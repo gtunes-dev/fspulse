@@ -1,7 +1,7 @@
 mod error;
 
 use clap::Parser;
-use error::DirCheckError;
+use crate::error::{DirCheckError, ErrorKind};
 use std::fs;
 use std::path::Path;
 
@@ -26,41 +26,44 @@ fn main() {
 
     // Validate the path
     let path = Path::new(&args.path);
-    if !path.exists() {
-        eprintln!("Error: Path '{}' does not exist.", args.path);
-        std::process::exit(1);
-    }
-    if !path.is_dir() {
-        eprintln!("Error: Path '{}' is not a directory.", args.path);
-        std::process::exit(1);
-    }
 
-    println!("Scanning directory: {}", args.path);
-    scan_directory(path);
+    if let Err(err) = scan_directory(path) {
+        eprintln!("Error: {}", err);
+        std::process::exit(1);
+    }
 }
 
-fn scan_directory(path: &Path) {
-    match fs::read_dir(path) {
-        Ok(entries) => {
-            for entry in entries {
-                match entry {
-                    Ok(entry) => {
-                        let metadata = entry.metadata().unwrap();
-                        let file_type = if metadata.is_dir() {
-                            FileType::Directory
-                        } else {
-                            FileType::File
-                        };
-                        println!("{:?}: {}", file_type, entry.path().display());
+/// Scans a directory and prints its structure.
+///
+/// # Arguments
+/// * `path` - A reference to the path of the directory to scan.
+///
+/// # Errors
+/// Returns an error if the directory cannot be read or metadata cannot be retrieved.
+fn scan_directory(path: &Path) -> Result<(), DirCheckError> {
+    let entries = fs::read_dir(path)
+        .map_err(|e| DirCheckError{ kind: ErrorKind::ReadDir, source: e})?;
 
-                        if let FileType::Directory = file_type {
-                            scan_directory(&entry.path());
-                        }
-                    }
-                    Err(err) => eprintln!("Error reading entry: {}", err),
-                }
-            }
+    for entry in entries {
+        let entry = entry
+            .map_err(|e| DirCheckError {kind: ErrorKind::ReadDir, source: e})?;
+
+        let metadata = entry.metadata()
+            .map_err(|e| DirCheckError { kind: ErrorKind::Metadata, source: e })?;
+
+        // Use the FileType enum instead of raw strings
+        let file_type = if metadata.is_dir() {
+            FileType::Directory
+        } else {
+            FileType::File
+        };
+
+        println!("{:?}: {}", file_type, entry.path().display());
+
+        if metadata.is_dir() {
+            scan_directory(&entry.path())?;
         }
-        Err(err) => eprintln!("Error reading directory '{}': {}", path.display(), err),
     }
+
+    Ok(())
 }
