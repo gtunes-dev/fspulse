@@ -2,13 +2,21 @@ mod error;
 
 use clap::Parser;
 use crate::error::{DirCheckError, ErrorKind};
-use std::fs;
+use std::fs::{self, DirEntry};
 use std::path::Path;
+use std::collections::VecDeque;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 enum FileType {
     File,
     Directory
+}
+
+#[derive(Clone, Debug)]
+struct QueueEntry {
+    path: PathBuf,
+    metadata: fs::Metadata,
 }
 
 // Command-line arguments
@@ -33,37 +41,39 @@ fn main() {
     }
 }
 
-/// Scans a directory and prints its structure.
-///
-/// # Arguments
-/// * `path` - A reference to the path of the directory to scan.
-///
-/// # Errors
-/// Returns an error if the directory cannot be read or metadata cannot be retrieved.
 fn scan_directory(path: &Path) -> Result<(), DirCheckError> {
-    let entries = fs::read_dir(path)
-        .map_err(|e| DirCheckError{ kind: ErrorKind::ReadDir, source: e})?;
+    let initial_metadata = fs::metadata(path)
+        .map_err(|e| DirCheckError{ kind: ErrorKind::Metadata, source: e})?;
 
-    for entry in entries {
-        let entry = entry
-            .map_err(|e| DirCheckError {kind: ErrorKind::ReadDir, source: e})?;
+    let mut q = VecDeque::new();
 
-        let metadata = entry.metadata()
-            .map_err(|e| DirCheckError { kind: ErrorKind::Metadata, source: e })?;
+    q.push_back(QueueEntry {
+        path: path.to_path_buf(),
+        metadata: initial_metadata,
+    });
 
-        // Use the FileType enum instead of raw strings
-        let file_type = if metadata.is_dir() {
-            FileType::Directory
-        } else {
-            FileType::File
-        };
+    while let Some(q_entry) = q.pop_front() {
+        println!("Directory: {}", q_entry.path.display());
 
-        println!("{:?}: {}", file_type, entry.path().display());
+        let entries = fs::read_dir(&q_entry.path)
+            .map_err(|e| DirCheckError{ kind: ErrorKind::ReadDir, source: e})?;
 
-        if metadata.is_dir() {
-            scan_directory(&entry.path())?;
+        for entry in entries {
+            let entry = entry
+                .map_err(|e| DirCheckError {kind: ErrorKind::ReadDir, source: e})?;
+
+            let metadata = entry.metadata()
+                .map_err(|e| DirCheckError { kind: ErrorKind::Metadata, source: e })?;
+
+            if metadata.is_dir() {
+                q.push_back(QueueEntry{
+                    path: entry.path(),
+                    metadata,
+                });
+            } else {
+                println!("File: {}", entry.path().display());
+            }
         }
     }
-
     Ok(())
 }
