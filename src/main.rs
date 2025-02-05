@@ -52,7 +52,6 @@ fn main() {
 }
 
 fn scan_directory(path: &Path) -> Result<(), DirCheckError> {
-
     let initial_metadata = fs::metadata(path)?;
 
     let mut q = VecDeque::new();

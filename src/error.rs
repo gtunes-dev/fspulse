@@ -9,4 +9,7 @@ pub enum DirCheckError {
 
     #[error("Database error: {0}")]
     Database(#[from] RusqliteError), // Converts rusqlite::Error automatically
+
+    #[error("Application error: {0}")]
+    Error(String), // Allows custom application errors
 }

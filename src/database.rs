@@ -1,8 +1,10 @@
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection, OptionalExtension, Result};
 use std::{io, path::Path};
 use crate::error::{DirCheckError};
 
 const DB_FILENAME: &str = "dircheck.db";
+const SCHEMA_VERSION: &str = "1";
+
 
 pub struct Database {
     conn: Connection,
@@ -25,7 +27,45 @@ impl Database {
         // Attempt to open the database
         let conn = Connection::open(&db_path).map_err(DirCheckError::Database)?;
         println!("Database opened at: {}", db_path.display());
+        let db = Self { conn };
+        
+        // Ensure schema is current
+        db.ensure_schema()?;
 
-        Ok(Self { conn })
+        Ok(db)
     }
+
+    fn ensure_schema(&self) -> Result<(), DirCheckError> {
+        let table_exists: bool = self.conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='meta'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !table_exists {
+            return self.create_schema();
+        }
+
+        // Get the stored schema version
+        let stored_version: Option<String> = self.conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+            match stored_version.as_deref() {
+                Some(SCHEMA_VERSION) => Ok(()), // Schema is up to date
+                Some(_) => Err(DirCheckError::Error("Schema version mismatch".to_string())),
+                None => Err(DirCheckError::Error("Schema version missing".to_string())),
+            }
+    }
+    
+    fn create_schema(&self) -> Result<(), DirCheckError> {
+        Ok(())
+    }  
 }
