@@ -1,18 +1,12 @@
+use rusqlite::Error as RusqliteError;
 use thiserror::Error;
 use std::io;
 
-/// Categorization of different kinds of directory scanning errors.
-#[derive(Debug)]
-pub enum ErrorKind {
-    ReadDir,
-    Metadata,
-}
-
-/// Errors that can occur while scanning directories.
 #[derive(Error, Debug)]
-#[error("{kind:?} error: {source}")]
-pub struct DirCheckError {
-    pub kind: ErrorKind,
-    #[source]  
-    pub source: io::Error,
+pub enum DirCheckError {
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),  // Converts io::Error into DirCheckError automatically
+
+    #[error("Database error: {0}")]
+    Database(#[from] RusqliteError), // Converts rusqlite::Error automatically
 }
