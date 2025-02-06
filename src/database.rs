@@ -5,7 +5,6 @@ use crate::error::{DirCheckError};
 const DB_FILENAME: &str = "dircheck.db";
 const SCHEMA_VERSION: &str = "1";
 
-
 pub struct Database {
     conn: Connection,
 }
