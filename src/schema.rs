@@ -1,0 +1,42 @@
+pub const CREATE_SCHEMA_SQL: &str = r#"
+BEGIN TRANSACTION;
+
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '1');
+
+CREATE TABLE IF NOT EXISTS root_paths (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS scans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    root_path_id INTEGER NOT NULL,
+    scan_time INTEGER NOT NULL,
+    FOREIGN KEY (root_path_id) REFERENCES root_paths(id)
+);
+
+CREATE TABLE IF NOT EXISTS entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE,
+    is_directory BOOLEAN NOT NULL,
+    inode INTEGER,
+    last_modified INTEGER,
+    file_size INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id INTEGER NOT NULL,
+    entry_id INTEGER NOT NULL,
+    change_type TEXT NOT NULL,
+    FOREIGN KEY (scan_id) REFERENCES scans(id),
+    FOREIGN KEY (entry_id) REFERENCES entries(id)
+);
+
+COMMIT;
+"#;

@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, Result};
 use std::{io, path::Path};
-use crate::error::{DirCheckError};
+use crate::error::DirCheckError;
+use crate::schema::CREATE_SCHEMA_SQL;
 
 const DB_FILENAME: &str = "dircheck.db";
 const SCHEMA_VERSION: &str = "1";
@@ -65,6 +66,7 @@ impl Database {
     }
     
     fn create_schema(&self) -> Result<(), DirCheckError> {
+        self.conn.execute_batch(CREATE_SCHEMA_SQL)?;
         Ok(())
     }  
 }

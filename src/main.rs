@@ -1,5 +1,6 @@
 mod database;
 mod error;
+mod schema;
 
 use clap::Parser;
 use crate::error::DirCheckError;
