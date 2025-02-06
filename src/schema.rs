@@ -24,16 +24,17 @@ CREATE TABLE IF NOT EXISTS entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
     is_directory BOOLEAN NOT NULL,
-    inode INTEGER,
     last_modified INTEGER,
-    file_size INTEGER
+    file_size INTEGER,
+    last_seen_scan_id INTEGER NOT NULL, -- Tracks the last scan where the file was seen
+    FOREIGN KEY (last_seen_scan_id) REFERENCES scans(id)
 );
 
 CREATE TABLE IF NOT EXISTS changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_id INTEGER NOT NULL,
     entry_id INTEGER NOT NULL,
-    change_type TEXT NOT NULL,
+    change_type CHAR(1) NOT NULL, -- Single-character storage for change type ('A', 'D', 'C')
     FOREIGN KEY (scan_id) REFERENCES scans(id),
     FOREIGN KEY (entry_id) REFERENCES entries(id)
 );

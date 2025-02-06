@@ -6,8 +6,17 @@ use crate::schema::CREATE_SCHEMA_SQL;
 const DB_FILENAME: &str = "dircheck.db";
 const SCHEMA_VERSION: &str = "1";
 
+#[derive(Debug, PartialEq)]
+pub enum ItemType {
+    File,
+    Directory,
+    Symlink,
+    Other,
+}
+
 pub struct Database {
     conn: Connection,
+    current_scan_id: Option<i64>,
 }
 
 impl Database {
@@ -27,7 +36,7 @@ impl Database {
         // Attempt to open the database
         let conn = Connection::open(&db_path).map_err(DirCheckError::Database)?;
         println!("Database opened at: {}", db_path.display());
-        let db = Self { conn };
+        let db: Database = Self { conn, current_scan_id: None };
         
         // Ensure schema is current
         db.ensure_schema()?;
@@ -68,5 +77,38 @@ impl Database {
     fn create_schema(&self) -> Result<(), DirCheckError> {
         self.conn.execute_batch(CREATE_SCHEMA_SQL)?;
         Ok(())
-    }  
+    }
+
+    fn begin_scan(&mut self, root_path: &Path) -> Result<(), DirCheckError> {
+        let path_str = root_path.to_string_lossy();
+
+        self.conn.execute(
+            "INSERT OR IGNORE INTO root_paths (path) VALUES (?)", 
+            [&path_str]
+        )?;
+
+        let root_path_id: i64 = self.conn.query_row(
+            "SELECT id FROM root_paths WHERE path = ?",
+            [&path_str],
+            |row| row.get(0),
+        )?;
+
+        // Insert into scans table with UTC timestamp
+        self.conn.execute(
+            "INSERT INTO scans (root_path_id, scan_time) VALUES (?, strftime('%s', 'now', 'utc'))",
+            [root_path_id],
+        )?;
+
+        // Get the new scan_id
+        let scan_id: i64 = self.conn.query_row(
+            "SELECT last_insert_rowid()",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Store it in the struct
+        self.current_scan_id = Some(scan_id);
+
+        Ok(())
+    }
 }
