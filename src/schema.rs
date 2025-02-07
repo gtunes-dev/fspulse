@@ -23,12 +23,15 @@ CREATE TABLE IF NOT EXISTS scans (
 CREATE TABLE IF NOT EXISTS entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
-    is_directory BOOLEAN NOT NULL,
+    is_tombstone BOOLEAN NOT NULL DEFAULT 0,
+    item_type CHAR(1) NOT NULL, -- Single-character storage for item type ('F', 'D', 'S', 'O')
     last_modified INTEGER,
     file_size INTEGER,
     last_seen_scan_id INTEGER NOT NULL, -- Tracks the last scan where the file was seen
     FOREIGN KEY (last_seen_scan_id) REFERENCES scans(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_entries_path ON entries (path);
 
 CREATE TABLE IF NOT EXISTS changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

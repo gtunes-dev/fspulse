@@ -2,16 +2,11 @@ mod database;
 mod error;
 mod schema;
 
-use clap::Arg;
 use clap::Parser;
 use crate::error::DirCheckError;
 use std::collections::VecDeque;
 use std::env;
 use std::fs;
-use std::fs::File;
-use std::fs::FileTimes;
-use std::fs::FileType;
-use std::iter;
 use std::path::Path;
 use std::path::PathBuf;
 use crate::database::{ Database, ItemType };
