@@ -1,4 +1,5 @@
 use rusqlite::{Connection, OptionalExtension, Result};
+use std::fs::Metadata;
 use std::{io, path::Path};
 use crate::error::DirCheckError;
 use crate::schema::CREATE_SCHEMA_SQL;
@@ -109,6 +110,10 @@ impl Database {
         // Store it in the struct
         self.current_scan_id = Some(scan_id);
 
+        Ok(())
+    }
+
+    pub fn handle_item(&self, item_type: ItemType, path: &Path, metadata: &Metadata) -> Result<(), DirCheckError> {
         Ok(())
     }
 }
