@@ -37,7 +37,7 @@ impl Database {
         // Attempt to open the database
         let conn = Connection::open(&db_path).map_err(DirCheckError::Database)?;
         println!("Database opened at: {}", db_path.display());
-        let db: Database = Self { conn, current_scan_id: None };
+        let mut db: Database = Self { conn, current_scan_id: None };
         
         // Ensure schema is current
         db.ensure_schema()?;
@@ -80,7 +80,7 @@ impl Database {
         Ok(())
     }
 
-    fn begin_scan(&mut self, root_path: &Path) -> Result<(), DirCheckError> {
+    pub fn begin_scan(&mut self, root_path: &Path) -> Result<(), DirCheckError> {
         let path_str = root_path.to_string_lossy();
 
         self.conn.execute(

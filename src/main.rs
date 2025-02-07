@@ -47,11 +47,11 @@ fn main() {
 }
 
 fn do_check_directory(args: Args) -> Result<(), DirCheckError> {
-    let db = Database::connect(&args.dbpath)?;
+    let mut db = Database::connect(&args.dbpath)?;
 
     // Validate the path
     let path = Path::new(&args.path);
-    scan_directory(&db, &path)?;
+    scan_directory(&mut db, &path)?;
 
     Ok(())
 }
@@ -83,10 +83,12 @@ fn validate_and_resolve_path(user_path: &Path) -> Result<PathBuf, DirCheckError>
     Ok(absolute_path)
 } 
 
-fn scan_directory(db: &Database, path: &Path) -> Result<(), DirCheckError> {
+fn scan_directory(db: &mut Database, path: &Path) -> Result<(), DirCheckError> {
     let absolute_path = validate_and_resolve_path(&path)?;
 
     let metadata = fs::symlink_metadata(&absolute_path)?;
+
+    db.begin_scan(&absolute_path)?;
 
     let mut q = VecDeque::new();
 
@@ -99,7 +101,7 @@ fn scan_directory(db: &Database, path: &Path) -> Result<(), DirCheckError> {
         println!("Directory: {}", q_entry.path.display());
 
         // Update the database
-        Database::handle_item(&db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
+        db.handle_item(ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
 
         let entries = fs::read_dir(&q_entry.path)?;
 
@@ -124,7 +126,7 @@ fn scan_directory(db: &Database, path: &Path) -> Result<(), DirCheckError> {
                 println!("{:?}: {}", item_type, entry.path().display());
                 
                 // Update the database
-                Database::handle_item(&db, item_type, &entry.path(), &metadata)?;
+                db.handle_item(item_type, &entry.path(), &metadata)?;
             }
         }
     }
