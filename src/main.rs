@@ -125,5 +125,7 @@ fn scan_directory(db: &mut Database, path: &Path) -> Result<(), DirCheckError> {
             }
         }
     }
+    db.end_scan()?;
+    
     Ok(())
 }
