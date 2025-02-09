@@ -33,12 +33,16 @@ enum DirCheckCommand {
     /// Show changes from a scan
     Changes {
         /// Get changes from the latest scan (default if no scan ID is provided)
-        #[arg(long, default_value = "true", conflicts_with = "scanid")]
+        #[arg(short = 'l', long, default_value = "true", conflicts_with = "scanid")]
         latest: bool,
 
         /// Get changes from a specific scan ID
-        #[arg(long)]
+        #[arg(long, conflicts_with = "latest")]
         scanid: Option<u64>,
+
+        /// Enable verbose output (list all changes)
+        #[arg(short = 'v', long, default_value_t = false)]
+        verbose: bool,
 
         /// Database file directory (default: current directory)
         #[arg(long, default_value = ".")]
@@ -61,12 +65,8 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         DirCheckCommand::Scan { path, dbpath } => {
             scan_command(&path, &dbpath)?;
         }
-        DirCheckCommand::Changes { latest, scanid, dbpath } => {
-            if latest {
-                changes_command(latest, scanid, &dbpath)?;
-            } else if let Some(id) = scanid {
-                println!("Showing changes for scan ID: {}", id);
-            }
+        DirCheckCommand::Changes { latest: _, scanid, verbose, dbpath } => {
+            changes_command(scanid, verbose, &dbpath)?;
         }
     }
 
@@ -75,20 +75,14 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
 
 fn scan_command(path: &str, dbpath: &str) -> Result<(), DirCheckError> {
     let mut db = Database::new(&dbpath)?;
-
-    // Validate the path
-    let path = Path::new(&path);
-
-    DirScan::scan_directory(&mut db, &path)?;
+    DirScan::scan_directory(&mut db, Path::new(&path))?;
 
     Ok(())
 }
 
-fn changes_command(latest: bool, scanid: Option<u64>, dbpath: &str) -> Result<(), DirCheckError> {
+fn changes_command(scanid: Option<u64>, verbose: bool, dbpath: &str) -> Result<(), DirCheckError> {
     let mut db = Database::new(&dbpath)?;
-    if (latest) {
-        Analytics::do_latest_changes(&mut db)?;
-    }
+    Analytics::do_changes(scanid, verbose, &mut db)?;
 
     Ok(())
 }

@@ -8,19 +8,40 @@ pub struct Analytics<'a> {
 }
 
 impl<'a> Analytics<'a> {
-    pub fn do_latest_changes(db: &mut Database) -> Result<(), DirCheckError> {
-        // Step 1: Get the most recent scan_id and root path
-        let latest_scan: Option<(i64, String)> = db.conn.query_row(
-            "SELECT scans.id, root_paths.path 
-             FROM scans 
-             JOIN root_paths ON scans.root_path_id = root_paths.id 
-             ORDER BY scans.id DESC LIMIT 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+    pub fn do_changes(scan_id: Option<u64>, verbose: bool, db: &mut Database) -> Result<(), DirCheckError> {
+
+        // Step1: Either use the provided scan_id or get one from the database
+        let scan_id = scan_id.map(|id| id as i64).or_else(|| {
+            db.conn.query_row(
+                "SELECT scans.id
+                FROM scans
+                ORDER BY scans.id DESC LIMIT 1", 
+                [], 
+                |row| Ok(row.get(0)?),
+            ).optional().ok().flatten()
+        });
+
+        let scan_id: i64 = if let Some(id) = scan_id {
+            id
+        } else {
+            println!("No scan ID available.");
+            return Ok(());
+        };
+
+        // Step 2: Get the root path
+        let root_path: Option<String> = db.conn.query_row(
+            "SELECT root_paths.path 
+            FROM scans
+            JOIN root_paths ON scans.root_path_id = root_paths.id
+            WHERE scans.id = ?",
+            [scan_id],
+            |row| Ok(row.get(0)?),
         ).optional()?;
-    
-        let Some((scan_id, root_path)) = latest_scan else {
-            println!("No scans found in the database.");
+        
+        let root_path = if let Some(path) = root_path {
+            path
+        } else {
+            println!("Specified scan not found in the database.");
             return Ok(());
         };
     
