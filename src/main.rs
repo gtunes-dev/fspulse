@@ -14,6 +14,10 @@ use crate::dirscan::DirScan;
 #[derive(Parser)]
 #[command(name = "dircheck", version = "0.1", about = "File system tree scanner")]
 struct Args {
+    /// Database file directory (default: current directory)
+    #[arg(long, default_value = ".")]
+    dbpath: String,
+
     #[command(subcommand)]
     command: DirCheckCommand,
 }
@@ -24,10 +28,6 @@ enum DirCheckCommand {
     Scan {
         /// Path to scan
         path: String,
-
-        /// Database file directory (default: current directory)
-        #[arg(long, default_value = ".")]
-        dbpath: String,
     },
 
     /// Show changes from a scan
@@ -43,11 +43,18 @@ enum DirCheckCommand {
         /// Enable verbose output (list all changes)
         #[arg(short = 'v', long, default_value_t = false)]
         verbose: bool,
-
-        /// Database file directory (default: current directory)
-        #[arg(long, default_value = ".")]
-        dbpath: String,
     },
+
+    /// List scans previous scans including ids and root paths
+    Scans {
+        /// Display all scans (conflicts with `count`)
+        #[arg(short = 'a', long, conflicts_with = "count")]
+        all: bool,
+
+        /// Number of scans to display (default: 10)
+        #[arg(short = 'c', long, default_value = "10", conflicts_with = "all")]
+        scan_count: u64,
+    }
 }
 
 fn main() {
@@ -61,28 +68,21 @@ fn main() {
 }
 
 fn handle_command(args: Args) -> Result<(), DirCheckError> {
+    let mut db = Database::new(&args.dbpath)?;
+
     match args.command {
-        DirCheckCommand::Scan { path, dbpath } => {
-            scan_command(&path, &dbpath)?;
+        DirCheckCommand::Scan { path } => {
+            DirScan::scan_directory(&mut db, Path::new(&path))?;
         }
-        DirCheckCommand::Changes { latest: _, scanid, verbose, dbpath } => {
-            changes_command(scanid, verbose, &dbpath)?;
+        DirCheckCommand::Changes { latest: _, scanid, verbose } => {
+            Analytics::do_changes(scanid, verbose, &mut db)?;
+        }
+        DirCheckCommand::Scans { all, scan_count } => {
+            Analytics::do_scans(&mut db, all, scan_count)?;
+            println!("Doing Scans Command: {}", scan_count);
+
         }
     }
-
-    Ok(())
-}
-
-fn scan_command(path: &str, dbpath: &str) -> Result<(), DirCheckError> {
-    let mut db = Database::new(&dbpath)?;
-    DirScan::scan_directory(&mut db, Path::new(&path))?;
-
-    Ok(())
-}
-
-fn changes_command(scanid: Option<u64>, verbose: bool, dbpath: &str) -> Result<(), DirCheckError> {
-    let mut db = Database::new(&dbpath)?;
-    Analytics::do_changes(scanid, verbose, &mut db)?;
 
     Ok(())
 }

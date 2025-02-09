@@ -1,13 +1,14 @@
 use crate::error::DirCheckError;
 use crate::database::Database;
 
+use chrono::{ DateTime, Local, NaiveDateTime, Utc };
 use rusqlite::{ OptionalExtension, Result };
 
-pub struct Analytics<'a> {
-    db: &'a mut Database,
+pub struct Analytics {
+    // No fields
 }
 
-impl<'a> Analytics<'a> {
+impl Analytics {
     pub fn do_changes(scan_id: Option<u64>, verbose: bool, db: &mut Database) -> Result<(), DirCheckError> {
 
         // Step1: Either use the provided scan_id or get one from the database
@@ -97,6 +98,39 @@ impl<'a> Analytics<'a> {
         println!("| Type Changes      | {:>6} |", type_change_count);
         println!("+--------------------+--------+");
     
+        Ok(())
+    }
+
+    pub fn do_scans(db: &mut Database, all: bool, count: u64) -> Result<(), DirCheckError> {
+        let count: i64 = if all { -1 } else { count as i64 };
+        let query = format!("
+            SELECT scans.id, scans.scan_time, root_paths.path
+            FROM scans
+            JOIN root_paths ON scans.root_path_id = root_paths.id
+            ORDER BY scans.id DESC
+            LIMIT {}",
+            count
+        );
+
+        let mut stmt = db.conn.prepare(&query)?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, String>(2)?))
+        })?;
+
+        for row in rows {
+            let (id, scan_time, path) = row?;
+
+        // Convert scan_time from UNIX timestamp to DateTime<Utc>
+        let datetime_utc = DateTime::<Utc>::from_timestamp(scan_time, 0)
+            .unwrap_or_default();
+
+        // Convert to local time and format it
+        let datetime_local = datetime_utc.with_timezone(&Local);
+        let formatted_time = datetime_local.format("%Y-%m-%d %H:%M:%S");
+
+            println!("Scan ID: {}, Time: {}, Path: {}", id, formatted_time, path);
+        }
+
         Ok(())
     }
 }
