@@ -33,7 +33,7 @@ enum DirCheckCommand {
     /// Show changes from a scan
     Changes {
         /// Get changes from the latest scan (default if no scan ID is provided)
-        #[arg(short = 'l', long, default_value = "true", conflicts_with = "scanid")]
+        #[arg(short = 'l', long, default_value_t = true, conflicts_with = "scanid")]
         latest: bool,
 
         /// Get changes from a specific scan ID
@@ -48,12 +48,12 @@ enum DirCheckCommand {
     /// List scans previous scans including ids and root paths
     Scans {
         /// Display all scans (conflicts with `count`)
-        #[arg(short = 'a', long, conflicts_with = "count")]
+        #[arg(short = 'a', long, default_value_t = false, conflicts_with = "count")]
         all: bool,
 
         /// Number of scans to display (default: 10)
-        #[arg(short = 'c', long, default_value = "10", conflicts_with = "all")]
-        scan_count: u64,
+        #[arg(short = 'c', long, default_value_t = 10, conflicts_with = "all")]
+        count: u64,
     }
 }
 
@@ -77,10 +77,8 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         DirCheckCommand::Changes { latest: _, scanid, verbose } => {
             Analytics::do_changes(scanid, verbose, &mut db)?;
         }
-        DirCheckCommand::Scans { all, scan_count } => {
-            Analytics::do_scans(&mut db, all, scan_count)?;
-            println!("Doing Scans Command: {}", scan_count);
-
+        DirCheckCommand::Scans { all, count } => {
+            Analytics::do_scans(&mut db, all, count)?;
         }
     }
 

@@ -74,8 +74,8 @@ impl<'a> DirScan<'a> {
             // println!("Directory: {}", q_entry.path.display());
     
             // Update the database
-            let change_type = self.handle_item(ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
-            self.update_change_counts(change_type);
+            let dir_change_type = self.handle_item(ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
+            self.update_change_counts(dir_change_type);
     
             let entries = fs::read_dir(&q_entry.path)?;
     
@@ -100,7 +100,8 @@ impl<'a> DirScan<'a> {
                     // println!("{:?}: {}", item_type, entry.path().display());
                     
                     // Update the database
-                    self.handle_item(item_type, &entry.path(), &metadata)?;
+                    let file_change_type = self.handle_item(item_type, &entry.path(), &metadata)?;
+                    self.update_change_counts(file_change_type);
                 }
             }
         }
@@ -132,8 +133,10 @@ impl<'a> DirScan<'a> {
         if !metadata.is_dir() {
             return Err(DirCheckError::Error(format!("Path '{}' is not a directory", absolute_path.display())));
         }
+
+        let canonical_path = absolute_path.canonicalize()?;
     
-        Ok(absolute_path)
+        Ok(canonical_path)
     }
 
     fn begin_scan(&mut self, root_path: &str) -> Result<(), DirCheckError> {
