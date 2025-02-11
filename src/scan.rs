@@ -1,10 +1,11 @@
 use crate::error::DirCheckError;
 use crate::database::{ Database, ItemType, ChangeType };
 
-use rusqlite::{ OptionalExtension, Result };
+use rusqlite::{ OptionalExtension, Result, params };
 
 use std::collections::VecDeque;
-use std::env;
+use std::num::Saturating;
+use std::{env, path};
 use std::fs;
 use std::fs::Metadata;
 use std::path::Path;
@@ -22,13 +23,12 @@ struct ChangeCounts {
 #[derive(Debug, Default)]
 pub struct Scan {
     // Schema fields
-    scan_id: Option<i64>,
+    scan_id: i64,
+    root_path_id: i64,
     path_arg: Option<String>,
     path_canonical: PathBuf,
-    scan_time: i64,
 
     // Scan state
-    root_path_id: Option<i64>,
     change_counts: Option<ChangeCounts>,
 }
 
@@ -39,12 +39,57 @@ struct QueueEntry {
 }
 
 impl Scan {
-    pub fn new(path_arg: String, path_canonical: PathBuf) -> Self {
+    // Create a Scan that will be used during a directory scan
+    // In this case, the scan_id is not yet known
+    fn new_from_path_arg(scan_id: i64, root_path_id: i64, path_arg: String, path_canonical: PathBuf) -> Self {
         Scan {
+            scan_id,
+            root_path_id,
             path_arg: Some(path_arg),
             path_canonical,
             ..Default::default()
         }
+    }
+
+    fn new(scan_id: i64, root_path_id: i64, path_canonical: PathBuf) -> Self {
+        Scan {
+            scan_id,
+            root_path_id,
+            path_canonical,
+            ..Default::default()
+        }
+    }
+
+    pub fn new_from_scan_id(db: &Database, scan_id: Option<i64>) -> Result<Self, DirCheckError> {
+        let conn = &db.conn;
+
+        // If the scan id wasn't explicitly specified, load the
+        let scan_row: Option<(i64, i64)> = conn.query_row(
+            "SELECT id, root_path_id FROM scans
+            WHERE (?1 IS NOT NULL AND id = ?1)
+                OR (?1 IS NULL AND id = (SELECT MAX(id) FROM scans))",
+            params![scan_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+
+        let (scan_id, root_path_id) = scan_row.ok_or_else(|| {
+            DirCheckError::Error("No scan found".to_string())
+        })?;
+
+        // TODO: This is temporary and should move to a root_path class
+        let root_path: Option<String> = conn.query_row(
+            "SELECT path FROM root_paths WHERE id = ?",
+            params![root_path_id],
+            |row| row.get(0),
+        ).optional()?;
+
+        let root_path = root_path.ok_or_else(|| {
+            DirCheckError::Error(format!("No root path found for scan id: {}", scan_id))
+        })?;
+
+        let scan = Scan::new(scan_id, root_path_id, PathBuf::from(root_path));
+
+        Ok(scan) 
     }
 
     pub fn increment_change_count(&mut self, change_type: ChangeType) {
@@ -60,10 +105,10 @@ impl Scan {
     }
 
     pub fn do_scan(db: &mut Database, path_arg: String) -> Result<Scan, DirCheckError> {
-        let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
+        //let path_canonical: PathBuf = Self::path_arg_to_canonical_path_buf(&path_arg)?;
 
-        let mut scan = Self::new(path_arg, path_canonical);
-        scan.scan_directory(db)?;
+        //let mut scan = Self::new_for_scan(path_arg, path_canonical);
+        let mut scan = Scan::scan_directory(db, path_arg)?;
         scan.print_scan_results();
 
         Ok(scan)
@@ -101,24 +146,23 @@ impl Scan {
         Ok(canonical_path)
     }
 
-    fn scan_directory(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
-        let path_canonical = self.path_canonical.clone();
+    fn scan_directory(db: &mut Database, path_arg: String) -> Result<Self, DirCheckError> {
+        //let path_canonical: PathBuf = Self::path_arg_to_canonical_path_buf(&path_arg)?;
+    
+        let mut scan = Self::begin_scan(db, path_arg)?;
+        let metadata = fs::symlink_metadata(&scan.path_canonical)?;
 
-        let metadata = fs::symlink_metadata(&path_canonical)?;
-    
-        self.begin_scan(db)?;
-    
         let mut q = VecDeque::new();
     
         q.push_back(QueueEntry {
-            path: path_canonical,
+            path: scan.path_canonical.clone(),
             metadata,
         });
     
         while let Some(q_entry) = q.pop_front() {    
             // Update the database
-            let dir_change_type = self.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
-            self.increment_change_count(dir_change_type);
+            let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
+            scan.increment_change_count(dir_change_type);
     
             let entries = fs::read_dir(&q_entry.path)?;
     
@@ -143,20 +187,23 @@ impl Scan {
                     // println!("{:?}: {}", item_type, entry.path().display());
                     
                     // Update the database
-                    let file_change_type = self.handle_item(db, item_type, &entry.path(), &metadata)?;
-                    self.increment_change_count(file_change_type);
+                    let file_change_type = scan.handle_item(db, item_type, &entry.path(), &metadata)?;
+                    scan.increment_change_count(file_change_type);
                 }
             }
         }
-        self.end_scan(db)?;
+        scan.end_scan(db)?;
     
-        Ok(())
+        Ok(scan)
     }
 
-    fn begin_scan(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
+    fn begin_scan(db: &mut Database, path_arg: String) -> Result<Self, DirCheckError> {
         let conn = &mut db.conn;
-        let root_path = self.path_canonical.to_string_lossy();
 
+        let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
+        let root_path = path_canonical.to_string_lossy();
+
+        // TODO: wrap this in a transaction
         conn.execute(
             "INSERT OR IGNORE INTO root_paths (path) VALUES (?)", 
             [&root_path]
@@ -168,9 +215,6 @@ impl Scan {
             [&root_path],
             |row| row.get(0),
         )?;
-
-        // Store it in the struct
-        self.root_path_id = Some(root_path_id);
 
         // Insert into scans table with UTC timestamp
         conn.execute(
@@ -185,16 +229,13 @@ impl Scan {
             |row| row.get(0),
         )?;
 
-        // Store it in the struct
-        self.scan_id = Some(scan_id);
-
-        Ok(())
+        Ok(Self::new_from_path_arg(scan_id, root_path_id, path_arg, path_canonical))
     }
 
     fn handle_item(&mut self, db: &mut Database, item_type: ItemType, path: &Path, metadata: &Metadata) -> Result<ChangeType, DirCheckError> {
-        let root_path_id = self.root_path_id.ok_or_else(|| DirCheckError::Error("No root path ID set".to_string()))?;
-        let scan_id = self.scan_id.ok_or_else(|| DirCheckError::Error("No active scan".to_string()))?;
         let path_str = path.to_string_lossy();
+        let scan_id = self.scan_id;
+        let root_path_id = self.root_path_id;
 
         let conn = &mut db.conn;
 
@@ -233,7 +274,7 @@ impl Scan {
                     tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, last_seen_scan_id = ? WHERE id = ?", 
                         (item_type_str, last_modified, file_size, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
-                        (scan_id, entry_id, ChangeType::TypeChange.as_db_str()))?;
+                        (self.scan_id, entry_id, ChangeType::TypeChange.as_db_str()))?;
                     change_type = Some(ChangeType::TypeChange);
                     tx.commit()?;
                 } else if existing_modified != last_modified || existing_size != file_size {
@@ -269,8 +310,8 @@ impl Scan {
     }
 
     fn end_scan(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
-        let root_path_id = self.root_path_id.ok_or_else(|| DirCheckError::Error("No root path ID set".to_string()))?;
-        let scan_id = self.scan_id.ok_or_else(|| DirCheckError::Error("No active scan".to_string()))?;
+        let root_path_id = self.root_path_id;
+        let scan_id = self.scan_id;
 
         let conn = &mut db.conn;
     
@@ -297,12 +338,10 @@ impl Scan {
 
     fn print_scan_results(&mut self) {
         let change_counts = self.change_counts.get_or_insert_default();
-        let root_path_id_str: String = self.root_path_id.map_or_else(|| "unknown".to_string(), |id| id.to_string());
-        let scan_id_str: String = self.scan_id.map_or_else(|| "unknown".to_string(), |id| id.to_string());
 
-        println!("Scan Id: {}", scan_id_str);
+        println!("Scan Id: {}", self.scan_id);
         println!("Path: {}, {}", self.path_arg.get_or_insert_default(), self.path_canonical.display());
-        println!("Root Path Id: {}", root_path_id_str);
+        println!("Root Path Id: {}", self.root_path_id);
         println!("-------------");
         println!("{:<12} {}", "Added:", change_counts.add_count);
         println!("{:<12} {}", "Modified:", change_counts.modify_count);

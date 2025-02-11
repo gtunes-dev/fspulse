@@ -1,4 +1,5 @@
-use crate::error::DirCheckError;
+use crate::scan::Scan;
+use crate::{error::DirCheckError, scan};
 use crate::database::Database;
 
 use chrono::{ DateTime, Local, Utc };
@@ -9,23 +10,12 @@ pub struct Analytics {
 }
 
 impl Analytics {
-    pub fn do_changes(scan_id: Option<u64>, verbose: bool, db: &mut Database) -> Result<(), DirCheckError> {
-
-        // Step1: Either use the provided scan_id or get the latest from the database
-        let scan_id = scan_id.map(|id| id as i64).or_else(|| {
-            db.conn.query_row(
-                "SELECT scans.id
-                FROM scans
-                ORDER BY scans.id DESC LIMIT 1", 
-                [], 
-                |row| Ok(row.get(0)?),
-            ).optional().ok().flatten()
-        });
+    pub fn do_changes(db: &mut Database, scan_id: Option<i64>, verbose: bool) -> Result<(), DirCheckError> {
+        let scan = Scan::new_from_scan_id(db, scan_id)?;
 
         let scan_id: i64 = if let Some(id) = scan_id {
             id
         } else {
-            println!("No scan ID available.");
             return Ok(());
         };
 
