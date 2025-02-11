@@ -10,7 +10,7 @@ use std::fs::Metadata;
 use std::path::Path;
 use std::path::PathBuf;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct ChangeCounts {
     add_count: u32,
     modify_count: u32,
@@ -19,13 +19,17 @@ struct ChangeCounts {
     unchanged_count: u32,
 }
 
-pub struct DirScan<'a> {
-    change_counts: ChangeCounts,
-    db: &'a mut Database,
-    user_path: &'a Path,
-    absolute_path: PathBuf,
+#[derive(Debug, Default)]
+pub struct Scan {
+    // Schema fields
+    scan_id: Option<i64>,
+    path_arg: Option<String>,
+    path_canonical: PathBuf,
+    scan_time: i64,
+
+    // Scan state
     root_path_id: Option<i64>,
-    current_scan_id: Option<i64>,
+    change_counts: Option<ChangeCounts>,
 }
 
 #[derive(Clone, Debug)]
@@ -34,48 +38,87 @@ struct QueueEntry {
     metadata: fs::Metadata,
 }
 
-impl<'a> DirScan<'a> {
-    fn new(db: &'a mut Database, user_path: &'a Path, absolute_path: PathBuf) -> Self {
-        Self {
-            change_counts: ChangeCounts::default(),
-            db,
-            user_path,
-            absolute_path,
-            root_path_id: None,
-            current_scan_id: None,
+impl Scan {
+    pub fn new(path_arg: String, path_canonical: PathBuf) -> Self {
+        Scan {
+            path_arg: Some(path_arg),
+            path_canonical,
+            ..Default::default()
         }
     }
 
-    pub fn scan_directory(db: &mut Database, user_path: &Path) -> Result<(), DirCheckError> {
-        let absolute_path = DirScan::validate_and_resolve_path(user_path)?;
+    pub fn increment_change_count(&mut self, change_type: ChangeType) {
+        let change_counts = self.change_counts.get_or_insert_default();
 
-        let mut dir_scan = DirScan::new(db, user_path, absolute_path);
-        dir_scan.do_scan_directory()?;
-        dir_scan.print_scan_results();
-
-        Ok(())
+        match change_type {
+            ChangeType::Add => change_counts.add_count += 1,
+            ChangeType::Delete => change_counts.delete_count += 1,
+            ChangeType::Modify => change_counts.modify_count += 1,
+            ChangeType::TypeChange => change_counts.type_change_count += 1,
+            ChangeType::NoChange => change_counts.unchanged_count += 1,
+        }
     }
 
-    fn do_scan_directory(&mut self) -> Result<(), DirCheckError> {
-        let absolute_path = self.absolute_path.clone();
+    pub fn do_scan(db: &mut Database, path_arg: String) -> Result<Scan, DirCheckError> {
+        let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
 
-        let metadata = fs::symlink_metadata(&absolute_path)?;
+        let mut scan = Self::new(path_arg, path_canonical);
+        scan.scan_directory(db)?;
+        scan.print_scan_results();
+
+        Ok(scan)
+    }
+
+    fn path_arg_to_canonical_path_buf(path_arg: &str) -> Result<PathBuf, DirCheckError> {
+        if path_arg.is_empty() {
+            return Err(DirCheckError::Error("Provided path is empty".to_string()));
+        }
+
+        let path = Path::new(path_arg);
+
+        let absolute_path = if path.is_absolute() {
+            path.to_owned() 
+        } else {
+            env::current_dir()?.join(path)
+        };
+        
+        if !absolute_path.exists() {
+            return Err(DirCheckError::Error(format!("Path '{}' does not exist", absolute_path.display())));
+        }
     
-        self.begin_scan(&absolute_path.to_string_lossy())?;
+        let metadata = fs::symlink_metadata(&absolute_path)?;
+
+        if metadata.file_type().is_symlink() {
+            return Err(DirCheckError::Error(format!("Path '{}' is a symlink and not allowed", absolute_path.display())));
+        }
+        
+        if !metadata.is_dir() {
+            return Err(DirCheckError::Error(format!("Path '{}' is not a directory", absolute_path.display())));
+        }
+
+        let canonical_path = absolute_path.canonicalize()?;
+    
+        Ok(canonical_path)
+    }
+
+    fn scan_directory(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
+        let path_canonical = self.path_canonical.clone();
+
+        let metadata = fs::symlink_metadata(&path_canonical)?;
+    
+        self.begin_scan(db)?;
     
         let mut q = VecDeque::new();
     
         q.push_back(QueueEntry {
-            path: self.absolute_path.clone(),
+            path: path_canonical,
             metadata,
         });
     
-        while let Some(q_entry) = q.pop_front() {
-            // println!("Directory: {}", q_entry.path.display());
-    
+        while let Some(q_entry) = q.pop_front() {    
             // Update the database
-            let dir_change_type = self.handle_item(ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
-            self.update_change_counts(dir_change_type);
+            let dir_change_type = self.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
+            self.increment_change_count(dir_change_type);
     
             let entries = fs::read_dir(&q_entry.path)?;
     
@@ -100,47 +143,19 @@ impl<'a> DirScan<'a> {
                     // println!("{:?}: {}", item_type, entry.path().display());
                     
                     // Update the database
-                    let file_change_type = self.handle_item(item_type, &entry.path(), &metadata)?;
-                    self.update_change_counts(file_change_type);
+                    let file_change_type = self.handle_item(db, item_type, &entry.path(), &metadata)?;
+                    self.increment_change_count(file_change_type);
                 }
             }
         }
-        self.end_scan()?;
+        self.end_scan(db)?;
     
         Ok(())
     }
-    
-    fn validate_and_resolve_path(user_path: &Path) -> Result<PathBuf, DirCheckError> {
-        if user_path.as_os_str().is_empty() {
-            return Err(DirCheckError::Error("Provided path is empty".to_string()));
-        }
-    
-        let absolute_path = if user_path.is_absolute() {
-            user_path.to_owned()
-        }  else {
-            env::current_dir()?.join(user_path)
-        };
-        
-        if !absolute_path.exists() {
-            return Err(DirCheckError::Error(format!("Path '{}' does not exist", absolute_path.display())));
-        }
-    
-        let metadata = fs::symlink_metadata(&absolute_path)?;
-        if metadata.file_type().is_symlink() {
-            return Err(DirCheckError::Error(format!("Path '{}' is a symlink and not allowed", absolute_path.display())));
-        }
-        
-        if !metadata.is_dir() {
-            return Err(DirCheckError::Error(format!("Path '{}' is not a directory", absolute_path.display())));
-        }
 
-        let canonical_path = absolute_path.canonicalize()?;
-    
-        Ok(canonical_path)
-    }
-
-    fn begin_scan(&mut self, root_path: &str) -> Result<(), DirCheckError> {
-        let conn = &mut self.db.conn;
+    fn begin_scan(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
+        let conn = &mut db.conn;
+        let root_path = self.path_canonical.to_string_lossy();
 
         conn.execute(
             "INSERT OR IGNORE INTO root_paths (path) VALUES (?)", 
@@ -171,47 +186,17 @@ impl<'a> DirScan<'a> {
         )?;
 
         // Store it in the struct
-        self.current_scan_id = Some(scan_id);
+        self.scan_id = Some(scan_id);
 
         Ok(())
     }
 
-    fn end_scan(&mut self) -> Result<(), DirCheckError> {
+    fn handle_item(&mut self, db: &mut Database, item_type: ItemType, path: &Path, metadata: &Metadata) -> Result<ChangeType, DirCheckError> {
         let root_path_id = self.root_path_id.ok_or_else(|| DirCheckError::Error("No root path ID set".to_string()))?;
-        let scan_id = self.current_scan_id.ok_or_else(|| DirCheckError::Error("No active scan".to_string()))?;
-
-        let conn = &mut self.db.conn;
-    
-        let tx = conn.transaction()?;
-    
-        // Insert deletion records into changes
-        tx.execute(
-            "INSERT INTO changes (scan_id, entry_id, change_type)
-             SELECT ?, id, ?
-             FROM entries
-             WHERE root_path_id = ? AND is_tombstone = 0 AND last_seen_scan_id < ?",
-            (scan_id, ChangeType::Delete.as_db_str(), root_path_id, scan_id),
-        )?;
-        // Mark unseen entries as tombstones
-        tx.execute(
-            "UPDATE entries SET is_tombstone = 1 WHERE root_path_id = ? AND last_seen_scan_id < ? AND is_tombstone = 0",
-            (root_path_id, scan_id),
-        )?;
-    
-        tx.commit()?;
-    
-        // Reset current scan ID since scan is complete
-        self.current_scan_id = None;
-    
-        Ok(())
-    }
-
-    fn handle_item(&mut self, item_type: ItemType, path: &Path, metadata: &Metadata) -> Result<ChangeType, DirCheckError> {
-        let root_path_id = self.root_path_id.ok_or_else(|| DirCheckError::Error("No root path ID set".to_string()))?;
-        let current_scan_id = self.current_scan_id.ok_or_else(|| DirCheckError::Error("No active scan".to_string()))?;
+        let scan_id = self.scan_id.ok_or_else(|| DirCheckError::Error("No active scan".to_string()))?;
         let path_str = path.to_string_lossy();
 
-        let conn = &mut self.db.conn;
+        let conn = &mut db.conn;
 
         let mut change_type: Option<ChangeType> = None;
     
@@ -237,33 +222,33 @@ impl<'a> DirScan<'a> {
                     // Item previously deleted - resurrect it
                     let tx = conn.transaction()?;
                     tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, last_seen_scan_id = ?, is_tombstone = 0 WHERE id = ?", 
-                        (item_type_str, last_modified, file_size, current_scan_id, entry_id))?;
+                        (item_type_str, last_modified, file_size, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
-                        (current_scan_id, entry_id, ChangeType::Add.as_db_str()))?;
+                        (scan_id, entry_id, ChangeType::Add.as_db_str()))?;
                     change_type = Some(ChangeType::Add);
                     tx.commit()?;
                 } else if existing_type != item_type_str {
                     // Item type changed (e.g., file -> directory)
                     let tx = conn.transaction()?;
                     tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, last_seen_scan_id = ? WHERE id = ?", 
-                        (item_type_str, last_modified, file_size, current_scan_id, entry_id))?;
+                        (item_type_str, last_modified, file_size, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
-                        (current_scan_id, entry_id, ChangeType::TypeChange.as_db_str()))?;
+                        (scan_id, entry_id, ChangeType::TypeChange.as_db_str()))?;
                     change_type = Some(ChangeType::TypeChange);
                     tx.commit()?;
                 } else if existing_modified != last_modified || existing_size != file_size {
                     // Item content changed
                     let tx = conn.transaction()?;
                     tx.execute("UPDATE entries SET last_modified = ?, file_size = ?, last_seen_scan_id = ? WHERE id = ?", 
-                        (last_modified, file_size, current_scan_id, entry_id))?;
+                        (last_modified, file_size, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
-                        (current_scan_id, entry_id, ChangeType::Modify.as_db_str()))?;
+                        (scan_id, entry_id, ChangeType::Modify.as_db_str()))?;
                     change_type = Some(ChangeType::Modify);
                     tx.commit()?;
                 } else {
                     // No change, just update last_seen_scan_id
                     conn.execute("UPDATE entries SET last_seen_scan_id = ? WHERE root_path_id = ? AND id = ?", 
-                        (current_scan_id, root_path_id, entry_id))?;
+                        (scan_id, root_path_id, entry_id))?;
                     change_type = Some(ChangeType::NoChange);
                 }
             }
@@ -271,10 +256,10 @@ impl<'a> DirScan<'a> {
                 // Item is new, insert into entries and changes tables
                 let tx = conn.transaction()?;
                 tx.execute("INSERT INTO entries (root_path_id, path, item_type, last_modified, file_size, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?)",
-                    (root_path_id, &path_str, item_type.as_db_str(), last_modified, file_size, current_scan_id))?;
+                    (root_path_id, &path_str, item_type.as_db_str(), last_modified, file_size, scan_id))?;
                 let entry_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
                 tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)",
-                    (current_scan_id, entry_id, ChangeType::Add.as_db_str()))?;
+                    (scan_id, entry_id, ChangeType::Add.as_db_str()))?;
                 change_type = Some(ChangeType::Add);
                 tx.commit()?;
             }
@@ -283,24 +268,47 @@ impl<'a> DirScan<'a> {
         change_type.ok_or(DirCheckError::Error("Expected a change type, but found None".to_string()))
     }
 
-    fn update_change_counts(&mut self, change_type: ChangeType) {
-        match change_type {
-            ChangeType::Add => self.change_counts.add_count += 1,
-            ChangeType::Modify => self.change_counts.modify_count += 1,
-            ChangeType::Delete => self.change_counts.delete_count += 1,
-            ChangeType::TypeChange => self.change_counts.type_change_count += 1,
-            ChangeType::NoChange => self.change_counts.unchanged_count += 1,
-        }
+    fn end_scan(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
+        let root_path_id = self.root_path_id.ok_or_else(|| DirCheckError::Error("No root path ID set".to_string()))?;
+        let scan_id = self.scan_id.ok_or_else(|| DirCheckError::Error("No active scan".to_string()))?;
+
+        let conn = &mut db.conn;
+    
+        let tx = conn.transaction()?;
+    
+        // Insert deletion records into changes
+        tx.execute(
+            "INSERT INTO changes (scan_id, entry_id, change_type)
+             SELECT ?, id, ?
+             FROM entries
+             WHERE root_path_id = ? AND is_tombstone = 0 AND last_seen_scan_id < ?",
+            (scan_id, ChangeType::Delete.as_db_str(), root_path_id, scan_id),
+        )?;
+        // Mark unseen entries as tombstones
+        tx.execute(
+            "UPDATE entries SET is_tombstone = 1 WHERE root_path_id = ? AND last_seen_scan_id < ? AND is_tombstone = 0",
+            (root_path_id, scan_id),
+        )?;
+    
+        tx.commit()?;
+    
+        Ok(())
     }
 
-    fn print_scan_results(&self) {
-        println!("Scan Results: {}", self.absolute_path.display());
+    fn print_scan_results(&mut self) {
+        let change_counts = self.change_counts.get_or_insert_default();
+        let root_path_id_str: String = self.root_path_id.map_or_else(|| "unknown".to_string(), |id| id.to_string());
+        let scan_id_str: String = self.scan_id.map_or_else(|| "unknown".to_string(), |id| id.to_string());
+
+        println!("Scan Id: {}", scan_id_str);
+        println!("Path: {}, {}", self.path_arg.get_or_insert_default(), self.path_canonical.display());
+        println!("Root Path Id: {}", root_path_id_str);
         println!("-------------");
-        println!("{:<12} {}", "Added:", self.change_counts.add_count);
-        println!("{:<12} {}", "Modified:", self.change_counts.modify_count);
-        println!("{:<12} {}", "Deleted:", self.change_counts.delete_count);
-        println!("{:<12} {}", "Type Change:", self.change_counts.type_change_count);
-        println!("{:<12} {}", "No Change:", self.change_counts.unchanged_count);
+        println!("{:<12} {}", "Added:", change_counts.add_count);
+        println!("{:<12} {}", "Modified:", change_counts.modify_count);
+        println!("{:<12} {}", "Deleted:", change_counts.delete_count);
+        println!("{:<12} {}", "Type Change:", change_counts.type_change_count);
+        println!("{:<12} {}", "No Change:", change_counts.unchanged_count);
         println!();
     }
 }

@@ -2,7 +2,6 @@ use crate::error::DirCheckError;
 use crate::database::Database;
 
 use chrono::{ DateTime, Local, Utc };
-use clap::builder::Str;
 use rusqlite::{ OptionalExtension, Result };
 
 pub struct Analytics {

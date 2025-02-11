@@ -4,12 +4,10 @@ mod error;
 mod schema;
 
 use clap::{ Parser, Subcommand };
+use dirscan::Scan;
 use crate::analytics::Analytics;
 use crate::error::DirCheckError;
-use std::path::Path;
 use crate::database::Database;
-use crate::dirscan::DirScan;
-
 
 #[derive(Parser)]
 #[command(name = "dircheck", version = "0.1", about = "File system tree scanner")]
@@ -72,7 +70,8 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
 
     match args.command {
         DirCheckCommand::Scan { path } => {
-            DirScan::scan_directory(&mut db, Path::new(&path))?;
+            //DirScan::scan_directory(&mut db, Path::new(&path))?;
+            Scan::do_scan(&mut db, path)?;
         }
         DirCheckCommand::Changes { latest: _, scanid, verbose } => {
             Analytics::do_changes(scanid, verbose, &mut db)?;
