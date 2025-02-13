@@ -43,7 +43,7 @@ struct QueueEntry {
 impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
-    fn new_with_path_arg(scan_id: i64, root_path_id: i64, root_path: String, path_arg: String) -> Self {
+    fn new_from_path_arg(scan_id: i64, root_path_id: i64, root_path: String, path_arg: String) -> Self {
         Scan {
             scan_id,
             root_path_id,
@@ -53,6 +53,7 @@ impl Scan {
         }
     }
 
+    // Private function used once all fields have been fetched
     fn new(scan_id: i64, root_path_id: i64, root_path: String) -> Self {
         Scan {
             scan_id,
@@ -62,14 +63,33 @@ impl Scan {
         }
     }
 
-    pub fn new_from_scan_id(db: &Database, scan_id: Option<i64>) -> Result<Self, DirCheckError> {
+    pub fn new_latest(db: &Database) -> Result<Self, DirCheckError> {
+        let conn = &db.conn;
+      
+       // If the scan id wasn't explicitly specified, load the
+       let scan_row: Option<(i64, i64)> = conn.query_row(
+        "SELECT id, root_path_id FROM scans
+            WHERE id = SELECT MAX(id) FROM scans",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+
+        let (scan_id, root_path_id) = scan_row.ok_or_else(|| {
+            DirCheckError::Error("No scan found".to_string())
+        })?;
+
+        let scan = Scan::new_from_id_and_path_id(db, scan_id, root_path_id)?;
+
+        Ok(scan)
+    }
+
+    pub fn new_from_scan_id(db: &Database, scan_id: i64) -> Result<Self, DirCheckError> {
         let conn = &db.conn;
 
         // If the scan id wasn't explicitly specified, load the
         let scan_row: Option<(i64, i64)> = conn.query_row(
             "SELECT id, root_path_id FROM scans
-            WHERE (?1 IS NOT NULL AND id = ?1)
-                OR (?1 IS NULL AND id = (SELECT MAX(id) FROM scans))",
+            WHERE id",
             params![scan_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).optional()?;
@@ -77,6 +97,14 @@ impl Scan {
         let (scan_id, root_path_id) = scan_row.ok_or_else(|| {
             DirCheckError::Error("No scan found".to_string())
         })?;
+
+        let scan = Scan::new_from_id_and_path_id(db, scan_id, root_path_id)?;
+
+        Ok(scan) 
+    }
+
+    fn new_from_id_and_path_id(db: &Database, scan_id: i64, root_path_id: i64) -> Result<Self, DirCheckError> {
+        let conn = &db.conn;
 
         // TODO: This is temporary and should move to a root_path class
         let root_path: Option<String> = conn.query_row(
@@ -91,7 +119,7 @@ impl Scan {
 
         let scan = Scan::new(scan_id, root_path_id, root_path);
 
-        Ok(scan) 
+        Ok(scan)
     }
 
     pub fn scan_id(&self) -> i64 {
@@ -112,6 +140,16 @@ impl Scan {
 
     pub fn change_counts(&self) -> Option<&ChangeCounts> {
         self.change_counts.as_ref()
+    }
+
+    pub fn with_id_or_latest<F>(db: &Database, scan_id: Option<i64>, func: F) -> Result<(), DirCheckError>
+    where
+        F: FnOnce(&Database, &Scan) -> Result<(), DirCheckError>,
+    {
+        let scan = scan_id
+            .map_or_else(|| Scan::new_latest(db), |id| Scan::new_from_scan_id(db, id))?;
+
+        func(db, &scan)
     }
 
     fn increment_change_count(&mut self, change_type: ChangeType) {
@@ -253,7 +291,7 @@ impl Scan {
             |row| row.get(0),
         )?;
 
-        Ok(Scan::new_with_path_arg(scan_id, root_path_id, root_path, path_arg))
+        Ok(Scan::new_from_path_arg(scan_id, root_path_id, root_path, path_arg))
     }
 
     fn handle_item(&mut self, db: &mut Database, item_type: ItemType, path: &Path, metadata: &Metadata) -> Result<ChangeType, DirCheckError> {

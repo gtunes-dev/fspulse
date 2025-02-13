@@ -1,30 +1,45 @@
+
 use crate::scan::Scan;
 use crate::error::DirCheckError;
 use crate::database::Database;
+use crate::utils::Utils;
 
 use chrono::{ DateTime, Local, Utc };
 use rusqlite::Result;
 
-pub struct Analytics {
+pub struct Reports {
     // No fields
 }
 
-impl Analytics {
-    pub fn do_changes(db: &mut Database, scan_id: Option<i64>, verbose: bool) -> Result<(), DirCheckError> {
-        let scan = Scan::new_from_scan_id(db, scan_id)?;
-        let scan_id = scan.scan_id();
-    
-        Analytics::changes_print_summary(&db, scan_id, scan.root_path())?;
+impl Reports {
+    pub fn do_report_scans(db: &mut Database, scan_id: Option<u64>, latest: bool, count: u64) -> Result<(), DirCheckError> {
+        if scan_id.is_some() && latest {
+            return Err(DirCheckError::Error("Cannot specify --id and --latest together.".to_string()));                    
+        }
 
+        // Handle the single scan case
+        if scan_id.is_some() || latest {
+            if count != 0 {
+                return Err(DirCheckError::Error("Cannot provide either -id or --latest and --count".to_string()));       
+            }
+
+            Scan::with_id_or_latest(db, Utils::opt_u64_to_opt_i64(scan_id), |db, scan| Reports::scan_print_summary(db, scan))?;
+        }
+    
+        /* 
         if verbose {
             Analytics::changes_print_verbose(&db, scan_id)?;
         }
+        */
 
         Ok(())
     }
 
-    fn changes_print_summary(db: &Database, scan_id: i64, root_path: &str) -> Result<(), DirCheckError> {
-        let mut stmt = db.conn.prepare(
+    fn scan_print_summary(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
+        let conn = &db.conn;
+        let scan_id = scan.scan_id();
+
+        let mut stmt = conn.prepare(
         "SELECT change_type, COUNT(*) FROM changes WHERE scan_id = ? GROUP BY change_type",
         )?;
     
@@ -49,7 +64,7 @@ impl Analytics {
         }
 
         // Step 3: Count total files and directories seen in this scan
-        let (file_count, folder_count): (i64, i64) = db.conn.query_row(
+        let (file_count, folder_count): (i64, i64) = conn.query_row(
             "SELECT 
                 SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count, 
                 SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count 
@@ -61,8 +76,9 @@ impl Analytics {
         let total_items = file_count + folder_count;
 
         // Step 4: Print results
-        println!("Scan ID: {}", scan_id);
-        println!("Scanned Path:   {}", root_path);
+        println!("Scan ID:        {}", scan_id);
+        println!("Root Path ID:   {}", scan.root_path_id());
+        println!("Root Path:      {}", scan.root_path());
         println!("Total Items:    {}", total_items);
         println!(" - Files:       {}", file_count);
         println!(" - Folders:     {}", folder_count);
@@ -74,12 +90,12 @@ impl Analytics {
         println!("| Deleted Files     | {:>6} |", delete_count);
         println!("| Type Changes      | {:>6} |", type_change_count);
         println!("+--------------------+--------+");
-    
 
         Ok(())
     }
 
-    fn changes_print_verbose(db: &Database, scan_id: i64) -> Result<(), DirCheckError> {
+    fn scan_print_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
+        let scan_id = scan.scan_id();
 
         let mut stmt = db.conn.prepare(
             "SELECT changes.change_type, entries.path
