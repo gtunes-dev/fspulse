@@ -25,6 +25,8 @@ impl ItemType {
     }
 }
 
+/*
+
 #[derive(Debug, PartialEq)]
 pub enum ChangeType {
     Add,
@@ -45,6 +47,7 @@ impl ChangeType {
         }
     }
 }
+    */
 
 pub struct Database {
     pub conn: Connection,

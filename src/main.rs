@@ -1,6 +1,8 @@
-mod reports;mod database;
-mod scan;
+mod database;
+mod change;
 mod error;
+mod scan;
+mod reports;
 mod schema;
 mod utils;
 

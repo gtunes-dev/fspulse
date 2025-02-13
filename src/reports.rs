@@ -1,7 +1,8 @@
 
-use crate::scan::Scan;
+use crate::change::{ChangeCounts, ChangeType};
 use crate::error::DirCheckError;
 use crate::database::Database;
+use crate::scan::Scan;
 use crate::utils::Utils;
 
 use chrono::{ DateTime, Local, Utc };
@@ -35,33 +36,11 @@ impl Reports {
         Ok(())
     }
 
-    fn scan_print_summary(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
+    pub fn scan_print_summary(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
         let conn = &db.conn;
         let scan_id = scan.scan_id();
 
-        let mut stmt = conn.prepare(
-        "SELECT change_type, COUNT(*) FROM changes WHERE scan_id = ? GROUP BY change_type",
-        )?;
-    
-        let mut rows = stmt.query([scan_id])?;
-
-        let mut add_count = 0;
-        let mut modify_count = 0;
-        let mut delete_count = 0;
-        let mut type_change_count = 0;
-
-        while let Some(row) = rows.next()? {
-            let change_type: String = row.get(0)?;
-            let count: i64 = row.get(1)?;
-
-            match change_type.as_str() {
-                "A" => add_count = count,
-                "M" => modify_count = count,
-                "D" => delete_count = count,
-                "T" => type_change_count = count,
-                _ => println!("Warning: Unknown change type found in DB: {}", change_type),
-            }
-        }
+        let change_counts = ChangeCounts::from_scan_id(db, scan_id)?;
 
         // Step 3: Count total files and directories seen in this scan
         let (file_count, folder_count): (i64, i64) = conn.query_row(
@@ -85,10 +64,10 @@ impl Reports {
         println!("+--------------------+--------+");
         println!("| Change Type       | Count  |");
         println!("+--------------------+--------+");
-        println!("| Added Files       | {:>6} |", add_count);
-        println!("| Modified Files    | {:>6} |", modify_count);
-        println!("| Deleted Files     | {:>6} |", delete_count);
-        println!("| Type Changes      | {:>6} |", type_change_count);
+        println!("| Added Files       | {:>6} |", change_counts.get(ChangeType::Add));
+        println!("| Modified Files    | {:>6} |", change_counts.get(ChangeType::Modify));
+        println!("| Deleted Files     | {:>6} |", change_counts.get(ChangeType::Delete));
+        println!("| Type Changes      | {:>6} |", change_counts.get(ChangeType::TypeChange));
         println!("+--------------------+--------+");
 
         Ok(())
