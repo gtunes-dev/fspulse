@@ -11,6 +11,14 @@ use crate::error::DirCheckError;
 use crate::database::Database;
 use crate::utils::Utils;
 
+/*
+
+scan [path - default is current directory]
+report 
+
+
+*/
+
 #[derive(Parser)]
 #[command(name = "dircheck", version = "0.1", about = "File system tree scanner")]
 struct Args {

@@ -1,10 +1,10 @@
 use crate::error::DirCheckError;
 use crate::database::{ Database, ItemType, ChangeType };
 
+use rusqlite::ffi::SQLITE_CHANGESET_CONFLICT;
 use rusqlite::{ OptionalExtension, Result, params };
 
 use std::collections::VecDeque;
-use std::num::Saturating;
 use std::{env, path};
 use std::fs;
 use std::fs::Metadata;
@@ -25,8 +25,10 @@ pub struct Scan {
     // Schema fields
     scan_id: i64,
     root_path_id: i64,
+    root_path: String,
+
+    // Optional values
     path_arg: Option<String>,
-    path_canonical: PathBuf,
 
     // Scan state
     change_counts: Option<ChangeCounts>,
@@ -41,21 +43,21 @@ struct QueueEntry {
 impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
-    fn new_from_path_arg(scan_id: i64, root_path_id: i64, path_arg: String, path_canonical: PathBuf) -> Self {
+    fn new_with_path_arg(scan_id: i64, root_path_id: i64, root_path: String, path_arg: String) -> Self {
         Scan {
             scan_id,
             root_path_id,
+            root_path,
             path_arg: Some(path_arg),
-            path_canonical,
             ..Default::default()
         }
     }
 
-    fn new(scan_id: i64, root_path_id: i64, path_canonical: PathBuf) -> Self {
+    fn new(scan_id: i64, root_path_id: i64, root_path: String) -> Self {
         Scan {
             scan_id,
             root_path_id,
-            path_canonical,
+            root_path,
             ..Default::default()
         }
     }
@@ -87,12 +89,32 @@ impl Scan {
             DirCheckError::Error(format!("No root path found for scan id: {}", scan_id))
         })?;
 
-        let scan = Scan::new(scan_id, root_path_id, PathBuf::from(root_path));
+        let scan = Scan::new(scan_id, root_path_id, root_path);
 
         Ok(scan) 
     }
 
-    pub fn increment_change_count(&mut self, change_type: ChangeType) {
+    pub fn scan_id(&self) -> i64 {
+        self.scan_id
+    }
+
+    pub fn root_path_id(&self) -> i64 {
+        self.root_path_id
+    }
+
+    pub fn root_path(&self) -> &str {
+        &self.root_path
+    }
+
+    pub fn path_arg(&self) -> &str {
+        self.path_arg.as_deref().unwrap_or("")
+    }
+
+    pub fn change_counts(&self) -> Option<&ChangeCounts> {
+        self.change_counts.as_ref()
+    }
+
+    fn increment_change_count(&mut self, change_type: ChangeType) {
         let change_counts = self.change_counts.get_or_insert_default();
 
         match change_type {
@@ -148,14 +170,16 @@ impl Scan {
 
     fn scan_directory(db: &mut Database, path_arg: String) -> Result<Self, DirCheckError> {
         //let path_canonical: PathBuf = Self::path_arg_to_canonical_path_buf(&path_arg)?;
+
     
         let mut scan = Self::begin_scan(db, path_arg)?;
-        let metadata = fs::symlink_metadata(&scan.path_canonical)?;
+        let root_path_buf = PathBuf::from(scan.root_path());
+        let metadata = fs::symlink_metadata(&root_path_buf)?;
 
         let mut q = VecDeque::new();
     
         q.push_back(QueueEntry {
-            path: scan.path_canonical.clone(),
+            path: root_path_buf,
             metadata,
         });
     
@@ -201,7 +225,7 @@ impl Scan {
         let conn = &mut db.conn;
 
         let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
-        let root_path = path_canonical.to_string_lossy();
+        let root_path = path_canonical.to_string_lossy().to_string();
 
         // TODO: wrap this in a transaction
         conn.execute(
@@ -229,7 +253,7 @@ impl Scan {
             |row| row.get(0),
         )?;
 
-        Ok(Self::new_from_path_arg(scan_id, root_path_id, path_arg, path_canonical))
+        Ok(Scan::new_with_path_arg(scan_id, root_path_id, root_path, path_arg))
     }
 
     fn handle_item(&mut self, db: &mut Database, item_type: ItemType, path: &Path, metadata: &Metadata) -> Result<ChangeType, DirCheckError> {
@@ -336,18 +360,31 @@ impl Scan {
         Ok(())
     }
 
-    fn print_scan_results(&mut self) {
-        let change_counts = self.change_counts.get_or_insert_default();
+    fn str_value_or_none(s: &Option<String>) -> &str {
+        s.as_deref().unwrap_or("None")
+    }
 
-        println!("Scan Id: {}", self.scan_id);
-        println!("Path: {}, {}", self.path_arg.get_or_insert_default(), self.path_canonical.display());
+    fn print_scan_results(&mut self) {
+
+        let change_counts = self.change_counts();
+
+        println!("Scan Id: {}", self.scan_id());
+        println!("Path Argument: {}", Self::str_value_or_none(&self.path_arg));
         println!("Root Path Id: {}", self.root_path_id);
-        println!("-------------");
-        println!("{:<12} {}", "Added:", change_counts.add_count);
-        println!("{:<12} {}", "Modified:", change_counts.modify_count);
-        println!("{:<12} {}", "Deleted:", change_counts.delete_count);
-        println!("{:<12} {}", "Type Change:", change_counts.type_change_count);
-        println!("{:<12} {}", "No Change:", change_counts.unchanged_count);
-        println!();
+        println!("Root Path: {}", self.root_path());
+
+        println!("-- Change Counts --");
+        if let Some(counts) = change_counts {
+            println!("{:<12} {}", "Added:", counts.add_count);
+            println!("{:<12} {}", "Modified:", counts.modify_count);
+            println!("{:<12} {}", "Deleted:", counts.delete_count);
+            println!("{:<12} {}", "Type Change:", counts.type_change_count);
+            println!("{:<12} {}", "No Change:", counts.unchanged_count);
+            println!();
+        } else {
+            println!("None");
+        }
+
+
     }
 }

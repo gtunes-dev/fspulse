@@ -1,9 +1,9 @@
 use crate::scan::Scan;
-use crate::{error::DirCheckError, scan};
+use crate::error::DirCheckError;
 use crate::database::Database;
 
 use chrono::{ DateTime, Local, Utc };
-use rusqlite::{ OptionalExtension, Result };
+use rusqlite::Result;
 
 pub struct Analytics {
     // No fields
@@ -12,31 +12,9 @@ pub struct Analytics {
 impl Analytics {
     pub fn do_changes(db: &mut Database, scan_id: Option<i64>, verbose: bool) -> Result<(), DirCheckError> {
         let scan = Scan::new_from_scan_id(db, scan_id)?;
-
-        let scan_id: i64 = if let Some(id) = scan_id {
-            id
-        } else {
-            return Ok(());
-        };
-
-        // Step 2: Get the root path
-        let root_path: Option<String> = db.conn.query_row(
-            "SELECT root_paths.path 
-            FROM scans
-            JOIN root_paths ON scans.root_path_id = root_paths.id
-            WHERE scans.id = ?",
-            [scan_id],
-            |row| Ok(row.get(0)?),
-        ).optional()?;
-        
-        let root_path = if let Some(path) = root_path {
-            path
-        } else {
-            println!("Specified scan not found in the database.");
-            return Ok(());
-        };
+        let scan_id = scan.scan_id();
     
-        Analytics::changes_print_summary(&db, scan_id, &root_path)?;
+        Analytics::changes_print_summary(&db, scan_id, scan.root_path())?;
 
         if verbose {
             Analytics::changes_print_verbose(&db, scan_id)?;
@@ -45,7 +23,7 @@ impl Analytics {
         Ok(())
     }
 
-    fn changes_print_summary(db: &Database, scan_id: i64, root_path: &String) -> Result<(), DirCheckError> {
+    fn changes_print_summary(db: &Database, scan_id: i64, root_path: &str) -> Result<(), DirCheckError> {
         let mut stmt = db.conn.prepare(
         "SELECT change_type, COUNT(*) FROM changes WHERE scan_id = ? GROUP BY change_type",
         )?;
