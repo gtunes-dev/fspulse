@@ -16,7 +16,10 @@ CREATE TABLE IF NOT EXISTS root_paths (
 CREATE TABLE IF NOT EXISTS scans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_path_id INTEGER NOT NULL,
-    scan_time INTEGER NOT NULL,
+    time_of_scan INTEGER NOT NULL,
+    file_count INTEGER DEFAULT NULL,
+    folder_count INTEGER DEFAULT NULL,
+    is_complete BOOLEAN NOT NULL DEFAULT 0,
     FOREIGN KEY (root_path_id) REFERENCES root_paths(id)
 );
 

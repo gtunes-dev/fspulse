@@ -5,7 +5,6 @@ use crate::database::Database;
 use crate::scan::Scan;
 use crate::utils::Utils;
 
-use chrono::{ DateTime, Local, Utc };
 use rusqlite::Result;
 
 pub struct Reports {
@@ -17,7 +16,7 @@ impl Reports {
         if scan_id.is_some() && latest {
             return Err(DirCheckError::Error("Cannot specify --id and --latest together.".to_string()));                    
         }
-
+        
         // Handle the single scan case
         if scan_id.is_some() || latest {
             if count != 0 {
@@ -37,42 +36,38 @@ impl Reports {
     }
 
     pub fn scan_print_summary(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
-        let conn = &db.conn;
+        //let conn = &db.conn;
         let scan_id = scan.scan_id();
 
         let change_counts = ChangeCounts::from_scan_id(db, scan_id)?;
 
-        // Step 3: Count total files and directories seen in this scan
-        let (file_count, folder_count): (i64, i64) = conn.query_row(
-            "SELECT 
-                SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count, 
-                SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count 
-            FROM entries WHERE last_seen_scan_id = ?",
-            [scan_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ).unwrap_or((0, 0)); // If no data, default to 0
+        println!("{}", "=".repeat(40));
+        println!(" Scan Report - Scan ID: {}", scan_id);
+        println!("{}", "=".repeat(40));
 
-        let total_items = file_count + folder_count;
-
-        // Step 4: Print results
-        println!("Scan ID:        {}", scan_id);
         println!("Root Path ID:   {}", scan.root_path_id());
         println!("Root Path:      {}", scan.root_path());
-        println!("Total Items:    {}", total_items);
-        println!(" - Files:       {}", file_count);
-        println!(" - Folders:     {}", folder_count);
-        println!("+--------------------+--------+");
-        println!("| Change Type       | Count  |");
-        println!("+--------------------+--------+");
-        println!("| Added Files       | {:>6} |", change_counts.get(ChangeType::Add));
-        println!("| Modified Files    | {:>6} |", change_counts.get(ChangeType::Modify));
-        println!("| Deleted Files     | {:>6} |", change_counts.get(ChangeType::Delete));
-        println!("| Type Changes      | {:>6} |", change_counts.get(ChangeType::TypeChange));
-        println!("+--------------------+--------+");
+        println!("Time of Scan:   {}", Utils::formatted_db_time(scan.time_of_scan()));
+        println!("");
+        println!("{}", "-".repeat(40));
+        // println!("Total Items:    {}", total_items);
+        println!("Items Seen");
+        println!("{}", "-".repeat(40));
+        println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
+        println!("Folders:        {}", Utils::opt_i64_or_none_as_str(scan.folder_count()));
+        println!("");
+        println!("{}", "-".repeat(40));
+        println!("Changed Files and Folders");
+        println!("{}", "-".repeat(40));
+        println!("Added           {}", change_counts.get(ChangeType::Add));
+        println!("Modified        {}", change_counts.get(ChangeType::Modify));
+        println!("Delete          {}", change_counts.get(ChangeType::Delete));
+        println!("Type Changed    {}", change_counts.get(ChangeType::TypeChange));
 
         Ok(())
     }
 
+    /* 
     fn scan_print_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
         let scan_id = scan.scan_id();
 
@@ -127,5 +122,5 @@ impl Reports {
         }
 
         Ok(())
-    }
+    } */
 }

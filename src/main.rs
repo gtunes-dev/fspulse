@@ -114,26 +114,6 @@ enum ReportCommand {
         #[arg(long = "dbpath", short = 'd', default_value = ".")]
         dbpath: String,
     },
-/* 
-    /// Report details about recorded changes
-    Changes {
-        /// Show changes for a specific scan ID (conflicts with `latest`)
-        #[arg(long = "id", short = 'i', conflicts_with = "latest")]
-        id: Option<u64>,
-
-        /// Show the latest changes (default if no ID is provided, conficts with 'id')
-        #[arg(long = "latest", short = 'l', default_value_t = false, conflicts_with = "id")]
-        latest: bool,
-
-        /// Number of changes to display (default: 10)
-        #[arg(long = "count", short = 'c', default_value_t = 10)]
-        count: u64,
-
-        /// Database file directory (default: current directory)
-        #[arg(long = "dbpath", short = 'd', default_value = ".")]
-        dbpath: String,
-    },
-    */
 }
 /* 
 #[derive(Parser)]

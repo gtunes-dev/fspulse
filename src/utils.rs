@@ -1,6 +1,6 @@
+use chrono::{DateTime, Local, Utc};
 
 pub struct Utils {
-
 }
 
 impl Utils {
@@ -11,4 +11,21 @@ impl Utils {
     pub fn str_value_or_none(s: &Option<String>) -> &str {
         s.as_deref().unwrap_or("None")
     }
+
+    pub fn opt_i64_or_none_as_str(opt_i64: Option<i64>) -> String {
+        match opt_i64 {
+            Some(i) => i.to_string(),
+            None => "None".to_string(),
+        }
+    }
+
+    pub fn formatted_db_time(db_time: i64) -> String {
+        let datetime_utc = DateTime::<Utc>::from_timestamp(db_time, 0)
+            .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+
+        let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
+
+        datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
+    }
+
 }
