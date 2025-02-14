@@ -1,13 +1,14 @@
 mod database;
 mod change;
 mod error;
-mod scan;
+mod scans;
 mod reports;
+mod root_paths;
 mod schema;
 mod utils;
 
 use clap::{ Parser, Subcommand };
-use scan::Scan;
+use scans::Scan;
 use crate::reports::Reports;
 use crate::error::DirCheckError;
 use crate::database::Database;

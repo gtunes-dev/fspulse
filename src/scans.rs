@@ -2,6 +2,7 @@ use crate::change::{ ChangeCounts, ChangeType };
 use crate::error::DirCheckError;
 use crate::database::{ Database, ItemType };
 use crate::reports::Reports;
+use crate::root_paths::RootPath;
 
 use rusqlite::{ OptionalExtension, Result, params };
 
@@ -15,13 +16,16 @@ use std::path::PathBuf;
 #[derive(Debug, Default)]
 pub struct Scan {
     // Schema fields
-    scan_id: i64,
-    root_path_id: i64,
-    root_path: String, // TODO: Move to Path struct
+    id: i64,
+    //root_path_id: i64,
+    //root_path: String, // TODO: Move to Path struct
     time_of_scan: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
     is_complete: bool,
+
+    // Related entities
+    root_path: RootPath,
 
     // Scan state
     change_counts: ChangeCounts,
@@ -36,12 +40,11 @@ struct QueueEntry {
 impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
-    fn new_for_scan(scan_id: i64, root_path_id: i64, root_path: String, time_of_scan: i64) -> Self {
+    fn new_for_scan(id: i64, time_of_scan: i64, root_path: RootPath) -> Self {
         Scan {
-            scan_id,
-            root_path_id,
-            root_path,
+            id,
             time_of_scan,
+            root_path,
             ..Default::default()
         }
     }
@@ -64,7 +67,7 @@ impl Scan {
     }
     */
 
-    pub fn new_from_scan_id(db: &Database, scan_id: Option<i64>) -> Result<Self, DirCheckError> {
+    pub fn new_from_id(db: &Database, id: Option<i64>) -> Result<Self, DirCheckError> {
         let conn = &db.conn;
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,
@@ -73,31 +76,20 @@ impl Scan {
             "SELECT id, root_path_id, time_of_scan, file_count, folder_count, is_complete
                 FROM scans
                 WHERE id = COALESCE(?1, (SELECT MAX(id) FROM scans))",
-            params![scan_id],
+            params![id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
         ).optional()?;
 
-        let (scan_id, root_path_id, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
+        let (id, root_path_id, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
             DirCheckError::Error("No scan found".to_string())
         })?;
 
-        // TODO: This is temporary and should move to a root_path class
-        let root_path: Option<String> = conn.query_row(
-        "SELECT path FROM root_paths WHERE id = ?",
-            params![root_path_id],
-        |row| row.get(0),
-        ).optional()?;
-
-        let root_path = root_path.ok_or_else(|| {
-            DirCheckError::Error(format!("No root path found for scan id: {}", scan_id))
-        })?;
-    
+        let root_path = RootPath::get(db, root_path_id)?;
 
         Ok(Scan {
-            scan_id,
-            root_path_id,
-            root_path,
+            id,
             time_of_scan,
+            root_path,
             file_count,
             folder_count,
             is_complete,
@@ -105,16 +97,16 @@ impl Scan {
         })
     }
 
-    pub fn scan_id(&self) -> i64 {
-        self.scan_id
+    pub fn id(&self) -> i64 {
+        self.id
     }
 
     pub fn root_path_id(&self) -> i64 {
-        self.root_path_id
+        self.root_path.id()
     }
 
     pub fn root_path(&self) -> &str {
-        &self.root_path
+        self.root_path.path()
     }
 
     pub fn time_of_scan(&self) -> i64 {
@@ -129,11 +121,11 @@ impl Scan {
         self.folder_count
     }
 
-    pub fn with_id_or_latest<F>(db: &Database, scan_id: Option<i64>, func: F) -> Result<(), DirCheckError>
+    pub fn with_id_or_latest<F>(db: &Database, id: Option<i64>, func: F) -> Result<(), DirCheckError>
     where
         F: FnOnce(&Database, &Scan) -> Result<(), DirCheckError>,
     {
-        let scan = Scan::new_from_scan_id(db, scan_id)?;
+        let scan = Scan::new_from_id(db, id)?;
 
         func(db, &scan)
     }
@@ -232,40 +224,27 @@ impl Scan {
     }
 
     fn begin_scan(db: &mut Database, path_arg: String) -> Result<Self, DirCheckError> {
-        let conn = &mut db.conn;
-
         let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
-        let root_path = path_canonical.to_string_lossy().to_string();
+        let root_path_str = path_canonical.to_string_lossy().to_string();
 
-        // TODO: wrap this in a transaction
-        conn.execute(
-            "INSERT OR IGNORE INTO root_paths (path) VALUES (?)", 
-            [&root_path]
-        )?;
+        let root_path = RootPath::get_or_insert(db, &root_path_str)?;
 
-        // Get the root_path_id
-        let root_path_id: i64 = conn.query_row(
-            "SELECT id FROM root_paths WHERE path = ?",
-            [&root_path],
-            |row| row.get(0),
-        )?;
-
-        let (scan_id, time_of_scan): (i64, i64) = conn.query_row(
+        let (scan_id, time_of_scan): (i64, i64) = db.conn.query_row(
             "INSERT INTO scans (root_path_id, time_of_scan) 
              VALUES (?, strftime('%s', 'now', 'utc')) 
              RETURNING id, time_of_scan",
-            [root_path_id],
+            [root_path.id()],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
 
-        let scan = Scan::new_for_scan(scan_id, root_path_id, root_path, time_of_scan);
+        let scan = Scan::new_for_scan(scan_id, time_of_scan, root_path);
         Ok(scan)
     }
 
     fn handle_item(&mut self, db: &mut Database, item_type: ItemType, path: &Path, metadata: &Metadata) -> Result<ChangeType, DirCheckError> {
         let path_str = path.to_string_lossy();
-        let scan_id = self.scan_id;
-        let root_path_id = self.root_path_id;
+        let scan_id = self.id;
+        let root_path_id = self.root_path.id();
 
         let conn = &mut db.conn;
 
@@ -304,7 +283,7 @@ impl Scan {
                     tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, last_seen_scan_id = ? WHERE id = ?", 
                         (item_type_str, last_modified, file_size, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
-                        (self.scan_id, entry_id, ChangeType::TypeChange.as_db_str()))?;
+                        (self.id, entry_id, ChangeType::TypeChange.as_db_str()))?;
                     change_type = ChangeType::TypeChange;
                     tx.commit()?;
                 } else if existing_modified != last_modified || existing_size != file_size {
@@ -340,8 +319,8 @@ impl Scan {
     }
 
     fn end_scan(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
-        let root_path_id = self.root_path_id;
-        let scan_id = self.scan_id;
+        let root_path_id = self.root_path.id();
+        let scan_id = self.id;
 
         let conn = &mut db.conn;
     

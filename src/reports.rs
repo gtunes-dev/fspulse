@@ -2,7 +2,7 @@
 use crate::change::{ChangeCounts, ChangeType};
 use crate::error::DirCheckError;
 use crate::database::Database;
-use crate::scan::Scan;
+use crate::scans::Scan;
 use crate::utils::Utils;
 
 use rusqlite::Result;
@@ -37,7 +37,7 @@ impl Reports {
 
     pub fn scan_print_summary(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
         //let conn = &db.conn;
-        let scan_id = scan.scan_id();
+        let scan_id = scan.id();
 
         let change_counts = ChangeCounts::from_scan_id(db, scan_id)?;
 
