@@ -1,4 +1,5 @@
 
+
 use crate::change::{ChangeCounts, ChangeType};
 use crate::error::DirCheckError;
 use crate::database::Database;
@@ -16,60 +17,97 @@ impl Reports {
         
         // Handle the single scan case
         if scan_id.is_some() || latest {
-            //let scan = Scan::with_id_or_latest(db, Utils::opt_u64_to_opt_i64(scan_id), |db, scan| Reports::scan_print_summary(db, scan))?;
             let scan = Scan::new_from_id(db, scan_id)?;
-            Self::scan_print_summary(db, &scan)?;
+            //Scan::with_id_or_latest(db, scan_id,|db, scan| Self::scan_print_block(db, scan))?;
+            Self::scan_print_block(db, &scan)?;
 
             if changes {
-                Self::scan_print_changes(db, &scan)?;
+                Self::scan_print_changes(db, scan.id())?;
             }
         }
-    
-        /* 
-        if verbose {
-            Analytics::changes_print_verbose(&db, scan_id)?;
-        }
-        */
 
         Ok(())
     }
 
-    pub fn scan_print_summary(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
-        //let conn = &db.conn;
-        let scan_id = scan.id();
+    fn print_marquee(title: &str, prefix_suffix: &str, fill_char: &str) {
+        let total_width = 40;
+        let prefix_fill_chars = 5;
+        let title_padding = " ";
 
-        let change_counts = ChangeCounts::from_scan_id(db, scan_id)?;
+        let suffix_fill_length = total_width - ((prefix_suffix.len() * 2) + prefix_fill_chars + (title_padding.len() * 2) + title.len());
 
-        println!("-- Scan --");
-        println!("Database: {}", db.path());
-        println!("{}", "+".repeat(40));
+        println!(
+            "{}{}{}{}{}{}{}",
+            prefix_suffix,
+            fill_char.repeat(prefix_fill_chars),
+            title_padding,
+            title,
+            title_padding,
+            fill_char.repeat(suffix_fill_length),
+            prefix_suffix
+        );
+    }
+
+    fn print_title(title: &str) {
+        Self::print_marquee(title, "+", "="); 
+    }
+
+    fn print_section_header(header: &str) {
+        println!();
+        Self::print_marquee(header, "", "-");
+    }
+
+    fn print_none_if_zero(i: i32) {
+        if i == 0 {
+            println!("None.");
+        }
+    }
+
+    pub fn scan_print_block(db: &Database, scan: &Scan) -> Result<(), DirCheckError>{
+        // Still necessary?
+        // let change_counts = ChangeCounts::from_scan_id(db, scan_id)?;
+        Self::print_title("Scan");
+        println!("Database:       {}", db.path());
         println!("Id:             {}", scan.id());
         println!("Root Path ID:   {}", scan.root_path_id());
         println!("Root Path:      {}", scan.root_path());
         println!("Time of Scan:   {}", Utils::formatted_db_time(scan.time_of_scan()));
         println!("");
         // println!("Total Items:    {}", total_items);
-        println!("-- Items Seen --");
-        println!("{}", "-".repeat(40));
+        
+        Self::print_section_header("Items Seen");
         println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
         println!("Folders:        {}", Utils::opt_i64_or_none_as_str(scan.folder_count()));
         println!("");
-        println!("-- Change Summary --");
-        println!("{}", "-".repeat(40));
-        println!("Added           {}", change_counts.get(ChangeType::Add));
-        println!("Modified        {}", change_counts.get(ChangeType::Modify));
+
+        Self::print_section_header("Changes");
+        let change_counts = scan.change_counts();
+        println!("Add             {}", change_counts.get(ChangeType::Add));
+        println!("Modify          {}", change_counts.get(ChangeType::Modify));
         println!("Delete          {}", change_counts.get(ChangeType::Delete));
-        println!("Type Changed    {}", change_counts.get(ChangeType::TypeChange));
+        println!("Type Change     {}", change_counts.get(ChangeType::TypeChange));
+
+        Ok(())
+    }
+    
+
+    fn scan_print_changes(db: &Database, scan_id: i64) -> Result<(), DirCheckError> {
+        Self::print_section_header("Changed Entries");
+
+        let entry_change_count = Self::with_each_scan_change(db, scan_id, Self::print_change_as_line)?;
+        Self::print_none_if_zero(entry_change_count);
 
         Ok(())
     }
 
-    
-    fn scan_print_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
-        let scan_id = scan.id();
+    fn with_each_scan_change<F>(db: &Database, scan_id: i64, func: F) -> Result<i32, DirCheckError>
+    where
+        F: Fn(i64, &str, &str, &str),
+    {
+        let mut change_count = 0;
 
         let mut stmt = db.conn.prepare(
-            "SELECT changes.change_type, entries.path
+            "SELECT entries.id, changes.change_type, entries.item_type, entries.path
             FROM changes
             JOIN entries ON entries.id = changes.entry_id
             WHERE changes.scan_id = ?
@@ -77,17 +115,29 @@ impl Reports {
         )?;
         
         let rows = stmt.query_map([scan_id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            Ok((
+                row.get::<_, i64>(0)?,      // Entry ID
+                row.get::<_, String>(1)?,   // Change type (A, M, D, etc.)
+                row.get::<_, String>(2)?,   // Item type (F, D)
+                row.get::<_, String>(3)?,   // Path
+            ))
         })?;
-
+        
         for row in rows {
-            let (change_type, path) = row?;
-            println!("{}: {}", change_type, path);
-        }
+            let (id, change_type, item_type, path) = row?;
 
-        Ok(())
+            func(id, &change_type, &item_type, &path);
+            change_count = change_count + 1;
+        }
+        Ok(change_count)
     }
-    /* 
+
+    fn print_change_as_line(id: i64, change_type: &str, item_type: &str, path: &str) {
+        println!("[{},{},{}] {}", id, change_type, item_type, path);
+    }
+
+
+     /* 
 
     pub fn do_scans(db: &mut Database, all: bool, count: u64) -> Result<(), DirCheckError> {
         let count: i64 = if all { -1 } else { count as i64 };

@@ -120,6 +120,9 @@ impl Scan {
     pub fn folder_count(&self) -> Option<i64> {
         self.folder_count
     }
+    pub fn change_counts(&self) -> &ChangeCounts {
+        &self.change_counts
+    }
 
     pub fn with_id_or_latest<F>(db: &Database, id: Option<i64>, func: F) -> Result<(), DirCheckError>
     where
@@ -131,12 +134,8 @@ impl Scan {
     }
 
     pub fn do_scan(db: &mut Database, path_arg: String) -> Result<Scan, DirCheckError> {
-        //let path_canonical: PathBuf = Self::path_arg_to_canonical_path_buf(&path_arg)?;
-
-        //let mut scan = Self::new_for_scan(path_arg, path_canonical);
         let scan = Scan::scan_directory(db, path_arg)?;
-        Reports::scan_print_summary(db, &scan)?;
-        //scan.print_scan_results();
+        Reports::scan_print_block(db, &scan)?;
 
         Ok(scan)
     }
