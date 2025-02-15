@@ -51,6 +51,7 @@ impl ChangeType {
 
 pub struct Database {
     pub conn: Connection,
+    path: String,
 }
 
 impl Database {
@@ -69,13 +70,17 @@ impl Database {
 
         // Attempt to open the database
         let conn = Connection::open(&db_path).map_err(DirCheckError::Database)?;
-        println!("Database opened at: {}", db_path.display());
-        let db = Self { conn };
+        // println!("Database opened at: {}", db_path.display());
+        let db = Self { conn, path: db_path.to_string_lossy().into_owned() };
         
         // Ensure schema is current
         db.ensure_schema()?;
 
         Ok(db)
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
     }
 
     fn ensure_schema(&self) -> Result<(), DirCheckError> {

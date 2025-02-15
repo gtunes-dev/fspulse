@@ -12,18 +12,17 @@ pub struct Reports {
 }
 
 impl Reports {
-    pub fn do_report_scans(db: &mut Database, scan_id: Option<u64>, latest: bool, count: u64) -> Result<(), DirCheckError> {
-        if scan_id.is_some() && latest {
-            return Err(DirCheckError::Error("Cannot specify --id and --latest together.".to_string()));                    
-        }
+    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, latest: bool, count: u64, changes: bool) -> Result<(), DirCheckError> {
         
         // Handle the single scan case
         if scan_id.is_some() || latest {
-            if count != 0 {
-                return Err(DirCheckError::Error("Cannot provide either -id or --latest and --count".to_string()));       
-            }
+            //let scan = Scan::with_id_or_latest(db, Utils::opt_u64_to_opt_i64(scan_id), |db, scan| Reports::scan_print_summary(db, scan))?;
+            let scan = Scan::new_from_id(db, scan_id)?;
+            Self::scan_print_summary(db, &scan)?;
 
-            Scan::with_id_or_latest(db, Utils::opt_u64_to_opt_i64(scan_id), |db, scan| Reports::scan_print_summary(db, scan))?;
+            if changes {
+                Self::scan_print_changes(db, &scan)?;
+            }
         }
     
         /* 
@@ -41,23 +40,21 @@ impl Reports {
 
         let change_counts = ChangeCounts::from_scan_id(db, scan_id)?;
 
-        println!("{}", "=".repeat(40));
-        println!(" Scan Report - Scan ID: {}", scan_id);
-        println!("{}", "=".repeat(40));
-
+        println!("-- Scan --");
+        println!("Database: {}", db.path());
+        println!("{}", "+".repeat(40));
+        println!("Id:             {}", scan.id());
         println!("Root Path ID:   {}", scan.root_path_id());
         println!("Root Path:      {}", scan.root_path());
         println!("Time of Scan:   {}", Utils::formatted_db_time(scan.time_of_scan()));
         println!("");
-        println!("{}", "-".repeat(40));
         // println!("Total Items:    {}", total_items);
-        println!("Items Seen");
+        println!("-- Items Seen --");
         println!("{}", "-".repeat(40));
         println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
         println!("Folders:        {}", Utils::opt_i64_or_none_as_str(scan.folder_count()));
         println!("");
-        println!("{}", "-".repeat(40));
-        println!("Changed Files and Folders");
+        println!("-- Change Summary --");
         println!("{}", "-".repeat(40));
         println!("Added           {}", change_counts.get(ChangeType::Add));
         println!("Modified        {}", change_counts.get(ChangeType::Modify));
@@ -67,9 +64,9 @@ impl Reports {
         Ok(())
     }
 
-    /* 
+    
     fn scan_print_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
-        let scan_id = scan.scan_id();
+        let scan_id = scan.id();
 
         let mut stmt = db.conn.prepare(
             "SELECT changes.change_type, entries.path
@@ -90,6 +87,7 @@ impl Reports {
 
         Ok(())
     }
+    /* 
 
     pub fn do_scans(db: &mut Database, all: bool, count: u64) -> Result<(), DirCheckError> {
         let count: i64 = if all { -1 } else { count as i64 };

@@ -9,6 +9,7 @@ mod utils;
 
 use clap::{ Parser, Subcommand };
 use scans::Scan;
+use utils::Utils;
 use crate::reports::Reports;
 use crate::error::DirCheckError;
 use crate::database::Database;
@@ -50,19 +51,15 @@ enum ReportCommand {
         id: Option<u64>,
 
         /// Show the most recent scan (default if no `id` or `count` is provided)
-        #[arg(long = "latest", short = 'l', conflicts_with = "id", default_value_t = false)]
+        #[arg(long = "latest", short = 'l', conflicts_with_all = &["id", "count"], default_value_t = false)]
         latest: bool,
 
         /// Show the latest `N` scans (default: 10) (conflicts with `id`)
         #[arg(long = "count", short = 'c', conflicts_with = "id", default_value_t = 10)]
         count: u64,
 
-        /// Include all entries in the scan report (conflicts with `changes`)
-        #[arg(long = "entries", short = 'e', conflicts_with = "changes")]
-        entries: bool,
-
-        /// Include changes in the scan report (conflicts with `entries`)
-        #[arg(long = "changes", conflicts_with = "entries")]
+        /// Include changes in the scan report (conflicts with 'count' and `entries`)
+        #[arg(long = "changes", conflicts_with = "count")]
         changes: bool,
 
         /// Database file directory (default: current directory)
@@ -116,49 +113,6 @@ enum ReportCommand {
         dbpath: String,
     },
 }
-/* 
-#[derive(Parser)]
-#[command(name = "dircheck", version = "0.1", about = "File system tree scanner")]
-struct OldArgs {
-    /// Database file directory (default: current directory)
-    #[arg(long, default_value = ".")]
-    dbpath: String,
-
-    #[command(subcommand)]
-    command: OldDirCheckCommand,
-}
-
-#[derive(Subcommand)]
-enum OldDirCheckCommand {
-    /// Scan a directory and record changes
-    Scan {
-        /// Path to scan
-        path: String,
-    },
-
-    /// Show changes from a scan
-    Changes {
-        /// Get changes from a specific scan ID (default: most recent scan)
-        #[arg(long)]
-        scanid: Option<u64>,
-
-        /// Enable verbose output (list all changes)
-        #[arg(short = 'v', long, default_value_t = false)]
-        verbose: bool,
-    },
-
-    /// List scans previous scans including ids and root paths
-    Scans {
-        /// Display all scans (conflicts with `count`)
-        #[arg(short = 'a', long, default_value_t = false, conflicts_with = "count")]
-        all: bool,
-
-        /// Number of scans to display (default: 10)
-        #[arg(short = 'c', long, default_value_t = 10, conflicts_with = "all")]
-        count: u64,
-    }
-}
-    */
 
 fn main() {
     // Parse command-line arguments
@@ -191,11 +145,6 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         }
         DirCheckCommand::Report { report_type } => {
             match report_type {
-                /* 
-                ReportCommand::Changes { id, latest, count, .. } => {
-                    //Reports::do_changes(& mut db, )?;
-                }
-                */
                 ReportCommand::Entries { id, path: _, changes, count: _, dbpath: _ } => {
                     if changes && id.is_none() {
                         return Err(DirCheckError::Error("Cannot use --changes without specifying an entry ID.".to_string()));
@@ -207,32 +156,13 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
                     }
     
                 }
-                ReportCommand::Scans { id, latest, count, changes: _, .. } => {
-                    // TODO: remove "entries" - we're not going to support dumping all of the entries from a scan.
-                    // We will support "entries" on root-paths instead [TBD: should we return tombstones]
-                    Reports::do_report_scans(&mut db, id, latest, count)?;
+                ReportCommand::Scans { id, latest, count, changes, .. } => {
+                    let id = Utils::opt_u64_to_opt_i64(id);
+                    Reports::do_report_scans(&mut db, id, latest, count, changes)?;
                 }
             }
         }
     }
-/* 
-    let mut db = Database::new(&args.dbpath)?;
-
-    match args.command {
-        DirCheckCommand::Scan { path } => {
-            //DirScan::scan_directory(&mut db, Path::new(&path))?;
-            Scan::do_scan(&mut db, path)?;
-        }
-        DirCheckCommand::Changes { scanid, verbose } => {
-            // scanid is a u64 to prevent callers from passing negative numbers
-            // Convert it to an i64 when passing here
-            Analytics::do_changes(& mut db, Utils::opt_u64_to_opt_i64(scanid), verbose)?;
-        }
-        DirCheckCommand::Scans { all, count } => {
-            Analytics::do_scans(&mut db, all, count)?;
-        }
-    }
-*/
 
     Ok(())
 }
