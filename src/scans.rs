@@ -135,7 +135,7 @@ impl Scan {
 
     pub fn do_scan(db: &mut Database, path_arg: String) -> Result<Scan, DirCheckError> {
         let scan = Scan::scan_directory(db, path_arg)?;
-        Reports::scan_print_block(db, &scan)?;
+        Reports::print_scan_block(db, &scan)?;
 
         Ok(scan)
     }
@@ -180,14 +180,16 @@ impl Scan {
         let mut q = VecDeque::new();
     
         q.push_back(QueueEntry {
-            path: root_path_buf,
+            path: root_path_buf.clone(),
             metadata,
         });
     
         while let Some(q_entry) = q.pop_front() {    
             // Update the database
-            let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
-            scan.change_counts.increment(dir_change_type);
+            if (q_entry.path != root_path_buf) {
+                let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
+                scan.change_counts.increment(dir_change_type);
+            }
     
             let entries = fs::read_dir(&q_entry.path)?;
     

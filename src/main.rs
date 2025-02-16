@@ -51,7 +51,7 @@ enum ReportCommand {
         id: Option<u64>,
 
         /// Show the most recent scan (default if no `id` or `count` is provided)
-        #[arg(long = "latest", short = 'l', conflicts_with_all = &["id", "count"], default_value_t = false)]
+        #[arg(long = "latest", short = 'l', conflicts_with_all = &["id", "count"], default_value_t = true)]
         latest: bool,
 
         /// Show the latest `N` scans (default: 10) (conflicts with `id`)
@@ -59,8 +59,12 @@ enum ReportCommand {
         count: u64,
 
         /// Include changes in the scan report (conflicts with 'count' and `entries`)
-        #[arg(long = "changes", conflicts_with = "count")]
+        #[arg(long = "changes", conflicts_with_all = ["count", "entries"])]
         changes: bool,
+
+        /// Include entries in the scan report (only usable with 'latest - conflicts with 'id', 'count' and 'changes')
+        #[arg(long = "entries", conflicts_with_all = ["id", "count", "changes"])]
+        entries: bool,
 
         /// Database file directory (default: current directory)
         #[arg(long = "dbpath", short = 'd', default_value = ".")]
@@ -156,9 +160,9 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
                     }
     
                 }
-                ReportCommand::Scans { id, latest, count, changes, .. } => {
+                ReportCommand::Scans { id, latest, count, changes, entries, .. } => {
                     let id = Utils::opt_u64_to_opt_i64(id);
-                    Reports::do_report_scans(&mut db, id, latest, count, changes)?;
+                    Reports::do_report_scans(&mut db, id, latest, count, changes, entries)?;
                 }
             }
         }
