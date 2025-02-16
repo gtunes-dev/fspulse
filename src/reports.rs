@@ -36,6 +36,10 @@ impl Reports {
         Ok(())
     }
 
+    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, path: Option<String>, scans: bool, count: u64) -> Result<(), DirCheckError> {
+        Ok(())
+    }
+
     fn marquee_title_fill_length(s: &str, indent: &str) -> usize {
         Self::REPORT_WIDTH.saturating_sub(
             s.len()

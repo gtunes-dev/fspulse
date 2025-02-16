@@ -125,7 +125,7 @@ fn main() {
     let temp_args: Vec<String> = std::env::args().collect();
     println!("{:?}", temp_args);
     */
-    
+
     let args = Args::parse();
 
     if let Err(err) = handle_command(args) {
@@ -155,20 +155,20 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         }
         DirCheckCommand::Report { report_type } => {
             match report_type {
+                ReportCommand::Scans { id, latest, count, changes, entries, .. } => {
+                    let id = Utils::opt_u64_to_opt_i64(id);
+                    Reports::do_report_scans(&mut db, id, latest, count, changes, entries)?;
+                }
                 ReportCommand::Entries { id, path: _, changes, count: _, dbpath: _ } => {
+                    //let id = Utils::opt_u64_to_opt_i64(id);
+                    
                     if changes && id.is_none() {
                         return Err(DirCheckError::Error("Cannot use --changes without specifying an entry ID.".to_string()));
                     }
                 }
-                ReportCommand::RootPaths { id, path, scans, count: _, dbpath: _ } => {
-                    if scans && id.is_none() && path.is_none() {
-                        return Err(DirCheckError::Error("Cannot use --scans without specifying a root path ID or path.".to_string()));
-                    }
-    
-                }
-                ReportCommand::Scans { id, latest, count, changes, entries, .. } => {
+                ReportCommand::RootPaths { id, path, scans, count, ..} => {
                     let id = Utils::opt_u64_to_opt_i64(id);
-                    Reports::do_report_scans(&mut db, id, latest, count, changes, entries)?;
+                    Reports::report_root_paths(&mut db, id, path, scans, count)?;
                 }
             }
         }
