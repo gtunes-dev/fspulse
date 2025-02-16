@@ -1,4 +1,5 @@
 use crate::change::ChangeType;
+use crate::entries::Entry;
 use crate::error::DirCheckError;
 use crate::database::Database;
 use crate::scans::Scan;
@@ -57,7 +58,7 @@ impl Reports {
 
         // TODO: print subtitle
         if subtitle.len() > 0 {
-            println!("{}{}{}", endcap_char, space_fill.repeat(Self::REPORT_WIDTH - 2), endcap_char);
+            //println!("{}{}{}", endcap_char, space_fill.repeat(Self::REPORT_WIDTH - 2), endcap_char);
             fill_length = Self::marquee_title_fill_length(subtitle, indent);
             println!("{}{}{}{}{}", endcap_char, indent, subtitle, space_fill.repeat(fill_length), endcap_char);
 
@@ -95,7 +96,7 @@ impl Reports {
 
     fn print_section_header(header: &str, subtitle: &str) {
         println!();
-        Self::print_marquee(header, subtitle, "", "-");
+        Self::print_marquee(header, subtitle, "+", "-");
     }
 
     fn print_none_if_zero(i: i32) {
@@ -180,14 +181,17 @@ impl Reports {
     }
     
     fn print_scan_entries(db: &Database, scan_id: i64) -> Result<(), DirCheckError> {
+        Self::print_section_header("Entries",  "Legend: [Entry ID, Item Type, Last Modified, Size] path");
+        let entry_count = Entry::with_each_scan_entry(db, scan_id, Self::print_entry_as_line)?;
+        Self::print_none_if_zero(entry_count);
         Ok(())
     }
 
     fn print_scan_changes(db: &Database, scan_id: i64) -> Result<(), DirCheckError> {
         Self::print_section_header("Changed Entries", "");
 
-        let entry_change_count = Self::with_each_scan_change(db, scan_id, Self::print_change_as_line)?;
-        Self::print_none_if_zero(entry_change_count);
+        let change_count = Self::with_each_scan_change(db, scan_id, Self::print_change_as_line)?;
+        Self::print_none_if_zero(change_count);
 
         Ok(())
     }
@@ -227,6 +231,16 @@ impl Reports {
     fn print_change_as_line(id: i64, change_type: &str, item_type: &str, path: &str) {
         println!("[{},{},{}] {}", id, change_type, item_type, path);
     }
+
+    fn print_entry_as_line(id: i64, path: &str, item_type: &str, last_modified: i64, file_size: Option<i64>) {
+        println!("[{},{},{},{}] {}", 
+            id, 
+            item_type, 
+            Utils::formatted_db_time(last_modified), 
+            file_size.map_or("-".to_string(), |v| v.to_string()), 
+            path);
+    }
+
 
 
      /* 

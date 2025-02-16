@@ -1,5 +1,6 @@
 mod database;
 mod change;
+mod entries;
 mod error;
 mod scans;
 mod reports;
@@ -59,11 +60,11 @@ enum ReportCommand {
         count: u64,
 
         /// Include changes in the scan report (conflicts with 'count' and `entries`)
-        #[arg(long = "changes", conflicts_with_all = ["count", "entries"])]
+        #[arg(long = "changes", conflicts_with_all = ["count", "entries"], default_value_t = false)]
         changes: bool,
 
         /// Include entries in the scan report (only usable with 'latest - conflicts with 'id', 'count' and 'changes')
-        #[arg(long = "entries", conflicts_with_all = ["id", "count", "changes"])]
+        #[arg(long = "entries", conflicts_with_all = ["id", "count", "changes"], default_value_t = false)]
         entries: bool,
 
         /// Database file directory (default: current directory)
@@ -120,6 +121,11 @@ enum ReportCommand {
 
 fn main() {
     // Parse command-line arguments
+    /*
+    let temp_args: Vec<String> = std::env::args().collect();
+    println!("{:?}", temp_args);
+    */
+    
     let args = Args::parse();
 
     if let Err(err) = handle_command(args) {

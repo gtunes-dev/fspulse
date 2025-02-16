@@ -186,7 +186,7 @@ impl Scan {
     
         while let Some(q_entry) = q.pop_front() {    
             // Update the database
-            if (q_entry.path != root_path_buf) {
+            if q_entry.path != root_path_buf {
                 let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
                 scan.change_counts.increment(dir_change_type);
             }
