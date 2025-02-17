@@ -1,4 +1,4 @@
-use crate::change::ChangeType;
+use crate::changes::ChangeType;
 use crate::entries::Entry;
 use crate::error::DirCheckError;
 use crate::database::Database;
@@ -36,7 +36,7 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, path: Option<String>, scans: bool, count: u64) -> Result<(), DirCheckError> {
+    pub fn report_root_paths(_db: &Database, _root_path_id: Option<i64>, _path: Option<String>, _scans: bool, _count: u64) -> Result<(), DirCheckError> {
         Ok(())
     }
 
@@ -202,12 +202,12 @@ impl Reports {
 
     fn with_each_scan_change<F>(db: &Database, scan_id: i64, func: F) -> Result<i32, DirCheckError>
     where
-        F: Fn(i64, &str, &str, &str),
+        F: Fn(i64, &str, Option<bool>, Option<bool>, &str, &str),
     {
         let mut change_count = 0;
 
         let mut stmt = db.conn.prepare(
-            "SELECT entries.id, changes.change_type, entries.item_type, entries.path
+            "SELECT entries.id, changes.change_type, changes.metadata_changed, changes.hash_changed, entries.item_type, entries.path
             FROM changes
             JOIN entries ON entries.id = changes.entry_id
             WHERE changes.scan_id = ?
@@ -216,36 +216,37 @@ impl Reports {
         
         let rows = stmt.query_map([scan_id], |row| {
             Ok((
-                row.get::<_, i64>(0)?,      // Entry ID
-                row.get::<_, String>(1)?,   // Change type (A, M, D, etc.)
-                row.get::<_, String>(2)?,   // Item type (F, D)
-                row.get::<_, String>(3)?,   // Path
+                row.get::<_, i64>(0)?,          // Entry ID
+                row.get::<_, String>(1)?,       // Change type (A, M, D, etc.)
+                row.get::<_, Option<bool>>(2)?, // Metadata Changed
+                row.get::<_, Option<bool>>(3)?, // Hash Changed
+                row.get::<_, String>(4)?,       // Item type (F, D)
+                row.get::<_, String>(5)?,       // Path
             ))
         })?;
         
         for row in rows {
-            let (id, change_type, item_type, path) = row?;
+            let (id, change_type, metadata_changed, hash_changed, item_type, path) = row?;
 
-            func(id, &change_type, &item_type, &path);
+            func(id, &change_type, metadata_changed, hash_changed, &item_type, &path);
             change_count = change_count + 1;
         }
         Ok(change_count)
     }
 
-    fn print_change_as_line(id: i64, change_type: &str, item_type: &str, path: &str) {
+    fn print_change_as_line(id: i64, change_type: &str, _metadata_changed: Option<bool>, _hash_changed: Option<bool>, item_type: &str, path: &str) {
         println!("[{},{},{}] {}", id, change_type, item_type, path);
     }
 
-    fn print_entry_as_line(id: i64, path: &str, item_type: &str, last_modified: i64, file_size: Option<i64>) {
-        println!("[{},{},{},{}] {}", 
+    fn print_entry_as_line(id: i64, path: &str, item_type: &str, last_modified: i64, file_size: Option<i64>, file_hash: Option<String>) {
+        println!("[{},{},{},{},{}] {}", 
             id, 
             item_type, 
             Utils::formatted_db_time(last_modified), 
-            file_size.map_or("-".to_string(), |v| v.to_string()), 
+            file_size.map_or("-".to_string(), |v| v.to_string()),
+            file_hash.map_or("-".to_string(), |v| v.to_string()),
             path);
     }
-
-
 
      /* 
 

@@ -1,5 +1,5 @@
 mod database;
-mod change;
+mod changes;
 mod entries;
 mod error;
 mod scans;
@@ -31,6 +31,10 @@ enum DirCheckCommand {
         #[arg(long = "path", short = 'p', default_value = ".")]
         path: String,
 
+        /// Perform a 'deep' scan computing a hash for each file
+        #[arg(long = "deep", default_value_t = false)]
+        deep: bool,
+        
         /// Database file directory (default: current directory)
         #[arg(long = "dbpath", short = 'd', default_value = ".")]
         dbpath: String,
@@ -150,8 +154,8 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
     let mut db = Database::new(dbpath)?;   
     
     match args.command {
-        DirCheckCommand::Scan { path, .. } => {
-            Scan::do_scan(&mut db, path)?;
+        DirCheckCommand::Scan { path, deep, .. } => {
+            Scan::do_scan(&mut db, path, deep)?;
         }
         DirCheckCommand::Report { report_type } => {
             match report_type {

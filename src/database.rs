@@ -4,7 +4,7 @@ use crate::error::DirCheckError;
 use crate::schema::CREATE_SCHEMA_SQL;
 
 const DB_FILENAME: &str = "dircheck.db";
-const SCHEMA_VERSION: &str = "1";
+const SCHEMA_VERSION: &str = "2";
 
 #[derive(Debug, PartialEq)]
 pub enum ItemType {
@@ -24,30 +24,6 @@ impl ItemType {
         }
     }
 }
-
-/*
-
-#[derive(Debug, PartialEq)]
-pub enum ChangeType {
-    Add,
-    Delete,
-    Modify,
-    TypeChange,
-    NoChange,
-}
-
-impl ChangeType {
-    pub fn as_db_str(&self) -> &'static str {
-        match self {
-            ChangeType::Add => "A",
-            ChangeType::Delete => "D",
-            ChangeType::Modify => "M",
-            ChangeType::TypeChange => "T",
-            ChangeType::NoChange => "N",
-        }
-    }
-}
-    */
 
 pub struct Database {
     pub conn: Connection,

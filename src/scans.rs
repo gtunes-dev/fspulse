@@ -1,4 +1,4 @@
-use crate::change::{ ChangeCounts, ChangeType };
+use crate::changes::{ ChangeCounts, ChangeType };
 use crate::error::DirCheckError;
 use crate::database::{ Database, ItemType };
 use crate::reports::Reports;
@@ -17,8 +17,7 @@ use std::path::PathBuf;
 pub struct Scan {
     // Schema fields
     id: i64,
-    //root_path_id: i64,
-    //root_path: String, // TODO: Move to Path struct
+    is_deep: bool,
     time_of_scan: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
@@ -40,47 +39,30 @@ struct QueueEntry {
 impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
-    fn new_for_scan(id: i64, time_of_scan: i64, root_path: RootPath) -> Self {
+    fn new_for_scan(id: i64, is_deep: bool, time_of_scan: i64, root_path: RootPath) -> Self {
         Scan {
             id,
+            is_deep,
             time_of_scan,
             root_path,
             ..Default::default()
         }
     }
-    
-    /*
-
-    // Private function used once all fields have been fetched
-    fn new(scan_id: i64, root_path_id: i64, root_path: String) -> Self {
-        Scan {
-            scan_id,
-            root_path_id,
-            root_path,
-            ..Default::default()
-        }
-    }
-
-    pub fn new_from_latest(db: &Database) -> Result<Self, DirCheckError> {
-        let scan = Scan::new_from_scan_id(db, None)?;
-        Ok(scan)
-    }
-    */
 
     pub fn new_from_id(db: &Database, id: Option<i64>) -> Result<Self, DirCheckError> {
         let conn = &db.conn;
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,
         // load the specified scan
-        let scan_row: Option<(i64, i64, i64, Option<i64>, Option<i64>, bool)> = conn.query_row(
-            "SELECT id, root_path_id, time_of_scan, file_count, folder_count, is_complete
+        let scan_row: Option<(i64, i64, bool, i64, Option<i64>, Option<i64>, bool)> = conn.query_row(
+            "SELECT id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete
                 FROM scans
                 WHERE id = COALESCE(?1, (SELECT MAX(id) FROM scans))",
             params![id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
         ).optional()?;
 
-        let (id, root_path_id, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
+        let (id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
             DirCheckError::Error("No scan found".to_string())
         })?;
 
@@ -88,6 +70,7 @@ impl Scan {
 
         Ok(Scan {
             id,
+            is_deep,
             time_of_scan,
             root_path,
             file_count,
@@ -109,6 +92,10 @@ impl Scan {
         self.root_path.path()
     }
 
+    pub fn bool(&self) -> bool {
+        self.is_deep
+    }
+
     pub fn time_of_scan(&self) -> i64 {
         self.time_of_scan
     }
@@ -124,6 +111,8 @@ impl Scan {
         &self.change_counts
     }
 
+    // TODO: Is this dead code?
+    /*
     pub fn with_id_or_latest<F>(db: &Database, id: Option<i64>, func: F) -> Result<(), DirCheckError>
     where
         F: FnOnce(&Database, &Scan) -> Result<(), DirCheckError>,
@@ -132,9 +121,10 @@ impl Scan {
 
         func(db, &scan)
     }
+    */
 
-    pub fn do_scan(db: &mut Database, path_arg: String) -> Result<Scan, DirCheckError> {
-        let scan = Scan::scan_directory(db, path_arg)?;
+    pub fn do_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<Scan, DirCheckError> {
+        let scan = Scan::scan_directory(db, path_arg, deep)?;
         Reports::print_scan_block(db, &scan)?;
 
         Ok(scan)
@@ -172,8 +162,8 @@ impl Scan {
         Ok(canonical_path)
     }
 
-    fn scan_directory(db: &mut Database, path_arg: String) -> Result<Self, DirCheckError> {
-        let mut scan = Self::begin_scan(db, path_arg)?;
+    fn scan_directory(db: &mut Database, path_arg: String, deep: bool) -> Result<Self, DirCheckError> {
+        let mut scan = Self::begin_scan(db, path_arg, deep)?;
         let root_path_buf = PathBuf::from(scan.root_path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
@@ -187,7 +177,7 @@ impl Scan {
         while let Some(q_entry) = q.pop_front() {    
             // Update the database
             if q_entry.path != root_path_buf {
-                let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
+                let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata, None)?;
                 scan.change_counts.increment(dir_change_type);
             }
     
@@ -214,7 +204,7 @@ impl Scan {
                     // println!("{:?}: {}", item_type, entry.path().display());
                     
                     // Update the database
-                    let file_change_type = scan.handle_item(db, item_type, &entry.path(), &metadata)?;
+                    let file_change_type = scan.handle_item(db, item_type, &entry.path(), &metadata, None)?;
                     scan.change_counts.increment(file_change_type);
                 }
             }
@@ -224,25 +214,25 @@ impl Scan {
         Ok(scan)
     }
 
-    fn begin_scan(db: &mut Database, path_arg: String) -> Result<Self, DirCheckError> {
+    fn begin_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<Self, DirCheckError> {
         let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
         let root_path_str = path_canonical.to_string_lossy().to_string();
 
         let root_path = RootPath::get_or_insert(db, &root_path_str)?;
 
         let (scan_id, time_of_scan): (i64, i64) = db.conn.query_row(
-            "INSERT INTO scans (root_path_id, time_of_scan) 
-             VALUES (?, strftime('%s', 'now', 'utc')) 
+            "INSERT INTO scans (root_path_id, is_deep, time_of_scan) 
+             VALUES (?, ?, strftime('%s', 'now', 'utc')) 
              RETURNING id, time_of_scan",
-            [root_path.id()],
+            [root_path.id(), deep as i64],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
 
-        let scan = Scan::new_for_scan(scan_id, time_of_scan, root_path);
+        let scan = Scan::new_for_scan(scan_id, deep, time_of_scan, root_path);
         Ok(scan)
     }
 
-    fn handle_item(&mut self, db: &mut Database, item_type: ItemType, path: &Path, metadata: &Metadata) -> Result<ChangeType, DirCheckError> {
+    fn handle_item(&mut self, db: &mut Database, item_type: ItemType, path: &Path, metadata: &Metadata, file_hash: Option<&str>) -> Result<ChangeType, DirCheckError> {
         let path_str = path.to_string_lossy();
         let scan_id = self.id;
         let root_path_id = self.root_path.id();
@@ -259,21 +249,23 @@ impl Scan {
         let file_size = if metadata.is_file() { Some(metadata.len() as i64) } else { None };
     
         // Check if the entry already exists (fetching `id`, `is_tombstone` as well)
-        let existing_entry: Option<(i64, String, Option<i64>, Option<i64>, bool)> = conn.query_row(
-            "SELECT id, item_type, last_modified, file_size, is_tombstone FROM entries WHERE root_path_id = ? AND path = ?",
+        let existing_entry: Option<(i64, String, Option<i64>, Option<i64>, Option<String>, bool)> = conn.query_row(
+            "SELECT id, item_type, last_modified, file_size, file_hash, is_tombstone FROM entries WHERE root_path_id = ? AND path = ?",
             (root_path_id, &path_str),
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2).ok(), row.get(3).ok(), row.get(4)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2).ok(), row.get(3).ok(), row.get(4)?, row.get(5)?)),
         ).optional()?;
     
         match existing_entry {
-            Some((entry_id, existing_type, existing_modified, existing_size, is_tombstone)) => {
+            Some((entry_id, existing_type, existing_modified, existing_size, existing_hash, is_tombstone)) => {
                 let item_type_str = item_type.as_db_str();
-                
+                let metadata_changed = existing_modified != last_modified || existing_size != file_size;
+
+                let hash_changed = file_hash.map_or(false, |h| Some(h) != existing_hash.as_deref());
+            
                 if is_tombstone {
-                    // Item previously deleted - resurrect it
                     let tx = conn.transaction()?;
-                    tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, last_seen_scan_id = ?, is_tombstone = 0 WHERE id = ?", 
-                        (item_type_str, last_modified, file_size, scan_id, entry_id))?;
+                    tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ?, is_tombstone = 0 WHERE id = ?", 
+                        (item_type_str, last_modified, file_size, file_hash, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
                         (scan_id, entry_id, ChangeType::Add.as_db_str()))?;
                     change_type = ChangeType::Add;
@@ -281,19 +273,35 @@ impl Scan {
                 } else if existing_type != item_type_str {
                     // Item type changed (e.g., file -> directory)
                     let tx = conn.transaction()?;
-                    tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, last_seen_scan_id = ? WHERE id = ?", 
-                        (item_type_str, last_modified, file_size, scan_id, entry_id))?;
+                    tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ? WHERE id = ?", 
+                        (item_type_str, last_modified, file_size, file_hash, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
                         (self.id, entry_id, ChangeType::TypeChange.as_db_str()))?;
                     change_type = ChangeType::TypeChange;
                     tx.commit()?;
-                } else if existing_modified != last_modified || existing_size != file_size {
+                } else if metadata_changed || hash_changed {
                     // Item content changed
                     let tx = conn.transaction()?;
-                    tx.execute("UPDATE entries SET last_modified = ?, file_size = ?, last_seen_scan_id = ? WHERE id = ?", 
-                        (last_modified, file_size, scan_id, entry_id))?;
-                    tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
-                        (scan_id, entry_id, ChangeType::Modify.as_db_str()))?;
+                    tx.execute("UPDATE entries 
+                        SET last_modified = ?, 
+                        file_size = ?,
+                        file_hash = ?,
+                        last_seen_scan_id = ? 
+                        WHERE id = ?", 
+                        (last_modified, file_size, file_hash.or(existing_hash.as_deref()), scan_id, entry_id))?;
+                    tx.execute("INSERT INTO changes 
+                        (scan_id, entry_id, change_type, metadata_changed, hash_changed, prev_last_modified, prev_file_size, prev_hash) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                        (
+                            scan_id, 
+                            entry_id, 
+                            ChangeType::Modify.as_db_str(),
+                            metadata_changed,
+                            hash_changed,
+                            metadata_changed.then_some(existing_modified),
+                            metadata_changed.then_some(existing_size),
+                            hash_changed.then_some(existing_hash),
+                        ))?;
                     change_type = ChangeType::Modify;
                     tx.commit()?;
                 } else {
@@ -306,8 +314,8 @@ impl Scan {
             None => {
                 // Item is new, insert into entries and changes tables
                 let tx = conn.transaction()?;
-                tx.execute("INSERT INTO entries (root_path_id, path, item_type, last_modified, file_size, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?)",
-                    (root_path_id, &path_str, item_type.as_db_str(), last_modified, file_size, scan_id))?;
+                tx.execute("INSERT INTO entries (root_path_id, path, item_type, last_modified, file_size, file_hash, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (root_path_id, &path_str, item_type.as_db_str(), last_modified, file_size, file_hash, scan_id))?;
                 let entry_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
                 tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)",
                     (scan_id, entry_id, ChangeType::Add.as_db_str()))?;

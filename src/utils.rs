@@ -8,9 +8,12 @@ impl Utils {
         opt_u64.map(|id| id as i64)
     }
 
+    // TODO: Dead code?
+    /* 
     pub fn str_value_or_none(s: &Option<String>) -> &str {
         s.as_deref().unwrap_or("None")
     }
+    */
 
     pub fn opt_i64_or_none_as_str(opt_i64: Option<i64>) -> String {
         match opt_i64 {
