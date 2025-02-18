@@ -1,6 +1,7 @@
 use crate::changes::{ ChangeCounts, ChangeType };
 use crate::error::DirCheckError;
 use crate::database::{ Database, ItemType };
+use crate::hash::Hash;
 use crate::reports::Reports;
 use crate::root_paths::RootPath;
 
@@ -92,7 +93,7 @@ impl Scan {
         self.root_path.path()
     }
 
-    pub fn bool(&self) -> bool {
+    pub fn is_deep(&self) -> bool {
         self.is_deep
     }
 
@@ -107,6 +108,11 @@ impl Scan {
     pub fn folder_count(&self) -> Option<i64> {
         self.folder_count
     }
+
+    pub fn is_complete(&self) -> bool {
+        self.is_complete
+    }
+
     pub fn change_counts(&self) -> &ChangeCounts {
         &self.change_counts
     }
@@ -174,7 +180,7 @@ impl Scan {
             metadata,
         });
     
-        while let Some(q_entry) = q.pop_front() {    
+        while let Some(q_entry) = q.pop_front() {
             // Update the database
             if q_entry.path != root_path_buf {
                 let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata, None)?;
@@ -201,10 +207,19 @@ impl Scan {
                         ItemType::Other
                     };
     
-                    // println!("{:?}: {}", item_type, entry.path().display());
-                    
-                    // Update the database
-                    let file_change_type = scan.handle_item(db, item_type, &entry.path(), &metadata, None)?;
+                    println!("{:?}: {}", item_type, entry.path().display());
+                    let mut hash = None;
+                    if deep && item_type == ItemType::File {
+                        hash = match Hash::compute_md5_hash(&entry.path()) {
+                            Ok(hash_s) => Some(hash_s),
+                            Err(error) => {
+                                eprintln!("Error computing hash: {}", error);
+                                None
+                            }
+                        }
+                    };
+
+                    let file_change_type = scan.handle_item(db, item_type, &entry.path(), &metadata, hash.as_deref())?;
                     scan.change_counts.increment(file_change_type);
                 }
             }
@@ -259,6 +274,10 @@ impl Scan {
             Some((entry_id, existing_type, existing_modified, existing_size, existing_hash, is_tombstone)) => {
                 let item_type_str = item_type.as_db_str();
                 let metadata_changed = existing_modified != last_modified || existing_size != file_size;
+
+                // println!("{}", Utils::string_value_or_none(&existing_hash));
+                // println!("{}", Utils::str_value_or_none(&file_hash));
+                // println!();
 
                 let hash_changed = file_hash.map_or(false, |h| Some(h) != existing_hash.as_deref());
             

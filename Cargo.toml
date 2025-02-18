@@ -6,5 +6,7 @@ edition = "2021"
 [dependencies]
 chrono = { version = "0.4", features = ["clock"] }
 clap = { version = "4.0", features = ["derive"] }
+hex = "0.4"
+md-5 = "0.10"
 thiserror = "2.0"
 rusqlite = { version = "0.33", features = ["bundled"] }

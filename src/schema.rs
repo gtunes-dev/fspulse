@@ -49,13 +49,14 @@ CREATE INDEX IF NOT EXISTS idx_entries_scan ON entries (root_path_id, last_seen_
 -- Changes table tracks modifications between scans
 CREATE TABLE IF NOT EXISTS changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    scan_id INTEGER NOT NULL,          -- The scan in which the change was detected
-    entry_id INTEGER NOT NULL,         -- The file or directory that changed
-    change_type CHAR(1) NOT NULL,      -- ('A' for added, 'D' for deleted, 'M' for modified, 'T' for type changed)
-    metadata_changed BOOLEAN DEFAULT NULL,  -- Indicates if metadata changed
-    hash_changed BOOLEAN DEFAULT NULL,      -- Indicates if file contents changed
-    prev_metadata INTEGER DEFAULT NULL,     -- Stores the previous last_modified timestamp (if applicable)
-    prev_hash TEXT DEFAULT NULL,            -- Stores the previous hash value (if applicable)
+    scan_id INTEGER NOT NULL,                 -- The scan in which the change was detected
+    entry_id INTEGER NOT NULL,                -- The file or directory that changed
+    change_type CHAR(1) NOT NULL,             -- ('A' for added, 'D' for deleted, 'M' for modified, 'T' for type changed)
+    metadata_changed BOOLEAN DEFAULT NULL,    -- Indicates if metadata changed
+    hash_changed BOOLEAN DEFAULT NULL,        -- Indicates if file contents changed
+    prev_last_modified INTEGER DEFAULT NULL,  -- Stores the previous last_modified timestamp (if applicable)
+    prev_file_size INTEGER DEFAULT NULL,      -- Stores the previous file_size (if applicable)
+    prev_hash TEXT DEFAULT NULL,              -- Stores the previous hash value (if applicable)
     FOREIGN KEY (scan_id) REFERENCES scans(id),
     FOREIGN KEY (entry_id) REFERENCES entries(id)
 );

@@ -2,6 +2,7 @@ mod database;
 mod changes;
 mod entries;
 mod error;
+mod hash;
 mod scans;
 mod reports;
 mod root_paths;

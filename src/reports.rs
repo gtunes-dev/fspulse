@@ -62,36 +62,11 @@ impl Reports {
 
         // TODO: print subtitle
         if subtitle.len() > 0 {
-            //println!("{}{}{}", endcap_char, space_fill.repeat(Self::REPORT_WIDTH - 2), endcap_char);
             fill_length = Self::marquee_title_fill_length(subtitle, indent);
             println!("{}{}{}{}{}", endcap_char, indent, subtitle, space_fill.repeat(fill_length), endcap_char);
-
         }
 
         println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
-        /* 
-
-        let suffix_fill_length = Self::REPORT_WIDTH.saturating_sub(
-            (prefix_suffix.len() * 2) 
-            + prefix_fill_chars 
-            + (title_padding.len() * 2) 
-            + title.len()
-        );
-        
-
-        println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
-
-        println!(
-            "{}{}{}{}{}{}{}",
-            endcap_char,
-            fill_char.repeat(prefix_fill_chars),
-            title_padding,
-            title,
-            title_padding,
-            fill_char.repeat(suffix_fill_length),
-            endcap_char
-        );
-        */
     }
 
     fn print_title(title: &str, subtitle: &str) {
@@ -115,7 +90,9 @@ impl Reports {
         println!("Id:             {}", scan.id());
         println!("Root Path ID:   {}", scan.root_path_id());
         println!("Root Path:      {}", scan.root_path());
+        println!("Deep Scan:      {}", scan.is_deep());
         println!("Time of Scan:   {}", Utils::formatted_db_time(scan.time_of_scan()));
+        println!("Completed:      {}", scan.is_complete());
         println!("");
         // println!("Total Items:    {}", total_items);
         
