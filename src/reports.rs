@@ -2,6 +2,7 @@ use crate::changes::ChangeType;
 use crate::entries::Entry;
 use crate::error::DirCheckError;
 use crate::database::Database;
+use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
 
@@ -36,7 +37,12 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_root_paths(_db: &Database, _root_path_id: Option<i64>, _path: Option<String>, _scans: bool, _count: u64) -> Result<(), DirCheckError> {
+    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, _path: Option<String>, _scans: bool, _count: u64) -> Result<(), DirCheckError> {
+        if let Some(root_path_id) = root_path_id {
+            let root_path = RootPath::get(db, root_path_id)?;
+            Self::print_root_path_block(&root_path);
+        }
+        
         Ok(())
     }
 
@@ -82,6 +88,12 @@ impl Reports {
         if i == 0 {
             println!("None.");
         }
+    }
+
+    pub fn print_root_path_block(root_path: &RootPath) {
+        Self::print_title("Root Path", "");
+        println!("Root Path:      {}", root_path.path());
+        println!("Id:             {}", root_path.id());
     }
 
     pub fn print_scan_block(db: &Database, scan: &Scan) -> Result<(), DirCheckError>{

@@ -78,6 +78,7 @@ enum ReportCommand {
     },
 
     /// Report details about root paths in the database
+    #[command(name = "root-paths")]
     RootPaths {
         /// Specify a root path by ID (conflicts with `path`)
         #[arg(long = "id", short = 'i', conflicts_with = "path")]
