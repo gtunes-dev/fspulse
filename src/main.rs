@@ -127,10 +127,10 @@ enum ReportCommand {
 
 fn main() {
     // Parse command-line arguments
-    /*
+    
     let temp_args: Vec<String> = std::env::args().collect();
     println!("{:?}", temp_args);
-    */
+    
 
     let args = Args::parse();
 

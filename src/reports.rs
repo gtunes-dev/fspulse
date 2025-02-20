@@ -6,6 +6,7 @@ use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
 
+use std::{cell::RefCell, path::{Path,PathBuf}};
 use rusqlite::Result;
 
 pub struct Reports {
@@ -24,7 +25,7 @@ impl Reports {
             Self::print_scan_block(db, &scan)?;
 
             if changes {
-                Self::print_scan_changes(db, scan.id())?;
+                Self::print_scan_changes(db, &scan)?;
             }
 
             if latest && entries {
@@ -180,7 +181,45 @@ impl Reports {
         Ok(())
     }
 
-    fn print_scan_changes(db: &Database, scan_id: i64) -> Result<(), DirCheckError> {
+    fn print_scan_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
+        Self::print_section_header("Changed Entries", "");
+    
+        let root_path = Path::new(scan.root_path());
+        let mut previous_indent_level = 0;
+        let mut previous_parent = root_path.to_path_buf();
+    
+        let change_count = Self::with_each_scan_change(db, scan.id(), |id, change_type, metadata_changed, hash_changed, item_type, path| {
+            let path_buf = Path::new(path);
+            let relative_path = path_buf.strip_prefix(root_path).unwrap_or(path_buf);
+            let parent = relative_path.parent().unwrap_or(Path::new(""));
+            let filename = relative_path.file_name().unwrap_or_else(|| path_buf.as_os_str());
+    
+            let indent_level = parent.components().count();
+            let indent_spaces = " ".repeat(indent_level * 5);
+    
+            if parent != previous_parent {
+                println!("{}{}\\", indent_spaces, parent.display());
+                previous_parent = parent.to_path_buf(); // Update the previous parent
+            }
+    
+            println!(
+                "{}[{}] {} ({})",
+                indent_spaces,
+                change_type,
+                //metadata_changed.unwrap_or(false),
+                //hash_changed.unwrap_or(false),
+                filename.to_string_lossy(),
+                id,
+            );
+    
+            previous_indent_level = indent_level;
+        })?;
+    
+        Self::print_none_if_zero(change_count);
+        Ok(())
+    }
+    /*
+    fn print_scan_changes_old(db: &Database, scan_id: i64) -> Result<(), DirCheckError> {
         Self::print_section_header("Changed Entries", "");
 
         let change_count = Self::with_each_scan_change(db, scan_id, Self::print_change_as_line)?;
@@ -188,10 +227,11 @@ impl Reports {
 
         Ok(())
     }
+    */
 
-    fn with_each_scan_change<F>(db: &Database, scan_id: i64, func: F) -> Result<i32, DirCheckError>
+    fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
     where
-        F: Fn(i64, &str, Option<bool>, Option<bool>, &str, &str),
+        F: FnMut(i64, &str, Option<bool>, Option<bool>, &str, &str),
     {
         let mut change_count = 0;
 
