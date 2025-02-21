@@ -1,9 +1,15 @@
+use std::path::MAIN_SEPARATOR_STR;
+
 use chrono::{DateTime, Local, Utc};
+
+const NO_DIR_SEPARATOR: &str = "";
 
 pub struct Utils {
 }
 
 impl Utils {
+    
+
     pub fn opt_u64_to_opt_i64(opt_u64: Option<u64>) -> Option<i64> {
         opt_u64.map(|id| id as i64)
     }
@@ -21,6 +27,14 @@ impl Utils {
         match opt_i64 {
             Some(i) => i.to_string(),
             None => "None".to_string(),
+        }
+    }
+    
+    pub fn dir_sep_or_empty(is_dir: bool) -> &'static str {
+        if is_dir {
+            MAIN_SEPARATOR_STR
+        } else {
+            NO_DIR_SEPARATOR
         }
     }
 

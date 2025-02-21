@@ -1,4 +1,4 @@
-use crate::changes::ChangeType;
+use crate::{changes::ChangeType, database::ItemType};
 use crate::entries::Entry;
 use crate::error::DirCheckError;
 use crate::database::Database;
@@ -6,7 +6,11 @@ use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
 
-use std::{cell::RefCell, path::{Path,PathBuf}};
+use std::collections::HashSet;
+use std::io::Cursor;
+use std::os::macos::raw::stat;
+use std::path::{MAIN_SEPARATOR_STR, Path, PathBuf};
+use rusqlite::ffi::SQLITE_ACCESS_EXISTS;
 use rusqlite::Result;
 
 pub struct Reports {
@@ -185,49 +189,66 @@ impl Reports {
         Self::print_section_header("Changed Entries", "");
     
         let root_path = Path::new(scan.root_path());
-        let mut previous_indent_level = 0;
-        let mut previous_parent = root_path.to_path_buf();
+        let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
     
-        let change_count = Self::with_each_scan_change(db, scan.id(), |id, change_type, metadata_changed, hash_changed, item_type, path| {
-            let path_buf = Path::new(path);
-            let relative_path = path_buf.strip_prefix(root_path).unwrap_or(path_buf);
-            let parent = relative_path.parent().unwrap_or(Path::new(""));
-            let filename = relative_path.file_name().unwrap_or_else(|| path_buf.as_os_str());
-    
-            let indent_level = parent.components().count();
-            let indent_spaces = " ".repeat(indent_level * 5);
-    
-            if parent != previous_parent {
-                println!("{}{}\\", indent_spaces, parent.display());
-                previous_parent = parent.to_path_buf(); // Update the previous parent
+        let change_count = Self::with_each_scan_change(
+            db,
+            scan.id(),
+            |id, change_type, metadata_changed, hash_changed, item_type, path| {
+                // Reduce path to the portion that is relative to the root
+                let path = Path::new(path).strip_prefix(root_path).unwrap();
+                let parent = path.parent();
+
+                let mut new_path = path;
+
+                // Wind the stack down to the first path that is a parent of the current item
+                while let Some(stack_path) = path_stack.last() {
+                    // if the path at the top of the stack is a prefix of the current path
+                    if path.starts_with(stack_path) {
+                        // reduce new_path down to the unique portion
+                        new_path = path.strip_prefix(stack_path).unwrap();
+                        break;
+                    }
+                    path_stack.pop();
+                }
+                
+                let is_dir = item_type == "D";
+
+                if !is_dir {
+                    let structural_component = new_path.parent();
+                    if let Some(s_path) = structural_component {
+                        let s_str = s_path.to_string_lossy();
+                        if !s_str.is_empty() {
+                            println!("{}{}/", " ".repeat(path_stack.len() * 4), s_str);
+                            path_stack.push(parent.unwrap().to_path_buf());
+
+                            // The structural path has been pushed. The new_path is now just the filename
+                            new_path = Path::new(new_path.file_name().unwrap());
+                        }
+                    }
+
+                } 
+
+                // Print the item
+                println!("{}[{}] {}{} ({})", 
+                    " ".repeat(path_stack.len() * 4), 
+                    change_type, 
+                    new_path.to_string_lossy(),
+                    Utils::dir_sep_or_empty(is_dir),
+                    id,
+                );
+
+                // If it's a directory, push it onto the stack
+                if item_type == "D" {
+                    path_stack.push(path.to_path_buf());
+                }
             }
-    
-            println!(
-                "{}[{}] {} ({})",
-                indent_spaces,
-                change_type,
-                //metadata_changed.unwrap_or(false),
-                //hash_changed.unwrap_or(false),
-                filename.to_string_lossy(),
-                id,
-            );
-    
-            previous_indent_level = indent_level;
-        })?;
-    
-        Self::print_none_if_zero(change_count);
-        Ok(())
-    }
-    /*
-    fn print_scan_changes_old(db: &Database, scan_id: i64) -> Result<(), DirCheckError> {
-        Self::print_section_header("Changed Entries", "");
-
-        let change_count = Self::with_each_scan_change(db, scan_id, Self::print_change_as_line)?;
+        )?;
+               
         Self::print_none_if_zero(change_count);
 
         Ok(())
     }
-    */
 
     fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
     where
