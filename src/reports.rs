@@ -1,16 +1,11 @@
-use crate::{changes::ChangeType, database::ItemType};
-use crate::entries::Entry;
+use crate::changes::ChangeType;
 use crate::error::DirCheckError;
 use crate::database::Database;
 use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
 
-use std::collections::HashSet;
-use std::io::Cursor;
-use std::os::macos::raw::stat;
-use std::path::{MAIN_SEPARATOR_STR, Path, PathBuf};
-use rusqlite::ffi::SQLITE_ACCESS_EXISTS;
+use std::path::{Path, PathBuf};
 use rusqlite::Result;
 
 pub struct Reports {
@@ -21,7 +16,6 @@ impl Reports {
     const REPORT_WIDTH: usize = 80;
 
     pub fn do_report_scans(db: &Database, scan_id: Option<i64>, latest: bool, count: u64, changes: bool, entries: bool) -> Result<(), DirCheckError> {
-        
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
         if scan_id.is_some() || latest {
@@ -33,7 +27,7 @@ impl Reports {
             }
 
             if latest && entries {
-                Self::print_scan_entries(db, scan.id())?;
+                Self::print_scan_entries(db, &scan)?;
             }
         } else {
             Self::print_latest_scans(db, count)?;
@@ -178,70 +172,77 @@ impl Reports {
         Ok(())
     }
     
-    fn print_scan_entries(db: &Database, scan_id: i64) -> Result<(), DirCheckError> {
-        Self::print_section_header("Entries",  "Legend: [Entry ID, Item Type, Last Modified, Size] path");
-        let entry_count = Entry::with_each_scan_entry(db, scan_id, Self::print_entry_as_line)?;
-        Self::print_none_if_zero(entry_count);
-        Ok(())
-    }
 
+    fn get_tree_path(path_stack: &mut Vec<PathBuf>, root_path: &Path, path: &str, is_dir: bool) -> (usize, PathBuf) {
+        // Reduce path to the portion that is relative to the root
+        let path = Path::new(path).strip_prefix(root_path).unwrap();
+        let parent = path.parent();
+
+        let mut new_path = path;
+
+        // Wind the stack down to the first path that is a parent of the current item
+        while let Some(stack_path) = path_stack.last() {
+            // if the path at the top of the stack is a prefix of the current path
+            // we stop pruning the stack. We now remove the portion of new_path
+            // which is covered by the entry at the top of the stack - we only
+            // want to print the portion that hasn't already been printed
+            if path.starts_with(stack_path) {
+                new_path = path.strip_prefix(stack_path).unwrap();
+                break;
+            }
+            path_stack.pop();
+        }
+        if !is_dir {
+            if let Some(structural_component) = new_path.parent() {
+                let structural_component_str = structural_component.to_string_lossy();
+                if !structural_component_str.is_empty() {
+                    println!("{}{}/", " ".repeat(path_stack.len() * 4), structural_component_str);
+                    path_stack.push(parent.unwrap().to_path_buf());
+
+                    // The structural path has been pushed. The new_path is now just the filename
+                    new_path = Path::new(new_path.file_name().unwrap());
+                }
+            }
+        }
+
+        let indent_level = path_stack.len();
+
+        // If it's a directory, push it onto the stack
+        if is_dir {
+            path_stack.push(path.to_path_buf());
+        }
+
+        (indent_level, new_path.to_path_buf())
+    }
+      
     fn print_scan_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
         Self::print_section_header("Changed Entries", "");
     
         let root_path = Path::new(scan.root_path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
     
+        // TODO: identify changes as metadata and/or hash
         let change_count = Self::with_each_scan_change(
             db,
             scan.id(),
-            |id, change_type, metadata_changed, hash_changed, item_type, path| {
-                // Reduce path to the portion that is relative to the root
-                let path = Path::new(path).strip_prefix(root_path).unwrap();
-                let parent = path.parent();
-
-                let mut new_path = path;
-
-                // Wind the stack down to the first path that is a parent of the current item
-                while let Some(stack_path) = path_stack.last() {
-                    // if the path at the top of the stack is a prefix of the current path
-                    if path.starts_with(stack_path) {
-                        // reduce new_path down to the unique portion
-                        new_path = path.strip_prefix(stack_path).unwrap();
-                        break;
-                    }
-                    path_stack.pop();
-                }
-                
+            |id, change_type, _metadata_changed, _hash_changed, item_type, path| {
                 let is_dir = item_type == "D";
 
-                if !is_dir {
-                    let structural_component = new_path.parent();
-                    if let Some(s_path) = structural_component {
-                        let s_str = s_path.to_string_lossy();
-                        if !s_str.is_empty() {
-                            println!("{}{}/", " ".repeat(path_stack.len() * 4), s_str);
-                            path_stack.push(parent.unwrap().to_path_buf());
-
-                            // The structural path has been pushed. The new_path is now just the filename
-                            new_path = Path::new(new_path.file_name().unwrap());
-                        }
-                    }
-
-                } 
+                let (indent_level, new_path) = Self::get_tree_path(
+                    &mut path_stack, 
+                    root_path, 
+                    path,
+                    is_dir,
+                );
 
                 // Print the item
                 println!("{}[{}] {}{} ({})", 
-                    " ".repeat(path_stack.len() * 4), 
+                    " ".repeat(indent_level * 4), 
                     change_type, 
                     new_path.to_string_lossy(),
                     Utils::dir_sep_or_empty(is_dir),
                     id,
                 );
-
-                // If it's a directory, push it onto the stack
-                if item_type == "D" {
-                    path_stack.push(path.to_path_buf());
-                }
             }
         )?;
                
@@ -284,8 +285,65 @@ impl Reports {
         Ok(change_count)
     }
 
-    fn print_change_as_line(id: i64, change_type: &str, _metadata_changed: Option<bool>, _hash_changed: Option<bool>, item_type: &str, path: &str) {
-        println!("[{},{},{}] {}", id, change_type, item_type, path);
+    fn print_scan_entries(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
+        Self::print_section_header("Entries",  "Legend: [Entry ID, Item Type, Last Modified, Size] path");
+
+        let root_path = Path::new(scan.root_path());
+        let mut path_stack: Vec<PathBuf> = Vec::new();
+
+        let entry_count = Self::with_each_scan_entry(
+            db, 
+            scan.id(), 
+            |id, path, item_type, _last_modified, _file_size, _file_hash| {
+                let is_dir = item_type == "D";
+
+                let (indent_level, new_path) = Self::get_tree_path(&mut path_stack, root_path, path, is_dir);
+
+                // Print the item
+                println!("{}[{}] {}{}",
+                    " ".repeat(indent_level * 4), 
+                    id,
+                    new_path.to_string_lossy(),
+                    Utils::dir_sep_or_empty(is_dir),
+                );
+            }
+        )?;
+
+        Self::print_none_if_zero(entry_count);
+        Ok(())
+    }
+
+    pub fn with_each_scan_entry<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
+    where
+        F: FnMut(i64, &str, &str, i64, Option<i64>, Option<String>),
+    {
+        let mut entry_count = 0;
+
+        let mut stmt = db.conn.prepare(
+            "SELECT id, path, item_type, last_modified, file_size, file_hash
+            FROM entries
+            WHERE last_seen_scan_id = ?
+            ORDER BY path ASC"
+        )?;
+        
+        let rows = stmt.query_map([scan_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,              // Entry ID
+                row.get::<_, String>(1)?,           // Path
+                row.get::<_, String>(2)?,           // Item type
+                row.get::<_, i64>(3)?,              // Last modified
+                row.get::<_, Option<i64>>(4)?,      // File size (can be null
+                row.get::<_, Option<String>>(5)?,   // File Hash (can be null)
+            ))
+        })?;
+        
+        for row in rows {
+            let (id, path, item_type, last_modified, file_size, file_hash) = row?;
+
+            func(id, &path, &item_type, last_modified, file_size, file_hash);
+            entry_count = entry_count + 1;
+        }
+        Ok(entry_count)
     }
 
     fn print_entry_as_line(id: i64, path: &str, item_type: &str, last_modified: i64, file_size: Option<i64>, file_hash: Option<String>) {
