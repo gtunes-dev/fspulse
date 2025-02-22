@@ -69,6 +69,8 @@ impl Scan {
 
         let root_path = RootPath::get(db, root_path_id)?;
 
+        let change_counts = ChangeCounts::from_scan_id(db, id)?;
+
         Ok(Scan {
             id,
             is_deep,
@@ -77,6 +79,7 @@ impl Scan {
             file_count,
             folder_count,
             is_complete,
+            change_counts,
             ..Default::default()
         })
     }
@@ -207,7 +210,7 @@ impl Scan {
                         ItemType::Other
                     };
     
-                    println!("{:?}: {}", item_type, entry.path().display());
+                    // println!("{:?}: {}", item_type, entry.path().display());
                     let mut hash = None;
                     if deep && item_type == ItemType::File {
                         hash = match Hash::compute_md5_hash(&entry.path()) {
@@ -390,6 +393,10 @@ impl Scan {
         self.file_count = Some(file_count);
         self.folder_count = Some(folder_count);
         self.is_complete = true;
+
+        // scan.change_counts acts as an accumulator during a scan but now we get the truth from the
+        // database. We need this to include deletes since they aren't known until tombstoning is complete
+        self.change_counts = ChangeCounts::from_scan_id(db, self.id)?;
 
         Ok(())
     }

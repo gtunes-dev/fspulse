@@ -61,8 +61,8 @@ enum ReportCommand {
         latest: bool,
 
         /// Show the latest `N` scans (default: 10) (conflicts with `id`)
-        #[arg(long = "count", short = 'c', conflicts_with = "id", default_value_t = 10)]
-        count: u64,
+        #[arg(long = "count", short = 'c', conflicts_with = "id")]
+        count: Option<u64>,
 
         /// Include changes in the scan report (conflicts with 'count' and `entries`)
         #[arg(long = "changes", conflicts_with_all = ["count", "entries"], default_value_t = false)]
@@ -128,10 +128,9 @@ enum ReportCommand {
 fn main() {
     // Parse command-line arguments
     
-    let temp_args: Vec<String> = std::env::args().collect();
-    println!("{:?}", temp_args);
+    //let temp_args: Vec<String> = std::env::args().collect();
+    //println!("{:?}", temp_args);
     
-
     let args = Args::parse();
 
     if let Err(err) = handle_command(args) {

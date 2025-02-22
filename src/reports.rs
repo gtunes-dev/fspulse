@@ -15,10 +15,12 @@ pub struct Reports {
 impl Reports {
     const REPORT_WIDTH: usize = 80;
 
-    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, latest: bool, count: u64, changes: bool, entries: bool) -> Result<(), DirCheckError> {
+    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, latest: bool, count: Option<u64>, changes: bool, entries: bool) -> Result<(), DirCheckError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
-        if scan_id.is_some() || latest {
+        if count.is_some() {
+            Self::print_latest_scans(db, count.unwrap())?;
+        } else {
             let scan = Scan::new_from_id(db, scan_id)?;
             Self::print_scan_block(db, &scan)?;
 
@@ -26,11 +28,9 @@ impl Reports {
                 Self::print_scan_changes(db, &scan)?;
             }
 
-            if latest && entries {
+            if entries {
                 Self::print_scan_entries(db, &scan)?;
             }
-        } else {
-            Self::print_latest_scans(db, count)?;
         }
 
         Ok(())
@@ -74,13 +74,12 @@ impl Reports {
         println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
     }
 
-    fn print_title(title: &str, subtitle: &str) {
-        Self::print_marquee(title, subtitle, "+", "="); 
+    fn print_title(title: &str) {
+        println!("{}\n{}", title, "=".repeat(title.len()));
     }
 
-    fn print_section_header(header: &str, subtitle: &str) {
-        println!();
-        Self::print_marquee(header, subtitle, "+", "-");
+    fn print_section_header(header: &str) {
+        println!("\n{}\n{}", header, "-".repeat(header.len()));
     }
 
     fn print_none_if_zero(i: i32) {
@@ -90,29 +89,27 @@ impl Reports {
     }
 
     pub fn print_root_path_block(root_path: &RootPath) {
-        Self::print_title("Root Path", "");
+        Self::print_title("Root Path");
         println!("Root Path:      {}", root_path.path());
         println!("Id:             {}", root_path.id());
     }
 
     pub fn print_scan_block(db: &Database, scan: &Scan) -> Result<(), DirCheckError>{
-        Self::print_title("Scan", "");
-        println!("Database:       {}", db.path());
+        Self::print_title("Scan Report");
         println!("Id:             {}", scan.id());
         println!("Root Path ID:   {}", scan.root_path_id());
         println!("Root Path:      {}", scan.root_path());
         println!("Deep Scan:      {}", scan.is_deep());
         println!("Time of Scan:   {}", Utils::formatted_db_time(scan.time_of_scan()));
         println!("Completed:      {}", scan.is_complete());
-        println!("");
+        println!("Database:       {}", db.path());
         // println!("Total Items:    {}", total_items);
         
-        Self::print_section_header("Items Seen", "");
+        Self::print_section_header("Items Seen");
         println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
         println!("Folders:        {}", Utils::opt_i64_or_none_as_str(scan.folder_count()));
-        println!("");
 
-        Self::print_section_header("Changes", "");
+        Self::print_section_header("Changes");
         let change_counts = scan.change_counts();
         println!("Add             {}", change_counts.get(ChangeType::Add));
         println!("Modify          {}", change_counts.get(ChangeType::Modify));
@@ -135,11 +132,14 @@ impl Reports {
     fn print_latest_scans(db: &Database, n: u64) -> Result<(), DirCheckError> {
         let mut scan_count = 0;
 
+        Self::print_title("Latest Scans");
+
+ /*        
         Self::print_title(
             &format!("Latest Scans ({})", n),
             "[scan id, root path id, time of scan, scan completed] {path}",
         );
-
+ */
 
         let mut stmt = db.conn.prepare(
             "SELECT scans.id, scans.root_path_id, scans.time_of_scan, scans.is_complete, root_paths.path
@@ -216,7 +216,7 @@ impl Reports {
     }
       
     fn print_scan_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
-        Self::print_section_header("Changed Entries", "");
+        Self::print_section_header("Changed Entries");
     
         let root_path = Path::new(scan.root_path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
@@ -286,7 +286,8 @@ impl Reports {
     }
 
     fn print_scan_entries(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
-        Self::print_section_header("Entries",  "Legend: [Entry ID, Item Type, Last Modified, Size] path");
+        Self::print_section_header("Entries");
+        //Self::print_section_header("Entries",  "Legend: [Entry ID, Item Type, Last Modified, Size] path");
 
         let root_path = Path::new(scan.root_path());
         let mut path_stack: Vec<PathBuf> = Vec::new();
@@ -345,17 +346,7 @@ impl Reports {
         }
         Ok(entry_count)
     }
-
-    fn print_entry_as_line(id: i64, path: &str, item_type: &str, last_modified: i64, file_size: Option<i64>, file_hash: Option<String>) {
-        println!("[{},{},{},{},{}] {}", 
-            id, 
-            item_type, 
-            Utils::formatted_db_time(last_modified), 
-            file_size.map_or("-".to_string(), |v| v.to_string()),
-            file_hash.map_or("-".to_string(), |v| v.to_string()),
-            path);
-    }
-
+     
      /* 
 
     pub fn do_scans(db: &mut Database, all: bool, count: u64) -> Result<(), DirCheckError> {

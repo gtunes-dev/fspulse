@@ -1,6 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
+use crate::database::Database;
 use crate::error::DirCheckError;
 
 #[derive(Debug, Default)]
@@ -34,8 +35,6 @@ impl ChangeType {
 }
 
 impl ChangeCounts {
-    // TODO: is this obsolete?
-    /*
     pub fn from_scan_id(db: &Database, scan_id: i64) -> Result<Self, DirCheckError> {
         let conn = &db.conn;
         let mut change_counts = ChangeCounts::default();
@@ -61,7 +60,6 @@ impl ChangeCounts {
 
         Ok(change_counts)
     }
-    */
     
     pub fn get(&self, change_type: ChangeType) -> i64 {
         match change_type {
@@ -84,8 +82,6 @@ impl ChangeCounts {
        *target += 1;
     }
 
-    // TODO: Is this dead code?
-    /*
     pub fn set(&mut self, change_type: ChangeType, count: i64) {
         let target = match change_type {
             ChangeType::Add => &mut self.add_count,
@@ -96,7 +92,6 @@ impl ChangeCounts {
        };
        *target = count;   
     }
-    */
 }
 
 
