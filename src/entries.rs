@@ -1,10 +1,9 @@
-use crate::database::Database;
-use crate::error::DirCheckError;
+// TODO: Unsure if we are going to have anything here.
 
-pub struct Entry {
-    // No fields yet
-}
+/*
+pub struct Entry;
 
 impl Entry {
     // No impl yet
 }
+    */

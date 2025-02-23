@@ -250,14 +250,19 @@ impl Scan {
         Ok(scan)
     }
 
-    fn handle_item(&mut self, db: &mut Database, item_type: ItemType, path: &Path, metadata: &Metadata, file_hash: Option<&str>) -> Result<ChangeType, DirCheckError> {
+    fn handle_item(
+        &mut self, 
+        db: &mut Database, 
+        item_type: ItemType, 
+        path: &Path, 
+        metadata: &Metadata, 
+        file_hash: Option<&str>
+    ) -> Result<ChangeType, DirCheckError> {
         let path_str = path.to_string_lossy();
         let scan_id = self.id;
         let root_path_id = self.root_path.id();
 
         let conn = &mut db.conn;
-
-        let mut change_type: ChangeType = ChangeType::NoChange;
     
         // Determine timestamps and file size
         let last_modified = metadata.modified()
@@ -273,7 +278,7 @@ impl Scan {
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2).ok(), row.get(3).ok(), row.get(4)?, row.get(5)?)),
         ).optional()?;
     
-        match existing_entry {
+        let change_type = match existing_entry {
             Some((entry_id, existing_type, existing_modified, existing_size, existing_hash, is_tombstone)) => {
                 let item_type_str = item_type.as_db_str();
                 let metadata_changed = existing_modified != last_modified || existing_size != file_size;
@@ -290,8 +295,8 @@ impl Scan {
                         (item_type_str, last_modified, file_size, file_hash, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
                         (scan_id, entry_id, ChangeType::Add.as_db_str()))?;
-                    change_type = ChangeType::Add;
                     tx.commit()?;
+                    ChangeType::Add
                 } else if existing_type != item_type_str {
                     // Item type changed (e.g., file -> directory)
                     let tx = conn.transaction()?;
@@ -299,8 +304,8 @@ impl Scan {
                         (item_type_str, last_modified, file_size, file_hash, scan_id, entry_id))?;
                     tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
                         (self.id, entry_id, ChangeType::TypeChange.as_db_str()))?;
-                    change_type = ChangeType::TypeChange;
                     tx.commit()?;
+                    ChangeType::TypeChange
                 } else if metadata_changed || hash_changed {
                     // Item content changed
                     let tx = conn.transaction()?;
@@ -324,13 +329,13 @@ impl Scan {
                             metadata_changed.then_some(existing_size),
                             hash_changed.then_some(existing_hash),
                         ))?;
-                    change_type = ChangeType::Modify;
                     tx.commit()?;
+                    ChangeType::Modify
                 } else {
                     // No change, just update last_seen_scan_id
                     conn.execute("UPDATE entries SET last_seen_scan_id = ? WHERE root_path_id = ? AND id = ?", 
                         (scan_id, root_path_id, entry_id))?;
-                    change_type = ChangeType::NoChange;
+                    ChangeType::NoChange
                 }
             }
             None => {
@@ -341,10 +346,10 @@ impl Scan {
                 let entry_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
                 tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)",
                     (scan_id, entry_id, ChangeType::Add.as_db_str()))?;
-                change_type = ChangeType::Add;
                 tx.commit()?;
+                ChangeType::Add
             }
-        }
+        };
         
         Ok(change_type)
     }

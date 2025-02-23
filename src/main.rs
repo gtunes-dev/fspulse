@@ -3,6 +3,7 @@ mod changes;
 mod entries;
 mod error;
 mod hash;
+mod indent;
 mod scans;
 mod reports;
 mod root_paths;
@@ -15,7 +16,6 @@ use utils::Utils;
 use crate::reports::Reports;
 use crate::error::DirCheckError;
 use crate::database::Database;
-
 
 #[derive(Parser)]
 #[command(name = "dircheck", version = "0.1", about = "File system tree scanner")]
@@ -52,15 +52,11 @@ enum DirCheckCommand {
 enum ReportCommand {
     /// Report details about scans in the database
     Scans {
-        /// Specify a scan ID to report on (conflicts with `latest` and `count`)
-        #[arg(long = "id", short = 'i', conflicts_with_all = &["latest", "count"])]
+        /// Specify a scan ID to report on (default: most recent scan. conflicts with `latest` and `count`)
+        #[arg(long = "id", short = 'i', conflicts_with = "count")]
         id: Option<u64>,
 
-        /// Show the most recent scan (default if no `id` or `count` is provided)
-        #[arg(long = "latest", short = 'l', conflicts_with_all = &["id", "count"], default_value_t = true)]
-        latest: bool,
-
-        /// Show the latest `N` scans (default: 10) (conflicts with `id`)
+        /// Show the latest `N` scans (default: 10) (conflicts with `id`, 'count', and 'entries')
         #[arg(long = "count", short = 'c', conflicts_with = "id")]
         count: Option<u64>,
 
@@ -68,7 +64,7 @@ enum ReportCommand {
         #[arg(long = "changes", conflicts_with_all = ["count", "entries"], default_value_t = false)]
         changes: bool,
 
-        /// Include entries in the scan report (only usable with 'latest - conflicts with 'id', 'count' and 'changes')
+        /// Include entries in the scan report. Only available for most recent scan (conflicts with 'id', 'count' and 'changes')
         #[arg(long = "entries", conflicts_with_all = ["id", "count", "changes"], default_value_t = false)]
         entries: bool,
 
@@ -89,12 +85,12 @@ enum ReportCommand {
         path: Option<String>,
 
         /// Include scans under this root path (only valid if `id` or `path` is provided)
-        #[arg(long = "scans", short = 's')]
+        #[arg(long = "scans", short = 's', default_value_t = false)]
         scans: bool,
 
         /// Number of scans to include when using `--scans` (default: 10)
-        #[arg(long = "count", short = 'c', default_value_t = 10, requires = "scans")]
-        count: u64,
+        #[arg(long = "count", short = 'c', requires = "scans")]
+        count: Option<u64>,
 
         /// Database file directory (default: current directory)
         #[arg(long = "dbpath", short = 'd', default_value = ".")]
@@ -160,9 +156,9 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         }
         DirCheckCommand::Report { report_type } => {
             match report_type {
-                ReportCommand::Scans { id, latest, count, changes, entries, .. } => {
+                ReportCommand::Scans { id, count, changes, entries, .. } => {
                     let id = Utils::opt_u64_to_opt_i64(id);
-                    Reports::do_report_scans(&mut db, id, latest, count, changes, entries)?;
+                    Reports::do_report_scans(&mut db, id, count, changes, entries)?;
                 }
                 ReportCommand::Entries { id, path: _, changes, count: _, dbpath: _ } => {
                     //let id = Utils::opt_u64_to_opt_i64(id);

@@ -1,6 +1,7 @@
-use crate::changes::ChangeType;
+use crate::{changes::ChangeType, in_println};
 use crate::error::DirCheckError;
 use crate::database::Database;
+use crate::indent::Indent;
 use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
@@ -13,9 +14,7 @@ pub struct Reports {
 }
 
 impl Reports {
-    const REPORT_WIDTH: usize = 80;
-
-    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, latest: bool, count: Option<u64>, changes: bool, entries: bool) -> Result<(), DirCheckError> {
+    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, count: Option<u64>, changes: bool, entries: bool) -> Result<(), DirCheckError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
         if count.is_some() {
@@ -36,7 +35,17 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, _path: Option<String>, _scans: bool, _count: u64) -> Result<(), DirCheckError> {
+    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, _path: Option<String>, _scans: bool, count: Option<u64>) -> Result<(), DirCheckError> {
+        match root_path_id {
+            Some(root_path_id) => {
+                let root_path = RootPath::get(db, root_path_id)?;
+                Self::print_root_path_block(&root_path);
+            },
+            None => {
+                Self::print_root_paths_latest(db, count)?;
+            }
+        }
+
         if let Some(root_path_id) = root_path_id {
             let root_path = RootPath::get(db, root_path_id)?;
             Self::print_root_path_block(&root_path);
@@ -45,14 +54,7 @@ impl Reports {
         Ok(())
     }
 
-    fn marquee_title_fill_length(s: &str, indent: &str) -> usize {
-        Self::REPORT_WIDTH.saturating_sub(
-            s.len()
-            + 2 // end caps
-            + indent.len()
-        )
-    }
-
+    /*
     fn print_marquee(title: &str, subtitle: &str, endcap_char: &str, fill_char: &str) {
         let indent = "  ";
         let space_fill = " ";
@@ -60,67 +62,74 @@ impl Reports {
         //let prefix_fill_chars = 5;
         //let title_padding = if title.is_empty() { "" } else { " " };
 
-        println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
+        in_println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
 
         let mut fill_length = Self::marquee_title_fill_length(title, indent);
-        println!("{}{}{}{}{}", endcap_char, indent, title, space_fill.repeat(fill_length), endcap_char);
+        in_println!("{}{}{}{}{}", endcap_char, indent, title, space_fill.repeat(fill_length), endcap_char);
 
         // TODO: print subtitle
         if subtitle.len() > 0 {
             fill_length = Self::marquee_title_fill_length(subtitle, indent);
-            println!("{}{}{}{}{}", endcap_char, indent, subtitle, space_fill.repeat(fill_length), endcap_char);
+            in_println!("{}{}{}{}{}", endcap_char, indent, subtitle, space_fill.repeat(fill_length), endcap_char);
         }
 
-        println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
+        in_println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
     }
+    */
 
     fn print_title(title: &str) {
-        println!("{}\n{}", title, "=".repeat(title.len()));
+        in_println!("{}\n{}", title, "=".repeat(title.len()));
     }
 
     fn print_section_header(header: &str) {
-        println!("\n{}\n{}", header, "-".repeat(header.len()));
+        in_println!("\n{}\n{}", header, "-".repeat(header.len()));
     }
 
     fn print_none_if_zero(i: i32) {
         if i == 0 {
-            println!("None.");
+            in_println!("None.");
         }
     }
 
-    pub fn print_root_path_block(root_path: &RootPath) {
+    fn print_root_paths_latest(_db: &Database, _count: Option<u64>) -> Result<(), DirCheckError> {
+        Ok(())
+    }
+
+    fn print_root_path_block(root_path: &RootPath) {
         Self::print_title("Root Path");
-        println!("Root Path:      {}", root_path.path());
-        println!("Id:             {}", root_path.id());
+        in_println!("Root Path:      {}", root_path.path());
+        in_println!("Id:             {}", root_path.id());
     }
 
     pub fn print_scan_block(db: &Database, scan: &Scan) -> Result<(), DirCheckError>{
         Self::print_title("Scan Report");
-        println!("Id:             {}", scan.id());
-        println!("Root Path ID:   {}", scan.root_path_id());
-        println!("Root Path:      {}", scan.root_path());
-        println!("Deep Scan:      {}", scan.is_deep());
-        println!("Time of Scan:   {}", Utils::formatted_db_time(scan.time_of_scan()));
-        println!("Completed:      {}", scan.is_complete());
-        println!("Database:       {}", db.path());
-        // println!("Total Items:    {}", total_items);
+        in_println!("Id:             {}", scan.id());
+        in_println!("Root Path ID:   {}", scan.root_path_id());
+        in_println!("Root Path:      {}", scan.root_path());
+        in_println!("Deep Scan:      {}", scan.is_deep());
+        in_println!("Time of Scan:   {}", Utils::formatted_db_time(scan.time_of_scan()));
+        in_println!("Completed:      {}", scan.is_complete());
+        in_println!("Database:       {}", db.path());
+        // in_println!("Total Items:    {}", total_items);
         
+        let _indent_1 = Indent::new();
+
         Self::print_section_header("Items Seen");
-        println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
-        println!("Folders:        {}", Utils::opt_i64_or_none_as_str(scan.folder_count()));
+        in_println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
+        in_println!("Folders:        {}", Utils::opt_i64_or_none_as_str(scan.folder_count()));
 
         Self::print_section_header("Changes");
         let change_counts = scan.change_counts();
-        println!("Add             {}", change_counts.get(ChangeType::Add));
-        println!("Modify          {}", change_counts.get(ChangeType::Modify));
-        println!("Delete          {}", change_counts.get(ChangeType::Delete));
-        println!("Type Change     {}", change_counts.get(ChangeType::TypeChange));
+        in_println!("Add             {}", change_counts.get(ChangeType::Add));
+        in_println!("Modify          {}", change_counts.get(ChangeType::Modify));
+        in_println!("Delete          {}", change_counts.get(ChangeType::Delete));
+        in_println!("Type Change     {}", change_counts.get(ChangeType::TypeChange));
 
         Ok(())
     }
 
     fn print_scan_as_line(id: i64, root_path_id: i64, time_of_scan: i64, is_complete: bool, root_path: &str) {
-        println!("[{},{},{},{}] {}",
+        in_println!("[{},{},{},{}] {}",
             id,
             Utils::formatted_db_time(time_of_scan),
             root_path_id,
@@ -196,7 +205,7 @@ impl Reports {
             if let Some(structural_component) = new_path.parent() {
                 let structural_component_str = structural_component.to_string_lossy();
                 if !structural_component_str.is_empty() {
-                    println!("{}{}/", " ".repeat(path_stack.len() * 4), structural_component_str);
+                    in_println!("{}{}/", " ".repeat(path_stack.len() * 4), structural_component_str);
                     path_stack.push(parent.unwrap().to_path_buf());
 
                     // The structural path has been pushed. The new_path is now just the filename
@@ -236,7 +245,7 @@ impl Reports {
                 );
 
                 // Print the item
-                println!("{}[{}] {}{} ({})", 
+                in_println!("{}[{}] {}{} ({})", 
                     " ".repeat(indent_level * 4), 
                     change_type, 
                     new_path.to_string_lossy(),
@@ -301,7 +310,7 @@ impl Reports {
                 let (indent_level, new_path) = Self::get_tree_path(&mut path_stack, root_path, path, is_dir);
 
                 // Print the item
-                println!("{}[{}] {}{}",
+                in_println!("{}[{}] {}{}",
                     " ".repeat(indent_level * 4), 
                     id,
                     new_path.to_string_lossy(),
@@ -376,7 +385,7 @@ impl Reports {
             let datetime_local = datetime_utc.with_timezone(&Local);
             let formatted_time = datetime_local.format("%Y-%m-%d %H:%M:%S");
 
-            println!("Scan ID: {}, Time: {}, Path: {}", id, formatted_time, path);
+            in_println!("Scan ID: {}, Time: {}, Path: {}", id, formatted_time, path);
         }
 
         Ok(())
