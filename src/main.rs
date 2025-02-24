@@ -126,6 +126,8 @@ fn main() {
     
     //let temp_args: Vec<String> = std::env::args().collect();
     //println!("{:?}", temp_args);
+
+    // Hi this is Lex!
     
     let args = Args::parse();
 
