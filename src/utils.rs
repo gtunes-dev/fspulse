@@ -41,13 +41,23 @@ impl Utils {
         }
     }
 
-    pub fn formatted_db_time(db_time: i64) -> String {
+    pub fn _format_db_time(db_time: i64) -> String {
         let datetime_utc = DateTime::<Utc>::from_timestamp(db_time, 0)
             .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
 
         let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
 
         datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
+    }
+
+    pub fn format_db_time_short(db_time: i64) -> String {
+        let datetime_utc = DateTime::<Utc>::from_timestamp(db_time, 0)
+            .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+
+        let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
+
+        datetime_local.format("%Y-%b-%d %H:%M").to_string()
+
     }
 
 }

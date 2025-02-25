@@ -126,8 +126,6 @@ fn main() {
     
     //let temp_args: Vec<String> = std::env::args().collect();
     //println!("{:?}", temp_args);
-
-    // Hi this is Lex!
     
     let args = Args::parse();
 
@@ -171,6 +169,7 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
                 }
                 ReportCommand::RootPaths { id, path, scans, count, ..} => {
                     let id = Utils::opt_u64_to_opt_i64(id);
+                    let count = Utils::opt_u64_to_opt_i64(count);
                     Reports::report_root_paths(&mut db, id, path, scans, count)?;
                 }
             }

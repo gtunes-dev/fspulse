@@ -1,7 +1,7 @@
+use crate::indent::Indent;
 use crate::{changes::ChangeType, in_println};
 use crate::error::DirCheckError;
 use crate::database::Database;
-use crate::indent::Indent;
 use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
@@ -14,6 +14,8 @@ pub struct Reports {
 }
 
 impl Reports {
+    const DEFAULT_COUNT: i64 = 10;
+
     pub fn do_report_scans(db: &Database, scan_id: Option<i64>, count: Option<u64>, changes: bool, entries: bool) -> Result<(), DirCheckError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
@@ -35,47 +37,19 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, _path: Option<String>, _scans: bool, count: Option<u64>) -> Result<(), DirCheckError> {
+    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, _path: Option<String>, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
         match root_path_id {
             Some(root_path_id) => {
                 let root_path = RootPath::get(db, root_path_id)?;
-                Self::print_root_path_block(&root_path);
+                Self::print_root_path_block(db, &root_path, scans, count)?;
             },
             None => {
-                Self::print_root_paths_latest(db, count)?;
+                Self::print_root_paths(db, scans, count)?;
             }
-        }
-
-        if let Some(root_path_id) = root_path_id {
-            let root_path = RootPath::get(db, root_path_id)?;
-            Self::print_root_path_block(&root_path);
         }
         
         Ok(())
     }
-
-    /*
-    fn print_marquee(title: &str, subtitle: &str, endcap_char: &str, fill_char: &str) {
-        let indent = "  ";
-        let space_fill = " ";
-        //let subtitle_endchap = "|";
-        //let prefix_fill_chars = 5;
-        //let title_padding = if title.is_empty() { "" } else { " " };
-
-        in_println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
-
-        let mut fill_length = Self::marquee_title_fill_length(title, indent);
-        in_println!("{}{}{}{}{}", endcap_char, indent, title, space_fill.repeat(fill_length), endcap_char);
-
-        // TODO: print subtitle
-        if subtitle.len() > 0 {
-            fill_length = Self::marquee_title_fill_length(subtitle, indent);
-            in_println!("{}{}{}{}{}", endcap_char, indent, subtitle, space_fill.repeat(fill_length), endcap_char);
-        }
-
-        in_println!("{}{}{}", endcap_char, fill_char.repeat(Self::REPORT_WIDTH - 2), endcap_char);
-    }
-    */
 
     fn print_title(title: &str) {
         in_println!("{}\n{}", title, "=".repeat(title.len()));
@@ -91,14 +65,16 @@ impl Reports {
         }
     }
 
-    fn print_root_paths_latest(_db: &Database, _count: Option<u64>) -> Result<(), DirCheckError> {
-        Ok(())
-    }
-
-    fn print_root_path_block(root_path: &RootPath) {
+    fn print_root_path_block(db: &Database, root_path: &RootPath, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
         Self::print_title("Root Path");
         in_println!("Root Path:      {}", root_path.path());
         in_println!("Id:             {}", root_path.id());
+
+        if scans {
+            Self::print_root_path_scans(db, root_path.id(), count)?;
+        }
+
+        Ok(())
     }
 
     pub fn print_scan_block(db: &Database, scan: &Scan) -> Result<(), DirCheckError>{
@@ -107,13 +83,11 @@ impl Reports {
         in_println!("Root Path ID:   {}", scan.root_path_id());
         in_println!("Root Path:      {}", scan.root_path());
         in_println!("Deep Scan:      {}", scan.is_deep());
-        in_println!("Time of Scan:   {}", Utils::formatted_db_time(scan.time_of_scan()));
+        in_println!("Time of Scan:   {}", Utils::format_db_time_short(scan.time_of_scan()));
         in_println!("Completed:      {}", scan.is_complete());
         in_println!("Database:       {}", db.path());
         // in_println!("Total Items:    {}", total_items);
         
-        let _indent_1 = Indent::new();
-
         Self::print_section_header("Items Seen");
         in_println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
         in_println!("Folders:        {}", Utils::opt_i64_or_none_as_str(scan.folder_count()));
@@ -131,7 +105,7 @@ impl Reports {
     fn print_scan_as_line(id: i64, root_path_id: i64, time_of_scan: i64, is_complete: bool, root_path: &str) {
         in_println!("[{},{},{},{}] {}",
             id,
-            Utils::formatted_db_time(time_of_scan),
+            Utils::format_db_time_short(time_of_scan),
             root_path_id,
             is_complete,
             root_path
@@ -142,13 +116,6 @@ impl Reports {
         let mut scan_count = 0;
 
         Self::print_title("Latest Scans");
-
- /*        
-        Self::print_title(
-            &format!("Latest Scans ({})", n),
-            "[scan id, root path id, time of scan, scan completed] {path}",
-        );
- */
 
         let mut stmt = db.conn.prepare(
             "SELECT scans.id, scans.root_path_id, scans.time_of_scan, scans.is_complete, root_paths.path
@@ -354,6 +321,74 @@ impl Reports {
             entry_count = entry_count + 1;
         }
         Ok(entry_count)
+    }
+
+    fn print_root_paths(db: &Database, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
+        RootPath::for_each_root_path(db, scans, count, Self::print_root_path_block)?;
+
+        Ok(())
+    }
+
+    fn print_root_path_scans(db: &Database, root_path_id: i64, count: Option<i64>) -> Result<(), DirCheckError> {
+        // if count isn't specified, the default is 10
+        let count = count.unwrap_or(Self::DEFAULT_COUNT);
+        
+        if count == 0 {
+            return Ok(()); // Nothing to print
+        }
+
+        let _in_1 = Indent::new();
+
+        Self::print_section_header("Scans");
+
+        let mut stmt = db.conn.prepare(
+            "SELECT id, is_deep, time_of_scan, file_count, folder_count, is_complete
+            FROM scans
+            WHERE root_path_id = ?
+            ORDER BY id DESC
+            LIMIT ?"
+        )?;
+
+        let rows = stmt.query_map([root_path_id, count], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,          // scan id
+                row.get::<_, bool>(1)?,         // is deep
+                row.get::<_, i64>(2)?,          // time of scan
+                row.get::<_, Option<i64>>(3)?,  // file count
+                row.get::<_, Option<i64>>(4)?,  // folder count
+                row.get::<_, bool>(5)?,         // is complete
+            ))
+        })?;
+
+        let mut printed_header = false;
+
+        for row in rows {
+            let (scan_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = row?;
+ 
+            if !printed_header {
+                in_println!(
+                    "{:<9} {:<6} {:<23} {:<12} {:<14} {:<8}",
+                    "ID", "Deep", "Time", "File Count", "Folder Count", "Complete"
+                );
+                printed_header = true;
+            }
+            
+            in_println!(
+                "{:<9} {:<6} {:<23} {:<12} {:<14} {:<8}",
+                scan_id,
+                is_deep,
+                Utils::format_db_time_short(time_of_scan),
+                Utils::opt_i64_or_none_as_str(file_count),
+                Utils::opt_i64_or_none_as_str(folder_count),
+                is_complete,
+            );
+        }
+
+        if !printed_header {
+            in_println!("None")
+        }
+
+        Ok(())
     }
      
      /* 
