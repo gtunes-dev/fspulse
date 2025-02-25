@@ -50,6 +50,10 @@ impl Scan {
         }
     }
 
+    pub fn _foo() {
+
+    }
+
     pub fn new_from_id(db: &Database, id: Option<i64>) -> Result<Self, DirCheckError> {
         let conn = &db.conn;
 
