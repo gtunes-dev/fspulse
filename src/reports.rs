@@ -16,7 +16,7 @@ pub struct Reports {
 impl Reports {
     const DEFAULT_COUNT: i64 = 10;
 
-    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, count: Option<u64>, changes: bool, entries: bool) -> Result<(), DirCheckError> {
+    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, count: Option<u64>, changes: bool, items: bool) -> Result<(), DirCheckError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
         if count.is_some() {
@@ -29,8 +29,8 @@ impl Reports {
                 Self::print_scan_changes(db, &scan)?;
             }
 
-            if entries {
-                Self::print_scan_entries(db, &scan)?;
+            if items {
+                Self::print_scan_items(db, &scan)?;
             }
         }
 
@@ -160,7 +160,7 @@ impl Reports {
         while let Some(stack_path) = path_stack.last() {
             // if the path at the top of the stack is a prefix of the current path
             // we stop pruning the stack. We now remove the portion of new_path
-            // which is covered by the entry at the top of the stack - we only
+            // which is covered by the item at the top of the stack - we only
             // want to print the portion that hasn't already been printed
             if path.starts_with(stack_path) {
                 new_path = path.strip_prefix(stack_path).unwrap();
@@ -192,7 +192,7 @@ impl Reports {
     }
       
     fn print_scan_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
-        Self::print_section_header("Changed Entries");
+        Self::print_section_header("Changed Items");
     
         let root_path = Path::new(scan.root_path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
@@ -234,16 +234,16 @@ impl Reports {
         let mut change_count = 0;
 
         let mut stmt = db.conn.prepare(
-            "SELECT entries.id, changes.change_type, changes.metadata_changed, changes.hash_changed, entries.item_type, entries.path
+            "SELECT items.id, changes.change_type, changes.metadata_changed, changes.hash_changed, items.item_type, items.path
             FROM changes
-            JOIN entries ON entries.id = changes.entry_id
+            JOIN items ON items.id = changes.item_id
             WHERE changes.scan_id = ?
-            ORDER BY entries.path ASC"
+            ORDER BY items.path ASC"
         )?;
         
         let rows = stmt.query_map([scan_id], |row| {
             Ok((
-                row.get::<_, i64>(0)?,          // Entry ID
+                row.get::<_, i64>(0)?,          // Item ID
                 row.get::<_, String>(1)?,       // Change type (A, M, D, etc.)
                 row.get::<_, Option<bool>>(2)?, // Metadata Changed
                 row.get::<_, Option<bool>>(3)?, // Hash Changed
@@ -261,14 +261,14 @@ impl Reports {
         Ok(change_count)
     }
 
-    fn print_scan_entries(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
-        Self::print_section_header("Entries");
-        //Self::print_section_header("Entries",  "Legend: [Entry ID, Item Type, Last Modified, Size] path");
+    fn print_scan_items(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
+        Self::print_section_header("Items");
+        //Self::print_section_header("Items",  "Legend: [Item ID, Item Type, Last Modified, Size] path");
 
         let root_path = Path::new(scan.root_path());
         let mut path_stack: Vec<PathBuf> = Vec::new();
 
-        let entry_count = Self::with_each_scan_entry(
+        let item_count = Self::with_each_scan_item(
             db, 
             scan.id(), 
             |id, path, item_type, _last_modified, _file_size, _file_hash| {
@@ -286,26 +286,26 @@ impl Reports {
             }
         )?;
 
-        Self::print_none_if_zero(entry_count);
+        Self::print_none_if_zero(item_count);
         Ok(())
     }
 
-    pub fn with_each_scan_entry<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
+    pub fn with_each_scan_item<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
     where
         F: FnMut(i64, &str, &str, i64, Option<i64>, Option<String>),
     {
-        let mut entry_count = 0;
+        let mut item_count = 0;
 
         let mut stmt = db.conn.prepare(
             "SELECT id, path, item_type, last_modified, file_size, file_hash
-            FROM entries
+            FROM items
             WHERE last_seen_scan_id = ?
             ORDER BY path ASC"
         )?;
         
         let rows = stmt.query_map([scan_id], |row| {
             Ok((
-                row.get::<_, i64>(0)?,              // Entry ID
+                row.get::<_, i64>(0)?,              // Item ID
                 row.get::<_, String>(1)?,           // Path
                 row.get::<_, String>(2)?,           // Item type
                 row.get::<_, i64>(3)?,              // Last modified
@@ -318,9 +318,9 @@ impl Reports {
             let (id, path, item_type, last_modified, file_size, file_hash) = row?;
 
             func(id, &path, &item_type, last_modified, file_size, file_hash);
-            entry_count = entry_count + 1;
+            item_count = item_count + 1;
         }
-        Ok(entry_count)
+        Ok(item_count)
     }
 
     fn print_root_paths(db: &Database, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {

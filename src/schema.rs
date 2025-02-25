@@ -26,31 +26,31 @@ CREATE TABLE IF NOT EXISTS scans (
     FOREIGN KEY (root_path_id) REFERENCES root_paths(id)
 );
 
--- Entries table tracks files and directories discovered during scans
-CREATE TABLE IF NOT EXISTS entries (
+-- Items table tracks files and directories discovered during scans
+CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_path_id INTEGER NOT NULL,    -- Links each entry to a root path
+    root_path_id INTEGER NOT NULL,    -- Links each item to a root path
     path TEXT NOT NULL,               -- Relative path from the root path
-    is_tombstone BOOLEAN NOT NULL DEFAULT 0,  -- Indicates if entry was deleted
+    is_tombstone BOOLEAN NOT NULL DEFAULT 0,  -- Indicates if the item was deleted
     item_type CHAR(1) NOT NULL,       -- ('F' for file, 'D' for directory, 'S' for symlink, 'O' for other)
     last_modified INTEGER,            -- Last modified timestamp
     file_size INTEGER,                -- File size in bytes (NULL for directories)
     file_hash TEXT,                    -- Hash of file contents (NULL for directories and if not computed)
-    last_seen_scan_id INTEGER NOT NULL, -- Last scan where the entry was present
+    last_seen_scan_id INTEGER NOT NULL, -- Last scan where the item was present
     FOREIGN KEY (root_path_id) REFERENCES root_paths(id),
     FOREIGN KEY (last_seen_scan_id) REFERENCES scans(id),
     UNIQUE (root_path_id, path)        -- Ensures uniqueness within each root path
 );
 
 -- Indexes to optimize queries
-CREATE INDEX IF NOT EXISTS idx_entries_path ON entries (root_path_id, path);
-CREATE INDEX IF NOT EXISTS idx_entries_scan ON entries (root_path_id, last_seen_scan_id, is_tombstone);
+CREATE INDEX IF NOT EXISTS idx_items_path ON items (root_path_id, path);
+CREATE INDEX IF NOT EXISTS idx_items_scan ON items (root_path_id, last_seen_scan_id, is_tombstone);
 
 -- Changes table tracks modifications between scans
 CREATE TABLE IF NOT EXISTS changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_id INTEGER NOT NULL,                 -- The scan in which the change was detected
-    entry_id INTEGER NOT NULL,                -- The file or directory that changed
+    item_id INTEGER NOT NULL,                -- The file or directory that changed
     change_type CHAR(1) NOT NULL,             -- ('A' for added, 'D' for deleted, 'M' for modified, 'T' for type changed)
     metadata_changed BOOLEAN DEFAULT NULL,    -- Indicates if metadata changed
     hash_changed BOOLEAN DEFAULT NULL,        -- Indicates if file contents changed
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS changes (
     prev_file_size INTEGER DEFAULT NULL,      -- Stores the previous file_size (if applicable)
     prev_hash TEXT DEFAULT NULL,              -- Stores the previous hash value (if applicable)
     FOREIGN KEY (scan_id) REFERENCES scans(id),
-    FOREIGN KEY (entry_id) REFERENCES entries(id)
+    FOREIGN KEY (item_id) REFERENCES items(id)
 );
 
 COMMIT;

@@ -1,6 +1,6 @@
 mod database;
 mod changes;
-mod entries;
+mod items;
 mod error;
 mod hash;
 mod indent;
@@ -41,7 +41,7 @@ enum DirCheckCommand {
         dbpath: String,
     },
 
-    /// Generate reports from scans, entries, changes, or paths
+    /// Generate reports from scans, items, changes, or paths
     Report {
         #[command(subcommand)]
         report_type: ReportCommand,
@@ -56,17 +56,17 @@ enum ReportCommand {
         #[arg(long = "id", short = 'i', conflicts_with = "count")]
         id: Option<u64>,
 
-        /// Show the latest `N` scans (default: 10) (conflicts with `id`, 'count', and 'entries')
+        /// Show the latest `N` scans (default: 10) (conflicts with `id`, 'count', and 'items')
         #[arg(long = "count", short = 'c', conflicts_with = "id")]
         count: Option<u64>,
 
-        /// Include changes in the scan report (conflicts with 'count' and `entries`)
-        #[arg(long = "changes", conflicts_with_all = ["count", "entries"], default_value_t = false)]
+        /// Include changes in the scan report (conflicts with 'count' and `items`)
+        #[arg(long = "changes", conflicts_with_all = ["count", "items"], default_value_t = false)]
         changes: bool,
 
-        /// Include entries in the scan report. Only available for most recent scan (conflicts with 'id', 'count' and 'changes')
-        #[arg(long = "entries", conflicts_with_all = ["id", "count", "changes"], default_value_t = false)]
-        entries: bool,
+        /// Include items in the scan report. Only available for most recent scan (conflicts with 'id', 'count' and 'changes')
+        #[arg(long = "items", conflicts_with_all = ["id", "count", "changes"], default_value_t = false)]
+        items: bool,
 
         /// Database file directory (default: current directory)
         #[arg(long = "dbpath", short = 'd', default_value = ".")]
@@ -97,17 +97,17 @@ enum ReportCommand {
         dbpath: String,
     },
 
-    /// Report details about file and folder entries in the database
-    Entries {
-        /// Specify an entry by ID (conflicts with `path`)
+    /// Report details about file and folder items in the database
+    Items {
+        /// Specify an item by ID (conflicts with `path`)
         #[arg(long = "id", short = 'i', conflicts_with = "path")]
         id: Option<u64>,
 
-        /// Specify an entry by textual path (conflicts with `id`)
+        /// Specify an item by textual path (conflicts with `id`)
         #[arg(long = "path", short = 'p', conflicts_with = "id")]
         path: Option<String>,
 
-        /// Show changes for the specified entry (only valid with `id`)
+        /// Show changes for the specified item (only valid with `id`)
         #[arg(long = "changes", short = 'c', requires = "id")]
         changes: bool,
 
@@ -142,7 +142,7 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         DirCheckCommand::Report { report_type } => match report_type {
             ReportCommand::Scans { dbpath, .. } => dbpath,
             ReportCommand::RootPaths { dbpath, .. } => dbpath,
-            ReportCommand::Entries { dbpath, .. } => dbpath,
+            ReportCommand::Items { dbpath, .. } => dbpath,
             // ReportCommand::Changes { dbpath, .. } => dbpath,
         },
     };
@@ -156,15 +156,15 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         }
         DirCheckCommand::Report { report_type } => {
             match report_type {
-                ReportCommand::Scans { id, count, changes, entries, .. } => {
+                ReportCommand::Scans { id, count, changes, items, .. } => {
                     let id = Utils::opt_u64_to_opt_i64(id);
-                    Reports::do_report_scans(&mut db, id, count, changes, entries)?;
+                    Reports::do_report_scans(&mut db, id, count, changes, items)?;
                 }
-                ReportCommand::Entries { id, path: _, changes, count: _, dbpath: _ } => {
+                ReportCommand::Items { id, path: _, changes, count: _, dbpath: _ } => {
                     //let id = Utils::opt_u64_to_opt_i64(id);
                     
                     if changes && id.is_none() {
-                        return Err(DirCheckError::Error("Cannot use --changes without specifying an entry ID.".to_string()));
+                        return Err(DirCheckError::Error("Cannot use --changes without specifying an item ID.".to_string()));
                     }
                 }
                 ReportCommand::RootPaths { id, path, scans, count, ..} => {

@@ -1,9 +1,7 @@
-
 use std::i64;
 
 use crate::database::Database;
 use crate::error::DirCheckError;
-
 
 
 #[derive(Debug, Default)]
