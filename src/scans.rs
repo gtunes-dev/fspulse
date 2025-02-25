@@ -190,15 +190,15 @@ impl Scan {
                 scan.change_counts.increment(dir_change_type);
             }
     
-            let entries = fs::read_dir(&q_entry.path)?;
+            let items = fs::read_dir(&q_entry.path)?;
     
-            for entry in entries {
-                let entry = entry?;
-                let metadata = fs::symlink_metadata(entry.path())?; // Use symlink_metadata to check for symlinks
+            for item in items {
+                let item = item?;
+                let metadata = fs::symlink_metadata(item.path())?; // Use symlink_metadata to check for symlinks
     
                 if metadata.is_dir() {
                     q.push_back(QueueEntry {
-                        path: entry.path(),
+                        path: item.path(),
                         metadata,
                     });
                 } else {
@@ -210,10 +210,10 @@ impl Scan {
                         ItemType::Other
                     };
     
-                    // println!("{:?}: {}", item_type, entry.path().display());
+                    // println!("{:?}: {}", item_type, item.path().display());
                     let mut hash = None;
                     if deep && item_type == ItemType::File {
-                        hash = match Hash::compute_md5_hash(&entry.path()) {
+                        hash = match Hash::compute_md5_hash(&item.path()) {
                             Ok(hash_s) => Some(hash_s),
                             Err(error) => {
                                 eprintln!("Error computing hash: {}", error);
@@ -222,7 +222,7 @@ impl Scan {
                         }
                     };
 
-                    let file_change_type = scan.handle_item(db, item_type, &entry.path(), &metadata, hash.as_deref())?;
+                    let file_change_type = scan.handle_item(db, item_type, &item.path(), &metadata, hash.as_deref())?;
                     scan.change_counts.increment(file_change_type);
                 }
             }
@@ -271,15 +271,15 @@ impl Scan {
             .map(|d| d.as_secs() as i64);
         let file_size = if metadata.is_file() { Some(metadata.len() as i64) } else { None };
     
-        // Check if the entry already exists (fetching `id`, `is_tombstone` as well)
-        let existing_entry: Option<(i64, String, Option<i64>, Option<i64>, Option<String>, bool)> = conn.query_row(
-            "SELECT id, item_type, last_modified, file_size, file_hash, is_tombstone FROM entries WHERE root_path_id = ? AND path = ?",
+        // Check if the item already exists (fetching `id`, `is_tombstone` as well)
+        let existing_item: Option<(i64, String, Option<i64>, Option<i64>, Option<String>, bool)> = conn.query_row(
+            "SELECT id, item_type, last_modified, file_size, file_hash, is_tombstone FROM items WHERE root_path_id = ? AND path = ?",
             (root_path_id, &path_str),
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2).ok(), row.get(3).ok(), row.get(4)?, row.get(5)?)),
         ).optional()?;
     
-        let change_type = match existing_entry {
-            Some((entry_id, existing_type, existing_modified, existing_size, existing_hash, is_tombstone)) => {
+        let change_type = match existing_item {
+            Some((item_id, existing_type, existing_modified, existing_size, existing_hash, is_tombstone)) => {
                 let item_type_str = item_type.as_db_str();
                 let metadata_changed = existing_modified != last_modified || existing_size != file_size;
 
@@ -291,37 +291,37 @@ impl Scan {
             
                 if is_tombstone {
                     let tx = conn.transaction()?;
-                    tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ?, is_tombstone = 0 WHERE id = ?", 
-                        (item_type_str, last_modified, file_size, file_hash, scan_id, entry_id))?;
-                    tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
-                        (scan_id, entry_id, ChangeType::Add.as_db_str()))?;
+                    tx.execute("UPDATE items SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ?, is_tombstone = 0 WHERE id = ?", 
+                        (item_type_str, last_modified, file_size, file_hash, scan_id, item_id))?;
+                    tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)", 
+                        (scan_id, item_id, ChangeType::Add.as_db_str()))?;
                     tx.commit()?;
                     ChangeType::Add
                 } else if existing_type != item_type_str {
                     // Item type changed (e.g., file -> directory)
                     let tx = conn.transaction()?;
-                    tx.execute("UPDATE entries SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ? WHERE id = ?", 
-                        (item_type_str, last_modified, file_size, file_hash, scan_id, entry_id))?;
-                    tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)", 
-                        (self.id, entry_id, ChangeType::TypeChange.as_db_str()))?;
+                    tx.execute("UPDATE items SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ? WHERE id = ?", 
+                        (item_type_str, last_modified, file_size, file_hash, scan_id, item_id))?;
+                    tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)", 
+                        (self.id, item_id, ChangeType::TypeChange.as_db_str()))?;
                     tx.commit()?;
                     ChangeType::TypeChange
                 } else if metadata_changed || hash_changed {
                     // Item content changed
                     let tx = conn.transaction()?;
-                    tx.execute("UPDATE entries 
+                    tx.execute("UPDATE items 
                         SET last_modified = ?, 
                         file_size = ?,
                         file_hash = ?,
                         last_seen_scan_id = ? 
                         WHERE id = ?", 
-                        (last_modified, file_size, file_hash.or(existing_hash.as_deref()), scan_id, entry_id))?;
+                        (last_modified, file_size, file_hash.or(existing_hash.as_deref()), scan_id, item_id))?;
                     tx.execute("INSERT INTO changes 
-                        (scan_id, entry_id, change_type, metadata_changed, hash_changed, prev_last_modified, prev_file_size, prev_hash) 
+                        (scan_id, item_id, change_type, metadata_changed, hash_changed, prev_last_modified, prev_file_size, prev_hash) 
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
                         (
                             scan_id, 
-                            entry_id, 
+                            item_id, 
                             ChangeType::Modify.as_db_str(),
                             metadata_changed,
                             hash_changed,
@@ -333,19 +333,19 @@ impl Scan {
                     ChangeType::Modify
                 } else {
                     // No change, just update last_seen_scan_id
-                    conn.execute("UPDATE entries SET last_seen_scan_id = ? WHERE root_path_id = ? AND id = ?", 
-                        (scan_id, root_path_id, entry_id))?;
+                    conn.execute("UPDATE items SET last_seen_scan_id = ? WHERE root_path_id = ? AND id = ?", 
+                        (scan_id, root_path_id, item_id))?;
                     ChangeType::NoChange
                 }
             }
             None => {
-                // Item is new, insert into entries and changes tables
+                // Item is new, insert into items and changes tables
                 let tx = conn.transaction()?;
-                tx.execute("INSERT INTO entries (root_path_id, path, item_type, last_modified, file_size, file_hash, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                tx.execute("INSERT INTO items (root_path_id, path, item_type, last_modified, file_size, file_hash, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (root_path_id, &path_str, item_type.as_db_str(), last_modified, file_size, file_hash, scan_id))?;
-                let entry_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
-                tx.execute("INSERT INTO changes (scan_id, entry_id, change_type) VALUES (?, ?, ?)",
-                    (scan_id, entry_id, ChangeType::Add.as_db_str()))?;
+                let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
+                tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)",
+                    (scan_id, item_id, ChangeType::Add.as_db_str()))?;
                 tx.commit()?;
                 ChangeType::Add
             }
@@ -364,16 +364,16 @@ impl Scan {
     
         // Insert deletion records into changes
         tx.execute(
-            "INSERT INTO changes (scan_id, entry_id, change_type)
+            "INSERT INTO changes (scan_id, item_id, change_type)
              SELECT ?, id, ?
-             FROM entries
+             FROM items
              WHERE root_path_id = ? AND is_tombstone = 0 AND last_seen_scan_id < ?",
             (scan_id, ChangeType::Delete.as_db_str(), root_path_id, scan_id),
         )?;
         
-        // Mark unseen entries as tombstones
+        // Mark unseen items as tombstones
         tx.execute(
-            "UPDATE entries SET is_tombstone = 1 WHERE root_path_id = ? AND last_seen_scan_id < ? AND is_tombstone = 0",
+            "UPDATE items SET is_tombstone = 1 WHERE root_path_id = ? AND last_seen_scan_id < ? AND is_tombstone = 0",
             (root_path_id, scan_id),
         )?;
 
@@ -382,12 +382,12 @@ impl Scan {
         "SELECT 
             SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count, 
             SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count 
-            FROM entries WHERE last_seen_scan_id = ?",
+            FROM items WHERE last_seen_scan_id = ?",
             [scan_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).unwrap_or((0, 0)); // If no data, default to 0
 
-        // Update the scan entry to indicate that it completed
+        // Update the scan entity to indicate that it completed
         tx.execute(
             "UPDATE scans SET file_count = ?, folder_count = ?, is_complete = 1 WHERE id = ?",
             (file_count, folder_count, scan_id)
