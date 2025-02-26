@@ -6,8 +6,10 @@ use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
 
+use std::io::{self, Stdout};
 use std::path::{Path, PathBuf};
 use rusqlite::Result;
+use tablestream::{Column, Stream};
 
 pub struct Reports {
     // No fields
@@ -24,8 +26,9 @@ impl Reports {
         } else {
             let scan = Scan::new_from_id(db, scan_id)?;
             let root_path = RootPath::get(db, scan.root_path_id())?;
-            Reports::print_scan_table_header();
-            Reports::print_scan_table_row(&scan);
+            let mut stream = Reports::begin_scans_table("Scan");
+            stream.row(scan.clone())?;
+            Reports::end_scans_table(stream)?;
 
             if changes {
                 Self::print_scan_changes(db, &scan, &root_path)?;
@@ -40,19 +43,22 @@ impl Reports {
     }
 
     pub fn print_scans(db: &Database, count: Option<i64>) -> Result<(), DirCheckError> {
-        Reports::print_scan_table_header();
 
+        let mut stream = Reports::begin_scans_table("Scans");
+        
         let scan_count = Scan::for_each_scan(
             db, 
             count, 
             |_db, scan| {
-                Reports::print_scan_table_row(scan);
+                stream.row(scan.clone())?;
                 Ok(())
             }
         )?;
 
+        Reports::end_scans_table(stream)?;
+
         if scan_count == 0 {
-            in_println!("None");
+            in_println!("No Scans");
         }
 
         Ok(())
@@ -86,28 +92,31 @@ impl Reports {
         }
     }
 
-    fn print_scan_table_header() {
-        in_println!(
-            "{:<7} {:<7} {:<5} {:<23} {:<11} {:<11} {:<8} {:<11} {:<11} {:<11} {:<11}",
-            "ID", "Path ID", "Deep", "Time", "Files", "Folders", "Complete", "Adds", "Modifies", "Deletes", "T Changes"
-        );
+    fn begin_scans_table(title: &str) -> Stream<Scan, Stdout> {
+        let out = io::stdout();
+        let mut stream = Stream::new(out, vec![
+            Column::new(|f, s: &Scan| write!(f, "{}", s.id())).header("ID").right().min_width(6),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.root_path_id())).header("Path ID").right().min_width(6),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.is_deep())).header("Deep").center(),
+            Column::new(|f, s: &Scan| write!(f, "{}", Utils::format_db_time_short(s.time_of_scan()))).header("Time"),
+            Column::new(|f, s: &Scan| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.file_count()))).header("Files").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.folder_count()))).header("Folders").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.is_complete())).header("Complete").center(),
+
+            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Add))).header("Adds").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Modify))).header("Modifies").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Delete))).header("Deletes").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
+        ]);
+
+        stream = stream.title(title);
+
+        stream
     }
 
-    fn print_scan_table_row(scan: &Scan) {
-        in_println!(
-            "{:<7} {:<7} {:>5} {:<23} {:<11} {:<11} {:<8} {:<11} {:<11} {:<11} {:<11}",
-            scan.id(),
-            scan.root_path_id(),
-            scan.is_deep(),
-            Utils::format_db_time_short(scan.time_of_scan()),
-            Utils::opt_i64_or_none_as_str(scan.file_count()),
-            Utils::opt_i64_or_none_as_str(scan.folder_count()),
-            scan.is_complete(),
-            scan.change_counts().get(ChangeType::Add),
-            scan.change_counts().get(ChangeType::Modify),
-            scan.change_counts().get(ChangeType::Delete),
-            scan.change_counts().get(ChangeType::TypeChange),
-        );
+    fn end_scans_table(stream: Stream<Scan, Stdout>) -> Result<(), DirCheckError> {
+        stream.finish()?;
+        Ok(())
     }
 
     fn print_root_path_block(db: &Database, root_path: &RootPath, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
@@ -118,29 +127,6 @@ impl Reports {
         if scans {
             Self::print_root_path_scans(db, root_path.id(), count)?;
         }
-
-        Ok(())
-    }
-
-    pub fn print_scan_block(scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError>{
-        Self::print_title("Scan Report");
-        in_println!("Id:             {}", scan.id());
-        in_println!("Root Path ID:   {}", scan.root_path_id());
-        in_println!("Root Path:      {}", root_path.path());
-        in_println!("Deep Scan:      {}", scan.is_deep());
-        in_println!("Time of Scan:   {}", Utils::format_db_time_short(scan.time_of_scan()));
-        in_println!("Completed:      {}", scan.is_complete());
-        
-        Self::print_section_header("Items Seen");
-        in_println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
-        in_println!("Folders:        {}", Utils::opt_i64_or_none_as_str(scan.folder_count()));
-
-        Self::print_section_header("Changes");
-        let change_counts = scan.change_counts();
-        in_println!("Add             {}", change_counts.get(ChangeType::Add));
-        in_println!("Modify          {}", change_counts.get(ChangeType::Modify));
-        in_println!("Delete          {}", change_counts.get(ChangeType::Delete));
-        in_println!("Type Change     {}", change_counts.get(ChangeType::TypeChange));
 
         Ok(())
     }

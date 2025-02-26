@@ -4,13 +4,13 @@ use std::str::FromStr;
 use crate::database::Database;
 use crate::error::DirCheckError;
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ChangeCounts {
-    add_count: i64,
-    modify_count: i64,
-    delete_count: i64,
-    type_change_count: i64,
-    unchanged_count: i64,
+    pub add_count: i64,
+    pub modify_count: i64,
+    pub delete_count: i64,
+    pub type_change_count: i64,
+    pub no_change_count: i64,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -35,13 +35,13 @@ impl ChangeType {
 }
 
 impl ChangeCounts {
-    pub fn new(add_count: i64, modify_count: i64, delete_count: i64, type_change_count: i64, unchanged_count: i64) -> Self {
+    pub fn new(add_count: i64, modify_count: i64, delete_count: i64, type_change_count: i64, no_change_count: i64) -> Self {
         Self {
             add_count,
             modify_count,
             delete_count,
             type_change_count,
-            unchanged_count,
+            no_change_count,
         }
     }
 
@@ -77,7 +77,7 @@ impl ChangeCounts {
             ChangeType::Delete => self.delete_count,
             ChangeType::Modify => self.modify_count,
             ChangeType::TypeChange => self.type_change_count,
-            ChangeType::NoChange => self.unchanged_count,
+            ChangeType::NoChange => self.no_change_count,
         }
     }
 
@@ -87,7 +87,7 @@ impl ChangeCounts {
             ChangeType::Delete => &mut self.delete_count,
             ChangeType::Modify => &mut self.modify_count,
             ChangeType::TypeChange => &mut self.type_change_count,
-            ChangeType::NoChange => &mut self.unchanged_count,
+            ChangeType::NoChange => &mut self.no_change_count,
        };
        *target += 1;
     }
@@ -98,7 +98,7 @@ impl ChangeCounts {
             ChangeType::Delete => &mut self.delete_count,
             ChangeType::Modify => &mut self.modify_count,
             ChangeType::TypeChange => &mut self.type_change_count,
-            ChangeType::NoChange => &mut self.unchanged_count,
+            ChangeType::NoChange => &mut self.no_change_count,
        };
        *target = count;   
     }
