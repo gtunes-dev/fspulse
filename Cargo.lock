@@ -573,8 +573,7 @@ dependencies = [
 [[package]]
 name = "tablestream"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8e352eabc3bef24a85c360ba6b8900bc04bafa83756d7fc418af0e31f8b390d"
+source = "git+https://github.com/gtunes-dev/tablestream#1024f62b1d8a3b317810cd593a50bfd3b6639cd4"
 dependencies = [
  "crossterm",
  "unicode-truncate",

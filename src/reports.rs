@@ -9,7 +9,7 @@ use crate::utils::Utils;
 use std::io::{self, Stdout};
 use std::path::{Path, PathBuf};
 use rusqlite::Result;
-use tablestream::{Column, Stream};
+use tablestream::*;
 
 pub struct Reports {
     // No fields
@@ -26,8 +26,8 @@ impl Reports {
         } else {
             let scan = Scan::new_from_id(db, scan_id)?;
             let root_path = RootPath::get(db, scan.root_path_id())?;
-            let mut stream = Reports::begin_scans_table("Scan");
-            stream.row(scan.clone())?;
+            let stream = Reports::begin_scans_table();
+
             Reports::end_scans_table(stream)?;
 
             if changes {
@@ -44,7 +44,7 @@ impl Reports {
 
     pub fn print_scans(db: &Database, count: Option<i64>) -> Result<(), DirCheckError> {
 
-        let mut stream = Reports::begin_scans_table("Scans");
+        let mut stream = Reports::begin_scans_table();
         
         let scan_count = Scan::for_each_scan(
             db, 
@@ -92,7 +92,7 @@ impl Reports {
         }
     }
 
-    fn begin_scans_table(title: &str) -> Stream<Scan, Stdout> {
+    fn begin_scans_table() -> Stream<Scan, Stdout> {
         let out = io::stdout();
         let mut stream = Stream::new(out, vec![
             Column::new(|f, s: &Scan| write!(f, "{}", s.id())).header("ID").right().min_width(6),
@@ -109,7 +109,7 @@ impl Reports {
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
         ]);
 
-        stream = stream.title(title);
+        stream = stream.title("Scans").empty_row("No Scans");
 
         stream
     }
