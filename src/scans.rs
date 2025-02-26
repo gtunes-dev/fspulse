@@ -18,14 +18,12 @@ use std::path::PathBuf;
 pub struct Scan {
     // Schema fields
     id: i64,
+    root_path_id: i64,
     is_deep: bool,
     time_of_scan: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
-    is_complete: bool,
-
-    // Related entities
-    root_path: RootPath,
+    is_complete: bool,   
 
     // Scan state
     change_counts: ChangeCounts,
@@ -40,18 +38,14 @@ struct QueueEntry {
 impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
-    fn new_for_scan(id: i64, is_deep: bool, time_of_scan: i64, root_path: RootPath) -> Self {
+    fn new_for_scan(id: i64, root_path_id: i64, is_deep: bool, time_of_scan: i64) -> Self {
         Scan {
             id,
+            root_path_id,
             is_deep,
             time_of_scan,
-            root_path,
             ..Default::default()
         }
-    }
-
-    pub fn _foo() {
-
     }
 
     pub fn new_from_id(db: &Database, id: Option<i64>) -> Result<Self, DirCheckError> {
@@ -71,15 +65,15 @@ impl Scan {
             DirCheckError::Error("No scan found".to_string())
         })?;
 
-        let root_path = RootPath::get(db, root_path_id)?;
+        //let root_path: RootPath = RootPath::get(db, root_path_id)?;
 
         let change_counts = ChangeCounts::from_scan_id(db, id)?;
 
         Ok(Scan {
             id,
+            root_path_id,
             is_deep,
             time_of_scan,
-            root_path,
             file_count,
             folder_count,
             is_complete,
@@ -93,11 +87,7 @@ impl Scan {
     }
 
     pub fn root_path_id(&self) -> i64 {
-        self.root_path.id()
-    }
-
-    pub fn root_path(&self) -> &str {
-        self.root_path.path()
+        self.root_path_id
     }
 
     pub fn is_deep(&self) -> bool {
@@ -137,8 +127,8 @@ impl Scan {
     */
 
     pub fn do_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<Scan, DirCheckError> {
-        let scan = Scan::scan_directory(db, path_arg, deep)?;
-        Reports::print_scan_block(db, &scan)?;
+        let (scan, root_path) = Scan::scan_directory(db, path_arg, deep)?;
+        Reports::print_scan_block(&scan, &root_path)?;
 
         Ok(scan)
     }
@@ -175,9 +165,9 @@ impl Scan {
         Ok(canonical_path)
     }
 
-    fn scan_directory(db: &mut Database, path_arg: String, deep: bool) -> Result<Self, DirCheckError> {
-        let mut scan = Self::begin_scan(db, path_arg, deep)?;
-        let root_path_buf = PathBuf::from(scan.root_path());
+    fn scan_directory(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, RootPath), DirCheckError> {
+        let (mut scan, root_path) = Self::begin_scan(db, path_arg, deep)?;
+        let root_path_buf = PathBuf::from(root_path.path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
         let mut q = VecDeque::new();
@@ -233,14 +223,15 @@ impl Scan {
         }
         scan.end_scan(db)?;
     
-        Ok(scan)
+        Ok((scan, root_path))
     }
 
-    fn begin_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<Self, DirCheckError> {
+    fn begin_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, RootPath), DirCheckError> {
         let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
         let root_path_str = path_canonical.to_string_lossy().to_string();
 
         let root_path = RootPath::get_or_insert(db, &root_path_str)?;
+        let root_path_id = root_path.id();
 
         let (scan_id, time_of_scan): (i64, i64) = db.conn.query_row(
             "INSERT INTO scans (root_path_id, is_deep, time_of_scan) 
@@ -250,13 +241,13 @@ impl Scan {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
 
-        let scan = Scan::new_for_scan(scan_id, deep, time_of_scan, root_path);
-        Ok(scan)
+        let scan = Scan::new_for_scan(scan_id, root_path_id, deep, time_of_scan);
+        Ok((scan, root_path))
     }
 
     fn handle_item(
         &mut self, 
-        db: &mut Database, 
+        db: &mut Database,
         item_type: ItemType, 
         path: &Path, 
         metadata: &Metadata, 
@@ -264,7 +255,7 @@ impl Scan {
     ) -> Result<ChangeType, DirCheckError> {
         let path_str = path.to_string_lossy();
         let scan_id = self.id;
-        let root_path_id = self.root_path.id();
+        let root_path_id = self.root_path_id;
 
         let conn = &mut db.conn;
     
@@ -359,7 +350,7 @@ impl Scan {
     }
 
     fn end_scan(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
-        let root_path_id = self.root_path.id();
+        let root_path_id = self.root_path_id;
         let scan_id = self.id;
 
         let conn = &mut db.conn;
@@ -408,5 +399,65 @@ impl Scan {
         self.change_counts = ChangeCounts::from_scan_id(db, self.id)?;
 
         Ok(())
+    }
+
+    pub fn for_each_scan<F>(db: &Database, num_scans: Option<i64>, mut func: F) -> Result<i32, DirCheckError> 
+    where
+        F: FnMut(&Database, &Scan) -> Result<(), DirCheckError>,
+    {
+        if num_scans == Some(0) {
+            return Ok(0);
+        }
+
+        let num_scans = num_scans.unwrap_or(10);
+        
+        let mut stmt = db.conn.prepare(
+            "SELECT 
+                s.id,
+                s.is_deep,
+                s.time_of_scan,
+                s.file_count,
+                s.folder_count, 
+                s.is_complete,
+                s.root_path_id,
+                COALESCE(SUM(CASE WHEN c.change_type = 'A' THEN 1 ELSE 0 END), 0) AS add_count,
+                COALESCE(SUM(CASE WHEN c.change_type = 'M' THEN 1 ELSE 0 END), 0) AS modify_count,
+                COALESCE(SUM(CASE WHEN c.change_type = 'D' THEN 1 ELSE 0 END), 0) AS delete_count,
+                COALESCE(SUM(CASE WHEN c.change_type = 'T' THEN 1 ELSE 0 END), 0) AS type_change_count
+            FROM scans s
+            LEFT JOIN changes c ON s.id = c.scan_id
+            GROUP BY s.id, s.is_deep, s.time_of_scan, s.file_count, s.folder_count, s.is_complete, s.root_path_id
+            ORDER BY s.id DESC
+            LIMIT ?"
+        )?;
+
+        let rows = stmt.query_map([num_scans], |row| {
+            Ok(Scan {
+                id: row.get::<_, i64>(0)?,                              // scan id
+                is_deep: row.get::<_, bool>(1)?,                        // is deep
+                time_of_scan: row.get::<_, i64>(2)?,                    // time of scan
+                file_count: row.get::<_, Option<i64>>(3)?,              // file count
+                folder_count: row.get::<_, Option<i64>>(4)?,            // folder count
+                is_complete: row.get::<_, bool>(5)?,                    // is complete
+                root_path_id: row.get::<_, i64>(6)?,                    // root path id
+                change_counts: ChangeCounts::new(  
+                    row.get::<_, i64>(7)?,             // adds
+                    row.get::<_, i64>(8)?,          // modifies
+                    row.get::<_, i64>(9)?,          // deletes
+                    row.get::<_, i64>(10)?,    // type changes
+                    0,
+                ),
+            })
+        })?;
+
+        let mut scan_count = 0;
+
+        for row in rows {
+            let scan = row?;
+            func(db, &scan)?;
+            scan_count = scan_count + 1;
+        }
+
+        Ok(scan_count)
     }
 }

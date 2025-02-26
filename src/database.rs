@@ -27,6 +27,7 @@ impl ItemType {
 
 pub struct Database {
     pub conn: Connection,
+    #[allow(dead_code)]
     path: String,
 }
 
@@ -55,6 +56,7 @@ impl Database {
         Ok(db)
     }
 
+    #[allow(dead_code)]
     pub fn path(&self) -> &str {
         &self.path
     }

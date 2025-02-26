@@ -16,22 +16,43 @@ pub struct Reports {
 impl Reports {
     const DEFAULT_COUNT: i64 = 10;
 
-    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, count: Option<u64>, changes: bool, items: bool) -> Result<(), DirCheckError> {
+    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, count: Option<i64>, changes: bool, items: bool) -> Result<(), DirCheckError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
         if count.is_some() {
-            Self::print_latest_scans(db, count.unwrap())?;
+            Reports::print_scans(db, count)?;
         } else {
             let scan = Scan::new_from_id(db, scan_id)?;
-            Self::print_scan_block(db, &scan)?;
+            let root_path = RootPath::get(db, scan.root_path_id())?;
+            Reports::print_scan_table_header();
+            Reports::print_scan_table_row(&scan);
 
             if changes {
-                Self::print_scan_changes(db, &scan)?;
+                Self::print_scan_changes(db, &scan, &root_path)?;
             }
 
             if items {
-                Self::print_scan_items(db, &scan)?;
+                Self::print_scan_items(db, &scan, &root_path)?;
             }
+        }
+
+        Ok(())
+    }
+
+    pub fn print_scans(db: &Database, count: Option<i64>) -> Result<(), DirCheckError> {
+        Reports::print_scan_table_header();
+
+        let scan_count = Scan::for_each_scan(
+            db, 
+            count, 
+            |_db, scan| {
+                Reports::print_scan_table_row(scan);
+                Ok(())
+            }
+        )?;
+
+        if scan_count == 0 {
+            in_println!("None");
         }
 
         Ok(())
@@ -65,6 +86,30 @@ impl Reports {
         }
     }
 
+    fn print_scan_table_header() {
+        in_println!(
+            "{:<7} {:<7} {:<5} {:<23} {:<11} {:<11} {:<8} {:<11} {:<11} {:<11} {:<11}",
+            "ID", "Path ID", "Deep", "Time", "Files", "Folders", "Complete", "Adds", "Modifies", "Deletes", "T Changes"
+        );
+    }
+
+    fn print_scan_table_row(scan: &Scan) {
+        in_println!(
+            "{:<7} {:<7} {:>5} {:<23} {:<11} {:<11} {:<8} {:<11} {:<11} {:<11} {:<11}",
+            scan.id(),
+            scan.root_path_id(),
+            scan.is_deep(),
+            Utils::format_db_time_short(scan.time_of_scan()),
+            Utils::opt_i64_or_none_as_str(scan.file_count()),
+            Utils::opt_i64_or_none_as_str(scan.folder_count()),
+            scan.is_complete(),
+            scan.change_counts().get(ChangeType::Add),
+            scan.change_counts().get(ChangeType::Modify),
+            scan.change_counts().get(ChangeType::Delete),
+            scan.change_counts().get(ChangeType::TypeChange),
+        );
+    }
+
     fn print_root_path_block(db: &Database, root_path: &RootPath, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
         Self::print_title("Root Path");
         in_println!("Root Path:      {}", root_path.path());
@@ -77,16 +122,14 @@ impl Reports {
         Ok(())
     }
 
-    pub fn print_scan_block(db: &Database, scan: &Scan) -> Result<(), DirCheckError>{
+    pub fn print_scan_block(scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError>{
         Self::print_title("Scan Report");
         in_println!("Id:             {}", scan.id());
         in_println!("Root Path ID:   {}", scan.root_path_id());
-        in_println!("Root Path:      {}", scan.root_path());
+        in_println!("Root Path:      {}", root_path.path());
         in_println!("Deep Scan:      {}", scan.is_deep());
         in_println!("Time of Scan:   {}", Utils::format_db_time_short(scan.time_of_scan()));
         in_println!("Completed:      {}", scan.is_complete());
-        in_println!("Database:       {}", db.path());
-        // in_println!("Total Items:    {}", total_items);
         
         Self::print_section_header("Items Seen");
         in_println!("Files:          {}", Utils::opt_i64_or_none_as_str(scan.file_count()));
@@ -101,53 +144,6 @@ impl Reports {
 
         Ok(())
     }
-
-    fn print_scan_as_line(id: i64, root_path_id: i64, time_of_scan: i64, is_complete: bool, root_path: &str) {
-        in_println!("[{},{},{},{}] {}",
-            id,
-            Utils::format_db_time_short(time_of_scan),
-            root_path_id,
-            is_complete,
-            root_path
-        );
-    }
-
-    fn print_latest_scans(db: &Database, n: u64) -> Result<(), DirCheckError> {
-        let mut scan_count = 0;
-
-        Self::print_title("Latest Scans");
-
-        let mut stmt = db.conn.prepare(
-            "SELECT scans.id, scans.root_path_id, scans.time_of_scan, scans.is_complete, root_paths.path
-            FROM scans
-            JOIN root_paths ON root_paths.id = scans.root_path_id
-            ORDER BY scans.id DESC
-            LIMIT ?"
-        )?;
-
-        let rows = stmt.query_map([n], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,      // scan id
-                row.get::<_, i64>(1)?,      // root path id
-                row.get::<_, i64>(2)?,      // time of scan
-                row.get::<_, bool>(3)?,     // is complete
-                row.get::<_, String>(4)?,   // root path
-            ))
-        })?;
-
-
-        for row in rows {
-            let (id, root_path_id, time_of_scan, is_complete, root_path) = row?;
-            Self::print_scan_as_line(id, root_path_id, time_of_scan, is_complete, &root_path);
-
-            scan_count = scan_count + 1;
-        }
-
-        Self::print_none_if_zero(scan_count);
-
-        Ok(())
-    }
-    
 
     fn get_tree_path(path_stack: &mut Vec<PathBuf>, root_path: &Path, path: &str, is_dir: bool) -> (usize, PathBuf) {
         // Reduce path to the portion that is relative to the root
@@ -191,10 +187,10 @@ impl Reports {
         (indent_level, new_path.to_path_buf())
     }
       
-    fn print_scan_changes(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
+    fn print_scan_changes(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
         Self::print_section_header("Changed Items");
     
-        let root_path = Path::new(scan.root_path());
+        let root_path = Path::new(root_path.path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
     
         // TODO: identify changes as metadata and/or hash
@@ -261,11 +257,11 @@ impl Reports {
         Ok(change_count)
     }
 
-    fn print_scan_items(db: &Database, scan: &Scan) -> Result<(), DirCheckError> {
+    fn print_scan_items(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
         Self::print_section_header("Items");
         //Self::print_section_header("Items",  "Legend: [Item ID, Item Type, Last Modified, Size] path");
 
-        let root_path = Path::new(scan.root_path());
+        let root_path = Path::new(root_path.path());
         let mut path_stack: Vec<PathBuf> = Vec::new();
 
         let item_count = Self::with_each_scan_item(

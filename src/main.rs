@@ -158,6 +158,7 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
             match report_type {
                 ReportCommand::Scans { id, count, changes, items, .. } => {
                     let id = Utils::opt_u64_to_opt_i64(id);
+                    let count = Utils::opt_u64_to_opt_i64(count);
                     Reports::do_report_scans(&mut db, id, count, changes, items)?;
                 }
                 ReportCommand::Items { id, path: _, changes, count: _, dbpath: _ } => {

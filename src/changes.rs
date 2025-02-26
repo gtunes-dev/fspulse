@@ -35,6 +35,16 @@ impl ChangeType {
 }
 
 impl ChangeCounts {
+    pub fn new(add_count: i64, modify_count: i64, delete_count: i64, type_change_count: i64, unchanged_count: i64) -> Self {
+        Self {
+            add_count,
+            modify_count,
+            delete_count,
+            type_change_count,
+            unchanged_count,
+        }
+    }
+
     pub fn from_scan_id(db: &Database, scan_id: i64) -> Result<Self, DirCheckError> {
         let conn = &db.conn;
         let mut change_counts = ChangeCounts::default();
