@@ -4,7 +4,7 @@ use crate::database::Database;
 use crate::error::DirCheckError;
 
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct RootPath {
     id: i64,
     path: String

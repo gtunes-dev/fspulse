@@ -26,9 +26,10 @@ impl Reports {
         } else {
             let scan = Scan::new_from_id(db, scan_id)?;
             let root_path = RootPath::get(db, scan.root_path_id())?;
-            let stream = Reports::begin_scans_table();
+            let mut stream = Reports::begin_scans_table();
 
-            Reports::end_scans_table(stream)?;
+            stream.row(scan.clone())?;
+            stream.finish()?;
 
             if changes {
                 Self::print_scan_changes(db, &scan, &root_path)?;
@@ -43,10 +44,9 @@ impl Reports {
     }
 
     pub fn print_scans(db: &Database, count: Option<i64>) -> Result<(), DirCheckError> {
-
         let mut stream = Reports::begin_scans_table();
         
-        let scan_count = Scan::for_each_scan(
+        Scan::for_each_scan(
             db, 
             count, 
             |_db, scan| {
@@ -55,11 +55,7 @@ impl Reports {
             }
         )?;
 
-        Reports::end_scans_table(stream)?;
-
-        if scan_count == 0 {
-            in_println!("No Scans");
-        }
+        stream.finish()?;
 
         Ok(())
     }
@@ -68,7 +64,9 @@ impl Reports {
         match root_path_id {
             Some(root_path_id) => {
                 let root_path = RootPath::get(db, root_path_id)?;
-                Self::print_root_path_block(db, &root_path, scans, count)?;
+                let mut stream = Reports::begin_root_paths_table();
+                stream.row(root_path)?;
+                stream.finish()?;
             },
             None => {
                 Self::print_root_paths(db, scans, count)?;
@@ -94,7 +92,7 @@ impl Reports {
 
     fn begin_scans_table() -> Stream<Scan, Stdout> {
         let out = io::stdout();
-        let mut stream = Stream::new(out, vec![
+        let stream = Stream::new(out, vec![
             Column::new(|f, s: &Scan| write!(f, "{}", s.id())).header("ID").right().min_width(6),
             Column::new(|f, s: &Scan| write!(f, "{}", s.root_path_id())).header("Path ID").right().min_width(6),
             Column::new(|f, s: &Scan| write!(f, "{}", s.is_deep())).header("Deep").center(),
@@ -107,16 +105,19 @@ impl Reports {
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Modify))).header("Modifies").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Delete))).header("Deletes").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
-        ]);
-
-        stream = stream.title("Scans").empty_row("No Scans");
+        ]).title("Scans").empty_row("No Scans");
 
         stream
     }
 
-    fn end_scans_table(stream: Stream<Scan, Stdout>) -> Result<(), DirCheckError> {
-        stream.finish()?;
-        Ok(())
+    fn begin_root_paths_table() -> Stream<RootPath, Stdout> {
+        let out = io::stdout();
+        let stream = Stream::new(out, vec![
+            Column::new(|f, rp: &RootPath| write!(f, "{}", rp.id())).header("ID").right().min_width(6),
+            Column::new(|f, rp: &RootPath| write!(f, "{}", rp.path())).header("Path").left(),
+        ]).title("Root Paths").empty_row("No Root Paths");
+
+        stream
     }
 
     fn print_root_path_block(db: &Database, root_path: &RootPath, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
@@ -310,6 +311,19 @@ impl Reports {
 
         Ok(())
     }
+    /*
+    fn print_root_paths(db: &Database, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
+        //RootPath::for_each_root_path(db, scans, count, Self::print_root_path_block)?;
+
+        let mut stream = Reports::begin_root_paths_table();
+
+        RootPath::for_each_root_path(db, scans, count, |RootPath rp| {
+            stream.row(rp)?;
+        });
+
+        Ok(())
+    }
+    */
 
     fn print_root_path_scans(db: &Database, root_path_id: i64, count: Option<i64>) -> Result<(), DirCheckError> {
         // if count isn't specified, the default is 10
