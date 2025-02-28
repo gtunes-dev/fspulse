@@ -48,7 +48,7 @@ impl Scan {
         }
     }
 
-    pub fn new_from_id(db: &Database, id: Option<i64>) -> Result<Self, DirCheckError> {
+    pub fn new_from_id_else_latest(db: &Database, id: Option<i64>) -> Result<Self, DirCheckError> {
         let conn = &db.conn;
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,

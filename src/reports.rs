@@ -1,5 +1,4 @@
-use crate::indent::Indent;
-use crate::{changes::ChangeType, in_println};
+use crate::changes::ChangeType;
 use crate::error::DirCheckError;
 use crate::database::Database;
 use crate::root_paths::RootPath;
@@ -16,35 +15,92 @@ pub struct Reports {
 }
 
 impl Reports {
-    const DEFAULT_COUNT: i64 = 10;
-
-    pub fn do_report_scans(db: &Database, scan_id: Option<i64>, count: Option<i64>, changes: bool, items: bool) -> Result<(), DirCheckError> {
+    pub fn report_scans(
+        db: &Database, 
+        scan_id: Option<i64>, 
+        latest: bool, 
+        count: Option<i64>, 
+        changes: bool, 
+        items: bool,
+    ) -> Result<(), DirCheckError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
-        if count.is_some() {
+        if scan_id.is_none() && !latest {
             Reports::print_scans(db, count)?;
         } else {
-            let scan = Scan::new_from_id(db, scan_id)?;
-            let root_path = RootPath::get(db, scan.root_path_id())?;
-            let mut stream = Reports::begin_scans_table();
+            let scan = Scan::new_from_id_else_latest(db, scan_id)?;
+            Self::print_scan(db, &scan, changes, items)?;
+        }
 
-            stream.row(scan.clone())?;
+        Ok(())
+    }
+
+    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, items: bool) -> Result<(), DirCheckError> {
+        if root_path_id.is_none() {
+            let mut stream = Reports::begin_root_paths_table();
+            
+            RootPath::for_each_root_path(
+                db,
+                |rp| {
+                    stream.row(rp.clone())?;
+                    Ok(())
+                }
+            )?;
+
             stream.finish()?;
+        } else {
+            let root_path_id = root_path_id.unwrap();
+            let root_path = RootPath::get(db, root_path_id)?
+                .ok_or_else(|| DirCheckError::Error("Root Path Not Found".to_string()))?;
+            let mut stream = Self::begin_root_paths_table()
+                .title("Root Path");
 
-            if changes {
-                Self::print_scan_changes(db, &scan, &root_path)?;
-            }
+            stream.row(root_path.clone())?;
+            let table_width = stream.finish()?;
 
             if items {
-                Self::print_scan_items(db, &scan, &root_path)?;
+                let scan_id = root_path.latest_scan(db)?;
+
+                if scan_id.is_none() {
+                    Self::print_center(table_width, "No Last Scan - No Items");
+                    Self::hr(table_width);
+                    return Ok(());
+                }
+
+                let scan = Scan::new_from_id_else_latest(db, scan_id)?;
+
+                Self::print_scan(db, &scan, false, true)?;
             }
         }
 
         Ok(())
     }
 
-    pub fn print_scans(db: &Database, count: Option<i64>) -> Result<(), DirCheckError> {
-        let mut stream = Reports::begin_scans_table();
+    fn print_scan(db: &Database, scan: &Scan, changes: bool, items: bool) -> Result<(), DirCheckError> {
+        let mut stream = Reports::begin_scans_table("Scan", "No Scan");
+
+        stream.row(scan.clone())?;
+        let table_width = stream.finish()?;
+
+        if changes || items {
+            let root_path = RootPath::get(db, scan.root_path_id())?
+                .ok_or_else(|| DirCheckError::Error("Root Path Not Found".to_string()))?;
+
+            if changes {
+                Self::print_scan_changes(db, table_width, &scan, &root_path)?;
+            }
+
+            if items {
+                Self::print_scan_items(db, table_width, &scan, &root_path)?;
+            }
+        }
+
+        Ok(())
+    }
+
+
+    fn print_scans(db: &Database, count: Option<i64>) -> Result<(), DirCheckError> {
+        let mut stream = Reports::begin_scans_table("Scans", "No Scans");
         
         Scan::for_each_scan(
             db, 
@@ -60,37 +116,7 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, _path: Option<String>, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
-        match root_path_id {
-            Some(root_path_id) => {
-                let root_path = RootPath::get(db, root_path_id)?;
-                let mut stream = Reports::begin_root_paths_table();
-                stream.row(root_path)?;
-                stream.finish()?;
-            },
-            None => {
-                Self::print_root_paths(db, scans, count)?;
-            }
-        }
-        
-        Ok(())
-    }
-
-    fn print_title(title: &str) {
-        in_println!("{}\n{}", title, "=".repeat(title.len()));
-    }
-
-    fn print_section_header(header: &str) {
-        in_println!("\n{}\n{}", header, "-".repeat(header.len()));
-    }
-
-    fn print_none_if_zero(i: i32) {
-        if i == 0 {
-            in_println!("None.");
-        }
-    }
-
-    fn begin_scans_table() -> Stream<Scan, Stdout> {
+    fn begin_scans_table(title: &str, empty_row: &str) -> Stream<Scan, Stdout> {
         let out = io::stdout();
         let stream = Stream::new(out, vec![
             Column::new(|f, s: &Scan| write!(f, "{}", s.id())).header("ID").right().min_width(6),
@@ -105,7 +131,7 @@ impl Reports {
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Modify))).header("Modifies").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Delete))).header("Deletes").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
-        ]).title("Scans").empty_row("No Scans");
+        ]).title(title).empty_row(empty_row);
 
         stream
     }
@@ -114,22 +140,10 @@ impl Reports {
         let out = io::stdout();
         let stream = Stream::new(out, vec![
             Column::new(|f, rp: &RootPath| write!(f, "{}", rp.id())).header("ID").right().min_width(6),
-            Column::new(|f, rp: &RootPath| write!(f, "{}", rp.path())).header("Path").left(),
+            Column::new(|f, rp: &RootPath| write!(f, "{}", rp.path())).header("Path").left().min_width(109),
         ]).title("Root Paths").empty_row("No Root Paths");
 
         stream
-    }
-
-    fn print_root_path_block(db: &Database, root_path: &RootPath, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
-        Self::print_title("Root Path");
-        in_println!("Root Path:      {}", root_path.path());
-        in_println!("Id:             {}", root_path.id());
-
-        if scans {
-            Self::print_root_path_scans(db, root_path.id(), count)?;
-        }
-
-        Ok(())
     }
 
     fn get_tree_path(path_stack: &mut Vec<PathBuf>, root_path: &Path, path: &str, is_dir: bool) -> (usize, PathBuf) {
@@ -155,7 +169,7 @@ impl Reports {
             if let Some(structural_component) = new_path.parent() {
                 let structural_component_str = structural_component.to_string_lossy();
                 if !structural_component_str.is_empty() {
-                    in_println!("{}{}/", " ".repeat(path_stack.len() * 4), structural_component_str);
+                    println!("{}{}/", " ".repeat(path_stack.len() * 4), structural_component_str);
                     path_stack.push(parent.unwrap().to_path_buf());
 
                     // The structural path has been pushed. The new_path is now just the filename
@@ -174,8 +188,11 @@ impl Reports {
         (indent_level, new_path.to_path_buf())
     }
       
-    fn print_scan_changes(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
-        Self::print_section_header("Changed Items");
+    fn print_scan_changes(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
+        Self::print_center(width, "Changes");
+        Self::print_center(width, &format!("Root Path: {}", root_path.path()));
+
+        Self::hr(width);
     
         let root_path = Path::new(root_path.path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
@@ -195,7 +212,7 @@ impl Reports {
                 );
 
                 // Print the item
-                in_println!("{}[{}] {}{} ({})", 
+                println!("{}[{}] {}{} ({})", 
                     " ".repeat(indent_level * 4), 
                     change_type, 
                     new_path.to_string_lossy(),
@@ -204,9 +221,12 @@ impl Reports {
                 );
             }
         )?;
-               
-        Self::print_none_if_zero(change_count);
 
+        if change_count == 0 {
+            Self::print_center(width, "No Changes");
+        }
+
+        Self::hr(width);    
         Ok(())
     }
 
@@ -244,9 +264,10 @@ impl Reports {
         Ok(change_count)
     }
 
-    fn print_scan_items(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
-        Self::print_section_header("Items");
-        //Self::print_section_header("Items",  "Legend: [Item ID, Item Type, Last Modified, Size] path");
+    fn print_scan_items(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
+        Self::print_center(width, "Items");
+        Self::print_center(width, &format!("Root Path: {}", root_path.path()));
+        Self::hr(width);
 
         let root_path = Path::new(root_path.path());
         let mut path_stack: Vec<PathBuf> = Vec::new();
@@ -260,7 +281,7 @@ impl Reports {
                 let (indent_level, new_path) = Self::get_tree_path(&mut path_stack, root_path, path, is_dir);
 
                 // Print the item
-                in_println!("{}[{}] {}{}",
+                println!("{}[{}] {}{}",
                     " ".repeat(indent_level * 4), 
                     id,
                     new_path.to_string_lossy(),
@@ -269,7 +290,12 @@ impl Reports {
             }
         )?;
 
-        Self::print_none_if_zero(item_count);
+        if item_count == 0 {
+            Self::print_center(width, "No Items");
+        }
+
+        Self::hr(width);
+
         Ok(())
     }
 
@@ -306,119 +332,20 @@ impl Reports {
         Ok(item_count)
     }
 
-    fn print_root_paths(db: &Database, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
-        RootPath::for_each_root_path(db, scans, count, Self::print_root_path_block)?;
-
-        Ok(())
+    fn hr(width: usize) {
+        println!("{1:-<0$}", width, ""); 
     }
-    /*
-    fn print_root_paths(db: &Database, scans: bool, count: Option<i64>) -> Result<(), DirCheckError> {
-        //RootPath::for_each_root_path(db, scans, count, Self::print_root_path_block)?;
 
-        let mut stream = Reports::begin_root_paths_table();
-
-        RootPath::for_each_root_path(db, scans, count, |RootPath rp| {
-            stream.row(rp)?;
-        });
-
-        Ok(())
+    fn __print_left(width: usize, value: &str) {
+        println!("{0:1$}{3}{0:2$}", "", 0, width - value.len(), value);
     }
-    */
 
-    fn print_root_path_scans(db: &Database, root_path_id: i64, count: Option<i64>) -> Result<(), DirCheckError> {
-        // if count isn't specified, the default is 10
-        let count = count.unwrap_or(Self::DEFAULT_COUNT);
-        
-        if count == 0 {
-            return Ok(()); // Nothing to print
-        }
+    fn print_center(width: usize, value: &str) {
+        // determine left padding
+        let padding = width - value.len();
+        let lpad = padding / 2;
+        let rpad = lpad + (padding % 2);
+        println!("{0:1$}{3}{0:2$}", "", lpad, rpad, value);
 
-        let _in_1 = Indent::new();
-
-        Self::print_section_header("Scans");
-
-        let mut stmt = db.conn.prepare(
-            "SELECT id, is_deep, time_of_scan, file_count, folder_count, is_complete
-            FROM scans
-            WHERE root_path_id = ?
-            ORDER BY id DESC
-            LIMIT ?"
-        )?;
-
-        let rows = stmt.query_map([root_path_id, count], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,          // scan id
-                row.get::<_, bool>(1)?,         // is deep
-                row.get::<_, i64>(2)?,          // time of scan
-                row.get::<_, Option<i64>>(3)?,  // file count
-                row.get::<_, Option<i64>>(4)?,  // folder count
-                row.get::<_, bool>(5)?,         // is complete
-            ))
-        })?;
-
-        let mut printed_header = false;
-
-        for row in rows {
-            let (scan_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = row?;
- 
-            if !printed_header {
-                in_println!(
-                    "{:<9} {:<6} {:<23} {:<12} {:<14} {:<8}",
-                    "ID", "Deep", "Time", "File Count", "Folder Count", "Complete"
-                );
-                printed_header = true;
-            }
-            
-            in_println!(
-                "{:<9} {:<6} {:<23} {:<12} {:<14} {:<8}",
-                scan_id,
-                is_deep,
-                Utils::format_db_time_short(time_of_scan),
-                Utils::opt_i64_or_none_as_str(file_count),
-                Utils::opt_i64_or_none_as_str(folder_count),
-                is_complete,
-            );
-        }
-
-        if !printed_header {
-            in_println!("None")
-        }
-
-        Ok(())
     }
-     
-     /* 
-
-    pub fn do_scans(db: &mut Database, all: bool, count: u64) -> Result<(), DirCheckError> {
-        let count: i64 = if all { -1 } else { count as i64 };
-        let query = format!("
-            SELECT scans.id, scans.scan_time, root_paths.path
-            FROM scans
-            JOIN root_paths ON scans.root_path_id = root_paths.id
-            ORDER BY scans.id DESC
-            LIMIT {}",
-            count
-        );
-
-        let mut stmt = db.conn.prepare(&query)?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, String>(2)?))
-        })?;
-
-        for row in rows {
-            let (id, scan_time, path) = row?;
-
-            // Convert scan_time from UNIX timestamp to DateTime<Utc>
-            let datetime_utc = DateTime::<Utc>::from_timestamp(scan_time, 0)
-                .unwrap_or_default();
-
-            // Convert to local time and format it
-            let datetime_local = datetime_utc.with_timezone(&Local);
-            let formatted_time = datetime_local.format("%Y-%m-%d %H:%M:%S");
-
-            in_println!("Scan ID: {}, Time: {}, Path: {}", id, formatted_time, path);
-        }
-
-        Ok(())
-    } */
 }

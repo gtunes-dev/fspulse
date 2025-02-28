@@ -1,5 +1,6 @@
 use std::i64;
 
+use rusqlite::Error::QueryReturnedNoRows;
 use crate::database::Database;
 use crate::error::DirCheckError;
 
@@ -11,16 +12,18 @@ pub struct RootPath {
 }
 
 impl RootPath {
-    pub fn get(db: &Database, id: i64) -> Result<Self, DirCheckError> {
+    pub fn get(db: &Database, id: i64) -> Result<Option<Self>, DirCheckError> {
         let conn = &db.conn;
 
-        let path: String = conn.query_row(
-        "SELECT path FROM root_paths WHERE id = ?",
-            [id],
-        |row| row.get(0),
-        )?;
-
-        Ok(RootPath{ id, path })
+        match conn.query_row(
+            "SELECT path FROM root_paths WHERE id = ?", 
+            [id], 
+            |row| row.get(0),
+        ) {
+            Ok(path) => Ok(Some(RootPath { id, path } )),
+            Err(QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(DirCheckError::Database(e)),
+        }
     }
 
     pub fn get_or_insert(db: &Database, path: &str) -> Result<Self, DirCheckError> {
@@ -45,17 +48,11 @@ impl RootPath {
         &self.path
     }
 
-    pub fn for_each_root_path<F>(db: &Database, scans: bool, count: Option<i64>, mut func: F) -> Result<i32, DirCheckError> 
+    pub fn for_each_root_path<F>(db: &Database, mut func: F) -> Result<(), DirCheckError> 
     where
-        F: FnMut(&Database, &RootPath, bool, Option<i64>) -> Result<(), DirCheckError>,
+        F: FnMut(&RootPath) -> Result<(), DirCheckError>,
     {
-        // if count isn't specified, the default is 10
-        //let count = count.unwrap_or(i64::MAX);
-        
-        if count == Some(0) {
-            return Ok(0); // Nothing to print
-        }
-
+   
         let mut stmt = db.conn.prepare(
             "SELECT id, path
             FROM root_paths
@@ -69,17 +66,30 @@ impl RootPath {
             })
         })?;
 
-        let mut path_count = 0;
-
         for row in rows {
 
             let root_path= row?;
-            func(db, &root_path, scans, count)?;
-            path_count += 1;
+            func(&root_path)?;
         }
 
-        Ok(path_count)
+        Ok(())
     }
 
-    
+    pub fn latest_scan(&self, db: &Database) -> Result<Option<i64>, DirCheckError> {
+        let conn = &db.conn;
+
+        match conn.query_row(
+            "SELECT id 
+            FROM scans
+            WHERE root_path_id = ?
+            ORDER BY ID DESC
+            LIMIT 1", 
+            [self.id], 
+            |row| row.get(0),
+        ) {
+            Ok(id) => Ok(Some( id )),
+            Err(QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(DirCheckError::Database(e)),
+        }
+    }
 }
