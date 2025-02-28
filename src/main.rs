@@ -1,12 +1,12 @@
 mod database;
 mod changes;
-mod items;
 mod error;
 mod hash;
 //mod indent;
-mod scans;
+mod items;
 mod reports;
 mod root_paths;
+mod scans;
 mod schema;
 mod utils;
 
@@ -161,12 +161,9 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
                     let id = Utils::opt_u64_to_opt_i64(id);
                     Reports::report_root_paths(&mut db, id, items)?;
                 }
-                ReportCommand::Items { id, path: _, changes, count: _, dbpath: _ } => {
-                    //let id = Utils::opt_u64_to_opt_i64(id);
-                    
-                    if changes && id.is_none() {
-                        return Err(DirCheckError::Error("Cannot use --changes without specifying an item ID.".to_string()));
-                    }
+                ReportCommand::Items { id, path: _, changes: _, count: _, dbpath: _ } => {
+                    let id = Utils::opt_u64_to_opt_i64(id).unwrap();
+                    Reports::report_items(&db, id)?;                    
                 }
             }
         }

@@ -1,6 +1,7 @@
 use crate::changes::ChangeType;
 use crate::error::DirCheckError;
 use crate::database::Database;
+use crate::items::Item;
 use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
@@ -72,6 +73,13 @@ impl Reports {
                 Self::print_scan(db, &scan, false, true)?;
             }
         }
+
+        Ok(())
+    }
+
+    pub fn report_items(db: &Database, item_id: i64) -> Result<(), DirCheckError> {
+        let item = Item::new(db, item_id)?;
+        println!("{:#?}", item);
 
         Ok(())
     }
