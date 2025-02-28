@@ -78,8 +78,13 @@ impl Reports {
     }
 
     pub fn report_items(db: &Database, item_id: i64) -> Result<(), DirCheckError> {
+        let mut stream = Self::begin_items_table("Item", "No Item");
+
         let item = Item::new(db, item_id)?;
-        println!("{:#?}", item);
+        if item.is_some() {
+            stream.row(item.unwrap())?;
+        }
+        stream.finish()?;
 
         Ok(())
     }
@@ -151,6 +156,23 @@ impl Reports {
             Column::new(|f, rp: &RootPath| write!(f, "{}", rp.path())).header("Path").left().min_width(109),
         ]).title("Root Paths").empty_row("No Root Paths");
 
+        stream
+    }
+
+    fn begin_items_table(title: &str, empty_row: &str) -> Stream<Item, Stdout> {
+        let out = io::stdout();
+        let stream = Stream::new(out, vec![
+            Column::new(|f, i: &Item| write!(f, "{}", i.id())).header("ID").right().min_width(6),
+            Column::new(|f, i: &Item| write!(f, "{}", i.root_path_id())).header("Path ID").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.last_seen_scan_id())).header("Last Scan").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.is_tombstone())).header("Tombstone").center(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.item_type())).header("Type").center(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.last_modified()))).header("Modified").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.file_size()))).header("Size").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.file_hash().unwrap_or("-"))).header("Hash").center(),
+        ]).title(title).empty_row(empty_row);
+        
         stream
     }
 

@@ -21,21 +21,24 @@ use rusqlite::{self, params, OptionalExtension};
 use crate::{database::Database, error::DirCheckError};
 
 #[derive(Clone, Debug, Default)]
-pub struct Item {
+pub struct Item {           // TODO: Change sql schema to have this column order
     id: i64,
     root_path_id: i64,
-    path: String,
+    last_seen_scan_id: i64,
     is_tombstone: bool,
     item_type: String,
+    path: String,
     last_modified: Option<i64>,
     file_size: Option<i64>,
     file_hash: Option<String>,
-    last_seen_scan_id: i64,
+    
 }
 
 impl Item {
     pub fn new(db: &Database, id: i64) -> Result<Option<Self>, DirCheckError> {
         let conn = &db.conn;
+
+        
 
         match conn.query_row(
             "SELECT id, root_path_id, path, is_tombstone, item_type, last_modified, file_size, file_hash, last_seen_scan_id
@@ -58,4 +61,18 @@ impl Item {
             None => Ok(None),
         }
     }
+
+    pub fn id(&self) -> i64 { self.id }
+    pub fn root_path_id(&self) -> i64 { self.root_path_id }
+    pub fn last_seen_scan_id(&self) -> i64 { self.last_seen_scan_id }
+    pub fn is_tombstone(&self) -> bool { self.is_tombstone }
+    pub fn item_type(&self) -> &str { &self.item_type }
+    pub fn path(&self) -> &str { &self.path }
+    pub fn last_modified(&self) -> Option<i64> { self.last_modified }
+    pub fn file_size(&self) -> Option<i64> { self.file_size }
+    pub fn file_hash(&self) -> Option<&str> { self.file_hash.as_deref() }
+    
+
+
+
 }

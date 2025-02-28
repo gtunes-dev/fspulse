@@ -60,4 +60,8 @@ impl Utils {
 
     }
 
+    pub fn format_db_time_short_or_none(db_time: Option<i64>) -> String {
+        db_time.map_or("None".to_string(), Self::format_db_time_short)
+    }
+
 }
