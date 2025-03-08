@@ -65,12 +65,21 @@ enum ReportCommand {
         count: Option<u64>,
 
         /// Include changes in the scan report (conflicts with 'count')
-        #[arg(long = "changes", conflicts_with_all = ["count"], default_value_t = false)]
+        #[arg(long = "changes", conflicts_with_all = ["count"], default_value_t = false, group = "output")]
         changes: bool,
 
         /// Include items in the scan report. Only available for most recent scan (requires 'latest'. conflicts with 'id' and 'count')
-        #[arg(long = "items", requires = "latest", conflicts_with_all = ["id", "count"], default_value_t = false)]
+        #[arg(long = "items", requires = "latest", conflicts_with_all = ["id", "count"], default_value_t = false, group = "output")]
         items: bool,
+
+        /// Output format (only applicable with `--items` or `--changes`, defaults to "table")
+        #[arg(
+            long = "format",
+            value_parser = clap::builder::PossibleValuesParser::new(["tree", "table"]),
+            default_value = "table",
+            requires = "output"
+    )]
+    format: String,
 
         /// Database file directory (default: current directory)
         #[arg(long = "dbpath", short = 'd', default_value = ".")]
@@ -152,10 +161,10 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         }
         DirCheckCommand::Report { report_type } => {
             match report_type {
-                ReportCommand::Scans { id, latest, count, changes, items, .. } => {
+                ReportCommand::Scans { id, latest, count, changes, items, format, .. } => {
                     let id = Utils::opt_u64_to_opt_i64(id);
                     let count = Utils::opt_u64_to_opt_i64(count);
-                    Reports::report_scans(&mut db, id, latest, count, changes, items)?;
+                    Reports::report_scans(&mut db, id, latest, count, changes, items, &format)?;
                 }
                 ReportCommand::RootPaths { id, items, .. } => {
                     let id = Utils::opt_u64_to_opt_i64(id);

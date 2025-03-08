@@ -1,4 +1,4 @@
-use crate::changes::ChangeType;
+use crate::changes::{Change, ChangeType};
 use crate::error::DirCheckError;
 use crate::database::Database;
 use crate::items::Item;
@@ -23,6 +23,7 @@ impl Reports {
         count: Option<i64>, 
         changes: bool, 
         items: bool,
+        format: &str,
     ) -> Result<(), DirCheckError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
@@ -30,7 +31,7 @@ impl Reports {
             Reports::print_scans(db, count)?;
         } else {
             let scan = Scan::new_from_id_else_latest(db, scan_id)?;
-            Self::print_scan(db, &scan, changes, items)?;
+            Self::print_scan(db, &scan, changes, items, format)?;
         }
 
         Ok(())
@@ -70,7 +71,7 @@ impl Reports {
 
                 let scan = Scan::new_from_id_else_latest(db, scan_id)?;
 
-                Self::print_scan(db, &scan, false, true)?;
+                Self::print_scan(db, &scan, false, true, "table")?;
             }
         }
 
@@ -89,7 +90,7 @@ impl Reports {
         Ok(())
     }
 
-    fn print_scan(db: &Database, scan: &Scan, changes: bool, items: bool) -> Result<(), DirCheckError> {
+    fn print_scan(db: &Database, scan: &Scan, changes: bool, items: bool, format: &str) -> Result<(), DirCheckError> {
         let mut stream = Reports::begin_scans_table("Scan", "No Scan");
 
         stream.row(scan.clone())?;
@@ -104,13 +105,16 @@ impl Reports {
             }
 
             if items {
-                Self::print_scan_items(db, table_width, &scan, &root_path)?;
+                if format == "tree" {
+                    Self::print_last_seen_scan_items_as_tree(db, table_width, &scan, &root_path)?;
+                } else {
+                    Self::print_last_seen_scan_items_as_table(db, &scan, &root_path)?;
+                }
             }
         }
 
         Ok(())
     }
-
 
     fn print_scans(db: &Database, count: Option<i64>) -> Result<(), DirCheckError> {
         let mut stream = Reports::begin_scans_table("Scans", "No Scans");
@@ -226,29 +230,30 @@ impl Reports {
     
         let root_path = Path::new(root_path.path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
-    
-        // TODO: identify changes as metadata and/or hash
-        let change_count = Self::with_each_scan_change(
-            db,
-            scan.id(),
-            |id, change_type, _metadata_changed, _hash_changed, item_type, path| {
+
+         // TODO: identify changes as metadata and/or hash
+        let change_count = Change::with_each_last_scan_change(
+            db, 
+            scan.id(), 
+            |item_type, item_path, change| {
                 let is_dir = item_type == "D";
 
                 let (indent_level, new_path) = Self::get_tree_path(
                     &mut path_stack, 
                     root_path, 
-                    path,
+                    item_path,
                     is_dir,
                 );
 
                 // Print the item
                 println!("{}[{}] {}{} ({})", 
                     " ".repeat(indent_level * 4), 
-                    change_type, 
+                    change.change_type, 
                     new_path.to_string_lossy(),
                     Utils::dir_sep_or_empty(is_dir),
-                    id,
+                    change.id,
                 );
+                Ok(())
             }
         )?;
 
@@ -260,6 +265,7 @@ impl Reports {
         Ok(())
     }
 
+    /* 
     fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
     where
         F: FnMut(i64, &str, Option<bool>, Option<bool>, &str, &str),
@@ -293,8 +299,27 @@ impl Reports {
         }
         Ok(change_count)
     }
+    */
 
-    fn print_scan_items(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
+    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<i32, DirCheckError> {
+        let mut stream = 
+            Self::begin_items_table(&format!("Items: {}", root_path.path()), "No Items");
+
+        let item_count = Item::with_each_last_seen_scan_item(
+            db, 
+            scan.id(),
+            |item|  {
+                stream.row(item.clone())?;
+                Ok(())
+            }
+        )?;
+
+        stream.finish()?;
+
+        Ok(item_count)
+    }
+
+    fn print_last_seen_scan_items_as_tree(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
         Self::print_center(width, "Items");
         Self::print_center(width, &format!("Root Path: {}", root_path.path()));
         Self::hr(width);
@@ -302,21 +327,22 @@ impl Reports {
         let root_path = Path::new(root_path.path());
         let mut path_stack: Vec<PathBuf> = Vec::new();
 
-        let item_count = Self::with_each_scan_item(
+        let item_count = Item::with_each_last_seen_scan_item(
             db, 
             scan.id(), 
-            |id, path, item_type, _last_modified, _file_size, _file_hash| {
-                let is_dir = item_type == "D";
+            |item| {
+                let is_dir = item.item_type() == "D";
 
-                let (indent_level, new_path) = Self::get_tree_path(&mut path_stack, root_path, path, is_dir);
+                let (indent_level, new_path) = Self::get_tree_path(&mut path_stack, root_path, item.path(), is_dir);
 
                 // Print the item
                 println!("{}[{}] {}{}",
                     " ".repeat(indent_level * 4), 
-                    id,
+                    item.id(),
                     new_path.to_string_lossy(),
                     Utils::dir_sep_or_empty(is_dir),
                 );
+                Ok(())
             }
         )?;
 
@@ -327,39 +353,6 @@ impl Reports {
         Self::hr(width);
 
         Ok(())
-    }
-
-    pub fn with_each_scan_item<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
-    where
-        F: FnMut(i64, &str, &str, i64, Option<i64>, Option<String>),
-    {
-        let mut item_count = 0;
-
-        let mut stmt = db.conn.prepare(
-            "SELECT id, path, item_type, last_modified, file_size, file_hash
-            FROM items
-            WHERE last_seen_scan_id = ?
-            ORDER BY path ASC"
-        )?;
-        
-        let rows = stmt.query_map([scan_id], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,              // Item ID
-                row.get::<_, String>(1)?,           // Path
-                row.get::<_, String>(2)?,           // Item type
-                row.get::<_, i64>(3)?,              // Last modified
-                row.get::<_, Option<i64>>(4)?,      // File size (can be null
-                row.get::<_, Option<String>>(5)?,   // File Hash (can be null)
-            ))
-        })?;
-        
-        for row in rows {
-            let (id, path, item_type, last_modified, file_size, file_hash) = row?;
-
-            func(id, &path, &item_type, last_modified, file_size, file_hash);
-            item_count = item_count + 1;
-        }
-        Ok(item_count)
     }
 
     fn hr(width: usize) {
