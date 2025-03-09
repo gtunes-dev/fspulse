@@ -7,14 +7,19 @@ use crate::error::DirCheckError;
 #[derive(Clone, Debug, Default)]
 pub struct Change {
     pub id: i64,
-    scan_id: i64,
-    item_id: i64,
+    #[allow(dead_code)]
+    pub scan_id: i64,   // scan_id is currently set but is never read
+    pub item_id: i64,
     pub change_type: String,
-    metadata_changed: Option<bool>,
-    hash_changed: Option<bool>,
-    prev_last_modified: Option<i64>,
-    prev_file_size: Option<i64>,
-    prev_hash: Option<String>,
+    pub metadata_changed: Option<bool>,
+    pub hash_changed: Option<bool>,
+    pub prev_last_modified: Option<i64>,
+    pub prev_file_size: Option<i64>,
+    pub prev_hash: Option<String>,
+
+    // Additional non-entity fields
+    pub item_type: String,
+    pub item_path: String,
 }
 
 
@@ -49,9 +54,9 @@ impl ChangeType {
 }
 
 impl Change {
-    pub fn with_each_last_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
+    pub fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
     where
-        F: FnMut(&str, &str, &Change) -> Result<(), DirCheckError>,
+        F: FnMut(&Change) -> Result<(), DirCheckError>,
     {
         let mut change_count = 0;
 
@@ -64,10 +69,8 @@ impl Change {
         )?;
         
         let rows = stmt.query_map([scan_id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,                               // items.item_type
-                row.get::<_, String>(1)?,                               // items.path
-                Change {
+            Ok(
+                 Change {
                     id: row.get::<_, i64>(2)?,                          // changes.id
                     scan_id: row.get::<_, i64>(3)?,                     // changes.scan_id
                     item_id: row.get::<_, i64>(4)?,                     // changes.item_id
@@ -77,14 +80,18 @@ impl Change {
                     prev_last_modified: row.get::<_, Option<i64>>(8)?,  // changes.prev_last_modified
                     prev_file_size: row.get::<_, Option<i64>>(9)?,      // changes.prev_file_size
                     prev_hash: row.get::<_, Option<String>>(10)?,       // changes.prev_hash
+
+                    // Additional fields
+                    item_type: row.get::<_, String>(0)?,                // items.item_type
+                    item_path: row.get::<_, String>(1)?,                               // items.path
                 }
-            ))
+            )
         })?;
         
         for row in rows {
-            let (item_type, path, change) = row?;
+            let change = row?;
 
-            func(&item_type, &path, &change)?;
+            func(&change)?;
             change_count = change_count + 1;
         }
         Ok(change_count)

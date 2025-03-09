@@ -29,7 +29,7 @@ impl Utils {
     pub fn opt_i64_or_none_as_str(opt_i64: Option<i64>) -> String {
         match opt_i64 {
             Some(i) => i.to_string(),
-            None => "None".to_string(),
+            None => "-".to_string(),
         }
     }
     
@@ -61,7 +61,22 @@ impl Utils {
     }
 
     pub fn format_db_time_short_or_none(db_time: Option<i64>) -> String {
-        db_time.map_or("None".to_string(), Self::format_db_time_short)
+        db_time.map_or("-".to_string(), Self::format_db_time_short)
+    }
+
+    pub fn opt_bool_or_none_as_str(opt_bool: Option<bool>) -> &'static str {
+        match opt_bool {
+            Some(true) => "T",
+            Some(false) => "F",
+            None => "-",
+        }
+    }
+
+    pub fn opt_string_or_none(str: &Option<String>) -> &str {
+        match str {
+            Some(s) => s.as_str(),
+            None => "-",
+        }
     }
 
 }

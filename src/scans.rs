@@ -2,8 +2,8 @@ use crate::changes::{ ChangeCounts, ChangeType };
 use crate::error::DirCheckError;
 use crate::database::{ Database, ItemType };
 use crate::hash::Hash;
+use crate::reports::{ReportFormat, Reports};
 use crate::root_paths::RootPath;
-use crate::utils::Utils;
 
 use rusqlite::{ OptionalExtension, Result, params };
 
@@ -128,25 +128,9 @@ impl Scan {
 
     pub fn do_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<Scan, DirCheckError> {
         let (scan, _root_path) = Scan::scan_directory(db, path_arg, deep)?;
-        scan.print_scan_results();
+        Reports::print_scan(db, &scan, false, false, ReportFormat::Table)?;
 
         Ok(scan)
-    }
-
-    fn print_scan_results(&self) {
-        println!("Scan Complete");
-        println!("Id:             {}", self.id);
-        println!("Root Path ID:   {}", self.root_path_id);
-        println!("Deep Scan:      {}", self.is_deep);
-        println!("File Count:     {}", Utils::opt_i64_or_none_as_str(self.file_count));
-        println!("Folder Count:   {}", Utils::opt_i64_or_none_as_str(self.folder_count));
-
-        println!("\nChanges");
-        let change_counts = self.change_counts();
-        println!("Add             {}", change_counts.get(ChangeType::Add));
-        println!("Modify          {}", change_counts.get(ChangeType::Modify));
-        println!("Delete          {}", change_counts.get(ChangeType::Delete));
-        println!("Type Change     {}", change_counts.get(ChangeType::TypeChange));
     }
 
     fn path_arg_to_canonical_path_buf(path_arg: &str) -> Result<PathBuf, DirCheckError> {

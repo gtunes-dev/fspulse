@@ -8,8 +8,28 @@ use crate::utils::Utils;
 
 use std::io::{self, Stdout};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use rusqlite::Result;
 use tablestream::*;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReportFormat {
+    Tree,
+    Table,
+    Csv,
+}
+
+impl FromStr for ReportFormat {
+    type Err = DirCheckError;
+    fn from_str(s: &str) -> Result<Self, DirCheckError> {
+        match s.to_lowercase().as_str() {
+            "tree" => Ok(ReportFormat::Tree),
+            "table" => Ok(ReportFormat::Table),
+            "csv" => Ok(ReportFormat::Csv),
+            _ => Err(DirCheckError::Error("Invalid format specified.".to_string())),
+        }
+    }
+}
 
 pub struct Reports {
     // No fields
@@ -23,7 +43,7 @@ impl Reports {
         count: Option<i64>, 
         changes: bool, 
         items: bool,
-        format: &str,
+        format: ReportFormat,
     ) -> Result<(), DirCheckError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
@@ -71,7 +91,7 @@ impl Reports {
 
                 let scan = Scan::new_from_id_else_latest(db, scan_id)?;
 
-                Self::print_scan(db, &scan, false, true, "table")?;
+                Self::print_scan(db, &scan, false, true, ReportFormat::Table)?;
             }
         }
 
@@ -90,7 +110,7 @@ impl Reports {
         Ok(())
     }
 
-    fn print_scan(db: &Database, scan: &Scan, changes: bool, items: bool, format: &str) -> Result<(), DirCheckError> {
+    pub fn print_scan(db: &Database, scan: &Scan, changes: bool, items: bool, format: ReportFormat) -> Result<(), DirCheckError> {
         let mut stream = Reports::begin_scans_table("Scan", "No Scan");
 
         stream.row(scan.clone())?;
@@ -101,14 +121,18 @@ impl Reports {
                 .ok_or_else(|| DirCheckError::Error("Root Path Not Found".to_string()))?;
 
             if changes {
-                Self::print_scan_changes(db, table_width, &scan, &root_path)?;
+                match format {
+                    ReportFormat::Tree => Self::print_scan_changes_as_tree(db, table_width, &scan, &root_path)?,
+                    ReportFormat::Table => Self::print_scan_changes_as_table(db, scan, &root_path)?,
+                    _ => return Err(DirCheckError::Error("Unsupported format.".to_string())),
+                }
             }
 
             if items {
-                if format == "tree" {
-                    Self::print_last_seen_scan_items_as_tree(db, table_width, &scan, &root_path)?;
-                } else {
-                    Self::print_last_seen_scan_items_as_table(db, &scan, &root_path)?;
+                match format {
+                    ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, table_width, &scan, &root_path)?,
+                    ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root_path)?,
+                    _ => return Err(DirCheckError::Error("Unsupported format.".to_string())),
                 }
             }
         }
@@ -180,6 +204,24 @@ impl Reports {
         stream
     }
 
+    fn begin_changes_table(title: &str, empty_row: &str) -> Stream<Change, Stdout> {
+        let out = io::stdout();
+        let stream = Stream::new(out, vec![
+            Column::new(|f, c: &Change| write!(f, "{}", c.id)).header("ID").right().min_width(6),
+            Column::new(|f, c: &Change| write!(f, "{}", c.item_id)).header("Item ID").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", c.item_type)).header("Item Type").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", c.item_path)).header("Item Path").left(),
+            Column::new(|f, c: &Change| write!(f, "{}", c.change_type)).header("Change Type").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.metadata_changed))).header("Meta Changed").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_last_modified))).header("Prev Modified").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_file_size))).header("Prev Size").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.hash_changed))).header("Hash Changed").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(&c.prev_hash))).header("Prev Hash").center(),
+        ]).title(title).empty_row(empty_row);
+
+        stream
+    }
+
     fn get_tree_path(path_stack: &mut Vec<PathBuf>, root_path: &Path, path: &str, is_dir: bool) -> (usize, PathBuf) {
         // Reduce path to the portion that is relative to the root
         let path = Path::new(path).strip_prefix(root_path).unwrap();
@@ -221,8 +263,25 @@ impl Reports {
 
         (indent_level, new_path.to_path_buf())
     }
+
+    fn print_scan_changes_as_table(db: &Database, scan: &Scan, _root_path: &RootPath) -> Result<(), DirCheckError> {
+        let mut stream = Reports::begin_changes_table("Scans", "No Scans");
+
+        Change::with_each_scan_change(
+            db, 
+            scan.id(), 
+            |change| {
+                stream.row(change.clone())?;
+                Ok(())
+            }
+        )?;
+
+        stream.finish()?;
+
+        Ok(())
+    }
       
-    fn print_scan_changes(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
+    fn print_scan_changes_as_tree(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
         Self::print_center(width, "Changes");
         Self::print_center(width, &format!("Root Path: {}", root_path.path()));
 
@@ -232,16 +291,16 @@ impl Reports {
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
 
          // TODO: identify changes as metadata and/or hash
-        let change_count = Change::with_each_last_scan_change(
+        let change_count = Change::with_each_scan_change(
             db, 
             scan.id(), 
-            |item_type, item_path, change| {
-                let is_dir = item_type == "D";
+            |change| {
+                let is_dir = change.item_type == "D";
 
                 let (indent_level, new_path) = Self::get_tree_path(
                     &mut path_stack, 
                     root_path, 
-                    item_path,
+                    &change.item_path,
                     is_dir,
                 );
 
@@ -301,11 +360,11 @@ impl Reports {
     }
     */
 
-    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<i32, DirCheckError> {
+    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
         let mut stream = 
             Self::begin_items_table(&format!("Items: {}", root_path.path()), "No Items");
 
-        let item_count = Item::with_each_last_seen_scan_item(
+        Item::with_each_last_seen_scan_item(
             db, 
             scan.id(),
             |item|  {
@@ -316,7 +375,7 @@ impl Reports {
 
         stream.finish()?;
 
-        Ok(item_count)
+        Ok(())
     }
 
     fn print_last_seen_scan_items_as_tree(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {

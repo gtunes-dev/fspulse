@@ -11,6 +11,7 @@ mod schema;
 mod utils;
 
 use clap::{ Parser, Subcommand };
+use reports::ReportFormat;
 use scans::Scan;
 use utils::Utils;
 use crate::reports::Reports;
@@ -162,9 +163,10 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
         DirCheckCommand::Report { report_type } => {
             match report_type {
                 ReportCommand::Scans { id, latest, count, changes, items, format, .. } => {
+                    let format: ReportFormat = format.parse()?;
                     let id = Utils::opt_u64_to_opt_i64(id);
                     let count = Utils::opt_u64_to_opt_i64(count);
-                    Reports::report_scans(&mut db, id, latest, count, changes, items, &format)?;
+                    Reports::report_scans(&mut db, id, latest, count, changes, items, format)?;
                 }
                 ReportCommand::RootPaths { id, items, .. } => {
                     let id = Utils::opt_u64_to_opt_i64(id);
