@@ -1,5 +1,5 @@
 use crate::changes::{Change, ChangeType};
-use crate::error::DirCheckError;
+use crate::error::FsPulseError;
 use crate::database::Database;
 use crate::items::Item;
 use crate::root_paths::RootPath;
@@ -20,13 +20,13 @@ pub enum ReportFormat {
 }
 
 impl FromStr for ReportFormat {
-    type Err = DirCheckError;
-    fn from_str(s: &str) -> Result<Self, DirCheckError> {
+    type Err = FsPulseError;
+    fn from_str(s: &str) -> Result<Self, FsPulseError> {
         match s.to_lowercase().as_str() {
             "tree" => Ok(ReportFormat::Tree),
             "table" => Ok(ReportFormat::Table),
             "csv" => Ok(ReportFormat::Csv),
-            _ => Err(DirCheckError::Error("Invalid format specified.".to_string())),
+            _ => Err(FsPulseError::Error("Invalid format specified.".to_string())),
         }
     }
 }
@@ -44,7 +44,7 @@ impl Reports {
         changes: bool, 
         items: bool,
         format: ReportFormat,
-    ) -> Result<(), DirCheckError> {
+    ) -> Result<(), FsPulseError> {
         // Handle the single scan case. "Latest" conflicts with "id" so if 
         // the caller specified "latest", scan_id will be None
         if scan_id.is_none() && !latest {
@@ -57,7 +57,7 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, items: bool) -> Result<(), DirCheckError> {
+    pub fn report_root_paths(db: &Database, root_path_id: Option<i64>, items: bool) -> Result<(), FsPulseError> {
         if root_path_id.is_none() {
             let mut stream = Reports::begin_root_paths_table();
             
@@ -73,7 +73,7 @@ impl Reports {
         } else {
             let root_path_id = root_path_id.unwrap();
             let root_path = RootPath::get(db, root_path_id)?
-                .ok_or_else(|| DirCheckError::Error("Root Path Not Found".to_string()))?;
+                .ok_or_else(|| FsPulseError::Error("Root Path Not Found".to_string()))?;
             let mut stream = Self::begin_root_paths_table()
                 .title("Root Path");
 
@@ -98,7 +98,7 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_items(db: &Database, item_id: i64) -> Result<(), DirCheckError> {
+    pub fn report_items(db: &Database, item_id: i64) -> Result<(), FsPulseError> {
         let mut stream = Self::begin_items_table("Item", "No Item");
 
         let item = Item::new(db, item_id)?;
@@ -110,7 +110,7 @@ impl Reports {
         Ok(())
     }
 
-    pub fn print_scan(db: &Database, scan: &Scan, changes: bool, items: bool, format: ReportFormat) -> Result<(), DirCheckError> {
+    pub fn print_scan(db: &Database, scan: &Scan, changes: bool, items: bool, format: ReportFormat) -> Result<(), FsPulseError> {
         let mut stream = Reports::begin_scans_table("Scan", "No Scan");
 
         stream.row(scan.clone())?;
@@ -118,13 +118,13 @@ impl Reports {
 
         if changes || items {
             let root_path = RootPath::get(db, scan.root_path_id())?
-                .ok_or_else(|| DirCheckError::Error("Root Path Not Found".to_string()))?;
+                .ok_or_else(|| FsPulseError::Error("Root Path Not Found".to_string()))?;
 
             if changes {
                 match format {
                     ReportFormat::Tree => Self::print_scan_changes_as_tree(db, table_width, &scan, &root_path)?,
                     ReportFormat::Table => Self::print_scan_changes_as_table(db, scan, &root_path)?,
-                    _ => return Err(DirCheckError::Error("Unsupported format.".to_string())),
+                    _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
                 }
             }
 
@@ -132,7 +132,7 @@ impl Reports {
                 match format {
                     ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, table_width, &scan, &root_path)?,
                     ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root_path)?,
-                    _ => return Err(DirCheckError::Error("Unsupported format.".to_string())),
+                    _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
                 }
             }
         }
@@ -140,7 +140,7 @@ impl Reports {
         Ok(())
     }
 
-    fn print_scans(db: &Database, count: Option<i64>) -> Result<(), DirCheckError> {
+    fn print_scans(db: &Database, count: Option<i64>) -> Result<(), FsPulseError> {
         let mut stream = Reports::begin_scans_table("Scans", "No Scans");
         
         Scan::for_each_scan(
@@ -264,7 +264,7 @@ impl Reports {
         (indent_level, new_path.to_path_buf())
     }
 
-    fn print_scan_changes_as_table(db: &Database, scan: &Scan, _root_path: &RootPath) -> Result<(), DirCheckError> {
+    fn print_scan_changes_as_table(db: &Database, scan: &Scan, _root_path: &RootPath) -> Result<(), FsPulseError> {
         let mut stream = Reports::begin_changes_table("Scans", "No Scans");
 
         Change::with_each_scan_change(
@@ -281,7 +281,7 @@ impl Reports {
         Ok(())
     }
       
-    fn print_scan_changes_as_tree(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
+    fn print_scan_changes_as_tree(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), FsPulseError> {
         Self::print_center(width, "Changes");
         Self::print_center(width, &format!("Root Path: {}", root_path.path()));
 
@@ -325,7 +325,7 @@ impl Reports {
     }
 
     /* 
-    fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
+    fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, FsPulseError>
     where
         F: FnMut(i64, &str, Option<bool>, Option<bool>, &str, &str),
     {
@@ -360,7 +360,7 @@ impl Reports {
     }
     */
 
-    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
+    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), FsPulseError> {
         let mut stream = 
             Self::begin_items_table(&format!("Items: {}", root_path.path()), "No Items");
 
@@ -378,7 +378,7 @@ impl Reports {
         Ok(())
     }
 
-    fn print_last_seen_scan_items_as_tree(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), DirCheckError> {
+    fn print_last_seen_scan_items_as_tree(db: &Database, width: usize, scan: &Scan, root_path: &RootPath) -> Result<(), FsPulseError> {
         Self::print_center(width, "Items");
         Self::print_center(width, &format!("Root Path: {}", root_path.path()));
         Self::hr(width);

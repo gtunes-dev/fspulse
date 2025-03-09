@@ -2,7 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::database::Database;
-use crate::error::DirCheckError;
+use crate::error::FsPulseError;
 
 #[derive(Clone, Debug, Default)]
 pub struct Change {
@@ -54,9 +54,9 @@ impl ChangeType {
 }
 
 impl Change {
-    pub fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
+    pub fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, FsPulseError>
     where
-        F: FnMut(&Change) -> Result<(), DirCheckError>,
+        F: FnMut(&Change) -> Result<(), FsPulseError>,
     {
         let mut change_count = 0;
 
@@ -109,7 +109,7 @@ impl ChangeCounts {
         }
     }
 
-    pub fn from_scan_id(db: &Database, scan_id: i64) -> Result<Self, DirCheckError> {
+    pub fn from_scan_id(db: &Database, scan_id: i64) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
         let mut change_counts = ChangeCounts::default();
 
@@ -183,7 +183,7 @@ impl fmt::Display for ChangeType {
 }
 
 impl FromStr for ChangeType {
-    type Err = DirCheckError;
+    type Err = FsPulseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -192,7 +192,7 @@ impl FromStr for ChangeType {
             "M" => Ok(ChangeType::Modify),
             "T" => Ok(ChangeType::TypeChange),
             "N" => Ok(ChangeType::NoChange),
-            _ => Err(DirCheckError::Error(format!("Invalid ChangeType: {}", s))), 
+            _ => Err(FsPulseError::Error(format!("Invalid ChangeType: {}", s))), 
         }
     }
 }

@@ -3,7 +3,7 @@ use std::{fs::File, io::{BufReader, Read}, path::PathBuf};
 use hex::encode;
 use md5::{Digest, Md5};
 
-use crate::error::DirCheckError;
+use crate::error::FsPulseError;
 
 
 pub struct Hash {
@@ -11,7 +11,7 @@ pub struct Hash {
 }
 
 impl Hash {
-    pub fn compute_md5_hash(path: &PathBuf) -> Result<String, DirCheckError> {
+    pub fn compute_md5_hash(path: &PathBuf) -> Result<String, FsPulseError> {
         let f = File::open(path)?;
         let mut reader = BufReader::new(f);
         let mut hasher = Md5::new();

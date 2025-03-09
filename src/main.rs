@@ -15,18 +15,18 @@ use reports::ReportFormat;
 use scans::Scan;
 use utils::Utils;
 use crate::reports::Reports;
-use crate::error::DirCheckError;
+use crate::error::FsPulseError;
 use crate::database::Database;
 
 #[derive(Parser)]
-#[command(name = "dircheck", version = "0.1", about = "File system tree scanner")]
+#[command(name = "fspulse", version = "0.1", about = "File system tree scanner")]
 struct Args {
     #[command(subcommand)]
-    command: DirCheckCommand,
+    command: FsPulseCommand,
 }
 
 #[derive(Subcommand)]
-enum DirCheckCommand {
+enum FsPulseCommand {
     /// Scan a directory and record changes (default: current directory)
     Scan {
         /// Path to scan
@@ -141,11 +141,11 @@ fn main() {
     }
 }
 
-fn handle_command(args: Args) -> Result<(), DirCheckError> {
+fn handle_command(args: Args) -> Result<(), FsPulseError> {
     // Extract dbpath first from the top-level arguments or subcommands
     let dbpath = match &args.command {
-        DirCheckCommand::Scan { dbpath, .. } => dbpath,
-        DirCheckCommand::Report { report_type } => match report_type {
+        FsPulseCommand::Scan { dbpath, .. } => dbpath,
+        FsPulseCommand::Report { report_type } => match report_type {
             ReportCommand::Scans { dbpath, .. } => dbpath,
             ReportCommand::RootPaths { dbpath, .. } => dbpath,
             ReportCommand::Items { dbpath, .. } => dbpath,
@@ -157,10 +157,10 @@ fn handle_command(args: Args) -> Result<(), DirCheckError> {
     let mut db = Database::new(dbpath)?;   
     
     match args.command {
-        DirCheckCommand::Scan { path, deep, .. } => {
+        FsPulseCommand::Scan { path, deep, .. } => {
             Scan::do_scan(&mut db, path, deep)?;
         }
-        DirCheckCommand::Report { report_type } => {
+        FsPulseCommand::Report { report_type } => {
             match report_type {
                 ReportCommand::Scans { id, latest, count, changes, items, format, .. } => {
                     let format: ReportFormat = format.parse()?;

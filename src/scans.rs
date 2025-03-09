@@ -1,5 +1,5 @@
 use crate::changes::{ ChangeCounts, ChangeType };
-use crate::error::DirCheckError;
+use crate::error::FsPulseError;
 use crate::database::{ Database, ItemType };
 use crate::hash::Hash;
 use crate::reports::{ReportFormat, Reports};
@@ -48,7 +48,7 @@ impl Scan {
         }
     }
 
-    pub fn new_from_id_else_latest(db: &Database, id: Option<i64>) -> Result<Self, DirCheckError> {
+    pub fn new_from_id_else_latest(db: &Database, id: Option<i64>) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,
@@ -62,7 +62,7 @@ impl Scan {
         ).optional()?;
 
         let (id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
-            DirCheckError::Error("No scan found".to_string())
+            FsPulseError::Error("No scan found".to_string())
         })?;
 
         //let root_path: RootPath = RootPath::get(db, root_path_id)?;
@@ -116,9 +116,9 @@ impl Scan {
 
     // TODO: Is this dead code?
     /*
-    pub fn with_id_or_latest<F>(db: &Database, id: Option<i64>, func: F) -> Result<(), DirCheckError>
+    pub fn with_id_or_latest<F>(db: &Database, id: Option<i64>, func: F) -> Result<(), FsPulseError>
     where
-        F: FnOnce(&Database, &Scan) -> Result<(), DirCheckError>,
+        F: FnOnce(&Database, &Scan) -> Result<(), FsPulseError>,
     {
         let scan = Scan::new_from_id(db, id)?;
 
@@ -126,16 +126,16 @@ impl Scan {
     }
     */
 
-    pub fn do_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<Scan, DirCheckError> {
+    pub fn do_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<Scan, FsPulseError> {
         let (scan, _root_path) = Scan::scan_directory(db, path_arg, deep)?;
         Reports::print_scan(db, &scan, false, false, ReportFormat::Table)?;
 
         Ok(scan)
     }
 
-    fn path_arg_to_canonical_path_buf(path_arg: &str) -> Result<PathBuf, DirCheckError> {
+    fn path_arg_to_canonical_path_buf(path_arg: &str) -> Result<PathBuf, FsPulseError> {
         if path_arg.is_empty() {
-            return Err(DirCheckError::Error("Provided path is empty".to_string()));
+            return Err(FsPulseError::Error("Provided path is empty".to_string()));
         }
 
         let path = Path::new(path_arg);
@@ -147,17 +147,17 @@ impl Scan {
         };
         
         if !absolute_path.exists() {
-            return Err(DirCheckError::Error(format!("Path '{}' does not exist", absolute_path.display())));
+            return Err(FsPulseError::Error(format!("Path '{}' does not exist", absolute_path.display())));
         }
     
         let metadata = fs::symlink_metadata(&absolute_path)?;
 
         if metadata.file_type().is_symlink() {
-            return Err(DirCheckError::Error(format!("Path '{}' is a symlink and not allowed", absolute_path.display())));
+            return Err(FsPulseError::Error(format!("Path '{}' is a symlink and not allowed", absolute_path.display())));
         }
         
         if !metadata.is_dir() {
-            return Err(DirCheckError::Error(format!("Path '{}' is not a directory", absolute_path.display())));
+            return Err(FsPulseError::Error(format!("Path '{}' is not a directory", absolute_path.display())));
         }
 
         let canonical_path = absolute_path.canonicalize()?;
@@ -165,7 +165,7 @@ impl Scan {
         Ok(canonical_path)
     }
 
-    fn scan_directory(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, RootPath), DirCheckError> {
+    fn scan_directory(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, RootPath), FsPulseError> {
         let (mut scan, root_path) = Self::begin_scan(db, path_arg, deep)?;
         let root_path_buf = PathBuf::from(root_path.path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
@@ -226,7 +226,7 @@ impl Scan {
         Ok((scan, root_path))
     }
 
-    fn begin_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, RootPath), DirCheckError> {
+    fn begin_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, RootPath), FsPulseError> {
         let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
         let root_path_str = path_canonical.to_string_lossy().to_string();
 
@@ -252,7 +252,7 @@ impl Scan {
         path: &Path, 
         metadata: &Metadata, 
         file_hash: Option<&str>
-    ) -> Result<ChangeType, DirCheckError> {
+    ) -> Result<ChangeType, FsPulseError> {
         let path_str = path.to_string_lossy();
         let scan_id = self.id;
         let root_path_id = self.root_path_id;
@@ -349,7 +349,7 @@ impl Scan {
         Ok(change_type)
     }
 
-    fn end_scan(&mut self, db: &mut Database) -> Result<(), DirCheckError> {
+    fn end_scan(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         let root_path_id = self.root_path_id;
         let scan_id = self.id;
 
@@ -401,9 +401,9 @@ impl Scan {
         Ok(())
     }
 
-    pub fn for_each_scan<F>(db: &Database, num_scans: Option<i64>, mut func: F) -> Result<i32, DirCheckError> 
+    pub fn for_each_scan<F>(db: &Database, num_scans: Option<i64>, mut func: F) -> Result<i32, FsPulseError> 
     where
-        F: FnMut(&Database, &Scan) -> Result<(), DirCheckError>,
+        F: FnMut(&Database, &Scan) -> Result<(), FsPulseError>,
     {
         if num_scans == Some(0) {
             return Ok(0);

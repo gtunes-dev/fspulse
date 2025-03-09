@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS items (
 
 use rusqlite::{self, params, OptionalExtension};
 
-use crate::{database::Database, error::DirCheckError};
+use crate::{database::Database, error::FsPulseError};
 
 #[derive(Clone, Debug, Default)]
 pub struct Item {           // TODO: Change sql schema to have this column order
@@ -35,7 +35,7 @@ pub struct Item {           // TODO: Change sql schema to have this column order
 }
 
 impl Item {
-    pub fn new(db: &Database, id: i64) -> Result<Option<Self>, DirCheckError> {
+    pub fn new(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;
 
         match conn.query_row(
@@ -70,9 +70,9 @@ impl Item {
     pub fn file_size(&self) -> Option<i64> { self.file_size }
     pub fn file_hash(&self) -> Option<&str> { self.file_hash.as_deref() }
 
-    pub fn with_each_last_seen_scan_item<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, DirCheckError>
+    pub fn with_each_last_seen_scan_item<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, FsPulseError>
     where
-        F: FnMut(&Item) -> Result<(), DirCheckError>,
+        F: FnMut(&Item) -> Result<(), FsPulseError>,
     {
         let mut item_count = 0;
 

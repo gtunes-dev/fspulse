@@ -3,9 +3,9 @@ use thiserror::Error;
 use std::io;
 
 #[derive(Error, Debug)]
-pub enum DirCheckError {
+pub enum FsPulseError {
     #[error("I/O error: {0}")]
-    Io(#[from] io::Error),  // Converts io::Error into DirCheckError automatically
+    Io(#[from] io::Error),  // Converts io::Error into FsPulseError automatically
 
     #[error("Database error: {0}")]
     Database(#[from] RusqliteError), // Converts rusqlite::Error automatically

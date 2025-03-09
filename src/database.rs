@@ -1,9 +1,9 @@
 use rusqlite::{Connection, OptionalExtension, Result};
 use std::{io, path::Path};
-use crate::error::DirCheckError;
+use crate::error::FsPulseError;
 use crate::schema::CREATE_SCHEMA_SQL;
 
-const DB_FILENAME: &str = "dircheck.db";
+const DB_FILENAME: &str = "fspulse.db";
 const SCHEMA_VERSION: &str = "2";
 
 #[derive(Debug, PartialEq)]
@@ -32,7 +32,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn new(db_folder: &str) -> Result<Self, DirCheckError> {
+    pub fn new(db_folder: &str) -> Result<Self, FsPulseError> {
         let folder_path = Path::new(db_folder);
         
         // Ensure the folder exists and is a directory
@@ -46,7 +46,7 @@ impl Database {
         let db_path = folder_path.join(DB_FILENAME);
 
         // Attempt to open the database
-        let conn = Connection::open(&db_path).map_err(DirCheckError::Database)?;
+        let conn = Connection::open(&db_path).map_err(FsPulseError::Database)?;
         // println!("Database opened at: {}", db_path.display());
         let db = Self { conn, path: db_path.to_string_lossy().into_owned() };
         
@@ -61,7 +61,7 @@ impl Database {
         &self.path
     }
 
-    fn ensure_schema(&self) -> Result<(), DirCheckError> {
+    fn ensure_schema(&self) -> Result<(), FsPulseError> {
         let table_exists: bool = self.conn
             .query_row(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='meta'",
@@ -86,12 +86,12 @@ impl Database {
 
             match stored_version.as_deref() {
                 Some(SCHEMA_VERSION) => Ok(()), // Schema is up to date
-                Some(_) => Err(DirCheckError::Error("Schema version mismatch".to_string())),
-                None => Err(DirCheckError::Error("Schema version missing".to_string())),
+                Some(_) => Err(FsPulseError::Error("Schema version mismatch".to_string())),
+                None => Err(FsPulseError::Error("Schema version missing".to_string())),
             }
     }
     
-    fn create_schema(&self) -> Result<(), DirCheckError> {
+    fn create_schema(&self) -> Result<(), FsPulseError> {
         self.conn.execute_batch(CREATE_SCHEMA_SQL)?;
         Ok(())
     }

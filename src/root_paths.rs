@@ -2,7 +2,7 @@ use std::i64;
 
 use rusqlite::Error::QueryReturnedNoRows;
 use crate::database::Database;
-use crate::error::DirCheckError;
+use crate::error::FsPulseError;
 
 
 #[derive(Clone, Debug, Default)]
@@ -12,7 +12,7 @@ pub struct RootPath {
 }
 
 impl RootPath {
-    pub fn get(db: &Database, id: i64) -> Result<Option<Self>, DirCheckError> {
+    pub fn get(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;
 
         match conn.query_row(
@@ -22,11 +22,11 @@ impl RootPath {
         ) {
             Ok(path) => Ok(Some(RootPath { id, path } )),
             Err(QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(DirCheckError::Database(e)),
+            Err(e) => Err(FsPulseError::Database(e)),
         }
     }
 
-    pub fn get_or_insert(db: &Database, path: &str) -> Result<Self, DirCheckError> {
+    pub fn get_or_insert(db: &Database, path: &str) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
 
         conn.execute("INSERT OR IGNORE INTO root_paths (path) VALUES (?)", [path])?;
@@ -48,9 +48,9 @@ impl RootPath {
         &self.path
     }
 
-    pub fn for_each_root_path<F>(db: &Database, mut func: F) -> Result<(), DirCheckError> 
+    pub fn for_each_root_path<F>(db: &Database, mut func: F) -> Result<(), FsPulseError> 
     where
-        F: FnMut(&RootPath) -> Result<(), DirCheckError>,
+        F: FnMut(&RootPath) -> Result<(), FsPulseError>,
     {
    
         let mut stmt = db.conn.prepare(
@@ -75,7 +75,7 @@ impl RootPath {
         Ok(())
     }
 
-    pub fn latest_scan(&self, db: &Database) -> Result<Option<i64>, DirCheckError> {
+    pub fn latest_scan(&self, db: &Database) -> Result<Option<i64>, FsPulseError> {
         let conn = &db.conn;
 
         match conn.query_row(
@@ -89,7 +89,7 @@ impl RootPath {
         ) {
             Ok(id) => Ok(Some( id )),
             Err(QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(DirCheckError::Database(e)),
+            Err(e) => Err(FsPulseError::Database(e)),
         }
     }
 }
