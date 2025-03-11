@@ -9,10 +9,11 @@ pub struct Utils {
 
 impl Utils {
     
-
+    /*
     pub fn opt_u64_to_opt_i64(opt_u64: Option<u64>) -> Option<i64> {
         opt_u64.map(|v| v as i64)
     }
+    */
 
     pub fn opt_u32_to_opt_i64(opt_u32: Option<u32>) -> Option<i64> {
         opt_u32.map(|v| v as i64 )

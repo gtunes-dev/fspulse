@@ -1,7 +1,6 @@
 use std::i64;
 
-use rusqlite::Error::{self, QueryReturnedNoRows};
-use rusqlite::OptionalExtension;
+use rusqlite::Error::QueryReturnedNoRows;
 use crate::database::Database;
 use crate::error::FsPulseError;
 

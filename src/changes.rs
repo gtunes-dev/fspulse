@@ -1,6 +1,6 @@
-use std::fmt;
 use std::str::FromStr;
 
+use log::info;
 use rusqlite::OptionalExtension;
 
 use crate::database::Database;
@@ -44,19 +44,40 @@ pub enum ChangeType {
 }
 
 impl ChangeType {
-    pub fn as_db_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
-            ChangeType::Add => "A",
-            ChangeType::Delete => "D",
-            ChangeType::Modify => "M",
-            ChangeType::TypeChange => "T",
-            ChangeType::NoChange => "N",
+            Self::Add => "A",
+            Self::Delete => "D",
+            Self::Modify => "M",
+            Self::TypeChange => "T",
+            Self::NoChange => "N",
+        }
+    }
+}
+
+impl std::fmt::Display for ChangeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl FromStr for ChangeType {
+    type Err = FsPulseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "A" => Ok(Self::Add),
+            "D" => Ok(Self::Delete),
+            "M" => Ok(Self::Modify),
+            "T" => Ok(Self::TypeChange),
+            "N" => Ok(Self::NoChange),
+            _ => Err(FsPulseError::Error(format!("Invalid change type: '{}'", s))), 
         }
     }
 }
 
 impl Change {
-    pub fn new_from_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
+    pub fn get_by_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;
     
         conn.query_row(
@@ -84,11 +105,11 @@ impl Change {
         .map_err(FsPulseError::Database)
     }
 
-    pub fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, FsPulseError>
+    pub fn for_each_change_in_scan<F>(db: &Database, scan_id: i64, mut func: F) -> Result<(), FsPulseError>
     where
         F: FnMut(&Change) -> Result<(), FsPulseError>,
     {
-        let mut change_count = 0;
+        let mut _change_count = 0;  // used only for logging
 
         let mut stmt = db.conn.prepare(
             "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.metadata_changed, changes.hash_changed, changes.prev_last_modified, prev_file_size, prev_hash
@@ -122,9 +143,10 @@ impl Change {
             let change = row?;
 
             func(&change)?;
-            change_count = change_count + 1;
+            _change_count += 1;
         }
-        Ok(change_count)
+        info!("for_each_scan_change - scan_id: {}, changes: {}", scan_id, _change_count);
+        Ok(())
     }
 }
 
@@ -139,7 +161,7 @@ impl ChangeCounts {
         }
     }
 
-    pub fn from_scan_id(db: &Database, scan_id: i64) -> Result<Self, FsPulseError> {
+    pub fn get_by_scan_id(db: &Database, scan_id: i64) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
         let mut change_counts = ChangeCounts::default();
 
@@ -153,19 +175,21 @@ impl ChangeCounts {
             let change_type: String = row.get(0)?;
             let count: i64 = row.get(1)?;
 
-            match change_type.as_str() {
-                "A" => change_counts.set(ChangeType::Add, count),
-                "M" => change_counts.set(ChangeType::Modify, count),
-                "D" => change_counts.set(ChangeType::Delete, count),
-                "T" => change_counts.set(ChangeType::TypeChange, count),
-                _ => println!("Warning: Unknown change type found in DB: {}", change_type),
+            let change_type = ChangeType::from_str(&change_type)?;
+
+            match change_type {
+                ChangeType::Add => change_counts.set_count_of(ChangeType::Add, count),
+                ChangeType::Delete => change_counts.set_count_of(ChangeType::Delete, count),
+                ChangeType::Modify => change_counts.set_count_of(ChangeType::Modify, count),
+                ChangeType::NoChange => change_counts.set_count_of(ChangeType::Modify, count),
+                ChangeType::TypeChange => change_counts.set_count_of(ChangeType::TypeChange, count),
             }
         }
 
         Ok(change_counts)
     }
     
-    pub fn get(&self, change_type: ChangeType) -> i64 {
+    pub fn count_of(&self, change_type: ChangeType) -> i64 {
         match change_type {
             ChangeType::Add => self.add_count,
             ChangeType::Delete => self.delete_count,
@@ -175,7 +199,7 @@ impl ChangeCounts {
         }
     }
 
-    pub fn increment(&mut self, change_type: ChangeType) {
+    pub fn increment_count_of(&mut self, change_type: ChangeType) {
         let target = match change_type {
             ChangeType::Add => &mut self.add_count,
             ChangeType::Delete => &mut self.delete_count,
@@ -186,7 +210,7 @@ impl ChangeCounts {
        *target += 1;
     }
 
-    pub fn set(&mut self, change_type: ChangeType, count: i64) {
+    pub fn set_count_of(&mut self, change_type: ChangeType, count: i64) {
         let target = match change_type {
             ChangeType::Add => &mut self.add_count,
             ChangeType::Delete => &mut self.delete_count,
@@ -199,30 +223,5 @@ impl ChangeCounts {
 }
 
 
-impl fmt::Display for ChangeType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let symbol = match self {
-            ChangeType::Add => "A",
-            ChangeType::Delete => "D",
-            ChangeType::Modify => "M",
-            ChangeType::TypeChange => "T",
-            ChangeType::NoChange => "N",
-        };
-        write!(f, "{}", symbol)
-    }
-}
 
-impl FromStr for ChangeType {
-    type Err = FsPulseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "A" => Ok(ChangeType::Add),
-            "D" => Ok(ChangeType::Delete),
-            "M" => Ok(ChangeType::Modify),
-            "T" => Ok(ChangeType::TypeChange),
-            "N" => Ok(ChangeType::NoChange),
-            _ => Err(FsPulseError::Error(format!("Invalid ChangeType: {}", s))), 
-        }
-    }
-}

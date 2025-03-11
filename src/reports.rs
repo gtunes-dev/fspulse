@@ -2,12 +2,12 @@ use crate::changes::{Change, ChangeType};
 use crate::error::FsPulseError;
 use crate::database::Database;
 use crate::items::Item;
-use crate::root_paths::{self, RootPath};
+use crate::root_paths::RootPath;
 use crate::scans::Scan;
 use crate::utils::Utils;
 
 use std::io::{self, Stdout};
-use std::path::{self, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use rusqlite::Result;
 use tablestream::*;
@@ -145,7 +145,7 @@ impl Reports {
 
         match (change_id, item_id, scan_id) {
             (Some(change_id), None, None) => {
-                let change = Change::new_from_id(db, change_id.into())?;
+                let change = Change::get_by_id(db, change_id.into())?;
                 let mut stream = Self::begin_changes_table("Change", "No Change Found");
                 if let Some(change) = change {
                     stream.row(change)?;
@@ -229,10 +229,10 @@ impl Reports {
             Column::new(|f, s: &Scan| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.folder_count()))).header("Folders").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", s.is_complete())).header("Complete").center(),
 
-            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Add))).header("Adds").right().min_width(7),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Modify))).header("Modifies").right().min_width(7),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::Delete))).header("Deletes").right().min_width(7),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().get(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Add))).header("Adds").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Modify))).header("Modifies").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Delete))).header("Deletes").right().min_width(7),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
         ]).title(title).empty_row(empty_row);
 
         stream
@@ -328,7 +328,7 @@ impl Reports {
     fn print_scan_changes_as_table(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
         let mut stream = Reports::begin_changes_table(&format!("Changes - Scan ID: {}", scan_id), "No Changes");
 
-        Change::with_each_scan_change(
+        Change::for_each_change_in_scan(
             db, 
             scan_id, 
             |change| {
@@ -356,9 +356,10 @@ impl Reports {
     
         let root_path = Path::new(root_path.path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
+        let mut change_count = 0;
 
          // TODO: identify changes as metadata and/or hash
-        let change_count = Change::with_each_scan_change(
+        Change::for_each_change_in_scan(
             db, 
             scan.id(), 
             |change| {
@@ -379,6 +380,8 @@ impl Reports {
                     Utils::dir_sep_or_empty(is_dir),
                     change.id,
                 );
+
+                change_count += 1;
                 Ok(())
             }
         )?;

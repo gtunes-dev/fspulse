@@ -1,10 +1,12 @@
 use clap::{Parser, Subcommand};
 use log::info;
 
+use std::path::PathBuf;
 
-use std::{path::PathBuf, ptr::dangling};
-
-use crate::{database::Database, error::FsPulseError, reports::{ReportFormat, Reports}, scans::Scan, FsPulseCommand};
+use crate::database::Database;
+use crate::error::FsPulseError; 
+use crate::reports::{ReportFormat, Reports}; 
+use crate::scans::Scan;
     
 /// CLI for fspulse: A filesystem scan and reporting tool.
 #[derive(Parser)]

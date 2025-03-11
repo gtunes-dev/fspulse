@@ -1,6 +1,6 @@
+use log::info;
 use rusqlite::{Connection, OptionalExtension, Result};
 use std::path::PathBuf;
-use std::{io, path::Path};
 use crate::error::FsPulseError;
 use crate::schema::CREATE_SCHEMA_SQL;
 
@@ -16,7 +16,7 @@ pub enum ItemType {
 }
 
 impl ItemType {
-    pub fn as_db_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             ItemType::File => "F",
             ItemType::Directory => "D",
@@ -49,32 +49,9 @@ impl Database {
         db_path.push(DB_FILENAME);
 
         // Attempt to open the database
+        info!("Opening database: {}", db_path.display());
         let conn = Connection::open(&db_path).map_err(FsPulseError::Database)?;
 
-        // println!("Database opened at: {}", db_path.display());
-        let db = Self { conn, path: db_path.to_string_lossy().into_owned() };
-        
-        // Ensure schema is current
-        db.ensure_schema()?;
-
-        Ok(db)
-    }
-
-    pub fn new_old(db_folder: &str) -> Result<Self, FsPulseError> {
-        let folder_path = Path::new(db_folder);
-        
-        // Ensure the folder exists and is a directory
-        if !folder_path.is_dir() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotADirectory, 
-                format!("Database folder '{}' does not exist or is not a directory", db_folder)
-            ).into());
-        }
-
-        let db_path = folder_path.join(DB_FILENAME);
-
-        // Attempt to open the database
-        let conn = Connection::open(&db_path).map_err(FsPulseError::Database)?;
         // println!("Database opened at: {}", db_path.display());
         let db = Self { conn, path: db_path.to_string_lossy().into_owned() };
         

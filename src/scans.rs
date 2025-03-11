@@ -71,7 +71,7 @@ impl Scan {
             FsPulseError::Error(format!("No scan found for path id {}", path_id))
         })?;
 
-        let change_counts = ChangeCounts::from_scan_id(db, id)?;
+        let change_counts = ChangeCounts::get_by_scan_id(db, id)?;
 
         Ok(Scan {
             id,
@@ -109,7 +109,7 @@ impl Scan {
 
         //let root_path: RootPath = RootPath::get(db, root_path_id)?;
 
-        let change_counts = ChangeCounts::from_scan_id(db, id)?;
+        let change_counts = ChangeCounts::get_by_scan_id(db, id)?;
 
         Ok(Scan {
             id,
@@ -247,7 +247,7 @@ impl Scan {
             // Update the database
             if q_entry.path != root_path_buf {
                 let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata, None)?;
-                scan.change_counts.increment(dir_change_type);
+                scan.change_counts.increment_count_of(dir_change_type);
             }
     
             let items = fs::read_dir(&q_entry.path)?;
@@ -283,7 +283,7 @@ impl Scan {
                     };
 
                     let file_change_type = scan.handle_item(db, item_type, &item.path(), &metadata, hash.as_deref())?;
-                    scan.change_counts.increment(file_change_type);
+                    scan.change_counts.increment_count_of(file_change_type);
                 }
             }
         }
@@ -341,7 +341,7 @@ impl Scan {
     
         let change_type = match existing_item {
             Some((item_id, existing_type, existing_modified, existing_size, existing_hash, is_tombstone)) => {
-                let item_type_str = item_type.as_db_str();
+                let item_type_str = item_type.as_str();
                 let metadata_changed = existing_modified != last_modified || existing_size != file_size;
 
                 // println!("{}", Utils::string_value_or_none(&existing_hash));
@@ -355,7 +355,7 @@ impl Scan {
                     tx.execute("UPDATE items SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ?, is_tombstone = 0 WHERE id = ?", 
                         (item_type_str, last_modified, file_size, file_hash, scan_id, item_id))?;
                     tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)", 
-                        (scan_id, item_id, ChangeType::Add.as_db_str()))?;
+                        (scan_id, item_id, ChangeType::Add.as_str()))?;
                     tx.commit()?;
                     ChangeType::Add
                 } else if existing_type != item_type_str {
@@ -364,7 +364,7 @@ impl Scan {
                     tx.execute("UPDATE items SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ? WHERE id = ?", 
                         (item_type_str, last_modified, file_size, file_hash, scan_id, item_id))?;
                     tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)", 
-                        (self.id, item_id, ChangeType::TypeChange.as_db_str()))?;
+                        (self.id, item_id, ChangeType::TypeChange.as_str()))?;
                     tx.commit()?;
                     ChangeType::TypeChange
                 } else if metadata_changed || hash_changed {
@@ -383,7 +383,7 @@ impl Scan {
                         (
                             scan_id, 
                             item_id, 
-                            ChangeType::Modify.as_db_str(),
+                            ChangeType::Modify.as_str(),
                             metadata_changed,
                             hash_changed,
                             metadata_changed.then_some(existing_modified),
@@ -403,10 +403,10 @@ impl Scan {
                 // Item is new, insert into items and changes tables
                 let tx = conn.transaction()?;
                 tx.execute("INSERT INTO items (root_path_id, path, item_type, last_modified, file_size, file_hash, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (root_path_id, &path_str, item_type.as_db_str(), last_modified, file_size, file_hash, scan_id))?;
+                    (root_path_id, &path_str, item_type.as_str(), last_modified, file_size, file_hash, scan_id))?;
                 let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
                 tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)",
-                    (scan_id, item_id, ChangeType::Add.as_db_str()))?;
+                    (scan_id, item_id, ChangeType::Add.as_str()))?;
                 tx.commit()?;
                 ChangeType::Add
             }
@@ -429,7 +429,7 @@ impl Scan {
              SELECT ?, id, ?
              FROM items
              WHERE root_path_id = ? AND is_tombstone = 0 AND last_seen_scan_id < ?",
-            (scan_id, ChangeType::Delete.as_db_str(), root_path_id, scan_id),
+            (scan_id, ChangeType::Delete.as_str(), root_path_id, scan_id),
         )?;
         
         // Mark unseen items as tombstones
@@ -462,7 +462,7 @@ impl Scan {
 
         // scan.change_counts acts as an accumulator during a scan but now we get the truth from the
         // database. We need this to include deletes since they aren't known until tombstoning is complete
-        self.change_counts = ChangeCounts::from_scan_id(db, self.id)?;
+        self.change_counts = ChangeCounts::get_by_scan_id(db, self.id)?;
 
         Ok(())
     }
