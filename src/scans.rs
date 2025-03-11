@@ -1,7 +1,8 @@
 use crate::changes::{ ChangeCounts, ChangeType };
 use crate::error::FsPulseError;
-use crate::database::{ Database, ItemType };
+use crate::database::Database;
 use crate::hash::Hash;
+use crate::items::ItemType;
 use crate::reports::{ReportFormat, Reports};
 use crate::root_paths::RootPath;
 

@@ -7,25 +7,6 @@ use crate::schema::CREATE_SCHEMA_SQL;
 const DB_FILENAME: &str = "fspulse.db";
 const SCHEMA_VERSION: &str = "2";
 
-#[derive(Debug, PartialEq)]
-pub enum ItemType {
-    File,
-    Directory,
-    Symlink,
-    Other,
-}
-
-impl ItemType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ItemType::File => "F",
-            ItemType::Directory => "D",
-            ItemType::Symlink => "S",
-            ItemType::Other => "O",
-        }
-    }
-}
-
 pub struct Database {
     pub conn: Connection,
     #[allow(dead_code)]
@@ -52,7 +33,6 @@ impl Database {
         info!("Opening database: {}", db_path.display());
         let conn = Connection::open(&db_path).map_err(FsPulseError::Database)?;
 
-        // println!("Database opened at: {}", db_path.display());
         let db = Self { conn, path: db_path.to_string_lossy().into_owned() };
         
         // Ensure schema is current

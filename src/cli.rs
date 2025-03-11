@@ -144,7 +144,6 @@ pub enum ReportType {
     },
 }
 
-
 impl Cli {
     pub fn handle_command_line() -> Result<(), FsPulseError>{
         let args = Cli::parse();
@@ -231,7 +230,6 @@ impl Cli {
         let format: ReportFormat = format.parse()?;
 
         Reports::report_scans(&db, scan_id, last, format)?;
-
         Ok(())
     }
 
@@ -261,8 +259,6 @@ impl Cli {
         let format: ReportFormat = format.parse()?;
 
         Reports::report_changes(&db, change_id, item_id, scan_id, format)?;
-            
-        
         Ok(())
     }
 }

@@ -1,24 +1,25 @@
-
-/*
-CREATE TABLE IF NOT EXISTS items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_path_id INTEGER NOT NULL,    -- Links each item to a root path
-    path TEXT NOT NULL,               -- Relative path from the root path
-    is_tombstone BOOLEAN NOT NULL DEFAULT 0,  -- Indicates if the item was deleted
-    item_type CHAR(1) NOT NULL,       -- ('F' for file, 'D' for directory, 'S' for symlink, 'O' for other)
-    last_modified INTEGER,            -- Last modified timestamp
-    file_size INTEGER,                -- File size in bytes (NULL for directories)
-    file_hash TEXT,                    -- Hash of file contents (NULL for directories and if not computed)
-    last_seen_scan_id INTEGER NOT NULL, -- Last scan where the item was present
-    FOREIGN KEY (root_path_id) REFERENCES root_paths(id),
-    FOREIGN KEY (last_seen_scan_id) REFERENCES scans(id),
-    UNIQUE (root_path_id, path)        -- Ensures uniqueness within each root path
-);
-*/
-
 use rusqlite::{self, params, OptionalExtension};
 
 use crate::{database::Database, error::FsPulseError};
+
+#[derive(Debug, PartialEq)]
+pub enum ItemType {
+    File,
+    Directory,
+    Symlink,
+    Other,
+}
+
+impl ItemType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ItemType::File => "F",
+            ItemType::Directory => "D",
+            ItemType::Symlink => "S",
+            ItemType::Other => "O",
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct Item {           // TODO: Change sql schema to have this column order
