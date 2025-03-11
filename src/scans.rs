@@ -48,6 +48,48 @@ impl Scan {
         }
     }
 
+    pub fn latest(db: &Database) -> Result<Self, FsPulseError> {
+        Self::new_from_id_else_latest(db, None)
+    }
+
+    pub fn new_for_last_path_scan(db: &Database, path_id: i64) -> Result<Self, FsPulseError> {
+        let conn = &db.conn;
+
+        // If the scan id wasn't explicitly specified, load the most recent otherwise,
+        // load the specified scan
+        let scan_row: Option<(i64, i64, bool, i64, Option<i64>, Option<i64>, bool)> = conn.query_row(
+            "SELECT id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete
+                FROM scans
+                WHERE root_path_id = ?
+                ORDER BY id DESC
+                LIMIT 1",
+            params![path_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+        ).optional()?;
+
+        let (id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
+            FsPulseError::Error(format!("No scan found for path id {}", path_id))
+        })?;
+
+        let change_counts = ChangeCounts::from_scan_id(db, id)?;
+
+        Ok(Scan {
+            id,
+            root_path_id,
+            is_deep,
+            time_of_scan,
+            file_count,
+            folder_count,
+            is_complete,
+            change_counts,
+            ..Default::default()
+        })
+    }
+    
+    pub fn new_from_id(db: &Database, scan_id: i64) -> Result<Self, FsPulseError> {
+        Self::new_from_id_else_latest(db, Some(scan_id))
+    }
+
     pub fn new_from_id_else_latest(db: &Database, id: Option<i64>) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
 
@@ -126,9 +168,33 @@ impl Scan {
     }
     */
 
-    pub fn do_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<Scan, FsPulseError> {
-        let (scan, _root_path) = Scan::scan_directory(db, path_arg, deep)?;
-        Reports::print_scan(db, &scan, false, false, ReportFormat::Table)?;
+    pub fn do_scan(
+        db: &mut Database, 
+        path_id: Option<u32>, 
+        path: Option<String>, 
+        last: bool, 
+        deep: bool
+    ) -> Result<Scan, FsPulseError> {
+        let path = match (last, path_id, path) {
+            (_, Some(path_id), _) => {
+                RootPath::get_from_id(db, path_id.into())?
+                    .ok_or_else(|| FsPulseError::Error("Path not found".to_string()))?
+                    .path()
+                    .to_string()
+            }
+            (true, None, _) => {
+                let scan = Self::latest(db)?;
+                RootPath::get_from_id(db, scan.root_path_id())?
+                    .ok_or_else(|| FsPulseError::Error("Path not found".to_string()))?
+                    .path()
+                    .to_string()
+            }
+            (false, None, Some(p)) => p,
+            (false, None, None) => return Err(FsPulseError::Error("No path specified".to_string())),
+        };
+        
+        let (scan, _root_path) = Scan::scan_directory(db, path, deep)?;
+        Reports::print_scan(&scan, ReportFormat::Table)?;
 
         Ok(scan)
     }
@@ -165,8 +231,8 @@ impl Scan {
         Ok(canonical_path)
     }
 
-    fn scan_directory(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, RootPath), FsPulseError> {
-        let (mut scan, root_path) = Self::begin_scan(db, path_arg, deep)?;
+    fn scan_directory(db: &mut Database, path: String, deep: bool) -> Result<(Self, RootPath), FsPulseError> {
+        let (mut scan, root_path) = Self::begin_scan(db, path, deep)?;
         let root_path_buf = PathBuf::from(root_path.path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
@@ -401,15 +467,13 @@ impl Scan {
         Ok(())
     }
 
-    pub fn for_each_scan<F>(db: &Database, num_scans: Option<i64>, mut func: F) -> Result<i32, FsPulseError> 
+    pub fn for_each_scan<F>(db: &Database, last: u32, mut func: F) -> Result<i32, FsPulseError> 
     where
         F: FnMut(&Database, &Scan) -> Result<(), FsPulseError>,
     {
-        if num_scans == Some(0) {
+        if last == 0 {
             return Ok(0);
         }
-
-        let num_scans = num_scans.unwrap_or(10);
         
         let mut stmt = db.conn.prepare(
             "SELECT 
@@ -431,7 +495,7 @@ impl Scan {
             LIMIT ?"
         )?;
 
-        let rows = stmt.query_map([num_scans], |row| {
+        let rows = stmt.query_map([last], |row| {
             Ok(Scan {
                 id: row.get::<_, i64>(0)?,                              // scan id
                 is_deep: row.get::<_, bool>(1)?,                        // is deep

@@ -1,5 +1,6 @@
 mod database;
 mod changes;
+mod cli;
 mod error;
 mod hash;
 //mod indent;
@@ -11,6 +12,8 @@ mod schema;
 mod utils;
 
 use clap::{ Parser, Subcommand };
+use cli::Cli;
+use log::{debug, error, info};
 use reports::ReportFormat;
 use scans::Scan;
 use utils::Utils;
@@ -128,57 +131,15 @@ enum ReportCommand {
 }
 
 fn main() {
-    // Parse command-line arguments
-    
-    //let temp_args: Vec<String> = std::env::args().collect();
-    //println!("{:?}", temp_args);
-    
-    let args = Args::parse();
+    // Must set an environment variable to use.
+    // Set RUST_LOG to one of:
+    // ERROR → WARN → INFO → DEBUG → TRACE
+    env_logger::init();
+    debug!("Command-line args: {:?}", std::env::args_os().collect::<Vec<_>>());
 
-    if let Err(err) = handle_command(args) {
-        eprintln!("Error: {}", err);
-        std::process::exit(1);           
+    if let Err(err) = Cli::handle_command_line() {
+        error!("{:?}", err);
+        eprint!("{}", err);
+        std::process::exit(1);
     }
-}
-
-fn handle_command(args: Args) -> Result<(), FsPulseError> {
-    // Extract dbpath first from the top-level arguments or subcommands
-    let dbpath = match &args.command {
-        FsPulseCommand::Scan { dbpath, .. } => dbpath,
-        FsPulseCommand::Report { report_type } => match report_type {
-            ReportCommand::Scans { dbpath, .. } => dbpath,
-            ReportCommand::RootPaths { dbpath, .. } => dbpath,
-            ReportCommand::Items { dbpath, .. } => dbpath,
-            // ReportCommand::Changes { dbpath, .. } => dbpath,
-        },
-    };
-
-    // Initialize the database
-    let mut db = Database::new(dbpath)?;   
-    
-    match args.command {
-        FsPulseCommand::Scan { path, deep, .. } => {
-            Scan::do_scan(&mut db, path, deep)?;
-        }
-        FsPulseCommand::Report { report_type } => {
-            match report_type {
-                ReportCommand::Scans { id, latest, count, changes, items, format, .. } => {
-                    let format: ReportFormat = format.parse()?;
-                    let id = Utils::opt_u64_to_opt_i64(id);
-                    let count = Utils::opt_u64_to_opt_i64(count);
-                    Reports::report_scans(&mut db, id, latest, count, changes, items, format)?;
-                }
-                ReportCommand::RootPaths { id, items, .. } => {
-                    let id = Utils::opt_u64_to_opt_i64(id);
-                    Reports::report_root_paths(&mut db, id, items)?;
-                }
-                ReportCommand::Items { id, path: _, changes: _, count: _, dbpath: _ } => {
-                    let id = Utils::opt_u64_to_opt_i64(id).unwrap();
-                    Reports::report_items(&db, id)?;                    
-                }
-            }
-        }
-    }
-
-    Ok(())
 }

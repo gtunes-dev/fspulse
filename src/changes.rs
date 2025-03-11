@@ -1,6 +1,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use rusqlite::OptionalExtension;
+
 use crate::database::Database;
 use crate::error::FsPulseError;
 
@@ -54,6 +56,34 @@ impl ChangeType {
 }
 
 impl Change {
+    pub fn new_from_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
+        let conn = &db.conn;
+    
+        conn.query_row(
+            "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, 
+                    changes.metadata_changed, changes.hash_changed, changes.prev_last_modified, changes.prev_file_size, changes.prev_hash
+            FROM changes
+            JOIN items ON items.id = changes.item_id
+            WHERE changes.id = ?", 
+            [change_id], 
+            |row| Ok(Change {
+                id: row.get(2)?,  
+                scan_id: row.get(3)?,  
+                item_id: row.get(4)?,  
+                change_type: row.get(5)?,  
+                metadata_changed: row.get(6)?,  
+                hash_changed: row.get(7)?,  
+                prev_last_modified: row.get(8)?,  
+                prev_file_size: row.get(9)?,  
+                prev_hash: row.get(10)?,  
+                item_type: row.get(0)?,  
+                item_path: row.get(1)?  
+            })
+        )
+        .optional()
+        .map_err(FsPulseError::Database)
+    }
+
     pub fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, FsPulseError>
     where
         F: FnMut(&Change) -> Result<(), FsPulseError>,
@@ -83,7 +113,7 @@ impl Change {
 
                     // Additional fields
                     item_type: row.get::<_, String>(0)?,                // items.item_type
-                    item_path: row.get::<_, String>(1)?,                               // items.path
+                    item_path: row.get::<_, String>(1)?,                // items.path
                 }
             )
         })?;

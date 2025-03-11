@@ -1,4 +1,5 @@
 use rusqlite::{Connection, OptionalExtension, Result};
+use std::path::PathBuf;
 use std::{io, path::Path};
 use crate::error::FsPulseError;
 use crate::schema::CREATE_SCHEMA_SQL;
@@ -32,7 +33,34 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn new(db_folder: &str) -> Result<Self, FsPulseError> {
+    pub fn new(db_path: Option<PathBuf>) -> Result<Self, FsPulseError>
+    {
+        let mut db_path = db_path
+            .or_else(dirs::home_dir)
+            .ok_or_else(|| FsPulseError::Error("Could not determine home directory".to_string()))?;
+
+        if !db_path.is_dir() {
+            return Err(FsPulseError::Error(format!(
+                "Database folder '{}' does not exist or is not a directory", 
+                db_path.display()
+            )));
+        }
+
+        db_path.push(DB_FILENAME);
+
+        // Attempt to open the database
+        let conn = Connection::open(&db_path).map_err(FsPulseError::Database)?;
+
+        // println!("Database opened at: {}", db_path.display());
+        let db = Self { conn, path: db_path.to_string_lossy().into_owned() };
+        
+        // Ensure schema is current
+        db.ensure_schema()?;
+
+        Ok(db)
+    }
+
+    pub fn new_old(db_folder: &str) -> Result<Self, FsPulseError> {
         let folder_path = Path::new(db_folder);
         
         // Ensure the folder exists and is a directory

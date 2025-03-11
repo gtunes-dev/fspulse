@@ -1,6 +1,7 @@
 use std::i64;
 
-use rusqlite::Error::QueryReturnedNoRows;
+use rusqlite::Error::{self, QueryReturnedNoRows};
+use rusqlite::OptionalExtension;
 use crate::database::Database;
 use crate::error::FsPulseError;
 
@@ -12,7 +13,7 @@ pub struct RootPath {
 }
 
 impl RootPath {
-    pub fn get(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
+    pub fn get_from_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;
 
         match conn.query_row(
@@ -22,6 +23,27 @@ impl RootPath {
         ) {
             Ok(path) => Ok(Some(RootPath { id, path } )),
             Err(QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(FsPulseError::Database(e)),
+        }
+    }
+
+    // TODO: I think this is the best pattern for handling a single row
+    // queries and the possible errors. Apply this pattern everywhere.
+    pub fn get_from_path(db: &Database, path: &str) -> Result<Self, FsPulseError> {
+        let conn = &db.conn;
+    
+        match conn.query_row(
+            "SELECT id, path FROM root_paths WHERE path = ?",
+            [path],
+            |row| Ok(RootPath {
+                id: row.get(0)?,   
+                path: row.get(1)?, 
+            }),
+        ) {
+            Ok(root_path) => Ok(root_path),
+            Err(QueryReturnedNoRows) => {
+                Err(FsPulseError::Error(format!("Path '{}' not found", path)))
+            }
             Err(e) => Err(FsPulseError::Database(e)),
         }
     }
