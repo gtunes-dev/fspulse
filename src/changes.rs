@@ -6,6 +6,21 @@ use rusqlite::OptionalExtension;
 use crate::database::Database;
 use crate::error::FsPulseError;
 
+const SQL_FOR_EACH_CHANGE_IN_SCAN: &str = 
+    "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.metadata_changed, changes.hash_changed, changes.prev_last_modified, prev_file_size, prev_hash
+        FROM changes
+        JOIN items ON items.id = changes.item_id
+        WHERE changes.scan_id = ?
+        ORDER BY items.path ASC";
+const SQL_FOR_EACH_CHANGE_IN_ITEM: &str = 
+    "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.metadata_changed, changes.hash_changed, changes.prev_last_modified, prev_file_size, prev_hash
+        FROM changes
+        JOIN items ON items.id = changes.item_id
+        WHERE changes.item_id = ?
+        ORDER BY changes.id ASC";
+
+
+
 #[derive(Clone, Debug, Default)]
 pub struct Change {
     pub id: i64,
@@ -105,21 +120,29 @@ impl Change {
         .map_err(FsPulseError::Database)
     }
 
-    pub fn for_each_change_in_scan<F>(db: &Database, scan_id: i64, mut func: F) -> Result<(), FsPulseError>
+    pub fn for_each_change_in_scan<F>(db: &Database, scan_id: i64, func: F) -> Result<(), FsPulseError> 
+    where
+        F: FnMut(&Change) -> Result<(), FsPulseError>,   
+    {
+        Self::for_each_change_impl(db, SQL_FOR_EACH_CHANGE_IN_SCAN, scan_id, func)
+    }
+
+    pub fn for_each_change_in_item<F>(db: &Database, item_id: i64, func: F) -> Result<(), FsPulseError> 
+    where
+        F: FnMut(&Change) -> Result<(), FsPulseError>,   
+    {
+        Self::for_each_change_impl(db, SQL_FOR_EACH_CHANGE_IN_ITEM, item_id, func)
+    }
+
+    pub fn for_each_change_impl<F>(db: &Database, sql_query: &str, sql_query_param: i64, mut func: F) -> Result<(), FsPulseError>
     where
         F: FnMut(&Change) -> Result<(), FsPulseError>,
     {
         let mut _change_count = 0;  // used only for logging
 
-        let mut stmt = db.conn.prepare(
-            "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.metadata_changed, changes.hash_changed, changes.prev_last_modified, prev_file_size, prev_hash
-            FROM changes
-            JOIN items ON items.id = changes.item_id
-            WHERE changes.scan_id = ?
-            ORDER BY items.path ASC"
-        )?;
+        let mut stmt = db.conn.prepare(sql_query)?;
         
-        let rows = stmt.query_map([scan_id], |row| {
+        let rows = stmt.query_map([sql_query_param], |row| {
             Ok(
                  Change {
                     id: row.get::<_, i64>(2)?,                          // changes.id
@@ -145,9 +168,10 @@ impl Change {
             func(&change)?;
             _change_count += 1;
         }
-        info!("for_each_scan_change - scan_id: {}, changes: {}", scan_id, _change_count);
+        info!("for_each_scan_change_impl - id: {}, changes: {}", sql_query_param, _change_count);
         Ok(())
     }
+
 }
 
 impl ChangeCounts {

@@ -104,4 +104,39 @@ impl Item {
         }
         Ok(())
     }
+
+    pub fn for_each_item_with_path<F>(db: &Database, path: &str, mut func: F) -> Result<(), FsPulseError>
+    where
+        F: FnMut(&Item) -> Result<(), FsPulseError>,
+    {
+        let mut item_count = 0;
+
+        let mut stmt = db.conn.prepare(
+            "SELECT id, root_id, last_seen_scan_id, is_tombstone, item_type, path, last_modified, file_size, file_hash
+             FROM items
+             WHERE path = ?
+             ORDER BY id ASC"
+        )?;
+
+        let rows = stmt.query_map([path], |row| {
+            Ok(Item {
+                id: row.get::<_, i64>(0)?,
+                root_id: row.get::<_, i64>(1)?,
+                last_seen_scan_id: row.get::<_, i64>(2)?,
+                is_tombstone: row.get::<_, bool>(3)?,
+                item_type: row.get::<_, String>(4)?,
+                path: row.get::<_, String>(5)?,
+                last_modified: row.get::<_, Option<i64>>(6)?,
+                file_size: row.get::<_, Option<i64>>(7)?,
+                file_hash: row.get::<_, Option<String>>(8)?,
+            })
+        })?;
+        
+        for row in rows {
+            let item = row?;
+            func(&item)?;
+            item_count = item_count + 1;
+        }
+        Ok(())
+    }
 }

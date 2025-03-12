@@ -94,30 +94,50 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_items(db: &Database, item_id: Option<u32>, root_id: Option<u32>, format: ReportFormat) -> Result<(), FsPulseError> {
+    pub fn report_items(db: &Database, item_id: Option<u32>, item_path: Option<String>, root_id: Option<u32>, format: ReportFormat) -> Result<(), FsPulseError> {
 
-        // TODO: In the single item case, "tree" is not a valid report format
-        if let Some(item_id) = item_id {
-            let item = Item::get_by_id(db, item_id.into())?;
+        match (item_id, item_path, root_id) {
+            (Some(item_id), _, _) => {
+                // TODO: In the single item case, "tree" is not a valid report format
+                let item = Item::get_by_id(db, item_id.into())?;
 
-            let mut stream = Self::begin_items_table("Item", &format!("Item {} Not Found", item_id));
+                let mut stream = Self::begin_items_table("Item", &format!("Item {} Not Found", item_id));
+    
+                if let Some(item) = item {
+                    stream.row(item)?;
+                }
+    
+                stream.finish()?;
+            },
+            (_, Some(item_path), _) => {
+                let mut stream = Self::begin_items_table("Items", &format!("Item Path '{}' Not Found", item_path));
+                Item::for_each_item_with_path(
+                    db, 
+                    &item_path, 
+                    |item| {
+                        stream.row(item.clone())?;
+                        Ok(())
+                    }
+                )?;
 
-            if let Some(item) = item {
-                stream.row(item)?;
-            }
+                stream.finish()?;
+            },
+            (_, _, Some(root_id)) => {
+                let root = Root::get_from_id(db, root_id.into())?
+                    .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", root_id)))?;
 
-            stream.finish()?;
-        } else if let Some(root_id) = root_id {
-            let root = Root::get_from_id(db, root_id.into())?
-                .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", root_id)))?;
+                let scan = Scan::get_latest_for_root(db, root.id())?
+                    .ok_or_else(|| FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id)))?;
 
-            let scan = Scan::get_latest_for_root(db, root.id())?
-                .ok_or_else(|| FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id)))?;
+                match format {
+                    ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?,
+                    ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root)?,
+                    _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
 
-            match format {
-                ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?,
-                ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root)?,
-                _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
+                }
+            },
+            _ => {
+                // Should never get here
             }
         }
         
@@ -127,7 +147,7 @@ impl Reports {
     pub fn report_changes(
         db: &Database, 
         change_id: Option<u32>, 
-        item_id: Option<u32>, 
+        item_id: Option<u32>,
         scan_id: Option<u32>, 
         format: ReportFormat
     ) -> Result<(), FsPulseError> {
@@ -142,7 +162,7 @@ impl Reports {
                 stream.finish()?;
             },
             (None, Some(item_id), None) => {
-
+                Self::print_item_changes_as_table(db, item_id.into())?;
             },
             (None, None, Some(scan_id)) => {
                 match format {
@@ -246,8 +266,9 @@ impl Reports {
     fn begin_changes_table(title: &str, empty_row: &str) -> Stream<Change, Stdout> {
         let out = io::stdout();
         let stream = Stream::new(out, vec![
-            Column::new(|f, c: &Change| write!(f, "{}", c.id)).header("ID").right().min_width(6),
-            Column::new(|f, c: &Change| write!(f, "{}", c.item_id)).header("Item ID").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", c.id)).header("Id").right().min_width(6),
+            Column::new(|f, c: &Change| write!(f, "{}", c.scan_id)).header("Scan Id").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", c.item_id)).header("Item Id").right(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_type)).header("Item Type").center(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_path)).header("Item Path").left(),
             Column::new(|f, c: &Change| write!(f, "{}", c.change_type)).header("Change Type").center(),
@@ -370,6 +391,28 @@ impl Reports {
         }
 
         Self::hr(width);    
+        Ok(())
+    }
+
+    fn print_item_changes_as_table(db: &Database, item_id: i64) -> Result<(), FsPulseError> {
+        let item = Item::get_by_id(db, item_id)?
+            .ok_or_else(|| FsPulseError::Error(format!("Item Id {} not found", item_id)))?;
+
+        let mut stream = Self::begin_changes_table(
+            &format!("Changes (Item Id: {}, Item Path: '{}'", item.id(), item.path()), 
+            "No Changes");
+
+        Change::for_each_change_in_item(
+            db, 
+            item_id,
+            |change| {
+                stream.row(change.clone())?;
+                Ok(())
+            }
+        )?;
+
+        stream.finish()?;
+
         Ok(())
     }
 

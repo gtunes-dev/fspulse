@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS roots (
     path TEXT NOT NULL UNIQUE
 );
 
+-- Indexes to optimize queries
+CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (path);
+
 -- Scans table tracks individual scan sessions
 CREATE TABLE IF NOT EXISTS scans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

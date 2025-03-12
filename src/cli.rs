@@ -108,11 +108,16 @@ pub enum ReportType {
         db_path: Option<PathBuf>,
 
         /// Show a specific Item
-        #[arg(long, conflicts_with = "root_id")]
+        #[arg(long, conflicts_with_all = ["item_path", "root_id"])]
         item_id: Option<u32>,
 
+        /// Show all items with a specific path (an item may appear in multiple roots
+        /// (in the case where one root is a subdirectory of another)
+        #[arg(long, conflicts_with_all = ["item_id", "root_id"])]
+        item_path: Option<String>,
+
         /// Shows the items seen on the most recent scan of the specified root
-        #[arg(long, conflicts_with = "item_id")]
+        #[arg(long, conflicts_with_all = ["item_id", "item_path"])]
         root_id: Option<u32>,
 
         /// Report format (csv, table, tree).
@@ -128,14 +133,13 @@ pub enum ReportType {
         #[arg(long)]
         db_path: Option<PathBuf>,
 
-
         /// Filter by change ID.
         #[arg(long, conflicts_with_all = ["item_id", "scan_id"])]
         change_id: Option<u32>,
 
         /// Filter by item ID (shows all changes affecting the item).
         #[arg(long, conflicts_with_all = ["change_id", "scan_id"])]
-        item_id: Option<u32>,
+        item_id: Option<u32>,        
 
         /// Filter by scan ID (shows all changes recorded in this scan).
         #[arg(long, conflicts_with_all = ["change_id", "item_id"])]
@@ -174,12 +178,12 @@ impl Cli {
                     );
                     Self::handle_report_scans(db_path, scan_id, last, format)?;
                 }
-                ReportType::Items { db_path, item_id, root_id, format } => {
+                ReportType::Items { db_path, item_id, item_path, root_id, format } => {
                     info!(
-                        "Generating items report with db_path: {:?}, item_id: {:?}, root_id: {:?}, format: {}",
-                        db_path, item_id, root_id, format
+                        "Generating items report with db_path: {:?}, item_id: {:?}, item_path: {:?}, root_id: {:?}, format: {}",
+                        db_path, item_id, item_path, root_id, format
                     );
-                    Self::handle_report_items(db_path, item_id, root_id, format)?;
+                    Self::handle_report_items(db_path, item_id, item_path, root_id, format)?;
                 }
                 ReportType::Changes { db_path, change_id, item_id, scan_id, format } => {
                     info!(
@@ -240,13 +244,14 @@ impl Cli {
     fn handle_report_items(
         db_path: Option<PathBuf>,
         item_id: Option<u32>,
+        item_path: Option<String>,
         root_id: Option<u32>,
         format: String,
     ) -> Result<(), FsPulseError> {
         let db = Database::new(db_path)?;
         let format: ReportFormat = format.parse()?;
 
-        Reports::report_items(&db, item_id, root_id, format)?;
+        Reports::report_items(&db, item_id, item_path, root_id, format)?;
         Ok(())
     }
 
