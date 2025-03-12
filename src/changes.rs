@@ -25,7 +25,7 @@ pub struct Change {
 }
 
 
-#[derive(Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct ChangeCounts {
     pub add_count: i64,
     pub modify_count: i64,

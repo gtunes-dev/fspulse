@@ -15,7 +15,18 @@ use std::fs::Metadata;
 use std::path::Path;
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, Default)]
+const SQL_SCAN_ID_OR_LATEST: &str = 
+    "SELECT id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete
+        FROM scans
+        WHERE id = IFNULL(?1, (SELECT MAX(id) FROM scans))";
+
+const SQL_LATEST_FOR_ROOT: &str = 
+    "SELECT id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete
+        FROM scans
+        WHERE root_id = ?
+        ORDER BY id DESC LIMIT 1";
+
+#[derive(Copy, Clone, Debug, Default)]
 pub struct Scan {
     // Schema fields
     id: i64,
@@ -49,78 +60,50 @@ impl Scan {
         }
     }
 
-    pub fn latest(db: &Database) -> Result<Self, FsPulseError> {
-        Self::new_from_id_else_latest(db, None)
+    pub fn get_latest(db: &Database) -> Result<Option<Self>, FsPulseError> {
+        Self::get_by_id_or_latest(db, None, None)
     }
 
-    pub fn new_for_last_path_scan(db: &Database, root_id: i64) -> Result<Self, FsPulseError> {
+    pub fn get_by_id(db: &Database, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
+        Self::get_by_id_or_latest(db, Some(scan_id), None)
+    }
+
+    pub fn get_latest_for_root(db: &Database, root_id: i64) -> Result<Option<Self>, FsPulseError> {
+        Self::get_by_id_or_latest(db, None, Some(root_id))
+    }
+
+    fn get_by_id_or_latest(db: &Database, scan_id: Option<i64>, root_id: Option<i64>) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;
+
+        let (query, query_param) = match (scan_id, root_id) {
+            (Some(_), _) => (SQL_SCAN_ID_OR_LATEST, scan_id),
+            (_, Some(_)) => (SQL_LATEST_FOR_ROOT, root_id),
+            _ => (SQL_SCAN_ID_OR_LATEST, None),
+        };
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,
         // load the specified scan
         let scan_row: Option<(i64, i64, bool, i64, Option<i64>, Option<i64>, bool)> = conn.query_row(
-            "SELECT id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete
-                FROM scans
-                WHERE root_id = ?
-                ORDER BY id DESC
-                LIMIT 1",
-            params![root_id],
+            query,
+            params![query_param],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
-        ).optional()?;
+        )
+        .optional()?;
 
-        let (id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
-            FsPulseError::Error(format!("No scan found for root id {}", root_id))
-        })?;
-
-        let change_counts = ChangeCounts::get_by_scan_id(db, id)?;
-
-        Ok(Scan {
-            id,
-            root_id,
-            is_deep,
-            time_of_scan,
-            file_count,
-            folder_count,
-            is_complete,
-            change_counts,
-            ..Default::default()
+        scan_row.map(|(id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete)| {
+            let change_counts = ChangeCounts::get_by_scan_id(db, id)?;
+            Ok(Scan {
+                id,
+                root_id,
+                is_deep,
+                time_of_scan,
+                file_count,
+                folder_count,
+                is_complete,
+                change_counts,
+            })
         })
-    }
-    
-    pub fn new_from_id(db: &Database, scan_id: i64) -> Result<Self, FsPulseError> {
-        Self::new_from_id_else_latest(db, Some(scan_id))
-    }
-
-    pub fn new_from_id_else_latest(db: &Database, scan_id: Option<i64>) -> Result<Self, FsPulseError> {
-        let conn = &db.conn;
-
-        // If the scan id wasn't explicitly specified, load the most recent otherwise,
-        // load the specified scan
-        let scan_row: Option<(i64, i64, bool, i64, Option<i64>, Option<i64>, bool)> = conn.query_row(
-            "SELECT id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete
-                FROM scans
-                WHERE id = COALESCE(?1, (SELECT MAX(id) FROM scans))",
-            params![scan_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
-        ).optional()?;
-
-        let (id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
-            FsPulseError::Error("No scan found".to_string())
-        })?;
-
-        let change_counts = ChangeCounts::get_by_scan_id(db, id)?;
-
-        Ok(Scan {
-            id,
-            root_id,
-            is_deep,
-            time_of_scan,
-            file_count,
-            folder_count,
-            is_complete,
-            change_counts,
-            ..Default::default()
-        })
+        .transpose()
     }
 
     pub fn id(&self) -> i64 {
@@ -170,25 +153,26 @@ impl Scan {
                     .to_string()
             }
             (true, None, _) => {
-                let scan = Self::latest(db)?;
+                let scan = Self::get_latest(db)?
+                    .ok_or_else(|| FsPulseError::Error("No latest scan found".into()))?;
                 Root::get_from_id(db, scan.root_id())?
-                    .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?
+                    .ok_or_else(|| FsPulseError::Error("Root not found".into()))?
                     .path()
                     .to_string()
             }
             (false, None, Some(p)) => p,
-            (false, None, None) => return Err(FsPulseError::Error("No path specified".to_string())),
+            (false, None, None) => return Err(FsPulseError::Error("No path specified".into())),
         };
         
         let (scan, _root) = Scan::scan_directory(db, path, deep)?;
-        Reports::print_scan(&scan, ReportFormat::Table)?;
+        Reports::print_scan(db, &Some(scan), ReportFormat::Table)?;
 
         Ok(scan)
     }
 
     fn path_arg_to_canonical_path_buf(path_arg: &str) -> Result<PathBuf, FsPulseError> {
         if path_arg.is_empty() {
-            return Err(FsPulseError::Error("Provided path is empty".to_string()));
+            return Err(FsPulseError::Error("Provided path is empty".into()));
         }
 
         let path = Path::new(path_arg);

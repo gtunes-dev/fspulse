@@ -97,22 +97,4 @@ impl Root {
 
         Ok(())
     }
-
-    pub fn latest_scan(&self, db: &Database) -> Result<Option<i64>, FsPulseError> {
-        let conn = &db.conn;
-
-        match conn.query_row(
-            "SELECT id 
-            FROM scans
-            WHERE root_id = ?
-            ORDER BY ID DESC
-            LIMIT 1", 
-            [self.id], 
-            |row| row.get(0),
-        ) {
-            Ok(id) => Ok(Some( id )),
-            Err(QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(FsPulseError::Database(e)),
-        }
-    }
 }

@@ -6,6 +6,7 @@ use crate::roots::Root;
 use crate::scans::Scan;
 use crate::utils::Utils;
 
+use std::cmp::max;
 use std::io::{self, Stdout};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -43,11 +44,12 @@ impl Reports {
         format: ReportFormat,
     ) -> Result<(), FsPulseError> 
     {
-        if scan_id.is_none() {
-            Reports::print_scans(db, last)?;
-        } else {
-            let scan = Scan::new_from_id_else_latest(db, Utils::opt_u32_to_opt_i64(scan_id))?;
-            Self::print_scan(&scan, format)?;
+        match scan_id {
+            Some(scan_id) => {
+                let scan = Scan::get_by_id(db, scan_id.into())?;
+                Self::print_scan(db, &scan, format)?;
+            },
+            None => Reports::print_scans(db, last)?,
         }
 
         Ok(())
@@ -107,9 +109,10 @@ impl Reports {
             stream.finish()?;
         } else if let Some(root_id) = root_id {
             let root = Root::get_from_id(db, root_id.into())?
-                .ok_or_else(|| FsPulseError::Error(format!("Root id {} not found", root_id)))?;
+                .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", root_id)))?;
 
-            let scan = Scan::new_for_last_path_scan(db, root.id())?;
+            let scan = Scan::get_latest_for_root(db, root.id())?
+                .ok_or_else(|| FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id)))?;
 
             match format {
                 ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?,
@@ -155,10 +158,22 @@ impl Reports {
         Ok(())
     }
 
-    pub fn print_scan(scan: &Scan, _format: ReportFormat) -> Result<(), FsPulseError> {
-        let mut stream = Reports::begin_scans_table("Scan", "No Scan");
+    pub fn print_scan(db: &Database, scan: &Option<Scan>, _format: ReportFormat) -> Result<(), FsPulseError> {
+        let table_title= match scan {
+            Some(scan) => {
+                let root = Root::get_from_id(db, scan.root_id())?
+                    .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", scan.root_id())))?;
+                format!("Scan (Root Path: '{}')", root.path())
+            }
+            None => "Scan".into()
+        };
 
-        stream.row(scan.clone())?;
+        let mut stream = Reports::begin_scans_table(&table_title, "No Scan");
+
+        if let Some(scan) = scan {
+            stream.row(scan.clone())?;
+        }
+
         stream.finish()?;
 
         Ok(())
@@ -308,9 +323,10 @@ impl Reports {
     fn print_scan_changes_as_tree(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
         let width = 100;
 
-        let scan = Scan::new_from_id(db, scan_id)?;
+        let scan = Scan::get_by_id(db, scan_id)?
+            .ok_or_else(|| FsPulseError::Error(format!("Scan Id {} not found", scan_id)))?;
         let root = Root::get_from_id(db, scan.root_id())?
-            .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?;
+            .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", scan.root_id())))?;
 
         Self::print_center(width, "Changes");
         Self::print_center(width, &format!("Root Path: '{}'", root.path()));
@@ -359,7 +375,7 @@ impl Reports {
 
     fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root: &Root) -> Result<(), FsPulseError> {
         let mut stream = 
-            Self::begin_items_table(&format!("Items: {}", root.path()), "No Items");
+            Self::begin_items_table(&format!("Items (Root Path: '{}'", root.path()), "No Items");
 
         Item::for_each_item_in_latest_scan(
             db, 
@@ -376,12 +392,12 @@ impl Reports {
     }
 
     fn print_last_seen_scan_items_as_tree(db: &Database, scan: &Scan, root: &Root) -> Result<(), FsPulseError> {
-        
-        // TODO: figure out a default width
-        let width = 100;
 
-        Self::print_center(width, "Items");
-        Self::print_center(width, &format!("Root Path: '{}'", root.path()));
+        let title = format!("Items (Root Id: {}, Root Path: '{}'", root.id(), root.path());
+        let width = max(100, title.len() + 20);
+
+        Self::hr(width);
+        Self::print_center(width, &title);
         Self::hr(width);
 
         let root_path = Path::new(root.path());
