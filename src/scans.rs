@@ -4,7 +4,7 @@ use crate::database::Database;
 use crate::hash::Hash;
 use crate::items::ItemType;
 use crate::reports::{ReportFormat, Reports};
-use crate::root_paths::RootPath;
+use crate::roots::Root;
 
 use rusqlite::{ OptionalExtension, Result, params };
 
@@ -19,7 +19,7 @@ use std::path::PathBuf;
 pub struct Scan {
     // Schema fields
     id: i64,
-    root_path_id: i64,
+    root_id: i64,
     is_deep: bool,
     time_of_scan: i64,
     file_count: Option<i64>,
@@ -39,10 +39,10 @@ struct QueueEntry {
 impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
-    fn new_for_scan(id: i64, root_path_id: i64, is_deep: bool, time_of_scan: i64) -> Self {
+    fn new_for_scan(id: i64, root_id: i64, is_deep: bool, time_of_scan: i64) -> Self {
         Scan {
             id,
-            root_path_id,
+            root_id,
             is_deep,
             time_of_scan,
             ..Default::default()
@@ -53,30 +53,30 @@ impl Scan {
         Self::new_from_id_else_latest(db, None)
     }
 
-    pub fn new_for_last_path_scan(db: &Database, path_id: i64) -> Result<Self, FsPulseError> {
+    pub fn new_for_last_path_scan(db: &Database, root_id: i64) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,
         // load the specified scan
         let scan_row: Option<(i64, i64, bool, i64, Option<i64>, Option<i64>, bool)> = conn.query_row(
-            "SELECT id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete
+            "SELECT id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete
                 FROM scans
-                WHERE root_path_id = ?
+                WHERE root_id = ?
                 ORDER BY id DESC
                 LIMIT 1",
-            params![path_id],
+            params![root_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
         ).optional()?;
 
-        let (id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
-            FsPulseError::Error(format!("No scan found for path id {}", path_id))
+        let (id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
+            FsPulseError::Error(format!("No scan found for root id {}", root_id))
         })?;
 
         let change_counts = ChangeCounts::get_by_scan_id(db, id)?;
 
         Ok(Scan {
             id,
-            root_path_id,
+            root_id,
             is_deep,
             time_of_scan,
             file_count,
@@ -91,30 +91,28 @@ impl Scan {
         Self::new_from_id_else_latest(db, Some(scan_id))
     }
 
-    pub fn new_from_id_else_latest(db: &Database, id: Option<i64>) -> Result<Self, FsPulseError> {
+    pub fn new_from_id_else_latest(db: &Database, scan_id: Option<i64>) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,
         // load the specified scan
         let scan_row: Option<(i64, i64, bool, i64, Option<i64>, Option<i64>, bool)> = conn.query_row(
-            "SELECT id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete
+            "SELECT id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete
                 FROM scans
                 WHERE id = COALESCE(?1, (SELECT MAX(id) FROM scans))",
-            params![id],
+            params![scan_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
         ).optional()?;
 
-        let (id, root_path_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
+        let (id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete) = scan_row.ok_or_else(|| {
             FsPulseError::Error("No scan found".to_string())
         })?;
-
-        //let root_path: RootPath = RootPath::get(db, root_path_id)?;
 
         let change_counts = ChangeCounts::get_by_scan_id(db, id)?;
 
         Ok(Scan {
             id,
-            root_path_id,
+            root_id,
             is_deep,
             time_of_scan,
             file_count,
@@ -129,8 +127,8 @@ impl Scan {
         self.id
     }
 
-    pub fn root_path_id(&self) -> i64 {
-        self.root_path_id
+    pub fn root_id(&self) -> i64 {
+        self.root_id
     }
 
     pub fn is_deep(&self) -> bool {
@@ -157,36 +155,24 @@ impl Scan {
         &self.change_counts
     }
 
-    // TODO: Is this dead code?
-    /*
-    pub fn with_id_or_latest<F>(db: &Database, id: Option<i64>, func: F) -> Result<(), FsPulseError>
-    where
-        F: FnOnce(&Database, &Scan) -> Result<(), FsPulseError>,
-    {
-        let scan = Scan::new_from_id(db, id)?;
-
-        func(db, &scan)
-    }
-    */
-
     pub fn do_scan(
         db: &mut Database, 
-        path_id: Option<u32>, 
-        path: Option<String>, 
+        root_id: Option<u32>, 
+        root_path: Option<String>, 
         last: bool, 
         deep: bool
     ) -> Result<Scan, FsPulseError> {
-        let path = match (last, path_id, path) {
-            (_, Some(path_id), _) => {
-                RootPath::get_from_id(db, path_id.into())?
-                    .ok_or_else(|| FsPulseError::Error("Path not found".to_string()))?
+        let path = match (last, root_id, root_path) {
+            (_, Some(root_id), _) => {
+                Root::get_from_id(db, root_id.into())?
+                    .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", root_id)))?
                     .path()
                     .to_string()
             }
             (true, None, _) => {
                 let scan = Self::latest(db)?;
-                RootPath::get_from_id(db, scan.root_path_id())?
-                    .ok_or_else(|| FsPulseError::Error("Path not found".to_string()))?
+                Root::get_from_id(db, scan.root_id())?
+                    .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?
                     .path()
                     .to_string()
             }
@@ -194,7 +180,7 @@ impl Scan {
             (false, None, None) => return Err(FsPulseError::Error("No path specified".to_string())),
         };
         
-        let (scan, _root_path) = Scan::scan_directory(db, path, deep)?;
+        let (scan, _root) = Scan::scan_directory(db, path, deep)?;
         Reports::print_scan(&scan, ReportFormat::Table)?;
 
         Ok(scan)
@@ -232,9 +218,9 @@ impl Scan {
         Ok(canonical_path)
     }
 
-    fn scan_directory(db: &mut Database, path: String, deep: bool) -> Result<(Self, RootPath), FsPulseError> {
-        let (mut scan, root_path) = Self::begin_scan(db, path, deep)?;
-        let root_path_buf = PathBuf::from(root_path.path());
+    fn scan_directory(db: &mut Database, path: String, deep: bool) -> Result<(Self, Root), FsPulseError> {
+        let (mut scan, root) = Self::begin_scan(db, path, deep)?;
+        let root_path_buf = PathBuf::from(root.path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
         let mut q = VecDeque::new();
@@ -290,26 +276,26 @@ impl Scan {
         }
         scan.end_scan(db)?;
     
-        Ok((scan, root_path))
+        Ok((scan, root))
     }
 
-    fn begin_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, RootPath), FsPulseError> {
+    fn begin_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, Root), FsPulseError> {
         let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
         let root_path_str = path_canonical.to_string_lossy().to_string();
 
-        let root_path = RootPath::get_or_insert(db, &root_path_str)?;
-        let root_path_id = root_path.id();
+        let root = Root::get_or_insert(db, &root_path_str)?;
+        let root_id = root.id();
 
         let (scan_id, time_of_scan): (i64, i64) = db.conn.query_row(
-            "INSERT INTO scans (root_path_id, is_deep, time_of_scan) 
+            "INSERT INTO scans (root_id, is_deep, time_of_scan) 
              VALUES (?, ?, strftime('%s', 'now', 'utc')) 
              RETURNING id, time_of_scan",
-            [root_path.id(), deep as i64],
+            [root_id, deep as i64],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
 
-        let scan = Scan::new_for_scan(scan_id, root_path_id, deep, time_of_scan);
-        Ok((scan, root_path))
+        let scan = Scan::new_for_scan(scan_id, root_id, deep, time_of_scan);
+        Ok((scan, root))
     }
 
     fn handle_item(
@@ -322,7 +308,7 @@ impl Scan {
     ) -> Result<ChangeType, FsPulseError> {
         let path_str = path.to_string_lossy();
         let scan_id = self.id;
-        let root_path_id = self.root_path_id;
+        let root_id = self.root_id;
 
         let conn = &mut db.conn;
     
@@ -335,8 +321,8 @@ impl Scan {
     
         // Check if the item already exists (fetching `id`, `is_tombstone` as well)
         let existing_item: Option<(i64, String, Option<i64>, Option<i64>, Option<String>, bool)> = conn.query_row(
-            "SELECT id, item_type, last_modified, file_size, file_hash, is_tombstone FROM items WHERE root_path_id = ? AND path = ?",
-            (root_path_id, &path_str),
+            "SELECT id, item_type, last_modified, file_size, file_hash, is_tombstone FROM items WHERE root_id = ? AND path = ?",
+            (root_id, &path_str),
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2).ok(), row.get(3).ok(), row.get(4)?, row.get(5)?)),
         ).optional()?;
     
@@ -395,16 +381,16 @@ impl Scan {
                     ChangeType::Modify
                 } else {
                     // No change, just update last_seen_scan_id
-                    conn.execute("UPDATE items SET last_seen_scan_id = ? WHERE root_path_id = ? AND id = ?", 
-                        (scan_id, root_path_id, item_id))?;
+                    conn.execute("UPDATE items SET last_seen_scan_id = ? WHERE root_id = ? AND id = ?", 
+                        (scan_id, root_id, item_id))?;
                     ChangeType::NoChange
                 }
             }
             None => {
                 // Item is new, insert into items and changes tables
                 let tx = conn.transaction()?;
-                tx.execute("INSERT INTO items (root_path_id, path, item_type, last_modified, file_size, file_hash, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (root_path_id, &path_str, item_type.as_str(), last_modified, file_size, file_hash, scan_id))?;
+                tx.execute("INSERT INTO items (root_id, path, item_type, last_modified, file_size, file_hash, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (root_id, &path_str, item_type.as_str(), last_modified, file_size, file_hash, scan_id))?;
                 let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
                 tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)",
                     (scan_id, item_id, ChangeType::Add.as_str()))?;
@@ -417,7 +403,7 @@ impl Scan {
     }
 
     fn end_scan(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
-        let root_path_id = self.root_path_id;
+        let root_id = self.root_id;
         let scan_id = self.id;
 
         let conn = &mut db.conn;
@@ -429,14 +415,14 @@ impl Scan {
             "INSERT INTO changes (scan_id, item_id, change_type)
              SELECT ?, id, ?
              FROM items
-             WHERE root_path_id = ? AND is_tombstone = 0 AND last_seen_scan_id < ?",
-            (scan_id, ChangeType::Delete.as_str(), root_path_id, scan_id),
+             WHERE root_id = ? AND is_tombstone = 0 AND last_seen_scan_id < ?",
+            (scan_id, ChangeType::Delete.as_str(), root_id, scan_id),
         )?;
         
         // Mark unseen items as tombstones
         tx.execute(
-            "UPDATE items SET is_tombstone = 1 WHERE root_path_id = ? AND last_seen_scan_id < ? AND is_tombstone = 0",
-            (root_path_id, scan_id),
+            "UPDATE items SET is_tombstone = 1 WHERE root_id = ? AND last_seen_scan_id < ? AND is_tombstone = 0",
+            (root_id, scan_id),
         )?;
 
         // Step 3: Count total files and directories seen in this scan
@@ -484,14 +470,14 @@ impl Scan {
                 s.file_count,
                 s.folder_count, 
                 s.is_complete,
-                s.root_path_id,
+                s.root_id,
                 COALESCE(SUM(CASE WHEN c.change_type = 'A' THEN 1 ELSE 0 END), 0) AS add_count,
                 COALESCE(SUM(CASE WHEN c.change_type = 'M' THEN 1 ELSE 0 END), 0) AS modify_count,
                 COALESCE(SUM(CASE WHEN c.change_type = 'D' THEN 1 ELSE 0 END), 0) AS delete_count,
                 COALESCE(SUM(CASE WHEN c.change_type = 'T' THEN 1 ELSE 0 END), 0) AS type_change_count
             FROM scans s
             LEFT JOIN changes c ON s.id = c.scan_id
-            GROUP BY s.id, s.is_deep, s.time_of_scan, s.file_count, s.folder_count, s.is_complete, s.root_path_id
+            GROUP BY s.id, s.is_deep, s.time_of_scan, s.file_count, s.folder_count, s.is_complete, s.root_id
             ORDER BY s.id DESC
             LIMIT ?"
         )?;
@@ -504,7 +490,7 @@ impl Scan {
                 file_count: row.get::<_, Option<i64>>(3)?,              // file count
                 folder_count: row.get::<_, Option<i64>>(4)?,            // folder count
                 is_complete: row.get::<_, bool>(5)?,                    // is complete
-                root_path_id: row.get::<_, i64>(6)?,                    // root path id
+                root_id: row.get::<_, i64>(6)?,                         // root id
                 change_counts: ChangeCounts::new(  
                     row.get::<_, i64>(7)?,             // adds
                     row.get::<_, i64>(8)?,          // modifies

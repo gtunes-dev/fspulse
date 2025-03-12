@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS meta (
 
 INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2');
 
--- Root paths table stores unique root directories that have been scanned
-CREATE TABLE IF NOT EXISTS root_paths (
+-- Roots table stores unique root directories that have been scanned
+CREATE TABLE IF NOT EXISTS roots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE
 );
@@ -17,19 +17,19 @@ CREATE TABLE IF NOT EXISTS root_paths (
 -- Scans table tracks individual scan sessions
 CREATE TABLE IF NOT EXISTS scans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_path_id INTEGER NOT NULL,     -- Links scan to a root path
+    root_id INTEGER NOT NULL,     -- Links scan to a root path
     is_deep BOOLEAN NOT NULL,          -- Indicates if this scan included hash computation
     time_of_scan INTEGER NOT NULL,     -- Timestamp of when scan was performed (UTC)
     file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
     folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
     is_complete BOOLEAN NOT NULL DEFAULT 0,  -- Whether the scan fully completed
-    FOREIGN KEY (root_path_id) REFERENCES root_paths(id)
+    FOREIGN KEY (root_id) REFERENCES roots(id)
 );
 
 -- Items table tracks files and directories discovered during scans
 CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_path_id INTEGER NOT NULL,    -- Links each item to a root path
+    root_id INTEGER NOT NULL,               -- Links each item to a root
     path TEXT NOT NULL,               -- Relative path from the root path
     is_tombstone BOOLEAN NOT NULL DEFAULT 0,  -- Indicates if the item was deleted
     item_type CHAR(1) NOT NULL,       -- ('F' for file, 'D' for directory, 'S' for symlink, 'O' for other)
@@ -37,14 +37,14 @@ CREATE TABLE IF NOT EXISTS items (
     file_size INTEGER,                -- File size in bytes (NULL for directories)
     file_hash TEXT,                    -- Hash of file contents (NULL for directories and if not computed)
     last_seen_scan_id INTEGER NOT NULL, -- Last scan where the item was present
-    FOREIGN KEY (root_path_id) REFERENCES root_paths(id),
+    FOREIGN KEY (root_id) REFERENCES roots(id),
     FOREIGN KEY (last_seen_scan_id) REFERENCES scans(id),
-    UNIQUE (root_path_id, path)        -- Ensures uniqueness within each root path
+    UNIQUE (root_id, path)              -- Ensures uniqueness within each root path
 );
 
 -- Indexes to optimize queries
-CREATE INDEX IF NOT EXISTS idx_items_path ON items (root_path_id, path);
-CREATE INDEX IF NOT EXISTS idx_items_scan ON items (root_path_id, last_seen_scan_id, is_tombstone);
+CREATE INDEX IF NOT EXISTS idx_items_path ON items (root_id, path);
+CREATE INDEX IF NOT EXISTS idx_items_scan ON items (root_id, last_seen_scan_id, is_tombstone);
 
 -- Changes table tracks modifications between scans
 CREATE TABLE IF NOT EXISTS changes (

@@ -19,7 +19,10 @@ pub struct Cli {
 /// Available commands in fspulse.
 #[derive(Subcommand)]
 pub enum Command {
-    /// Perform a filesystem scan.
+    /// Perform a filesystem scan on a specified "root". If the root has been scanned previously,
+    /// it can be identified by its root-id. A root can also be identified by path by
+    /// specifying a root-path. In the case of root-path, an existing root will be used if
+    /// one exists and, if not, a new root will be created
     Scan {
         /// Specifies the directory where the database is stored.
         /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
@@ -27,16 +30,16 @@ pub enum Command {
         #[arg(long)]
         db_path: Option<PathBuf>,
 
-        /// Scan using a stored path ID.
-        #[arg(long, conflicts_with_all = ["path", "last"])]
-        path_id: Option<u32>,
+        /// Scan a known root by id
+        #[arg(long, conflicts_with_all = ["root_path", "last"])]
+        root_id: Option<u32>,
 
-        /// Scan using a string path.
-        #[arg(long, conflicts_with_all = ["path_id", "last"])]
-        path: Option<String>,
+        /// Scan a known or new root by path (must be a directory)
+        #[arg(long, conflicts_with_all = ["root_id", "last"])]
+        root_path: Option<String>,
 
-        /// Scan the last-used path (default if no other path is provided).
-        #[arg(long, conflicts_with_all = ["path_id", "path"])]
+        /// Scan the root which was scanned most recently
+        #[arg(long, conflicts_with_all = ["root_id", "root_path"])]
         last: bool,
 
         /// Perform a deep scan. Defaults to shallow if not provided.
@@ -54,21 +57,21 @@ pub enum Command {
 /// Available report types.
 #[derive(Subcommand)]
 pub enum ReportType {
-    /// Reports on scanned paths.
-    Paths {
+    /// Reports on "roots" which have been scanned in the past
+    Roots {
         /// Specifies the directory where the database is stored.
         /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
         /// The database file will always be named "fspulse.db".
         #[arg(long)]
         db_path: Option<PathBuf>,
 
-        /// Filter by path ID.
-        #[arg(long, conflicts_with = "path")]
-        path_id: Option<u32>,
+        /// Show details of the root with the specified id
+        #[arg(long, conflicts_with = "root_path")]
+        root_id: Option<u32>,
 
-        /// Filter by specific path string.
-        #[arg(long, conflicts_with = "path_id")]
-        path: Option<String>,
+        /// Show details of the root with the specified path
+        #[arg(long, conflicts_with = "root_id")]
+        root_path: Option<String>,
 
         /// Report format (csv, table).
         #[arg(long, default_value = "table", value_parser = ["csv", "table"])]
@@ -104,13 +107,13 @@ pub enum ReportType {
         #[arg(long)]
         db_path: Option<PathBuf>,
 
-        /// Filter by item ID.
-        #[arg(long, conflicts_with = "path_id")]
+        /// Show a specific Item
+        #[arg(long, conflicts_with = "root_id")]
         item_id: Option<u32>,
 
-        /// Filter by path ID (shows items from last scan of this path).
+        /// Shows the items seen on the most recent scan of the specified root
         #[arg(long, conflicts_with = "item_id")]
-        path_id: Option<u32>,
+        root_id: Option<u32>,
 
         /// Report format (csv, table, tree).
         #[arg(long, default_value = "table", value_parser = ["csv", "table", "tree"])]
@@ -149,20 +152,20 @@ impl Cli {
         let args = Cli::parse();
         
         match args.command {
-            Command::Scan { db_path, path_id, path, last, deep } => {
+            Command::Scan { db_path, root_id, root_path, last, deep } => {
                 info!(
-                    "Running scan with db_path: {:?}, path_id: {:?}, path: {:?}, last: {}, deep: {}",
-                    db_path, path_id, path, last, deep
+                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, deep: {}",
+                    db_path, root_id, root_path, last, deep
                 );
-                Self::handle_scan(db_path, path_id, path, last, deep)?;
+                Self::handle_scan(db_path, root_id, root_path, last, deep)?;
             }
             Command::Report { report_type } => match report_type {
-                ReportType::Paths { db_path, path_id, path, format } => {
+                ReportType::Roots { db_path, root_id, root_path, format } => {
                     info!(
-                        "Generating paths report with db_path: {:?}, path_id: {:?}, path: {:?}, format: {}",
-                        db_path, path_id, path, format
+                        "Generating roots report with db_path: {:?}, root_id: {:?}, root_path: {:?}, format: {}",
+                        db_path, root_id, root_path, format
                     );
-                    Self::handle_report_paths(db_path, path_id, path, format)?;
+                    Self::handle_report_roots(db_path, root_id, root_path, format)?;
                 }
                 ReportType::Scans { db_path, scan_id, last, format } => {
                     info!(
@@ -171,12 +174,12 @@ impl Cli {
                     );
                     Self::handle_report_scans(db_path, scan_id, last, format)?;
                 }
-                ReportType::Items { db_path, item_id, path_id, format } => {
+                ReportType::Items { db_path, item_id, root_id, format } => {
                     info!(
-                        "Generating items report with db_path: {:?}, item_id: {:?}, path_id: {:?}, format: {}",
-                        db_path, item_id, path_id, format
+                        "Generating items report with db_path: {:?}, item_id: {:?}, root_id: {:?}, format: {}",
+                        db_path, item_id, root_id, format
                     );
-                    Self::handle_report_items(db_path, item_id, path_id, format)?;
+                    Self::handle_report_items(db_path, item_id, root_id, format)?;
                 }
                 ReportType::Changes { db_path, change_id, item_id, scan_id, format } => {
                     info!(
@@ -194,28 +197,28 @@ impl Cli {
     /// Handler for `pulse` command.
     fn handle_scan(
         db_path: Option<PathBuf>,
-        path_id: Option<u32>,
-        path: Option<String>,
+        root_id: Option<u32>,
+        root_path: Option<String>,
         last: bool,
         deep: bool,
     ) -> Result<(), FsPulseError> {
         let mut db = Database::new(db_path)?;
-        Scan::do_scan(&mut db, path_id, path, last, deep)?;
+        Scan::do_scan(&mut db, root_id, root_path, last, deep)?;
 
         Ok(())
     }
 
     /// Handler for `report paths`
-    fn handle_report_paths(
+    fn handle_report_roots(
         db_path: Option<PathBuf>,
-        path_id: Option<u32>,
-        path: Option<String>,
+        root_id: Option<u32>,
+        root_path: Option<String>,
         format: String,
     ) -> Result<(), FsPulseError> {
         let db = Database::new(db_path)?;
         let format: ReportFormat = format.parse()?;
         
-        Reports::report_root_paths(&db, path_id, path, format)?;
+        Reports::report_roots(&db, root_id, root_path, format)?;
         Ok(())
     }
 
@@ -237,13 +240,13 @@ impl Cli {
     fn handle_report_items(
         db_path: Option<PathBuf>,
         item_id: Option<u32>,
-        path_id: Option<u32>,
+        root_id: Option<u32>,
         format: String,
     ) -> Result<(), FsPulseError> {
         let db = Database::new(db_path)?;
         let format: ReportFormat = format.parse()?;
 
-        Reports::report_items(&db, item_id, path_id, format)?;
+        Reports::report_items(&db, item_id, root_id, format)?;
         Ok(())
     }
 

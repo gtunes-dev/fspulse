@@ -2,7 +2,7 @@ use crate::changes::{Change, ChangeType};
 use crate::error::FsPulseError;
 use crate::database::Database;
 use crate::items::Item;
-use crate::root_paths::RootPath;
+use crate::roots::Root;
 use crate::scans::Scan;
 use crate::utils::Utils;
 
@@ -53,26 +53,26 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_root_paths(db: &Database, path_id: Option<u32>, path: Option<String>, _format: ReportFormat) -> Result<(), FsPulseError> {
-        if path_id.is_none() && path.is_none(){
-            let mut stream = Reports::begin_root_paths_table();
+    pub fn report_roots(db: &Database, root_id: Option<u32>, root_path: Option<String>, _format: ReportFormat) -> Result<(), FsPulseError> {
+        if root_id.is_none() && root_path.is_none(){
+            let mut stream = Reports::begin_roots_table();
             
-            RootPath::for_each_root_path(
+            Root::for_each_root(
                 db,
-                |rp| {
-                    stream.row(rp.clone())?;
+                |root| {
+                    stream.row(root.clone())?;
                     Ok(())
                 }
             )?;
 
             stream.finish()?;
         } else {
-            let path_id: i64 = match (path_id, path) {
-                (Some(path_id), _) => {
-                    path_id.into()
+            let root_id: i64 = match (root_id, root_path) {
+                (Some(root_id), _) => {
+                    root_id.into()
                 }
-                (_, Some(path)) => {
-                    RootPath::get_from_path(db, &path)?.id()
+                (_, Some(root_path)) => {
+                    Root::get_from_path(db, &root_path)?.id()
                 }
                 (None, None) => {
                     // should be unreachable
@@ -80,54 +80,40 @@ impl Reports {
                 }
             };
 
-            // let root_path_id = path_id.unwrap();
-            let root_path = RootPath::get_from_id(db, path_id)?
-                .ok_or_else(|| FsPulseError::Error("Root Path Not Found".to_string()))?;
-            let mut stream = Self::begin_root_paths_table()
-                .title("Root Path");
+            let root = Root::get_from_id(db, root_id)?
+                .ok_or_else(|| FsPulseError::Error("Root Not Found".to_string()))?;
+            let mut stream = Self::begin_roots_table()
+                .title("Root");
 
-            stream.row(root_path.clone())?;
+            stream.row(root.clone())?;
             stream.finish()?;
-
-            /* 
-            if items {
-                let scan_id = root_path.latest_scan(db)?;
-
-                if scan_id.is_none() {
-                    Self::print_center(table_width, "No Last Scan - No Items");
-                    Self::hr(table_width);
-                    return Ok(());
-                }
-
-                let scan = Scan::new_from_id_else_latest(db, scan_id)?;
-
-                Self::print_scan(db, &scan, false, true, ReportFormat::Table)?;
-            }
-            */
         }
 
         Ok(())
     }
 
-    pub fn report_items(db: &Database, item_id: Option<u32>, path_id: Option<u32>, format: ReportFormat) -> Result<(), FsPulseError> {
+    pub fn report_items(db: &Database, item_id: Option<u32>, root_id: Option<u32>, format: ReportFormat) -> Result<(), FsPulseError> {
 
         // TODO: In the single item case, "tree" is not a valid report format
         if let Some(item_id) = item_id {
-            let item = Item::new(db, item_id.into())?
-                .ok_or_else(|| FsPulseError::Error("Item not found".to_string()))?;
+            let item = Item::get_by_id(db, item_id.into())?;
 
-            let mut stream = Self::begin_items_table("Item", "No Item");
-            stream.row(item)?;
+            let mut stream = Self::begin_items_table("Item", &format!("Item {} Not Found", item_id));
+
+            if let Some(item) = item {
+                stream.row(item)?;
+            }
+
             stream.finish()?;
-        } else if let Some(path_id) = path_id {
-            let root_path = RootPath::get_from_id(db, path_id.into())?
-                .ok_or_else(|| FsPulseError::Error(format!("Path id {} not found", path_id)))?;
+        } else if let Some(root_id) = root_id {
+            let root = Root::get_from_id(db, root_id.into())?
+                .ok_or_else(|| FsPulseError::Error(format!("Root id {} not found", root_id)))?;
 
-            let scan = Scan::new_for_last_path_scan(db, root_path.id())?;
+            let scan = Scan::new_for_last_path_scan(db, root.id())?;
 
             match format {
-                ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, &scan, &root_path)?,
-                ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root_path)?,
+                ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?,
+                ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root)?,
                 _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
             }
         }
@@ -175,29 +161,6 @@ impl Reports {
         stream.row(scan.clone())?;
         stream.finish()?;
 
-        /*
-        if changes || items {
-            let root_path = RootPath::get_from_id(db, scan.root_path_id())?
-                .ok_or_else(|| FsPulseError::Error("Root Path Not Found".to_string()))?;
-
-            if changes {
-                match format {
-                    ReportFormat::Tree => Self::print_scan_changes_as_tree(db, table_width, &scan, &root_path)?,
-                    ReportFormat::Table => Self::print_scan_changes_as_table(db, scan, &root_path)?,
-                    _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
-                }
-            }
-
-            if items {
-                match format {
-                    ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, table_width, &scan, &root_path)?,
-                    ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root_path)?,
-                    _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
-                }
-            }
-        }
-        */
-
         Ok(())
     }
 
@@ -222,7 +185,7 @@ impl Reports {
         let out = io::stdout();
         let stream = Stream::new(out, vec![
             Column::new(|f, s: &Scan| write!(f, "{}", s.id())).header("ID").right().min_width(6),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.root_path_id())).header("Path ID").right().min_width(6),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.root_id())).header("Root ID").right().min_width(6),
             Column::new(|f, s: &Scan| write!(f, "{}", s.is_deep())).header("Deep").center(),
             Column::new(|f, s: &Scan| write!(f, "{}", Utils::format_db_time_short(s.time_of_scan()))).header("Time"),
             Column::new(|f, s: &Scan| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.file_count()))).header("Files").right().min_width(7),
@@ -238,12 +201,12 @@ impl Reports {
         stream
     }
 
-    fn begin_root_paths_table() -> Stream<RootPath, Stdout> {
+    fn begin_roots_table() -> Stream<Root, Stdout> {
         let out = io::stdout();
         let stream = Stream::new(out, vec![
-            Column::new(|f, rp: &RootPath| write!(f, "{}", rp.id())).header("ID").right().min_width(6),
-            Column::new(|f, rp: &RootPath| write!(f, "{}", rp.path())).header("Path").left().min_width(109),
-        ]).title("Root Paths").empty_row("No Root Paths");
+            Column::new(|f, root: &Root| write!(f, "{}", root.id())).header("ID").right().min_width(6),
+            Column::new(|f, root: &Root| write!(f, "{}", root.path())).header("Path").left().min_width(109),
+        ]).title("Roots").empty_row("No Rootss");
 
         stream
     }
@@ -252,7 +215,7 @@ impl Reports {
         let out = io::stdout();
         let stream = Stream::new(out, vec![
             Column::new(|f, i: &Item| write!(f, "{}", i.id())).header("ID").right().min_width(6),
-            Column::new(|f, i: &Item| write!(f, "{}", i.root_path_id())).header("Path ID").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.root_id())).header("Root ID").right(),
             Column::new(|f, i: &Item| write!(f, "{}", i.last_seen_scan_id())).header("Last Scan").right(),
             Column::new(|f, i: &Item| write!(f, "{}", i.is_tombstone())).header("Tombstone").center(),
             Column::new(|f, i: &Item| write!(f, "{}", i.item_type())).header("Type").center(),
@@ -346,15 +309,15 @@ impl Reports {
         let width = 100;
 
         let scan = Scan::new_from_id(db, scan_id)?;
-        let root_path = RootPath::get_from_id(db, scan.root_path_id())?
-            .ok_or_else(|| FsPulseError::Error("Path not found".to_string()))?;
+        let root = Root::get_from_id(db, scan.root_id())?
+            .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?;
 
         Self::print_center(width, "Changes");
-        Self::print_center(width, &format!("Root Path: {}", root_path.path()));
+        Self::print_center(width, &format!("Root Path: '{}'", root.path()));
 
         Self::hr(width);
     
-        let root_path = Path::new(root_path.path());
+        let root_path = Path::new(root.path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
         let mut change_count = 0;
 
@@ -394,47 +357,11 @@ impl Reports {
         Ok(())
     }
 
-    /* 
-    fn with_each_scan_change<F>(db: &Database, scan_id: i64, mut func: F) -> Result<i32, FsPulseError>
-    where
-        F: FnMut(i64, &str, Option<bool>, Option<bool>, &str, &str),
-    {
-        let mut change_count = 0;
-
-        let mut stmt = db.conn.prepare(
-            "SELECT items.id, changes.change_type, changes.metadata_changed, changes.hash_changed, items.item_type, items.path
-            FROM changes
-            JOIN items ON items.id = changes.item_id
-            WHERE changes.scan_id = ?
-            ORDER BY items.path ASC"
-        )?;
-        
-        let rows = stmt.query_map([scan_id], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,          // Item ID
-                row.get::<_, String>(1)?,       // Change type (A, M, D, etc.)
-                row.get::<_, Option<bool>>(2)?, // Metadata Changed
-                row.get::<_, Option<bool>>(3)?, // Hash Changed
-                row.get::<_, String>(4)?,       // Item type (F, D)
-                row.get::<_, String>(5)?,       // Path
-            ))
-        })?;
-        
-        for row in rows {
-            let (id, change_type, metadata_changed, hash_changed, item_type, path) = row?;
-
-            func(id, &change_type, metadata_changed, hash_changed, &item_type, &path);
-            change_count = change_count + 1;
-        }
-        Ok(change_count)
-    }
-    */
-
-    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), FsPulseError> {
+    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root: &Root) -> Result<(), FsPulseError> {
         let mut stream = 
-            Self::begin_items_table(&format!("Items: {}", root_path.path()), "No Items");
+            Self::begin_items_table(&format!("Items: {}", root.path()), "No Items");
 
-        Item::with_each_last_seen_scan_item(
+        Item::for_each_item_in_latest_scan(
             db, 
             scan.id(),
             |item|  {
@@ -448,19 +375,20 @@ impl Reports {
         Ok(())
     }
 
-    fn print_last_seen_scan_items_as_tree(db: &Database, scan: &Scan, root_path: &RootPath) -> Result<(), FsPulseError> {
+    fn print_last_seen_scan_items_as_tree(db: &Database, scan: &Scan, root: &Root) -> Result<(), FsPulseError> {
         
         // TODO: figure out a default width
         let width = 100;
 
         Self::print_center(width, "Items");
-        Self::print_center(width, &format!("Root Path: {}", root_path.path()));
+        Self::print_center(width, &format!("Root Path: '{}'", root.path()));
         Self::hr(width);
 
-        let root_path = Path::new(root_path.path());
+        let root_path = Path::new(root.path());
         let mut path_stack: Vec<PathBuf> = Vec::new();
+        let mut item_count = 0;
 
-        let item_count = Item::with_each_last_seen_scan_item(
+        Item::for_each_item_in_latest_scan(
             db, 
             scan.id(), 
             |item| {
@@ -475,6 +403,7 @@ impl Reports {
                     new_path.to_string_lossy(),
                     Utils::dir_sep_or_empty(is_dir),
                 );
+                item_count += 1;
                 Ok(())
             }
         )?;

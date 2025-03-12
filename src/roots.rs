@@ -6,21 +6,21 @@ use crate::error::FsPulseError;
 
 
 #[derive(Clone, Debug, Default)]
-pub struct RootPath {
+pub struct Root {
     id: i64,
     path: String
 }
 
-impl RootPath {
+impl Root {
     pub fn get_from_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;
 
         match conn.query_row(
-            "SELECT path FROM root_paths WHERE id = ?", 
+            "SELECT path FROM roots WHERE id = ?", 
             [id], 
             |row| row.get(0),
         ) {
-            Ok(path) => Ok(Some(RootPath { id, path } )),
+            Ok(path) => Ok(Some(Root { id, path } )),
             Err(QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(FsPulseError::Database(e)),
         }
@@ -30,18 +30,20 @@ impl RootPath {
     // queries and the possible errors. Apply this pattern everywhere.
     pub fn get_from_path(db: &Database, path: &str) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
+
+        // TODO: Should we try to canonicalize the path?
     
         match conn.query_row(
-            "SELECT id, path FROM root_paths WHERE path = ?",
+            "SELECT id, path FROM roots WHERE path = ?",
             [path],
-            |row| Ok(RootPath {
+            |row| Ok(Root {
                 id: row.get(0)?,   
                 path: row.get(1)?, 
             }),
         ) {
-            Ok(root_path) => Ok(root_path),
+            Ok(root) => Ok(root),
             Err(QueryReturnedNoRows) => {
-                Err(FsPulseError::Error(format!("Path '{}' not found", path)))
+                Err(FsPulseError::Error(format!("Root '{}' not found", path)))
             }
             Err(e) => Err(FsPulseError::Database(e)),
         }
@@ -50,15 +52,15 @@ impl RootPath {
     pub fn get_or_insert(db: &Database, path: &str) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
 
-        conn.execute("INSERT OR IGNORE INTO root_paths (path) VALUES (?)", [path])?;
+        conn.execute("INSERT OR IGNORE INTO roots (path) VALUES (?)", [path])?;
 
         let id: i64 = conn.query_row(
-            "SELECT id FROM root_paths WHERE path = ?",
+            "SELECT id FROM roots WHERE path = ?",
             [path],
             |row| row.get(0),
         )?;
 
-        Ok(RootPath { id, path: path.to_owned() })
+        Ok(Root { id, path: path.to_owned() })
     }
 
     pub fn id(&self) -> i64 {
@@ -69,19 +71,19 @@ impl RootPath {
         &self.path
     }
 
-    pub fn for_each_root_path<F>(db: &Database, mut func: F) -> Result<(), FsPulseError> 
+    pub fn for_each_root<F>(db: &Database, mut func: F) -> Result<(), FsPulseError> 
     where
-        F: FnMut(&RootPath) -> Result<(), FsPulseError>,
+        F: FnMut(&Root) -> Result<(), FsPulseError>,
     {
    
         let mut stmt = db.conn.prepare(
             "SELECT id, path
-            FROM root_paths
+            FROM roots
             ORDER BY id ASC"
         )?;
 
         let rows = stmt.query_map([], |row| {
-            Ok(RootPath {
+            Ok(Root {
                 id: row.get::<_, i64>(0)?,      // root path id
                 path: row.get::<_, String>(1)?, // path
             })
@@ -89,8 +91,8 @@ impl RootPath {
 
         for row in rows {
 
-            let root_path= row?;
-            func(&root_path)?;
+            let root= row?;
+            func(&root)?;
         }
 
         Ok(())
@@ -102,7 +104,7 @@ impl RootPath {
         match conn.query_row(
             "SELECT id 
             FROM scans
-            WHERE root_path_id = ?
+            WHERE root_id = ?
             ORDER BY ID DESC
             LIMIT 1", 
             [self.id], 
