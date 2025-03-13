@@ -6,6 +6,7 @@ use crate::items::ItemType;
 use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
 
+use indicatif::{ProgressBar, ProgressStyle};
 use rusqlite::{ OptionalExtension, Result, params };
 
 use std::collections::VecDeque;
@@ -208,6 +209,19 @@ impl Scan {
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
         let mut q = VecDeque::new();
+
+        let mut progress_bar = if deep {
+            let bar = ProgressBar::new(0); // Initialize with 0 length
+        
+            // TODO: this error will panic
+            bar.set_style(ProgressStyle::default_bar()
+                .template("{msg}\n[{bar:40}] {bytes}/{total_bytes} ({eta})")
+                .unwrap()
+                .progress_chars("#>-"));
+            Some(bar)
+        } else {
+            None
+        };
     
         q.push_back(QueueEntry {
             path: root_path_buf.clone(),
@@ -243,15 +257,19 @@ impl Scan {
     
                     // println!("{:?}: {}", item_type, item.path().display());
                     let mut hash = None;
-                    if deep && item_type == ItemType::File {
-                        hash = match Hash::compute_md5_hash(&item.path()) {
-                            Ok(hash_s) => Some(hash_s),
-                            Err(error) => {
-                                eprintln!("Error computing hash: {}", error);
-                                None
+                    match (item_type, progress_bar.as_mut()) {
+                        (ItemType::File, Some(ref progress_bar)) => {
+                            hash = match Hash::compute_md5_hash(&item.path(), progress_bar) {
+                                Ok(hash_s) => Some(hash_s),
+                                Err(error) => {
+                                    eprintln!("Error computing hash: {}", error);
+                                    None
+                                }
                             }
-                        }
-                    };
+                        },
+                        _ => { // nothing to do
+                        },
+                    }
 
                     let file_change_type = scan.handle_item(db, item_type, &item.path(), &metadata, hash.as_deref())?;
                     scan.change_counts.increment_count_of(file_change_type);

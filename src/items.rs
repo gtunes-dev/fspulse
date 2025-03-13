@@ -2,7 +2,7 @@ use rusqlite::{self, params, OptionalExtension};
 
 use crate::{database::Database, error::FsPulseError};
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy,Clone, Debug, PartialEq)]
 pub enum ItemType {
     File,
     Directory,
