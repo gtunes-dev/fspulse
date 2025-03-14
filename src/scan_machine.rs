@@ -17,15 +17,25 @@
 // 4. Completed
 // 5. Aborted
 
+use crate::items::ItemType;
 use crate::{database::Database, error::FsPulseError, scans::Scan};
-use crate::roots::{self, Root};
-use crate::scans::{self, ScanState};
+use crate::roots::Root;
+use crate::scans::ScanState;
 
-use dialoguer::{MultiSelect, Select};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+use dialoguer::Select;
+use log::Metadata;
+use std::collections::VecDeque;
 use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
+#[derive(Clone, Debug)]
+struct QueueEntry {
+    path: PathBuf,
+    metadata: fs::Metadata,
+}
 
 
 pub fn do_scan_machine(
@@ -116,14 +126,50 @@ fn abort_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan) -> Resu
 
 fn initiate_scan(db: &Database, root: &Root, hashing: bool, validating: bool) -> Result<(), FsPulseError> {
     let scan = Scan::create(db, root, hashing, validating)?;
-    let root_path_buf = PathBuf::from(root.path());
-    let metadata = fs::symlink_metadata(&root_path_buf)?;
-
-    
-    Ok(())
+    do_state_scanning(db, root, &scan)
 }
 
 fn do_state_scanning(db: &Database, root: &Root, scan: &Scan) -> Result<(), FsPulseError> {
+    let root_path_buf = PathBuf::from(root.path());
+    let metadata = fs::symlink_metadata(&root_path_buf)?;
+
+    let mut q = VecDeque::new();
+
+    let multi = MultiProgress::new();
+    multi.println(format!("Scanning: {}", root.path()))?;
+    let dir_bar = multi.add(ProgressBar::new_spinner());
+    dir_bar.enable_steady_tick(Duration::from_millis(100));
+    let item_bar = multi.add(ProgressBar::new_spinner());
+    item_bar.enable_steady_tick(Duration::from_millis(100));
+
+    let mut progress_bar = if scan.hashing() || scan.validating() {
+        let bar = ProgressBar::new(0); // Initialize with 0 length
+    
+        // TODO: this error will panic
+        bar.set_style(ProgressStyle::default_bar()
+            .template("{msg}\n[{bar:40}] {bytes}/{total_bytes} ({eta})")
+            .unwrap()
+            .progress_chars("#>-"));
+        Some(bar)
+    } else {
+        None
+    };
+
+    q.push_back(QueueEntry {
+        path: root_path_buf.clone(),
+        metadata,
+    });
+
+    while let Some(q_entry) = q.pop_front() {
+        dir_bar.set_message(format!("Directory: '{}'", q_entry.path.to_string_lossy()));
+
+        // The root was previously pushed onto the queue to enable it to be scanned but
+        // we don't want to insert it into the database as an item, so we skip this
+
+    }
+
+
+
 
     do_state_sweeping(db, root, scan)
 }
@@ -138,4 +184,14 @@ fn do_state_analyzing(db: &Database, root: &Root, scan: &Scan) -> Result<(), FsP
     Ok(())
 }
 
+fn handle_scan_item(
+    db: &Database, 
+    item_type: ItemType, 
+    path: &Path, 
+    metadata: &Metadata,
+    file_hash: Option<&str>,
+    file_is_valid: Option<bool>,
+) -> Result<(), FsPulseError> {
+    
+}
 

@@ -213,8 +213,8 @@ impl Cli {
         validate: bool
     ) -> Result<(), FsPulseError> {
         let mut db = Database::new(db_path)?;
-        Scan::do_scan(&mut db, root_id, root_path, last, hash, validate)?;
-        //do_scan_machine(&mut db, root_id, root_path, last, hash, validate)?;
+        //Scan::do_scan(&mut db, root_id, root_path, last, hash, validate)?;
+        do_scan_machine(&mut db, root_id, root_path, last, hash, validate)?;
 
 
         Ok(())
