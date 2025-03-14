@@ -74,7 +74,9 @@ impl Reports {
                     root_id.into()
                 }
                 (_, Some(root_path)) => {
-                    Root::get_from_path(db, &root_path)?.id()
+                    Root::get_by_path(db, &root_path)?
+                    .ok_or_else(|| FsPulseError::Error(format!("Root Path '{}' not found", &root_path)))?
+                    .id()
                 }
                 (None, None) => {
                     // should be unreachable
@@ -82,7 +84,7 @@ impl Reports {
                 }
             };
 
-            let root = Root::get_from_id(db, root_id)?
+            let root = Root::get_by_id(db, root_id)?
                 .ok_or_else(|| FsPulseError::Error("Root Not Found".to_string()))?;
             let mut stream = Self::begin_roots_table()
                 .title("Root");
@@ -123,7 +125,7 @@ impl Reports {
                 stream.finish()?;
             },
             (_, _, Some(root_id)) => {
-                let root = Root::get_from_id(db, root_id.into())?
+                let root = Root::get_by_id(db, root_id.into())?
                     .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", root_id)))?;
 
                 let scan = Scan::get_latest_for_root(db, root.id())?
@@ -181,7 +183,7 @@ impl Reports {
     pub fn print_scan(db: &Database, scan: &Option<Scan>, _format: ReportFormat) -> Result<(), FsPulseError> {
         let table_title= match scan {
             Some(scan) => {
-                let root = Root::get_from_id(db, scan.root_id())?
+                let root = Root::get_by_id(db, scan.root_id())?
                     .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", scan.root_id())))?;
                 format!("Scan (Root Path: '{}')", root.path())
             }
@@ -221,11 +223,13 @@ impl Reports {
         let stream = Stream::new(out, vec![
             Column::new(|f, s: &Scan| write!(f, "{}", s.id())).header("ID").right().min_width(6),
             Column::new(|f, s: &Scan| write!(f, "{}", s.root_id())).header("Root ID").right().min_width(6),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.is_deep())).header("Deep").center(),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.state())).header("State").center().min_width(10),
+
+            Column::new(|f, s: &Scan| write!(f, "{}", s.hashing())).header("Hashing").center(),
+            Column::new(|f, s: &Scan| write!(f, "{}", s.validating())).header("Validating").center(),
             Column::new(|f, s: &Scan| write!(f, "{}", Utils::format_db_time_short(s.time_of_scan()))).header("Time"),
             Column::new(|f, s: &Scan| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.file_count()))).header("Files").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.folder_count()))).header("Folders").right().min_width(7),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.is_complete())).header("Complete").center(),
 
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Add))).header("Adds").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Modify))).header("Modifies").right().min_width(7),
@@ -251,13 +255,16 @@ impl Reports {
         let stream = Stream::new(out, vec![
             Column::new(|f, i: &Item| write!(f, "{}", i.id())).header("ID").right().min_width(6),
             Column::new(|f, i: &Item| write!(f, "{}", i.root_id())).header("Root ID").right(),
-            Column::new(|f, i: &Item| write!(f, "{}", i.last_seen_scan_id())).header("Last Scan").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
             Column::new(|f, i: &Item| write!(f, "{}", i.is_tombstone())).header("Tombstone").center(),
             Column::new(|f, i: &Item| write!(f, "{}", i.item_type())).header("Type").center(),
-            Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.last_modified()))).header("Modified").left(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.file_size()))).header("Size").right(),
             Column::new(|f, i: &Item| write!(f, "{}", i.file_hash().unwrap_or("-"))).header("Hash").center(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_bool_or_none_as_str(i.file_is_valid()))).header("Is Valid").center(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.last_scan_id())).header("Last Scan").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_hash_scan_id()))).header("Last Hash Scan").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_is_valid_scan_id()))).header("Last Is Valid Scan").right(),
         ]).title(title).empty_row(empty_row);
         
         stream
@@ -272,11 +279,10 @@ impl Reports {
             Column::new(|f, c: &Change| write!(f, "{}", c.item_type)).header("Item Type").center(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_path)).header("Item Path").left(),
             Column::new(|f, c: &Change| write!(f, "{}", c.change_type)).header("Change Type").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.metadata_changed))).header("Meta Changed").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_last_modified))).header("Prev Modified").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_file_size))).header("Prev Size").right(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.hash_changed))).header("Hash Changed").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(&c.prev_hash))).header("Prev Hash").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.prev_is_valid))).header("Prev Is Valid").center(),
         ]).title(title).empty_row(empty_row);
 
         stream
@@ -346,7 +352,7 @@ impl Reports {
 
         let scan = Scan::get_by_id(db, scan_id)?
             .ok_or_else(|| FsPulseError::Error(format!("Scan Id {} not found", scan_id)))?;
-        let root = Root::get_from_id(db, scan.root_id())?
+        let root = Root::get_by_id(db, scan.root_id())?
             .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", scan.root_id())))?;
 
         Self::print_center(width, "Changes");

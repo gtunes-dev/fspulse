@@ -7,6 +7,7 @@ mod items;
 mod reports;
 mod roots;
 mod scans;
+mod scan_machine;
 mod schema;
 mod utils;
 

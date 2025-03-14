@@ -6,23 +6,24 @@ use crate::items::ItemType;
 use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
 
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rusqlite::{ OptionalExtension, Result, params };
 
 use std::collections::VecDeque;
-use std::env;
+use std::{env, fmt};
 use std::fs;
 use std::fs::Metadata;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
 
 const SQL_SCAN_ID_OR_LATEST: &str = 
-    "SELECT id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete
+    "SELECT id, root_id, state, hashing, validating, time_of_scan, file_count, folder_count
         FROM scans
         WHERE id = IFNULL(?1, (SELECT MAX(id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str = 
-    "SELECT id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete
+    "SELECT id, root_id, state, hashing, validating, time_of_scan, file_count, folder_count
         FROM scans
         WHERE root_id = ?
         ORDER BY id DESC LIMIT 1";
@@ -32,14 +33,60 @@ pub struct Scan {
     // Schema fields
     id: i64,
     root_id: i64,
-    is_deep: bool,
+    state: ScanState,
+    hashing: bool,
+    validating: bool,
     time_of_scan: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
-    is_complete: bool,   
-
+    
     // Scan state
     change_counts: ChangeCounts,
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(i64)]  // Ensures explicit numeric representation
+pub enum ScanState {
+    #[default]
+    Pending = 0,
+    Scanning = 1,
+    Sweeping = 2,
+    Analyzing = 3,
+    Completed = 4,
+    Aborted = 5,
+    Unknown = -1,
+}
+
+impl ScanState {
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            1 => ScanState::Scanning,
+            2 => ScanState::Sweeping,
+            3 => ScanState::Analyzing,
+            4 => ScanState::Completed,
+            5 => ScanState::Aborted,
+            _ => ScanState::Unknown,  // Handle unknown states
+        }
+    }
+
+    pub fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+}
+
+impl fmt::Display for ScanState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            ScanState::Pending => "Pending",
+            ScanState::Scanning => "Scanning",
+            ScanState::Sweeping => "Sweeping",
+            ScanState::Analyzing => "Analyzing",
+            ScanState::Completed => "Completed",
+            ScanState::Aborted => "Aborted",
+            ScanState::Unknown => "Unknown",
+        };
+        write!(f, "{}", name)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -51,14 +98,29 @@ struct QueueEntry {
 impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
-    fn new_for_scan(id: i64, root_id: i64, is_deep: bool, time_of_scan: i64) -> Self {
+    fn new_for_scan(id: i64, root_id: i64, state: ScanState, hashing: bool, validating: bool, time_of_scan: i64) -> Self {
         Scan {
             id,
             root_id,
-            is_deep,
+            state,
+            hashing,
+            validating,
             time_of_scan,
             ..Default::default()
         }
+    }
+
+    pub fn create(db: &Database, root: &Root, hashing: bool, validating: bool) -> Result<Self, FsPulseError> {
+        let (scan_id, time_of_scan): (i64, i64) = db.conn.query_row(
+            "INSERT INTO scans (root_id, state, hashing, validating, time_of_scan) 
+             VALUES (?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
+             RETURNING id, time_of_scan",
+            [root.id(), ScanState::Scanning.as_i64(), hashing as i64, validating as i64],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+    
+        let scan = Scan::new_for_scan(scan_id, root.id(), ScanState::Scanning, false, false, time_of_scan);
+        Ok(scan)
     }
 
     pub fn get_latest(db: &Database) -> Result<Option<Self>, FsPulseError> {
@@ -84,23 +146,24 @@ impl Scan {
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,
         // load the specified scan
-        let scan_row: Option<(i64, i64, bool, i64, Option<i64>, Option<i64>, bool)> = conn.query_row(
+        let scan_row: Option<(i64, i64, i64, bool, bool, i64, Option<i64>, Option<i64>)> = conn.query_row(
             query,
             params![query_param],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
         )
         .optional()?;
 
-        scan_row.map(|(id, root_id, is_deep, time_of_scan, file_count, folder_count, is_complete)| {
+        scan_row.map(|(id, root_id, state, hashing, validating, time_of_scan, file_count, folder_count)| {
             let change_counts = ChangeCounts::get_by_scan_id(db, id)?;
             Ok(Scan {
                 id,
                 root_id,
-                is_deep,
+                state: ScanState::from_i64(state),
+                hashing,
+                validating,
                 time_of_scan,
                 file_count,
                 folder_count,
-                is_complete,
                 change_counts,
             })
         })
@@ -115,8 +178,16 @@ impl Scan {
         self.root_id
     }
 
-    pub fn is_deep(&self) -> bool {
-        self.is_deep
+    pub fn state(&self) -> ScanState {
+        self.state
+    }
+
+    pub fn hashing(&self) -> bool {
+        self.hashing
+    }
+
+    pub fn validating(&self) -> bool {
+        self.validating
     }
 
     pub fn time_of_scan(&self) -> i64 {
@@ -131,12 +202,36 @@ impl Scan {
         self.folder_count
     }
 
-    pub fn is_complete(&self) -> bool {
-        self.is_complete
-    }
-
     pub fn change_counts(&self) -> &ChangeCounts {
         &self.change_counts
+    }
+
+
+    pub fn abort(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+        match self.state {
+            ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
+                self.set_state(db, ScanState::Aborted)
+            }
+            _ => Err(FsPulseError::Error(format!("Can't abort scan - invalid state {}", self.state.as_i64())))
+        }
+    }
+
+    fn set_state(&mut self, db: &mut Database, new_state: ScanState) -> Result<(), FsPulseError> {
+        let conn = &mut db.conn;
+
+        let rows_updated = conn.execute(
+            "UPDATE scans SET state = ? WHERE id = ?", 
+            [new_state.as_i64(), self.id]
+        )?;
+
+        if rows_updated == 0 {
+            return Err(FsPulseError::Error(
+                format!("Could not update the state of Scan Id {} to {}", self.id, new_state.as_i64())));
+        }
+
+        self.state = new_state;
+
+        Ok(())
     }
 
     pub fn do_scan(
@@ -144,11 +239,12 @@ impl Scan {
         root_id: Option<u32>, 
         root_path: Option<String>, 
         last: bool, 
-        deep: bool
+        hash: bool,
+        validate: bool
     ) -> Result<Scan, FsPulseError> {
         let path = match (last, root_id, root_path) {
             (_, Some(root_id), _) => {
-                Root::get_from_id(db, root_id.into())?
+                Root::get_by_id(db, root_id.into())?
                     .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", root_id)))?
                     .path()
                     .to_string()
@@ -156,7 +252,7 @@ impl Scan {
             (true, None, _) => {
                 let scan = Self::get_latest(db)?
                     .ok_or_else(|| FsPulseError::Error("No latest scan found".into()))?;
-                Root::get_from_id(db, scan.root_id())?
+                Root::get_by_id(db, scan.root_id())?
                     .ok_or_else(|| FsPulseError::Error("Root not found".into()))?
                     .path()
                     .to_string()
@@ -165,7 +261,7 @@ impl Scan {
             (false, None, None) => return Err(FsPulseError::Error("No path specified".into())),
         };
         
-        let (scan, _root) = Scan::scan_directory(db, path, deep)?;
+        let (scan, _root) = Scan::scan_directory(db, &path, hash, validate)?;
         Reports::print_scan(db, &Some(scan), ReportFormat::Table)?;
 
         Ok(scan)
@@ -203,14 +299,22 @@ impl Scan {
         Ok(canonical_path)
     }
 
-    fn scan_directory(db: &mut Database, path: String, deep: bool) -> Result<(Self, Root), FsPulseError> {
-        let (mut scan, root) = Self::begin_scan(db, path, deep)?;
+    fn scan_directory(db: &mut Database, path: &str, hash: bool, validate: bool) -> Result<(Self, Root), FsPulseError> {
+        let (mut scan, root) = Self::begin_scan(db, path, hash, validate)?;
         let root_path_buf = PathBuf::from(root.path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
         let mut q = VecDeque::new();
 
-        let mut progress_bar = if deep {
+        
+        let multi = MultiProgress::new();
+        multi.println(format!("Scanning: {}", &path))?;
+        let dir_bar = multi.add(ProgressBar::new_spinner());
+        dir_bar.enable_steady_tick(Duration::from_millis(100));
+        let item_bar = multi.add(ProgressBar::new_spinner());
+        item_bar.enable_steady_tick(Duration::from_millis(100));
+
+        let mut progress_bar = if hash {
             let bar = ProgressBar::new(0); // Initialize with 0 length
         
             // TODO: this error will panic
@@ -229,6 +333,7 @@ impl Scan {
         });
     
         while let Some(q_entry) = q.pop_front() {
+            dir_bar.set_message(format!("Directory: '{}'", q_entry.path.to_string_lossy()));
             // Update the database
             if q_entry.path != root_path_buf {
                 let dir_change_type = scan.handle_item(db, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata, None)?;
@@ -240,7 +345,8 @@ impl Scan {
             for item in items {
                 let item = item?;
                 let metadata = fs::symlink_metadata(item.path())?; // Use symlink_metadata to check for symlinks
-    
+                item_bar.set_message(format!("Item: '{}'", item.file_name().to_string_lossy()));
+
                 if metadata.is_dir() {
                     q.push_back(QueueEntry {
                         path: item.path(),
@@ -281,7 +387,7 @@ impl Scan {
         Ok((scan, root))
     }
 
-    fn begin_scan(db: &mut Database, path_arg: String, deep: bool) -> Result<(Self, Root), FsPulseError> {
+    fn begin_scan(db: &mut Database, path_arg: &str, hashing: bool, validating: bool) -> Result<(Self, Root), FsPulseError> {
         let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
         let root_path_str = path_canonical.to_string_lossy().to_string();
 
@@ -289,14 +395,14 @@ impl Scan {
         let root_id = root.id();
 
         let (scan_id, time_of_scan): (i64, i64) = db.conn.query_row(
-            "INSERT INTO scans (root_id, is_deep, time_of_scan) 
-             VALUES (?, ?, strftime('%s', 'now', 'utc')) 
+            "INSERT INTO scans (root_id, state, hashing, validating, time_of_scan) 
+             VALUES (?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
              RETURNING id, time_of_scan",
-            [root_id, deep as i64],
+            [root_id, ScanState::Scanning.as_i64(), hashing as i64, validating as i64],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
 
-        let scan = Scan::new_for_scan(scan_id, root_id, deep, time_of_scan);
+        let scan = Scan::new_for_scan(scan_id, root_id, ScanState::Scanning, false, false, time_of_scan);
         Ok((scan, root))
     }
 
@@ -341,7 +447,7 @@ impl Scan {
             
                 if is_tombstone {
                     let tx = conn.transaction()?;
-                    tx.execute("UPDATE items SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ?, is_tombstone = 0 WHERE id = ?", 
+                    tx.execute("UPDATE items SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_scan_id = ?, is_tombstone = 0 WHERE id = ?", 
                         (item_type_str, last_modified, file_size, file_hash, scan_id, item_id))?;
                     tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)", 
                         (scan_id, item_id, ChangeType::Add.as_str()))?;
@@ -350,31 +456,31 @@ impl Scan {
                 } else if existing_type != item_type_str {
                     // Item type changed (e.g., file -> directory)
                     let tx = conn.transaction()?;
-                    tx.execute("UPDATE items SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_seen_scan_id = ? WHERE id = ?", 
+                    tx.execute("UPDATE items SET item_type = ?, last_modified = ?, file_size = ?, file_hash = ?, last_scan_id = ? WHERE id = ?", 
                         (item_type_str, last_modified, file_size, file_hash, scan_id, item_id))?;
-                    tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)", 
+                    tx.execute("INSERT INTO changes (scanhttps://docs.rs/crate/console/0.15.11/features_id, item_id, change_type) VALUES (?, ?, ?)", 
                         (self.id, item_id, ChangeType::TypeChange.as_str()))?;
                     tx.commit()?;
                     ChangeType::TypeChange
                 } else if metadata_changed || hash_changed {
                     // Item content changed
                     let tx = conn.transaction()?;
+
+                     // TODO: this is not doing the right thing with last_hash_scan_id and last_is_valid_scan_id
                     tx.execute("UPDATE items 
                         SET last_modified = ?, 
-                        file_size = ?,
+                        file_size = ?,             
                         file_hash = ?,
-                        last_seen_scan_id = ? 
+                        last_scan_id = ? 
                         WHERE id = ?", 
                         (last_modified, file_size, file_hash.or(existing_hash.as_deref()), scan_id, item_id))?;
                     tx.execute("INSERT INTO changes 
-                        (scan_id, item_id, change_type, metadata_changed, hash_changed, prev_last_modified, prev_file_size, prev_hash) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                        (scan_id, item_id, change_type, prev_last_modified, prev_file_size, prev_hash) 
+                        VALUES (?, ?, ?, ?, ?, ?)", 
                         (
                             scan_id, 
                             item_id, 
                             ChangeType::Modify.as_str(),
-                            metadata_changed,
-                            hash_changed,
                             metadata_changed.then_some(existing_modified),
                             metadata_changed.then_some(existing_size),
                             hash_changed.then_some(existing_hash),
@@ -382,8 +488,8 @@ impl Scan {
                     tx.commit()?;
                     ChangeType::Modify
                 } else {
-                    // No change, just update last_seen_scan_id
-                    conn.execute("UPDATE items SET last_seen_scan_id = ? WHERE root_id = ? AND id = ?", 
+                    // No change, just update last_scan_id
+                    conn.execute("UPDATE items SET last_scan_id = ? WHERE root_id = ? AND id = ?", 
                         (scan_id, root_id, item_id))?;
                     ChangeType::NoChange
                 }
@@ -391,7 +497,7 @@ impl Scan {
             None => {
                 // Item is new, insert into items and changes tables
                 let tx = conn.transaction()?;
-                tx.execute("INSERT INTO items (root_id, path, item_type, last_modified, file_size, file_hash, last_seen_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                tx.execute("INSERT INTO items (root_id, path, item_type, last_modified, file_size, file_hash, last_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (root_id, &path_str, item_type.as_str(), last_modified, file_size, file_hash, scan_id))?;
                 let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
                 tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)",
@@ -417,13 +523,13 @@ impl Scan {
             "INSERT INTO changes (scan_id, item_id, change_type)
              SELECT ?, id, ?
              FROM items
-             WHERE root_id = ? AND is_tombstone = 0 AND last_seen_scan_id < ?",
+             WHERE root_id = ? AND is_tombstone = 0 AND last_scan_id < ?",
             (scan_id, ChangeType::Delete.as_str(), root_id, scan_id),
         )?;
         
         // Mark unseen items as tombstones
         tx.execute(
-            "UPDATE items SET is_tombstone = 1 WHERE root_id = ? AND last_seen_scan_id < ? AND is_tombstone = 0",
+            "UPDATE items SET is_tombstone = 1 WHERE root_id = ? AND last_scan_id < ? AND is_tombstone = 0",
             (root_id, scan_id),
         )?;
 
@@ -432,22 +538,22 @@ impl Scan {
         "SELECT 
             SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count, 
             SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count 
-            FROM items WHERE last_seen_scan_id = ?",
+            FROM items WHERE last_scan_id = ?",
             [scan_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).unwrap_or((0, 0)); // If no data, default to 0
 
         // Update the scan entity to indicate that it completed
         tx.execute(
-            "UPDATE scans SET file_count = ?, folder_count = ?, is_complete = 1 WHERE id = ?",
-            (file_count, folder_count, scan_id)
+            "UPDATE scans SET file_count = ?, folder_count = ?, state = ? WHERE id = ?",
+            (file_count, folder_count, ScanState::Completed.as_i64(), scan_id)
         )?;
 
         tx.commit()?;
 
         self.file_count = Some(file_count);
         self.folder_count = Some(folder_count);
-        self.is_complete = true;
+        self.state = ScanState::Completed;
 
         // scan.change_counts acts as an accumulator during a scan but now we get the truth from the
         // database. We need this to include deletes since they aren't known until tombstoning is complete
@@ -467,19 +573,20 @@ impl Scan {
         let mut stmt = db.conn.prepare(
             "SELECT 
                 s.id,
-                s.is_deep,
+                s.root_id,
+                s.state,
+                s.hashing,
+                s.validating,
                 s.time_of_scan,
                 s.file_count,
                 s.folder_count, 
-                s.is_complete,
-                s.root_id,
                 COALESCE(SUM(CASE WHEN c.change_type = 'A' THEN 1 ELSE 0 END), 0) AS add_count,
                 COALESCE(SUM(CASE WHEN c.change_type = 'M' THEN 1 ELSE 0 END), 0) AS modify_count,
                 COALESCE(SUM(CASE WHEN c.change_type = 'D' THEN 1 ELSE 0 END), 0) AS delete_count,
                 COALESCE(SUM(CASE WHEN c.change_type = 'T' THEN 1 ELSE 0 END), 0) AS type_change_count
             FROM scans s
             LEFT JOIN changes c ON s.id = c.scan_id
-            GROUP BY s.id, s.is_deep, s.time_of_scan, s.file_count, s.folder_count, s.is_complete, s.root_id
+            GROUP BY s.id, s.root_id, s.state, s.hashing, s.validating, s.time_of_scan, s.file_count, s.folder_count
             ORDER BY s.id DESC
             LIMIT ?"
         )?;
@@ -487,17 +594,18 @@ impl Scan {
         let rows = stmt.query_map([last], |row| {
             Ok(Scan {
                 id: row.get::<_, i64>(0)?,                              // scan id
-                is_deep: row.get::<_, bool>(1)?,                        // is deep
-                time_of_scan: row.get::<_, i64>(2)?,                    // time of scan
-                file_count: row.get::<_, Option<i64>>(3)?,              // file count
-                folder_count: row.get::<_, Option<i64>>(4)?,            // folder count
-                is_complete: row.get::<_, bool>(5)?,                    // is complete
-                root_id: row.get::<_, i64>(6)?,                         // root id
+                root_id: row.get::<_, i64>(1)?,                         // root id
+                state: ScanState::from_i64(row.get::<_, i64>(2)?),                         // root id
+                hashing: row.get::<_, bool>(3)?,                        // hashing
+                validating: row.get::<_, bool>(4)?,                        // validating
+                time_of_scan: row.get::<_, i64>(5)?,                    // time of scan
+                file_count: row.get::<_, Option<i64>>(6)?,              // file count
+                folder_count: row.get::<_, Option<i64>>(7)?,            // folder count
                 change_counts: ChangeCounts::new(  
-                    row.get::<_, i64>(7)?,             // adds
-                    row.get::<_, i64>(8)?,          // modifies
-                    row.get::<_, i64>(9)?,          // deletes
-                    row.get::<_, i64>(10)?,    // type changes
+                    row.get::<_, i64>(8)?,             // adds
+                    row.get::<_, i64>(9)?,          // modifies
+                    row.get::<_, i64>(10)?,          // deletes
+                    row.get::<_, i64>(11)?,    // type changes
                     0,
                 ),
             })

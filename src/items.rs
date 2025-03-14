@@ -25,14 +25,16 @@ impl ItemType {
 pub struct Item {           // TODO: Change sql schema to have this column order
     id: i64,
     root_id: i64,
-    last_seen_scan_id: i64,
-    is_tombstone: bool,
-    item_type: String,
     path: String,
+    item_type: String,
+    is_tombstone: bool,
     last_modified: Option<i64>,
     file_size: Option<i64>,
     file_hash: Option<String>,
-    
+    file_is_valid: Option<bool>,
+    last_scan_id: i64,
+    last_hash_scan_id: Option<i64>,
+    last_is_valid_scan_id: Option<i64>
 }
 
 impl Item {
@@ -40,7 +42,7 @@ impl Item {
         let conn = &db.conn;
 
         conn.query_row(
-            "SELECT id, root_id, path, is_tombstone, item_type, last_modified, file_size, file_hash, last_seen_scan_id
+            "SELECT id, root_id, path, item_type, is_tombstone, last_modified, file_size, file_hash, file_is_valid, last_scan_id, last_hash_scan_id, last_is_valid_scan_id
              FROM items
              WHERE id = ?",
             params![id],
@@ -48,12 +50,15 @@ impl Item {
                 id: row.get(0)?,
                 root_id: row.get(1)?,
                 path: row.get(2)?,
-                is_tombstone: row.get(3)?,
-                item_type: row.get(4)?,
+                item_type: row.get(3)?,
+                is_tombstone: row.get(4)?,
                 last_modified: row.get(5)?,
                 file_size: row.get(6)?,
                 file_hash: row.get(7)?,
-                last_seen_scan_id: row.get(8)?,
+                file_is_valid: row.get(8)?,
+                last_scan_id: row.get(9)?,
+                last_hash_scan_id: row.get(10)?,
+                last_is_valid_scan_id: row.get(11)?,
             }),
         )
         .optional()
@@ -62,13 +67,16 @@ impl Item {
 
     pub fn id(&self) -> i64 { self.id }
     pub fn root_id(&self) -> i64 { self.root_id }
-    pub fn last_seen_scan_id(&self) -> i64 { self.last_seen_scan_id }
-    pub fn is_tombstone(&self) -> bool { self.is_tombstone }
-    pub fn item_type(&self) -> &str { &self.item_type }
     pub fn path(&self) -> &str { &self.path }
+    pub fn item_type(&self) -> &str { &self.item_type }
+    pub fn is_tombstone(&self) -> bool { self.is_tombstone }
     pub fn last_modified(&self) -> Option<i64> { self.last_modified }
     pub fn file_size(&self) -> Option<i64> { self.file_size }
     pub fn file_hash(&self) -> Option<&str> { self.file_hash.as_deref() }
+    pub fn file_is_valid(&self) -> Option<bool> { self. file_is_valid }
+    pub fn last_scan_id(&self) -> i64 { self.last_scan_id }
+    pub fn last_hash_scan_id(&self) -> Option<i64> { self.last_hash_scan_id }
+    pub fn last_is_valid_scan_id(&self) -> Option<i64> { self.last_is_valid_scan_id }
 
     pub fn for_each_item_in_latest_scan<F>(db: &Database, scan_id: i64, mut func: F) -> Result<(), FsPulseError>
     where
@@ -77,9 +85,9 @@ impl Item {
         let mut item_count = 0;
 
         let mut stmt = db.conn.prepare(
-            "SELECT id, root_id, last_seen_scan_id, is_tombstone, item_type, path, last_modified, file_size, file_hash
+            "SELECT id, root_id, path, item_type, is_tombstone, last_modified, file_size, file_hash, file_is_valid, last_scan_id, last_hash_scan_id, last_is_valid_scan_id
              FROM items
-             WHERE last_seen_scan_id = ?
+             WHERE last_scan_id = ?
              ORDER BY path ASC"
         )?;
 
@@ -87,13 +95,16 @@ impl Item {
             Ok(Item {
                 id: row.get::<_, i64>(0)?,
                 root_id: row.get::<_, i64>(1)?,
-                last_seen_scan_id: row.get::<_, i64>(2)?,
-                is_tombstone: row.get::<_, bool>(3)?,
-                item_type: row.get::<_, String>(4)?,
-                path: row.get::<_, String>(5)?,
-                last_modified: row.get::<_, Option<i64>>(6)?,
-                file_size: row.get::<_, Option<i64>>(7)?,
-                file_hash: row.get::<_, Option<String>>(8)?,
+                path: row.get::<_, String>(2)?,
+                item_type: row.get::<_, String>(3)?,
+                is_tombstone: row.get::<_, bool>(4)?,
+                last_modified: row.get::<_, Option<i64>>(5)?,
+                file_size: row.get::<_, Option<i64>>(6)?,
+                file_hash: row.get::<_, Option<String>>(7)?,
+                file_is_valid: row.get::<_, Option<bool>>(8)?,
+                last_scan_id: row.get::<_, i64>(9)?,
+                last_hash_scan_id: row.get::<_, Option<i64>>(10)?,
+                last_is_valid_scan_id: row.get::<_, Option<i64>>(11)?,
             })
         })?;
         
@@ -112,7 +123,7 @@ impl Item {
         let mut item_count = 0;
 
         let mut stmt = db.conn.prepare(
-            "SELECT id, root_id, last_seen_scan_id, is_tombstone, item_type, path, last_modified, file_size, file_hash
+            "SELECT id, root_id, path, item_type, is_tombstone, last_modified, file_size, file_hash, file_is_valid, last_scan_id, last_hash_scan_id, last_is_valid_scan_id
              FROM items
              WHERE path = ?
              ORDER BY id ASC"
@@ -122,13 +133,17 @@ impl Item {
             Ok(Item {
                 id: row.get::<_, i64>(0)?,
                 root_id: row.get::<_, i64>(1)?,
-                last_seen_scan_id: row.get::<_, i64>(2)?,
-                is_tombstone: row.get::<_, bool>(3)?,
-                item_type: row.get::<_, String>(4)?,
-                path: row.get::<_, String>(5)?,
-                last_modified: row.get::<_, Option<i64>>(6)?,
-                file_size: row.get::<_, Option<i64>>(7)?,
-                file_hash: row.get::<_, Option<String>>(8)?,
+                path: row.get::<_, String>(2)?,
+                item_type: row.get::<_, String>(3)?,
+                is_tombstone: row.get::<_, bool>(4)?,
+                last_modified: row.get::<_, Option<i64>>(5)?,
+                file_size: row.get::<_, Option<i64>>(6)?,
+                file_hash: row.get::<_, Option<String>>(7)?,
+                file_is_valid: row.get::<_, Option<bool>>(8)?,
+                last_scan_id: row.get::<_, i64>(9)?,
+                last_hash_scan_id: row.get::<_, Option<i64>>(10)?,
+                last_is_valid_scan_id: row.get::<_, Option<i64>>(11)?,
+
             })
         })?;
         

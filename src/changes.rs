@@ -7,13 +7,13 @@ use crate::database::Database;
 use crate::error::FsPulseError;
 
 const SQL_FOR_EACH_CHANGE_IN_SCAN: &str = 
-    "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.metadata_changed, changes.hash_changed, changes.prev_last_modified, prev_file_size, prev_hash
+    "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.prev_last_modified, prev_file_size, prev_hash, prev_is_valid
         FROM changes
         JOIN items ON items.id = changes.item_id
         WHERE changes.scan_id = ?
         ORDER BY items.path ASC";
 const SQL_FOR_EACH_CHANGE_IN_ITEM: &str = 
-    "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.metadata_changed, changes.hash_changed, changes.prev_last_modified, prev_file_size, prev_hash
+    "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.prev_last_modified, prev_file_size, prev_hash, prev_is_valid
         FROM changes
         JOIN items ON items.id = changes.item_id
         WHERE changes.item_id = ?
@@ -28,11 +28,10 @@ pub struct Change {
     pub scan_id: i64,   // scan_id is currently set but is never read
     pub item_id: i64,
     pub change_type: String,
-    pub metadata_changed: Option<bool>,
-    pub hash_changed: Option<bool>,
     pub prev_last_modified: Option<i64>,
     pub prev_file_size: Option<i64>,
     pub prev_hash: Option<String>,
+    pub prev_is_valid: Option<bool>,
 
     // Additional non-entity fields
     pub item_type: String,
@@ -97,7 +96,7 @@ impl Change {
     
         conn.query_row(
             "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, 
-                    changes.metadata_changed, changes.hash_changed, changes.prev_last_modified, changes.prev_file_size, changes.prev_hash
+                    changes.prev_last_modified, changes.prev_file_size, changes.prev_hash, changes.prev_is_valid
             FROM changes
             JOIN items ON items.id = changes.item_id
             WHERE changes.id = ?", 
@@ -107,11 +106,10 @@ impl Change {
                 scan_id: row.get(3)?,  
                 item_id: row.get(4)?,  
                 change_type: row.get(5)?,  
-                metadata_changed: row.get(6)?,  
-                hash_changed: row.get(7)?,  
-                prev_last_modified: row.get(8)?,  
-                prev_file_size: row.get(9)?,  
-                prev_hash: row.get(10)?,  
+                prev_last_modified: row.get(6)?,  
+                prev_file_size: row.get(7)?,  
+                prev_hash: row.get(8)?,
+                prev_is_valid: row.get(8)?,
                 item_type: row.get(0)?,  
                 item_path: row.get(1)?  
             })
@@ -149,11 +147,10 @@ impl Change {
                     scan_id: row.get::<_, i64>(3)?,                     // changes.scan_id
                     item_id: row.get::<_, i64>(4)?,                     // changes.item_id
                     change_type: row.get::<_, String>(5)?,              // changes.change_type
-                    metadata_changed: row.get::<_, Option<bool>>(6)?,   // changes.metadata_changed
-                    hash_changed: row.get::<_, Option<bool>>(7)?,       // changes.hash_changed
-                    prev_last_modified: row.get::<_, Option<i64>>(8)?,  // changes.prev_last_modified
-                    prev_file_size: row.get::<_, Option<i64>>(9)?,      // changes.prev_file_size
-                    prev_hash: row.get::<_, Option<String>>(10)?,       // changes.prev_hash
+                    prev_last_modified: row.get::<_, Option<i64>>(6)?,  // changes.prev_last_modified
+                    prev_file_size: row.get::<_, Option<i64>>(7)?,      // changes.prev_file_size
+                    prev_hash: row.get::<_, Option<String>>(8)?,        // changes.prev_hash
+                    prev_is_valid: row.get::<_, Option<bool>>(9)?,      // changes.prev_is_valid
 
                     // Additional fields
                     item_type: row.get::<_, String>(0)?,                // items.item_type

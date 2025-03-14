@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use crate::database::Database;
 use crate::error::FsPulseError; 
 use crate::reports::{ReportFormat, Reports}; 
+use crate::scan_machine::do_scan_machine;
 use crate::scans::Scan;
     
 /// CLI for fspulse: A filesystem scan and reporting tool.
@@ -42,9 +43,13 @@ pub enum Command {
         #[arg(long, conflicts_with_all = ["root_id", "root_path"])]
         last: bool,
 
-        /// Perform a deep scan. Defaults to shallow if not provided.
+        /// Hash files using md5 and compare to previous known hashes
         #[arg(long)]
-        deep: bool,
+        hash: bool,
+
+       /// Validate file contents for known file types (tbd)
+       #[arg(long)]
+       validate: bool,
     },
 
     /// Generate reports.
@@ -156,12 +161,12 @@ impl Cli {
         let args = Cli::parse();
         
         match args.command {
-            Command::Scan { db_path, root_id, root_path, last, deep } => {
+            Command::Scan { db_path, root_id, root_path, last, hash, validate } => {
                 info!(
-                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, deep: {}",
-                    db_path, root_id, root_path, last, deep
+                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, validate: {}",
+                    db_path, root_id, root_path, last, hash, validate
                 );
-                Self::handle_scan(db_path, root_id, root_path, last, deep)?;
+                Self::handle_scan(db_path, root_id, root_path, last, hash, validate)?;
             }
             Command::Report { report_type } => match report_type {
                 ReportType::Roots { db_path, root_id, root_path, format } => {
@@ -204,10 +209,13 @@ impl Cli {
         root_id: Option<u32>,
         root_path: Option<String>,
         last: bool,
-        deep: bool,
+        hash: bool,
+        validate: bool
     ) -> Result<(), FsPulseError> {
         let mut db = Database::new(db_path)?;
-        Scan::do_scan(&mut db, root_id, root_path, last, deep)?;
+        Scan::do_scan(&mut db, root_id, root_path, last, hash, validate)?;
+        //do_scan_machine(&mut db, root_id, root_path, last, hash, validate)?;
+
 
         Ok(())
     }
