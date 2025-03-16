@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (path);
 CREATE TABLE IF NOT EXISTS scans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,          -- Links scan to a root path
-    state INTEGER NOT NULL,            -- The state of the scan (0 = Pending, 1 = Scanning, 2 = Sweeping, 3 = Analyzing, 4 = Completed, 5 = Aborted)
+    state INTEGER NOT NULL,            -- The state of the scan (0 = Pending, 1 = Scanning, 2 = Sweeping, 3 = Analyzing, 4 = Completed, 5 = Stopped)
     hashing BOOLEAN NOT NULL,          -- Indicated the scan computes hashes for files
     validating BOOLEAN NOT NULL,       -- Indicates the scan validates file contents
     time_of_scan INTEGER NOT NULL,     -- Timestamp of when scan was performed (UTC)
@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS changes (
     prev_hash TEXT DEFAULT NULL,              -- Stores the previous hash value (if changed)
     prev_is_valid BOOL DEFAULT NULL,          -- Stores the previous is_valid value (if changed)
     FOREIGN KEY (scan_id) REFERENCES scans(id),
-    FOREIGN KEY (item_id) REFERENCES items(id)
+    FOREIGN KEY (item_id) REFERENCES items(id),
+    UNIQUE (scan_id, item_id, change_type)
 );
 
 COMMIT;

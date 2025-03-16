@@ -30,7 +30,7 @@ pub struct Change {
     pub change_type: String,
     pub prev_last_modified: Option<i64>,
     pub prev_file_size: Option<i64>,
-    pub prev_hash: Option<String>,
+    prev_hash: Option<String>,
     pub prev_is_valid: Option<bool>,
 
     // Additional non-entity fields
@@ -91,6 +91,9 @@ impl FromStr for ChangeType {
 }
 
 impl Change {
+    // TODO: Implement accessors for other fields
+    pub fn prev_hash(&self) -> Option<&str> { self.prev_hash.as_deref() }
+
     pub fn get_by_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;
     

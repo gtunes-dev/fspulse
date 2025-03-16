@@ -15,16 +15,17 @@
 //          - Hash and/or Validate per scan configuration
 //          - If Hash and/or Valid are non-null and have changed, create change record with old value(s) of the changed value(s)
 // 4. Completed
-// 5. Aborted
+// 5. Stopped
 
 use crate::changes::ChangeType;
+use crate::hash::Hash;
 use crate::items::{Item, ItemType};
 use crate::reports::{ReportFormat, Reports};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 use crate::roots::Root;
 use crate::scans::ScanState;
 
-use indicatif::{MultiProgress, ProgressBar};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use dialoguer::Select;
 //use md5::digest::typenum::Abs;
@@ -51,7 +52,7 @@ pub fn do_scan_machine(
         // If an incomplete scan exists, find it.
         // TODO: Allow incomplete scans on different roots to exist. We won't, however,
         // allow the user to initiate a new scan on a root that has an outstanding scan until they
-        // either resume/complete it or abort it
+        // either resume/complete it or stop it
         
         let (root, mut existing_scan) = match (root_id, root_path, last) {
             (Some(root_id), _, _) => {
@@ -59,7 +60,7 @@ pub fn do_scan_machine(
                     .ok_or_else(|| FsPulseError::Error(format!("Root iI {} not found", root_id)))?;
                 // Look for an outstanding scan on the root
                 let scan = Scan::get_latest_for_root(db, root.id())?
-                    .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Aborted);
+                    .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
                 (root, scan)
             },
             (_, Some(root_path), _) => {
@@ -71,7 +72,7 @@ pub fn do_scan_machine(
                     Some(root) => {
                         // Found the root. Look for an outstanding scan
                         let scan = Scan::get_latest_for_root(db, root.id())?
-                            .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Aborted);
+                            .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
                         (root, scan)
                     },
                     None => {
@@ -84,21 +85,27 @@ pub fn do_scan_machine(
             (_, _, true) => {
                 let scan = Scan::get_latest(db)?
                     .ok_or_else(|| FsPulseError::Error(format!("No latest scan found")))?;
-                let root = Root::get_by_id(db, scan.id())?
+                let root = Root::get_by_id(db, scan.root_id())?
                     .ok_or_else(|| FsPulseError::Error(format!("No root found for latest Scan Id {}", scan.id())))?;
 
-                (root, Some(scan))
+                let return_scan = if scan.state() != ScanState::Completed {
+                    Some(scan)
+                } else {
+                    None
+                };
+
+                (root, return_scan)
             },
             _ => {
                 return Err(FsPulseError::Error("Invalid arguments".into()));
             }
         };
 
-        // If scan is present, it is incomplete. Ask the user to decide if it should be resumed or aborted.
+        // If scan is present, it is incomplete. Ask the user to decide if it should be resumed or stopped.
         // Also allows the user to exit without making the choice now
 
         let mut scan = match existing_scan.as_mut() {
-            Some(existing_scan) => match abort_or_resume_scan(db, &root, existing_scan)? {
+            Some(existing_scan) => match stop_or_resume_scan(db, &root, existing_scan)? {
                 ScanDecision::NewScan => initiate_scan(db, &root, hash, validate)?,
                 ScanDecision::ContinueExisting => *existing_scan,
                 ScanDecision::Exit => return Ok(())
@@ -106,11 +113,15 @@ pub fn do_scan_machine(
             None => initiate_scan(db, &root, hash, validate)?
         };
 
+
+        let mut multi_prog = MultiProgress::new();
+        multi_prog.println(format!("Scanning: {}", root.path()))?;
+        
         while scan.state() != ScanState::Completed {
             match scan.state() {
-                ScanState::Scanning => do_state_scanning(db, &root, &mut scan),
-                ScanState::Sweeping => do_state_sweeping(db, &mut scan),
-                ScanState::Analyzing => do_state_analyzing(db, &root, &mut scan),
+                ScanState::Scanning => do_state_scanning(db, &root, &mut scan, &mut multi_prog),
+                ScanState::Sweeping => do_state_sweeping(db, &mut scan, &mut multi_prog),
+                ScanState::Analyzing => do_state_analyzing(db, &root, &mut scan, &mut multi_prog),
                 _ => Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", scan.state()))),
             }?;
         }
@@ -126,12 +137,18 @@ enum ScanDecision {
     Exit,
 }
 
-fn abort_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<ScanDecision, FsPulseError> {
-    let options = vec!["resume scan", "abort scan", "exit"];
+fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<ScanDecision, FsPulseError> {
+    let options = vec![
+        "Resume the scan", 
+        "Stop & exit",
+        "Stop & start a new scan",
+        "Exit (decide later)",
+    ];
 
     let selection = Select::new()
-        .with_prompt(format!("Scan Id {} on path '{}' did not complete.\nYou can choose to resume, abort, or exit", scan.id(), root.path()))
+        .with_prompt(format!("Found in-progress scan on:'{}'\n\nWhat would you like to do?", root.path()))
         .items(&options)
+        .report(false)
         .interact()
         .unwrap();
 
@@ -145,8 +162,12 @@ fn abort_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan) -> Resu
             }
         }, 
         1 => {
-            scan.set_state_abort(db)?;
-            ScanDecision::NewScan   // abort and exit
+            scan.set_state_stopped(db)?;
+            ScanDecision::Exit   
+        },
+        2 => {
+            scan.set_state_stopped(db)?;
+            ScanDecision::NewScan
         },
         _ => ScanDecision::Exit // exit
     };
@@ -158,18 +179,16 @@ fn initiate_scan(db: &mut Database, root: &Root, hashing: bool, validating: bool
     Scan::create(db, root, hashing, validating)
 }
 
-fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<(), FsPulseError> {
+fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
     let root_path_buf = PathBuf::from(root.path());
     let metadata = fs::symlink_metadata(&root_path_buf)?;
 
     let mut q = VecDeque::new();
 
-    let multi = MultiProgress::new();
-    multi.println(format!("Scanning: {}", root.path()))?;
-    let dir_bar = multi.add(ProgressBar::new_spinner());
-    dir_bar.enable_steady_tick(Duration::from_millis(100));
-    let item_bar = multi.add(ProgressBar::new_spinner());
-    item_bar.enable_steady_tick(Duration::from_millis(100));
+    let dir_prog = multi_prog.add(ProgressBar::new_spinner());
+    dir_prog.enable_steady_tick(Duration::from_millis(100));
+    let item_prog = multi_prog.add(ProgressBar::new_spinner());
+    item_prog.enable_steady_tick(Duration::from_millis(100));
 
     q.push_back(QueueEntry {
         path: root_path_buf.clone(),
@@ -177,7 +196,7 @@ fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<
     });
 
     while let Some(q_entry) = q.pop_front() {
-        dir_bar.set_message(format!("Directory: '{}'", q_entry.path.to_string_lossy()));
+        dir_prog.set_message(format!("Directory: '{}'", q_entry.path.to_string_lossy()));
 
         // Handle the directory itself before iterating its contents. The root dir
         // was previously pushed into the queue - if this is that entry, we skip it
@@ -191,7 +210,7 @@ fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<
             let item = item?;
 
             let metadata = fs::symlink_metadata(item.path())?; // Use symlink_metadata to check for symlinks
-            item_bar.set_message(format!("Item: '{}'", item.file_name().to_string_lossy()));
+            item_prog.set_message(format!("Item: '{}'", item.file_name().to_string_lossy()));
 
             if metadata.is_dir() {
                 q.push_back(QueueEntry {
@@ -211,11 +230,19 @@ fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<
             }
         }
     }
+
+    dir_prog.finish_with_message("Scan complete");
+    item_prog.finish_and_clear();
+
     scan.set_state_sweeping(db)
 }
 
-fn do_state_sweeping(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> { 
+fn do_state_sweeping(db: &mut Database, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> { 
     let tx = db.conn.transaction()?;
+
+    let sweep_prog = multi_prog.add(ProgressBar::new_spinner());
+    sweep_prog.set_message("Detecting changes and deletions...");
+    sweep_prog.enable_steady_tick(Duration::from_millis(100));
 
     // Insert deletion records into changes
         tx.execute(
@@ -234,11 +261,51 @@ fn do_state_sweeping(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseEr
 
     tx.commit()?;
 
+    sweep_prog.finish_with_message("Change and delete detection complete");
     scan.set_state_analyzing(db)
 }
 
-fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan) -> Result<(), FsPulseError> {
+fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
+    if scan.hashing() || scan.validating() {
+        let file_count = scan.file_count().unwrap_or_default().max(0) as u64;            // scan.file_count is the total # of files in the scan
+        let analyzed_items= Item::count_analyzed_items(db, scan.id())?.max(0) as u64;  // may be resuming the scan
+    
+        let analysis_prog = multi_prog.add(ProgressBar::new(file_count));
+        analysis_prog.set_style(ProgressStyle::default_bar()
+                .template("{msg}\n[{bar:80}] {pos}/{len} (Remaining: {eta})")
+                .unwrap()
+                .progress_chars("#>-"));
+        analysis_prog.set_message("Analyzing files:");
+        analysis_prog.inc(analyzed_items);
 
+        loop {
+            let items = Item::fetch_next_analysis_batch(
+                db, 
+                scan.id(), 
+                scan.hashing(), 
+                scan.validating(), 
+                10,
+            )?;
+
+            if items.len() == 0 {
+                break;
+            }
+
+            for item in items {
+                let hash = match Hash::compute_md5_hash(item.path(), multi_prog) {
+                    Ok(hash_s) => Some(hash_s),
+                    Err(error) => {
+                        eprintln!("Error computing hash: {}", error);
+                        None
+                    }
+                };
+                update_item_analysis(db, scan.id(), item.id(), scan.hashing(), scan.validating(), hash, None)?;
+                analysis_prog.inc(1);
+            }
+        }
+        analysis_prog.finish_with_message("Analysis complete");
+    }
+   
     scan.set_state_completed(db)
 }
 
@@ -356,7 +423,6 @@ fn handle_scan_item(
             }
         }
     } else {
-        // Ietm is new. Insert into items and changes
         // Item is new, insert into items and changes tables
         let tx = db.conn.transaction()?;
         tx.execute("INSERT INTO items (root_id, path, item_type, last_modified, file_size, last_scan_id) VALUES (?, ?, ?, ?, ?, ?)",
@@ -367,5 +433,55 @@ fn handle_scan_item(
         tx.commit()?;
     }
     
+    Ok(())
+}
+
+pub fn update_item_analysis(
+    db: &mut Database,
+    scan_id: i64,
+    item_id: i64,
+    hashing: bool,
+    validating: bool,
+    new_hash: Option<String>,
+    new_is_valid: Option<bool>,
+) -> Result<(), FsPulseError> {
+    let tx = db.conn.transaction()?; // Start transaction
+
+    // Step 1: UPSERT into `changes` table
+    tx.execute(
+        "INSERT INTO changes (scan_id, item_id, change_type, prev_hash, prev_is_valid)
+         SELECT ?, ?, 'M', 
+                CASE WHEN ? = 1 THEN file_hash ELSE NULL END, 
+                CASE WHEN ? = 1 THEN file_is_valid ELSE NULL END
+         FROM items WHERE id = ?
+         ON CONFLICT(scan_id, item_id, change_type) 
+         DO UPDATE SET 
+            prev_hash = CASE WHEN ? = 1 THEN (SELECT file_hash FROM items WHERE id = ?) ELSE NULL END,
+            prev_is_valid = CASE WHEN ? = 1 THEN (SELECT file_is_valid FROM items WHERE id = ?) ELSE NULL END",
+        rusqlite::params![
+            scan_id, item_id, 
+            hashing as i64, validating as i64, item_id, 
+            hashing as i64, item_id, 
+            validating as i64, item_id
+        ],
+    )?;
+
+    // Step 2: Update `items` table
+    tx.execute(
+        "UPDATE items 
+         SET file_hash = CASE WHEN ? = 1 THEN ? ELSE file_hash END,
+             last_hash_scan_id = CASE WHEN ? = 1 THEN ? ELSE last_hash_scan_id END,
+             file_is_valid = CASE WHEN ? = 1 THEN ? ELSE file_is_valid END,
+             last_is_valid_scan_id = CASE WHEN ? = 1 THEN ? ELSE last_is_valid_scan_id END
+         WHERE id = ?",
+        rusqlite::params![
+            hashing as i64, new_hash, hashing as i64, scan_id,
+            validating as i64, new_is_valid, validating as i64, scan_id,
+            item_id
+        ],
+    )?;
+
+    tx.commit()?; // Commit transaction
+
     Ok(())
 }

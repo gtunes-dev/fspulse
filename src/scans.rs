@@ -43,7 +43,7 @@ pub enum ScanState {
     Sweeping = 2,
     Analyzing = 3,
     Completed = 4,
-    Aborted = 5,
+    Stopped = 5,
     Unknown = -1,
 }
 
@@ -54,7 +54,7 @@ impl ScanState {
             2 => ScanState::Sweeping,
             3 => ScanState::Analyzing,
             4 => ScanState::Completed,
-            5 => ScanState::Aborted,
+            5 => ScanState::Stopped,
             _ => ScanState::Unknown,  // Handle unknown states
         }
     }
@@ -72,7 +72,7 @@ impl fmt::Display for ScanState {
             ScanState::Sweeping => "Sweeping",
             ScanState::Analyzing => "Analyzing",
             ScanState::Completed => "Completed",
-            ScanState::Aborted => "Aborted",
+            ScanState::Stopped => "Stopped",
             ScanState::Unknown => "Unknown",
         };
         write!(f, "{}", name)
@@ -103,7 +103,7 @@ impl Scan {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
     
-        let scan = Scan::new_for_scan(scan_id, root.id(), ScanState::Scanning, false, false, time_of_scan);
+        let scan = Scan::new_for_scan(scan_id, root.id(), ScanState::Scanning, hashing, validating, time_of_scan);
         Ok(scan)
     }
 
@@ -236,12 +236,12 @@ impl Scan {
         }
     }
 
-    pub fn set_state_abort(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+    pub fn set_state_stopped(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state {
             ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
-                self.set_state(db, ScanState::Aborted)
+                self.set_state(db, ScanState::Stopped)
             }
-            _ => Err(FsPulseError::Error(format!("Can't abort scan - invalid state {}", self.state.as_i64())))
+            _ => Err(FsPulseError::Error(format!("Can't stop scan - invalid state {}", self.state.as_i64())))
         }
     }
 

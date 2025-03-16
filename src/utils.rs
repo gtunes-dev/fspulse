@@ -79,11 +79,13 @@ impl Utils {
         }
     }
 
+    /*
     pub fn opt_string_or_none(str: &Option<String>) -> &str {
         match str {
             Some(s) => s.as_str(),
             None => "-",
         }
     }
+    */
 
 }

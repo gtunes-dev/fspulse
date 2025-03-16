@@ -98,6 +98,8 @@ impl Item {
 
     }
 
+
+
     pub fn id(&self) -> i64 { self.id }
     pub fn root_id(&self) -> i64 { self.root_id }
     pub fn path(&self) -> &str { &self.path }
@@ -111,6 +113,68 @@ impl Item {
     pub fn last_hash_scan_id(&self) -> Option<i64> { self.last_hash_scan_id }
     pub fn last_is_valid_scan_id(&self) -> Option<i64> { self.last_is_valid_scan_id }
 
+    pub fn count_analyzed_items(db: &Database, scan_id: i64) -> Result<i64, FsPulseError> {
+        let mut stmt = db.conn.prepare(
+            "SELECT COUNT(*) FROM items
+             WHERE
+                last_scan_id = ? AND
+                item_type = 'F' AND
+                (last_hash_scan_id = ? OR last_is_valid_scan_id = ?)"
+        )?;
+    
+        let count: i64 = stmt.query_row([scan_id, scan_id, scan_id], |row| row.get(0))?;
+    
+        Ok(count)
+    }
+
+    pub fn fetch_next_analysis_batch(
+        db: &Database,
+        scan_id: i64,
+        hashing: bool,
+        validating: bool,
+        limit: usize,  // Parameterized limit
+    ) -> Result<Vec<Item>, FsPulseError> {
+        let query = format!(
+            "SELECT id, root_id, path, item_type, is_tombstone, last_modified, file_size, 
+                    file_hash, file_is_valid, last_scan_id, last_hash_scan_id, last_is_valid_scan_id
+             FROM items
+             WHERE
+                last_scan_id = ?
+                AND
+                item_type = 'F'
+                AND 
+                    ((? = 1 AND (last_hash_scan_id IS NULL OR last_hash_scan_id < ?))
+                    OR 
+                    (? = 1 AND (last_is_valid_scan_id IS NULL OR last_is_valid_scan_id < ?)))
+             ORDER BY path ASC
+             LIMIT {}",
+            limit
+        );
+    
+        let mut stmt = db.conn.prepare(&query)?;
+    
+        let rows = stmt.query_map([scan_id, hashing as i64, scan_id, validating as i64, scan_id], |row| {
+            Ok(Item {
+                id: row.get(0)?,
+                root_id: row.get(1)?,
+                path: row.get(2)?,
+                item_type: row.get(3)?,
+                is_tombstone: row.get(4)?,
+                last_modified: row.get(5)?,
+                file_size: row.get(6)?,
+                file_hash: row.get(7)?,
+                file_is_valid: row.get(8)?,
+                last_scan_id: row.get(9)?,
+                last_hash_scan_id: row.get(10)?,
+                last_is_valid_scan_id: row.get(11)?,
+            })
+        })?;
+    
+        let items: Vec<Item> = rows.collect::<Result<Vec<_>, _>>()?;
+    
+        Ok(items)
+    }
+    
     pub fn for_each_item_in_latest_scan<F>(db: &Database, scan_id: i64, mut func: F) -> Result<(), FsPulseError>
     where
         F: FnMut(&Item) -> Result<(), FsPulseError>,
