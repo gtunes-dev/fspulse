@@ -17,17 +17,20 @@
 // 4. Completed
 // 5. Aborted
 
-use crate::items::ItemType;
+use crate::changes::ChangeType;
+use crate::items::{Item, ItemType};
+use crate::reports::{ReportFormat, Reports};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 use crate::roots::Root;
 use crate::scans::ScanState;
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar};
 
 use dialoguer::Select;
-use log::Metadata;
+//use md5::digest::typenum::Abs;
 use std::collections::VecDeque;
 use std::fs;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -50,7 +53,7 @@ pub fn do_scan_machine(
         // allow the user to initiate a new scan on a root that has an outstanding scan until they
         // either resume/complete it or abort it
         
-        let (root, mut scan) = match (root_id, root_path, last) {
+        let (root, mut existing_scan) = match (root_id, root_path, last) {
             (Some(root_id), _, _) => {
                 let root = Root::get_by_id(db, root_id.into())?
                     .ok_or_else(|| FsPulseError::Error(format!("Root iI {} not found", root_id)))?;
@@ -93,43 +96,69 @@ pub fn do_scan_machine(
 
         // If scan is present, it is incomplete. Ask the user to decide if it should be resumed or aborted.
         // Also allows the user to exit without making the choice now
-        match scan.as_mut() {
-            Some(scan) => abort_or_resume_scan(db, &root, scan),
-            None => initiate_scan(db, &root, hash, validate),
+
+        let mut scan = match existing_scan.as_mut() {
+            Some(existing_scan) => match abort_or_resume_scan(db, &root, existing_scan)? {
+                ScanDecision::NewScan => initiate_scan(db, &root, hash, validate)?,
+                ScanDecision::ContinueExisting => *existing_scan,
+                ScanDecision::Exit => return Ok(())
+            },
+            None => initiate_scan(db, &root, hash, validate)?
+        };
+
+        while scan.state() != ScanState::Completed {
+            match scan.state() {
+                ScanState::Scanning => do_state_scanning(db, &root, &mut scan),
+                ScanState::Sweeping => do_state_sweeping(db, &mut scan),
+                ScanState::Analyzing => do_state_analyzing(db, &root, &mut scan),
+                _ => Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", scan.state()))),
+            }?;
         }
+
+        Reports::print_scan(db, &Some(scan), ReportFormat::Table)?;
+
+        Ok(())
 }
 
-fn abort_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<(), FsPulseError> {
+enum ScanDecision {
+    NewScan,
+    ContinueExisting,
+    Exit,
+}
+
+fn abort_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<ScanDecision, FsPulseError> {
     let options = vec!["resume scan", "abort scan", "exit"];
 
     let selection = Select::new()
-        .with_prompt(format!("Scan Id {} did not complete.\nYou can choose to resume, abort, or exit", scan.id()))
+        .with_prompt(format!("Scan Id {} on path '{}' did not complete.\nYou can choose to resume, abort, or exit", scan.id(), root.path()))
         .items(&options)
         .interact()
         .unwrap();
 
-    match (selection) {
+    let decision = match selection {
         0 => {
             match scan.state() {
-                ScanState::Scanning => do_state_scanning(db, root, scan),
-                ScanState::Sweeping => do_state_sweeping(db, root, scan),
-                ScanState::Analyzing => do_state_analyzing(db, root, scan),
-                _ => Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", scan.state()))),
+                ScanState::Scanning => ScanDecision::ContinueExisting,
+                ScanState::Sweeping => ScanDecision::ContinueExisting,
+                ScanState::Analyzing => ScanDecision::ContinueExisting,
+                _ => return Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", scan.state()))),
             }
         }, 
         1 => {
-            scan.abort(db)   // abort and exit
+            scan.set_state_abort(db)?;
+            ScanDecision::NewScan   // abort and exit
         },
-        _ => Ok(()), // exit
-    }
+        _ => ScanDecision::Exit // exit
+    };
+
+    Ok(decision)
 }
 
-fn initiate_scan(db: &Database, root: &Root, hashing: bool, validating: bool) -> Result<(), FsPulseError> {
-    let scan = Scan::create(db, root, hashing, validating)?;
-    do_state_scanning(db, root, &scan)
+fn initiate_scan(db: &mut Database, root: &Root, hashing: bool, validating: bool) -> Result<Scan, FsPulseError> {
+    Scan::create(db, root, hashing, validating)
 }
 
-fn do_state_scanning(db: &Database, root: &Root, scan: &Scan) -> Result<(), FsPulseError> {
+fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<(), FsPulseError> {
     let root_path_buf = PathBuf::from(root.path());
     let metadata = fs::symlink_metadata(&root_path_buf)?;
 
@@ -142,19 +171,6 @@ fn do_state_scanning(db: &Database, root: &Root, scan: &Scan) -> Result<(), FsPu
     let item_bar = multi.add(ProgressBar::new_spinner());
     item_bar.enable_steady_tick(Duration::from_millis(100));
 
-    let mut progress_bar = if scan.hashing() || scan.validating() {
-        let bar = ProgressBar::new(0); // Initialize with 0 length
-    
-        // TODO: this error will panic
-        bar.set_style(ProgressStyle::default_bar()
-            .template("{msg}\n[{bar:40}] {bytes}/{total_bytes} ({eta})")
-            .unwrap()
-            .progress_chars("#>-"));
-        Some(bar)
-    } else {
-        None
-    };
-
     q.push_back(QueueEntry {
         path: root_path_buf.clone(),
         metadata,
@@ -163,35 +179,193 @@ fn do_state_scanning(db: &Database, root: &Root, scan: &Scan) -> Result<(), FsPu
     while let Some(q_entry) = q.pop_front() {
         dir_bar.set_message(format!("Directory: '{}'", q_entry.path.to_string_lossy()));
 
-        // The root was previously pushed onto the queue to enable it to be scanned but
-        // we don't want to insert it into the database as an item, so we skip this
+        // Handle the directory itself before iterating its contents. The root dir
+        // was previously pushed into the queue - if this is that entry, we skip it
+        if q_entry.path != root_path_buf {
+            handle_scan_item(db, scan, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
+        }
 
+        let items = fs::read_dir(&q_entry.path)?;
+
+        for item in items {
+            let item = item?;
+
+            let metadata = fs::symlink_metadata(item.path())?; // Use symlink_metadata to check for symlinks
+            item_bar.set_message(format!("Item: '{}'", item.file_name().to_string_lossy()));
+
+            if metadata.is_dir() {
+                q.push_back(QueueEntry {
+                    path: item.path(),
+                    metadata,
+                });
+            } else {
+                let item_type = if metadata.is_file() {
+                    ItemType::File
+                } else if metadata.is_symlink() {
+                    ItemType::Symlink
+                } else {
+                    ItemType::Other
+                };
+
+                handle_scan_item(db, scan, item_type, &item.path(), &metadata)?;
+            }
+        }
     }
-
-
-
-
-    do_state_sweeping(db, root, scan)
+    scan.set_state_sweeping(db)
 }
 
-fn do_state_sweeping(db: &Database, root: &Root, scan: &Scan) -> Result<(), FsPulseError> { 
+fn do_state_sweeping(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> { 
+    let tx = db.conn.transaction()?;
+
+    // Insert deletion records into changes
+        tx.execute(
+            "INSERT INTO changes (scan_id, item_id, change_type)
+             SELECT ?, id, ?
+             FROM items
+             WHERE root_id = ? AND is_tombstone = 0 AND last_scan_id < ?",
+            (scan.id(), ChangeType::Delete.as_str(), scan.root_id(), scan.id()),
+        )?;
     
-    do_state_analyzing(db, root, scan)
+       // Mark unseen items as tombstones
+       tx.execute(
+        "UPDATE items SET is_tombstone = 1 WHERE root_id = ? AND last_scan_id < ? AND is_tombstone = 0",
+        (scan.root_id(), scan.root_id()),
+    )?;
+
+    tx.commit()?;
+
+    scan.set_state_analyzing(db)
 }
 
-fn do_state_analyzing(db: &Database, root: &Root, scan: &Scan) -> Result<(), FsPulseError> {
+fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan) -> Result<(), FsPulseError> {
 
-    Ok(())
+    scan.set_state_completed(db)
 }
 
 fn handle_scan_item(
-    db: &Database, 
+    db: &mut Database,
+    scan: &Scan,
     item_type: ItemType, 
     path: &Path, 
     metadata: &Metadata,
-    file_hash: Option<&str>,
-    file_is_valid: Option<bool>,
 ) -> Result<(), FsPulseError> {
-    
-}
+    //let conn = &mut db.conn;
 
+    // load the item
+    let path_str = path.to_string_lossy();
+    let existing_item = Item::get_by_root_and_path(db, scan.root_id(), &path_str)?;
+
+    let last_modified = metadata.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64);
+
+    let file_size = if metadata.is_file() { Some(metadata.len() as i64) } else { None };
+
+
+    // If the item was already processed for this scan, just skip it. We intentionally
+    // do not handle the case where the item was seen within this scan, but has since
+    // either been modified or has changed type. There are edge cases where this might
+    // cause strangeness in reports such as when an item was seen as a file, the scan
+    // was resumed and the item has changed into a directory. In this case, we'll still
+    // traverse the children within the resumed scan and a tree report will look odd
+    if let Some(existing_item) = existing_item {
+        if existing_item.last_scan_id() == scan.id() {
+            return Ok(())
+        }
+
+        let item_type_str = item_type.as_str();
+        let metadata_changed = existing_item.last_modified() != last_modified || existing_item.file_size() != file_size;
+        
+        if existing_item.is_tombstone() {
+            // Rehydrate a tombstone
+            let tx = db.conn.transaction()?;
+            let rows_updated = tx.execute(
+                "UPDATE items SET 
+                        is_tombstone = 0, 
+                        item_type = ?, 
+                        last_modified = ?, 
+                        file_size = ?, 
+                        file_hash = NULL, 
+                        file_is_valid = NULL, 
+                        last_scan_id = ?,
+                        last_hash_scan_id = NULL, 
+                        last_is_valid_scan_id = NULL 
+                    WHERE id = ?", 
+                (item_type_str, last_modified, file_size, scan.id(), existing_item.id()))?;
+            if rows_updated == 0 {
+                    return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
+            }
+            tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)", 
+                (scan.id(), existing_item.id(), ChangeType::Add.as_str()))?;
+            tx.commit()?;
+        } else if existing_item.item_type() != item_type_str {
+            //Item type changed file <-> folder
+            let tx = db.conn.transaction()?;
+            let rows_updated = tx.execute(
+                "UPDATE items SET 
+                    item_type = ?, 
+                    last_modified = ?, 
+                    file_size = ?,
+                    file_hash = NULL,
+                    file_is_valid = NULL,
+                    last_scan_id = ?,
+                    last_hash_scan_id = NULL,
+                    last_is_valid_scan_id = NULL 
+                WHERE id = ?", 
+                (item_type_str, last_modified, file_size, scan.id(), existing_item.id()))?;
+            if rows_updated == 0 {
+                    return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
+            }
+ 
+            tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)", 
+                (scan.id(), existing_item.id(), ChangeType::TypeChange.as_str()))?;
+            tx.commit()?;
+        } else if metadata_changed {
+            let tx = db.conn.transaction()?;
+
+           let rows_updated = tx.execute(
+            "UPDATE items SET
+                last_modified = ?, 
+                file_size = ?,             
+                last_scan_id = ? 
+               WHERE id = ?", 
+               (last_modified, file_size, scan.id(), existing_item.id()))?;
+            if rows_updated == 0 {
+                return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
+            }
+            tx.execute(
+                "INSERT INTO changes 
+                    (scan_id, item_id, change_type, prev_last_modified, prev_file_size) 
+                    VALUES (?, ?, ?, ?, ?)", 
+               (
+                   scan.id(), 
+                   existing_item.id(), 
+                   ChangeType::Modify.as_str(),
+                   metadata_changed.then_some(existing_item.last_modified()),
+                   metadata_changed.then_some(existing_item.file_size())
+               ))?;
+           tx.commit()?;            
+        } else {
+            // No change - just update last_scan_id
+            let rows_updated = db.conn.execute(
+                "UPDATE items SET last_scan_id = ? WHERE id = ?", 
+                (scan.id(), existing_item.id()))?;
+            if rows_updated == 0 {
+                    return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
+            }
+        }
+    } else {
+        // Ietm is new. Insert into items and changes
+        // Item is new, insert into items and changes tables
+        let tx = db.conn.transaction()?;
+        tx.execute("INSERT INTO items (root_id, path, item_type, last_modified, file_size, last_scan_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (scan.root_id(), &path_str, item_type.as_str(), last_modified, file_size, scan.id()))?;
+        let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
+        tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)",
+            (scan.id(), item_id, ChangeType::Add.as_str()))?;
+        tx.commit()?;
+    }
+    
+    Ok(())
+}

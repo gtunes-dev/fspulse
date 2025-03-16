@@ -55,6 +55,7 @@ impl Root {
         Ok(Root { id, path: path.to_owned() })
     }
 
+    /* 
     pub fn get_or_insert(db: &Database, path: &str) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
 
@@ -67,7 +68,7 @@ impl Root {
         )?;
 
         Ok(Root { id, path: path.to_owned() })
-    }
+    } */
 
     pub fn id(&self) -> i64 {
         self.id

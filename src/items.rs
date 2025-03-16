@@ -65,6 +65,39 @@ impl Item {
         .map_err(FsPulseError::Database)
     }
 
+    pub fn get_by_root_and_path(
+        db: &Database, 
+        root_id: i64, 
+        path: &str
+    ) -> Result<Option<Self>, FsPulseError> 
+    {
+        let conn = &db.conn;
+
+        conn.query_row(
+            "SELECT id, root_id, path, item_type, is_tombstone, last_modified, file_size, file_hash, file_is_valid, last_scan_id, last_hash_scan_id, last_is_valid_scan_id
+             FROM items
+             WHERE root_id = ? AND path = ?",
+            params![root_id, path],
+            |row| Ok(Item {
+                id: row.get(0)?,
+                root_id: row.get(1)?,
+                path: row.get(2)?,
+                item_type: row.get(3)?,
+                is_tombstone: row.get(4)?,
+                last_modified: row.get(5)?,
+                file_size: row.get(6)?,
+                file_hash: row.get(7)?,
+                file_is_valid: row.get(8)?,
+                last_scan_id: row.get(9)?,
+                last_hash_scan_id: row.get(10)?,
+                last_is_valid_scan_id: row.get(11)?,
+            }),
+        )
+        .optional()
+        .map_err(FsPulseError::Database)
+
+    }
+
     pub fn id(&self) -> i64 { self.id }
     pub fn root_id(&self) -> i64 { self.root_id }
     pub fn path(&self) -> &str { &self.path }

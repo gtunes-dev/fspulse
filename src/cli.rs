@@ -7,7 +7,6 @@ use crate::database::Database;
 use crate::error::FsPulseError; 
 use crate::reports::{ReportFormat, Reports}; 
 use crate::scan_machine::do_scan_machine;
-use crate::scans::Scan;
     
 /// CLI for fspulse: A filesystem scan and reporting tool.
 #[derive(Parser)]

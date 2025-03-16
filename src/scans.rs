@@ -1,21 +1,11 @@
-use crate::changes::{ ChangeCounts, ChangeType };
+use crate::changes::ChangeCounts;
 use crate::error::FsPulseError;
 use crate::database::Database;
-use crate::hash::Hash;
-use crate::items::ItemType;
-use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rusqlite::{ OptionalExtension, Result, params };
 
-use std::collections::VecDeque;
-use std::{env, fmt};
-use std::fs;
-use std::fs::Metadata;
-use std::path::Path;
-use std::path::PathBuf;
-use std::time::Duration;
+use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str = 
     "SELECT id, root_id, state, hashing, validating, time_of_scan, file_count, folder_count
@@ -87,12 +77,6 @@ impl fmt::Display for ScanState {
         };
         write!(f, "{}", name)
     }
-}
-
-#[derive(Clone, Debug)]
-struct QueueEntry {
-    path: PathBuf,
-    metadata: fs::Metadata,
 }
 
 impl Scan {
@@ -206,8 +190,53 @@ impl Scan {
         &self.change_counts
     }
 
+    pub fn set_state_sweeping(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+        match self.state {
+            ScanState::Scanning => self.set_state(db, ScanState::Sweeping),
+            _ => Err(FsPulseError::Error(format!("Can't set Scan Id {} to state sweeping from state {}", self.id(), self.state().as_i64())))
+        }
+    }
 
-    pub fn abort(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+    pub fn set_state_analyzing(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+        let tx = db.conn.transaction()?;
+
+        let (file_count, folder_count): (i64, i64) = tx.query_row(
+            "SELECT 
+                SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count, 
+                SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count 
+                FROM items WHERE last_scan_id = ?",
+                [self.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            ).unwrap_or((0, 0)); // If no data, default to 0
+
+        // Update the scan entity to indicate that it completed
+        tx.execute(
+            "UPDATE scans SET file_count = ?, folder_count = ?, state = ? WHERE id = ?",
+            (file_count, folder_count, ScanState::Analyzing.as_i64(), self.id)
+        )?;
+
+        tx.commit()?;
+        
+        self.state = ScanState::Analyzing;
+
+        self.file_count = Some(file_count);
+        self.folder_count = Some(folder_count);
+
+        // scan.change_counts acts as an accumulator during a scan but now we get the truth from the
+        // database. We need this to include deletes since they aren't known until tombstoning is complete
+        self.change_counts = ChangeCounts::get_by_scan_id(db, self.id)?;
+
+        Ok(())
+    }
+
+    pub fn set_state_completed(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+        match self.state {
+            ScanState::Analyzing => self.set_state(db, ScanState::Completed),
+            _ => Err(FsPulseError::Error(format!("Can't set Scan Id {} to state completed from state {}", self.id(), self.state().as_i64())))
+        }
+    }
+
+    pub fn set_state_abort(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state {
             ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
                 self.set_state(db, ScanState::Aborted)
@@ -234,7 +263,7 @@ impl Scan {
         Ok(())
     }
 
-    pub fn do_scan(
+/*     pub fn do_scan(
         db: &mut Database, 
         root_id: Option<u32>, 
         root_path: Option<String>, 
@@ -265,8 +294,8 @@ impl Scan {
         Reports::print_scan(db, &Some(scan), ReportFormat::Table)?;
 
         Ok(scan)
-    }
-
+    } */
+/* 
     fn path_arg_to_canonical_path_buf(path_arg: &str) -> Result<PathBuf, FsPulseError> {
         if path_arg.is_empty() {
             return Err(FsPulseError::Error("Provided path is empty".into()));
@@ -298,7 +327,8 @@ impl Scan {
     
         Ok(canonical_path)
     }
-
+ */
+    /* 
     fn scan_directory(db: &mut Database, path: &str, hash: bool, validate: bool) -> Result<(Self, Root), FsPulseError> {
         let (mut scan, root) = Self::begin_scan(db, path, hash, validate)?;
         let root_path_buf = PathBuf::from(root.path());
@@ -386,8 +416,9 @@ impl Scan {
     
         Ok((scan, root))
     }
+    */
 
-    fn begin_scan(db: &mut Database, path_arg: &str, hashing: bool, validating: bool) -> Result<(Self, Root), FsPulseError> {
+ /*    fn begin_scan(db: &mut Database, path_arg: &str, hashing: bool, validating: bool) -> Result<(Self, Root), FsPulseError> {
         let path_canonical = Self::path_arg_to_canonical_path_buf(&path_arg)?;
         let root_path_str = path_canonical.to_string_lossy().to_string();
 
@@ -561,7 +592,7 @@ impl Scan {
 
         Ok(())
     }
-
+ */
     pub fn for_each_scan<F>(db: &Database, last: u32, mut func: F) -> Result<i32, FsPulseError> 
     where
         F: FnMut(&Database, &Scan) -> Result<(), FsPulseError>,

@@ -220,6 +220,7 @@ impl ChangeCounts {
         }
     }
 
+    /*
     pub fn increment_count_of(&mut self, change_type: ChangeType) {
         let target = match change_type {
             ChangeType::Add => &mut self.add_count,
@@ -230,6 +231,7 @@ impl ChangeCounts {
        };
        *target += 1;
     }
+    */
 
     pub fn set_count_of(&mut self, change_type: ChangeType, count: i64) {
         let target = match change_type {
