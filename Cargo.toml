@@ -15,6 +15,7 @@ indicatif = "0.17"
 log = "0.4"
 md-5 = "0.10"
 rusqlite = { version = "0.33", features = ["bundled"] }
+symphonia = "0.5"
 thiserror = "2.0"
 
 tablestream = { git = "https://github.com/gtunes-dev/tablestream" }

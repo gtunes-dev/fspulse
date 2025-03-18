@@ -18,7 +18,7 @@
 // 5. Stopped
 
 use crate::changes::ChangeType;
-use crate::hash::Hash;
+use crate::analysis::Analysis;
 use crate::items::{Item, ItemType};
 use crate::reports::{ReportFormat, Reports};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
@@ -292,14 +292,59 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
             }
 
             for item in items {
-                let hash = match Hash::compute_md5_hash(item.path(), multi_prog) {
-                    Ok(hash_s) => Some(hash_s),
-                    Err(error) => {
-                        eprintln!("Error computing hash: {}", error);
-                        None
-                    }
+                let path = Path::new(item.path());
+                let file_name = path.file_name()
+                    .unwrap_or_else(|| path.as_os_str())
+                    .to_string_lossy();
+
+
+                // TODO: Improve the error handling for all analysis. Need to differentiate
+                // between file system errors and actual content errors
+                let (hash, hash_prog) = match scan.hashing() {
+                    true => {
+                        let mut hash_prog = multi_prog.add(ProgressBar::new(0));
+
+                        hash_prog.set_style(ProgressStyle::default_bar()
+                            .template("{msg}\n[{bar:80}] {bytes}/{total_bytes} ({eta})")
+                            .unwrap()
+                            .progress_chars("#>-"));
+
+                        hash_prog.set_message(format!("Computing hash: '{}'", file_name));
+
+                        match Analysis::compute_md5_hash(&path, &file_name, &mut hash_prog) {
+                            Ok(hash_s) => (Some(hash_s), Some(hash_prog)),
+                            Err(error) => {
+                                eprintln!("Error hashing '{}': {}", file_name, error);
+                                (None, Some(hash_prog))
+                            }
+                        }
+                    },
+                    false => (None, None)
                 };
-                update_item_analysis(db, scan.id(), item.id(), scan.hashing(), scan.validating(), hash, None)?;
+
+                let (is_valid, is_valid_prog) = match scan.validating() {
+                    true => {
+                        let is_valid_prog = multi_prog.add(ProgressBar::new_spinner());
+                        is_valid_prog.enable_steady_tick(Duration::from_millis(100));
+                        match Analysis::validate(&path, &file_name, &is_valid_prog) {
+                            Ok(is_valid_b) => (Some(is_valid_b), Some(is_valid_prog)),
+                            Err(error) => {
+                                eprintln!("Error validating '{}': {}", file_name, error);
+                                (Some(false), Some(is_valid_prog))
+                            }
+                        }
+                    }
+                    false => (None, None),
+                };
+
+                update_item_analysis(db, scan.id(), item.id(), scan.hashing(), scan.validating(), hash, is_valid)?;
+                if let Some(hash_prog) = hash_prog {
+
+                    hash_prog.finish_and_clear();
+                }
+                if let Some(is_valid_prog) = is_valid_prog {
+                    is_valid_prog.finish_and_clear();
+                }
                 analysis_prog.inc(1);
             }
         }

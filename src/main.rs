@@ -2,7 +2,7 @@ mod database;
 mod changes;
 mod cli;
 mod error;
-mod hash;
+mod analysis;
 mod items;
 mod reports;
 mod roots;
