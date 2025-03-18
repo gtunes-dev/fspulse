@@ -29,6 +29,7 @@ pub enum Error {
 
 
 use std::{fs::File, io::{BufReader, ErrorKind, Read}, path::Path};
+use std::io;
 
 use hex::encode;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -62,18 +63,24 @@ impl Analysis {
         // should treat it as a possible validation error if Symphonia can't find a codec
 
         // Probe the media source.
-        /* 
-        let probed = symphonia::default::get_probe()
-            .format(&hint, mss, &fmt_opts, &meta_opts)
-            .map_err(|e| FsPulseError::Error(e.to_string()))?;  // unsupported format : // TODO: this is a SymphoniaError - we should actually care about it in the calling function
-        */
-
+        //let probed = match symphonia::default::get_probe()
+        //    .format(&hint, mss, &fmt_opts, &meta_opts) 
         let probed = match symphonia::default::get_probe()
-            .format(&hint, mss, &fmt_opts, &meta_opts) 
+            .format(&hint, mss, &fmt_opts, &meta_opts)
+
         {
-                Ok(probed) => probed,
-                Err(symphonia::core::errors::Error::Unsupported(_)) => return Ok(true), // Handle "Unsupported" error
-                Err(_) => return Ok(false), // Handle all other errors
+            Ok(probed) => probed,
+            Err(Error::IoError(io_err)) => {
+                if io_err.kind() == ErrorKind::UnexpectedEof {  // occurs when file is too short to probe
+                    return Ok(true)
+                } else {
+                    return Ok(false)
+                }
+            },
+            Err(e) => {
+                println!("{:?}", e);
+                return Ok(false)
+            }, // Handle all other errors
         };
 
         let mut format = probed.format;
