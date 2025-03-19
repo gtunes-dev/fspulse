@@ -33,8 +33,9 @@ use std::{fs::File, io::{self, BufReader, ErrorKind, Read}, path::Path};
 use hex::encode;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::error;
-use md5::{Digest, Md5};
-use symphonia::core::{codecs::DecoderOptions, errors::Error, formats::FormatOptions, io::MediaSourceStream, meta::{MetadataOptions, StandardTagKey}, probe::Hint };
+use md5::{digest::typenum::Same, Digest, Md5};
+use symphonia::core::{codecs::DecoderOptions, errors::Error, formats::FormatOptions, io::MediaSourceStream, meta::{MetadataOptions, StandardTagKey}, probe::Hint, sample };
+use claxon::{Block, FlacReader};
 
 use crate::error::FsPulseError;
 
@@ -45,6 +46,24 @@ pub struct Analysis {
 
 impl Analysis {
 
+    pub fn validate_flac(path: &Path, file_name: &str, is_valid_prog: &ProgressBar) -> Result<bool, FsPulseError> {
+        let mut reader =  match FlacReader::open(path) {
+            Ok(reader) => reader,
+            Err(_) => return Ok(false)
+        };
+         // .expect("failed to open FLAC stream");
+        for opt_sample in reader.samples() {
+            let _sample = match opt_sample {
+                Err(e) => {
+                    error!("{:?}", e);
+                    return Ok(false)
+                }
+                Ok(sample) => sample
+            };
+        }
+        Ok(true)
+    }
+    
     pub fn validate(path: &Path, file_name: &str, is_valid_prog: &ProgressBar) -> Result<bool, FsPulseError> {
             // Try to create a Symphonia decoder
         let f = File::open(path)?;

@@ -331,6 +331,7 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
                         }
                         let is_valid_prog = multi_prog.add(ProgressBar::new_spinner());
                         is_valid_prog.enable_steady_tick(Duration::from_millis(100));
+                        /* 
                         match Analysis::validate(&path, &file_name, &is_valid_prog) {
                             Ok(is_valid_b) => (Some(is_valid_b), Some(is_valid_prog)),
                             Err(error) => {
@@ -338,6 +339,16 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
                                 (Some(false), Some(is_valid_prog))
                             }
                         }
+                        */
+                        if !path.ends_with(".flac") {
+                            match Analysis::validate_flac(&path, &file_name, &is_valid_prog) {
+                                Ok(is_valid) => (Some(is_valid), Some(is_valid_prog)),
+                                Err(_) => (Some(false), Some(is_valid_prog))
+                            }
+                        } else {
+                            (None, Some(is_valid_prog))
+                        }
+
                     }
                     false => (None, None),
                 };
