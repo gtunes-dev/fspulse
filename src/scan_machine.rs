@@ -48,7 +48,9 @@ pub fn do_scan_machine(
     root_path: Option<String>,
     last: bool, 
     hash: bool,
-    validate: bool) -> Result<(), FsPulseError> {
+    validate: bool,
+    multi_prog: &mut MultiProgress,
+) -> Result<(), FsPulseError> {
         // If an incomplete scan exists, find it.
         // TODO: Allow incomplete scans on different roots to exist. We won't, however,
         // allow the user to initiate a new scan on a root that has an outstanding scan until they
@@ -114,14 +116,14 @@ pub fn do_scan_machine(
         };
 
 
-        let mut multi_prog = MultiProgress::new();
+        //let mut multi_prog = MultiProgress::new();
         multi_prog.println(format!("Scanning: {}", root.path()))?;
         
         while scan.state() != ScanState::Completed {
             match scan.state() {
-                ScanState::Scanning => do_state_scanning(db, &root, &mut scan, &mut multi_prog),
-                ScanState::Sweeping => do_state_sweeping(db, &mut scan, &mut multi_prog),
-                ScanState::Analyzing => do_state_analyzing(db, &root, &mut scan, &mut multi_prog),
+                ScanState::Scanning => do_state_scanning(db, &root, &mut scan, multi_prog),
+                ScanState::Sweeping => do_state_sweeping(db, &mut scan, multi_prog),
+                ScanState::Analyzing => do_state_analyzing(db, &root, &mut scan, multi_prog),
                 _ => Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", scan.state()))),
             }?;
         }
@@ -324,6 +326,9 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
 
                 let (is_valid, is_valid_prog) = match scan.validating() {
                     true => {
+                        if let Some(ref hash_prog) = hash_prog {
+                            hash_prog.set_message("Hash complete");
+                        }
                         let is_valid_prog = multi_prog.add(ProgressBar::new_spinner());
                         is_valid_prog.enable_steady_tick(Duration::from_millis(100));
                         match Analysis::validate(&path, &file_name, &is_valid_prog) {
@@ -339,7 +344,6 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
 
                 update_item_analysis(db, scan.id(), item.id(), scan.hashing(), scan.validating(), hash, is_valid)?;
                 if let Some(hash_prog) = hash_prog {
-
                     hash_prog.finish_and_clear();
                 }
                 if let Some(is_valid_prog) = is_valid_prog {

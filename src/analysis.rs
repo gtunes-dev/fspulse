@@ -28,11 +28,11 @@ pub enum Error {
 */
 
 
-use std::{fs::File, io::{BufReader, ErrorKind, Read}, path::Path};
-use std::io;
+use std::{fs::File, io::{self, BufReader, ErrorKind, Read}, path::Path};
 
 use hex::encode;
 use indicatif::{ProgressBar, ProgressStyle};
+use log::error;
 use md5::{Digest, Md5};
 use symphonia::core::{codecs::DecoderOptions, errors::Error, formats::FormatOptions, io::MediaSourceStream, meta::{MetadataOptions, StandardTagKey}, probe::Hint };
 
@@ -71,20 +71,25 @@ impl Analysis {
         {
             Ok(probed) => probed,
             Err(Error::IoError(io_err)) => {
-                if io_err.kind() == ErrorKind::UnexpectedEof {  // occurs when file is too short to probe
+                is_valid_prog.println(format!("Analysis error ('{}'): {:?}", file_name, io_err));
+                if io_err.kind() == io::ErrorKind::UnexpectedEof {  // occurs when file is too short to probe
                     return Ok(true)
                 } else {
                     return Ok(false)
                 }
             },
+            Err(Error::Unsupported(_)) => {
+                return Ok(true);
+            },
             Err(e) => {
-                println!("{:?}", e);
+                error!("{:?}", e);
                 return Ok(false)
             }, // Handle all other errors
         };
 
         let mut format = probed.format;
-        let dec_opts: DecoderOptions = Default::default();
+        let mut dec_opts: DecoderOptions = Default::default();
+        dec_opts.verify = true;
 
         let tracks = format.tracks().to_vec();
         let track_count = tracks.len();

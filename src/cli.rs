@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use indicatif::MultiProgress;
 use log::info;
 
 use std::path::PathBuf;
@@ -156,7 +157,7 @@ pub enum ReportType {
 }
 
 impl Cli {
-    pub fn handle_command_line() -> Result<(), FsPulseError>{
+    pub fn handle_command_line(multi_prog: &mut MultiProgress) -> Result<(), FsPulseError>{
         let args = Cli::parse();
         
         match args.command {
@@ -165,7 +166,7 @@ impl Cli {
                     "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, validate: {}",
                     db_path, root_id, root_path, last, hash, validate
                 );
-                Self::handle_scan(db_path, root_id, root_path, last, hash, validate)?;
+                Self::handle_scan(multi_prog, db_path, root_id, root_path, last, hash, validate)?;
             }
             Command::Report { report_type } => match report_type {
                 ReportType::Roots { db_path, root_id, root_path, format } => {
@@ -204,16 +205,17 @@ impl Cli {
 
     /// Handler for `pulse` command.
     fn handle_scan(
+        multi_prog: &mut MultiProgress,
         db_path: Option<PathBuf>,
         root_id: Option<u32>,
         root_path: Option<String>,
         last: bool,
         hash: bool,
-        validate: bool
+        validate: bool,
     ) -> Result<(), FsPulseError> {
         let mut db = Database::new(db_path)?;
         //Scan::do_scan(&mut db, root_id, root_path, last, hash, validate)?;
-        do_scan_machine(&mut db, root_id, root_path, last, hash, validate)?;
+        do_scan_machine(&mut db, root_id, root_path, last, hash, validate, multi_prog)?;
 
 
         Ok(())
