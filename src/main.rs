@@ -30,7 +30,7 @@ fn main() {
 
     let logger = 
         env_logger::Builder::from_env(env_logger::Env::default().
-            default_filter_or("info"))
+            default_filter_or("trace"))
             .build();
     let level = logger.filter();
     

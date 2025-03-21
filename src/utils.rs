@@ -1,4 +1,4 @@
-use std::path::MAIN_SEPARATOR_STR;
+use std::path::{Path, MAIN_SEPARATOR_STR};
 
 use chrono::{DateTime, Local, Utc};
 
@@ -32,6 +32,13 @@ impl Utils {
         s.unwrap_or("None")
     }
     */
+
+    pub fn has_flac_extension(path: &Path) -> bool {
+        path.extension()
+            .and_then(|ext| ext.to_str()) // Convert OsStr to &str
+            .map(|ext| ext.eq_ignore_ascii_case("flac")) // Case-insensitive comparison
+            .unwrap_or(false) // Default to false if no extension
+    }
 
     pub fn opt_i64_or_none_as_str(opt_i64: Option<i64>) -> String {
         match opt_i64 {
@@ -71,6 +78,8 @@ impl Utils {
         db_time.map_or("-".to_string(), Self::format_db_time_short)
     }
 
+    /* 
+
     pub fn opt_bool_or_none_as_str(opt_bool: Option<bool>) -> &'static str {
         match opt_bool {
             Some(true) => "T",
@@ -78,14 +87,13 @@ impl Utils {
             None => "-",
         }
     }
+    */
 
-    /*
     pub fn opt_string_or_none(str: &Option<String>) -> &str {
         match str {
             Some(s) => s.as_str(),
             None => "-",
         }
     }
-    */
 
 }

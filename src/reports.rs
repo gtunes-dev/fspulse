@@ -262,10 +262,10 @@ impl Reports {
             Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.last_modified()))).header("Modified").left(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.file_size()))).header("Size").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Analysis::short_md5(&i.file_hash()))).center(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_bool_or_none_as_str(i.file_is_valid()))).header("Is Valid").center(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.validation_state())).header("Valid State").center(),
             Column::new(|f, i: &Item| write!(f, "{}", i.last_scan_id())).header("Last Scan").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_hash_scan_id()))).header("Last Hash Scan").right(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_is_valid_scan_id()))).header("Last Is Valid Scan").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_validation_scan_id()))).header("Last Valid Scan").right(),
         ]).title(title).empty_row(empty_row);
         
         stream
@@ -283,7 +283,7 @@ impl Reports {
             Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_last_modified))).header("Prev Modified").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_file_size))).header("Prev Size").right(),
             Column::new(|f, c: &Change| write!(f, "{}", Analysis::short_md5(&c.prev_hash()))).header("Prev Hash").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.prev_is_valid))).header("Prev Is Valid").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(&c.prev_validation_state))).header("Prev Valid").center(),
         ]).title(title).empty_row(empty_row);
 
         stream

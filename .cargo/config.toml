@@ -1,0 +1,2 @@
+[build]
+rustflags = ["-C", "codegen-units=1"]

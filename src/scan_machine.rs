@@ -18,15 +18,17 @@
 // 5. Stopped
 
 use crate::changes::ChangeType;
-use crate::analysis::Analysis;
+use crate::analysis::{Analysis, ValidationState};
 use crate::items::{Item, ItemType};
 use crate::reports::{ReportFormat, Reports};
+use crate::utils::Utils;
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 use crate::roots::Root;
 use crate::scans::ScanState;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
+use log::error;
 use dialoguer::Select;
 //use md5::digest::typenum::Abs;
 use std::collections::VecDeque;
@@ -324,36 +326,35 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
                     false => (None, None)
                 };
 
-                let (is_valid, is_valid_prog) = match scan.validating() {
+                let (validation_state, validation_state_desc, is_valid_prog) = match scan.validating() {
                     true => {
                         if let Some(ref hash_prog) = hash_prog {
                             hash_prog.set_message("Hash complete");
                         }
-                        let is_valid_prog = multi_prog.add(ProgressBar::new_spinner());
-                        is_valid_prog.enable_steady_tick(Duration::from_millis(100));
-                        /* 
-                        match Analysis::validate(&path, &file_name, &is_valid_prog) {
-                            Ok(is_valid_b) => (Some(is_valid_b), Some(is_valid_prog)),
-                            Err(error) => {
-                                eprintln!("Error validating '{}': {}", file_name, error);
-                                (Some(false), Some(is_valid_prog))
-                            }
-                        }
-                        */
-                        if !path.ends_with(".flac") {
-                            match Analysis::validate_flac(&path, &file_name, &is_valid_prog) {
-                                Ok(is_valid) => (Some(is_valid), Some(is_valid_prog)),
-                                Err(_) => (Some(false), Some(is_valid_prog))
+                        
+                        let is_flac = Utils::has_flac_extension(&path);
+
+                        if is_flac {
+                            let is_valid_prog = multi_prog.add(ProgressBar::new_spinner());
+                            is_valid_prog.set_message(format!("Validating: '{}'", &file_name));
+                            is_valid_prog.enable_steady_tick(Duration::from_millis(100));
+
+                            match Analysis::validate_flac_claxon(&path, &file_name, &is_valid_prog) {
+                                Ok((validation_state, validation_state_desc)) => (validation_state, validation_state_desc, Some(is_valid_prog)),
+                                Err(error) => {
+                                    let e_str = format!("{:?}", error);
+                                    error!("Error validating '{}': {}", file_name, e_str);
+                                    (ValidationState::Invalid, None, Some(is_valid_prog))
+                                }
                             }
                         } else {
-                            (None, Some(is_valid_prog))
+                            (ValidationState::NoValidator, None, None)
                         }
-
                     }
-                    false => (None, None),
+                    false => (ValidationState::Unknown, None, None)
                 };
 
-                update_item_analysis(db, scan.id(), item.id(), scan.hashing(), scan.validating(), hash, is_valid)?;
+                update_item_analysis(db, scan, &item, hash, validation_state, validation_state_desc)?;
                 if let Some(hash_prog) = hash_prog {
                     hash_prog.finish_and_clear();
                 }
@@ -414,12 +415,13 @@ fn handle_scan_item(
                         last_modified = ?, 
                         file_size = ?, 
                         file_hash = NULL, 
-                        file_is_valid = NULL, 
+                        validation_state = ?,
+                        validation_state_desc = NULL,
                         last_scan_id = ?,
                         last_hash_scan_id = NULL, 
-                        last_is_valid_scan_id = NULL 
+                        last_validation_scan_id = NULL 
                     WHERE id = ?", 
-                (item_type_str, last_modified, file_size, scan.id(), existing_item.id()))?;
+                (item_type_str, last_modified, file_size, ValidationState::Unknown.to_string(), scan.id(), existing_item.id()))?;
             if rows_updated == 0 {
                     return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
             }
@@ -435,12 +437,13 @@ fn handle_scan_item(
                     last_modified = ?, 
                     file_size = ?,
                     file_hash = NULL,
-                    file_is_valid = NULL,
+                    validation_state = ?,
+                    validation_state_desc = NULL,
                     last_scan_id = ?,
                     last_hash_scan_id = NULL,
-                    last_is_valid_scan_id = NULL 
+                    last_validation_scan_id = NULL 
                 WHERE id = ?", 
-                (item_type_str, last_modified, file_size, scan.id(), existing_item.id()))?;
+                (item_type_str, last_modified, file_size, ValidationState::Unknown.to_string(), scan.id(), existing_item.id()))?;
             if rows_updated == 0 {
                     return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
             }
@@ -485,8 +488,8 @@ fn handle_scan_item(
     } else {
         // Item is new, insert into items and changes tables
         let tx = db.conn.transaction()?;
-        tx.execute("INSERT INTO items (root_id, path, item_type, last_modified, file_size, last_scan_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (scan.root_id(), &path_str, item_type.as_str(), last_modified, file_size, scan.id()))?;
+        tx.execute("INSERT INTO items (root_id, path, item_type, last_modified, file_size, validation_state, last_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (scan.root_id(), &path_str, item_type.as_str(), last_modified, file_size, ValidationState::Unknown.to_string(), scan.id()))?;
         let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
         tx.execute("INSERT INTO changes (scan_id, item_id, change_type) VALUES (?, ?, ?)",
             (scan.id(), item_id, ChangeType::Add.as_str()))?;
@@ -498,46 +501,100 @@ fn handle_scan_item(
 
 pub fn update_item_analysis(
     db: &mut Database,
-    scan_id: i64,
-    item_id: i64,
-    hashing: bool,
-    validating: bool,
+    scan: &Scan,
+    item: &Item,
     new_hash: Option<String>,
-    new_is_valid: Option<bool>,
+    new_validation_state: ValidationState,
+    new_validation_state_desc: Option<String>,
 ) -> Result<(), FsPulseError> {
+    let mut update_changes = false;
+
+    // values to use when updating the changes table
+    let mut hash_change = None;
+    let mut validation_state_change = None;
+    let mut validation_state_desc_change = None;
+
+    // values to use in the item update
+    let mut hash_item = item.file_hash();
+    let mut validation_state_item = item.validation_state().to_str();
+    let mut validation_state_desc_item = item.validation_state_desc();
+    let mut last_hash_scan_id_item = item.last_hash_scan_id();
+    let mut last_validation_scan_id_item = item.last_validation_scan_id();
+
+    if scan.hashing() {
+        if item.file_hash() != new_hash.as_deref() {
+            // update the change record only if a previous hash had been computed
+            if item.last_hash_scan_id().is_some() {
+                update_changes = true;
+
+                // for change update
+                hash_change = item.file_hash();
+            }
+            
+            hash_item = new_hash.as_deref();
+        }
+
+        // Update the last scan id whether or not anything changed
+        last_hash_scan_id_item = Some(scan.id());
+    }
+
+    if scan.validating() {
+        if (item.validation_state() != new_validation_state) || (item.validation_state_desc() != new_validation_state_desc.as_deref()) {
+            // update the change record only if a previous validation had been completed
+            if item.last_validation_scan_id().is_some() {
+                update_changes = true;
+                validation_state_change = Some(item.validation_state().to_str());
+                validation_state_desc_change = item.validation_state_desc();
+            }
+
+            // always update the item when the validation state changes
+            validation_state_item = new_validation_state.to_str();
+            validation_state_desc_item = new_validation_state_desc.as_deref();
+        }
+
+        // update the last validation scan id whether or not anything changed
+        last_validation_scan_id_item = Some(scan.id());
+    }
+    
     let tx = db.conn.transaction()?; // Start transaction
 
-    // Step 1: UPSERT into `changes` table
-    tx.execute(
-        "INSERT INTO changes (scan_id, item_id, change_type, prev_hash, prev_is_valid)
-         SELECT ?, ?, 'M', 
-                CASE WHEN ? = 1 THEN file_hash ELSE NULL END, 
-                CASE WHEN ? = 1 THEN file_is_valid ELSE NULL END
-         FROM items WHERE id = ?
-         ON CONFLICT(scan_id, item_id, change_type) 
-         DO UPDATE SET 
-            prev_hash = CASE WHEN ? = 1 THEN (SELECT file_hash FROM items WHERE id = ?) ELSE NULL END,
-            prev_is_valid = CASE WHEN ? = 1 THEN (SELECT file_is_valid FROM items WHERE id = ?) ELSE NULL END",
-        rusqlite::params![
-            scan_id, item_id, 
-            hashing as i64, validating as i64, item_id, 
-            hashing as i64, item_id, 
-            validating as i64, item_id
-        ],
-    )?;
+    // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
+    if update_changes {
+        tx.execute(
+            "INSERT INTO changes (scan_id, item_id, change_type, prev_hash, prev_validation_state, prev_validation_state_desc)
+                VALUES (?, ?, 'M', ?, ?, ?)
+            ON CONFLICT(scan_id, item_id, change_type) 
+                DO UPDATE SET 
+                    prev_hash = excluded.prev_hash,
+                    prev_validation_state = excluded.prev_validation_state,
+                    prev_validation_state_desc = excluded.prev_validation_state_desc",
+            rusqlite::params![
+                scan.id(), 
+                item.id(),
+                hash_change, 
+                validation_state_change, 
+                validation_state_desc_change,
+            ],
+        )?;
+    }
 
     // Step 2: Update `items` table
     tx.execute(
         "UPDATE items 
-         SET file_hash = CASE WHEN ? = 1 THEN ? ELSE file_hash END,
-             last_hash_scan_id = CASE WHEN ? = 1 THEN ? ELSE last_hash_scan_id END,
-             file_is_valid = CASE WHEN ? = 1 THEN ? ELSE file_is_valid END,
-             last_is_valid_scan_id = CASE WHEN ? = 1 THEN ? ELSE last_is_valid_scan_id END
-         WHERE id = ?",
+            SET 
+                file_hash = ?,
+                validation_state = ?,
+                validation_state_desc = ?,
+                last_hash_scan_id = ?,
+                last_validation_scan_id = ?
+        WHERE id = ?",
         rusqlite::params![
-            hashing as i64, new_hash, hashing as i64, scan_id,
-            validating as i64, new_is_valid, validating as i64, scan_id,
-            item_id
+            hash_item,
+            validation_state_item,
+            validation_state_desc_item,
+            last_hash_scan_id_item,
+            last_validation_scan_id_item,
+            item.id()
         ],
     )?;
 

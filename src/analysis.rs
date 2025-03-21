@@ -27,15 +27,14 @@ pub enum Error {
 
 */
 
-
-use std::{fs::File, io::{self, BufReader, ErrorKind, Read}, path::Path};
+use std::{fmt, fs::File, io::{self, BufReader, ErrorKind, Read}, path::Path};
 
 use hex::encode;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::error;
-use md5::{digest::typenum::Same, Digest, Md5};
-use symphonia::core::{codecs::DecoderOptions, errors::Error, formats::FormatOptions, io::MediaSourceStream, meta::{MetadataOptions, StandardTagKey}, probe::Hint, sample };
-use claxon::{Block, FlacReader};
+use log::trace;
+use md5::{Digest, Md5};
+use symphonia::core::{codecs::DecoderOptions, errors::Error, formats::FormatOptions, io::MediaSourceStream, meta::{MetadataOptions, StandardTagKey}, probe::Hint };
+use claxon::FlacReader;
 
 use crate::error::FsPulseError;
 
@@ -44,28 +43,74 @@ pub struct Analysis {
     // no fields
 }
 
-impl Analysis {
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ValidationState {
+    #[default]
+    Unknown,
+    Valid,
+    Invalid,
+    NoValidator
+}
 
-    pub fn validate_flac(path: &Path, file_name: &str, is_valid_prog: &ProgressBar) -> Result<bool, FsPulseError> {
+impl ValidationState {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            ValidationState::Unknown => "U",
+            ValidationState::Valid => "V",
+            ValidationState::Invalid => "I",
+            ValidationState::NoValidator => "N",
+        }
+    }
+
+    pub fn from_string(value: &str) -> Self {
+        ValidationState::from_char(value.chars().next().unwrap())
+    }
+
+    /// Convert a single-character string from the database into a State
+    pub fn from_char(value: char) -> Self {
+        match value {
+            'U' => ValidationState::Unknown,
+            'V' => ValidationState::Valid,
+            'I' => ValidationState::Invalid,
+            'N' => ValidationState::NoValidator,
+            _ => ValidationState::Unknown,
+        }
+    }
+}
+
+/// Implement Display to print the short codes directly
+impl fmt::Display for ValidationState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_str())
+    }
+}
+
+impl Analysis {
+    pub fn validate_flac_claxon(path: &Path, _file_name: &str, _is_valid_prog: &ProgressBar) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let mut reader =  match FlacReader::open(path) {
             Ok(reader) => reader,
-            Err(_) => return Ok(false)
+            Err(e) => {
+                let e_str = format!("{:?}", e);
+                return Ok((ValidationState::Invalid, Some(e_str)))
+            }
         };
-         // .expect("failed to open FLAC stream");
+
         for opt_sample in reader.samples() {
             let _sample = match opt_sample {
                 Err(e) => {
-                    error!("{:?}", e);
-                    return Ok(false)
+                    let e_str = format!("{:?}", e);
+                    return Ok((ValidationState::Invalid, Some(e_str)))
                 }
                 Ok(sample) => sample
             };
         }
-        Ok(true)
+        Ok((ValidationState::Valid, None))
     }
     
-    pub fn validate(path: &Path, file_name: &str, is_valid_prog: &ProgressBar) -> Result<bool, FsPulseError> {
+    pub fn _validate_flac_symphonia(path: &Path, file_name: &str, is_valid_prog: &ProgressBar) -> Result<bool, FsPulseError> {
             // Try to create a Symphonia decoder
+        
+        trace!("Begin: Symphonia validate: {}", file_name);
         let f = File::open(path)?;
         let mss = MediaSourceStream::new(Box::new(f), Default::default());
 
@@ -90,6 +135,7 @@ impl Analysis {
         {
             Ok(probed) => probed,
             Err(Error::IoError(io_err)) => {
+                trace!("Error::IoError in get_probe: {:?}", io_err);
                 is_valid_prog.println(format!("Analysis error ('{}'): {:?}", file_name, io_err));
                 if io_err.kind() == io::ErrorKind::UnexpectedEof {  // occurs when file is too short to probe
                     return Ok(true)
@@ -97,11 +143,13 @@ impl Analysis {
                     return Ok(false)
                 }
             },
-            Err(Error::Unsupported(_)) => {
+            Err(Error::Unsupported(err)) => {
+                trace!("Error::Unsupported in get_probe: {:?}", err);
                 return Ok(true);
             },
             Err(e) => {
-                error!("{:?}", e);
+                trace!("Error in get_probe: {:?}", e);
+                //error!("{:?}", e);
                 return Ok(false)
             }, // Handle all other errors
         };
@@ -120,15 +168,16 @@ impl Analysis {
             
             let mut decoder = match symphonia::default::get_codecs().make(&track.codec_params, &dec_opts) {
                 Ok(decoder) => decoder, // Assign decoder if successful
-                Err(symphonia::core::errors::Error::Unsupported(_)) => return Ok(true), // Handle "Unsupported" error
-                Err(_) => return Ok(false), // Handle all other errors
+                Err(symphonia::core::errors::Error::Unsupported(u)) => 
+                {
+                    trace!("Error::Unsupported in get_codecs: {:?}", u); 
+                    return Ok(true) // Handle "Unsupported" error
+                },
+                Err(e) => {
+                    trace!("Error in get_codecs: {:?}", e); 
+                    return Ok(false) // Handle all other errors
+                },
             };
-
-            /*
-            let mut decoder = symphonia::default::get_codecs()
-                .make(&track.codec_params, &dec_opts)
-                .map_err(|e| FsPulseError::Error(e.to_string()))?; // unsupported codec
-            */
 
             let mut track_title: Option<String> = None;
 
@@ -155,9 +204,11 @@ impl Analysis {
                         // then restart the decode loop. This is an advanced feature and it is not
                         // unreasonable to consider this "the end." As of v0.5.0, the only usage of this is
                         // for chained OGG physical streams.
+                        trace!("Error::ResetRequired in next_packet"); 
                         unimplemented!();
                     },
                     Err(Error::IoError(io_err)) => {
+                        trace!("Error::IoError in next_packet: {:?}", io_err); 
                         if io_err.kind() == ErrorKind::UnexpectedEof {
                             // This is how Symphonia signals EOF - just break the loop
                             break;
@@ -166,8 +217,9 @@ impl Analysis {
                         }
                     },
                     Err(err) => {
+                        trace!("Error in next_packet: {:?}", err); 
                         // A unrecoverable error occurred, halt decoding.
-                        println!("{:?}", err);
+                        //println!("{:?}", err);
                         panic!("{}", err);
                     }
                 };
@@ -190,22 +242,26 @@ impl Analysis {
                     Ok(_decoded) => {
                         // Consume the decoded audio samples (see below).
                     }
-                    Err(Error::IoError(_)) => {
+                    Err(Error::IoError(io_err)) => {
                         // The packet failed to decode due to an IO error, skip the packet.
-                        continue;
+                        trace!("Error::IoError in decode: {:?}", io_err); 
+                        return Ok(false)
                     }
-                    Err(Error::DecodeError(_)) => {
+                    Err(Error::DecodeError(err)) => {
                         // The packet failed to decode due to invalid data, skip the packet.
-                        return Ok(false);
+                        trace!("Error::DecodeError in decode: {:?}", err); 
+                        return Ok(false)
                         //continue;
                     }
                     Err(err) => {
                         // An unrecoverable error occurred, halt decoding.
+                        trace!("Error in decode: {:?}", err); 
                         panic!("{}", err);
                     }
                 }
             }
         }
+        trace!("End: Symphonia validate: {}", file_name);
         Ok(true)
     }
 

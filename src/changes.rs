@@ -7,19 +7,39 @@ use crate::database::Database;
 use crate::error::FsPulseError;
 
 const SQL_FOR_EACH_CHANGE_IN_SCAN: &str = 
-    "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.prev_last_modified, prev_file_size, prev_hash, prev_is_valid
-        FROM changes
-        JOIN items ON items.id = changes.item_id
-        WHERE changes.scan_id = ?
-        ORDER BY items.path ASC";
+    "SELECT 
+        items.item_type, 
+        items.path, 
+        changes.id, 
+        changes.scan_id, 
+        changes.item_id, 
+        changes.change_type, 
+        changes.prev_last_modified, 
+        prev_file_size, 
+        prev_hash, 
+        prev_validation_state,
+        prev_validation_state_desc
+    FROM changes
+    JOIN items ON items.id = changes.item_id
+    WHERE changes.scan_id = ?
+    ORDER BY items.path ASC";
 const SQL_FOR_EACH_CHANGE_IN_ITEM: &str = 
-    "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, changes.prev_last_modified, prev_file_size, prev_hash, prev_is_valid
-        FROM changes
-        JOIN items ON items.id = changes.item_id
-        WHERE changes.item_id = ?
-        ORDER BY changes.id ASC";
-
-
+    "SELECT 
+        items.item_type, 
+        items.path, 
+        changes.id, 
+        changes.scan_id, 
+        changes.item_id, 
+        changes.change_type, 
+        changes.prev_last_modified, 
+        prev_file_size, 
+        prev_hash, 
+        prev_validation_state,
+        prev_validation_state_desc
+    FROM changes
+    JOIN items ON items.id = changes.item_id
+    WHERE changes.item_id = ?
+    ORDER BY changes.id ASC";
 
 #[derive(Clone, Debug, Default)]
 pub struct Change {
@@ -30,8 +50,10 @@ pub struct Change {
     pub change_type: String,
     pub prev_last_modified: Option<i64>,
     pub prev_file_size: Option<i64>,
-    prev_hash: Option<String>,
-    pub prev_is_valid: Option<bool>,
+    pub prev_hash: Option<String>,
+    pub prev_validation_state : Option<String>,
+    #[allow(dead_code)]
+    pub prev_validation_state_desc: Option<String>,
 
     // Additional non-entity fields
     pub item_type: String,
@@ -98,13 +120,25 @@ impl Change {
         let conn = &db.conn;
     
         conn.query_row(
-            "SELECT items.item_type, items.path, changes.id, changes.scan_id, changes.item_id, changes.change_type, 
-                    changes.prev_last_modified, changes.prev_file_size, changes.prev_hash, changes.prev_is_valid
+            "SELECT 
+                items.item_type, 
+                items.path, 
+                changes.id, 
+                changes.scan_id, 
+                changes.item_id, 
+                changes.change_type, 
+                changes.prev_last_modified, 
+                changes.prev_file_size, 
+                changes.prev_hash, 
+                changes.prev_validation_state,
+                changes.prev_validation_state_desc
             FROM changes
             JOIN items ON items.id = changes.item_id
             WHERE changes.id = ?", 
             [change_id], 
             |row| Ok(Change {
+                item_type: row.get(0)?,
+                item_path: row.get(1)?,
                 id: row.get(2)?,  
                 scan_id: row.get(3)?,  
                 item_id: row.get(4)?,  
@@ -112,9 +146,8 @@ impl Change {
                 prev_last_modified: row.get(6)?,  
                 prev_file_size: row.get(7)?,  
                 prev_hash: row.get(8)?,
-                prev_is_valid: row.get(8)?,
-                item_type: row.get(0)?,  
-                item_path: row.get(1)?  
+                prev_validation_state: row.get(9)?,
+                prev_validation_state_desc: row.get(10)?
             })
         )
         .optional()
@@ -146,14 +179,15 @@ impl Change {
         let rows = stmt.query_map([sql_query_param], |row| {
             Ok(
                  Change {
-                    id: row.get::<_, i64>(2)?,                          // changes.id
-                    scan_id: row.get::<_, i64>(3)?,                     // changes.scan_id
-                    item_id: row.get::<_, i64>(4)?,                     // changes.item_id
-                    change_type: row.get::<_, String>(5)?,              // changes.change_type
-                    prev_last_modified: row.get::<_, Option<i64>>(6)?,  // changes.prev_last_modified
-                    prev_file_size: row.get::<_, Option<i64>>(7)?,      // changes.prev_file_size
-                    prev_hash: row.get::<_, Option<String>>(8)?,        // changes.prev_hash
-                    prev_is_valid: row.get::<_, Option<bool>>(9)?,      // changes.prev_is_valid
+                    id: row.get::<_, i64>(2)?,                                      // changes.id
+                    scan_id: row.get::<_, i64>(3)?,                                 // changes.scan_id
+                    item_id: row.get::<_, i64>(4)?,                                 // changes.item_id
+                    change_type: row.get::<_, String>(5)?,                          // changes.change_type
+                    prev_last_modified: row.get::<_, Option<i64>>(6)?,              // changes.prev_last_modified
+                    prev_file_size: row.get::<_, Option<i64>>(7)?,                  // changes.prev_file_size
+                    prev_hash: row.get::<_, Option<String>>(8)?,                    // changes.prev_hash
+                    prev_validation_state: row.get::<_, Option<String>>(9)?,        // changes.prev_validation_state
+                    prev_validation_state_desc: row.get::<_, Option<String>>(10)?,  // changes.prev_validation_state_desc
 
                     // Additional fields
                     item_type: row.get::<_, String>(0)?,                // items.item_type
