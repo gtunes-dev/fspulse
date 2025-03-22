@@ -33,8 +33,8 @@ use hex::encode;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::trace;
 use md5::{Digest, Md5};
-use symphonia::core::{codecs::DecoderOptions, errors::Error, formats::FormatOptions, io::MediaSourceStream, meta::{MetadataOptions, StandardTagKey}, probe::Hint };
-use claxon::FlacReader;
+use symphonia::core::{codecs::audio::AudioDecoderOptions, errors::Error, formats::{probe::Hint, FormatOptions}, io::MediaSourceStream, meta::MetadataOptions  };
+use claxon::{Block, FlacReader};
 
 use crate::error::FsPulseError;
 
@@ -86,7 +86,34 @@ impl fmt::Display for ValidationState {
 }
 
 impl Analysis {
-    pub fn validate_flac_claxon(path: &Path, _file_name: &str, _is_valid_prog: &ProgressBar) -> Result<(ValidationState, Option<String>), FsPulseError> {
+    pub fn validate_flac_claxon2(path: &Path, _file_name: &str, _is_valid_prog: &ProgressBar) -> Result<(ValidationState, Option<String>), FsPulseError> {
+        let mut reader =  match FlacReader::open(path) {
+            Ok(reader) => reader,
+            Err(e) => {
+                let e_str = format!("{:?}", e);
+                return Ok((ValidationState::Invalid, Some(e_str)))
+            }
+        };
+
+        let mut frame_reader = reader.blocks();
+        let mut block = Block::empty();
+
+        loop {
+            match frame_reader.read_next_or_eof(block.into_buffer()) {
+                Ok(Some(next_block)) => block = next_block,
+                Ok(None) => break, // EOF.
+                Err(error) => {
+                    let e_str = format!("{:?}", error);
+                        return Ok((ValidationState::Invalid, Some(e_str)))
+                },
+            }
+        }
+
+        Ok((ValidationState::Valid, None))
+    }
+
+
+    pub fn _validate_flac_claxon(path: &Path, _file_name: &str, _is_valid_prog: &ProgressBar) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let mut reader =  match FlacReader::open(path) {
             Ok(reader) => reader,
             Err(e) => {
@@ -128,12 +155,10 @@ impl Analysis {
 
         // Probe the media source.
         //let probed = match symphonia::default::get_probe()
-        //    .format(&hint, mss, &fmt_opts, &meta_opts) 
-        let probed = match symphonia::default::get_probe()
-            .format(&hint, mss, &fmt_opts, &meta_opts)
-
-        {
-            Ok(probed) => probed,
+        //    .format(&hint, mss, &fmt_opts, &meta_opts)
+        let mut format = match symphonia::default::get_probe()
+            .probe(&hint, mss, fmt_opts, meta_opts) {
+            Ok(format) => format,
             Err(Error::IoError(io_err)) => {
                 trace!("Error::IoError in get_probe: {:?}", io_err);
                 is_valid_prog.println(format!("Analysis error ('{}'): {:?}", file_name, io_err));
@@ -153,10 +178,9 @@ impl Analysis {
                 return Ok(false)
             }, // Handle all other errors
         };
-
-        let mut format = probed.format;
-        let mut dec_opts: DecoderOptions = Default::default();
-        dec_opts.verify = true;
+        
+        let dec_opts: AudioDecoderOptions = Default::default();
+        //dec_opts.verify = true;
 
         let tracks = format.tracks().to_vec();
         let track_count = tracks.len();
@@ -166,7 +190,16 @@ impl Analysis {
             
             let track_id = track.id;
             
-            let mut decoder = match symphonia::default::get_codecs().make(&track.codec_params, &dec_opts) {
+            let track_codec_params = match track.codec_params.as_ref() {
+                Some(code_params) => code_params,
+                None => {
+                    return Ok(false);
+                }
+            };
+            
+            let mut decoder = match symphonia::default::get_codecs().
+                make_audio_decoder(track_codec_params.audio().unwrap(), &dec_opts) {
+
                 Ok(decoder) => decoder, // Assign decoder if successful
                 Err(symphonia::core::errors::Error::Unsupported(u)) => 
                 {
@@ -181,24 +214,30 @@ impl Analysis {
 
             let mut track_title: Option<String> = None;
 
+            /* 
             if let Some(metadata) = format.metadata().current() {
                 for tag in metadata.tags() {
-                    if tag.std_key == Some(StandardTagKey::TrackTitle) {
-                        track_title = Some(tag.value.to_string());
+                    if tag.std == Some(StandardTagKey::TrackTitle) {
+                        tag.
+                        track_title = Some(tag.());
                         break;
                     }
                 }
             }
+            */
             
-            let track_title = track_title.unwrap_or_else(|| "unknown".to_string());
+            //let track_title = track_title.unwrap_or_else(|| "unknown".to_string());
 
-            is_valid_prog.set_message(format!("Validating '{}': Track {} ('{}') of {}", file_name, track_id, track_title, track_count));
+            //is_valid_prog.set_message(format!("Validating '{}': Track {} ('{}') of {}", file_name, track_id, track_title, track_count));
 
             // The decode loop
             loop {
                     // Get the next packet from the media format.
                 let packet = match format.next_packet() {
-                    Ok(packet) => packet,
+                    Ok(Some(packet)) => packet,
+                    Ok(None) => {
+                        break;
+                    },
                     Err(Error::ResetRequired) => {
                         // The track list has been changed. Re-examine it and create a new set of decoders,
                         // then restart the decode loop. This is an advanced feature and it is not

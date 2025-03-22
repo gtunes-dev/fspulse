@@ -17,7 +17,6 @@ indicatif-log-bridge = "0.2"
 log = "0.4"
 md-5 = "0.10"
 rusqlite = { version = "0.33", features = ["bundled"] }
-symphonia = "0.5"
+symphonia = { git = "https://github.com/pdeljanov/Symphonia.git", branch = "dev-0.6" }
 thiserror = "2.0"
-
 tablestream = { git = "https://github.com/gtunes-dev/tablestream" }

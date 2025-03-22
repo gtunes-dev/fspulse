@@ -108,8 +108,9 @@ pub fn do_scan_machine(
         // If scan is present, it is incomplete. Ask the user to decide if it should be resumed or stopped.
         // Also allows the user to exit without making the choice now
 
+
         let mut scan = match existing_scan.as_mut() {
-            Some(existing_scan) => match stop_or_resume_scan(db, &root, existing_scan)? {
+            Some(existing_scan) => match stop_or_resume_scan(db, &root, existing_scan, multi_prog)? {
                 ScanDecision::NewScan => initiate_scan(db, &root, hash, validate)?,
                 ScanDecision::ContinueExisting => *existing_scan,
                 ScanDecision::Exit => return Ok(())
@@ -117,8 +118,6 @@ pub fn do_scan_machine(
             None => initiate_scan(db, &root, hash, validate)?
         };
 
-
-        //let mut multi_prog = MultiProgress::new();
         multi_prog.println(format!("Scanning: {}", root.path()))?;
         
         while scan.state() != ScanState::Completed {
@@ -141,7 +140,7 @@ enum ScanDecision {
     Exit,
 }
 
-fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan) -> Result<ScanDecision, FsPulseError> {
+fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<ScanDecision, FsPulseError> {
     let options = vec![
         "Resume the scan", 
         "Stop & exit",
@@ -158,6 +157,7 @@ fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan) -> Resul
 
     let decision = match selection {
         0 => {
+            multi_prog.println("Resuming scan")?;
             match scan.state() {
                 ScanState::Scanning => ScanDecision::ContinueExisting,
                 ScanState::Sweeping => ScanDecision::ContinueExisting,
@@ -190,9 +190,9 @@ fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan, multi_prog
     let mut q = VecDeque::new();
 
     let dir_prog = multi_prog.add(ProgressBar::new_spinner());
-    dir_prog.enable_steady_tick(Duration::from_millis(100));
+    dir_prog.enable_steady_tick(Duration::from_millis(250));
     let item_prog = multi_prog.add(ProgressBar::new_spinner());
-    item_prog.enable_steady_tick(Duration::from_millis(100));
+    item_prog.enable_steady_tick(Duration::from_millis(250));
 
     q.push_back(QueueEntry {
         path: root_path_buf.clone(),
@@ -246,7 +246,7 @@ fn do_state_sweeping(db: &mut Database, scan: &mut Scan, multi_prog: &mut MultiP
 
     let sweep_prog = multi_prog.add(ProgressBar::new_spinner());
     sweep_prog.set_message("Detecting changes and deletions...");
-    sweep_prog.enable_steady_tick(Duration::from_millis(100));
+    sweep_prog.enable_steady_tick(Duration::from_millis(250));
 
     // Insert deletion records into changes
         tx.execute(
@@ -337,9 +337,14 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
                         if is_flac {
                             let is_valid_prog = multi_prog.add(ProgressBar::new_spinner());
                             is_valid_prog.set_message(format!("Validating: '{}'", &file_name));
-                            is_valid_prog.enable_steady_tick(Duration::from_millis(100));
+                            is_valid_prog.enable_steady_tick(Duration::from_millis(250));
 
-                            match Analysis::validate_flac_claxon(&path, &file_name, &is_valid_prog) {
+                            let x = match Analysis::_validate_flac_symphonia(path, &file_name, &is_valid_prog) {
+                                Ok(_) => { },
+                                Err(_) => {}
+                            };
+
+                            match Analysis::validate_flac_claxon2(&path, &file_name, &is_valid_prog) {
                                 Ok((validation_state, validation_state_desc)) => (validation_state, validation_state_desc, Some(is_valid_prog)),
                                 Err(error) => {
                                     let e_str = format!("{:?}", error);
