@@ -259,8 +259,11 @@ fn do_state_sweeping(db: &mut Database, scan: &mut Scan, multi_prog: &mut MultiP
     
        // Mark unseen items as tombstones
        tx.execute(
-        "UPDATE items SET is_tombstone = 1 WHERE root_id = ? AND last_scan_id < ? AND is_tombstone = 0",
-        (scan.root_id(), scan.root_id()),
+        "UPDATE items SET 
+            is_tombstone = 1,
+            last_scan_id = ?
+        WHERE root_id = ? AND last_scan_id < ? AND is_tombstone = 0",
+        (scan.id(), scan.root_id(), scan.id()),
     )?;
 
     tx.commit()?;
@@ -339,10 +342,12 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
                             is_valid_prog.set_message(format!("Validating: '{}'", &file_name));
                             is_valid_prog.enable_steady_tick(Duration::from_millis(250));
 
+                            /*
                             let x = match Analysis::_validate_flac_symphonia(path, &file_name, &is_valid_prog) {
                                 Ok(_) => { },
                                 Err(_) => {}
                             };
+                            */
 
                             match Analysis::validate_flac_claxon2(&path, &file_name, &is_valid_prog) {
                                 Ok((validation_state, validation_state_desc)) => (validation_state, validation_state_desc, Some(is_valid_prog)),

@@ -97,7 +97,7 @@ impl Reports {
         Ok(())
     }
 
-    pub fn report_items(db: &Database, item_id: Option<u32>, item_path: Option<String>, root_id: Option<u32>, format: ReportFormat) -> Result<(), FsPulseError> {
+    pub fn report_items(db: &Database, item_id: Option<u32>, item_path: Option<String>, root_id: Option<u32>, invalid: bool, format: ReportFormat) -> Result<(), FsPulseError> {
 
         match (item_id, item_path, root_id) {
             (Some(item_id), _, _) => {
@@ -129,14 +129,19 @@ impl Reports {
                 let root = Root::get_by_id(db, root_id.into())?
                     .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", root_id)))?;
 
-                let scan = Scan::get_latest_for_root(db, root.id())?
-                    .ok_or_else(|| FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id)))?;
+                if invalid {
+                    Self::print_invalid_items_as_table(db, &root)?;
+                } else {
 
-                match format {
-                    ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?,
-                    ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root)?,
-                    _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
+                    let scan = Scan::get_latest_for_root(db, root.id())?
+                        .ok_or_else(|| FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id)))?;
 
+                    match format {
+                        ReportFormat::Tree => Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?,
+                        ReportFormat::Table => Self::print_last_seen_scan_items_as_table(db, &scan, &root)?,
+                        _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
+
+                    }
                 }
             },
             _ => {
@@ -251,6 +256,21 @@ impl Reports {
         stream
     }
 
+    fn begin_invalid_items_table(title: &str, empty_row: &str) -> Stream<Item, Stdout> {
+        let out = io::stdout();
+        let stream = Stream::new(out, vec![
+            Column::new(|f, i: &Item| write!(f, "{}", i.id())).header("ID").right().min_width(6),
+            Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.last_modified()))).header("Modified").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.file_size()))).header("Size").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_validation_scan_id()))).header("Last Valid Scan").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_string_or_none(i.validation_state_desc()))).header("Validation Desc").left(),
+
+        ]).title(title).empty_row(empty_row);
+
+        stream
+    }
+
     fn begin_items_table(title: &str, empty_row: &str) -> Stream<Item, Stdout> {
         let out = io::stdout();
         let stream = Stream::new(out, vec![
@@ -283,7 +303,7 @@ impl Reports {
             Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_last_modified))).header("Prev Modified").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_file_size))).header("Prev Size").right(),
             Column::new(|f, c: &Change| write!(f, "{}", Analysis::short_md5(&c.prev_hash()))).header("Prev Hash").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(&c.prev_validation_state))).header("Prev Valid").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.prev_validation_state()))).header("Prev Valid").center(),
         ]).title(title).empty_row(empty_row);
 
         stream
@@ -423,8 +443,25 @@ impl Reports {
         Ok(())
     }
 
-    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root: &Root) -> Result<(), FsPulseError> {
+    pub fn print_invalid_items_as_table(db: &Database, root: &Root) -> Result<(), FsPulseError> {
         let mut stream = 
+            Self::begin_invalid_items_table(&format!("Invalid Items (Root Path: '{}'", root.path()), "No Invalid Items");
+       
+        Item::for_each_invalid_item_in_root(
+            db, 
+            root.id(),
+            |item|  {
+                stream.row(item.clone())?;
+                Ok(())
+            }
+        )?;
+    
+        stream.finish()?;
+        Ok(())
+    }
+
+    fn print_last_seen_scan_items_as_table(db: &Database, scan: &Scan, root: &Root) -> Result<(), FsPulseError> {
+        let mut stream =  
             Self::begin_items_table(&format!("Items (Root Path: '{}'", root.path()), "No Items");
 
         Item::for_each_item_in_latest_scan(

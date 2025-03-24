@@ -1,4 +1,6 @@
 use clap::{Parser, Subcommand};
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::Select;
 use indicatif::MultiProgress;
 use log::info;
 
@@ -7,6 +9,7 @@ use std::path::PathBuf;
 use crate::database::Database;
 use crate::error::FsPulseError; 
 use crate::reports::{ReportFormat, Reports}; 
+use crate::roots::Root;
 use crate::scan_machine::do_scan_machine;
     
 /// CLI for fspulse: A filesystem scan and reporting tool.
@@ -20,6 +23,16 @@ pub struct Cli {
 /// Available commands in fspulse.
 #[derive(Subcommand)]
 pub enum Command {
+    /// Interactively choose the command type (Scan or Report) and then choose from
+    /// among existing items (roots, scans, items, changes) to initiate the
+    /// command
+    Interact {
+       /// Specifies the directory where the database is stored.
+        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
+        /// The database file will always be named "fspulse.db".
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+    },
     /// Perform a filesystem scan on a specified "root". If the root has been scanned previously,
     /// it can be identified by its root-id. A root can also be identified by path by
     /// specifying a root-path. In the case of root-path, an existing root will be used if
@@ -125,6 +138,10 @@ pub enum ReportType {
         #[arg(long, conflicts_with_all = ["item_id", "item_path"])]
         root_id: Option<u32>,
 
+        /// Shows all invalid items under a specific root
+        #[arg(long, requires="root_id")]
+        invalid: bool,
+
         /// Report format (csv, table, tree).
         #[arg(long, default_value = "table", value_parser = ["csv", "table", "tree"])]
         format: String,
@@ -156,17 +173,68 @@ pub enum ReportType {
     },
 }
 
+#[derive(Copy, Clone)]
+enum CommandChoice {
+    Scan,
+    Report,
+    Exit,
+}
+
+static COMMAND_CHOICES: &[(CommandChoice, &'static str)] = &[
+    (CommandChoice::Scan, "Scan"),
+    (CommandChoice::Report, "Report"),
+    (CommandChoice::Exit, "Exit"),
+];
+
+#[derive(Copy, Clone)]
+enum ReportChoice {
+    Roots,
+    Scans,
+    Items,
+    Changes,
+    Exit,
+}
+
+static REPORT_CHOICES: &[(ReportChoice, &'static str)] = &[
+    (ReportChoice::Roots, "Roots"),
+    (ReportChoice::Scans, "Scans"),
+    (ReportChoice::Items, "Items"),
+    (ReportChoice::Changes, "Changes"),
+    (ReportChoice::Exit, "Exit"),
+];
+
+#[derive(Copy, Clone)]
+enum ItemReportChoice {
+    InvalidItems,
+    Exit,
+}
+
+static ITEM_REPORT_CHOICES: &[(ItemReportChoice, &'static str)] = &[
+    (ItemReportChoice::InvalidItems, "Invalid Items"),
+    (ItemReportChoice::Exit, "Exit"),
+];
+
+
+
 impl Cli {
     pub fn handle_command_line(multi_prog: &mut MultiProgress) -> Result<(), FsPulseError>{
         let args = Cli::parse();
         
         match args.command {
+            Command::Interact { db_path } => {
+                info!("Running interact with db_path: {:?}", db_path);
+                let mut db = Database::new(db_path)?;
+                
+                Cli::handle_interact(&mut db, multi_prog)
+            },
             Command::Scan { db_path, root_id, root_path, last, hash, validate } => {
                 info!(
                     "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, validate: {}",
                     db_path, root_id, root_path, last, hash, validate
                 );
-                Self::handle_scan(multi_prog, db_path, root_id, root_path, last, hash, validate)?;
+
+                let mut db = Database::new(db_path)?;
+                do_scan_machine(&mut db, root_id, root_path, last, hash, validate, multi_prog)        
             }
             Command::Report { report_type } => match report_type {
                 ReportType::Roots { db_path, root_id, root_path, format } => {
@@ -174,108 +242,138 @@ impl Cli {
                         "Generating roots report with db_path: {:?}, root_id: {:?}, root_path: {:?}, format: {}",
                         db_path, root_id, root_path, format
                     );
-                    Self::handle_report_roots(db_path, root_id, root_path, format)?;
+                    let db = Database::new(db_path)?;
+                    let format: ReportFormat = format.parse()?;
+                    
+                    Reports::report_roots(&db, root_id, root_path, format)
                 }
                 ReportType::Scans { db_path, scan_id, last, format } => {
                     info!(
                         "Generating scans report with db_path: {:?}, scan_id: {:?}, last: {}, format: {}",
                         db_path, scan_id, last, format
                     );
-                    Self::handle_report_scans(db_path, scan_id, last, format)?;
+                    let db = Database::new(db_path)?;
+                    let format: ReportFormat = format.parse()?;
+
+                    Reports::report_scans(&db, scan_id, last, format)
                 }
-                ReportType::Items { db_path, item_id, item_path, root_id, format } => {
+                ReportType::Items { db_path, item_id, item_path, root_id, invalid, format } => {
                     info!(
                         "Generating items report with db_path: {:?}, item_id: {:?}, item_path: {:?}, root_id: {:?}, format: {}",
                         db_path, item_id, item_path, root_id, format
                     );
-                    Self::handle_report_items(db_path, item_id, item_path, root_id, format)?;
+                    let db = Database::new(db_path)?;
+                    let format: ReportFormat = format.parse()?;
+
+                    Reports::report_items(&db, item_id, item_path, root_id, invalid, format)
                 }
                 ReportType::Changes { db_path, change_id, item_id, scan_id, format } => {
                     info!(
                         "Generating changes report with db_path: {:?}, change_id: {:?}, item_id: {:?}, scan_id: {:?}, format: {}",
                         db_path, change_id, item_id, scan_id, format
                     );
-                    Self::handle_report_changes(db_path, change_id, item_id, scan_id, format)?;
+                    let db = Database::new(db_path)?;
+                    let format: ReportFormat = format.parse()?;
+
+                    Reports::report_changes(&db, change_id, item_id, scan_id, format)
                 }
             },
         }
+    }
+
+    fn handle_interact(db: &mut Database, _multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
+        let command = Cli::choose_command();
+        match command {
+            CommandChoice::Scan => Cli::do_interactive_scan(&db),
+            CommandChoice::Report => Cli::do_interactive_report(&db),
+            CommandChoice::Exit => Ok(()),
+        }
+    }
+
+    fn choose_command() -> CommandChoice {  
+        // Build a vector of labels for display.
+        let labels: Vec<&str> = COMMAND_CHOICES.iter().map(|&(_, label)| label).collect();
+    
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Choose Command")
+            .default(0)
+            .items(&labels)
+            .interact()
+            .unwrap();
+    
+        // Directly select the enum variant.
+        COMMAND_CHOICES[selection].0
+    }
+
+    fn do_interactive_scan(_db: &Database) -> Result<(), FsPulseError>{
 
         Ok(())
     }
 
-    /// Handler for `pulse` command.
-    fn handle_scan(
-        multi_prog: &mut MultiProgress,
-        db_path: Option<PathBuf>,
-        root_id: Option<u32>,
-        root_path: Option<String>,
-        last: bool,
-        hash: bool,
-        validate: bool,
-    ) -> Result<(), FsPulseError> {
-        let mut db = Database::new(db_path)?;
-        //Scan::do_scan(&mut db, root_id, root_path, last, hash, validate)?;
-        do_scan_machine(&mut db, root_id, root_path, last, hash, validate, multi_prog)?;
+    fn do_interactive_report(db: &Database) -> Result<(), FsPulseError> {
+        let labels: Vec<&str> = REPORT_CHOICES.iter().map(|&(_, label)| label).collect();
 
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Choose Report Type")
+            .default(0)
+            .items(&labels)
+            .interact()
+            .unwrap();
 
-        Ok(())
+        // Directly select the enum variant.
+        match REPORT_CHOICES[selection].0 {
+            ReportChoice::Roots => Ok(()),
+            ReportChoice::Changes => Ok(()),
+            ReportChoice::Items => Cli::do_interactive_report_items(db),
+            _ => Ok(())
+        }
     }
 
-    /// Handler for `report paths`
-    fn handle_report_roots(
-        db_path: Option<PathBuf>,
-        root_id: Option<u32>,
-        root_path: Option<String>,
-        format: String,
-    ) -> Result<(), FsPulseError> {
-        let db = Database::new(db_path)?;
-        let format: ReportFormat = format.parse()?;
-        
-        Reports::report_roots(&db, root_id, root_path, format)?;
-        Ok(())
+    fn do_interactive_report_items(db: &Database) -> Result<(), FsPulseError>{
+        let labels: Vec<&str> = ITEM_REPORT_CHOICES.iter().map(|&(_, label)| label).collect();
+
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Choose Item Report Type")
+            .default(0)
+            .items(&labels)
+            .interact()
+            .unwrap();
+
+        match ITEM_REPORT_CHOICES[selection].0 {
+            ItemReportChoice::InvalidItems => {
+                let root = Cli::choose_root(db, "Invalid items for which root?")?;
+                if let Some(root) = root {
+                    Reports::print_invalid_items_as_table(db, &root)
+                } else {
+                    Ok(())
+                }
+            },
+            _ => Ok(())
+        }
     }
 
-    /// Handler for `report scans`
-    fn handle_report_scans(
-        db_path: Option<PathBuf>,
-        scan_id: Option<u32>,
-        last: u32,
-        format: String,
-    ) -> Result<(), FsPulseError> {
-        let db = Database::new(db_path)?;
-        let format: ReportFormat = format.parse()?;
+    fn choose_root(db: &Database, prompt: &str) -> Result<Option<Root>, FsPulseError> {
+        let mut roots = Root::roots_as_vec(db)?;
+        if roots.len() == 0 {
+            print!("No roots in database");
+            return Ok(None);
+        }
 
-        Reports::report_scans(&db, scan_id, last, format)?;
-        Ok(())
-    }
+        let mut labels: Vec<&str> = roots.iter().map(|root| root.path()).collect();
+        labels.push("Exit");
 
-    /// Handler for `report items`
-    fn handle_report_items(
-        db_path: Option<PathBuf>,
-        item_id: Option<u32>,
-        item_path: Option<String>,
-        root_id: Option<u32>,
-        format: String,
-    ) -> Result<(), FsPulseError> {
-        let db = Database::new(db_path)?;
-        let format: ReportFormat = format.parse()?;
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .default(0)
+            .items(&labels)
+            .interact()
+            .unwrap();
 
-        Reports::report_items(&db, item_id, item_path, root_id, format)?;
-        Ok(())
-    }
-
-    /// Handler for `report changes`
-    fn handle_report_changes(
-        db_path: Option<PathBuf>,
-        change_id: Option<u32>,
-        item_id: Option<u32>,
-        scan_id: Option<u32>,
-        format: String,
-    ) -> Result<(), FsPulseError> {
-        let db = Database::new(db_path)?;
-        let format: ReportFormat = format.parse()?;
-
-        Reports::report_changes(&db, change_id, item_id, scan_id, format)?;
-        Ok(())
+        // "Exit" is the last option in the prompt
+        if selection == roots.len() {
+            Ok(None)
+        } else {
+            Ok(Some(roots.remove(selection)))
+        }
     }
 }

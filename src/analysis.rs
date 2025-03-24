@@ -27,13 +27,12 @@ pub enum Error {
 
 */
 
-use std::{fmt, fs::File, io::{self, BufReader, ErrorKind, Read}, path::Path};
+use std::{fmt, fs::File, io::{BufReader, Read}, path::Path};
 
 use hex::encode;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::trace;
 use md5::{Digest, Md5};
-use symphonia::core::{codecs::audio::AudioDecoderOptions, errors::Error, formats::{probe::Hint, FormatOptions}, io::MediaSourceStream, meta::MetadataOptions  };
+//use symphonia::core::{codecs::audio::AudioDecoderOptions, errors::Error, formats::{probe::Hint, FormatOptions}, io::MediaSourceStream, meta::MetadataOptions  };
 use claxon::{Block, FlacReader};
 
 use crate::error::FsPulseError;
@@ -134,6 +133,7 @@ impl Analysis {
         Ok((ValidationState::Valid, None))
     }
     
+    /*
     pub fn _validate_flac_symphonia(path: &Path, file_name: &str, is_valid_prog: &ProgressBar) -> Result<bool, FsPulseError> {
             // Try to create a Symphonia decoder
         
@@ -303,6 +303,7 @@ impl Analysis {
         trace!("End: Symphonia validate: {}", file_name);
         Ok(true)
     }
+    */
 
     pub fn compute_md5_hash(path: &Path, file_name: &str, hash_prog: &ProgressBar) -> Result<String, FsPulseError> {
         let f = File::open(path)?;

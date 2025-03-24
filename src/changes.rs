@@ -113,8 +113,13 @@ impl FromStr for ChangeType {
 }
 
 impl Change {
+
+    
+
+
     // TODO: Implement accessors for other fields
     pub fn prev_hash(&self) -> Option<&str> { self.prev_hash.as_deref() }
+    pub fn prev_validation_state(&self) -> Option<&str> {self.prev_validation_state.as_deref()}
 
     pub fn get_by_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;

@@ -78,6 +78,20 @@ impl Root {
         &self.path
     }
 
+    pub fn roots_as_vec(db: &Database) -> Result<Vec<Root>, FsPulseError> {
+        let mut roots: Vec<Root> = Vec::new();
+
+        Root::for_each_root(
+            db, 
+            |root| {
+                roots.push(root.clone());
+                Ok(())
+            }
+        )?;
+
+        Ok(roots)
+    }
+
     pub fn for_each_root<F>(db: &Database, mut func: F) -> Result<(), FsPulseError> 
     where
         F: FnMut(&Root) -> Result<(), FsPulseError>,

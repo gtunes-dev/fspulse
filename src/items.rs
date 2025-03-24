@@ -39,42 +39,33 @@ pub struct Item {           // TODO: Change sql schema to have this column order
 }
 
 impl Item {
-    pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = &db.conn;
+    const ITEM_COLUMNS: &str = "id, root_id, path, item_type, is_tombstone, last_modified, file_size, file_hash, validation_state, validation_state_desc, last_scan_id, last_hash_scan_id, last_validation_scan_id";
+    
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Item {
+            id: row.get(0)?,
+            root_id: row.get(1)?,
+            path: row.get(2)?,
+            item_type: row.get(3)?,
+            is_tombstone: row.get(4)?,
+            last_modified: row.get(5)?,
+            file_size: row.get(6)?,
+            file_hash: row.get(7)?,
+            validation_state: row.get(8)?,
+            validation_state_desc: row.get(9)?,
+            last_scan_id: row.get(10)?,
+            last_hash_scan_id: row.get(11)?,
+            last_validation_scan_id: row.get(12)?,
+        })
+    }
 
-        conn.query_row(
-            "SELECT 
-                id, 
-                root_id, 
-                path, 
-                item_type, 
-                is_tombstone, 
-                last_modified, 
-                file_size, 
-                file_hash,
-                validation_state,
-                validation_state_desc,
-                last_scan_id, 
-                last_hash_scan_id, 
-                last_validation_scan_id
-             FROM items
-             WHERE id = ?",
+    pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
+        
+        let query = format!("SELECT {} FROM ITEMS WHERE id = ?", Item::ITEM_COLUMNS);
+        db.conn.query_row(
+            &query,
             params![id],
-            |row| Ok(Item {
-                id: row.get(0)?,
-                root_id: row.get(1)?,
-                path: row.get(2)?,
-                item_type: row.get(3)?,
-                is_tombstone: row.get(4)?,
-                last_modified: row.get(5)?,
-                file_size: row.get(6)?,
-                file_hash: row.get(7)?,
-                validation_state: row.get(8)?,
-                validation_state_desc: row.get(9)?,
-                last_scan_id: row.get(10)?,
-                last_hash_scan_id: row.get(11)?,
-                last_validation_scan_id: row.get(12)?,
-            }),
+            |row| Item::from_row(row),
         )
         .optional()
         .map_err(FsPulseError::Database)
@@ -86,47 +77,16 @@ impl Item {
         path: &str
     ) -> Result<Option<Self>, FsPulseError> 
     {
-        let conn = &db.conn;
+        let query = format!("SELECT {} FROM ITEMS WHERE root_id = ? AND path = ?", Item::ITEM_COLUMNS);
 
-        conn.query_row(
-            "SELECT
-                id, 
-                root_id, 
-                path, 
-                item_type, 
-                is_tombstone, 
-                last_modified, 
-                file_size, 
-                file_hash,
-                validation_state,
-                validation_state_desc,
-                last_scan_id, 
-                last_hash_scan_id, 
-                last_validation_scan_id
-             FROM items
-             WHERE root_id = ? AND path = ?",
+        db.conn.query_row(
+            &query,
             params![root_id, path],
-            |row| Ok(Item {
-                id: row.get(0)?,
-                root_id: row.get(1)?,
-                path: row.get(2)?,
-                item_type: row.get(3)?,
-                is_tombstone: row.get(4)?,
-                last_modified: row.get(5)?,
-                file_size: row.get(6)?,
-                file_hash: row.get(7)?,
-                validation_state: row.get(8)?,
-                validation_state_desc: row.get(9)?,
-                last_scan_id: row.get(10)?,
-                last_hash_scan_id: row.get(11)?,
-                last_validation_scan_id: row.get(12)?,
-            }),
+            |row| Item::from_row(row),
         )
         .optional()
         .map_err(FsPulseError::Database)
     }
-
-
 
     pub fn id(&self) -> i64 { self.id }
     pub fn root_id(&self) -> i64 { self.root_id }
@@ -152,7 +112,6 @@ impl Item {
         )?;
     
         let count: i64 = stmt.query_row([scan_id, scan_id, scan_id], |row| row.get(0))?;
-    
         Ok(count)
     }
 
@@ -163,21 +122,9 @@ impl Item {
         validating: bool,
         limit: usize,  // Parameterized limit
     ) -> Result<Vec<Item>, FsPulseError> {
+
         let query = format!(
-            "SELECT 
-                id, 
-                root_id, 
-                path, 
-                item_type, 
-                is_tombstone, 
-                last_modified, 
-                file_size, 
-                file_hash,
-                validation_state,
-                validation_state_desc,
-                last_scan_id, 
-                last_hash_scan_id, 
-                last_validation_scan_id
+            "SELECT {}
             FROM items
              WHERE
                 last_scan_id = ?
@@ -189,27 +136,13 @@ impl Item {
                     (? = 1 AND (last_validation_scan_id IS NULL OR last_validation_scan_id < ?)))
              ORDER BY path ASC
              LIMIT {}",
-            limit
+            Item::ITEM_COLUMNS, limit
         );
     
         let mut stmt = db.conn.prepare(&query)?;
     
         let rows = stmt.query_map([scan_id, hashing as i64, scan_id, validating as i64, scan_id], |row| {
-            Ok(Item {
-                id: row.get(0)?,
-                root_id: row.get(1)?,
-                path: row.get(2)?,
-                item_type: row.get(3)?,
-                is_tombstone: row.get(4)?,
-                last_modified: row.get(5)?,
-                file_size: row.get(6)?,
-                file_hash: row.get(7)?,
-                validation_state: row.get(8)?,
-                validation_state_desc: row.get(9)?,
-                last_scan_id: row.get(10)?,
-                last_hash_scan_id: row.get(11)?,
-                last_validation_scan_id: row.get(12)?,
-             })
+            Item::from_row(row)
         })?;
     
         let items: Vec<Item> = rows.collect::<Result<Vec<_>, _>>()?;
@@ -217,48 +150,44 @@ impl Item {
         Ok(items)
     }
     
+    pub fn for_each_invalid_item_in_root<F>(db: &Database, root_id: i64, mut func: F) -> Result<(), FsPulseError>
+    where
+        F: FnMut(&Item) -> Result<(), FsPulseError>,
+    {
+        let sql = format!("SELECT {}
+             FROM items
+             WHERE root_id = ? AND is_tombstone = 0 AND validation_state = 'I'
+             ORDER BY path ASC", Item::ITEM_COLUMNS);
+
+        let mut stmt = db.conn.prepare(&sql)?;
+
+        let rows = stmt.query_map([root_id], |row| {
+            Item::from_row(row)
+        })?;
+        
+        for row in rows {
+            let item = row?;
+            func(&item)?;
+        }
+
+        Ok(())
+    }
+
     pub fn for_each_item_in_latest_scan<F>(db: &Database, scan_id: i64, mut func: F) -> Result<(), FsPulseError>
     where
         F: FnMut(&Item) -> Result<(), FsPulseError>,
     {
         let mut item_count = 0;
 
-        let mut stmt = db.conn.prepare(
-            "SELECT 
-                id, 
-                root_id, 
-                path, 
-                item_type, 
-                is_tombstone, 
-                last_modified, 
-                file_size, 
-                file_hash,
-                validation_state,
-                validation_state_desc,
-                last_scan_id, 
-                last_hash_scan_id, 
-                last_validation_scan_id
+        let sql = format!("SELECT {}
              FROM items
              WHERE last_scan_id = ?
-             ORDER BY path ASC"
-        )?;
+             ORDER BY path ASC", Item::ITEM_COLUMNS);
+
+        let mut stmt = db.conn.prepare(&sql)?;
 
         let rows = stmt.query_map([scan_id], |row| {
-            Ok(Item {
-                id: row.get(0)?,
-                root_id: row.get(1)?,
-                path: row.get(2)?,
-                item_type: row.get(3)?,
-                is_tombstone: row.get(4)?,
-                last_modified: row.get(5)?,
-                file_size: row.get(6)?,
-                file_hash: row.get(7)?,
-                validation_state: row.get(8)?,
-                validation_state_desc: row.get(9)?,
-                last_scan_id: row.get(10)?,
-                last_hash_scan_id: row.get(11)?,
-                last_validation_scan_id: row.get(12)?,
-            })
+            Item::from_row(row)
         })?;
         
         for row in rows {
@@ -275,42 +204,15 @@ impl Item {
     {
         let mut item_count = 0;
 
-        let mut stmt = db.conn.prepare(
-            "SELECT 
-               id, 
-                root_id, 
-                path, 
-                item_type, 
-                is_tombstone, 
-                last_modified, 
-                file_size, 
-                file_hash,
-                validation_state,
-                validation_state_desc,
-                last_scan_id, 
-                last_hash_scan_id, 
-                last_validation_scan_id
+        let sql = format!("SELECT {}
              FROM items
              WHERE path = ?
-             ORDER BY id ASC"
-        )?;
+             ORDER BY id ASC", Item::ITEM_COLUMNS);
+
+        let mut stmt = db.conn.prepare(&sql)?;
 
         let rows = stmt.query_map([path], |row| {
-            Ok(Item {
-                id: row.get(0)?,
-                root_id: row.get(1)?,
-                path: row.get(2)?,
-                item_type: row.get(3)?,
-                is_tombstone: row.get(4)?,
-                last_modified: row.get(5)?,
-                file_size: row.get(6)?,
-                file_hash: row.get(7)?,
-                validation_state: row.get(8)?,
-                validation_state_desc: row.get(9)?,
-                last_scan_id: row.get(10)?,
-                last_hash_scan_id: row.get(11)?,
-                last_validation_scan_id: row.get(12)?,
-            })
+            Item::from_row(row)
         })?;
         
         for row in rows {

@@ -30,7 +30,7 @@ fn main() {
 
     let logger = 
         env_logger::Builder::from_env(env_logger::Env::default().
-            default_filter_or("trace"))
+            default_filter_or("error"))
             .build();
     let level = logger.filter();
     
@@ -39,6 +39,14 @@ fn main() {
         .try_init()
         .unwrap();
     log::set_max_level(level);
+
+    /* 
+    if let Err(err) = Cli::interact(&mut multi_prog) {
+        error!("{:?}", err);
+        eprint!("{}", err);
+        std::process::exit(1);
+    }
+    */
 
     if let Err(err) = Cli::handle_command_line(&mut multi_prog) {
         error!("{:?}", err);
