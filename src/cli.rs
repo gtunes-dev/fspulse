@@ -10,7 +10,7 @@ use crate::database::Database;
 use crate::error::FsPulseError; 
 use crate::reports::{ReportFormat, Reports}; 
 use crate::roots::Root;
-use crate::scan_machine::do_scan_machine;
+use crate::scan_machine::{self, do_scan_machine};
     
 /// CLI for fspulse: A filesystem scan and reporting tool.
 #[derive(Parser)]
@@ -281,10 +281,10 @@ impl Cli {
         }
     }
 
-    fn handle_interact(db: &mut Database, _multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
+    fn handle_interact(db: &mut Database, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
         let command = Cli::choose_command();
         match command {
-            CommandChoice::Scan => Cli::do_interactive_scan(&db),
+            CommandChoice::Scan => scan_machine::do_interactive_scan(db, multi_prog),
             CommandChoice::Report => Cli::do_interactive_report(&db),
             CommandChoice::Exit => Ok(()),
         }
@@ -303,11 +303,6 @@ impl Cli {
     
         // Directly select the enum variant.
         COMMAND_CHOICES[selection].0
-    }
-
-    fn do_interactive_scan(_db: &Database) -> Result<(), FsPulseError>{
-
-        Ok(())
     }
 
     fn do_interactive_report(db: &Database) -> Result<(), FsPulseError> {
@@ -341,7 +336,7 @@ impl Cli {
 
         match ITEM_REPORT_CHOICES[selection].0 {
             ItemReportChoice::InvalidItems => {
-                let root = Cli::choose_root(db, "Invalid items for which root?")?;
+                let root = Root::interact_choose_root(db, "Invalid items for which root?")?;
                 if let Some(root) = root {
                     Reports::print_invalid_items_as_table(db, &root)
                 } else {
@@ -349,31 +344,6 @@ impl Cli {
                 }
             },
             _ => Ok(())
-        }
-    }
-
-    fn choose_root(db: &Database, prompt: &str) -> Result<Option<Root>, FsPulseError> {
-        let mut roots = Root::roots_as_vec(db)?;
-        if roots.len() == 0 {
-            print!("No roots in database");
-            return Ok(None);
-        }
-
-        let mut labels: Vec<&str> = roots.iter().map(|root| root.path()).collect();
-        labels.push("Exit");
-
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(prompt)
-            .default(0)
-            .items(&labels)
-            .interact()
-            .unwrap();
-
-        // "Exit" is the last option in the prompt
-        if selection == roots.len() {
-            Ok(None)
-        } else {
-            Ok(Some(roots.remove(selection)))
         }
     }
 }

@@ -1,6 +1,8 @@
 use std::{env, fs, i64};
 use std::path::{Path, PathBuf};
 
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::Select;
 use rusqlite::OptionalExtension;
 use crate::database::Database;
 use crate::error::FsPulseError;
@@ -13,6 +15,31 @@ pub struct Root {
 }
 
 impl Root {
+    pub fn interact_choose_root(db: &Database, prompt: &str) -> Result<Option<Root>, FsPulseError> {
+        let mut roots = Root::roots_as_vec(db)?;
+        if roots.len() == 0 {
+            print!("No roots in database");
+            return Ok(None);
+        }
+
+        let mut labels: Vec<&str> = roots.iter().map(|root| root.path()).collect();
+        labels.push("Exit");
+
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .default(0)
+            .items(&labels)
+            .interact()
+            .unwrap();
+
+        // "Exit" is the last option in the prompt
+        if selection == roots.len() {
+            Ok(None)
+        } else {
+            Ok(Some(roots.remove(selection)))
+        }
+    }
+    
     pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = &db.conn;
 

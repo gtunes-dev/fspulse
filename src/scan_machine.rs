@@ -26,6 +26,7 @@ use crate::{database::Database, error::FsPulseError, scans::Scan};
 use crate::roots::Root;
 use crate::scans::ScanState;
 
+use dialoguer::theme::ColorfulTheme;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use log::error;
@@ -43,6 +44,65 @@ struct QueueEntry {
     metadata: fs::Metadata,
 }
 
+pub fn do_interactive_scan(db: &mut Database, _multi_prog: &mut MultiProgress) -> Result<(), FsPulseError>{
+
+    let root = match Root::interact_choose_root(db, "Scan which root?")? {
+        Some(root) => root,
+        None => return Ok(())
+    };
+    
+    // look for an existing, incomplete scan
+    let _existing_scan = Scan::get_latest_for_root(db, root.id())?
+            .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
+
+    /*    
+    // if a scan is found, ask the user if it should be stopped or resumed
+    let mut scan = match existing_scan.as_mut() {
+        Some(existing_scan) => match stop_or_resume_scan(db, &root, existing_scan, true)? {
+            ScanDecision::NewScan => initiate_scan(db, &root, hash, validate)?,
+            ScanDecision::ContinueExisting => *existing_scan,
+            ScanDecision::Exit => return Ok(())
+        },
+        None => initiate_scan(db, &root, hash, validate)?
+    };
+
+
+        let flags = vec!["hash", "validate"];
+        let selection = MultiSelect::new()
+            .with_prompt("Hash or Validate (space to select, enter to continue)")
+            .items(&flags)
+            .interact()
+            .unwrap();
+
+        let mut hash = false;
+        let mut validate = false;
+
+
+
+        // if a scan is found, ask the user if it should be stopped or resumed
+        let mut scan = match existing_scan.as_mut() {
+            Some(existing_scan) => match stop_or_resume_scan(db, &root, existing_scan, multi_prog)? {
+                ScanDecision::NewScan => initiate_scan(db, &root, hash, validate)?,
+                ScanDecision::ContinueExisting => *existing_scan,
+                ScanDecision::Exit => return Ok(())
+            },
+            None => initiate_scan(db, &root, hash, validate)?
+        };
+
+        for selected_flag in selection.iter() {
+            match selected_flag {
+                0 => hash = true,
+                1 => validate = true,
+                _ => ()
+            }
+        //do_scan_machine(&mut db, Some(root.id().into), root_path, last, hash, validate, multi_prog);       
+
+        println!("{:?}", selection);
+    }
+
+    */
+    Ok(())
+}
 
 pub fn do_scan_machine(
     db: &mut Database, 
@@ -54,17 +114,13 @@ pub fn do_scan_machine(
     multi_prog: &mut MultiProgress,
 ) -> Result<(), FsPulseError> {
         // If an incomplete scan exists, find it.
-        // TODO: Allow incomplete scans on different roots to exist. We won't, however,
-        // allow the user to initiate a new scan on a root that has an outstanding scan until they
-        // either resume/complete it or stop it
-        
         let (root, mut existing_scan) = match (root_id, root_path, last) {
             (Some(root_id), _, _) => {
                 let root = Root::get_by_id(db, root_id.into())?
-                    .ok_or_else(|| FsPulseError::Error(format!("Root iI {} not found", root_id)))?;
+                    .ok_or_else(|| FsPulseError::Error(format!("Root id {} not found", root_id)))?;
                 // Look for an outstanding scan on the root
                 let scan = Scan::get_latest_for_root(db, root.id())?
-                    .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
+                    .filter(|s: &Scan| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
                 (root, scan)
             },
             (_, Some(root_path), _) => {
@@ -108,11 +164,13 @@ pub fn do_scan_machine(
         // If scan is present, it is incomplete. Ask the user to decide if it should be resumed or stopped.
         // Also allows the user to exit without making the choice now
 
-
         let mut scan = match existing_scan.as_mut() {
-            Some(existing_scan) => match stop_or_resume_scan(db, &root, existing_scan, multi_prog)? {
+            Some(existing_scan) => match stop_or_resume_scan(db, &root, existing_scan, false)? {
                 ScanDecision::NewScan => initiate_scan(db, &root, hash, validate)?,
-                ScanDecision::ContinueExisting => *existing_scan,
+                ScanDecision::ContinueExisting => {
+                    multi_prog.println("Resuming scan")?;
+                    *existing_scan
+                },
                 ScanDecision::Exit => return Ok(())
             },
             None => initiate_scan(db, &root, hash, validate)?
@@ -140,7 +198,7 @@ enum ScanDecision {
     Exit,
 }
 
-fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<ScanDecision, FsPulseError> {
+fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan, report: bool) -> Result<ScanDecision, FsPulseError> {
     let options = vec![
         "Resume the scan", 
         "Stop & exit",
@@ -148,17 +206,17 @@ fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan, multi_pr
         "Exit (decide later)",
     ];
 
-    let selection = Select::new()
+    let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(format!("Found in-progress scan on:'{}'\n\nWhat would you like to do?", root.path()))
+        .default(0)
         .items(&options)
-        .report(false)
+        .report(report)
         .interact()
         .unwrap();
 
     let decision = match selection {
         0 => {
-            multi_prog.println("Resuming scan")?;
-            match scan.state() {
+             match scan.state() {
                 ScanState::Scanning => ScanDecision::ContinueExisting,
                 ScanState::Sweeping => ScanDecision::ContinueExisting,
                 ScanState::Analyzing => ScanDecision::ContinueExisting,

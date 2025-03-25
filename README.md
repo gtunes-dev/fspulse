@@ -1,19 +1,24 @@
 # FsPulse
 
-FsPulse is a command-line tool designed to capture the state of directories and detect changes over time. It records file and directory metadata, tracking additions, deletions, and modifications. FsPulse supports both **shallow scans**, which compare file metadata, and **deep scans**, which compute file hashes to detect content changes even when metadata remains unchanged.
+FsPulse is a command-line tool designed to capture the state of directories and detect changes over time. It records file and directory metadata, tracking additions, deletions, and modifications. FsPulse optionally computes MD5 hashes of file contents to detect changes even if metadata remains unchanged. Additionally, FsPulse can validate file contents by examining and decoding their contents. Validation is currently limited to `.flac` audio files, using the [`claxon`](https://github.com/ruuda/claxon) crate.
 
 ## Overview
 
-FsPulse organizes data into structured entities, each identified by a unique ID that appears in reports and can be used as input for other commands:
+FsPulse organizes information into four structured entities:
 
-- **Root Path**: A directory registered for scanning
-- **Scan**: A snapshot of the directory’s state at a given time
-- **Entry**: A file or directory recorded in a scan
-- **Change**: A modification detected between scans
+- **Roots:**  
+  Directories explicitly scanned with FsPulse. Each root corresponds to a unique path on your filesystem and serves as a starting point for scans.
 
-Scans can be **shallow** (metadata-based) or **deep** (including file content hashing). Deep scans allow detection of changes due to bit rot, corruption, or manual modification when timestamps and sizes remain the same.
+- **Scans:**  
+  Snapshots capturing the state of a root directory at a specific point in time. Scans record detailed metadata about every file and directory encountered.
 
-By default, FsPulse stores its database in the same directory as the binary. However, you can specify a different location using the `--dbpath` option.
+- **Items:**  
+  Files or directories identified within a scan. Each item maintains metadata, including path, file size, timestamps, and optionally, content hashes and validation status.
+
+- **Changes:**  
+  Modifications detected between consecutive scans, including additions, deletions, and modifications of items within a root.
+
+FsPulse stores scan data in a SQLite database named `fspulse.db`. By default, this database is located in your home directory (`~/` on Unix-based systems, `%USERPROFILE%\` on Windows). You can optionally specify a different database location using the `--db-path` parameter.
 
 ## Installation
 
@@ -23,71 +28,132 @@ To install FsPulse, clone the repository and build it with Cargo:
 cargo build --release
 ```
 
-Move the compiled binary to a location in your `PATH` or run it from the build directory.
+Move the compiled binary to a location in your `PATH` or run it directly from the build directory.
 
 ## Usage
 
+### Interactive Mode
+
+Launch FsPulse in interactive mode:
+
+```sh
+fspulse interact
+```
+
+Interactive mode provides step-by-step guidance through common tasks.
+
 ### Scanning a Directory
 
-To perform a shallow scan of the current directory:
+To scan a directory (creating a root if needed):
 
 ```sh
-fspulse scan
+fspulse scan --root-path /some/directory
 ```
 
-To scan a specific directory:
+To scan an existing root by ID:
 
 ```sh
-fspulse scan --path /some/directory
+fspulse scan --root-id 123
 ```
 
-To perform a deep scan (including file hashes):
+To scan the most recently scanned root:
 
 ```sh
-fspulse scan --deep
+fspulse scan --last
 ```
+
+To include content hashing (MD5) during a scan:
+
+```sh
+fspulse scan --root-path /some/directory --hash
+```
+
+To validate files (currently supports `.flac` files validated using the [`claxon`](https://github.com/ruuda/claxon) crate):
+
+```sh
+fspulse scan --root-path /some/directory --validate
+```
+
+If a scan does not complete, FsPulse remembers its state. Upon the next scan of the same root, you'll be prompted to either resume or discard the incomplete scan. Only one scan per root can be active at a time.
 
 ### Reporting
 
-#### Show the latest scan summary
+FsPulse provides detailed reporting options:
+
+#### Roots
+
+Show all roots scanned:
 
 ```sh
-fspulse report scans --latest
+fspulse report roots
 ```
 
-#### Show a specific scan summary (replace `<scan_id>` with an actual scan ID)
+Show a specific root by ID or path:
 
 ```sh
-fspulse report scans --id <scan_id>
+fspulse report roots --root-id 123
+fspulse report roots --root-path /some/directory
 ```
 
-#### Show changes detected in the latest scan
+#### Scans
+
+Show recent scans (default last 10 scans):
 
 ```sh
-fspulse report scans --latest --changes
+fspulse report scans
 ```
 
-#### Show changes detected in a specific scan
+Show specific scan by ID or a custom number of recent scans:
 
 ```sh
-fspulse report scans --id <scan_id> --changes
+fspulse report scans --scan-id 456
+fspulse report scans --last 5
 ```
 
-#### Show root paths stored in the database
+#### Items
+
+Show a specific item by ID or path:
 
 ```sh
-fspulse report root-paths
+fspulse report items --item-id 789
+fspulse report items --item-path /some/file
 ```
 
-#### Show entries recorded in a scan (replace `<entry_id>` with an actual entry ID)
+Show all items from the most recent scan of a root:
 
 ```sh
-fspulse report entries --id <entry_id>
+fspulse report items --root-id 123
+```
+
+Show invalid items within a specific root:
+
+```sh
+fspulse report items --root-id 123 --invalid
+```
+
+#### Changes
+
+Show all changes from a specific scan:
+
+```sh
+fspulse report changes --scan-id 456
+```
+
+Show changes affecting a specific item:
+
+```sh
+fspulse report changes --item-id 789
+```
+
+Report formats (`csv`, `table`, `tree`) can be specified using the `--format` option:
+
+```sh
+fspulse report items --root-id 123 --format tree
 ```
 
 ## Command-Line Help
 
-For a full list of available commands and options, run:
+For a complete list of commands and options, run:
 
 ```sh
 fspulse --help
@@ -97,13 +163,13 @@ fspulse --help
 
 Future improvements and features include:
 
-- Completion of all commands and parameters
-- Enhanced content and formatting for reports
-- Progress indication during deep scans
-- Multi-threaded deep scans for parallelized hash computation
-- Resumption of incomplete scans
-- Improved resilience to file system and access errors
+- Enhanced reporting capabilities
+- Expanded file validation types beyond `.flac`
+- Progress indicators for hashing and validation
+- Multi-threaded scanning for improved performance
+- Increased resilience to file system errors
 
 ## License
 
 FsPulse is released under the MIT License.
+
