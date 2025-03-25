@@ -10,7 +10,7 @@ use crate::database::Database;
 use crate::error::FsPulseError; 
 use crate::reports::{ReportFormat, Reports}; 
 use crate::roots::Root;
-use crate::scan_machine::{self, do_scan_machine};
+use crate::scan_machine::{do_interactive_scan, do_scan_command};
     
 /// CLI for fspulse: A filesystem scan and reporting tool.
 #[derive(Parser)]
@@ -214,8 +214,6 @@ static ITEM_REPORT_CHOICES: &[(ItemReportChoice, &'static str)] = &[
     (ItemReportChoice::Exit, "Exit"),
 ];
 
-
-
 impl Cli {
     pub fn handle_command_line(multi_prog: &mut MultiProgress) -> Result<(), FsPulseError>{
         let args = Cli::parse();
@@ -234,7 +232,7 @@ impl Cli {
                 );
 
                 let mut db = Database::new(db_path)?;
-                do_scan_machine(&mut db, root_id, root_path, last, hash, validate, multi_prog)        
+                do_scan_command(&mut db, root_id, root_path, last, hash, validate, multi_prog)        
             }
             Command::Report { report_type } => match report_type {
                 ReportType::Roots { db_path, root_id, root_path, format } => {
@@ -284,7 +282,7 @@ impl Cli {
     fn handle_interact(db: &mut Database, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
         let command = Cli::choose_command();
         match command {
-            CommandChoice::Scan => scan_machine::do_interactive_scan(db, multi_prog),
+            CommandChoice::Scan => do_interactive_scan(db, multi_prog),
             CommandChoice::Report => Cli::do_interactive_report(&db),
             CommandChoice::Exit => Ok(()),
         }

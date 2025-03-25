@@ -40,14 +40,6 @@ fn main() {
         .unwrap();
     log::set_max_level(level);
 
-    /* 
-    if let Err(err) = Cli::interact(&mut multi_prog) {
-        error!("{:?}", err);
-        eprint!("{}", err);
-        std::process::exit(1);
-    }
-    */
-
     if let Err(err) = Cli::handle_command_line(&mut multi_prog) {
         error!("{:?}", err);
         eprint!("{}", err);

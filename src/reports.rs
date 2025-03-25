@@ -47,7 +47,8 @@ impl Reports {
     {
         match scan_id {
             Some(scan_id) => {
-                let scan = Scan::get_by_id(db, scan_id.into())?;
+                let scan = Scan::get_by_id(db, scan_id.into())?
+                    .ok_or_else(|| FsPulseError::Error(format!("Scan Id {} not found", scan_id)))?;
                 Self::print_scan(db, &scan, format)?;
             },
             None => Reports::print_scans(db, last)?,
@@ -186,21 +187,14 @@ impl Reports {
         Ok(())
     }
 
-    pub fn print_scan(db: &Database, scan: &Option<Scan>, _format: ReportFormat) -> Result<(), FsPulseError> {
-        let table_title= match scan {
-            Some(scan) => {
-                let root = Root::get_by_id(db, scan.root_id())?
-                    .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", scan.root_id())))?;
-                format!("Scan (Root Path: '{}')", root.path())
-            }
-            None => "Scan".into()
-        };
+    pub fn print_scan(db: &Database, scan: &Scan, _format: ReportFormat) -> Result<(), FsPulseError> {
+        let root = Root::get_by_id(db, scan.root_id())?
+            .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", scan.root_id())))?;
+        let table_title = format!("Scan (Root Path: '{}')", root.path());
 
         let mut stream = Reports::begin_scans_table(&table_title, "No Scan");
 
-        if let Some(scan) = scan {
-            stream.row(scan.clone())?;
-        }
+        stream.row(scan.clone())?;
 
         stream.finish()?;
 
