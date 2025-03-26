@@ -7,13 +7,31 @@ use crate::schema::CREATE_SCHEMA_SQL;
 const DB_FILENAME: &str = "fspulse.db";
 const SCHEMA_VERSION: &str = "2";
 
+#[derive(Debug)]
 pub struct Database {
-    pub conn: Connection,
+    conn: Option<Connection>,
     #[allow(dead_code)]
     path: String,
 }
 
+impl Default for Database {
+    fn default() -> Self {
+        Database {
+            conn: None,
+            path: String::new(),
+        }
+    }
+}
+
 impl Database {
+    pub fn conn(&self) -> &Connection {
+        self.conn.as_ref().expect("Expected a database connection")
+    }
+
+    pub fn conn_mut(&mut self) -> &mut Connection {
+            self.conn.as_mut().expect("Expected a database connection")
+    }
+
     pub fn new(db_path: Option<PathBuf>) -> Result<Self, FsPulseError>
     {
         let mut db_path = db_path
@@ -33,7 +51,7 @@ impl Database {
         info!("Opening database: {}", db_path.display());
         let conn = Connection::open(&db_path).map_err(FsPulseError::Database)?;
 
-        let db = Self { conn, path: db_path.to_string_lossy().into_owned() };
+        let db = Self { conn: Some(conn), path: db_path.to_string_lossy().into_owned() };
         
         // Ensure schema is current
         db.ensure_schema()?;
@@ -47,7 +65,7 @@ impl Database {
     }
 
     fn ensure_schema(&self) -> Result<(), FsPulseError> {
-        let table_exists: bool = self.conn
+        let table_exists: bool = self.conn()
             .query_row(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='meta'",
                 [],
@@ -61,7 +79,7 @@ impl Database {
         }
 
         // Get the stored schema version
-        let stored_version: Option<String> = self.conn
+        let stored_version: Option<String> = self.conn()
             .query_row(
                 "SELECT value FROM meta WHERE key = 'schema_version'",
                 [],
@@ -77,7 +95,7 @@ impl Database {
     }
     
     fn create_schema(&self) -> Result<(), FsPulseError> {
-        self.conn.execute_batch(CREATE_SCHEMA_SQL)?;
+        self.conn().execute_batch(CREATE_SCHEMA_SQL)?;
         Ok(())
     }
 }

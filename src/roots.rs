@@ -41,7 +41,7 @@ impl Root {
     }
     
     pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = &db.conn;
+        let conn = db.conn();
 
         conn.query_row(
             "SELECT path FROM roots WHERE id = ?", 
@@ -56,7 +56,7 @@ impl Root {
     }
 
     pub fn get_by_path(db: &Database, path: &str) -> Result<Option<Self>, FsPulseError> {
-        let conn = &db.conn;
+        let conn = db.conn();
 
         conn.query_row(
             "SELECT id, path FROM roots WHERE path = ?",
@@ -71,7 +71,7 @@ impl Root {
     }
 
     pub fn create(db: &Database, path: &str) -> Result<Self, FsPulseError> {
-        let conn = &db.conn;
+        let conn = db.conn();
 
         let id: i64 = conn.query_row(
             "INSERT INTO roots (path) VALUES (?) RETURNING id",
@@ -124,7 +124,7 @@ impl Root {
         F: FnMut(&Root) -> Result<(), FsPulseError>,
     {
    
-        let mut stmt = db.conn.prepare(
+        let mut stmt = db.conn().prepare(
             "SELECT id, path
             FROM roots
             ORDER BY id ASC"

@@ -311,13 +311,16 @@ impl Analysis {
 
         hash_prog.set_length(len);
 
+        /*
+
         hash_prog.set_style(ProgressStyle::default_bar()
                 .template("{msg}\n[{bar:80}] {bytes}/{total_bytes} ({eta})")
                 .unwrap()
                 .progress_chars("#>-"));
 
-        hash_prog.set_message(format!("Computing Hash: '{}'", file_name));
-
+        hash_prog.set_message(format!("Hashing: '{}'", file_name));
+        */
+        
         let mut reader = BufReader::new(f);
         let mut hasher = Md5::new();
         let mut buffer = [0; 8192]; // Read in 8KB chunks

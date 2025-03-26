@@ -26,16 +26,19 @@ use crate::{database::Database, error::FsPulseError, scans::Scan};
 use crate::roots::Root;
 use crate::scans::ScanState;
 
+use crossbeam_channel::bounded;
 use dialoguer::theme::ColorfulTheme;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use log::error;
 use dialoguer::{MultiSelect, Select};
+use threadpool::ThreadPool;
 //use md5::digest::typenum::Abs;
 use std::collections::VecDeque;
 use std::fs;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[derive(Clone, Debug)]
@@ -180,7 +183,24 @@ fn do_scan_machine(db: &mut Database, scan: &mut Scan, root: &Root, multi_prog: 
         match current_state {
             ScanState::Scanning => do_state_scanning(db, &root, scan, multi_prog),
             ScanState::Sweeping => do_state_sweeping(db, scan, multi_prog),
-            ScanState::Analyzing => do_state_analyzing(db, &root, scan, multi_prog),
+            ScanState::Analyzing => {
+                // This is a boundary - we'll take ownership of the database and progress
+                // bars here and then restore them when we're done
+                let owned_db = std::mem::take(db);
+                let db_arc = Arc::new(Mutex::new(owned_db));
+                let multi_prog_arc = Arc::new(multi_prog.clone());
+                
+                let analysis_result = do_state_analyzing_async(db_arc.clone(), scan, multi_prog_arc);
+
+                // recover the database from the Arc
+                let recovered_db = Arc::try_unwrap(db_arc)
+                    .expect("No additional clones should exist")
+                    .into_inner()
+                    .expect("Mutex isn't poisoned");
+
+                *db = recovered_db;
+                analysis_result
+            },
             _ => Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", current_state))),
         }?;
     }   
@@ -298,7 +318,7 @@ fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan, multi_prog
 }
 
 fn do_state_sweeping(db: &mut Database, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> { 
-    let tx = db.conn.transaction()?;
+    let tx = db.conn_mut().transaction()?;
 
     let sweep_prog = multi_prog.add(ProgressBar::new_spinner());
     sweep_prog.set_message("Detecting changes and deletions...");
@@ -328,6 +348,176 @@ fn do_state_sweeping(db: &mut Database, scan: &mut Scan, multi_prog: &mut MultiP
     scan.set_state_analyzing(db)
 }
 
+fn do_state_analyzing_async(
+    db: Arc<Mutex<Database>>, 
+    scan: &mut Scan, 
+    multi_prog: Arc<MultiProgress>,
+) -> Result<(), FsPulseError> {
+
+    let hashing = scan.hashing();
+    let validating = scan.validating();
+
+    // If the scan doesn't hash or validate, then the scan
+    // can be marked complete and we just return
+    if !hashing && !validating {
+        scan.set_state_completed(&mut *db.lock().unwrap())?;
+        return Ok(());
+    }
+
+    let file_count = scan.file_count().unwrap_or_default().max(0) as u64;                   // scan.file_count is the total # of files in the scan
+    let analyzed_items= Item::count_analyzed_items(&db.lock().unwrap(), scan.id())?.max(0) as u64;  // may be resuming the scan
+
+    let analysis_prog = multi_prog.add(ProgressBar::new(file_count));
+    analysis_prog.set_style(ProgressStyle::default_bar()
+        .template("{msg}\n[{bar:80}] {pos}/{len} (Remaining: {eta})")
+        .unwrap()
+        .progress_chars("#>-"));
+    analysis_prog.set_message("Analyzing files:");
+    analysis_prog.inc(analyzed_items);
+
+    let multi_prog_arc = Arc::new((*multi_prog).clone());
+    let analysis_prog_arc = Arc::new(analysis_prog);
+
+    // Create a bounded channel to limit the number of queued tasks (e.g., max 100 tasks)
+    let (sender, receiver) = bounded::<Item>(100);
+
+    // Initialize the thread pool. Current 4 threads
+    let pool = ThreadPool::new(8);
+    for _ in 0..8 {
+        // Clone shared resources for each worker thread.
+        let receiver = receiver.clone();
+        let multi_prog_clone = Arc::clone(&multi_prog_arc);
+        let db = Arc::clone(&db);
+        let analysis_prog_clone = Arc::clone(&analysis_prog_arc);
+        let scan_id = scan.id();
+        
+        // Worker thread: continuously receive and process tasks.
+        pool.execute(move || {
+            while let Ok(item) = receiver.recv() {
+                process_item_async(&db, scan_id, item, hashing, validating, multi_prog_clone.clone(), analysis_prog_clone.clone());
+            }
+        });
+    }
+
+    let mut last_item_id = 0;
+
+    loop {
+        let items = Item::fetch_next_analysis_batch(
+            &db.lock().unwrap(),
+            scan.id(),
+            scan.hashing(),
+            scan.validating(),
+            last_item_id,
+            10,
+        )?;
+
+        if items.is_empty() {
+            break;
+        }
+
+        for item in items {
+            // Items will be ordered by id. We keep track of the last seen id and provide
+            // it in calls to fetch_next_analysis_batch to avoid picking up unprocessed
+            // items that we've already picked up. This avoids a race condition
+            // in which we'd pick up unprocessed items that are currently being processed
+            last_item_id = item.id();
+
+            // This send will block if the channel already has 100 items.
+            sender.send(item)
+                .expect("Failed to send task into the bounded channel");
+        }
+    }
+
+    // Drop the sender to signal the workers that no more items will come.
+    drop(sender);
+
+    // Wait for all tasks to complete.
+    pool.join();
+    analysis_prog_arc.finish_with_message("Analysis complete");
+    
+    scan.set_state_completed(&mut db.lock().unwrap())
+}
+
+fn process_item_async(
+    db: &Arc<Mutex<Database>>, 
+    scan_id: i64, 
+    item: Item, 
+    hashing: bool, 
+    validating: bool, 
+    multi_prog: Arc<MultiProgress>, 
+    analysis_prog: Arc<ProgressBar>) {
+    // TODO: Improve the error handling for all analysis. Need to differentiate
+    // between file system errors and actual content errors
+    
+    let path = Path::new(item.path());
+    let file_name = path.file_name()
+        .unwrap_or_else(|| path.as_os_str())
+        .to_string_lossy();
+
+    let mut new_hash = None;
+
+    if hashing {
+        let mut hash_prog = multi_prog.add(ProgressBar::new(0));
+
+        hash_prog.set_style(ProgressStyle::default_bar()
+            .template("{msg}\n[{bar:80}] {bytes}/{total_bytes} ({eta})")
+            .unwrap()
+            .progress_chars("#>-"));
+
+        hash_prog.set_message(format!("Hashing: '{}'", file_name));
+
+        new_hash = match Analysis::compute_md5_hash(&path, &file_name, &mut hash_prog) {
+            Ok(hash_s) => Some(hash_s),
+            Err(error) => {
+                error!("Error hashing '{}': {}", file_name, error);
+                None
+            },
+        };
+
+        hash_prog.finish_and_clear();
+    }
+    
+    let mut new_validation_state = ValidationState::Unknown;
+    let mut new_validation_state_desc = None;
+
+    if validating {
+        let is_flac = Utils::has_flac_extension(&path);
+
+        if is_flac {
+            let is_valid_prog = multi_prog.add(ProgressBar::new_spinner());
+            is_valid_prog.set_message(format!("Validating: '{}'", &file_name));
+            is_valid_prog.enable_steady_tick(Duration::from_millis(250));
+
+            match Analysis::validate_flac_claxon2(&path, &file_name, &is_valid_prog) {
+                Ok((res_validation_state, res_validation_state_desc)) => {
+                    new_validation_state = res_validation_state;
+                    new_validation_state_desc = res_validation_state_desc;
+                },
+                Err(error) => {
+                    let e_str = format!("{:?}", error);
+                    error!("Error validating '{}': {}", file_name, e_str);
+                    new_validation_state = ValidationState::Invalid;
+                }
+            }
+
+            is_valid_prog.finish_and_clear();
+        } else {
+            new_validation_state = ValidationState::NoValidator;
+        }
+    }
+
+    match update_item_analysis(db, scan_id, hashing, validating, &item, new_hash, new_validation_state, new_validation_state_desc) {
+        Err(error) => {
+            let e_str = format!("{:?}", error);
+            error!("Error updating item analysis '{}': {}", file_name, e_str);
+        },
+        _ => {},
+    }
+    
+    analysis_prog.inc(1);
+}
+
+/*
 fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
     if scan.hashing() || scan.validating() {
         let file_count = scan.file_count().unwrap_or_default().max(0) as u64;            // scan.file_count is the total # of files in the scan
@@ -435,6 +625,7 @@ fn do_state_analyzing(db: &mut Database, _root: &Root, scan: &mut Scan, multi_pr
    
     scan.set_state_completed(db)
 }
+    */
 
 fn handle_scan_item(
     db: &mut Database,
@@ -473,7 +664,7 @@ fn handle_scan_item(
         
         if existing_item.is_tombstone() {
             // Rehydrate a tombstone
-            let tx = db.conn.transaction()?;
+            let tx = db.conn_mut().transaction()?;
             let rows_updated = tx.execute(
                 "UPDATE items SET 
                         is_tombstone = 0, 
@@ -496,7 +687,7 @@ fn handle_scan_item(
             tx.commit()?;
         } else if existing_item.item_type() != item_type_str {
             //Item type changed file <-> folder
-            let tx = db.conn.transaction()?;
+            let tx = db.conn_mut().transaction()?;
             let rows_updated = tx.execute(
                 "UPDATE items SET 
                     item_type = ?, 
@@ -518,7 +709,7 @@ fn handle_scan_item(
                 (scan.id(), existing_item.id(), ChangeType::TypeChange.as_str()))?;
             tx.commit()?;
         } else if metadata_changed {
-            let tx = db.conn.transaction()?;
+            let tx = db.conn_mut().transaction()?;
 
            let rows_updated = tx.execute(
             "UPDATE items SET
@@ -544,7 +735,7 @@ fn handle_scan_item(
            tx.commit()?;            
         } else {
             // No change - just update last_scan_id
-            let rows_updated = db.conn.execute(
+            let rows_updated = db.conn().execute(
                 "UPDATE items SET last_scan_id = ? WHERE id = ?", 
                 (scan.id(), existing_item.id()))?;
             if rows_updated == 0 {
@@ -553,7 +744,7 @@ fn handle_scan_item(
         }
     } else {
         // Item is new, insert into items and changes tables
-        let tx = db.conn.transaction()?;
+        let tx = db.conn_mut().transaction()?;
         tx.execute("INSERT INTO items (root_id, path, item_type, last_modified, file_size, validation_state, last_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (scan.root_id(), &path_str, item_type.as_str(), last_modified, file_size, ValidationState::Unknown.to_string(), scan.id()))?;
         let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
@@ -566,8 +757,10 @@ fn handle_scan_item(
 }
 
 pub fn update_item_analysis(
-    db: &mut Database,
-    scan: &Scan,
+    db: &Arc<Mutex<Database>>,
+    scan_id: i64,
+    hashing: bool,
+    validating: bool,
     item: &Item,
     new_hash: Option<String>,
     new_validation_state: ValidationState,
@@ -587,7 +780,7 @@ pub fn update_item_analysis(
     let mut last_hash_scan_id_item = item.last_hash_scan_id();
     let mut last_validation_scan_id_item = item.last_validation_scan_id();
 
-    if scan.hashing() {
+    if hashing {
         if item.file_hash() != new_hash.as_deref() {
             // update the change record only if a previous hash had been computed
             if item.last_hash_scan_id().is_some() {
@@ -601,10 +794,10 @@ pub fn update_item_analysis(
         }
 
         // Update the last scan id whether or not anything changed
-        last_hash_scan_id_item = Some(scan.id());
+        last_hash_scan_id_item = Some(scan_id);
     }
 
-    if scan.validating() {
+    if validating {
         if (item.validation_state() != new_validation_state) || (item.validation_state_desc() != new_validation_state_desc.as_deref()) {
             // update the change record only if a previous validation had been completed
             if item.last_validation_scan_id().is_some() {
@@ -619,10 +812,13 @@ pub fn update_item_analysis(
         }
 
         // update the last validation scan id whether or not anything changed
-        last_validation_scan_id_item = Some(scan.id());
+        last_validation_scan_id_item = Some(scan_id);
     }
+
+    let mut db_guard = db.lock().unwrap();
+    let conn = db_guard.conn_mut();
     
-    let tx = db.conn.transaction()?; // Start transaction
+    let tx = conn.transaction()?; // Start transaction
 
     // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
     if update_changes {
@@ -635,7 +831,7 @@ pub fn update_item_analysis(
                     prev_validation_state = excluded.prev_validation_state,
                     prev_validation_state_desc = excluded.prev_validation_state_desc",
             rusqlite::params![
-                scan.id(), 
+                scan_id, 
                 item.id(),
                 hash_change, 
                 validation_state_change, 

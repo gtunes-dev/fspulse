@@ -95,7 +95,7 @@ impl Scan {
     }
 
     pub fn create(db: &Database, root: &Root, hashing: bool, validating: bool) -> Result<Self, FsPulseError> {
-        let (scan_id, time_of_scan): (i64, i64) = db.conn.query_row(
+        let (scan_id, time_of_scan): (i64, i64) = db.conn().query_row(
             "INSERT INTO scans (root_id, state, hashing, validating, time_of_scan) 
              VALUES (?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
              RETURNING id, time_of_scan",
@@ -120,7 +120,7 @@ impl Scan {
     }
 
     fn get_by_id_or_latest(db: &Database, scan_id: Option<i64>, root_id: Option<i64>) -> Result<Option<Self>, FsPulseError> {
-        let conn = &db.conn;
+        let conn = db.conn();
 
         let (query, query_param) = match (scan_id, root_id) {
             (Some(_), _) => (SQL_SCAN_ID_OR_LATEST, scan_id),
@@ -198,7 +198,7 @@ impl Scan {
     }
 
     pub fn set_state_analyzing(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
-        let tx = db.conn.transaction()?;
+        let tx = db.conn_mut().transaction()?;
 
         let (file_count, folder_count): (i64, i64) = tx.query_row(
             "SELECT 
@@ -246,7 +246,7 @@ impl Scan {
     }
 
     fn set_state(&mut self, db: &mut Database, new_state: ScanState) -> Result<(), FsPulseError> {
-        let conn = &mut db.conn;
+        let conn = &mut db.conn_mut();
 
         let rows_updated = conn.execute(
             "UPDATE scans SET state = ? WHERE id = ?", 
@@ -271,7 +271,7 @@ impl Scan {
             return Ok(0);
         }
         
-        let mut stmt = db.conn.prepare(
+        let mut stmt = db.conn().prepare(
             "SELECT 
                 s.id,
                 s.root_id,

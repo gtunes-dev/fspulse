@@ -122,7 +122,7 @@ impl Change {
     pub fn prev_validation_state(&self) -> Option<&str> {self.prev_validation_state.as_deref()}
 
     pub fn get_by_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = &db.conn;
+        let conn = db.conn();
     
         conn.query_row(
             "SELECT 
@@ -179,7 +179,7 @@ impl Change {
     {
         let mut _change_count = 0;  // used only for logging
 
-        let mut stmt = db.conn.prepare(sql_query)?;
+        let mut stmt = db.conn().prepare(sql_query)?;
         
         let rows = stmt.query_map([sql_query_param], |row| {
             Ok(
@@ -225,7 +225,7 @@ impl ChangeCounts {
     }
 
     pub fn get_by_scan_id(db: &Database, scan_id: i64) -> Result<Self, FsPulseError> {
-        let conn = &db.conn;
+        let conn = db.conn();
         let mut change_counts = ChangeCounts::default();
 
         let mut stmt = conn.prepare(

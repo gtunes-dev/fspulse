@@ -62,7 +62,7 @@ impl Item {
     pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         
         let query = format!("SELECT {} FROM ITEMS WHERE id = ?", Item::ITEM_COLUMNS);
-        db.conn.query_row(
+        db.conn().query_row(
             &query,
             params![id],
             |row| Item::from_row(row),
@@ -79,7 +79,7 @@ impl Item {
     {
         let query = format!("SELECT {} FROM ITEMS WHERE root_id = ? AND path = ?", Item::ITEM_COLUMNS);
 
-        db.conn.query_row(
+        db.conn().query_row(
             &query,
             params![root_id, path],
             |row| Item::from_row(row),
@@ -103,7 +103,7 @@ impl Item {
     pub fn last_validation_scan_id(&self) -> Option<i64> { self.last_validation_scan_id }
 
     pub fn count_analyzed_items(db: &Database, scan_id: i64) -> Result<i64, FsPulseError> {
-        let mut stmt = db.conn.prepare(
+        let mut stmt = db.conn().prepare(
             "SELECT COUNT(*) FROM items
              WHERE
                 last_scan_id = ? AND
@@ -120,6 +120,7 @@ impl Item {
         scan_id: i64,
         hashing: bool,
         validating: bool,
+        last_item_id: i64,
         limit: usize,  // Parameterized limit
     ) -> Result<Vec<Item>, FsPulseError> {
 
@@ -127,21 +128,23 @@ impl Item {
             "SELECT {}
             FROM items
              WHERE
-                last_scan_id = ?
+                    last_scan_id = ?
                 AND
-                item_type = 'F'
+                    item_type = 'F'
                 AND 
                     ((? = 1 AND (last_hash_scan_id IS NULL OR last_hash_scan_id < ?))
                     OR 
                     (? = 1 AND (last_validation_scan_id IS NULL OR last_validation_scan_id < ?)))
-             ORDER BY path ASC
+                AND
+                    id > ?
+             ORDER BY id ASC
              LIMIT {}",
             Item::ITEM_COLUMNS, limit
         );
     
-        let mut stmt = db.conn.prepare(&query)?;
+        let mut stmt = db.conn().prepare(&query)?;
     
-        let rows = stmt.query_map([scan_id, hashing as i64, scan_id, validating as i64, scan_id], |row| {
+        let rows = stmt.query_map([scan_id, hashing as i64, scan_id, validating as i64, scan_id, last_item_id], |row| {
             Item::from_row(row)
         })?;
     
@@ -159,7 +162,7 @@ impl Item {
              WHERE root_id = ? AND is_tombstone = 0 AND validation_state = 'I'
              ORDER BY path ASC", Item::ITEM_COLUMNS);
 
-        let mut stmt = db.conn.prepare(&sql)?;
+        let mut stmt = db.conn().prepare(&sql)?;
 
         let rows = stmt.query_map([root_id], |row| {
             Item::from_row(row)
@@ -184,7 +187,7 @@ impl Item {
              WHERE last_scan_id = ?
              ORDER BY path ASC", Item::ITEM_COLUMNS);
 
-        let mut stmt = db.conn.prepare(&sql)?;
+        let mut stmt = db.conn().prepare(&sql)?;
 
         let rows = stmt.query_map([scan_id], |row| {
             Item::from_row(row)
@@ -209,7 +212,7 @@ impl Item {
              WHERE path = ?
              ORDER BY id ASC", Item::ITEM_COLUMNS);
 
-        let mut stmt = db.conn.prepare(&sql)?;
+        let mut stmt = db.conn().prepare(&sql)?;
 
         let rows = stmt.query_map([path], |row| {
             Item::from_row(row)
