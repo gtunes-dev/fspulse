@@ -30,7 +30,7 @@ pub enum Error {
 use std::{fmt, fs::File, io::{BufReader, Read}, path::Path};
 
 use hex::encode;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::ProgressBar;
 use md5::{Digest, Md5};
 //use symphonia::core::{codecs::audio::AudioDecoderOptions, errors::Error, formats::{probe::Hint, FormatOptions}, io::MediaSourceStream, meta::MetadataOptions  };
 use claxon::{Block, FlacReader};
@@ -85,7 +85,9 @@ impl fmt::Display for ValidationState {
 }
 
 impl Analysis {
-    pub fn validate_flac_claxon2(path: &Path, _file_name: &str, _is_valid_prog: &ProgressBar) -> Result<(ValidationState, Option<String>), FsPulseError> {
+    const BLOCKS_PER_TICK: i32 = 500;
+
+    pub fn validate_flac_claxon2(path: &Path, _file_name: &str, is_valid_prog: &ProgressBar) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let mut reader =  match FlacReader::open(path) {
             Ok(reader) => reader,
             Err(e) => {
@@ -97,6 +99,8 @@ impl Analysis {
         let mut frame_reader = reader.blocks();
         let mut block = Block::empty();
 
+        let mut tick_blocks = 0;
+
         loop {
             match frame_reader.read_next_or_eof(block.into_buffer()) {
                 Ok(Some(next_block)) => block = next_block,
@@ -106,6 +110,12 @@ impl Analysis {
                         return Ok((ValidationState::Invalid, Some(e_str)))
                 },
             }
+            tick_blocks += 1;
+            if tick_blocks == Analysis::BLOCKS_PER_TICK {
+                is_valid_prog.tick();
+                tick_blocks = 0;
+            }
+
         }
 
         Ok((ValidationState::Valid, None))
@@ -305,21 +315,13 @@ impl Analysis {
     }
     */
 
-    pub fn compute_md5_hash(path: &Path, file_name: &str, hash_prog: &ProgressBar) -> Result<String, FsPulseError> {
+    pub fn compute_md5_hash(path: &Path, hash_prog: &ProgressBar) -> Result<String, FsPulseError> {
         let f = File::open(path)?;
         let len = f.metadata()?.len();
 
+        // The progress bar is mostly set up by our caller. We just need to set the
+        // length and go
         hash_prog.set_length(len);
-
-        /*
-
-        hash_prog.set_style(ProgressStyle::default_bar()
-                .template("{msg}\n[{bar:80}] {bytes}/{total_bytes} ({eta})")
-                .unwrap()
-                .progress_chars("#>-"));
-
-        hash_prog.set_message(format!("Hashing: '{}'", file_name));
-        */
         
         let mut reader = BufReader::new(f);
         let mut hasher = Md5::new();
@@ -336,7 +338,6 @@ impl Analysis {
 
         let hash = hasher.finalize();
 
-        //hash_prog.finish_and_clear();
         Ok(encode(hash))
     }
 

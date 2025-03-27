@@ -97,4 +97,15 @@ impl Utils {
         }
     }
 
+    pub fn _format_path_for_display(path: &Path, max_len: usize) -> String {
+        let path_str = path.to_string_lossy();
+        if path_str.len() <= max_len {
+            path_str.to_string()
+        } else {
+            let prefix = "...";
+            let available_len = max_len - prefix.len();
+            format!("{}{}", prefix, &path_str[path_str.len() - available_len..])
+        }
+    }
+
 }
