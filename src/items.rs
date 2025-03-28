@@ -1,6 +1,6 @@
 use rusqlite::{self, params, OptionalExtension};
 
-use crate::{analysis::ValidationState, database::Database, error::FsPulseError};
+use crate::{database::Database, error::FsPulseError, validators::validator::ValidationState};
 
 #[derive(Copy,Clone, Debug, PartialEq)]
 pub enum ItemType {

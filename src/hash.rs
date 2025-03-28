@@ -1,148 +1,16 @@
-/*
-WAV 
-WAV64 
-DSD 
-FLAC 
-AIFF 
-ALAC (Apple Lossless) 
-OGG 
-AAC 
-MP3 
-MQA 
-DSF 
-and DFF 
-*/
-
-/*
-Symphonia errors to handle:
-
-pub enum Error {
-    IoError(Error),
-    DecodeError(&'static str),
-    SeekError(SeekErrorKind),
-    Unsupported(&'static str),
-    LimitError(&'static str),
-    ResetRequired,
-}
-
-*/
-
-use std::{fmt, fs::File, io::{BufReader, Read}, path::Path};
+use std::{fs::File, io::{BufReader, Read}, path::Path};
 
 use hex::encode;
 use indicatif::ProgressBar;
 use md5::{Digest, Md5};
 //use symphonia::core::{codecs::audio::AudioDecoderOptions, errors::Error, formats::{probe::Hint, FormatOptions}, io::MediaSourceStream, meta::MetadataOptions  };
-use claxon::{Block, FlacReader};
 
 use crate::error::FsPulseError;
 
 
-pub struct Analysis {
-    // no fields
-}
+pub struct Hash;
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum ValidationState {
-    #[default]
-    Unknown,
-    Valid,
-    Invalid,
-    NoValidator
-}
-
-impl ValidationState {
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            ValidationState::Unknown => "U",
-            ValidationState::Valid => "V",
-            ValidationState::Invalid => "I",
-            ValidationState::NoValidator => "N",
-        }
-    }
-
-    pub fn from_string(value: &str) -> Self {
-        ValidationState::from_char(value.chars().next().unwrap())
-    }
-
-    /// Convert a single-character string from the database into a State
-    pub fn from_char(value: char) -> Self {
-        match value {
-            'U' => ValidationState::Unknown,
-            'V' => ValidationState::Valid,
-            'I' => ValidationState::Invalid,
-            'N' => ValidationState::NoValidator,
-            _ => ValidationState::Unknown,
-        }
-    }
-}
-
-/// Implement Display to print the short codes directly
-impl fmt::Display for ValidationState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_str())
-    }
-}
-
-impl Analysis {
-    const BLOCKS_PER_TICK: i32 = 500;
-
-    pub fn validate_flac_claxon2(path: &Path, _file_name: &str, is_valid_prog: &ProgressBar) -> Result<(ValidationState, Option<String>), FsPulseError> {
-        let mut reader =  match FlacReader::open(path) {
-            Ok(reader) => reader,
-            Err(e) => {
-                let e_str = format!("{:?}", e);
-                return Ok((ValidationState::Invalid, Some(e_str)))
-            }
-        };
-
-        let mut frame_reader = reader.blocks();
-        let mut block = Block::empty();
-
-        let mut tick_blocks = 0;
-
-        loop {
-            match frame_reader.read_next_or_eof(block.into_buffer()) {
-                Ok(Some(next_block)) => block = next_block,
-                Ok(None) => break, // EOF.
-                Err(error) => {
-                    let e_str = format!("{:?}", error);
-                        return Ok((ValidationState::Invalid, Some(e_str)))
-                },
-            }
-            tick_blocks += 1;
-            if tick_blocks == Analysis::BLOCKS_PER_TICK {
-                is_valid_prog.tick();
-                tick_blocks = 0;
-            }
-
-        }
-
-        Ok((ValidationState::Valid, None))
-    }
-
-
-    pub fn _validate_flac_claxon(path: &Path, _file_name: &str, _is_valid_prog: &ProgressBar) -> Result<(ValidationState, Option<String>), FsPulseError> {
-        let mut reader =  match FlacReader::open(path) {
-            Ok(reader) => reader,
-            Err(e) => {
-                let e_str = format!("{:?}", e);
-                return Ok((ValidationState::Invalid, Some(e_str)))
-            }
-        };
-
-        for opt_sample in reader.samples() {
-            let _sample = match opt_sample {
-                Err(e) => {
-                    let e_str = format!("{:?}", e);
-                    return Ok((ValidationState::Invalid, Some(e_str)))
-                }
-                Ok(sample) => sample
-            };
-        }
-        Ok((ValidationState::Valid, None))
-    }
-    
+impl Hash {
     /*
     pub fn _validate_flac_symphonia(path: &Path, file_name: &str, is_valid_prog: &ProgressBar) -> Result<bool, FsPulseError> {
             // Try to create a Symphonia decoder

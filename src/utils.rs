@@ -34,13 +34,6 @@ impl Utils {
     }
     */
 
-    pub fn has_flac_extension(path: &Path) -> bool {
-        path.extension()
-            .and_then(|ext| ext.to_str()) // Convert OsStr to &str
-            .map(|ext| ext.eq_ignore_ascii_case("flac")) // Case-insensitive comparison
-            .unwrap_or(false) // Default to false if no extension
-    }
-
     pub fn opt_i64_or_none_as_str(opt_i64: Option<i64>) -> String {
         match opt_i64 {
             Some(i) => i.to_string(),

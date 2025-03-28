@@ -18,10 +18,11 @@
 // 5. Stopped
 
 use crate::changes::ChangeType;
-use crate::analysis::{Analysis, ValidationState};
+use crate::hash::Hash;
 use crate::items::{Item, ItemType};
 use crate::reports::{ReportFormat, Reports};
 use crate::utils::Utils;
+use crate::validators::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 use crate::roots::Root;
 use crate::scans::ScanState;
@@ -549,7 +550,7 @@ impl Scanner {
             thread_prog.set_position(0); // reset in case left from previous
             thread_prog.set_length(0);
 
-            new_hash = match Analysis::compute_md5_hash(&path, &thread_prog) {
+            new_hash = match Hash::compute_md5_hash(&path, &thread_prog) {
                 Ok(hash_s) => Some(hash_s),
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
@@ -562,32 +563,28 @@ impl Scanner {
         let mut new_validation_state_desc = None;
 
         if validating {
-            let is_flac = Utils::has_flac_extension(&path);
-
-            if is_flac {
-                thread_prog.set_style(
-                    ProgressStyle::default_spinner()
-                        .template("{prefix} {spinner} {msg}")
-                        .unwrap(),
-                );
-        
-                thread_prog.set_message(format!("Validating: '{}'", &display_path));
-                //is_valid_prog.enable_steady_tick(Duration::from_millis(250));
-
-                match Analysis::validate_flac_claxon2(&path, &display_path, &thread_prog) {
-                    Ok((res_validation_state, res_validation_state_desc)) => {
-                        new_validation_state = res_validation_state;
-                        new_validation_state_desc = res_validation_state_desc;
-                    },
-                    Err(error) => {
-                        let e_str = format!("{:?}", error);
-                        error!("Error validating '{}': {}", &display_path, e_str);
-                        new_validation_state = ValidationState::Invalid;
+            let validator = from_path(&path);
+            match validator {
+                Some(v) => {
+                    thread_prog.set_style(
+                        ProgressStyle::default_spinner()
+                            .template("{prefix} {spinner} {msg}")
+                            .unwrap(),
+                    );
+                    thread_prog.set_message(format!("Validating: '{}'", &display_path));
+                    match v.validate(&path, &thread_prog) {
+                        Ok((res_validation_state, res_validation_state_desc)) => {
+                            new_validation_state = res_validation_state;
+                            new_validation_state_desc = res_validation_state_desc;
+                        },
+                        Err(e) => {
+                            let e_str = e.to_string();
+                            error!("Error validating '{}': {}", &display_path, e_str);
+                            new_validation_state = ValidationState::Invalid;
+                        }
                     }
-                }
-
-            } else {
-                new_validation_state = ValidationState::NoValidator;
+                },
+                None => new_validation_state = ValidationState::NoValidator,
             }
         }
 
@@ -750,7 +747,7 @@ impl Scanner {
 
         // values to use in the item update
         let mut hash_item = item.file_hash();
-        let mut validation_state_item = item.validation_state().to_str();
+        let mut validation_state_item = item.validation_state().as_str();
         let mut validation_state_desc_item = item.validation_state_desc();
         let mut last_hash_scan_id_item = item.last_hash_scan_id();
         let mut last_validation_scan_id_item = item.last_validation_scan_id();
@@ -777,12 +774,12 @@ impl Scanner {
                 // update the change record only if a previous validation had been completed
                 if item.last_validation_scan_id().is_some() {
                     update_changes = true;
-                    validation_state_change = Some(item.validation_state().to_str());
+                    validation_state_change = Some(item.validation_state().as_str());
                     validation_state_desc_change = item.validation_state_desc();
                 }
 
                 // always update the item when the validation state changes
-                validation_state_item = new_validation_state.to_str();
+                validation_state_item = new_validation_state.as_str();
                 validation_state_desc_item = new_validation_state_desc.as_deref();
             }
 

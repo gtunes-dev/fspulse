@@ -2,7 +2,7 @@ mod database;
 mod changes;
 mod cli;
 mod error;
-mod analysis;
+mod hash;
 mod items;
 mod reports;
 mod roots;
@@ -10,6 +10,7 @@ mod scans;
 mod scanner;
 mod schema;
 mod utils;
+mod validators;
 
 use cli::Cli;
 use indicatif::MultiProgress;
