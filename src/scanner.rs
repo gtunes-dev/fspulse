@@ -35,11 +35,10 @@ use dialoguer::{MultiSelect, Select};
 use threadpool::ThreadPool;
 //use md5::digest::typenum::Abs;
 use std::collections::VecDeque;
-use std::fs;
+use std::{cmp, fs};
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 #[derive(Clone, Debug)]
 struct QueueEntry {
@@ -180,48 +179,74 @@ impl Scanner {
     }
 
     fn do_scan_machine(db: &mut Database, scan: &mut Scan, root: &Root, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
-        multi_prog.println(format!("Scanning: {}", root.path()))?;
+        multi_prog.println("-- FsPulse Scan --")?;
 
-
+        // Loop through all states, even if resuming, to allow progress updates
+        let mut loop_state = ScanState::Scanning;
+        
         loop {
-            let current_state = scan.state();
-
             // When the state is completed, the scan is done
-            if current_state == ScanState::Completed {
+            if loop_state == ScanState::Completed {
                 break;
             }
 
-            match current_state {
-                ScanState::Scanning => Scanner::do_state_scanning(db, &root, scan, multi_prog),
-                ScanState::Sweeping => Scanner::do_state_sweeping(db, scan, multi_prog),
-                ScanState::Analyzing => {
-                    // This is a boundary - we'll take ownership of the database and progress
-                    // bars here and then restore them when we're done
-                    let owned_db = std::mem::take(db);
-                    let db_arc = Arc::new(Mutex::new(owned_db));
-                    let multi_prog_arc = Arc::new(multi_prog.clone());
-                    
-                    let analysis_result = Scanner::do_state_analyzing(db_arc.clone(), scan, multi_prog_arc);
-
-                    // recover the database from the Arc
-                    let recovered_db = Arc::try_unwrap(db_arc)
-                        .expect("No additional clones should exist")
-                        .into_inner()
-                        .expect("Mutex isn't poisoned");
-
-                    *db = recovered_db;
-                    analysis_result
+            match loop_state {
+                ScanState::Scanning => {
+                    let bar = Utils::add_section_bar(multi_prog, 1, "Quick scanning...");
+                    if scan.state() == ScanState::Scanning {
+                        Scanner::do_state_scanning(db, &root, scan, multi_prog)?;
+                    }
+                    Utils::finish_section_bar(&bar, "✔ Quick scanning");
+                    loop_state = ScanState::Sweeping;
                 },
-                _ => Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", current_state))),
-            }?;
+                ScanState::Sweeping => {
+                    let bar = Utils::add_section_bar(multi_prog, 2, "Tombstoning deletes...");
+                    if scan.state() == ScanState::Sweeping {
+                        Scanner::do_state_sweeping(db, scan)?;
+                    }
+                    Utils::finish_section_bar(&bar, "✔ Tombstoning deletes");
+                    loop_state = ScanState::Analyzing;
+                },
+                ScanState::Analyzing => {
+                    // Should never get here in a situation in which scan.state() isn't Analyzing
+                    // but we protect against it just in case
+                    let bar = Utils::add_section_bar(multi_prog, 3, "Analyzing...");
+                    let mut analysis_result = Ok(());
+                    if scan.state() == ScanState::Analyzing {
+                        // This is a boundary - we'll take ownership of the database and progress
+                        // bars here and then restore them when we're done
+                        let owned_db = std::mem::take(db);
+                        let db_arc = Arc::new(Mutex::new(owned_db));
+                        let multi_prog_arc = Arc::new(multi_prog.clone());
+                        
+                        analysis_result = Scanner::do_state_analyzing(db_arc.clone(), scan, multi_prog_arc);
+
+                        // recover the database from the Arc
+                        let recovered_db = Arc::try_unwrap(db_arc)
+                            .expect("No additional clones should exist")
+                            .into_inner()
+                            .expect("Mutex isn't poisoned");
+
+                        *db = recovered_db;
+                    }
+                    if analysis_result.is_err() {
+                        return analysis_result;
+                    }
+                    Utils::finish_section_bar(&bar, "✔ Analyzing");
+                    loop_state = ScanState::Completed;
+                },
+                unexpected => {
+                    return Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", unexpected)));
+                },
+            };
         }   
 
+        println!();
+        println!();
         Reports::print_scan(db, scan, ReportFormat::Table)?;
 
         Ok(())
     }
-
-
 
     fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan, report: bool) -> Result<ScanDecision, FsPulseError> {
         let options = vec![
@@ -272,10 +297,20 @@ impl Scanner {
 
         let mut q = VecDeque::new();
 
-        let dir_prog = multi_prog.add(ProgressBar::new_spinner());
-        dir_prog.enable_steady_tick(Duration::from_millis(250));
-        let item_prog = multi_prog.add(ProgressBar::new_spinner());
-        item_prog.enable_steady_tick(Duration::from_millis(250));
+        let dir_prog = Utils::add_spinner_bar(
+            multi_prog, 
+            "   ", 
+            format!("Directory:"), 
+            true
+        );
+
+        let item_prog = Utils::add_spinner_bar(
+            multi_prog, 
+            "   ", 
+            format!("File:"), 
+            true
+        );
+
 
         q.push_back(QueueEntry {
             path: root_path_buf.clone(),
@@ -318,18 +353,14 @@ impl Scanner {
             }
         }
 
-        dir_prog.finish_with_message("Scan complete");
         item_prog.finish_and_clear();
+        dir_prog.finish_and_clear();
 
         scan.set_state_sweeping(db)
     }
 
-    fn do_state_sweeping(db: &mut Database, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> { 
+    fn do_state_sweeping(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> { 
         let tx = db.conn_mut().transaction()?;
-
-        let sweep_prog = multi_prog.add(ProgressBar::new_spinner());
-        sweep_prog.set_message("Detecting changes and deletions...");
-        sweep_prog.enable_steady_tick(Duration::from_millis(250));
 
         // Insert deletion records into changes
             tx.execute(
@@ -351,7 +382,6 @@ impl Scanner {
 
         tx.commit()?;
 
-        sweep_prog.finish_with_message("Change and delete detection complete");
         scan.set_state_analyzing(db)
     }
 
@@ -374,35 +404,72 @@ impl Scanner {
         let file_count = scan.file_count().unwrap_or_default().max(0) as u64;                   // scan.file_count is the total # of files in the scan
         let analyzed_items= Item::count_analyzed_items(&db.lock().unwrap(), scan.id())?.max(0) as u64;  // may be resuming the scan
 
-        let analysis_prog = multi_prog.add(ProgressBar::new(file_count));
-        analysis_prog.set_style(ProgressStyle::default_bar()
-            .template("{msg}\n[{bar:80}] {pos}/{len} (Remaining: {eta})")
-            .unwrap()
-            .progress_chars("#>-"));
-        analysis_prog.set_message("Analyzing files:");
+        let analysis_prog = multi_prog.add(ProgressBar::new(file_count)
+            .with_style(ProgressStyle::default_bar()
+                .template("{prefix}{msg} [{bar:80}] {pos}/{len} (Remaining: {eta})")
+                .unwrap()
+                .progress_chars("#>-")
+            )
+            .with_prefix("   ")
+            .with_message("Files")
+        );
+
         analysis_prog.inc(analyzed_items);
 
         let multi_prog_arc = Arc::new((*multi_prog).clone());
-        let analysis_prog_arc = Arc::new(analysis_prog);
 
         // Create a bounded channel to limit the number of queued tasks (e.g., max 100 tasks)
         let (sender, receiver) = bounded::<Item>(100);
 
-        // Initialize the thread pool. Current 4 threads
-        let pool = ThreadPool::new(20);
-        for _ in 0..20 {
+        // Initialize the thread pool
+
+        let items_remaining = file_count.saturating_sub(analyzed_items); // avoids underflow
+        let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
+        let num_threads = cmp::min(items_remaining_usize, 16);
+        let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread
+
+        for thread_index in 0..num_threads {
             // Clone shared resources for each worker thread.
             let receiver = receiver.clone();
-            let multi_prog_clone = Arc::clone(&multi_prog_arc);
             let db = Arc::clone(&db);
-            let analysis_prog_clone = Arc::clone(&analysis_prog_arc);
+            let multi_prog_clone = Arc::clone(&multi_prog_arc);
+            let analysis_prog_clone = analysis_prog.clone();
             let scan_id = scan.id();
-            
+
+ 
+            // Create a reusable progress bar for this thread
+            let thread_prog = multi_prog_clone.add(ProgressBar::new(0));
+            thread_prog.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{prefix} {spinner} {msg}")
+                    .unwrap(),
+            );
+            // Format thread label like [01/20], [02/20], ..., [20/20]
+            let thread_prog_label = format!("   [{:0width$}/{}]", thread_index + 1, num_threads, width = if num_threads >= 10 { 2 } else { 1 });
+            thread_prog.set_prefix(thread_prog_label.clone());
+            thread_prog.set_message("Waiting...".to_string());
+
             // Worker thread: continuously receive and process tasks.
             pool.execute(move || {
                 while let Ok(item) = receiver.recv() {
-                    Scanner::process_item_async(&db, scan_id, item, hashing, validating, multi_prog_clone.clone(), analysis_prog_clone.clone());
+                    Scanner::process_item_async(
+                        &db, 
+                        scan_id, 
+                        item, 
+                        hashing, 
+                        validating, 
+                        &multi_prog_clone, 
+                        &analysis_prog_clone,
+                        &thread_prog,
+                    );
                 }
+                thread_prog.set_style(
+                    ProgressStyle::default_spinner()
+                        .template("{prefix} {msg}")
+                        .unwrap(),
+                );
+                thread_prog.finish_and_clear();
+                //thread_prog.finish_with_message(format!("✔ Done"));
             });
         }
 
@@ -415,7 +482,7 @@ impl Scanner {
                 scan.hashing(),
                 scan.validating(),
                 last_item_id,
-                10,
+                100,
             )?;
 
             if items.is_empty() {
@@ -430,8 +497,7 @@ impl Scanner {
                 last_item_id = item.id();
 
                 // This send will block if the channel already has 100 items.
-                sender.send(item)
-                    .expect("Failed to send task into the bounded channel");
+                sender.send(item).expect("Failed to send task into the bounded channel");
             }
         }
 
@@ -440,8 +506,13 @@ impl Scanner {
 
         // Wait for all tasks to complete.
         pool.join();
-        analysis_prog_arc.finish_with_message("Analysis complete");
-        
+        analysis_prog.set_style(
+            ProgressStyle::default_spinner()
+                .template("{prefix} ✔ Analyzing ({pos} files)")
+                .unwrap(),
+        );
+        //analysis_prog.finish_with_message("✔ Analyzing");
+        analysis_prog.finish_and_clear();
         scan.set_state_completed(&mut db.lock().unwrap())
     }
 
@@ -451,8 +522,10 @@ impl Scanner {
         item: Item, 
         hashing: bool, 
         validating: bool, 
-        multi_prog: Arc<MultiProgress>, 
-        analysis_prog: Arc<ProgressBar>) {
+        _multi_prog: &Arc<MultiProgress>, 
+        analysis_prog: &ProgressBar,
+        thread_prog: &ProgressBar,
+    ) {
         // TODO: Improve the error handling for all analysis. Need to differentiate
         // between file system errors and actual content errors
         
@@ -462,29 +535,27 @@ impl Scanner {
             .unwrap_or_else(|| path.as_os_str())
             .to_string_lossy();
         
-        //let display_path = Utils::format_path_for_display(&path, 60);
-
         let mut new_hash = None;
 
         if hashing {
-            let mut hash_prog = multi_prog.add(ProgressBar::new(0));
+            thread_prog.set_style(
+                ProgressStyle::default_bar()
+                    .template("{prefix} {msg} [{bar:40}] {bytes}/{total_bytes}")
+                    .unwrap()
+                    .progress_chars("=> "),
+            );
 
-            hash_prog.set_style(ProgressStyle::default_bar()
-                .template("{msg}\n[{bar:80}] {bytes}/{total_bytes} ({eta})")
-                .unwrap()
-                .progress_chars("-> "));
+            thread_prog.set_message(format!("Hashing: '{}'", &display_path));
+            thread_prog.set_position(0); // reset in case left from previous
+            thread_prog.set_length(0);
 
-            hash_prog.set_message(format!("Hashing: '{}'", &display_path));
-
-            new_hash = match Analysis::compute_md5_hash(&path, &mut hash_prog) {
+            new_hash = match Analysis::compute_md5_hash(&path, &thread_prog) {
                 Ok(hash_s) => Some(hash_s),
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
                     None
                 },
             };
-
-            hash_prog.finish_and_clear();
         }
         
         let mut new_validation_state = ValidationState::Unknown;
@@ -494,11 +565,16 @@ impl Scanner {
             let is_flac = Utils::has_flac_extension(&path);
 
             if is_flac {
-                let is_valid_prog = multi_prog.add(ProgressBar::new_spinner());
-                is_valid_prog.set_message(format!("Validating: '{}'", &display_path));
+                thread_prog.set_style(
+                    ProgressStyle::default_spinner()
+                        .template("{prefix} {spinner} {msg}")
+                        .unwrap(),
+                );
+        
+                thread_prog.set_message(format!("Validating: '{}'", &display_path));
                 //is_valid_prog.enable_steady_tick(Duration::from_millis(250));
 
-                match Analysis::validate_flac_claxon2(&path, &display_path, &is_valid_prog) {
+                match Analysis::validate_flac_claxon2(&path, &display_path, &thread_prog) {
                     Ok((res_validation_state, res_validation_state_desc)) => {
                         new_validation_state = res_validation_state;
                         new_validation_state_desc = res_validation_state_desc;
@@ -510,7 +586,6 @@ impl Scanner {
                     }
                 }
 
-                is_valid_prog.finish_and_clear();
             } else {
                 new_validation_state = ValidationState::NoValidator;
             }

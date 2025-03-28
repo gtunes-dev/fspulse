@@ -1,6 +1,7 @@
-use std::path::{Path, MAIN_SEPARATOR_STR};
+use std::{path::{Path, MAIN_SEPARATOR_STR}, time::Duration};
 
 use chrono::{DateTime, Local, Utc};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 const NO_DIR_SEPARATOR: &str = "";
 
@@ -108,4 +109,46 @@ impl Utils {
         }
     }
 
+    pub fn add_section_bar(
+        multi_prog: &mut MultiProgress,
+        stage_index: i32,
+        msg: impl Into<String>,
+    ) -> ProgressBar {
+        Utils::add_spinner_bar(
+            multi_prog, 
+            format!("[{}/3]", stage_index), 
+            msg, 
+            true
+        )
+    }
+
+    pub fn finish_section_bar(
+        section_bar: &ProgressBar,
+        msg: impl Into<String>,
+    ) {
+        section_bar.finish_with_message(msg.into());
+    }
+
+    pub fn add_spinner_bar(
+        multi_prog: &mut MultiProgress, 
+        prefix: impl Into<String>, 
+        msg: impl Into<String>,
+        tick: bool,
+    ) -> ProgressBar {
+        let spinner = multi_prog.add(
+            ProgressBar::new_spinner()
+            .with_style(
+                ProgressStyle::default_spinner()
+                    .template("{prefix}{spinner} {msg}")
+                    .unwrap(),
+            )
+            .with_prefix(prefix.into())
+            .with_message(msg.into())
+        );
+        if tick {
+            spinner.enable_steady_tick(Duration::from_millis(250));
+        }
+
+        spinner
+    }
 }
