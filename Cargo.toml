@@ -11,6 +11,7 @@ console = "0.15"
 crossbeam-channel = "0.5"
 dialoguer = "0.11"
 directories = "6.0"
+figment = { version = "0.10", features = ["toml"] }
 flexi_logger = "0.29"
 hex = "0.4"
 indicatif = "0.17"
@@ -19,7 +20,8 @@ log = "0.4"
 lopdf = "0.36"
 md-5 = "0.10"
 rusqlite = { version = "0.33", features = ["bundled"] }
-symphonia = { git = "https://github.com/pdeljanov/Symphonia.git", branch = "dev-0.6" }
+serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
 tablestream = { git = "https://github.com/gtunes-dev/tablestream" }
 threadpool = "1.8"
+toml = "0.8"

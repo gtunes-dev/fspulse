@@ -1,6 +1,7 @@
 mod database;
 mod changes;
 mod cli;
+mod config;
 mod error;
 mod hash;
 mod items;
@@ -12,17 +13,23 @@ mod schema;
 mod utils;
 mod validators;
 
-use std::{path::PathBuf, time::Instant};
+use std::time::Instant;
 
 use chrono::Local;
 use cli::Cli;
+use config::Config;
 use directories::ProjectDirs;
 use flexi_logger::{Cleanup, Criterion, FileSpec, Logger, Naming};
 use indicatif::MultiProgress;
 use log::{error, info};
 
 fn main() {
-    setup_logging();
+    let project_dirs = ProjectDirs::from("", "", "fspulse")
+        .expect("Could not determine project directories");
+
+    let config = Config::load_config(&project_dirs);
+
+    setup_logging(&project_dirs, &config);
 
     let mut multi_prog = MultiProgress::new();
 
@@ -49,14 +56,12 @@ fn main() {
     }
 }
 
+pub fn setup_logging(project_dirs: &ProjectDirs, config: &Config) {
+    let log_levels = format!("fspulse={}, lopdf={}", config.logging.fspulse, config.logging.lopdf);
 
-pub fn setup_logging() {
-    let log_dir: PathBuf = ProjectDirs::from("", "", "fspulse")
-        .expect("Could not determine project directories")
-        .data_local_dir()
-        .join("logs");
+    let log_dir = project_dirs.data_local_dir().join("logs");
 
-    Logger::try_with_str("fspulse=info,lopdf=error")
+    Logger::try_with_str(log_levels)
         .unwrap()
         .log_to_file(FileSpec::default().directory(log_dir))
         .rotate(
