@@ -4,7 +4,7 @@ use indicatif::ProgressBar;
 
 use crate::error::FsPulseError;
 
-use super::{claxon::ClaxonValidator, image::ImageValidator};
+use super::{claxon::ClaxonValidator, image::ImageValidator, lopdf::LopdfValidator};
 
 /// Represents the validation state of an item.
 /// Stored as a single-character code in the database for compactness.
@@ -16,6 +16,17 @@ pub enum ValidationState {
     Valid,
     Invalid,
     NoValidator
+}
+
+// macro to simplify code in validators which generates Ok(invalid) results
+#[macro_export]
+macro_rules! try_invalid {
+    ($expr:expr) => {
+        match $expr {
+            Ok(val) => val,
+            Err(e) => return Ok((ValidationState::Invalid, Some(e.to_string()))),
+        }
+    };
 }
 
 impl ValidationState {
@@ -64,7 +75,8 @@ where
 
     match ext.as_str() {
         "flac" => Some(Box::new(ClaxonValidator::new())),
-        "jpg" | "jpeg" | "png" => Some(Box::new(ImageValidator::new())),
+        "jpg" | "jpeg" | "png" | "gif" | "tiff" | "bmp" => Some(Box::new(ImageValidator::new())),
+        "pdf" => Some(Box::new(LopdfValidator::new())),
         _ => None,
     }
 }

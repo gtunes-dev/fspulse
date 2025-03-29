@@ -1,3 +1,4 @@
+use directories::BaseDirs;
 use log::info;
 use rusqlite::{Connection, OptionalExtension, Result};
 use std::path::PathBuf;
@@ -34,9 +35,9 @@ impl Database {
 
     pub fn new(db_path: Option<PathBuf>) -> Result<Self, FsPulseError>
     {
-        let mut db_path = db_path
-            .or_else(dirs::home_dir)
-            .ok_or_else(|| FsPulseError::Error("Could not determine home directory".to_string()))?;
+        let mut db_path = db_path.or_else(|| {
+            BaseDirs::new().map(|base| base.home_dir().to_path_buf())
+        }).ok_or_else(|| FsPulseError::Error("Could not determine home directory".to_string()))?;
 
         if !db_path.is_dir() {
             return Err(FsPulseError::Error(format!(
