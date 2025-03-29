@@ -95,4 +95,6 @@ pub trait Validator {
         path: &Path, 
         validation_pb: &ProgressBar
     ) -> Result<(ValidationState, Option<String>), FsPulseError>;
+
+    fn wants_steady_tick(&self) -> bool;
 }

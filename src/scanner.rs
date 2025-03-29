@@ -18,6 +18,7 @@
 // 5. Stopped
 
 use crate::changes::ChangeType;
+use crate::config::CONFIG;
 use crate::hash::Hash;
 use crate::items::{Item, ItemType};
 use crate::reports::{ReportFormat, Reports};
@@ -36,6 +37,7 @@ use dialoguer::{MultiSelect, Select};
 use threadpool::ThreadPool;
 //use md5::digest::typenum::Abs;
 use std::collections::VecDeque;
+use std::time::Duration;
 use std::{cmp, fs};
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
@@ -426,7 +428,10 @@ impl Scanner {
 
         let items_remaining = file_count.saturating_sub(analyzed_items); // avoids underflow
         let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
-        let num_threads = cmp::min(items_remaining_usize, 16);
+
+        let config_threads = CONFIG.get().expect("Config not initialized").analysis.threads;
+        
+        let num_threads = cmp::min(items_remaining_usize, config_threads);
         let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread
 
         for thread_index in 0..num_threads {
@@ -572,6 +577,11 @@ impl Scanner {
                             .unwrap(),
                     );
                     thread_prog.set_message(format!("Validating: '{}'", &display_path));
+                    let steady_tick = v.wants_steady_tick();
+
+                    if steady_tick {
+                        thread_prog.enable_steady_tick(Duration::from_millis(250));
+                    }
                     match v.validate(&path, &thread_prog) {
                         Ok((res_validation_state, res_validation_state_desc)) => {
                             new_validation_state = res_validation_state;
@@ -582,6 +592,9 @@ impl Scanner {
                             error!("Error validating '{}': {}", &display_path, e_str);
                             new_validation_state = ValidationState::Invalid;
                         }
+                    }
+                    if steady_tick {
+                        thread_prog.disable_steady_tick();
                     }
                 },
                 None => new_validation_state = ValidationState::NoValidator,

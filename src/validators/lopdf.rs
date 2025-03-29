@@ -36,6 +36,10 @@ impl Validator for LopdfValidator {
         }
         Ok((ValidationState::Valid, None))
     }
+
+    fn wants_steady_tick(&self) -> bool {
+        true
+    }
 }
 
 impl LopdfValidator {

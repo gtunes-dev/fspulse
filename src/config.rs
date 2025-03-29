@@ -2,7 +2,10 @@ use std::fs;
 
 use directories::ProjectDirs;
 use figment::{providers::{Format, Serialized, Toml}, Figment};
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+
+pub static CONFIG: OnceCell<Config> = OnceCell::new();
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LoggingConfig {
@@ -11,8 +14,14 @@ pub struct LoggingConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AnalysisConfig {
+    pub threads: usize,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     pub logging: LoggingConfig,
+    pub analysis: AnalysisConfig,
 }
 
 impl Config {
@@ -28,6 +37,9 @@ impl Config {
                 fspulse: "info".to_string(),
                 lopdf: "error".to_string(),
             },
+            analysis:  AnalysisConfig {
+                threads: 8,
+            }
         };
 
         // If the config file doesn't exist, write the default configuration to disk.

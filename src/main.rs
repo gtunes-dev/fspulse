@@ -17,7 +17,7 @@ use std::time::Instant;
 
 use chrono::Local;
 use cli::Cli;
-use config::Config;
+use config::{Config, CONFIG};
 use directories::ProjectDirs;
 use flexi_logger::{Cleanup, Criterion, FileSpec, Logger, Naming};
 use indicatif::MultiProgress;
@@ -28,8 +28,9 @@ fn main() {
         .expect("Could not determine project directories");
 
     let config = Config::load_config(&project_dirs);
+    CONFIG.set(config).expect("Config already set!");
 
-    setup_logging(&project_dirs, &config);
+    setup_logging(&project_dirs);
 
     let mut multi_prog = MultiProgress::new();
 
@@ -56,7 +57,8 @@ fn main() {
     }
 }
 
-pub fn setup_logging(project_dirs: &ProjectDirs, config: &Config) {
+pub fn setup_logging(project_dirs: &ProjectDirs) {
+    let config = CONFIG.get().expect("Config not initialized");
     let log_levels = format!("fspulse={}, lopdf={}", config.logging.fspulse, config.logging.lopdf);
 
     let log_dir = project_dirs.data_local_dir().join("logs");

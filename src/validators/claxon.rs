@@ -61,4 +61,8 @@ impl Validator for ClaxonValidator {
 
         Ok((ValidationState::Valid, None))
     }
+
+    fn wants_steady_tick(&self) -> bool {
+        false
+    }
 }

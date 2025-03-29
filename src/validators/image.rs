@@ -43,4 +43,8 @@ impl Validator for ImageValidator {
             }
         }        
     }
+
+    fn wants_steady_tick(&self) -> bool {
+        true
+    }
 }
