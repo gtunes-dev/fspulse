@@ -44,6 +44,7 @@ jobs:
           fi
 
       - name: List release directory
+        shell: bash
         run: ls -la release
 
       - name: Upload build artifact
