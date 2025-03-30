@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use indicatif::ProgressBar;
+use log::warn;
 use lopdf::{Document, Object};
 
 use crate::error::FsPulseError;
@@ -52,7 +53,17 @@ impl LopdfValidator {
         match object {
             Object::Stream(stream) => {
                 // Validate the stream by attempting to decompress its content.
-                let _ = stream.decompressed_content()?;
+                if stream.is_compressed() {
+                    match stream.decompressed_content() {
+                        Ok(_) => {},
+                        Err(lopdf::Error::Unimplemented(reason)) => {
+                            warn!("Lopdf unimplemented feature: {}", reason);
+                        },
+                        Err(err) => {
+                            return Err(err);
+                        }
+                    }
+                }
             },
             Object::Array(arr) => {
                 // Recursively validate all elements in the array.
