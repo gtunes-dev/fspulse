@@ -194,7 +194,7 @@ impl Reports {
 
         let mut stream = Reports::begin_scans_table(&table_title, "No Scan");
 
-        stream.row(scan.clone())?;
+        stream.row(*scan)?;
 
         stream.finish()?;
 
@@ -208,7 +208,7 @@ impl Reports {
             db, 
             last, 
             |_db, scan| {
-                stream.row(scan.clone())?;
+                stream.row(*scan)?;
                 Ok(())
             }
         )?;
@@ -219,8 +219,7 @@ impl Reports {
     }
 
     fn begin_scans_table(title: &str, empty_row: &str) -> Stream<Scan, Stdout> {
-        let out = io::stdout();
-        let stream = Stream::new(out, vec![
+        Stream::new(io::stdout(), vec![
             Column::new(|f, s: &Scan| write!(f, "{}", s.id())).header("ID").right().min_width(6),
             Column::new(|f, s: &Scan| write!(f, "{}", s.root_id())).header("Root ID").right().min_width(6),
             Column::new(|f, s: &Scan| write!(f, "{}", s.state())).header("State").center().min_width(10),
@@ -235,24 +234,18 @@ impl Reports {
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Modify))).header("Modifies").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Delete))).header("Deletes").right().min_width(7),
             Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
-        ]).title(title).empty_row(empty_row);
-
-        stream
+        ]).title(title).empty_row(empty_row)
     }
 
     fn begin_roots_table() -> Stream<Root, Stdout> {
-        let out = io::stdout();
-        let stream = Stream::new(out, vec![
+        Stream::new(io::stdout(), vec![
             Column::new(|f, root: &Root| write!(f, "{}", root.id())).header("ID").right().min_width(6),
             Column::new(|f, root: &Root| write!(f, "{}", root.path())).header("Path").left().min_width(109),
-        ]).title("Roots").empty_row("No Rootss");
-
-        stream
+        ]).title("Roots").empty_row("No Roots")
     }
 
     fn begin_invalid_items_table(title: &str, empty_row: &str) -> Stream<Item, Stdout> {
-        let out = io::stdout();
-        let stream = Stream::new(out, vec![
+        Stream::new(io::stdout(), vec![
             Column::new(|f, i: &Item| write!(f, "{}", i.id())).header("ID").right().min_width(6),
             Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.last_modified()))).header("Modified").left(),
@@ -260,14 +253,11 @@ impl Reports {
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_validation_scan_id()))).header("Last Valid Scan").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_string_or_none(i.validation_state_desc()))).header("Validation Desc").left(),
 
-        ]).title(title).empty_row(empty_row);
-
-        stream
+        ]).title(title).empty_row(empty_row)
     }
 
     fn begin_items_table(title: &str, empty_row: &str) -> Stream<Item, Stdout> {
-        let out = io::stdout();
-        let stream = Stream::new(out, vec![
+        Stream::new(io::stdout(), vec![
             Column::new(|f, i: &Item| write!(f, "{}", i.id())).header("ID").right().min_width(6),
             Column::new(|f, i: &Item| write!(f, "{}", i.root_id())).header("Root ID").right(),
             Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
@@ -280,14 +270,11 @@ impl Reports {
             Column::new(|f, i: &Item| write!(f, "{}", i.last_scan_id())).header("Last Scan").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_hash_scan_id()))).header("Last Hash Scan").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_validation_scan_id()))).header("Last Valid Scan").right(),
-        ]).title(title).empty_row(empty_row);
-        
-        stream
+        ]).title(title).empty_row(empty_row)
     }
 
     fn begin_changes_table(title: &str, empty_row: &str) -> Stream<Change, Stdout> {
-        let out = io::stdout();
-        let stream = Stream::new(out, vec![
+        Stream::new(io::stdout(), vec![
             Column::new(|f, c: &Change| write!(f, "{}", c.id)).header("Id").right().min_width(6),
             Column::new(|f, c: &Change| write!(f, "{}", c.scan_id)).header("Scan Id").right(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_id)).header("Item Id").right(),
@@ -298,9 +285,7 @@ impl Reports {
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_file_size))).header("Prev Size").right(),
             Column::new(|f, c: &Change| write!(f, "{}", Hash::short_md5(&c.prev_hash()))).header("Prev Hash").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.prev_validation_state()))).header("Prev Valid").center(),
-        ]).title(title).empty_row(empty_row);
-
-        stream
+        ]).title(title).empty_row(empty_row)
     }
 
     fn get_tree_path(path_stack: &mut Vec<PathBuf>, root_path: &Path, path: &str, is_dir: bool) -> (usize, PathBuf) {

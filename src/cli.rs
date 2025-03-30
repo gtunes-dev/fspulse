@@ -180,7 +180,7 @@ enum CommandChoice {
     Exit,
 }
 
-static COMMAND_CHOICES: &[(CommandChoice, &'static str)] = &[
+static COMMAND_CHOICES: &[(CommandChoice, &str)] = &[
     (CommandChoice::Scan, "Scan"),
     (CommandChoice::Report, "Report"),
     (CommandChoice::Exit, "Exit"),
@@ -195,7 +195,7 @@ enum ReportChoice {
     Exit,
 }
 
-static REPORT_CHOICES: &[(ReportChoice, &'static str)] = &[
+static REPORT_CHOICES: &[(ReportChoice, &str)] = &[
     (ReportChoice::Roots, "Roots"),
     (ReportChoice::Scans, "Scans"),
     (ReportChoice::Items, "Items"),
@@ -209,7 +209,7 @@ enum ItemReportChoice {
     Exit,
 }
 
-static ITEM_REPORT_CHOICES: &[(ItemReportChoice, &'static str)] = &[
+static ITEM_REPORT_CHOICES: &[(ItemReportChoice, &str)] = &[
     (ItemReportChoice::InvalidItems, "Invalid Items"),
     (ItemReportChoice::Exit, "Exit"),
 ];
@@ -283,7 +283,7 @@ impl Cli {
         let command = Cli::choose_command();
         match command {
             CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog),
-            CommandChoice::Report => Cli::do_interactive_report(&db),
+            CommandChoice::Report => Cli::do_interactive_report(db),
             CommandChoice::Exit => Ok(()),
         }
     }

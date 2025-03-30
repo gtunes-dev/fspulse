@@ -34,6 +34,8 @@ pub struct Scan {
     change_counts: ChangeCounts,
 }
 
+
+
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i64)]  // Ensures explicit numeric representation
 pub enum ScanState {

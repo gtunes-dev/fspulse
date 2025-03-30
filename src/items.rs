@@ -65,7 +65,7 @@ impl Item {
         db.conn().query_row(
             &query,
             params![id],
-            |row| Item::from_row(row),
+            Item::from_row,
         )
         .optional()
         .map_err(FsPulseError::Database)
@@ -82,7 +82,7 @@ impl Item {
         db.conn().query_row(
             &query,
             params![root_id, path],
-            |row| Item::from_row(row),
+            Item::from_row,
         )
         .optional()
         .map_err(FsPulseError::Database)
@@ -180,8 +180,6 @@ impl Item {
     where
         F: FnMut(&Item) -> Result<(), FsPulseError>,
     {
-        let mut item_count = 0;
-
         let sql = format!("SELECT {}
              FROM items
              WHERE last_scan_id = ?
@@ -196,7 +194,6 @@ impl Item {
         for row in rows {
             let item = row?;
             func(&item)?;
-            item_count = item_count + 1;
         }
         Ok(())
     }
@@ -205,8 +202,6 @@ impl Item {
     where
         F: FnMut(&Item) -> Result<(), FsPulseError>,
     {
-        let mut item_count = 0;
-
         let sql = format!("SELECT {}
              FROM items
              WHERE path = ?
@@ -221,7 +216,6 @@ impl Item {
         for row in rows {
             let item = row?;
             func(&item)?;
-            item_count = item_count + 1;
         }
         Ok(())
     }

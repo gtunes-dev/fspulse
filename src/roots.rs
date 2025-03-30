@@ -1,4 +1,4 @@
-use std::{env, fs, i64};
+use std::{env, fs};
 use std::path::{Path, PathBuf};
 
 use dialoguer::theme::ColorfulTheme;
@@ -17,7 +17,7 @@ pub struct Root {
 impl Root {
     pub fn interact_choose_root(db: &Database, prompt: &str) -> Result<Option<Root>, FsPulseError> {
         let mut roots = Root::roots_as_vec(db)?;
-        if roots.len() == 0 {
+        if roots.is_empty() {
             print!("No roots in database");
             return Ok(None);
         }
@@ -47,7 +47,7 @@ impl Root {
             "SELECT path FROM roots WHERE id = ?", 
             [id], 
             |row| Ok(Root {
-                id : id,
+                id,
                 path: row.get(0)?,
             }),
         )

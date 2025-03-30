@@ -8,20 +8,11 @@ use crate::schema::CREATE_SCHEMA_SQL;
 const DB_FILENAME: &str = "fspulse.db";
 const SCHEMA_VERSION: &str = "2";
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Database {
     conn: Option<Connection>,
     #[allow(dead_code)]
     path: String,
-}
-
-impl Default for Database {
-    fn default() -> Self {
-        Database {
-            conn: None,
-            path: String::new(),
-        }
-    }
 }
 
 impl Database {
