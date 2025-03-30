@@ -1,4 +1,4 @@
-use crate::changes::{Change, ChangeType};
+use crate::changes::{Change, ChangeCounts, ChangeType};
 use crate::error::FsPulseError;
 use crate::database::Database;
 use crate::hash::Hash;
@@ -194,7 +194,8 @@ impl Reports {
 
         let mut stream = Reports::begin_scans_table(&table_title, "No Scan");
 
-        stream.row(*scan)?;
+        let change_counts = ChangeCounts::get_by_scan_id(db, scan.id())?;
+        stream.row((*scan, change_counts))?;
 
         stream.finish()?;
 
@@ -207,8 +208,9 @@ impl Reports {
         Scan::for_each_scan(
             db, 
             last, 
-            |_db, scan| {
-                stream.row(*scan)?;
+            |db, scan| {
+                let change_counts = ChangeCounts::get_by_scan_id(db, scan.id())?;
+                stream.row((*scan, change_counts))?;
                 Ok(())
             }
         )?;
@@ -218,22 +220,22 @@ impl Reports {
         Ok(())
     }
 
-    fn begin_scans_table(title: &str, empty_row: &str) -> Stream<Scan, Stdout> {
+    fn begin_scans_table(title: &str, empty_row: &str) -> Stream<(Scan, ChangeCounts), Stdout> {
         Stream::new(io::stdout(), vec![
-            Column::new(|f, s: &Scan| write!(f, "{}", s.id())).header("ID").right().min_width(6),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.root_id())).header("Root ID").right().min_width(6),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.state())).header("State").center().min_width(10),
+            Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", s.id())).header("ID").right().min_width(6),
+            Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", s.root_id())).header("Root ID").right().min_width(6),
+            Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", s.state())).header("State").center().min_width(10),
 
-            Column::new(|f, s: &Scan| write!(f, "{}", s.hashing())).header("Hashing").center(),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.validating())).header("Validating").center(),
-            Column::new(|f, s: &Scan| write!(f, "{}", Utils::format_db_time_short(s.time_of_scan()))).header("Time"),
-            Column::new(|f, s: &Scan| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.file_count()))).header("Files").right().min_width(7),
-            Column::new(|f, s: &Scan| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.folder_count()))).header("Folders").right().min_width(7),
+            Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", s.hashing())).header("Hashing").center(),
+            Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", s.validating())).header("Validating").center(),
+            Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", Utils::format_db_time_short(s.time_of_scan()))).header("Time"),
+            Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.file_count()))).header("Files").right().min_width(7),
+            Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", Utils::opt_i64_or_none_as_str(s.folder_count()))).header("Folders").right().min_width(7),
 
-            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Add))).header("Adds").right().min_width(7),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Modify))).header("Modifies").right().min_width(7),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::Delete))).header("Deletes").right().min_width(7),
-            Column::new(|f, s: &Scan| write!(f, "{}", s.change_counts().count_of(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
+            Column::new(|f, (_, c): &(Scan, ChangeCounts)| write!(f, "{}", c.count_of(ChangeType::Add))).header("Adds").right().min_width(7),
+            Column::new(|f, (_, c): &(Scan, ChangeCounts)| write!(f, "{}", c.count_of(ChangeType::Modify))).header("Modifies").right().min_width(7),
+            Column::new(|f, (_, c): &(Scan, ChangeCounts)| write!(f, "{}", c.count_of(ChangeType::Delete))).header("Deletes").right().min_width(7),
+            Column::new(|f, (_, c): &(Scan, ChangeCounts)| write!(f, "{}", c.count_of(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
         ]).title(title).empty_row(empty_row)
     }
 

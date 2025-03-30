@@ -39,7 +39,7 @@ impl Validator for ImageValidator {
             Ok(_) => Ok((ValidationState::Valid, None)),
             Err(e) => {
                 let e_str = format!("{:?}", e);
-                return Ok((ValidationState::Invalid, Some(e_str)))
+                Ok((ValidationState::Invalid, Some(e_str)))
             }
         }        
     }

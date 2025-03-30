@@ -146,7 +146,7 @@ impl Scanner {
                 },
                 (_, _, true) => {
                     let scan = Scan::get_latest(db)?
-                        .ok_or_else(|| FsPulseError::Error(format!("No latest scan found")))?;
+                        .ok_or_else(|| FsPulseError::Error("No latest scan found".to_string()))?;
                     let root = Root::get_by_id(db, scan.root_id())?
                         .ok_or_else(|| FsPulseError::Error(format!("No root found for latest Scan Id {}", scan.id())))?;
 
@@ -197,7 +197,7 @@ impl Scanner {
                 ScanState::Scanning => {
                     let bar = Utils::add_section_bar(multi_prog, 1, "Quick scanning...");
                     if scan.state() == ScanState::Scanning {
-                        Scanner::do_state_scanning(db, &root, scan, multi_prog)?;
+                        Scanner::do_state_scanning(db, root, scan, multi_prog)?;
                     }
                     Utils::finish_section_bar(&bar, "✔ Quick scanning");
                     loop_state = ScanState::Sweeping;
@@ -220,9 +220,8 @@ impl Scanner {
                         // bars here and then restore them when we're done
                         let owned_db = std::mem::take(db);
                         let db_arc = Arc::new(Mutex::new(owned_db));
-                        let multi_prog_arc = Arc::new(multi_prog.clone());
                         
-                        analysis_result = Scanner::do_state_analyzing(db_arc.clone(), scan, multi_prog_arc);
+                        analysis_result = Scanner::do_state_analyzing(db_arc.clone(), scan, multi_prog);
 
                         // recover the database from the Arc
                         let recovered_db = Arc::try_unwrap(db_arc)
@@ -232,9 +231,9 @@ impl Scanner {
 
                         *db = recovered_db;
                     }
-                    if analysis_result.is_err() {
-                        return analysis_result;
-                    }
+
+                    analysis_result?;
+
                     Utils::finish_section_bar(&bar, "✔ Analyzing");
                     loop_state = ScanState::Completed;
                 },
@@ -303,14 +302,14 @@ impl Scanner {
         let dir_prog = Utils::add_spinner_bar(
             multi_prog, 
             "   ", 
-            format!("Directory:"), 
+            "Directory:", 
             true
         );
 
         let item_prog = Utils::add_spinner_bar(
             multi_prog, 
             "   ", 
-            format!("File:"), 
+            "File:", 
             true
         );
 
@@ -391,7 +390,7 @@ impl Scanner {
     fn do_state_analyzing(
         db: Arc<Mutex<Database>>, 
         scan: &mut Scan, 
-        multi_prog: Arc<MultiProgress>,
+        multi_prog: &MultiProgress,
     ) -> Result<(), FsPulseError> {
 
         let hashing = scan.hashing();
@@ -400,7 +399,7 @@ impl Scanner {
         // If the scan doesn't hash or validate, then the scan
         // can be marked complete and we just return
         if !hashing && !validating {
-            scan.set_state_completed(&mut *db.lock().unwrap())?;
+            scan.set_state_completed(&mut db.lock().unwrap())?;
             return Ok(());
         }
 
@@ -419,8 +418,6 @@ impl Scanner {
 
         analysis_prog.inc(analyzed_items);
 
-        let multi_prog_arc = Arc::new((*multi_prog).clone());
-
         // Create a bounded channel to limit the number of queued tasks (e.g., max 100 tasks)
         let (sender, receiver) = bounded::<Item>(100);
 
@@ -438,13 +435,12 @@ impl Scanner {
             // Clone shared resources for each worker thread.
             let receiver = receiver.clone();
             let db = Arc::clone(&db);
-            let multi_prog_clone = Arc::clone(&multi_prog_arc);
             let analysis_prog_clone = analysis_prog.clone();
-            let scan_id = scan.id();
+            let scan_copy = *scan;
+            //let scan_id = scan.id();
 
- 
             // Create a reusable progress bar for this thread
-            let thread_prog = multi_prog_clone.add(ProgressBar::new(0));
+            let thread_prog = multi_prog.add(ProgressBar::new(0));
             thread_prog.set_style(
                 ProgressStyle::default_spinner()
                     .template("{prefix} {spinner} {msg}")
@@ -459,12 +455,9 @@ impl Scanner {
             pool.execute(move || {
                 while let Ok(item) = receiver.recv() {
                     Scanner::process_item_async(
-                        &db, 
-                        scan_id, 
+                        &db,
+                        scan_copy,
                         item, 
-                        hashing, 
-                        validating, 
-                        &multi_prog_clone, 
                         &analysis_prog_clone,
                         &thread_prog,
                     );
@@ -523,12 +516,9 @@ impl Scanner {
     }
 
     fn process_item_async(
-        db: &Arc<Mutex<Database>>, 
-        scan_id: i64, 
+        db: &Arc<Mutex<Database>>,
+        scan: Scan,
         item: Item, 
-        hashing: bool, 
-        validating: bool, 
-        _multi_prog: &Arc<MultiProgress>, 
         analysis_prog: &ProgressBar,
         thread_prog: &ProgressBar,
     ) {
@@ -538,12 +528,12 @@ impl Scanner {
         let path = Path::new(item.path());
         
         let display_path = path.file_name()
-            .unwrap_or_else(|| path.as_os_str())
+            .unwrap_or(path.as_os_str())
             .to_string_lossy();
         
         let mut new_hash = None;
 
-        if hashing {
+        if scan.hashing() {
             thread_prog.set_style(
                 ProgressStyle::default_bar()
                     .template("{prefix} {msg} [{bar:40}] {bytes}/{total_bytes}")
@@ -555,7 +545,7 @@ impl Scanner {
             thread_prog.set_position(0); // reset in case left from previous
             thread_prog.set_length(0);
 
-            new_hash = match Hash::compute_md5_hash(&path, &thread_prog) {
+            new_hash = match Hash::compute_md5_hash(path, thread_prog) {
                 Ok(hash_s) => Some(hash_s),
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
@@ -567,8 +557,8 @@ impl Scanner {
         let mut new_validation_state = ValidationState::Unknown;
         let mut new_validation_state_desc = None;
 
-        if validating {
-            let validator = from_path(&path);
+        if scan.validating() {
+            let validator = from_path(path);
             match validator {
                 Some(v) => {
                     thread_prog.set_style(
@@ -582,7 +572,7 @@ impl Scanner {
                     if steady_tick {
                         thread_prog.enable_steady_tick(Duration::from_millis(250));
                     }
-                    match v.validate(&path, &thread_prog) {
+                    match v.validate(path, thread_prog) {
                         Ok((res_validation_state, res_validation_state_desc)) => {
                             new_validation_state = res_validation_state;
                             new_validation_state_desc = res_validation_state_desc;
@@ -601,12 +591,9 @@ impl Scanner {
             }
         }
 
-        match Scanner::update_item_analysis(db, scan_id, hashing, validating, &item, new_hash, new_validation_state, new_validation_state_desc) {
-            Err(error) => {
-                let e_str = format!("{:?}", error);
-                error!("Error updating item analysis '{}': {}", &display_path, e_str);
-            },
-            _ => {},
+        if let Err(error) = Scanner::update_item_analysis(db, &scan, &item, new_hash, new_validation_state, new_validation_state_desc) {
+            let e_str = error.to_string();
+            error!("Error updating item analysis '{}': {}", &display_path, e_str);
         }
         
         analysis_prog.inc(1);
@@ -743,9 +730,7 @@ impl Scanner {
 
     pub fn update_item_analysis(
         db: &Arc<Mutex<Database>>,
-        scan_id: i64,
-        hashing: bool,
-        validating: bool,
+        scan: &Scan,
         item: &Item,
         new_hash: Option<String>,
         new_validation_state: ValidationState,
@@ -765,7 +750,7 @@ impl Scanner {
         let mut last_hash_scan_id_item = item.last_hash_scan_id();
         let mut last_validation_scan_id_item = item.last_validation_scan_id();
 
-        if hashing {
+        if scan.hashing() {
             if item.file_hash() != new_hash.as_deref() {
                 // update the change record only if a previous hash had been computed
                 if item.last_hash_scan_id().is_some() {
@@ -779,10 +764,10 @@ impl Scanner {
             }
 
             // Update the last scan id whether or not anything changed
-            last_hash_scan_id_item = Some(scan_id);
+            last_hash_scan_id_item = Some(scan.id());
         }
 
-        if validating {
+        if scan.validating() {
             if (item.validation_state() != new_validation_state) || (item.validation_state_desc() != new_validation_state_desc.as_deref()) {
                 // update the change record only if a previous validation had been completed
                 if item.last_validation_scan_id().is_some() {
@@ -797,7 +782,7 @@ impl Scanner {
             }
 
             // update the last validation scan id whether or not anything changed
-            last_validation_scan_id_item = Some(scan_id);
+            last_validation_scan_id_item = Some(scan.id());
         }
 
         let mut db_guard = db.lock().unwrap();
@@ -816,7 +801,7 @@ impl Scanner {
                         prev_validation_state = excluded.prev_validation_state,
                         prev_validation_state_desc = excluded.prev_validation_state_desc",
                 rusqlite::params![
-                    scan_id, 
+                    scan.id(), 
                     item.id(),
                     hash_change, 
                     validation_state_change, 

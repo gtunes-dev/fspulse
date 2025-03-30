@@ -30,7 +30,7 @@ impl Validator for LopdfValidator {
     {
         let doc = try_invalid!(Document::load(path));
         // Traverse and validate all objects in the document.
-        for (_obj_id, object) in &doc.objects {
+        for object in doc.objects.values() {
             if let Err(e) = Self::validate_object(object) {
                 return Ok((ValidationState::Invalid, Some(e.to_string())))
             }
