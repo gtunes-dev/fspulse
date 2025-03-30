@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  # Trigger on tags for release builds
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Run Clippy (Linting)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build release binary
+        run: cargo build --release
+
+      # Prepare the artifact by renaming based on the OS
+      - name: Prepare artifact
+        run: |
+          mkdir -p release
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            cp target/release/fs-pulse.exe release/fs-pulse-${{ matrix.os }}.exe
+          else
+            cp target/release/fs-pulse release/fs-pulse-${{ matrix.os }}
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: fs-pulse-${{ matrix.os }}
+          path: release/
