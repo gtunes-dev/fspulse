@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="banner with image of folder and magnifying glass">
+
 # FsPulse
 
 FsPulse is a command-line tool designed to capture the state of directories and detect changes over time. It records file and directory metadata, tracking additions, deletions, and modifications. FsPulse optionally computes MD5 hashes of file contents to detect changes even if metadata remains unchanged. Additionally, FsPulse can validate file contents by examining and decoding their contents. Validation is currently limited to `.flac` audio files, using the [`claxon`](https://github.com/ruuda/claxon) crate.
