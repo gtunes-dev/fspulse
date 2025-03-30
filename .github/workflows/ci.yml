@@ -36,6 +36,7 @@ jobs:
 
       # Prepare the artifact by renaming based on the OS
       - name: Prepare artifact
+        shell: bash
         run: |
           mkdir -p release
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
