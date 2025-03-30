@@ -2,7 +2,17 @@
 
 # FsPulse
 
-FsPulse is a command-line tool designed to capture the state of directories and detect changes over time. It records file and directory metadata, tracking additions, deletions, and modifications. FsPulse optionally computes MD5 hashes of file contents to detect changes even if metadata remains unchanged. Additionally, FsPulse can validate file contents by examining and decoding their contents. Validation is currently limited to `.flac` audio files, using the [`claxon`](https://github.com/ruuda/claxon) crate.
+FsPulse is a command-line tool designed to capture the state of directories and detect changes over time. It records file and directory metadata, tracking additions, deletions, and modifications. FsPulse optionally computes MD5 hashes of file contents to detect changes even if metadata remains unchanged. Additionally, FsPulse can validate file contents by examining and decoding their contents. Validation is currently done with limited, but growing, set of Rust libraries listed below.
+
+## Validators
+
+FsPulse attempts to validate the following file types
+
+- **FLAC** with [**claxon**](https://github.com/ruuda/claxon) (https://github.com/ruuda/claxon)
+
+- **JPG/JPEG, GIF, BMP** with [**image**](https://github.com/image-rs/image) (https://github.com/image-rs/image)
+
+- **PDF** with [**lopdf**](https://github.com/J-F-Liu/lopdf) (https://github.com/J-F-Liu/lopdf)
 
 ## Overview
 
@@ -166,9 +176,7 @@ fspulse --help
 Future improvements and features include:
 
 - Enhanced reporting capabilities
-- Expanded file validation types beyond `.flac`
-- Progress indicators for hashing and validation
-- Multi-threaded scanning for improved performance
+- Expanded file validation types
 - Increased resilience to file system errors
 
 ## License
