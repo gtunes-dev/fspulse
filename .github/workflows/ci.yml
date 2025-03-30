@@ -4,11 +4,9 @@ on:
   push:
     branches:
       - main
-  pull_request:
-  # Trigger on tags for release builds
-  push:
     tags:
       - 'v*'
+  pull_request:
 
 jobs:
   build:
