@@ -10,6 +10,7 @@ claxon = "0.4"
 console = "0.15"
 crossbeam-channel = "0.5"
 dialoguer = "0.11"
+dunce = "1.0"
 directories = "6.0"
 figment = { version = "0.10", features = ["toml"] }
 flexi_logger = "0.29"

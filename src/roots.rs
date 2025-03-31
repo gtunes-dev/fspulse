@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
+
 use rusqlite::OptionalExtension;
 use crate::database::Database;
 use crate::error::FsPulseError;
@@ -174,7 +175,8 @@ impl Root {
             return Err(FsPulseError::Error(format!("Path '{}' is not a directory", absolute_path.display())));
         }
 
-        let canonical_path = absolute_path.canonicalize()?;
+        // Canonicalize using Dunce (de-UNC) to strip the "UNC" (e.g., \\?\C) on Windows
+        let canonical_path = dunce::canonicalize(absolute_path)?;
     
         Ok(canonical_path)
     }
