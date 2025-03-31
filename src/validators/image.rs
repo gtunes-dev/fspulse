@@ -30,7 +30,7 @@ impl Validator for ImageValidator {
         let reader = match open_result {
             Ok(reader) => reader,
             Err(e) => {
-                let e_str = format!("{:?}", e);
+                let e_str = e.to_string();
                 return Ok((ValidationState::Invalid, Some(e_str)))
             }
         };
@@ -38,7 +38,7 @@ impl Validator for ImageValidator {
         match reader.decode() {
             Ok(_) => Ok((ValidationState::Valid, None)),
             Err(e) => {
-                let e_str = format!("{:?}", e);
+                let e_str = e.to_string();
                 Ok((ValidationState::Invalid, Some(e_str)))
             }
         }        

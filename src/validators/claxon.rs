@@ -31,9 +31,7 @@ impl Validator for ClaxonValidator {
         let mut reader =  match FlacReader::open(path) {
             Ok(reader) => reader,
             Err(e) => {
-                let e_str = e.to_string();
-                //let e_str = format!("{:?}", e);
-                return Ok((ValidationState::Invalid, Some(e_str)))
+                return Ok((ValidationState::Invalid, Some(e.to_string())))
             }
         };
 
@@ -47,9 +45,7 @@ impl Validator for ClaxonValidator {
                 Ok(Some(next_block)) => block = next_block,
                 Ok(None) => break, // EOF.
                 Err(e) => {
-                    let e_str = e.to_string();
-                    //let e = format!("{:?}", error);
-                    return Ok((ValidationState::Invalid, Some(e_str)))
+                    return Ok((ValidationState::Invalid, Some(e.to_string())))
                 },
             }
             tick_blocks += 1;
