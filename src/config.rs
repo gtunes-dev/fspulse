@@ -44,6 +44,15 @@ impl Config {
 
         // If the config file doesn't exist, write the default configuration to disk.
         if !config_path.exists() {
+            if let Some(parent) = config_path.parent() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    eprintln!(
+                        "Failed to create configuration directory {}: {}",
+                        parent.display(),
+                        e
+                    );
+                }
+            }
             if let Ok(toml_string) = toml::to_string_pretty(&default_config) {
                 if let Err(e) = fs::write(&config_path, toml_string) {
                     eprintln!(
