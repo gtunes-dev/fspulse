@@ -26,3 +26,9 @@ thiserror = "2.0"
 tablestream = { git = "https://github.com/gtunes-dev/tablestream" }
 threadpool = "1.8"
 toml = "0.8"
+
+[features]
+windows-static = ["dep:static_vcruntime"]
+
+[target.'cfg(windows)'.build-dependencies]
+static_vcruntime = { version = "2", optional = true }

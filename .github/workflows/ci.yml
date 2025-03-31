@@ -31,7 +31,13 @@ jobs:
         run: cargo test --verbose
 
       - name: Build release binary
-        run: cargo build --release
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            cargo build --release --features=windows-static
+          else
+            cargo build --release
+          fi
 
       - name: Prepare artifact
         shell: bash

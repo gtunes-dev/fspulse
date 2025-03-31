@@ -673,6 +673,7 @@ dependencies = [
  "once_cell",
  "rusqlite",
  "serde",
+ "static_vcruntime",
  "tablestream",
  "thiserror 2.0.11",
  "threadpool",
@@ -1735,6 +1736,12 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+
+[[package]]
+name = "static_vcruntime"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "954e3e877803def9dc46075bf4060147c55cd70db97873077232eae0269dc89b"
 
 [[package]]
 name = "stringprep"
