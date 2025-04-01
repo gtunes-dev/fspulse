@@ -178,7 +178,9 @@ impl Scanner {
                 None => Scanner::initiate_scan(db, &root, hash, validate)?
             };
 
-            Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)
+            Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)?;
+
+            Reports::report_scan(db, &scan)
     }
 
     fn do_scan_machine(db: &mut Database, scan: &mut Scan, root: &Root, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {

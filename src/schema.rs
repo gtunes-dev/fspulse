@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS scans (
 CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,                 -- Links each item to a root
-    path TEXT NOT NULL,                       -- Relative path from the root path
+    path TEXT NOT NULL,                       -- Absolute path of the item
     is_tombstone BOOLEAN NOT NULL DEFAULT 0,  -- Indicates if the item was deleted
     item_type CHAR(1) NOT NULL,               -- ('F' for file, 'D' for directory, 'S' for symlink, 'O' for other)
     last_modified INTEGER,                    -- Last modified timestamp

@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use log::info;
-use rusqlite::OptionalExtension;
+use rusqlite::{params, OptionalExtension};
 
 use crate::database::Database;
 use crate::error::FsPulseError;
@@ -70,6 +70,17 @@ pub struct ChangeCounts {
     pub no_change_count: i64,
 }
 
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ValidationTransitions {
+    pub unknown_to_valid: i32,
+    pub unknown_to_invalid: i32,
+    pub unknown_to_no_validator: i32,
+    pub valid_to_invalid: i32,
+    pub valid_to_no_validator: i32,
+    pub no_validator_to_valid: i32,
+    pub no_validator_to_invalid: i32,
+}
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ChangeType {
     Add,
@@ -113,10 +124,6 @@ impl FromStr for ChangeType {
 }
 
 impl Change {
-
-    
-
-
     // TODO: Implement accessors for other fields
     pub fn prev_hash(&self) -> Option<&str> { self.prev_hash.as_deref() }
     pub fn prev_validation_state(&self) -> Option<&str> {self.prev_validation_state.as_deref()}
@@ -157,6 +164,70 @@ impl Change {
         )
         .optional()
         .map_err(FsPulseError::Database)
+    }
+
+    pub fn get_validation_transitions_for_scan(db: &Database, scan_id: i64) -> Result<ValidationTransitions, FsPulseError> {
+        let conn = db.conn();
+        let sql = 
+            "SELECT 
+                COALESCE(SUM(CASE 
+                    WHEN c.change_type IN ('A','M')
+                        AND COALESCE(c.prev_validation_state, 'U') = 'U'
+                        AND i.validation_state = 'V'
+                    THEN 1 ELSE 0 END), 0) AS unknown_to_valid,
+                COALESCE(SUM(CASE 
+                    WHEN c.change_type IN ('A','M')
+                        AND COALESCE(c.prev_validation_state, 'U') = 'U'
+                        AND i.validation_state = 'I'
+                    THEN 1 ELSE 0 END), 0) AS unknown_to_invalid,
+                COALESCE(SUM(CASE 
+                    WHEN c.change_type IN ('A','M')
+                        AND COALESCE(c.prev_validation_state, 'U') = 'U'
+                        AND i.validation_state = 'N'
+                    THEN 1 ELSE 0 END), 0) AS unknown_to_no_validator,
+                COALESCE(SUM(CASE 
+                    WHEN c.change_type IN ('A','M')
+                        AND COALESCE(c.prev_validation_state, 'U') = 'V'
+                        AND i.validation_state = 'I'
+                    THEN 1 ELSE 0 END), 0) AS valid_to_invalid,
+                COALESCE(SUM(CASE 
+                    WHEN c.change_type IN ('A','M')
+                        AND COALESCE(c.prev_validation_state, 'U') = 'V'
+                        AND i.validation_state = 'N'
+                    THEN 1 ELSE 0 END), 0) AS valid_to_no_validator,
+                COALESCE(SUM(CASE 
+                    WHEN c.change_type IN ('A','M')
+                        AND COALESCE(c.prev_validation_state, 'U') = 'N'
+                        AND i.validation_state = 'V'
+                    THEN 1 ELSE 0 END), 0) AS no_validator_to_valid,
+                COALESCE(SUM(CASE 
+                    WHEN c.change_type IN ('A','M')
+                        AND COALESCE(c.prev_validation_state, 'U') = 'N'
+                        AND i.validation_state = 'I'
+                    THEN 1 ELSE 0 END), 0) AS no_validator_to_invalid
+            FROM changes c
+                JOIN items i ON c.item_id = i.id
+            WHERE c.scan_id = ?
+                AND i.item_type = 'F'
+                AND i.is_tombstone = 0;";
+
+            let validation_transitions = conn.query_row(
+                sql, 
+                params![scan_id], 
+                |row| {
+                    Ok(ValidationTransitions {
+                        unknown_to_valid: row.get(0)?,
+                        unknown_to_invalid: row.get(1)?,
+                        unknown_to_no_validator: row.get(2)?,
+                        valid_to_invalid: row.get(3)?,
+                        valid_to_no_validator: row.get(4)?,
+                        no_validator_to_valid: row.get(5)?,
+                        no_validator_to_invalid: row.get(6)?,
+                    })
+                },
+            )?;
+
+            Ok(validation_transitions)
     }
 
     pub fn for_each_change_in_scan<F>(db: &Database, scan_id: i64, func: F) -> Result<(), FsPulseError> 
