@@ -30,8 +30,6 @@ pub struct Scan {
     folder_count: Option<i64>,
 }
 
-
-
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i64)]  // Ensures explicit numeric representation
 pub enum ScanState {
@@ -226,7 +224,10 @@ impl Scan {
     pub fn set_state_stopped(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
-                self.set_state(db, ScanState::Stopped)
+                //self.set_state(db, ScanState::Stopped)
+                Scan::stop_scan(db, self)?;
+                self.state = ScanState::Stopped.as_i64();
+                Ok(())
             }
             _ => Err(FsPulseError::Error(format!("Can't stop scan - invalid state {}", self.state().as_i64())))
         }
@@ -295,4 +296,184 @@ impl Scan {
 
         Ok(())
     }
+
+    pub fn stop_scan(db: &mut Database, scan: &Scan) -> Result<(), FsPulseError> {
+        let tx = db.conn_mut().transaction()?;
+
+        // Find the id of the last scan on this root to not be stopped
+        // We'll restore this scan_id to all partially updated by the
+        // scan being stopped
+        let prev_scan_id: i64 = tx.query_row(
+            "SELECT COALESCE(
+                (SELECT MAX(id)
+                 FROM scans
+                 WHERE root_id = ?
+                   AND id < ?
+                   AND state = 4
+                ),
+                0
+            ) AS prev_scan_id",
+            [scan.root_id(), scan.id()],
+            |row| row.get::<_, i64>(0)
+        )?;
+
+        // Undo Add (when they are reyhdrates) and Type Change
+        // When an item was previously tombstoned and then was found again during a scan
+        // the item is rehydrated. This means that is_tombstone is set to false and all properties
+        // on the item are cleared and set to new values. In this case the cleared properties are
+        // stored in the change record, and we can recover them from there. A type change is
+        // handled similarly. When an item that was known to be a file or folder is next seen as the other
+        // type, we clear the properties (and store them on the change record). So, in both cases, we can
+        // now recover the modfiied properties from the change and this batch handles the minor differences
+        // between the two operations
+        tx.execute(
+            "UPDATE items
+            SET (
+                item_type,
+                is_tombstone,
+                last_modified,
+                file_size,
+                last_hash_scan_id,
+                file_hash,
+                last_validation_scan_id,
+                validation_state,
+                validation_state_desc,
+                last_scan_id
+            ) =
+            (
+                SELECT 
+                    CASE WHEN c.change_type = 'T' THEN c.prev_item_type ELSE items.item_type END,
+                    CASE WHEN c.change_type = 'A' THEN 1 ELSE items.is_tombstone END,
+                    c.prev_last_modified,
+                    c.prev_file_size,
+                    c.prev_last_hash_scan_id,
+                    c.prev_hash,
+                    c.prev_last_validation_scan_id,
+                    c.prev_validation_state,
+                    c.prev_validation_state_desc,
+                    ?1
+                FROM changes c
+                WHERE c.item_id = items.id
+                    AND c.scan_id = ?2
+                    AND ((c.change_type = 'A' AND c.prev_is_tombstone = 1) OR c.change_type = 'T')
+                LIMIT 1
+            )
+            WHERE id IN (
+                SELECT item_id 
+                FROM changes 
+                WHERE scan_id = ?2
+                    AND ((change_type = 'A' AND prev_is_tombstone = 1) OR change_type = 'T')
+            )", 
+            [prev_scan_id, scan.id()]
+        )?;
+        
+        // Undoing a modify requires selectively copying back (from the change)
+        // the property groups that were part of the modify
+        tx.execute(
+            "UPDATE items
+            SET (
+                last_modified, 
+                file_size, 
+                last_hash_scan_id, 
+                file_hash,
+                last_validation_scan_id, 
+                validation_state, 
+                validation_state_desc, 
+                last_scan_id
+            ) =
+            (
+            SELECT 
+                CASE WHEN c.metadata_changed = 1 THEN COALESCE(c.prev_last_modified, items.last_modified) ELSE items.last_modified END,
+                CASE WHEN c.metadata_changed = 1 THEN COALESCE(c.prev_file_size, items.file_size) ELSE items.file_size END,
+                CASE WHEN c.hash_changed = 1 THEN c.prev_last_hash_scan_id ELSE items.last_hash_scan_id END,
+                CASE WHEN c.hash_changed = 1 THEN c.prev_hash ELSE items.file_hash END,
+                CASE WHEN c.validation_changed = 1 THEN c.prev_last_validation_scan_id ELSE items.last_validation_scan_id END,
+                CASE WHEN c.validation_changed = 1 THEN c.prev_validation_state ELSE items.validation_state END,
+                CASE WHEN c.validation_changed = 1 THEN c.prev_validation_state_desc ELSE items.validation_state_desc END,
+                ?1
+            FROM changes c
+            WHERE c.item_id = items.id 
+                AND c.scan_id = ?2
+                AND c.change_type = 'M'
+            LIMIT 1
+            )
+            WHERE last_scan_id = ?2
+            AND EXISTS (
+                SELECT 1 FROM changes c 
+                WHERE c.item_id = items.id 
+                    AND c.scan_id = ?2
+                    AND c.change_type = 'M'
+            )", 
+            [prev_scan_id, scan.id()]
+        )?;
+
+        // Undo deletes. This is simple because deletes just set the tombstone flag
+        tx.execute(
+            "UPDATE items
+            SET is_tombstone = 0,
+                last_scan_id = ?1
+            WHERE id IN (
+                SELECT item_id
+                FROM changes
+                WHERE scan_id = ?2
+                  AND change_type = 'D'
+            )",
+            [prev_scan_id, scan.id()]
+        )?;
+
+        // Mark the scan as stopped
+        tx.execute(
+            "UPDATE scans
+                SET state = 5
+                WHERE id = ?1",
+            [scan.id()]
+        )?;
+
+        // Delete the change records from the stopped scan
+        tx.execute(
+            "DELETE FROM changes WHERE scan_id = ?1", 
+            [scan.id()])?;
+
+        // Final step is to delete the remaining items that were created during
+        // the scan. We have to do this after the change records are deleted otherwise
+        // attemping to delete these rows will generate a referential integrity violation
+        // since we'll be abandoning change records. This operation assumes that the
+        // only remaining items with a last_scan_id of the current scan are the simple
+        // adds. This should be true :)
+       tx.execute(
+        "DELETE FROM items
+        WHERE last_scan_id = ?", 
+        [scan.id()]
+        )?;
+
+        tx.commit()?;
+
+        Ok(())
+
+    }
 }
+
+
+/*
+
+Undo a scan
+Find previous scan:
+
+
+
+**** Undo Add or Type Change
+
+
+**** Undo Modify
+
+
+
+  **** Undo Delete
+
+ 
+
+-- Delete all change records for the aborted scan
+DELETE FROM changes
+WHERE scan_id = :scan_id;
+
+*/

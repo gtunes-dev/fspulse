@@ -8,32 +8,47 @@ use crate::error::FsPulseError;
 
 const SQL_FOR_EACH_CHANGE_IN_SCAN: &str = 
     "SELECT 
-        items.item_type, 
-        items.path, 
-        changes.id, 
-        changes.scan_id, 
-        changes.item_id, 
-        changes.change_type, 
-        changes.prev_last_modified, 
-        prev_file_size, 
-        prev_hash, 
+        items.item_type,
+        items.path,
+        id,
+        scan_id,
+        item_id,
+        change_type,
+        prev_is_tombstone,
+        prev_item_type,
+        metadata_changed,
+        changes.prev_last_modified,
+        prev_file_size,
+        hash_changed,
+        prev_last_hash_scan_id,
+        prev_hash,
+        validation_changed,
+        prev_last_validation_scan_id,
         prev_validation_state,
         prev_validation_state_desc
     FROM changes
     JOIN items ON items.id = changes.item_id
     WHERE changes.scan_id = ?
     ORDER BY items.path ASC";
+
 const SQL_FOR_EACH_CHANGE_IN_ITEM: &str = 
     "SELECT 
-        items.item_type, 
-        items.path, 
-        changes.id, 
-        changes.scan_id, 
-        changes.item_id, 
-        changes.change_type, 
-        changes.prev_last_modified, 
-        prev_file_size, 
-        prev_hash, 
+        items.item_type,
+        items.path,
+        id,
+        scan_id,
+        item_id,
+        change_type,
+        prev_is_tombstone,
+        prev_item_type,
+        metadata_changed,
+        changes.prev_last_modified,
+        prev_file_size,
+        hash_changed,
+        prev_last_hash_scan_id,
+        prev_hash,
+        validation_changed,
+        prev_last_validation_scan_id,
         prev_validation_state,
         prev_validation_state_desc
     FROM changes
@@ -44,17 +59,27 @@ const SQL_FOR_EACH_CHANGE_IN_ITEM: &str =
 #[derive(Clone, Debug, Default)]
 pub struct Change {
     pub id: i64,
-    #[allow(dead_code)]
-    pub scan_id: i64,   // scan_id is currently set but is never read
+    pub scan_id: i64,
     pub item_id: i64,
     pub change_type: String,
-    pub prev_last_modified: Option<i64>,
-    pub prev_file_size: Option<i64>,
-    pub prev_hash: Option<String>,
-    pub prev_validation_state : Option<String>,
+    pub prev_is_tombstone: Option<bool>,            // Present if "A". True if add is undelete
+    pub prev_item_type: Option<String>,             // Present if "T"
+    pub metadata_changed: Option<bool>,             // Present if "M". True if metadata changed, else False
+    pub prev_last_modified: Option<i64>,            // Meaningful if undelete or metadata_changed
+    pub prev_file_size: Option<i64>,                // Meaningful if undelete or metadata_changed
+    pub hash_changed: Option<bool>,                 // Present if "M". True if hash changed, else False
     #[allow(dead_code)]
-    pub prev_validation_state_desc: Option<String>,
-
+    pub prev_last_hash_scan_id: Option<i64>,        // Present if "M" and hash_changed
+    pub prev_hash: Option<String>,                  // Meaningful if undelete or hash_changed
+    pub validation_changed: Option<bool>,           // Present if "M", True if validation changed, else False
+    #[allow(dead_code)]
+    pub prev_last_validation_scan_id: Option<i64>,  // Present if "M" and validation changed
+    pub prev_validation_state : Option<String>,     // Meaningful if undelete or validation_changed
+    #[allow(dead_code)]
+    pub prev_validation_state_desc: Option<String>, // Meaningful if undelete validation_changed
+    
+    // $TODO: Remove this. Was a bad idea to have this in the first place
+    // Changes should be a simple struct that models a Changes entity
     // Additional non-entity fields
     pub item_type: String,
     pub item_path: String,
@@ -125,6 +150,7 @@ impl FromStr for ChangeType {
 
 impl Change {
     // TODO: Implement accessors for other fields
+    pub fn prev_item_type(&self) -> Option<&str> { self.prev_item_type.as_deref() }
     pub fn prev_hash(&self) -> Option<&str> { self.prev_hash.as_deref() }
     pub fn prev_validation_state(&self) -> Option<&str> {self.prev_validation_state.as_deref()}
 
@@ -135,15 +161,22 @@ impl Change {
             "SELECT 
                 items.item_type, 
                 items.path, 
-                changes.id, 
-                changes.scan_id, 
-                changes.item_id, 
-                changes.change_type, 
-                changes.prev_last_modified, 
-                changes.prev_file_size, 
-                changes.prev_hash, 
-                changes.prev_validation_state,
-                changes.prev_validation_state_desc
+                id,
+                scan_id,
+                item_id,
+                change_type,
+                prev_is_tombstone,
+                prev_item_type,
+                metadata_changed,
+                prev_last_modified,
+                prev_file_size,
+                hash_changed,
+                prev_last_hash_scan_id,
+                prev_hash,
+                validation_changed,
+                prev_last_validation_scan_id,
+                prev_validation_state,
+                prev_validation_state_desc
             FROM changes
             JOIN items ON items.id = changes.item_id
             WHERE changes.id = ?", 
@@ -151,15 +184,22 @@ impl Change {
             |row| Ok(Change {
                 item_type: row.get(0)?,
                 item_path: row.get(1)?,
-                id: row.get(2)?,  
-                scan_id: row.get(3)?,  
-                item_id: row.get(4)?,  
-                change_type: row.get(5)?,  
-                prev_last_modified: row.get(6)?,  
-                prev_file_size: row.get(7)?,  
-                prev_hash: row.get(8)?,
-                prev_validation_state: row.get(9)?,
-                prev_validation_state_desc: row.get(10)?
+                id: row.get(2)?,
+                scan_id: row.get(3)?,
+                item_id: row.get(4)?,
+                change_type: row.get(5)?,
+                prev_is_tombstone: row.get(6)?,
+                prev_item_type: row.get(7)?,
+                metadata_changed: row.get(8)?,
+                prev_last_modified: row.get(9)?,
+                prev_file_size: row.get(10)?,
+                hash_changed: row.get(11)?,
+                prev_last_hash_scan_id: row.get(12)?,
+                prev_hash: row.get(13)?,
+                validation_changed: row.get(14)?,
+                prev_last_validation_scan_id: row.get(15)?,
+                prev_validation_state: row.get(16)?,
+                prev_validation_state_desc: row.get(17)?
             })
         )
         .optional()
@@ -255,19 +295,24 @@ impl Change {
         let rows = stmt.query_map([sql_query_param], |row| {
             Ok(
                  Change {
-                    id: row.get::<_, i64>(2)?,                                      // changes.id
-                    scan_id: row.get::<_, i64>(3)?,                                 // changes.scan_id
-                    item_id: row.get::<_, i64>(4)?,                                 // changes.item_id
-                    change_type: row.get::<_, String>(5)?,                          // changes.change_type
-                    prev_last_modified: row.get::<_, Option<i64>>(6)?,              // changes.prev_last_modified
-                    prev_file_size: row.get::<_, Option<i64>>(7)?,                  // changes.prev_file_size
-                    prev_hash: row.get::<_, Option<String>>(8)?,                    // changes.prev_hash
-                    prev_validation_state: row.get::<_, Option<String>>(9)?,        // changes.prev_validation_state
-                    prev_validation_state_desc: row.get::<_, Option<String>>(10)?,  // changes.prev_validation_state_desc
-
-                    // Additional fields
-                    item_type: row.get::<_, String>(0)?,                // items.item_type
-                    item_path: row.get::<_, String>(1)?,                // items.path
+                    item_type: row.get(0)?,
+                    item_path: row.get(1)?,
+                    id: row.get(2)?,
+                    scan_id: row.get(3)?,
+                    item_id: row.get(4)?,
+                    change_type: row.get(5)?,
+                    prev_is_tombstone: row.get(6)?,
+                    prev_item_type: row.get(7)?,
+                    metadata_changed: row.get(8)?,
+                    prev_last_modified: row.get(9)?,
+                    prev_file_size: row.get(10)?,
+                    hash_changed: row.get(11)?,
+                    prev_last_hash_scan_id: row.get(12)?,
+                    prev_hash: row.get(13)?,
+                    validation_changed: row.get(14)?,
+                    prev_last_validation_scan_id: row.get(15)?,
+                    prev_validation_state: row.get(16)?,
+                    prev_validation_state_desc: row.get(17)?
                 }
             )
         })?;
@@ -322,19 +367,6 @@ impl ChangeCounts {
             ChangeType::NoChange => self.no_change_count,
         }
     }
-
-    /*
-    pub fn increment_count_of(&mut self, change_type: ChangeType) {
-        let target = match change_type {
-            ChangeType::Add => &mut self.add_count,
-            ChangeType::Delete => &mut self.delete_count,
-            ChangeType::Modify => &mut self.modify_count,
-            ChangeType::TypeChange => &mut self.type_change_count,
-            ChangeType::NoChange => &mut self.no_change_count,
-       };
-       *target += 1;
-    }
-    */
 
     pub fn set_count_of(&mut self, change_type: ChangeType, count: i64) {
         let target = match change_type {

@@ -34,6 +34,14 @@ impl Utils {
     }
     */
 
+    pub fn opt_bool_or_none_as_str(opt_bool: Option<bool>) -> String {
+        match opt_bool {
+            Some(true) => "T".to_string(),
+            Some(false) => "F".to_string(),
+            None => "=".to_string(),
+        }
+    }
+
     pub fn opt_i64_or_none_as_str(opt_i64: Option<i64>) -> String {
         match opt_i64 {
             Some(i) => i.to_string(),

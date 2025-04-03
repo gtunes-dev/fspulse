@@ -34,17 +34,24 @@ CREATE TABLE IF NOT EXISTS scans (
 CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,                 -- Links each item to a root
+    last_scan_id INTEGER NOT NULL,            -- Last scan where the item was present
     path TEXT NOT NULL,                       -- Absolute path of the item
     is_tombstone BOOLEAN NOT NULL DEFAULT 0,  -- Indicates if the item was deleted
     item_type CHAR(1) NOT NULL,               -- ('F' for file, 'D' for directory, 'S' for symlink, 'O' for other)
+    
+    -- Medatadata Property Group
     last_modified INTEGER,                    -- Last modified timestamp
     file_size INTEGER,                        -- File size in bytes (NULL for directories)
-    file_hash TEXT,                           -- Hash of file contents (NULL for directories and if not computed)
-    validation_state CHAR(1) NOT NULL,        -- Validation state of file
-    validation_state_desc TEXT,                     -- Description of invalid state
-    last_scan_id INTEGER NOT NULL,            -- Last scan where the item was present
+
+    -- Hash Property Group
     last_hash_scan_id INTEGER,                -- Id of last scan during which a hash was computed
-    last_validation_scan_id INTEGER,    -- Id of last scan during which file was validated
+    file_hash TEXT,                           -- Hash of file contents (NULL for directories and if not computed)
+
+    -- Validation Property Group
+    last_validation_scan_id INTEGER,          -- Id of last scan during which file was validated
+    validation_state CHAR(1) NOT NULL,        -- Validation state of file
+    validation_state_desc TEXT,               -- Description of invalid state
+
     FOREIGN KEY (root_id) REFERENCES roots(id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(id),
     FOREIGN KEY (last_hash_scan_id) REFERENCES scans(id),
@@ -62,15 +69,36 @@ CREATE TABLE IF NOT EXISTS changes (
     scan_id INTEGER NOT NULL,                       -- The scan in which the change was detected
     item_id INTEGER NOT NULL,                       -- The file or directory that changed
     change_type CHAR(1) NOT NULL,                   -- ('A' for added, 'D' for deleted, 'M' for modified, 'T' for type changed)
+
+    -- Add specific properties
+    prev_is_tombstone BOOLEAN DEFAULT NULL,         -- Not Null if "A". True if item was tombstone (undelete)
+
+    -- Type Change specific properties
+    prev_item_type CHAR(1) DEFAULT NULL,            -- Not Null if "T". Stores the previous item_type
+
+    -- Metadata Changed (Modify, Type Change)
+    metadata_changed BOOLEAN DEFAULT NULL,          -- Not Null if "M". True if metadata changed
     prev_last_modified INTEGER DEFAULT NULL,        -- Stores the previous last_modified timestamp (if changed)
     prev_file_size INTEGER DEFAULT NULL,            -- Stores the previous file_size (if changed)
+
+    -- Hash Changed (Modify, Type Change)
+    hash_changed BOOLEAN DEFAULT NULL,              -- Not Null if "M". True if hash changed
+    prev_last_hash_scan_id INTEGER DEFAULT NULL,    -- Id of last scan during which a hash was computed
     prev_hash TEXT DEFAULT NULL,                    -- Stores the previous hash value (if changed)
-    prev_validation_state CHAR(1) DEFAULT NULL,     -- Stores the previous validation state (if changed)
-    prev_validation_state_desc DEFAULT NULL,        -- Stores the previous validation description (if changed)
+
+    -- Validation Changed (Modify, Type Change)
+    validation_changed BOOLEAN DEFAULT NULL,            -- Not Null if "M", True if hash changed
+    prev_last_validation_scan_id INTEGER DEFAULT NULL,  -- Id of last scan during which validation was done
+    prev_validation_state CHAR(1) DEFAULT NULL,         -- Stores the previous validation state (if changed)
+    prev_validation_state_desc DEFAULT NULL,            -- Stores the previous validation description (if changed)
+
     FOREIGN KEY (scan_id) REFERENCES scans(id),
     FOREIGN KEY (item_id) REFERENCES items(id),
     UNIQUE (scan_id, item_id, change_type)
 );
+
+-- Indexes to optimize queries
+CREATE INDEX IF NOT EXISTS idx_changes_scan_type ON changes (scan_id, change_type);
 
 COMMIT;
 "#;

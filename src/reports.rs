@@ -281,12 +281,18 @@ impl Reports {
             Column::new(|f, c: &Change| write!(f, "{}", c.id)).header("Id").right().min_width(6),
             Column::new(|f, c: &Change| write!(f, "{}", c.scan_id)).header("Scan Id").right(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_id)).header("Item Id").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", c.change_type)).header("Change Type").center(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_type)).header("Item Type").center(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_path)).header("Item Path").left(),
-            Column::new(|f, c: &Change| write!(f, "{}", c.change_type)).header("Change Type").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.prev_is_tombstone))).header("Prev Tomb").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.prev_item_type()))).header("Prev Item Type").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.metadata_changed))).header("MD Changed").center(),
+
             Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_last_modified))).header("Prev Modified").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_file_size))).header("Prev Size").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.hash_changed))).header("Hash Changed").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Hash::short_md5(&c.prev_hash()))).header("Prev Hash").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.validation_changed))).header("Validation Changed").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.prev_validation_state()))).header("Prev Valid").center(),
         ]).title(title).empty_row(empty_row)
     }
@@ -589,9 +595,8 @@ impl Reports {
 
     // New Validation Transitions Section
     report.push(header_style.apply_to("[VALIDATION TRANSITIONS]").to_string());
-    if scan.hashing() {
+    if scan.validating() {
         let validation_changes = Change::get_validation_transitions_for_scan(db, scan.id())?;
-  
     
         // From Unknown transitions
         report.push(label_style.apply_to("From Unknown:").to_string());
