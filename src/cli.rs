@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use crate::database::Database;
 use crate::error::FsPulseError; 
+use crate::queries::Query;
 use crate::reports::{ReportFormat, Reports}; 
 use crate::roots::Root;
 use crate::scanner::Scanner;
@@ -70,6 +71,16 @@ pub enum Command {
         #[command(subcommand)]
         report_type: ReportType,
     },
+    Query {
+        /// Specifies the directory where the database is stored.
+        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
+        /// The database file will always be named "fspulse.db".
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+
+        /// The query string (e.g., "items where scan:(5)")
+        query: String,
+     },
 }
 
 /// Available report types.
@@ -275,6 +286,13 @@ impl Cli {
 
                     Reports::report_changes(&db, change_id, item_id, scan_id, format)
                 }
+            },
+            Command::Query { db_path, query} => {
+                info!(
+                    "Processing query with db_path: {:?}, '{}'", db_path, query
+                );
+                let db = Database::new(db_path)?;
+                Query::process_query(&db, &query)
             },
         }
     }

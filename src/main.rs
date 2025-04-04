@@ -5,6 +5,7 @@ mod config;
 mod error;
 mod hash;
 mod items;
+mod queries;
 mod reports;
 mod roots;
 mod scans;

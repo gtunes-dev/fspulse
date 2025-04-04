@@ -1,0 +1,68 @@
+// fspulse_query.pest
+// interactive parser: https://pest.rs/#editor
+
+// Basic tokens
+WHITESPACE = _{ " " | "\t" | "\n" }
+COLON      =  { ":" }
+COMMA      = _{ "," }
+DOTDOT     =  { ".." }
+LPAREN     =  { "(" }
+RPAREN     =  { ")" }
+
+// Top-level query: one of the domain-specific queries
+query = { SOI ~ (items_query | scans_query | roots_query | changes_query | paths_query) ~ EOI }
+
+where_ws = @{ "where" ~ WHITESPACE+ }
+
+items_ws   = @{ "items" ~ WHITESPACE+ }
+scans_ws   = @{ "scans" ~ WHITESPACE+ }
+roots_ws   = @{ "roots" ~ WHITESPACE+ }
+changes_ws = @{ "changes" ~ WHITESPACE+ }
+paths_ws   = @{ "paths" ~ WHITESPACE+ }
+
+items_where   = @{ items_ws ~ where_ws }
+scans_where   = @{ scans_ws ~ where_ws }
+roots_where   = @{ roots_ws ~ where_ws }
+changes_where = @{ changes_ws ~ where_ws }
+paths_where   = @{ paths_ws ~ where_ws }
+
+items_query   = { items_where ~ filter_set_items }
+scans_query   = { scans_where ~ filter_set_scans }
+roots_query   = { roots_where ~ filter_set_roots }
+changes_query = { changes_where ~ filter_set_changes }
+paths_query   = { paths_where ~ filter_set_paths }
+
+// Filter sets for each type (for items, we allow a COMMA-separated list of filters)
+filter_set_items   = { item_filter ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ item_filter)* }
+filter_set_scans   = { filter_scan ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ filter_scan)* }
+filter_set_roots   = { filter_root ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ filter_root)* }
+filter_set_changes = { filter_change ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ filter_change)* }
+filter_set_paths   = { filter_path ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ filter_path)* }
+
+// Items filter: union of various item filters
+item_filter = { filter_change | scan_filter | date_filter | filter_validity }
+
+// Scan filter: e.g., scan:(32) or scan:(32..36)
+scan_filter =  { "scan" ~ COLON ~ LPAREN ~ (scan_range | single_scan) ~ RPAREN }
+scan_range  =  { single_scan ~ DOTDOT ~ single_scan }
+single_scan = @{ ASCII_DIGIT+ }
+
+// Date filter: e.g., date:(2023-01-01) or date:(2023-01-01..2023-01-31)
+date_filter  =  { "date" ~ COLON ~ LPAREN ~ date_range ~ RPAREN }
+date_range   =  { date_literal ~ (DOTDOT ~ date_literal)? }
+date_literal = @{ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
+
+// Change filter: e.g., change:(A) or change:(A,M)
+filter_change = { "change" ~ COLON ~ LPAREN ~ change_values ~ RPAREN }
+change_values = { change_value ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ change_value)* }
+change_value  = { "A" | "M" | "D" | "T" }
+
+// Validity filter: e.g., validity:(V) or validity:(V,I)
+filter_validity = { "validity" ~ COLON ~ LPAREN ~ validity_values ~ RPAREN }
+validity_values = { validity_value ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ validity_value)* }
+validity_value  = { "V" | "I" | "N" | "U" }
+
+// Placeholders for other domain filters
+filter_scan = { ASCII_ALPHANUMERIC+ }
+filter_root = { ASCII_ALPHANUMERIC+ }
+filter_path = { ASCII_ALPHANUMERIC+ }

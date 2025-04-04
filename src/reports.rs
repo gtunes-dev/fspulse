@@ -526,127 +526,127 @@ impl Reports {
     }
 
     pub fn report_scan(db: &Database, scan: &Scan) -> Result<(), FsPulseError> {
-    // Define your styles
-    let header_style = Style::new().blue().bold();
-    let label_style = Style::new().cyan();
-    let command_style = Style::new().yellow();
+        // Define your styles
+        let header_style = Style::new().cyan().bold().underlined();
+        let label_style = Style::new().white();
+        let command_style = Style::new().green();
 
-    let root = Root::get_by_id(db, scan.root_id())?
-        .ok_or_else(|| FsPulseError::Error("Root Not Found".to_string()))?;
+        let root = Root::get_by_id(db, scan.root_id())?
+            .ok_or_else(|| FsPulseError::Error("Root Not Found".to_string()))?;
 
-    let changes = ChangeCounts::get_by_scan_id(db, scan.id())?;
+        let changes = ChangeCounts::get_by_scan_id(db, scan.id())?;
 
-    // Build the report line by line
-    let mut report = Vec::new();
+        // Build the report line by line
+        let mut report = Vec::new();
 
-    // Header Section
-    report.push(header_style.apply_to("===============================================").to_string());
-    report.push(header_style.apply_to("           FS Pulse Scan Report").to_string());
-    report.push(header_style.apply_to("===============================================").to_string());
-    report.push(String::new());
-    
-    // Scan Info Section
-    report.push(header_style.apply_to("[SCAN INFO]").to_string());
-    report.push(format!(
-        "{}         {}",
-        label_style.apply_to("Scan Id:"), scan.id()
-    ));
-    report.push(format!(
-        "{}          {}   (Root Id: {})",
-        label_style.apply_to("Path:"), root.path(), root.id()
-    ));
-    report.push(format!(
-        "{}         {}",
-        label_style.apply_to("Files:"), Utils::opt_i64_or_none_as_str(scan.file_count())
-    ));
-    report.push(format!(
-        "{}       {}",
-        label_style.apply_to("Folders:"), Utils::opt_i64_or_none_as_str(scan.folder_count())
-    ));
-    report.push(String::new());
-    
-
-    // Change Summary Section
-    report.push(header_style.apply_to("[CHANGE SUMMARY]").to_string());
-    report.push(format!(
-        "{}     {}    • {} for details.",
-        label_style.apply_to("Additions:"), changes.add_count, command_style.apply_to("Run 'fs list-adds'")
-    ));
-    report.push(format!(
-        "{} {}    • {} for details.",
-        label_style.apply_to("Modifications:"), changes.modify_count, command_style.apply_to("Run 'fs list-modifies'")
-    ));
-    report.push(format!(
-        "{}     {}    • {} for details.",
-        label_style.apply_to("Deletions:"), changes.delete_count, command_style.apply_to("Run 'fs list-deletes'")
-    ));
-    report.push(String::new());
-    
-    // Hash Mode Section
-    report.push(header_style.apply_to("[HASH SUMMARY]").to_string());
-    if !scan.hashing() {
-        report.push("Hash mode was not specified".to_string());
-    }
-    report.push(format!(
-        "{}   {}    • {} for complete info.",
-        label_style.apply_to("Changed Hashes:"), 4, command_style.apply_to("Run 'fs hash-details'")
-    ));
-    report.push(String::new());
-
-    // New Validation Transitions Section
-    report.push(header_style.apply_to("[VALIDATION TRANSITIONS]").to_string());
-    if scan.validating() {
-        let validation_changes = Change::get_validation_transitions_for_scan(db, scan.id())?;
-    
-        // From Unknown transitions
-        report.push(label_style.apply_to("From Unknown:").to_string());
+        // Header Section
+        report.push(header_style.apply_to("===============================================").to_string());
+        report.push(header_style.apply_to("           FS Pulse Scan Report").to_string());
+        report.push(header_style.apply_to("===============================================").to_string());
+        report.push(String::new());
+        
+        // Scan Info Section
+        report.push(header_style.apply_to("Scan Info").to_string());
         report.push(format!(
-            "    {}         {}    • {}",
-            label_style.apply_to("-> Valid:"), validation_changes.unknown_to_valid, command_style.apply_to("Run 'fs list-new-valid'")
+            "{}         {}",
+            label_style.apply_to("Scan Id:"), scan.id()
         ));
         report.push(format!(
-            "    {}       {}    • {}",
-            label_style.apply_to("-> Invalid:"), validation_changes.unknown_to_invalid, command_style.apply_to("Run 'fs list-new-invalid'")
+            "{}          {}   (Root Id: {})",
+            label_style.apply_to("Path:"), root.path(), root.id()
         ));
         report.push(format!(
-            "    {}  {}    • {}",
-            label_style.apply_to("-> No Validator:"), validation_changes.unknown_to_no_validator, command_style.apply_to("Run 'fs list-new-no-validator'")
+            "{}         {}",
+            label_style.apply_to("Files:"), Utils::opt_i64_or_none_as_str(scan.file_count())
+        ));
+        report.push(format!(
+            "{}       {}",
+            label_style.apply_to("Folders:"), Utils::opt_i64_or_none_as_str(scan.folder_count())
         ));
         report.push(String::new());
         
-        // From Valid transitions
-        report.push(label_style.apply_to("From Valid:").to_string());
+
+        // Change Summary Section
+        report.push(header_style.apply_to("Change Summary").to_string());
         report.push(format!(
-            "    {}       {}    • {}",
-            label_style.apply_to("-> Invalid:"), validation_changes.valid_to_invalid, command_style.apply_to("Run 'fs list-valid-to-invalid'")
-        ));
+            "{}     {}",
+            label_style.apply_to("Additions:"), changes.add_count)
+        );
         report.push(format!(
-            "    {}  {}    • {}",
-            label_style.apply_to("-> No Validator:"), validation_changes.valid_to_no_validator, command_style.apply_to("Run 'fs list-valid-to-no-validator'")
-        ));
+            "{} {}",
+            label_style.apply_to("Modifications:"), changes.modify_count)
+        );
+        report.push(format!(
+            "{}     {}",
+            label_style.apply_to("Deletions:"), changes.delete_count)
+        );
         report.push(String::new());
         
-        // From No Validator transitions
-        report.push(label_style.apply_to("From No Validator:").to_string());
+        // Hash Mode Section
+        report.push(header_style.apply_to("Hash Summary").to_string());
+        if !scan.hashing() {
+            report.push("Hash mode was not specified".to_string());
+        }
         report.push(format!(
-            "    {}         {}    • {}",
-            label_style.apply_to("-> Valid:"), validation_changes.no_validator_to_valid, command_style.apply_to("Run 'fs list-no-validator-to-valid'")
-        ));
-        report.push(format!(
-            "    {}       {}    • {}",
-            label_style.apply_to("-> Invalid:"), validation_changes.no_validator_to_invalid, command_style.apply_to("Run 'fs list-no-validator-to-invalid'")
+            "{}   {}    • {} for complete info.",
+            label_style.apply_to("Changed Hashes:"), 4, command_style.apply_to("Run 'fs hash-details'")
         ));
         report.push(String::new());
-    } else {
-        report.push("Validation mode was not specified".to_string());
-    };
-    
-    // Next Steps
-    report.push(format!("{} Use the commands above for further analysis.",
-        label_style.apply_to("Next Steps:")));
-    
-    // Join all lines and print the report
-    println!("{}", report.join("\n"));
+
+        // New Validation Transitions Section
+        report.push(header_style.apply_to("Validation Transitions").to_string());
+        if scan.validating() {
+            let validation_changes = Change::get_validation_transitions_for_scan(db, scan.id())?;
+        
+            // From Unknown transitions
+            report.push(label_style.apply_to("From Unknown:").to_string());
+            report.push(format!(
+                "    {}         {}    • {}",
+                label_style.apply_to("-> Valid:"), validation_changes.unknown_to_valid, command_style.apply_to("Run 'fs list-new-valid'")
+            ));
+            report.push(format!(
+                "    {}       {}    • {}",
+                label_style.apply_to("-> Invalid:"), validation_changes.unknown_to_invalid, command_style.apply_to("Run 'fs list-new-invalid'")
+            ));
+            report.push(format!(
+                "    {}  {}    • {}",
+                label_style.apply_to("-> No Validator:"), validation_changes.unknown_to_no_validator, command_style.apply_to("Run 'fs list-new-no-validator'")
+            ));
+            report.push(String::new());
+            
+            // From Valid transitions
+            report.push(label_style.apply_to("From Valid:").to_string());
+            report.push(format!(
+                "    {}       {}    • {}",
+                label_style.apply_to("-> Invalid:"), validation_changes.valid_to_invalid, command_style.apply_to("Run 'fs list-valid-to-invalid'")
+            ));
+            report.push(format!(
+                "    {}  {}    • {}",
+                label_style.apply_to("-> No Validator:"), validation_changes.valid_to_no_validator, command_style.apply_to("Run 'fs list-valid-to-no-validator'")
+            ));
+            report.push(String::new());
+            
+            // From No Validator transitions
+            report.push(label_style.apply_to("From No Validator:").to_string());
+            report.push(format!(
+                "    {}         {}    • {}",
+                label_style.apply_to("-> Valid:"), validation_changes.no_validator_to_valid, command_style.apply_to("Run 'fs list-no-validator-to-valid'")
+            ));
+            report.push(format!(
+                "    {}       {}    • {}",
+                label_style.apply_to("-> Invalid:"), validation_changes.no_validator_to_invalid, command_style.apply_to("Run 'fs list-no-validator-to-invalid'")
+            ));
+            report.push(String::new());
+        } else {
+            report.push("Validation mode was not specified".to_string());
+        };
+        
+        // Next Steps
+        report.push(format!("{} Use the commands above for further analysis.",
+            label_style.apply_to("Next Steps:")));
+        
+        // Join all lines and print the report
+        println!("{}", report.join("\n"));
         Ok(())
     }
 }
