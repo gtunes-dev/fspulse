@@ -1,13 +1,13 @@
 // fspulse_query.pest
 // interactive parser: https://pest.rs/#editor
 
-// Basic tokens
+// Basic tokens - all silent
 WHITESPACE = _{ " " | "\t" | "\n" }
-COLON      =  { ":" }
+COLON      = _{ ":" }
 COMMA      = _{ "," }
-DOTDOT     =  { ".." }
-LPAREN     =  { "(" }
-RPAREN     =  { ")" }
+DOTDOT     = _{ ".." }
+LPAREN     = _{ "(" }
+RPAREN     = _{ ")" }
 
 // Top-level query: one of the domain-specific queries
 query = { SOI ~ (items_query | scans_query | roots_query | changes_query | paths_query) ~ EOI }

@@ -8,5 +8,5 @@ pub use query::Query;
 //pub mod parser;
 
 #[derive(Parser)]
-#[grammar = "queries/parser.pest"]
+#[grammar = "queries/query.pest"]
 pub struct QueryParser;
