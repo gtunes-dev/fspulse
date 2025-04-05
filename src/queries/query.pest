@@ -26,29 +26,33 @@ roots_where   = @{ roots_ws ~ where_ws }
 changes_where = @{ changes_ws ~ where_ws }
 paths_where   = @{ paths_ws ~ where_ws }
 
-items_query   = { items_where ~ filter_set_items }
-scans_query   = { scans_where ~ filter_set_scans }
-roots_query   = { roots_where ~ filter_set_roots }
-changes_query = { changes_where ~ filter_set_changes }
-paths_query   = { paths_where ~ filter_set_paths }
+items_query   = { items_where ~ fs_items }
+scans_query   = { scans_where ~ fs_scans }
+roots_query   = { roots_where ~ fs_roots }
+changes_query = { changes_where ~ fs_changes }
+paths_query   = { paths_where ~ fs_paths }
 
 // Filter sets for each type (for items, we allow a COMMA-separated list of filters)
-filter_set_items   = { item_filter ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ item_filter)* }
-filter_set_scans   = { filter_scan ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ filter_scan)* }
-filter_set_roots   = { filter_root ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ filter_root)* }
-filter_set_changes = { filter_change ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ filter_change)* }
-filter_set_paths   = { filter_path ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ filter_path)* }
+fs_items   = { fs_items_filter ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ fs_items_filter)* }
+fs_scans   = { fs_scans_filter ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ fs_scans_filter)* }
+fs_roots   = { fs_roots_filter ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ fs_roots_filter)* }
+fs_changes = { fs_changes_filter ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ fs_changes_filter)* }
+fs_paths   = { fs_paths_filter ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ fs_paths_filter)* }
 
-// Items filter: union of various item filters
-item_filter = { filter_change | scan_filter | date_filter | filter_validity }
+// Allowable filters for the various types of queries
+fs_items_filter   = { filter_change | filter_scan | filter_date | filter_validity }
+fs_scans_filter   = { filter_scan | filter_date }
+fs_roots_filter   = { WHITESPACE* }
+fs_changes_filter = { filter_change | filter_validity }
+fs_paths_filter   = { WHITESPACE* }
 
 // Scan filter: e.g., scan:(32) or scan:(32..36)
-scan_filter =  { "scan" ~ COLON ~ LPAREN ~ (scan_range | single_scan) ~ RPAREN }
+filter_scan =  { "scan" ~ COLON ~ LPAREN ~ (scan_range | single_scan) ~ RPAREN }
 scan_range  =  { single_scan ~ DOTDOT ~ single_scan }
 single_scan = @{ ASCII_DIGIT+ }
 
 // Date filter: e.g., date:(2023-01-01) or date:(2023-01-01..2023-01-31)
-date_filter  =  { "date" ~ COLON ~ LPAREN ~ date_range ~ RPAREN }
+filter_date  =  { "date" ~ COLON ~ LPAREN ~ date_range ~ RPAREN }
 date_range   =  { date_literal ~ (DOTDOT ~ date_literal)? }
 date_literal = @{ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
@@ -61,8 +65,3 @@ change_value  = { "A" | "M" | "D" | "T" }
 filter_validity = { "validity" ~ COLON ~ LPAREN ~ validity_values ~ RPAREN }
 validity_values = { validity_value ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ validity_value)* }
 validity_value  = { "V" | "I" | "N" | "U" }
-
-// Placeholders for other domain filters
-filter_scan = { ASCII_ALPHANUMERIC+ }
-filter_root = { ASCII_ALPHANUMERIC+ }
-filter_path = { ASCII_ALPHANUMERIC+ }

@@ -37,15 +37,114 @@ pub struct DateFilter {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ChangeFilter {
+    include_adds: bool,
+    include_modifies: bool,
+    include_deletes: bool,
+    include_type_changes: bool
+}
+
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ItemsQuery {
-    pub scan_filter: Option<ScanFilter>,
-    pub date_filter: Option<DateFilter>,
+    scan_filter: Option<ScanFilter>,
+    date_filter: Option<DateFilter>,
+    change_filter: Option<ChangeFilter>,
+}
+
+impl ChangeFilter {
+    pub fn _get_include_adds(&self) -> bool {
+        self.include_adds
+    }
+
+    pub fn _get_include_modifies(&self) -> bool {
+        self.include_modifies
+    }
+
+    pub fn _get_include_deletes(&self) -> bool {
+        self.include_deletes
+    }
+
+    pub fn _get_include_type_changes(&self) -> bool {
+        self.include_type_changes
+    }
+
+    pub fn set_include_type(&mut self, include_type: &str) -> Result<(), FsPulseError> {
+        let s = include_type.trim().to_uppercase();
+        let bool_ref = match s.as_str() {
+            "A" => &mut self.include_adds,
+            "D" => &mut self.include_deletes,
+            "M" => &mut self.include_modifies,
+            "T" => &mut self.include_type_changes,
+            _ => {
+                return Err(FsPulseError::Error("Unknown change type".into()))
+            }
+        };
+        if *bool_ref {
+            return Err(FsPulseError::Error(format!("Change filter of '{}' is already defined", s)))
+        }
+        *bool_ref = true;
+        Ok(())
+    }
+}
+
+impl ItemsQuery {
+    pub fn _get_scan_filter(&self) -> &Option<ScanFilter> {
+        &self.scan_filter
+    }
+
+    pub fn set_scan_filter(&mut self, scan_filter: ScanFilter ) -> Result<(), FsPulseError> {
+        if self.scan_filter.is_some() {
+            Err(FsPulseError::Error("Scan filter is already defined".into()))
+        } else {
+            self.scan_filter = Some(scan_filter);
+            Ok(())
+        }
+    }
+
+    pub fn _get_date_filter(&self) -> &Option<DateFilter> {
+        &self.date_filter
+    }
+
+    pub fn set_date_filter(&mut self, date_filter: DateFilter) -> Result<(), FsPulseError> {
+        if self.date_filter.is_some() {
+            Err(FsPulseError::Error("Date filter is already defined".into()))
+        } else {
+            self.date_filter = Some(date_filter);
+            Ok(())
+        }
+    }
+
+    pub fn _get_change_filter(&self) -> &Option<ChangeFilter> {
+        &self.change_filter
+    }
+
+    fn get_change_filter_mut(&mut self) -> Option<&mut ChangeFilter> {
+        self.change_filter.as_mut()
+    }
+
+    fn set_change_filter(&mut self, change_filter: ChangeFilter) -> Result<(), FsPulseError> {
+        if self.change_filter.is_some() {
+            // This shouldn't be reachable. We use a single instance of ChangeFilter
+            // to model all changes so if we hit this, it's a code error, not
+            // a user error
+            error!("Change filter is already set");
+            Err(FsPulseError::Error("Change filter is already set".into()))
+        } else {
+            self.change_filter = Some(change_filter);
+            Ok(())
+        }
+    }
 }
 
 pub struct Query;
 
 impl Query {
     pub fn process_query(_db: &Database, query: &str) -> Result<(), FsPulseError> {
+
+        // for testing during coding
+        //let query = "items where scan:(32),change:(A),change:(A)";
+
         let mut pairs = Query::parse(Rule::query, query)?;
         println!("Parsed query: {}", pairs);
 
@@ -98,30 +197,34 @@ impl Query {
         // The first child is the items_where part. We can skip it.
         let _items_where = inner.next().ok_or_else(|| FsPulseError::Error("Missing 'items where'".into()))?;
         
-        // The second child should be the filter_set_items.
-        let filter_set_pair = inner.next().ok_or_else(|| FsPulseError::Error("Missing filters on 'items where'".into()))?;
+        let fs_items = inner.next().ok_or_else(|| FsPulseError::Error("Missing filters on 'items where'".into()))?;
         
         // Now iterate over the children of filter_set_items.
-        for filter_outer in filter_set_pair.into_inner() {
-            let filter_inner = filter_outer.into_inner().next().unwrap();
-            //let y = filter.into_inner().next().unwrap();
-            match filter_inner.as_rule() {
-                Rule::scan_filter => {
-                    if items_query.scan_filter.is_some() {
-                        return Err(FsPulseError::Error("Scan filter is already defined".into()));
-                    }
-                    let inner_scan = filter_inner.into_inner().next().unwrap();
-                    items_query.scan_filter = Some(Self::build_scan_filter(inner_scan));
+        for fs_items_filter in fs_items.into_inner() {
+            let filter = fs_items_filter.into_inner().next().unwrap();
+            match filter.as_rule() {
+                Rule::filter_scan => {
+                    let filter_scan = filter.into_inner().next().unwrap();
+                    items_query.set_scan_filter(Self::build_scan_filter(filter_scan))?;
                 },
-                Rule::date_filter => {
-                    let inner_scan = filter_inner.into_inner().next().unwrap();
-                    items_query.date_filter = Some(Self::build_date_filter(inner_scan));
-                    // Process the date filter similarly.
-                    // items_query.date_filter = Some(build_date_filter(filter)?);
+                Rule::filter_date => {
+                    let filter_date = filter.into_inner().next().unwrap();
+                    items_query.set_date_filter(Self::build_date_filter(filter_date))?;
                 },
                 Rule::filter_change => {
                     // Process the change filter.
-                    // items_query.change_filter = Some(build_change_filter(filter)?);
+                    let mut change_values = filter.into_inner();
+                    let change_value = change_values.next().unwrap().as_str();
+                    match items_query.get_change_filter_mut() {
+                        Some(cf) => {
+                            cf.set_include_type(change_value)?;
+                        },
+                        None => {
+                            let mut change_filter = ChangeFilter::default();
+                            change_filter.set_include_type(change_value)?;
+                            items_query.set_change_filter(change_filter)?;
+                        }
+                    }
                 },
                 Rule::filter_validity => {
                     // Process the validity filter.
