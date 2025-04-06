@@ -611,7 +611,7 @@ impl Scanner {
 
         // load the item
         let path_str = path.to_string_lossy();
-        let existing_item = Item::get_by_root_and_path(db, scan.root_id(), &path_str)?;
+        let existing_item = Item::get_by_root_path_type(db, scan.root_id(), &path_str, item_type)?;
 
         let last_modified = metadata.modified()
             .ok()
@@ -631,7 +631,6 @@ impl Scanner {
                 return Ok(())
             }
 
-            let item_type_str = item_type.as_str();
             let metadata_changed = existing_item.last_modified() != last_modified || existing_item.file_size() != file_size;
             
             if existing_item.is_tombstone() {
@@ -640,7 +639,6 @@ impl Scanner {
                 let rows_updated = tx.execute(
                     "UPDATE items SET 
                             is_tombstone = 0, 
-                            item_type = ?, 
                             last_modified = ?, 
                             file_size = ?, 
                             file_hash = NULL, 
@@ -650,14 +648,14 @@ impl Scanner {
                             last_hash_scan_id = NULL, 
                             last_validation_scan_id = NULL 
                         WHERE id = ?", 
-                    (item_type_str, last_modified, file_size, ValidationState::Unknown.to_string(), scan.id(), existing_item.id()))?;
+                    (last_modified, file_size, ValidationState::Unknown.to_string(), scan.id(), existing_item.id()))?;
                 if rows_updated == 0 {
                         return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
                 }
 
                 tx.execute(
                     "INSERT INTO changes 
-                        (scan_id, item_id, change_type, prev_is_tombstone, prev_last_modified, prev_file_size, prev_hash, prev_validation_state, prev_validation_state_desc) 
+                        (scan_id, item_id, change_type, is_undelete, prev_last_modified, prev_file_size, prev_hash, prev_validation_state, prev_validation_state_desc) 
                     VALUES 
                         (?, ?, ?, 1, ?, ?, ?, ?, ?)", 
                     (
@@ -670,44 +668,6 @@ impl Scanner {
                         existing_item.validation_state_as_str(),
                         existing_item.validation_state_desc()
                     ))?;
-
-                tx.commit()?;
-            } else if existing_item.item_type() != item_type_str {
-                //Item type changed file <-> folder
-                let tx = db.conn_mut().transaction()?;
-                let rows_updated = tx.execute(
-                    "UPDATE items SET 
-                        item_type = ?, 
-                        last_modified = ?, 
-                        file_size = ?,
-                        file_hash = NULL,
-                        validation_state = ?,
-                        validation_state_desc = NULL,
-                        last_scan_id = ?,
-                        last_hash_scan_id = NULL,
-                        last_validation_scan_id = NULL 
-                    WHERE id = ?", 
-                    (item_type_str, last_modified, file_size, ValidationState::Unknown.to_string(), scan.id(), existing_item.id()))?;
-                if rows_updated == 0 {
-                        return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
-                }
-
-                tx.execute(
-                    "INSERT INTO changes 
-                        (scan_id, item_id, change_type, prev_last_modified, prev_file_size, prev_hash, prev_validation_state, prev_validation_state_desc) 
-                    VALUES 
-                        (?, ?, ?, ?, ?, ?, ?, ?)", 
-                    (
-                        scan.id(), 
-                        existing_item.id(), 
-                        ChangeType::TypeChange.as_str(), 
-                        existing_item.last_modified(),
-                        existing_item.file_size(),
-                        existing_item.file_hash(),
-                        existing_item.validation_state_as_str(),
-                        existing_item.validation_state_desc()
-                    )
-                )?;
 
                 tx.commit()?;
             } else if metadata_changed {
@@ -757,7 +717,7 @@ impl Scanner {
 
             let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
-            tx.execute("INSERT INTO changes (scan_id, item_id, change_type, prev_is_tombstone) VALUES (?, ?, ?, 0)",
+            tx.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete) VALUES (?, ?, ?, 0)",
                 (scan.id(), item_id, ChangeType::Add.as_str()))?;
             tx.commit()?;
         }
@@ -837,7 +797,18 @@ impl Scanner {
         // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
         if update_changes {
             tx.execute(
-                "INSERT INTO changes (scan_id, item_id, change_type, metadata_changed, hash_changed, prev_last_hash_scan_id, prev_hash, validation_changed, prev_last_validation_scan_id, prev_validation_state, prev_validation_state_desc)
+                "INSERT INTO changes (
+                    scan_id, 
+                    item_id, 
+                    change_type, 
+                    metadata_changed, 
+                    hash_changed, 
+                    prev_last_hash_scan_id, 
+                    prev_hash, 
+                    validation_changed, 
+                    prev_last_validation_scan_id, 
+                    prev_validation_state, 
+                    prev_validation_state_desc)
                     VALUES (?, ?, 'M', 0, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scan_id, item_id, change_type) 
                     DO UPDATE SET

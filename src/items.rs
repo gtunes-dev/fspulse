@@ -90,17 +90,18 @@ impl Item {
         .map_err(FsPulseError::Database)
     }
 
-    pub fn get_by_root_and_path(
+    pub fn get_by_root_path_type(
         db: &Database, 
         root_id: i64, 
-        path: &str
+        path: &str,
+        item_type: ItemType,
     ) -> Result<Option<Self>, FsPulseError> 
     {
-        let query = format!("SELECT {} FROM ITEMS WHERE root_id = ? AND path = ?", Item::ITEM_COLUMNS);
+        let query = format!("SELECT {} FROM ITEMS WHERE root_id = ? AND path = ? AND item_type = ?", Item::ITEM_COLUMNS);
 
         db.conn().query_row(
             &query,
-            params![root_id, path],
+            params![root_id, path, item_type.as_str()],
             Item::from_row,
         )
         .optional()

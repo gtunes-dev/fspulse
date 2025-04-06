@@ -56,11 +56,11 @@ CREATE TABLE IF NOT EXISTS items (
     FOREIGN KEY (last_scan_id) REFERENCES scans(id),
     FOREIGN KEY (last_hash_scan_id) REFERENCES scans(id),
     FOREIGN KEY (last_validation_scan_id) REFERENCES scans(id),
-    UNIQUE (root_id, path)              -- Ensures uniqueness within each root path
+    UNIQUE (root_id, path, item_type)         -- Ensures uniqueness within each root path
 );
 
 -- Indexes to optimize queries
-CREATE INDEX IF NOT EXISTS idx_items_path ON items (root_id, path);
+CREATE INDEX IF NOT EXISTS idx_items_path ON items (root_id, path, item_type);
 CREATE INDEX IF NOT EXISTS idx_items_scan ON items (root_id, last_scan_id, is_tombstone);
 
 -- Changes table tracks modifications between scans
@@ -71,17 +71,14 @@ CREATE TABLE IF NOT EXISTS changes (
     change_type CHAR(1) NOT NULL,                   -- ('A' for added, 'D' for deleted, 'M' for modified, 'T' for type changed)
 
     -- Add specific properties
-    prev_is_tombstone BOOLEAN DEFAULT NULL,         -- Not Null if "A". True if item was tombstone (undelete)
-
-    -- Type Change specific properties
-    prev_item_type CHAR(1) DEFAULT NULL,            -- Not Null if "T". Stores the previous item_type
+    is_undelete BOOLEAN DEFAULT NULL,               -- Not Null if "A". True if item was tombstone
 
     -- Metadata Changed (Modify, Type Change)
     metadata_changed BOOLEAN DEFAULT NULL,          -- Not Null if "M". True if metadata changed
     prev_last_modified INTEGER DEFAULT NULL,        -- Stores the previous last_modified timestamp (if changed)
     prev_file_size INTEGER DEFAULT NULL,            -- Stores the previous file_size (if changed)
 
-    -- Hash Changed (Modify, Type Change)
+    -- Hash Changed (Add, Modify, Type Change)
     hash_changed BOOLEAN DEFAULT NULL,              -- Not Null if "M". True if hash changed
     prev_last_hash_scan_id INTEGER DEFAULT NULL,    -- Id of last scan during which a hash was computed
     prev_hash TEXT DEFAULT NULL,                    -- Stores the previous hash value (if changed)

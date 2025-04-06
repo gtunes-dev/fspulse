@@ -355,14 +355,14 @@ impl Scan {
                 FROM changes c
                 WHERE c.item_id = items.id
                     AND c.scan_id = ?2
-                    AND ((c.change_type = 'A' AND c.prev_is_tombstone = 1) OR c.change_type = 'T')
+                    AND ((c.change_type = 'A' AND c.is_undelete = 1) OR c.change_type = 'T')
                 LIMIT 1
             )
             WHERE id IN (
                 SELECT item_id 
                 FROM changes 
                 WHERE scan_id = ?2
-                    AND ((change_type = 'A' AND prev_is_tombstone = 1) OR change_type = 'T')
+                    AND ((change_type = 'A' AND is_undelete = 1) OR change_type = 'T')
             )", 
             [prev_scan_id, scan.id()]
         )?;

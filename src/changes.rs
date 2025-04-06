@@ -14,8 +14,7 @@ const SQL_FOR_EACH_CHANGE_IN_SCAN: &str =
         scan_id,
         item_id,
         change_type,
-        prev_is_tombstone,
-        prev_item_type,
+        is_undelete,
         metadata_changed,
         changes.prev_last_modified,
         prev_file_size,
@@ -39,8 +38,7 @@ const SQL_FOR_EACH_CHANGE_IN_ITEM: &str =
         scan_id,
         item_id,
         change_type,
-        prev_is_tombstone,
-        prev_item_type,
+        is_undelete,
         metadata_changed,
         changes.prev_last_modified,
         prev_file_size,
@@ -62,8 +60,7 @@ pub struct Change {
     pub scan_id: i64,
     pub item_id: i64,
     pub change_type: String,
-    pub prev_is_tombstone: Option<bool>,            // Present if "A". True if add is undelete
-    pub prev_item_type: Option<String>,             // Present if "T"
+    pub is_undelete: Option<bool>,                  // Present if "A". True if add is undelete
     pub metadata_changed: Option<bool>,             // Present if "M". True if metadata changed, else False
     pub prev_last_modified: Option<i64>,            // Meaningful if undelete or metadata_changed
     pub prev_file_size: Option<i64>,                // Meaningful if undelete or metadata_changed
@@ -91,7 +88,6 @@ pub struct ChangeCounts {
     pub add_count: i64,
     pub modify_count: i64,
     pub delete_count: i64,
-    pub type_change_count: i64,
     pub no_change_count: i64,
 }
 
@@ -111,7 +107,6 @@ pub enum ChangeType {
     Add,
     Delete,
     Modify,
-    TypeChange,
     NoChange,
 }
 
@@ -121,7 +116,6 @@ impl ChangeType {
             Self::Add => "A",
             Self::Delete => "D",
             Self::Modify => "M",
-            Self::TypeChange => "T",
             Self::NoChange => "N",
         }
     }
@@ -141,7 +135,6 @@ impl FromStr for ChangeType {
             "A" => Ok(Self::Add),
             "D" => Ok(Self::Delete),
             "M" => Ok(Self::Modify),
-            "T" => Ok(Self::TypeChange),
             "N" => Ok(Self::NoChange),
             _ => Err(FsPulseError::Error(format!("Invalid change type: '{}'", s))), 
         }
@@ -150,7 +143,6 @@ impl FromStr for ChangeType {
 
 impl Change {
     // TODO: Implement accessors for other fields
-    pub fn prev_item_type(&self) -> Option<&str> { self.prev_item_type.as_deref() }
     pub fn prev_hash(&self) -> Option<&str> { self.prev_hash.as_deref() }
     pub fn prev_validation_state(&self) -> Option<&str> {self.prev_validation_state.as_deref()}
 
@@ -165,8 +157,7 @@ impl Change {
                 scan_id,
                 item_id,
                 change_type,
-                prev_is_tombstone,
-                prev_item_type,
+                is_undelete,
                 metadata_changed,
                 prev_last_modified,
                 prev_file_size,
@@ -188,18 +179,17 @@ impl Change {
                 scan_id: row.get(3)?,
                 item_id: row.get(4)?,
                 change_type: row.get(5)?,
-                prev_is_tombstone: row.get(6)?,
-                prev_item_type: row.get(7)?,
-                metadata_changed: row.get(8)?,
-                prev_last_modified: row.get(9)?,
-                prev_file_size: row.get(10)?,
-                hash_changed: row.get(11)?,
-                prev_last_hash_scan_id: row.get(12)?,
-                prev_hash: row.get(13)?,
-                validation_changed: row.get(14)?,
-                prev_last_validation_scan_id: row.get(15)?,
-                prev_validation_state: row.get(16)?,
-                prev_validation_state_desc: row.get(17)?
+                is_undelete: row.get(6)?,
+                metadata_changed: row.get(7)?,
+                prev_last_modified: row.get(8)?,
+                prev_file_size: row.get(9)?,
+                hash_changed: row.get(10)?,
+                prev_last_hash_scan_id: row.get(11)?,
+                prev_hash: row.get(12)?,
+                validation_changed: row.get(13)?,
+                prev_last_validation_scan_id: row.get(14)?,
+                prev_validation_state: row.get(15)?,
+                prev_validation_state_desc: row.get(16)?
             })
         )
         .optional()
@@ -301,18 +291,17 @@ impl Change {
                     scan_id: row.get(3)?,
                     item_id: row.get(4)?,
                     change_type: row.get(5)?,
-                    prev_is_tombstone: row.get(6)?,
-                    prev_item_type: row.get(7)?,
-                    metadata_changed: row.get(8)?,
-                    prev_last_modified: row.get(9)?,
-                    prev_file_size: row.get(10)?,
-                    hash_changed: row.get(11)?,
-                    prev_last_hash_scan_id: row.get(12)?,
-                    prev_hash: row.get(13)?,
-                    validation_changed: row.get(14)?,
-                    prev_last_validation_scan_id: row.get(15)?,
-                    prev_validation_state: row.get(16)?,
-                    prev_validation_state_desc: row.get(17)?
+                    is_undelete: row.get(6)?,
+                    metadata_changed: row.get(7)?,
+                    prev_last_modified: row.get(8)?,
+                    prev_file_size: row.get(9)?,
+                    hash_changed: row.get(10)?,
+                    prev_last_hash_scan_id: row.get(11)?,
+                    prev_hash: row.get(12)?,
+                    validation_changed: row.get(13)?,
+                    prev_last_validation_scan_id: row.get(14)?,
+                    prev_validation_state: row.get(15)?,
+                    prev_validation_state_desc: row.get(16)?
                 }
             )
         })?;
@@ -351,7 +340,6 @@ impl ChangeCounts {
                 ChangeType::Delete => change_counts.set_count_of(ChangeType::Delete, count),
                 ChangeType::Modify => change_counts.set_count_of(ChangeType::Modify, count),
                 ChangeType::NoChange => change_counts.set_count_of(ChangeType::Modify, count),
-                ChangeType::TypeChange => change_counts.set_count_of(ChangeType::TypeChange, count),
             }
         }
 
@@ -363,7 +351,6 @@ impl ChangeCounts {
             ChangeType::Add => self.add_count,
             ChangeType::Delete => self.delete_count,
             ChangeType::Modify => self.modify_count,
-            ChangeType::TypeChange => self.type_change_count,
             ChangeType::NoChange => self.no_change_count,
         }
     }
@@ -373,7 +360,6 @@ impl ChangeCounts {
             ChangeType::Add => &mut self.add_count,
             ChangeType::Delete => &mut self.delete_count,
             ChangeType::Modify => &mut self.modify_count,
-            ChangeType::TypeChange => &mut self.type_change_count,
             ChangeType::NoChange => &mut self.no_change_count,
        };
        *target = count;   

@@ -236,7 +236,6 @@ impl Reports {
             Column::new(|f, (_, c): &(Scan, ChangeCounts)| write!(f, "{}", c.count_of(ChangeType::Add))).header("Adds").right().min_width(7),
             Column::new(|f, (_, c): &(Scan, ChangeCounts)| write!(f, "{}", c.count_of(ChangeType::Modify))).header("Modifies").right().min_width(7),
             Column::new(|f, (_, c): &(Scan, ChangeCounts)| write!(f, "{}", c.count_of(ChangeType::Delete))).header("Deletes").right().min_width(7),
-            Column::new(|f, (_, c): &(Scan, ChangeCounts)| write!(f, "{}", c.count_of(ChangeType::TypeChange))).header("T Changes").right().min_width(7),
         ]).title(title).empty_row(empty_row)
     }
 
@@ -284,8 +283,7 @@ impl Reports {
             Column::new(|f, c: &Change| write!(f, "{}", c.change_type)).header("Change Type").center(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_type)).header("Item Type").center(),
             Column::new(|f, c: &Change| write!(f, "{}", c.item_path)).header("Item Path").left(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.prev_is_tombstone))).header("Prev Tomb").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.prev_item_type()))).header("Prev Item Type").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.is_undelete))).header("Undelete").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.metadata_changed))).header("MD Changed").center(),
 
             Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_last_modified))).header("Prev Modified").center(),
