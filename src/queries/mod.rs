@@ -2,6 +2,7 @@
 use pest_derive::Parser;
 
 pub mod query;
+mod filters;
 
 pub use query::Query;
 

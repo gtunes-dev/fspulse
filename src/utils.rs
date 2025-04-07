@@ -1,7 +1,9 @@
 use std::{path::{Path, MAIN_SEPARATOR_STR}, time::Duration};
 
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+use crate::error::FsPulseError;
 
 const NO_DIR_SEPARATOR: &str = "";
 
@@ -78,6 +80,48 @@ impl Utils {
 
     pub fn format_db_time_short_or_none(db_time: Option<i64>) -> String {
         db_time.map_or("-".to_string(), Self::format_db_time_short)
+    }
+
+    /// Parses a single date string (yyyy-mm-dd) and returns the NaiveDateTime values for:
+    /// - start of day (00:00:00)
+    /// - end of day (23:59:59)
+    fn parse_date_bounds(date_str: &str) -> Result<(NaiveDateTime, NaiveDateTime), FsPulseError> {
+        let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            .map_err(|_| FsPulseError::Error(format!("Failed to parse '{}' as a valid date", date_str)))?;
+        
+        let start_dt = date
+            .and_hms_opt(0, 0, 0)
+            .ok_or_else(|| FsPulseError::Error(format!("Failed to create start time for '{}'", date_str)))?;
+        let end_dt = date
+            .and_hms_opt(23, 59, 59)
+            .ok_or_else(|| FsPulseError::Error(format!("Failed to create end time for '{}'", date_str)))?;
+        Ok((start_dt, end_dt))
+    }
+
+    /// For a single date, returns (start_timestamp, end_timestamp)
+    /// where start is the beginning (00:00:00) of that day and end is the end (23:59:59) of that day.
+    pub fn single_date_bounds(date_str: &str) -> Result<(i64, i64), FsPulseError> {
+        let (start_dt, end_dt) = Self::parse_date_bounds(date_str)?;
+        let start_ts = Utc.from_utc_datetime(&start_dt).timestamp();
+        let end_ts = Utc.from_utc_datetime(&end_dt).timestamp();
+        Ok((start_ts, end_ts))
+    }
+
+    /// For a range of dates, returns (start_timestamp, end_timestamp)
+    /// where start is the beginning (00:00:00) of the first date and end is the end (23:59:59) of the second date.
+    /// Returns an error if the first date is after the second.
+    pub fn range_date_bounds(start_date_str: &str, end_date_str: &str) -> Result<(i64, i64), FsPulseError> {
+        // Reuse our helper to get the respective bounds.
+        let (start_dt, _) = Self::parse_date_bounds(start_date_str)?;
+        let (_, end_dt) = Self::parse_date_bounds(end_date_str)?;
+        
+        if start_dt > end_dt {
+            return Err(FsPulseError::Error(format!("Start date '{}' is after end date '{}'", start_date_str, end_date_str)));
+        }
+        
+        let start_ts = Utc.from_utc_datetime(&start_dt).timestamp();
+        let end_ts = Utc.from_utc_datetime(&end_dt).timestamp();
+        Ok((start_ts, end_ts))
     }
 
     /* 
