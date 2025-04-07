@@ -32,8 +32,8 @@ pub struct Item {
     is_tombstone: bool,
 
     // Metadata property group
-    modified: Option<i64>,
-    size: Option<i64>,
+    mod_date: Option<i64>,
+    file_size: Option<i64>,
 
     // Hash property group
     last_hash_scan_id: Option<i64>,
@@ -41,7 +41,7 @@ pub struct Item {
 
     // Validation property group
     last_validation_scan_id: Option<i64>,
-    validation_state: String,
+    validity_state: String,
     validation_error: Option<String>,
 }
 
@@ -53,12 +53,12 @@ impl Item {
         item_type,
         last_scan_id, 
         is_tombstone,
-        modified,
-        size,
+        mod_date,
+        file_size,
         last_hash_scan_id,
         file_hash,
         last_validation_scan_id,
-        validation_state,
+        validity_state,
         validation_error";
     
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
@@ -69,12 +69,12 @@ impl Item {
             item_type: row.get(3)?,
             last_scan_id: row.get(4)?,
             is_tombstone: row.get(5)?,
-            modified: row.get(6)?,
-            size: row.get(7)?,
+            mod_date: row.get(6)?,
+            file_size: row.get(7)?,
             last_hash_scan_id: row.get(8)?,
             file_hash: row.get(9)?,
             last_validation_scan_id: row.get(10)?,
-            validation_state: row.get(11)?,
+            validity_state: row.get(11)?,
             validation_error: row.get(12)?,
         })
     }
@@ -115,13 +115,13 @@ impl Item {
     pub fn item_type(&self) -> &str { &self.item_type }
     pub fn last_scan_id(&self) -> i64 { self.last_scan_id }
     pub fn is_tombstone(&self) -> bool { self.is_tombstone }
-    pub fn modified(&self) -> Option<i64> { self.modified }
-    pub fn size(&self) -> Option<i64> { self.size }
+    pub fn mod_date(&self) -> Option<i64> { self.mod_date }
+    pub fn file_size(&self) -> Option<i64> { self.file_size }
     pub fn last_hash_scan_id(&self) -> Option<i64> { self.last_hash_scan_id }
     pub fn file_hash(&self) -> Option<&str> { self.file_hash.as_deref() }
     pub fn last_validation_scan_id(&self) -> Option<i64> { self.last_validation_scan_id }
-    pub fn validation_state_as_str(&self) -> &str { &self.validation_state }
-    pub fn validation_state(&self) -> ValidationState { ValidationState::from_string(&self.validation_state) }
+    pub fn validity_state_as_str(&self) -> &str { &self.validity_state }
+    pub fn validity_state(&self) -> ValidationState { ValidationState::from_string(&self.validity_state) }
     pub fn validation_error(&self) -> Option<&str> {self.validation_error.as_deref()}
 
     pub fn count_analyzed_items(db: &Database, scan_id: i64) -> Result<i64, FsPulseError> {
@@ -181,7 +181,7 @@ impl Item {
     {
         let sql = format!("SELECT {}
              FROM items
-             WHERE root_id = ? AND is_tombstone = 0 AND validation_state = 'I'
+             WHERE root_id = ? AND is_tombstone = 0 AND validity_state = 'I'
              ORDER BY path ASC", Item::ITEM_COLUMNS);
 
         let mut stmt = db.conn().prepare(&sql)?;

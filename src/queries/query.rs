@@ -115,9 +115,11 @@ struct ChangesQueryRow {
     #[allow(dead_code)]
     hash_changed: Option<bool>,
     #[allow(dead_code)]
-    validation_changed: Option<bool>,
+    validity_changed: Option<bool>,
     #[allow(dead_code)]
-    validation_state: Option<String>,
+    validity_state_old: Option<String>,
+    #[allow(dead_code)]
+    validity_state_new: Option<String>,
 }
 
 impl ChangesQueryRow {
@@ -128,8 +130,9 @@ impl ChangesQueryRow {
         change_type,
         metadata_changed,
         hash_changed,
-        validation_changed,
-        validation_state";
+        validity_changed,
+        validity_state_old,
+        validity_state_new";
 
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(
@@ -140,8 +143,9 @@ impl ChangesQueryRow {
                 change_type: row.get(3)?, 
                 metadata_changed: row.get(4)?, 
                 hash_changed: row.get(5)?, 
-                validation_changed: row.get(6)?,
-                validation_state: row.get(7)?,
+                validity_changed: row.get(6)?,
+                validity_state_old: row.get(7)?,
+                validity_state_new: row.get(8)?,
             }
         )
     }

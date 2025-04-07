@@ -555,7 +555,7 @@ impl Scanner {
             };
         }
         
-        let mut new_validation_state = ValidationState::Unknown;
+        let mut new_validity_state = ValidationState::Unknown;
         let mut new_validation_error = None;
 
         if scan.validating() {
@@ -574,25 +574,25 @@ impl Scanner {
                         thread_prog.enable_steady_tick(Duration::from_millis(250));
                     }
                     match v.validate(path, thread_prog) {
-                        Ok((res_validation_state, res_validation_error)) => {
-                            new_validation_state = res_validation_state;
+                        Ok((res_validity_state, res_validation_error)) => {
+                            new_validity_state = res_validity_state;
                             new_validation_error = res_validation_error;
                         },
                         Err(e) => {
                             let e_str = e.to_string();
                             error!("Error validating '{}': {}", &display_path, e_str);
-                            new_validation_state = ValidationState::Invalid;
+                            new_validity_state = ValidationState::Invalid;
                         }
                     }
                     if steady_tick {
                         thread_prog.disable_steady_tick();
                     }
                 },
-                None => new_validation_state = ValidationState::NoValidator,
+                None => new_validity_state = ValidationState::NoValidator,
             }
         }
 
-        if let Err(error) = Scanner::update_item_analysis(db, &scan, &item, new_hash, new_validation_state, new_validation_error) {
+        if let Err(error) = Scanner::update_item_analysis(db, &scan, &item, new_hash, new_validity_state, new_validation_error) {
             let e_str = error.to_string();
             error!("Error updating item analysis '{}': {}", &display_path, e_str);
         }
@@ -613,16 +613,16 @@ impl Scanner {
         let path_str = path.to_string_lossy();
         let existing_item = Item::get_by_root_path_type(db, scan.root_id(), &path_str, item_type)?;
 
-        let modified = metadata.modified()
+        let mod_date = metadata.modified()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs() as i64);
 
-        let size = if metadata.is_file() { Some(metadata.len() as i64) } else { None };
+        let file_size = if metadata.is_file() { Some(metadata.len() as i64) } else { None };
 
         // If the item was already processed for this scan, just skip it. We intentionally
         // do not handle the case where the item was seen within this scan, but has since
-        // either been modified or has changed type. There are edge cases where this might
+        // either been mod_date or has changed type. There are edge cases where this might
         // cause strangeness in reports such as when an item was seen as a file, the scan
         // was resumed and the item has changed into a directory. In this case, we'll still
         // traverse the children within the resumed scan and a tree report will look odd
@@ -631,7 +631,7 @@ impl Scanner {
                 return Ok(())
             }
 
-            let metadata_changed = existing_item.modified() != modified || existing_item.size() != size;
+            let metadata_changed = existing_item.mod_date() != mod_date || existing_item.file_size() != file_size;
             
             if existing_item.is_tombstone() {
                 // Rehydrate a tombstone
@@ -639,35 +639,47 @@ impl Scanner {
                 let rows_updated = tx.execute(
                     "UPDATE items SET 
                             is_tombstone = 0, 
-                            modified = ?, 
-                            size = ?, 
+                            mod_date = ?, 
+                            file_size = ?, 
                             file_hash = NULL, 
-                            validation_state = ?,
+                            validity_state = ?,
                             validation_error = NULL,
                             last_scan_id = ?,
                             last_hash_scan_id = NULL, 
                             last_validation_scan_id = NULL 
                         WHERE id = ?", 
-                    (modified, size, ValidationState::Unknown.to_string(), scan.id(), existing_item.id()))?;
+                    (mod_date, file_size, ValidationState::Unknown.to_string(), scan.id(), existing_item.id()))?;
                 if rows_updated == 0 {
                         return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
                 }
 
                 tx.execute(
                     "INSERT INTO changes 
-                        (scan_id, item_id, change_type, is_undelete, prev_modified, prev_size, hash_changed, prev_hash, validation_changed, prev_validation_state, prev_validation_error) 
+                        (
+                            scan_id, 
+                            item_id, 
+                            change_type, 
+                            is_undelete, 
+                            mod_date_old, 
+                            mod_date_new, 
+                            file_size_old, 
+                            file_size_new, 
+                            hash_old,
+                            validity_state_old, 
+                            validation_error_old
+                        ) 
                     VALUES 
-                        (?, ?, ?, 1, ?, ?, ?, ?, ?)", 
+                        (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)", 
                     (
                         scan.id(), 
                         existing_item.id(), 
                         ChangeType::Add.as_str(), 
-                        existing_item.modified(),   
-                        existing_item.size(),
-                        false,                                      // hash_changed - initially false. will be changed if file is hashed during analysis
+                        existing_item.mod_date(),
+                        mod_date,
+                        existing_item.file_size(),
+                        file_size,
                         existing_item.file_hash(),
-                        false,                                      // validation_changed - initially false. will be changed if file is validated during analysis
-                        existing_item.validation_state_as_str(),
+                        existing_item.validity_state_as_str(),
                         existing_item.validation_error()
                     ))?;
 
@@ -677,24 +689,36 @@ impl Scanner {
 
                 let rows_updated = tx.execute(
                     "UPDATE items SET
-                        modified = ?, 
-                        size = ?,             
+                        mod_date = ?, 
+                        file_size = ?,             
                         last_scan_id = ? 
                     WHERE id = ?", 
-                    (modified, size, scan.id(), existing_item.id()))?;
+                    (mod_date, file_size, scan.id(), existing_item.id()))?;
                     if rows_updated == 0 {
                         return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
                     }
                     tx.execute(
                         "INSERT INTO changes 
-                            (scan_id, item_id, change_type, metadata_changed, prev_modified, prev_size, hash_changed, validation_changed) 
+                            (
+                                scan_id, 
+                                item_id, 
+                                change_type, 
+                                metadata_changed, 
+                                mod_date_old, 
+                                mod_date_new, 
+                                file_size_old, 
+                                file_size_new, 
+                                hash_changed, 
+                                validity_changed) 
                             VALUES (?, ?, ?, 1, ?, ?, 0, 0)", 
                     (
                         scan.id(), 
                         existing_item.id(), 
                         ChangeType::Modify.as_str(),
-                        metadata_changed.then_some(existing_item.modified()),
-                        metadata_changed.then_some(existing_item.size())
+                        metadata_changed.then_some(existing_item.mod_date()),
+                        metadata_changed.then_some(mod_date),
+                        metadata_changed.then_some(existing_item.file_size()),
+                        metadata_changed.then_some(file_size),
                     )
                 )?;
 
@@ -714,13 +738,13 @@ impl Scanner {
             // Item is new, insert into items and changes tables
             let tx = db.conn_mut().transaction()?;
 
-            tx.execute("INSERT INTO items (root_id, path, item_type, modified, size, validation_state, last_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (scan.root_id(), &path_str, item_type.as_str(), modified, size, ValidationState::Unknown.to_string(), scan.id()))?;
+            tx.execute("INSERT INTO items (root_id, path, item_type, mod_date, file_size, validity_state, last_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (scan.root_id(), &path_str, item_type.as_str(), mod_date, file_size, ValidationState::Unknown.to_string(), scan.id()))?;
 
             let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
-            tx.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, hash_changed, validation_changed) VALUES (?, ?, ?, 0, 0, 0)",
-                (scan.id(), item_id, ChangeType::Add.as_str()))?;
+            tx.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, file_size_new, hash_changed, validity_changed) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
+                (scan.id(), item_id, ChangeType::Add.as_str(), mod_date, file_size))?;
             tx.commit()?;
         }
         
@@ -732,24 +756,26 @@ impl Scanner {
         scan: &Scan,
         item: &Item,
         new_hash: Option<String>,
-        new_validation_state: ValidationState,
+        new_validity_state: ValidationState,
         new_validation_error: Option<String>,
     ) -> Result<(), FsPulseError> {
         let mut update_changes = false;
 
         // values to use when updating the changes table
         let mut c_hash_changed = Some(false);
-        let mut c_prev_last_hash_scan_id = None;
-        let mut c_prev_hash = None;
-        let mut c_validation_changed = Some(false);
-        let mut c_validation_state = None;
-        let mut c_prev_last_validation_scan_id = None;
-        let mut c_prev_validation_state = None;
-        let mut c_prev_validation_error = None;
+        let mut c_last_hash_scan_id_old = None;
+        let mut c_hash_old = None;
+        let mut c_hash_new = None;
+        let mut c_validity_changed = Some(false);
+        let mut c_last_validation_scan_id_old = None;
+        let mut c_validity_state_old = None;
+        let mut c_validity_state_new = None;
+        let mut c_validation_error_old = None;
+        let mut c_validation_error_new = None;
 
         // values to use in the item update
         let mut i_hash = item.file_hash();
-        let mut i_validation_state = item.validation_state();
+        let mut i_validity_state = item.validity_state();
         let mut i_validation_error = item.validation_error();
         let mut i_last_hash_scan_id = item.last_hash_scan_id();
         let mut i_last_validation_scan_id = item.last_validation_scan_id();
@@ -759,13 +785,9 @@ impl Scanner {
                 // if either the hash or validation state changes, we update changes
                 update_changes = true;
                 c_hash_changed = Some(true);
-
-                // if the hash was previously computed, write the old values
-                // otherwise use the defaults assigned earlier
-                if item.last_hash_scan_id().is_some() {
-                    c_prev_last_hash_scan_id = item.last_hash_scan_id();
-                    c_prev_hash = item.file_hash();
-                }
+                c_last_hash_scan_id_old = item.last_hash_scan_id();
+                c_hash_old = item.file_hash();
+                c_hash_new = new_hash.as_deref();
                 
                 i_hash = new_hash.as_deref();
             }
@@ -775,22 +797,18 @@ impl Scanner {
         }
 
         if scan.validating() {
-            if (item.validation_state() != new_validation_state) || (item.validation_error() != new_validation_error.as_deref()) {
+            if (item.validity_state() != new_validity_state) || (item.validation_error() != new_validation_error.as_deref()) {
                 // if either the hash or validation state changes, we update changes
                 update_changes = true;
-                c_validation_changed = Some(true);
-                c_validation_state = Some(new_validation_state.as_str());
-
-                // if the item was previously validated, write the old values
-                // otherwise use the defaults assigned earlier
-                if item.last_validation_scan_id().is_some() {
-                    c_prev_last_validation_scan_id = item.last_validation_scan_id();
-                    c_prev_validation_state = Some(item.validation_state().as_str());
-                    c_prev_validation_error = item.validation_error();
-                }
+                c_validity_changed = Some(true);
+                c_last_validation_scan_id_old = item.last_validation_scan_id();
+                c_validity_state_old = Some(item.validity_state().as_str());
+                c_validity_state_new = Some(new_validity_state.as_str());
+                c_validation_error_old = item.validation_error();
+                c_validation_error_new = new_validation_error.as_deref();
 
                 // always update the item when the validation state changes
-                i_validation_state = new_validation_state;
+                i_validity_state = new_validity_state;
                 i_validation_error = new_validation_error.as_deref();
             }
 
@@ -807,40 +825,47 @@ impl Scanner {
         if update_changes {
             tx.execute(
                 "INSERT INTO changes (
-                    scan_id, 
-                    item_id, 
-                    change_type, 
-                    metadata_changed, 
-                    hash_changed, 
-                    prev_last_hash_scan_id, 
-                    prev_hash, 
-                    validation_changed,
-                    validation_state,
-                    prev_last_validation_scan_id, 
-                    prev_validation_state, 
-                    prev_validation_error)
-                    VALUES (?, ?, 'M', 0, ?, ?, ?, ?, ?, ?, ?, ?)
+                        scan_id, 
+                        item_id, 
+                        change_type, 
+                        metadata_changed, 
+                        hash_changed, 
+                        last_hash_scan_id_old, 
+                        hash_old,
+                        hash_new,
+                        validity_changed,
+                        last_validation_scan_id_old,
+                        validity_state_old, 
+                        validity_state_new,
+                        validation_error_old,
+                        validation_error_new
+                    )
+                    VALUES (?, ?, 'M', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scan_id, item_id) 
                     DO UPDATE SET
                         hash_changed = excluded.hash_changed,
-                        prev_last_hash_scan_id = excluded.prev_last_hash_scan_id,
-                        prev_hash = excluded.prev_hash,
-                        validation_changed = excluded.validation_changed,
-                        validation_state = excluded.validation_state,
-                        prev_last_validation_scan_id = excluded.prev_last_validation_scan_id,
-                        prev_validation_state = excluded.prev_validation_state,
-                        prev_validation_error = excluded.prev_validation_error",
+                        last_hash_scan_id_old = excluded.last_hash_scan_id_old,
+                        hash_old = excluded.hash_old,
+                        hash_new = excluded.hash_new,
+                        validity_changed = excluded.validity_changed,
+                        last_validation_scan_id_old = excluded.last_validation_scan_id_old,
+                        validity_state_old = excluded.validity_state_old,
+                        validity_state_new = excluded.validity_state_new,
+                        validation_error_old = excluded.validation_error_old,
+                        validation_error_new = excluded.validation_error_new",
                 rusqlite::params![
                     scan.id(), 
                     item.id(),
                     c_hash_changed,
-                    c_prev_last_hash_scan_id,
-                    c_prev_hash,
-                    c_validation_changed,
-                    c_validation_state,
-                    c_prev_last_validation_scan_id,
-                    c_prev_validation_state, 
-                    c_prev_validation_error,
+                    c_last_hash_scan_id_old,
+                    c_hash_old,
+                    c_hash_new,
+                    c_validity_changed,
+                    c_last_validation_scan_id_old,
+                    c_validity_state_old, 
+                    c_validity_state_new,
+                    c_validation_error_old,
+                    c_validation_error_new,
                 ],
             )?;
         }
@@ -850,14 +875,14 @@ impl Scanner {
             "UPDATE items 
             SET 
                 file_hash = ?,
-                validation_state = ?,
+                validity_state = ?,
                 validation_error = ?,
                 last_hash_scan_id = ?,
                 last_validation_scan_id = ?
             WHERE id = ?",
             rusqlite::params![
                 i_hash,
-                i_validation_state.as_str(),
+                i_validity_state.as_str(),
                 i_validation_error,
                 i_last_hash_scan_id,
                 i_last_validation_scan_id,

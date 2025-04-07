@@ -331,12 +331,12 @@ impl Scan {
             SET (
                 item_type,
                 is_tombstone,
-                modified,
-                size,
+                mod_date,
+                file_size,
                 last_hash_scan_id,
                 file_hash,
                 last_validation_scan_id,
-                validation_state,
+                validity_state,
                 validation_error,
                 last_scan_id
             ) =
@@ -344,13 +344,13 @@ impl Scan {
                 SELECT 
                     CASE WHEN c.change_type = 'T' THEN c.prev_item_type ELSE items.item_type END,
                     CASE WHEN c.change_type = 'A' THEN 1 ELSE items.is_tombstone END,
-                    c.prev_modified,
-                    c.prev_size,
-                    c.prev_last_hash_scan_id,
-                    c.prev_hash,
-                    c.prev_last_validation_scan_id,
-                    c.prev_validation_state,
-                    c.prev_validation_error,
+                    c.mod_date_old,
+                    c.file_size_old,
+                    c.last_hash_scan_id_old,
+                    c.hash_old,
+                    c.last_validation_scan_id_old,
+                    c.validity_state_old,
+                    c.validation_error_old,
                     ?1
                 FROM changes c
                 WHERE c.item_id = items.id
@@ -372,24 +372,24 @@ impl Scan {
         tx.execute(
             "UPDATE items
             SET (
-                modified, 
-                size, 
+                mod_date, 
+                file_size, 
                 last_hash_scan_id, 
                 file_hash,
                 last_validation_scan_id, 
-                validation_state, 
+                validity_state, 
                 validation_error, 
                 last_scan_id
             ) =
             (
             SELECT 
-                CASE WHEN c.metadata_changed = 1 THEN COALESCE(c.prev_modified, items.modified) ELSE items.modified END,
-                CASE WHEN c.metadata_changed = 1 THEN COALESCE(c.prev_size, items.size) ELSE items.size END,
-                CASE WHEN c.hash_changed = 1 THEN c.prev_last_hash_scan_id ELSE items.last_hash_scan_id END,
-                CASE WHEN c.hash_changed = 1 THEN c.prev_hash ELSE items.file_hash END,
-                CASE WHEN c.validation_changed = 1 THEN c.prev_last_validation_scan_id ELSE items.last_validation_scan_id END,
-                CASE WHEN c.validation_changed = 1 THEN c.prev_validation_state ELSE items.validation_state END,
-                CASE WHEN c.validation_changed = 1 THEN c.prev_validation_error ELSE items.validation_error END,
+                CASE WHEN c.metadata_changed = 1 THEN COALESCE(c.mod_date_old, items.mod_date) ELSE items.mod_date END,
+                CASE WHEN c.metadata_changed = 1 THEN COALESCE(c.file_size_old, items.file_size) ELSE items.size END,
+                CASE WHEN c.hash_changed = 1 THEN c.last_hash_scan_id_old ELSE items.last_hash_scan_id END,
+                CASE WHEN c.hash_changed = 1 THEN c.hash_old ELSE items.file_hash END,
+                CASE WHEN c.validity_changed = 1 THEN c.last_validation_scan_id_old ELSE items.last_validation_scan_id END,
+                CASE WHEN c.validity_changed = 1 THEN c.validity_state_old ELSE items.validity_state END,
+                CASE WHEN c.validity_changed = 1 THEN c.validation_error_old ELSE items.validation_error END,
                 ?1
             FROM changes c
             WHERE c.item_id = items.id 

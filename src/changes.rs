@@ -16,16 +16,20 @@ const SQL_FOR_EACH_CHANGE_IN_SCAN: &str =
         change_type,
         is_undelete,
         metadata_changed,
-        changes.prev_modified,
-        prev_size,
+        changes.mod_date_old,
+        changes.mod_date_new,
+        file_size_old,
+        file_size_new,
         hash_changed,
-        prev_last_hash_scan_id,
-        prev_hash,
-        validation_changed,
-        validation_state,
-        prev_last_validation_scan_id,
-        prev_validation_state,
-        prev_validation_error
+        last_hash_scan_id_old,
+        hash_old,
+        hash_new,
+        validity_changed,
+        last_validation_scan_id_old,
+        validity_state_old,
+        validity_state_new,
+        validation_error_old,
+        validation_error_new
     FROM changes
     JOIN items ON items.id = changes.item_id
     WHERE changes.scan_id = ?
@@ -41,16 +45,20 @@ const SQL_FOR_EACH_CHANGE_IN_ITEM: &str =
         change_type,
         is_undelete,
         metadata_changed,
-        changes.prev_modified,
-        prev_size,
+        changes.mod_date_old,
+        changes.mod_date_new,
+        file_size_old,
+        file_size_new,
         hash_changed,
-        prev_last_hash_scan_id,
-        prev_hash,
-        validation_changed,
-        validation_state,
-        prev_last_validation_scan_id,
-        prev_validation_state,
-        prev_validation_error
+        last_hash_scan_id_old,
+        hash_old,
+        hash_new,
+        validity_changed,
+        last_validation_scan_id_old,
+        validation_state_old,
+        validation_state_new,
+        validation_error_old,
+        validation_error_new
     FROM changes
     JOIN items ON items.id = changes.item_id
     WHERE changes.item_id = ?
@@ -64,19 +72,26 @@ pub struct Change {
     pub change_type: String,
     pub is_undelete: Option<bool>,                  // Present if "A". True if add is undelete
     pub metadata_changed: Option<bool>,             // Present if "M". True if metadata changed, else False
-    pub prev_modified: Option<i64>,                 // Meaningful if undelete or metadata_changed
-    pub prev_size: Option<i64>,                     // Meaningful if undelete or metadata_changed
+    pub mod_date_old: Option<i64>,                 // Meaningful if undelete or metadata_changed
+    pub mod_date_new: Option<i64>,                  // Meaningful if metdata_changed
+    pub file_size_old: Option<i64>,                // Meaningful if undelete or metadata_changed
+    pub file_size_new: Option<i64>,                // Meaningful if undelete or metadata_changed
     pub hash_changed: Option<bool>,                 // Present if "M". True if hash changed, else False
     #[allow(dead_code)]
-    pub prev_last_hash_scan_id: Option<i64>,        // Present if "M" and hash_changed
-    pub prev_hash: Option<String>,                  // Meaningful if undelete or hash_changed
-    pub validation_changed: Option<bool>,           // Present if "M", True if validation changed, else False
-    pub validation_state: Option<String>,           // Validation state of the item if validation_changed = true
+    pub last_hash_scan_id_old: Option<i64>,        // Present if "M" and hash_changed
+    pub hash_old: Option<String>,                  // Meaningful if undelete or hash_changed
     #[allow(dead_code)]
-    pub prev_last_validation_scan_id: Option<i64>,  // Present if "M" and validation changed
-    pub prev_validation_state : Option<String>,     // Meaningful if undelete or validation_changed
+    pub hash_new: Option<String>,                   // Meaningful if hash_changed
+    pub validity_changed: Option<bool>,             // Present if "M", True if validation changed, else False
     #[allow(dead_code)]
-    pub prev_validation_error: Option<String>,      // Meaningful if undelete validation_changed
+    pub last_validation_scan_id_old: Option<i64>,  // Present if "M" and validation changed
+    pub validity_state_new: Option<String>,           // Validation state of the item if validity_changed = true
+    #[allow(dead_code)]
+    pub validity_state_old : Option<String>,     // Meaningful if undelete or validity_changed
+    #[allow(dead_code)]
+    pub validation_error_old: Option<String>,      // Meaningful if undelete or validity_changed
+    #[allow(dead_code)]
+    pub validation_error_new: Option<String>,       // Meaningful if validity changed
     
     // $TODO: Remove this. Was a bad idea to have this in the first place
     // Changes should be a simple struct that models a Changes entity
@@ -146,10 +161,10 @@ impl FromStr for ChangeType {
 
 impl Change {
     // TODO: Implement accessors for other fields
-    pub fn prev_hash(&self) -> Option<&str> { self.prev_hash.as_deref() }
-    pub fn validation_state(&self) -> Option<&str> { self.validation_state.as_deref()}
-    pub fn prev_validation_state(&self) -> Option<&str> {self.prev_validation_state.as_deref()}
-
+    pub fn hash_old(&self) -> Option<&str> { self.hash_old.as_deref() }
+    pub fn validity_state_old(&self) -> Option<&str> {self.validity_state_old.as_deref()}
+    pub fn validity_state_new(&self) -> Option<&str> { self.validity_state_new.as_deref()}
+    
     pub fn get_by_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = db.conn();
     
@@ -163,40 +178,50 @@ impl Change {
                 change_type,
                 is_undelete,
                 metadata_changed,
-                prev_modified,
-                prev_size,
+                mod_date_old,
+                mod_date_new,
+                file_size_old,
+                file_size_new,
                 hash_changed,
-                prev_last_hash_scan_id,
-                prev_hash,
-                validation_changed,
-                validation_state,
-                prev_last_validation_scan_id,
-                prev_validation_state,
-                prev_validation_error
+                last_hash_scan_id_old,
+                hash_old,
+                hash_new,
+                validity_changed,
+                last_validation_scan_id_old,
+                validity_state_old,
+                validity_state_new,
+                validation_error_old,
+                validation_error_new
             FROM changes
             JOIN items ON items.id = changes.item_id
             WHERE changes.id = ?", 
             [change_id], 
-            |row| Ok(Change {
-                item_type: row.get(0)?,
-                item_path: row.get(1)?,
-                id: row.get(2)?,
-                scan_id: row.get(3)?,
-                item_id: row.get(4)?,
-                change_type: row.get(5)?,
-                is_undelete: row.get(6)?,
-                metadata_changed: row.get(7)?,
-                prev_modified: row.get(8)?,
-                prev_size: row.get(9)?,
-                hash_changed: row.get(10)?,
-                prev_last_hash_scan_id: row.get(11)?,
-                prev_hash: row.get(12)?,
-                validation_changed: row.get(13)?,
-                validation_state: row.get(14)?,
-                prev_last_validation_scan_id: row.get(15)?,
-                prev_validation_state: row.get(16)?,
-                prev_validation_error: row.get(17)?
-            })
+            |row| Ok(
+                Change {
+                    item_type: row.get(0)?,
+                    item_path: row.get(1)?,
+                    id: row.get(2)?,
+                    scan_id: row.get(3)?,
+                    item_id: row.get(4)?,
+                    change_type: row.get(5)?,
+                    is_undelete: row.get(6)?,
+                    metadata_changed: row.get(7)?,
+                    mod_date_old: row.get(8)?,
+                    mod_date_new: row.get(9)?,
+                    file_size_old: row.get(10)?,
+                    file_size_new: row.get(11)?,
+                    hash_changed: row.get(12)?,
+                    last_hash_scan_id_old: row.get(13)?,
+                    hash_old: row.get(14)?,
+                    hash_new: row.get(15)?,
+                    validity_changed: row.get(16)?,
+                    last_validation_scan_id_old: row.get(17)?,
+                    validity_state_old: row.get(18)?,
+                    validity_state_new: row.get(19)?,
+                    validation_error_old: row.get(20)?,
+                    validation_error_new: row.get(21)?,
+                }
+            )
         )
         .optional()
         .map_err(FsPulseError::Database)
@@ -204,42 +229,43 @@ impl Change {
 
     pub fn get_validation_transitions_for_scan(db: &Database, scan_id: i64) -> Result<ValidationTransitions, FsPulseError> {
         let conn = db.conn();
+        // TODO: This is unnecessarily complex now that we have old and new validation states in the change record
         let sql = 
             "SELECT 
                 COALESCE(SUM(CASE 
                     WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.prev_validation_state, 'U') = 'U'
-                        AND i.validation_state = 'V'
+                        AND COALESCE(c.validity_state_old, 'U') = 'U'
+                        AND i.validity_state = 'V'
                     THEN 1 ELSE 0 END), 0) AS unknown_to_valid,
                 COALESCE(SUM(CASE 
                     WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.prev_validation_state, 'U') = 'U'
-                        AND i.validation_state = 'I'
+                        AND COALESCE(c.validity_state_old, 'U') = 'U'
+                        AND i.validity_state = 'I'
                     THEN 1 ELSE 0 END), 0) AS unknown_to_invalid,
                 COALESCE(SUM(CASE 
                     WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.prev_validation_state, 'U') = 'U'
-                        AND i.validation_state = 'N'
+                        AND COALESCE(c.validity_state_old, 'U') = 'U'
+                        AND i.validity_state = 'N'
                     THEN 1 ELSE 0 END), 0) AS unknown_to_no_validator,
                 COALESCE(SUM(CASE 
                     WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.prev_validation_state, 'U') = 'V'
-                        AND i.validation_state = 'I'
+                        AND COALESCE(c.validity_state_old, 'U') = 'V'
+                        AND i.validity_state = 'I'
                     THEN 1 ELSE 0 END), 0) AS valid_to_invalid,
                 COALESCE(SUM(CASE 
                     WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.prev_validation_state, 'U') = 'V'
-                        AND i.validation_state = 'N'
+                        AND COALESCE(c.validity_state_old, 'U') = 'V'
+                        AND i.validity_state = 'N'
                     THEN 1 ELSE 0 END), 0) AS valid_to_no_validator,
                 COALESCE(SUM(CASE 
                     WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.prev_validation_state, 'U') = 'N'
-                        AND i.validation_state = 'V'
+                        AND COALESCE(c.validity_state_old, 'U') = 'N'
+                        AND i.validity_state = 'V'
                     THEN 1 ELSE 0 END), 0) AS no_validator_to_valid,
                 COALESCE(SUM(CASE 
                     WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.prev_validation_state, 'U') = 'N'
-                        AND i.validation_state = 'I'
+                        AND COALESCE(c.validity_state_old, 'U') = 'N'
+                        AND i.validity_state = 'I'
                     THEN 1 ELSE 0 END), 0) AS no_validator_to_invalid
             FROM changes c
                 JOIN items i ON c.item_id = i.id
@@ -299,16 +325,20 @@ impl Change {
                     change_type: row.get(5)?,
                     is_undelete: row.get(6)?,
                     metadata_changed: row.get(7)?,
-                    prev_modified: row.get(8)?,
-                    prev_size: row.get(9)?,
-                    hash_changed: row.get(10)?,
-                    prev_last_hash_scan_id: row.get(11)?,
-                    prev_hash: row.get(12)?,
-                    validation_changed: row.get(13)?,
-                    validation_state: row.get(14)?,
-                    prev_last_validation_scan_id: row.get(15)?,
-                    prev_validation_state: row.get(16)?,
-                    prev_validation_error: row.get(17)?
+                    mod_date_old: row.get(8)?,
+                    mod_date_new: row.get(9)?,
+                    file_size_old: row.get(10)?,
+                    file_size_new: row.get(11)?,
+                    hash_changed: row.get(12)?,
+                    last_hash_scan_id_old: row.get(13)?,
+                    hash_old: row.get(14)?,
+                    hash_new: row.get(15)?,
+                    validity_changed: row.get(16)?,
+                    last_validation_scan_id_old: row.get(17)?,
+                    validity_state_old: row.get(18)?,
+                    validity_state_new: row.get(19)?,
+                    validation_error_old: row.get(20)?,
+                    validation_error_new: row.get(21)?,
                 }
             )
         })?;

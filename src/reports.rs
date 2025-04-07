@@ -250,8 +250,8 @@ impl Reports {
         Stream::new(io::stdout(), vec![
             Column::new(|f, i: &Item| write!(f, "{}", i.id())).header("ID").right().min_width(6),
             Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.modified()))).header("Modified").left(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.size()))).header("Size").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.mod_date()))).header("Modified").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.file_size()))).header("Size").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_validation_scan_id()))).header("Last Valid Scan").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_string_or_none(i.validation_error()))).header("Validation Error").left(),
 
@@ -265,10 +265,10 @@ impl Reports {
             Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
             Column::new(|f, i: &Item| write!(f, "{}", i.is_tombstone())).header("Tombstone").center(),
             Column::new(|f, i: &Item| write!(f, "{}", i.item_type())).header("Type").center(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.modified()))).header("Modified").left(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.size()))).header("Size").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.mod_date()))).header("Modified").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.file_size()))).header("Size").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Hash::short_md5(&i.file_hash()))).center(),
-            Column::new(|f, i: &Item| write!(f, "{}", i.validation_state())).header("Valid State").center(),
+            Column::new(|f, i: &Item| write!(f, "{}", i.validity_state())).header("Valid State").center(),
             Column::new(|f, i: &Item| write!(f, "{}", i.last_scan_id())).header("Last Scan").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_hash_scan_id()))).header("Last Hash Scan").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_validation_scan_id()))).header("Last Valid Scan").right(),
@@ -286,13 +286,15 @@ impl Reports {
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.is_undelete))).header("Undelete").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.metadata_changed))).header("MD Changed").center(),
 
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_modified))).header("Prev Modified").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_size))).header("Prev Size").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.mod_date_old))).header("Mod Date (old)").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.mod_date_new))).header("Mod Date (new)").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.file_size_old))).header("Size (old)").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.file_size_new))).header("Size (new)").right(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.hash_changed))).header("Hash Changed").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Hash::short_md5(&c.prev_hash()))).header("Prev Hash").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.validation_changed))).header("Val Changed").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.validation_state()))).header("Val State").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.prev_validation_state()))).header("Prev Val State").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Hash::short_md5(&c.hash_old()))).header("Prev Hash").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.validity_changed))).header("Val Changed").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.validity_state_new()))).header("Val State").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.validity_state_old()))).header("Prev Val State").center(),
         ]).title(title).empty_row(empty_row)
     }
 

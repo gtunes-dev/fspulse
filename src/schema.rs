@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS items (
     is_tombstone BOOLEAN NOT NULL DEFAULT 0,  -- Indicates if the item was deleted
     
     -- Medatadata Property Group
-    modified INTEGER,                           -- Last modified timestamp
-    size INTEGER,                               -- File size in bytes (NULL for directories)
+    mod_date INTEGER,                           -- Last mod_date timestamp
+    file_size INTEGER,                               -- File size in bytes (NULL for directories)
 
     -- Hash Property Group
     last_hash_scan_id INTEGER,                -- Id of last scan during which a hash was computed
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS items (
 
     -- Validation Property Group
     last_validation_scan_id INTEGER,          -- Id of last scan during which file was validated
-    validation_state CHAR(1) NOT NULL,        -- Validation state of file
+    validity_state CHAR(1) NOT NULL,        -- Validation state of file
     validation_error TEXT,                    -- Description of invalid state
 
     FOREIGN KEY (root_id) REFERENCES roots(id),
@@ -69,28 +69,31 @@ CREATE TABLE IF NOT EXISTS changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_id INTEGER NOT NULL,                       -- The scan in which the change was detected
     item_id INTEGER NOT NULL,                       -- The file or directory that changed
-    change_type CHAR(1) NOT NULL,                   -- ('A' for added, 'D' for deleted, 'M' for modified, 'T' for type changed)
+    change_type CHAR(1) NOT NULL,                   -- ('A' for added, 'D' for deleted, 'M' for mod_date, 'T' for type changed)
 
     -- Add specific properties
     is_undelete BOOLEAN DEFAULT NULL,               -- Not Null if "A". True if item was tombstone
 
     -- Metadata Changed (Modify)
     metadata_changed BOOLEAN DEFAULT NULL,          -- Not Null if "M". True if metadata changed
-    prev_modified INTEGER DEFAULT NULL,             -- Stores the previous modified timestamp (if changed)
-    prev_size INTEGER DEFAULT NULL,                 -- Stores the previous size (if changed)
+    mod_date_old INTEGER DEFAULT NULL,              -- Stores the previous mod_date timestamp (if changed)
+    mod_date_new INTEGER DEFAULT NULL,              -- Stores the new mod_date timestamp (if changed)
+    file_size_old INTEGER DEFAULT NULL,            -- Stores the previous file_size (if changed)
+    file_size_new INTEGER DEFAULT NULL,            -- Stores the new file_size (if changed)
 
     -- Hash Properties (Add, Modify)
     hash_changed BOOLEAN DEFAULT NULL,              -- Not Null if "A" or "M". True if hash changed
-    prev_last_hash_scan_id INTEGER DEFAULT NULL,    -- Id of last scan during which a hash was computed
-    prev_hash TEXT DEFAULT NULL,                    -- Stores the previous hash value (if changed)
+    last_hash_scan_id_old INTEGER DEFAULT NULL,    -- Id of last scan during which a hash was computed
+    hash_old TEXT DEFAULT NULL,                    -- Stores the previous hash value (if changed)
+    hash_new TEXT DEFAULT NULL,                     -- Stores the new hash (if changed)
 
     -- Validation Properties (Add or Modify)
-    validation_changed BOOLEAN DEFAULT NULL,            -- Not Null if "A" or "M", True if hash changed
-    validation_state CHAR(1) DEFAULT NULL,              -- If the validation state changes, current state is stored here
-    
-    prev_last_validation_scan_id INTEGER DEFAULT NULL,  -- Id of last scan during which validation was done
-    prev_validation_state CHAR(1) DEFAULT NULL,         -- Stores the previous validation state (if changed)
-    prev_validation_error DEFAULT NULL,                 -- Stores the previous validation error (if changed)
+    validity_changed BOOLEAN DEFAULT NULL,            -- Not Null if "A" or "M", True if hash changed
+    last_validation_scan_id_old INTEGER DEFAULT NULL,  -- Id of last scan during which validation was done
+    validity_state_old CHAR(1) DEFAULT NULL,            -- Stores the previous validation state (if changed)
+    validity_state_new CHAR(1) DEFAULT NULL,          -- If the validation state changes, current state is stored here
+    validation_error_old DEFAULT NULL,                  -- Stores the previous validation error (if changed)
+    validation_error_new DEFAULT NULL,                -- Stores the new validation error (if changed)
 
     FOREIGN KEY (scan_id) REFERENCES scans(id),
     FOREIGN KEY (item_id) REFERENCES items(id),
