@@ -250,10 +250,10 @@ impl Reports {
         Stream::new(io::stdout(), vec![
             Column::new(|f, i: &Item| write!(f, "{}", i.id())).header("ID").right().min_width(6),
             Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.last_modified()))).header("Modified").left(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.file_size()))).header("Size").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.modified()))).header("Modified").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.size()))).header("Size").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.last_validation_scan_id()))).header("Last Valid Scan").right(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_string_or_none(i.validation_state_desc()))).header("Validation Desc").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_string_or_none(i.validation_error()))).header("Validation Error").left(),
 
         ]).title(title).empty_row(empty_row)
     }
@@ -265,8 +265,8 @@ impl Reports {
             Column::new(|f, i: &Item| write!(f, "{}", i.path())).header("Path").left(),
             Column::new(|f, i: &Item| write!(f, "{}", i.is_tombstone())).header("Tombstone").center(),
             Column::new(|f, i: &Item| write!(f, "{}", i.item_type())).header("Type").center(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.last_modified()))).header("Modified").left(),
-            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.file_size()))).header("Size").right(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::format_db_time_short_or_none(i.modified()))).header("Modified").left(),
+            Column::new(|f, i: &Item| write!(f, "{}", Utils::opt_i64_or_none_as_str(i.size()))).header("Size").right(),
             Column::new(|f, i: &Item| write!(f, "{}", Hash::short_md5(&i.file_hash()))).center(),
             Column::new(|f, i: &Item| write!(f, "{}", i.validation_state())).header("Valid State").center(),
             Column::new(|f, i: &Item| write!(f, "{}", i.last_scan_id())).header("Last Scan").right(),
@@ -286,12 +286,13 @@ impl Reports {
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.is_undelete))).header("Undelete").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.metadata_changed))).header("MD Changed").center(),
 
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_last_modified))).header("Prev Modified").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_file_size))).header("Prev Size").right(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::format_db_time_short_or_none(c.prev_modified))).header("Prev Modified").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_i64_or_none_as_str(c.prev_size))).header("Prev Size").right(),
             Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.hash_changed))).header("Hash Changed").center(),
             Column::new(|f, c: &Change| write!(f, "{}", Hash::short_md5(&c.prev_hash()))).header("Prev Hash").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.validation_changed))).header("Validation Changed").center(),
-            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.prev_validation_state()))).header("Prev Valid").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.validation_changed))).header("Val Changed").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.validation_state()))).header("Val State").center(),
+            Column::new(|f, c: &Change| write!(f, "{}", Utils::opt_string_or_none(c.prev_validation_state()))).header("Prev Val State").center(),
         ]).title(title).empty_row(empty_row)
     }
 

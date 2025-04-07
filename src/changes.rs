@@ -16,15 +16,16 @@ const SQL_FOR_EACH_CHANGE_IN_SCAN: &str =
         change_type,
         is_undelete,
         metadata_changed,
-        changes.prev_last_modified,
-        prev_file_size,
+        changes.prev_modified,
+        prev_size,
         hash_changed,
         prev_last_hash_scan_id,
         prev_hash,
         validation_changed,
+        validation_state,
         prev_last_validation_scan_id,
         prev_validation_state,
-        prev_validation_state_desc
+        prev_validation_error
     FROM changes
     JOIN items ON items.id = changes.item_id
     WHERE changes.scan_id = ?
@@ -40,15 +41,16 @@ const SQL_FOR_EACH_CHANGE_IN_ITEM: &str =
         change_type,
         is_undelete,
         metadata_changed,
-        changes.prev_last_modified,
-        prev_file_size,
+        changes.prev_modified,
+        prev_size,
         hash_changed,
         prev_last_hash_scan_id,
         prev_hash,
         validation_changed,
+        validation_state,
         prev_last_validation_scan_id,
         prev_validation_state,
-        prev_validation_state_desc
+        prev_validation_error
     FROM changes
     JOIN items ON items.id = changes.item_id
     WHERE changes.item_id = ?
@@ -62,18 +64,19 @@ pub struct Change {
     pub change_type: String,
     pub is_undelete: Option<bool>,                  // Present if "A". True if add is undelete
     pub metadata_changed: Option<bool>,             // Present if "M". True if metadata changed, else False
-    pub prev_last_modified: Option<i64>,            // Meaningful if undelete or metadata_changed
-    pub prev_file_size: Option<i64>,                // Meaningful if undelete or metadata_changed
+    pub prev_modified: Option<i64>,                 // Meaningful if undelete or metadata_changed
+    pub prev_size: Option<i64>,                     // Meaningful if undelete or metadata_changed
     pub hash_changed: Option<bool>,                 // Present if "M". True if hash changed, else False
     #[allow(dead_code)]
     pub prev_last_hash_scan_id: Option<i64>,        // Present if "M" and hash_changed
     pub prev_hash: Option<String>,                  // Meaningful if undelete or hash_changed
     pub validation_changed: Option<bool>,           // Present if "M", True if validation changed, else False
+    pub validation_state: Option<String>,           // Validation state of the item if validation_changed = true
     #[allow(dead_code)]
     pub prev_last_validation_scan_id: Option<i64>,  // Present if "M" and validation changed
     pub prev_validation_state : Option<String>,     // Meaningful if undelete or validation_changed
     #[allow(dead_code)]
-    pub prev_validation_state_desc: Option<String>, // Meaningful if undelete validation_changed
+    pub prev_validation_error: Option<String>,      // Meaningful if undelete validation_changed
     
     // $TODO: Remove this. Was a bad idea to have this in the first place
     // Changes should be a simple struct that models a Changes entity
@@ -144,6 +147,7 @@ impl FromStr for ChangeType {
 impl Change {
     // TODO: Implement accessors for other fields
     pub fn prev_hash(&self) -> Option<&str> { self.prev_hash.as_deref() }
+    pub fn validation_state(&self) -> Option<&str> { self.validation_state.as_deref()}
     pub fn prev_validation_state(&self) -> Option<&str> {self.prev_validation_state.as_deref()}
 
     pub fn get_by_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
@@ -159,15 +163,16 @@ impl Change {
                 change_type,
                 is_undelete,
                 metadata_changed,
-                prev_last_modified,
-                prev_file_size,
+                prev_modified,
+                prev_size,
                 hash_changed,
                 prev_last_hash_scan_id,
                 prev_hash,
                 validation_changed,
+                validation_state,
                 prev_last_validation_scan_id,
                 prev_validation_state,
-                prev_validation_state_desc
+                prev_validation_error
             FROM changes
             JOIN items ON items.id = changes.item_id
             WHERE changes.id = ?", 
@@ -181,15 +186,16 @@ impl Change {
                 change_type: row.get(5)?,
                 is_undelete: row.get(6)?,
                 metadata_changed: row.get(7)?,
-                prev_last_modified: row.get(8)?,
-                prev_file_size: row.get(9)?,
+                prev_modified: row.get(8)?,
+                prev_size: row.get(9)?,
                 hash_changed: row.get(10)?,
                 prev_last_hash_scan_id: row.get(11)?,
                 prev_hash: row.get(12)?,
                 validation_changed: row.get(13)?,
-                prev_last_validation_scan_id: row.get(14)?,
-                prev_validation_state: row.get(15)?,
-                prev_validation_state_desc: row.get(16)?
+                validation_state: row.get(14)?,
+                prev_last_validation_scan_id: row.get(15)?,
+                prev_validation_state: row.get(16)?,
+                prev_validation_error: row.get(17)?
             })
         )
         .optional()
@@ -293,15 +299,16 @@ impl Change {
                     change_type: row.get(5)?,
                     is_undelete: row.get(6)?,
                     metadata_changed: row.get(7)?,
-                    prev_last_modified: row.get(8)?,
-                    prev_file_size: row.get(9)?,
+                    prev_modified: row.get(8)?,
+                    prev_size: row.get(9)?,
                     hash_changed: row.get(10)?,
                     prev_last_hash_scan_id: row.get(11)?,
                     prev_hash: row.get(12)?,
                     validation_changed: row.get(13)?,
-                    prev_last_validation_scan_id: row.get(14)?,
-                    prev_validation_state: row.get(15)?,
-                    prev_validation_state_desc: row.get(16)?
+                    validation_state: row.get(14)?,
+                    prev_last_validation_scan_id: row.get(15)?,
+                    prev_validation_state: row.get(16)?,
+                    prev_validation_error: row.get(17)?
                 }
             )
         })?;
