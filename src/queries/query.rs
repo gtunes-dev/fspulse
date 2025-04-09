@@ -1,6 +1,9 @@
+use std::io::{self, Stdout};
+
 use log::error;
 use pest::{iterators::{Pair, Pairs}, Parser};
 use rusqlite::ToSql;
+use tablestream::{Column, Stream};
 
 use crate::{database::Database, error::FsPulseError};
 
@@ -152,7 +155,6 @@ impl ChangesQueryRow {
 }
 
 impl ChangesQuery {
-
     pub fn build(changes_query_token: Pair<Rule>) -> Result<ChangesQuery, FsPulseError> {
         let mut changes_query = ChangesQuery::default();
 
@@ -185,7 +187,16 @@ impl ChangesQuery {
         self.filters.push(Box::new(filter));
     }
 
-    fn execute(&self, db: &Database) -> Result<(), FsPulseError> {
+    fn begin_table(title: &str, empty_row: &str) -> Stream<ChangesQueryRow, Stdout> {
+        Stream::new(io::stdout(), vec![
+            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.id)).header("Id").right().min_width(6),
+            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.scan_id)).header("Scan Id").right(),
+            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.item_id)).header("Item Id").right(),
+            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.change_type)).header("Type").center(),
+        ]).title(title).empty_row(empty_row)
+    }
+
+    fn execute(&self, db: &Database, query: &str) -> Result<(), FsPulseError> {
         let mut sql = format!("SELECT {} FROM changes WHERE", ChangesQueryRow::COLUMNS);
 
         let mut params_vec: Vec<&dyn ToSql> = Vec::new();
@@ -201,10 +212,15 @@ impl ChangesQuery {
             ChangesQueryRow::from_row(row)
         })?;
 
+        let mut table = Self::begin_table(query, "No Changes");
+
         for row in rows {
             let changes_query_row = row?;
-            println!("id: {}, item_id: {}", changes_query_row.id, changes_query_row.item_id);
+            table.row(changes_query_row)?;
+            //println!("id: {}, item_id: {}", changes_query_row.id, changes_query_row.item_id);
         }
+
+        table.finish()?;
 
         Ok(())
     }
@@ -236,7 +252,7 @@ impl Query {
                 },
                 Rule::changes_query => {
                     let changes_query = ChangesQuery::build(pair)?;
-                    changes_query.execute(db)?;
+                    changes_query.execute(db, query)?;
                 },
                 Rule::paths_query => {
 

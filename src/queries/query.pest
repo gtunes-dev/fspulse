@@ -2,21 +2,33 @@
 // interactive parser: https://pest.rs/#editor
 
 // Basic tokens - all silent
-WHITESPACE = _{ " " | "\t" | "\n" }
-COLON      = _{ ":" }
-COMMA      = _{ "," }
-DOTDOT     = _{ ".." }
-LPAREN     = _{ "(" }
-RPAREN     = _{ ")" }
+WS     = _{ " " | "\t" | "\n" }
+COLON  = _{ ":" }
+COMMA  = _{ "," }
+DOTDOT = _{ ".." }
+LPAREN = _{ "(" }
+RPAREN = _{ ")" }
 
 // Top-level query: one of the domain-specific queries
-query = { SOI ~ (items_query | scans_query | roots_query | changes_query | paths_query) ~ EOI }
+query = { SOI ~ WS* ~ base_query ~ (order_clause)? ~ (WS+ ~ limit_clause)? ~ WS* ~ EOI }
 
-items_where   = @{ "items" ~ WHITESPACE+ ~ "where" ~ WHITESPACE+ }
-scans_where   = @{ "scans" ~ WHITESPACE+ ~ "where" ~ WHITESPACE+ }
-roots_where   = @{ "roots" ~ WHITESPACE+ ~ "where" ~ WHITESPACE+ }
-changes_where = @{ "changes" ~ WHITESPACE+ ~ "where" ~ WHITESPACE+ }
-paths_where   = @{ "paths" ~ WHITESPACE+ ~ "where" ~ WHITESPACE+ }
+base_query = _{ items_query | scans_query | roots_query | changes_query | paths_query }
+
+order_clause = _{ WS+ ~ ^"order" ~ WS+ ~ order_list }
+order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
+order_spec   =  { column_id ~ (WS+ ~ order_dir)? }
+order_dir    =  { ^"ASC" | ^"DESC" }
+column_id    =  { ^"change_id" | ^"item_id" | ^"scan_id" | ^"root_id" }
+
+limit_clause = { limit_text ~ WS+ ~ limit_val }
+limit_text   = _{ ^"limit" }
+limit_val    = { ASCII_DIGIT+ }
+
+items_where   = { ^"items" ~ WS+ ~ ^"where" ~ WS+ }
+scans_where   = { ^"scans" ~ WS+ ~ ^"where" ~ WS+ }
+roots_where   = { ^"roots" ~ WS+ ~ ^"where" ~ WS+ }
+changes_where = { ^"changes" ~ WS+ ~ ^"where" ~ WS+ }
+paths_where   = { ^"paths" ~ WS+ ~ ^"where" ~ WS+ }
 
 items_query   = { items_where ~ fs_items }
 scans_query   = { scans_where ~ fs_scans }
@@ -34,39 +46,39 @@ fs_paths   = _{ fs_paths_filter ~ (COMMA ~ fs_paths_filter)* }
 // Allowable filters for the various types of queries
 fs_items_filter   = _{ filter_change | filter_scan | filter_date | filter_validity | filter_root }
 fs_scans_filter   = _{ filter_scan | filter_date }
-fs_roots_filter   = _{ WHITESPACE* }
-fs_changes_filter = _{ filter_scan | filter_change | filter_validity }
-fs_paths_filter   = _{ WHITESPACE* }
+fs_roots_filter   = _{ WS* }
+fs_changes_filter = _{ filter_scan | filter_change | filter_validity | filter_root }
+fs_paths_filter   = _{ WS* }
 
 // Root filter: e.g., root(1) [TODO: Add path support]
-filter_root =  { "root" ~ COLON ~ LPAREN ~ root_values ~ RPAREN }
-root_values = _{ root_spec ~ (COMMA ~ root_spec)* }
+filter_root =  { ^"root" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ root_values ~ WS* ~ RPAREN }
+root_values = _{ root_spec ~ (WS* ~ COMMA ~ WS* ~ root_spec)* }
 root_spec   = _{ root_path | root_id }
-root_path   =  { "'" ~ (("\\'" | (!"'" ~ ANY)))* ~ "'" }
-root_id     = @{ ASCII_DIGIT+ }
+root_path   =  { WS* ~ "'" ~ (("\\'" | (!"'" ~ ANY)))* ~ "'" }
+root_id     =  { WS* ~ ASCII_DIGIT+ }
 
 // Scan filter: e.g., scan:(32) or scan:(32..36) or scan:(3, 3..5)
-filter_scan =  { "scan" ~ COLON ~ LPAREN ~ scan_values ~ RPAREN }
-scan_values = _{ scan_spec ~ (COMMA ~ scan_spec)* }
+filter_scan =  { ^"scan" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ scan_values ~ WS* ~ RPAREN }
+scan_values = _{ scan_spec ~ (WS* ~ COMMA ~ WS* ~ scan_spec)* }
 scan_spec   = _{ date_range | scan_range | date | scan_id }
-scan_range  =  { scan_id ~ DOTDOT ~ scan_id }
-scan_id     = @{ ASCII_DIGIT+ }
+scan_range  =  { scan_id ~ WS* ~ DOTDOT ~ WS* ~ scan_id }
+scan_id     =  { WS* ~ ASCII_DIGIT+ }
 
 // Date filter: e.g., date:(2023-01-01) or date:(2023-01-01..2023-01-31)
 // filter_date  =  { "date" ~ COLON ~ LPAREN ~ date_range ~ RPAREN }
-filter_date =  { "date" ~ COLON ~ LPAREN ~ date_values ~ RPAREN }
-date_values = _{ date_spec ~ (COMMA ~ date_spec)* }
+filter_date =  { ^"date" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ date_values ~ WS* ~ RPAREN }
+date_values = _{ date_spec ~ (WS* ~ COMMA ~ date_spec)* }
 
 // Change filter: e.g., change:(A) or change:(A,M)
-filter_change =  { "change" ~ COLON ~ LPAREN ~ change_values ~ RPAREN }
-change_values = _{ change ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ change)* }
-change        =  { "A" | "M" | "D" }
+filter_change =  { ^"change" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_values ~ WS* ~ RPAREN }
+change_values = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
+change        =  { ^"A" | ^"D" | ^"M" }
 
 // Validity filter: e.g., validity:(V) or validity:(V,I)
-filter_validity =  { "validity" ~ COLON ~ LPAREN ~ validity_values ~ RPAREN }
-validity_values = _{ validity ~ (WHITESPACE* ~ COMMA ~ WHITESPACE* ~ validity)* }
-validity        =  { "V" | "I" | "N" | "U" }
+filter_validity =  { ^"validity" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ validity_values ~ WS* ~ RPAREN }
+validity_values = _{ validity ~ (WS* ~ COMMA ~ WS* ~ validity)* }
+validity        =  { ^"V" | ^"I" | ^"N" | ^"U" }
 
 date_spec  = _{ date_range | date }
-date_range =  { date ~ DOTDOT ~ date }
-date       = @{ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
+date_range =  { date ~ WS* ~ DOTDOT ~ WS* ~ date }
+date       =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
