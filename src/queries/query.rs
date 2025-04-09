@@ -7,7 +7,7 @@ use tablestream::{Column, Stream};
 
 use crate::{database::Database, error::FsPulseError};
 
-use super::{filters::{ChangeFilter, DateFilter, Filter, ScanFilter}, QueryParser, Rule};
+use super::{filters::{ChangeFilter, DateFilter, Filter, ScanFilter}, order::Order, QueryParser, Rule};
 
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -104,11 +104,11 @@ impl ItemsQuery {
 #[derive(Debug, Default)]
 pub struct ChangesQuery {
     filters: Vec<Box<dyn Filter>>,
+    order: Option<Order>,
 }
 
 struct ChangesQueryRow {
     id: i64,
-    #[allow(dead_code)]
     scan_id: i64,
     item_id: i64,
     #[allow(dead_code)]
@@ -172,6 +172,10 @@ impl ChangesQuery {
                 Rule::filter_change => {
                     let change_filter = ChangeFilter::build(token)?;
                     changes_query.add_filter(change_filter);
+                },
+                Rule::order_list => {
+                    let order = Order::build(token, Order::CHANGE_COLS)?;
+                    changes_query.order = Some(order);
                 }
                 _ => {}
             }
@@ -231,7 +235,7 @@ pub struct Query;
 impl Query {
     pub fn process_query(db: &Database, _query: &str) -> Result<(), FsPulseError> {
         // for testing during coding
-        let query = "changes where scan:(1, 2)";
+        let query = "changes where scan:(2) order scan_id asc, root_id, id desc";
 
         let mut parsed_query = Query::parse(Rule::query, query)?;
         println!("Parsed query: {}", parsed_query);

@@ -70,7 +70,6 @@ impl ScanFilter {
     pub fn build(filter_scan: Pair<Rule>) -> Result<ScanFilter, FsPulseError> {
         let mut scan_filter = Self::new();
 
-        println!("Scan filter: {}", filter_scan);
         for element in filter_scan.into_inner() {
             match element.as_rule() {
                 Rule::scan_id => {

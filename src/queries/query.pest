@@ -18,7 +18,7 @@ order_clause = _{ WS+ ~ ^"order" ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { column_id ~ (WS+ ~ order_dir)? }
 order_dir    =  { ^"ASC" | ^"DESC" }
-column_id    =  { ^"change_id" | ^"item_id" | ^"scan_id" | ^"root_id" }
+column_id    =  { ^"change_id" | ^"item_id" | ^"scan_id" | ^"root_id" | ^"id" }
 
 limit_clause = { limit_text ~ WS+ ~ limit_val }
 limit_text   = _{ ^"limit" }
@@ -27,7 +27,7 @@ limit_val    = { ASCII_DIGIT+ }
 items_where   = { ^"items" ~ WS+ ~ ^"where" ~ WS+ }
 scans_where   = { ^"scans" ~ WS+ ~ ^"where" ~ WS+ }
 roots_where   = { ^"roots" ~ WS+ ~ ^"where" ~ WS+ }
-changes_where = { ^"changes" ~ WS+ ~ ^"where" ~ WS+ }
+changes_where = _{ ^"changes" ~ WS+ ~ ^"where" ~ WS+ }
 paths_where   = { ^"paths" ~ WS+ ~ ^"where" ~ WS+ }
 
 items_query   = { items_where ~ fs_items }
