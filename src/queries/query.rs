@@ -33,15 +33,15 @@ impl ItemsQuery {
         for fs_items_filter in fs_items.into_inner() {
             let filter = fs_items_filter.into_inner().next().unwrap();
             match filter.as_rule() {
-                Rule::filter_scan => {
+                Rule::scan_filter => {
                     let filter_scan = filter.into_inner().next().unwrap();
                     items_query.set_scan_filter(ScanFilter::build(filter_scan)?)?;
                 },
-                Rule::filter_date => {
+                Rule::date_filter => {
                     let filter_date = filter.into_inner().next().unwrap();
                     items_query.set_date_filter(DateFilter::build(filter_date))?;
                 },
-                Rule::filter_change => {
+                Rule::change_filter => {
                     // Process the change filter.
                     /* 
                     let mut change_values = filter.into_inner();
@@ -58,7 +58,7 @@ impl ItemsQuery {
                     }
                     */
                 },
-                Rule::filter_validity => {
+                Rule::validity_filter => {
                     // Process the validity filter.
                     //items_query.validity_filter = Some(build_validity_filter(filter)?);
                 },
@@ -105,6 +105,7 @@ impl ItemsQuery {
 pub struct ChangesQuery {
     filters: Vec<Box<dyn Filter>>,
     order: Option<Order>,
+    limit: Option<i64>,
 }
 
 struct ChangesQueryRow {
@@ -161,21 +162,20 @@ impl ChangesQuery {
         // iterate over the children of changes_query
         for token in changes_query_token.into_inner() {
             match token.as_rule() {
-                Rule::changes_where => {
-                    // skip this...it's compound to deal with whitespace correctly,
-                    // so can't be made silent
-                },
-                Rule::filter_scan => {
+                Rule::scan_filter => {
                     let scan_filter = ScanFilter::build(token)?;
                     changes_query.add_filter(scan_filter);
                 },
-                Rule::filter_change => {
+                Rule::change_filter => {
                     let change_filter = ChangeFilter::build(token)?;
                     changes_query.add_filter(change_filter);
                 },
                 Rule::order_list => {
                     let order = Order::build(token, Order::CHANGE_COLS)?;
                     changes_query.order = Some(order);
+                },
+                Rule::limit_val => {
+                    changes_query.limit = Some(token.as_str().parse().unwrap());
                 }
                 _ => {}
             }
@@ -194,8 +194,8 @@ impl ChangesQuery {
     fn begin_table(title: &str, empty_row: &str) -> Stream<ChangesQueryRow, Stdout> {
         Stream::new(io::stdout(), vec![
             Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.id)).header("Id").right().min_width(6),
-            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.scan_id)).header("Scan Id").right(),
-            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.item_id)).header("Item Id").right(),
+            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.scan_id)).header("Scan").right(),
+            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.item_id)).header("Item").right(),
             Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.change_type)).header("Type").center(),
         ]).title(title).empty_row(empty_row)
     }
@@ -209,6 +209,15 @@ impl ChangesQuery {
             let (pred_str, pred_vec) = filter.to_predicate_parts()?;
             sql.push_str(&pred_str);
             params_vec.extend(pred_vec);
+        }
+
+        if let Some(order) = &self.order {
+            let order_clause = order.to_order_clause();
+            sql.push_str(&order_clause);
+        }
+
+        if let Some(limit) = &self.limit {
+            sql.push_str(&format!(" LIMIT {}", limit));
         }
 
         let mut stmt = db.conn().prepare(&sql)?;
@@ -235,7 +244,7 @@ pub struct Query;
 impl Query {
     pub fn process_query(db: &Database, _query: &str) -> Result<(), FsPulseError> {
         // for testing during coding
-        let query = "changes where scan:(2) order scan_id asc, root_id, id desc";
+        let query = "changes where scan:(1) order scan_id asc, id desc limit 10";
 
         let mut parsed_query = Query::parse(Rule::query, query)?;
         println!("Parsed query: {}", parsed_query);

@@ -17,8 +17,8 @@ pub struct Order {
 }
 
 impl Order {
-    pub const CHANGE_COLS: &'static [&'static str] = &["item_id", "scan_id"];
-    pub const ITEM_COLS: &'static [&'static str] = &["item_id", "scan_id"];
+    pub const CHANGE_COLS: &'static [&'static str] = &["id", "item_id", "scan_id", "root_id"];
+    // pub const ITEM_COLS: &'static [&'static str] = &["item_id", "scan_id"];
     
     fn new(col_set: &'static [&'static str]) -> Self {
         Order {
@@ -50,14 +50,36 @@ impl Order {
                 Rule::order_spec => {
                     let mut order_parts = element.into_inner();
                     let column = order_parts.next().unwrap().as_str();
-                    let direction = order_parts.next().map(|r| r.as_str().to_string());
+                    let direction = order_parts.next().map(|r| r.as_str().to_uppercase());
                     
                     order.add_order_spec(column.into(), direction)?;
                 },
                 _ => unreachable!(),
             }
         }
+        println!("Order: {:?}", order);
 
         Ok(order)
+    }
+
+    pub fn to_order_clause(&self) -> String {
+        let mut order_clause = " ORDER BY ".to_string();
+        let mut first = true;
+
+        for order in &self.order_specs {
+            match first {
+                true => first = false,
+                false => order_clause.push_str(", ")
+            }
+
+            order_clause.push_str(&order.column);
+            order_clause.push(' ');
+
+            match &order.direction {
+                Some(direction) => order_clause.push_str(direction),
+                None => order_clause.push_str("ASC")
+            }
+        }
+        order_clause
     }
 }
