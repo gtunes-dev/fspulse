@@ -12,12 +12,22 @@ RPAREN = _{ ")" }
 // Top-level query: one of the domain-specific queries
 // query = { SOI ~ WS* ~ base_query ~ (order_clause)? ~ (WS+ ~ limit_clause)? ~ WS* ~ EOI }
 
-query = { SOI ~ WS* ~ (items_query | changes_query) ~ WS* ~ EOI }
+query = { SOI ~ WS* ~ (items_query | roots_query | changes_query) ~ WS* ~ EOI }
 
 changes_query         =  { ^"changes" ~ changes_where? ~ order_clause? ~ limit_clause? }
 changes_where         = _{ WS+ ~ ^"where" ~ WS+ ~ changes_filter_list }
 changes_filter_list   = _{ changes_filter_choice ~ (WS* ~ COMMA ~ WS* ~ changes_filter_choice)* }
 changes_filter_choice = _{ scan_filter | change_filter | validity_filter | root_filter }
+
+items_query         =  { ^"items" ~ WS+ ~ ^"where" ~ WS+ ~ items_filter_list ~ order_clause? }
+items_where         = _{ WS+ ~ ^"where" ~ WS+ ~ items_filter_list }
+items_filter_list   = _{ items_filter_choice ~ (WS* ~ COMMA ~ WS* ~ items_filter_choice)* }
+items_filter_choice = _{ date_filter | validity_filter | root_filter }
+
+roots_query         =  { ^"roots" ~ WS+ ~ ^"where" ~ WS+ ~ roots_filter_list ~ order_clause? }
+roots_where         = _{ WS+ ~ ^"where" ~ WS+ ~ roots_filter_list }
+roots_filter_list   = _{ roots_filter_choice ~ (WS* ~ COMMA ~ WS* ~ roots_filter_choice)* }
+roots_filter_choice = _{ root_filter }
 
 order_clause = _{ WS+ ~ ^"order" ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
@@ -29,21 +39,16 @@ limit_clause = _{ WS+ ~ limit_text ~ WS+ ~ limit_val }
 limit_text   = _{ ^"limit" }
 limit_val    =  { ASCII_DIGIT+ }
 
-items_query = { ^"items" ~ WS+ ~ ^"where" ~ WS+ ~ items_filter_list ~ order_clause? }
+// items_query = { ^"items" ~ WS+ ~ ^"where" ~ WS+ ~ items_filter_list ~ order_clause? }
 scans_query = { ^"scans" ~ WS+ ~ ^"where" ~ WS+ ~ scans_filters_list ~ order_clause? }
-roots_query = { ^"roots" ~ WS+ ~ ^"where" ~ WS+ ~ roots_filter_list ~ order_clause? }
 paths_query = { ^"paths" ~ WS+ ~ ^"where" ~ WS+ ~ paths_filter_list ~ order_clause? }
 
 // Filter sets for each type (for items, we allow a COMMA-separated list of filters)
-items_filter_list  = _{ items_filter_choice ~ (COMMA ~ items_filter_choice)* }
 scans_filters_list = _{ scans_filter_choice ~ (COMMA ~ scans_filter_choice)* }
-roots_filter_list  = _{ roots_filter_choice ~ (COMMA ~ roots_filter_choice)* }
 paths_filter_list  = _{ paths_filter_choice ~ (COMMA ~ paths_filter_choice)* }
 
 // Allowable filters for the various types of queries
-items_filter_choice = _{ change_filter | scan_filter | date_filter | validity_filter | root_filter }
 scans_filter_choice = _{ scan_filter | date_filter }
-roots_filter_choice = _{ WS* }
 paths_filter_choice = _{ WS* }
 
 // Root filter: e.g., root(1) [TODO: Add path support]
