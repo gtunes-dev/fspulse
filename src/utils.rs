@@ -40,7 +40,7 @@ impl Utils {
         match opt_bool {
             Some(true) => "T".to_string(),
             Some(false) => "F".to_string(),
-            None => "=".to_string(),
+            None => "-".to_string(),
         }
     }
 

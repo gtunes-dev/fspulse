@@ -26,6 +26,7 @@ pest_derive = "2.8"
 rusqlite = { version = "0.33", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
+tabled = "0.18"
 tablestream = { git = "https://github.com/gtunes-dev/tablestream" }
 threadpool = "1.8"
 toml = "0.8"

@@ -8,7 +8,7 @@ use super::Rule;
 /// Defines the behavior of a filter.
 pub trait Filter: Debug {
     /// return predicate text and params
-    fn to_predicate_parts(&self) -> Result<(String, Vec<&dyn ToSql>), FsPulseError>;
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError>;
 }
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ScanFilter {
@@ -29,34 +29,42 @@ pub enum ScanFilterElement {
 }
 
 impl Filter for ScanFilter {
-    fn to_predicate_parts(&self) -> Result<(String, Vec<&dyn ToSql>), FsPulseError> {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
-        let mut pred_vec: Vec<&dyn ToSql> = Vec::new();
+        let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
+
+        if self.elements.len() > 1 {
+            pred_str.push('(');
+        }
 
         for element in &self.elements {
             match first {
                 true => first = false,
-                false => pred_str.push_str(" OR"),
+                false => pred_str.push_str(" OR "),
             }
             
             match element {
                 ScanFilterElement::SingleScan (scan_id) => {
-                    pred_str.push_str(" (scan_id = ?)");
-                    pred_vec.push(scan_id);
+                    pred_str.push_str("(scan_id = ?)");
+                    pred_vec.push(Box::new(*scan_id));
                 },
                 ScanFilterElement::ScanRange { start_scan_id, end_scan_id} => {
-                    pred_str.push_str(" (scan_id >= ? AND scan_id <= ?)");
-                    pred_vec.push(start_scan_id);
-                    pred_vec.push(end_scan_id);
+                    pred_str.push_str("(scan_id >= ? AND scan_id <= ?)");
+                    pred_vec.push(Box::new(*start_scan_id));
+                    pred_vec.push(Box::new(*end_scan_id));
                 },
                 ScanFilterElement::DateRange { start_datetime, end_datetime } => {
-                    pred_str.push_str(" (scan_id IN (SELECT id FROM scans WHERE time_of_scan >= ? AND time_of_scan <= ?)");
-                    pred_vec.push(start_datetime);
-                    pred_vec.push(end_datetime);
+                    pred_str.push_str("(scan_id IN (SELECT id FROM scans WHERE time_of_scan >= ? AND time_of_scan <= ?))");
+                    pred_vec.push(Box::new(*start_datetime));
+                    pred_vec.push(Box::new(*end_datetime));
                 },
             }
         };
+
+        if self.elements.len() > 1 {
+            pred_str.push(')');
+        }
 
         Ok((pred_str, pred_vec))
     }
@@ -149,10 +157,27 @@ pub struct ChangeFilter {
 }
 
 impl Filter for ChangeFilter {
-    fn to_predicate_parts(&self) -> Result<(String, Vec<&dyn ToSql>), FsPulseError> {
-        let pred_str = " (change_type IN ?)";
-        let pred_vec = vec![&self.change_types as &dyn ToSql];
-        Ok((pred_str.into(), pred_vec))
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+        let mut pred_str = " (change_type IN (".to_string();
+        let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
+
+        let mut first: bool = true;
+        for c in self.change_types.chars() {
+            match first {
+                true => {
+                    first = false;
+                    pred_str.push('?');
+                },
+                false => pred_str.push_str(", ?"),
+            }
+            let change_type_str = c.to_string();
+            pred_vec.push(Box::new(change_type_str));
+
+        }
+
+        pred_str.push_str("))");
+
+        Ok((pred_str, pred_vec))
     }
 }
 
@@ -173,9 +198,65 @@ impl ChangeFilter {
                 return Err(FsPulseError::Error(format!("Change filter contains multiple instances of '{}'", change_str)));
             }
             change_filter.change_types.push_str(&change_str_upper);
-
-
         }
         Ok(change_filter)
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct RootFilter {
+    root_ids: Vec<i64>,
+
+}
+
+impl Filter for RootFilter {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+        /* 
+        let pred_str = " (root_id IN (?))";
+        let pred_vec: Vec<&dyn ToSql> = self.root_ids.iter()
+            .map(|id| id as &dyn ToSql)
+            .collect();
+        */
+
+        let mut first = true;
+        let mut pred_str = " (root_id IN (".to_string();
+        let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
+        for root_id in &self.root_ids {
+            match first {
+                true => {
+                    first = false;
+                    pred_str.push('?');
+                }
+                false => {
+                    pred_str.push_str(", ?");
+                }
+            }
+            pred_vec.push(Box::new(*root_id));
+        }
+        pred_str.push_str("))");
+
+        Ok((pred_str, pred_vec))
+    }
+}
+
+impl RootFilter {
+    fn new() -> Self {
+        RootFilter::default()
+    }
+
+    pub fn build(root_filter_pair: Pair<Rule>) -> Result<RootFilter, FsPulseError> {
+        let mut root_filter = RootFilter::new();
+        for root in root_filter_pair.into_inner() {
+
+            let root_str = root.as_str().to_string();
+            let root_id: i64 = root_str.parse().unwrap();
+
+            // disallow specifying the same type multiple times
+            if root_filter.root_ids.contains(&root_id) {
+                return Err(FsPulseError::Error(format!("Root filter contains multiple instances of '{}'", root_str)));
+            }
+            root_filter.root_ids.push(root_id);
+        }
+        Ok(root_filter)
     }
 }

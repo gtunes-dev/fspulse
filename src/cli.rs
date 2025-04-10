@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use dialoguer::theme::ColorfulTheme;
+use dialoguer::Input;
 use dialoguer::Select;
+use dialoguer::Editor;
 use indicatif::MultiProgress;
 use log::info;
 
@@ -187,12 +189,17 @@ pub enum ReportType {
 #[derive(Copy, Clone)]
 enum CommandChoice {
     Scan,
+    QuerySimple,
+    QueryEditor,
     Report,
     Exit,
 }
 
 static COMMAND_CHOICES: &[(CommandChoice, &str)] = &[
     (CommandChoice::Scan, "Scan"),
+    (CommandChoice::QuerySimple, "Query (Simple)"),
+    (CommandChoice::QueryEditor, "Query (Editor)"),
+
     (CommandChoice::Report, "Report"),
     (CommandChoice::Exit, "Exit"),
 ];
@@ -301,6 +308,8 @@ impl Cli {
         let command = Cli::choose_command();
         match command {
             CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog),
+            CommandChoice::QuerySimple => Cli::do_interactive_query(db, command),
+            CommandChoice::QueryEditor => Cli::do_interactive_query(db, command),
             CommandChoice::Report => Cli::do_interactive_report(db),
             CommandChoice::Exit => Ok(()),
         }
@@ -319,6 +328,26 @@ impl Cli {
     
         // Directly select the enum variant.
         COMMAND_CHOICES[selection].0
+    }
+
+    fn do_interactive_query(db: &Database, choice: CommandChoice) -> Result<(), FsPulseError> {
+        match choice {
+            CommandChoice::QuerySimple => {
+                let query: String = Input::new()
+                    .with_prompt("Query?")
+                    .interact_text()
+                    .unwrap();
+                Query::process_query(db, &query)?;
+            },
+            CommandChoice::QueryEditor => {
+                if let Some(query) = Editor::new().edit("Enter a query").unwrap() {
+                    Query::process_query(db, &query)?;
+                }
+            },
+            _ => unreachable!()
+        }
+        
+        Ok(())
     }
 
     fn do_interactive_report(db: &Database) -> Result<(), FsPulseError> {

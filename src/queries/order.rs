@@ -17,7 +17,24 @@ pub struct Order {
 }
 
 impl Order {
-    pub const CHANGE_COLS: &'static [&'static str] = &["id", "item_id", "scan_id", "root_id"];
+    /*
+    pub const CHANGE_COLS: &[(&str, &str)] = &[
+        // friendly name, query name
+        ("id", "id"),
+        ("item_id", "item_id"),
+        ("scan_id", "scan_id"),
+        ("root_id", "root_id"),
+    ];
+    */
+
+    pub const CHANGE_COLS: &[&str] = &[
+        "change_id",
+        "item_id",
+        "scan_id",
+        "root_id",
+    ];
+
+    //pub const CHANGE_COLS: &'static [&'static str] = &["id", "item_id", "scan_id", "root_id"];
     // pub const ITEM_COLS: &'static [&'static str] = &["item_id", "scan_id"];
     
     fn new(col_set: &'static [&'static str]) -> Self {
@@ -63,7 +80,7 @@ impl Order {
     }
 
     pub fn to_order_clause(&self) -> String {
-        let mut order_clause = " ORDER BY ".to_string();
+        let mut order_clause = "\nORDER BY ".to_string();
         let mut first = true;
 
         for order in &self.order_specs {

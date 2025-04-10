@@ -1,13 +1,14 @@
-use std::io::{self, Stdout};
+//use std::io::{self, Stdout};
 
-use log::error;
+use log::{error, info};
 use pest::{iterators::{Pair, Pairs}, Parser};
 use rusqlite::ToSql;
-use tablestream::{Column, Stream};
+use tabled::{settings::{object::Rows, Alignment, Style}, Table, Tabled};
+//use tablestream::{Column, Stream};
 
 use crate::{database::Database, error::FsPulseError};
 
-use super::{filters::{ChangeFilter, DateFilter, Filter, ScanFilter}, order::Order, QueryParser, Rule};
+use super::{filters::{ChangeFilter, DateFilter, Filter, RootFilter, ScanFilter}, order::Order, QueryParser, Rule};
 
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -108,27 +109,38 @@ pub struct ChangesQuery {
     limit: Option<i64>,
 }
 
+#[derive(Tabled)]
 struct ChangesQueryRow {
+    // changes properties
+    #[tabled(rename = "change\nid")]
     id: i64,
+    #[tabled(rename = "root\nid")]
+    root_id: i64,
+    #[tabled(rename = "scan\nid")]
     scan_id: i64,
+    #[tabled(rename = "item\nid")]
     item_id: i64,
-    #[allow(dead_code)]
+    #[tabled(rename = "change\ntype")]
     change_type: String,
-    #[allow(dead_code)]
+    #[tabled(rename = "meta\nchange", display = "ChangesQueryRow::display_opt_bool")]
     metadata_changed: Option<bool>,
-    #[allow(dead_code)]
+    #[tabled(rename = "hash\nchange", display = "ChangesQueryRow::display_opt_bool")]
     hash_changed: Option<bool>,
-    #[allow(dead_code)]
+    #[tabled(rename = "valid\nchange", display = "ChangesQueryRow::display_opt_bool")]
     validity_changed: Option<bool>,
-    #[allow(dead_code)]
+    #[tabled(rename = "old\nvalid", display = "ChangesQueryRow::display_opt_string")]
     validity_state_old: Option<String>,
-    #[allow(dead_code)]
+    #[tabled(rename = "new\nvalid", display = "ChangesQueryRow::display_opt_string")]
     validity_state_new: Option<String>,
+
+    // items properties
+    path: String,
 }
 
 impl ChangesQueryRow {
     const COLUMNS: &str = 
-        "id,
+        "changes.id as change_id,
+        items.root_id as root_id,
         scan_id,
         item_id,
         change_type,
@@ -136,20 +148,38 @@ impl ChangesQueryRow {
         hash_changed,
         validity_changed,
         validity_state_old,
-        validity_state_new";
+        validity_state_new,
+        items.path as path";
+
+    pub fn display_opt_bool(opt_bool: &Option<bool>) -> String {
+        match opt_bool {
+            Some(true) => "T".into(),
+            Some(false) => "F".into(),
+            None => "-".into(),
+        }
+    }
+
+    pub fn display_opt_string(opt_string: &Option<String>) -> String {
+        match opt_string {
+            Some(s) => s.into(),
+            None => "-".into(),
+        }
+    }
 
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(
             ChangesQueryRow { 
                 id: row.get(0)?, 
-                scan_id: row.get(1)?, 
-                item_id: row.get(2)?, 
-                change_type: row.get(3)?, 
-                metadata_changed: row.get(4)?, 
-                hash_changed: row.get(5)?, 
-                validity_changed: row.get(6)?,
-                validity_state_old: row.get(7)?,
-                validity_state_new: row.get(8)?,
+                root_id: row.get(1)?,
+                scan_id: row.get(2)?, 
+                item_id: row.get(3)?, 
+                change_type: row.get(4)?, 
+                metadata_changed: row.get(5)?, 
+                hash_changed: row.get(6)?, 
+                validity_changed: row.get(7)?,
+                validity_state_old: row.get(8)?,
+                validity_state_new: row.get(9)?,
+                path: row.get(10)?,
             }
         )
     }
@@ -169,6 +199,10 @@ impl ChangesQuery {
                 Rule::change_filter => {
                     let change_filter = ChangeFilter::build(token)?;
                     changes_query.add_filter(change_filter);
+                },
+                Rule::root_filter => {
+                    let root_filter = RootFilter::build(token)?;
+                    changes_query.add_filter(root_filter);
                 },
                 Rule::order_list => {
                     let order = Order::build(token, Order::CHANGE_COLS)?;
@@ -191,24 +225,58 @@ impl ChangesQuery {
         self.filters.push(Box::new(filter));
     }
 
-    fn begin_table(title: &str, empty_row: &str) -> Stream<ChangesQueryRow, Stdout> {
+/*     fn begin_table(title: &str, empty_row: &str) -> Stream<ChangesQueryRow, Stdout> {
         Stream::new(io::stdout(), vec![
             Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.id)).header("Id").right().min_width(6),
             Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.scan_id)).header("Scan").right(),
             Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.item_id)).header("Item").right(),
+            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", Utils::opt_bool_or_none_as_str(c.metadata_changed))).header("Meta").center(),
             Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.change_type)).header("Type").center(),
+            Column::new(|f, c: &ChangesQueryRow| write!(f, "{}", c.path)).header("Path").left(),
         ]).title(title).empty_row(empty_row)
+    } */
+
+ /*    fn begin_comfy_table() -> Table {
+        let mut table = Table::new();
+        table
+            .apply_modifier(UTF8_NO_BORDERS)
+            .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+            .set_header(vec![
+                "Id", "Scan", "Item", "Meta\nChanged"
+            ]);
+        table
     }
+ */
+    fn execute(&self, db: &Database, _query: &str) -> Result<(), FsPulseError> {
+        let mut sql = format!(
+            "SELECT {} 
+            FROM changes
+            JOIN items
+                ON changes.item_id = items.id", 
+            ChangesQueryRow::COLUMNS
+        );
+            //let table = Self::begin_comfy_table();
+            //println!("{table}");
+            
+        // $TODO: Wrap Filters into a struct that can generate the entire WHERE clause
+        let mut params_vec: Vec<Box<dyn ToSql>> = Vec::new();
 
-    fn execute(&self, db: &Database, query: &str) -> Result<(), FsPulseError> {
-        let mut sql = format!("SELECT {} FROM changes WHERE", ChangesQueryRow::COLUMNS);
-
-        let mut params_vec: Vec<&dyn ToSql> = Vec::new();
-
-        for filter in &self.filters {
-            let (pred_str, pred_vec) = filter.to_predicate_parts()?;
-            sql.push_str(&pred_str);
-            params_vec.extend(pred_vec);
+        if !self.filters.is_empty() {
+            let mut first = true;
+            sql.push_str("\nWHERE ");
+            for filter in &self.filters {
+                match first {
+                    true => {
+                        first = false;
+                    },
+                    false => {
+                        sql.push_str(" AND");
+                    }
+                }
+                let (pred_str, pred_vec) = filter.to_predicate_parts()?;
+                sql.push_str(&pred_str);
+                params_vec.extend(pred_vec);
+            }
         }
 
         if let Some(order) = &self.order {
@@ -217,23 +285,33 @@ impl ChangesQuery {
         }
 
         if let Some(limit) = &self.limit {
-            sql.push_str(&format!(" LIMIT {}", limit));
+            sql.push_str(&format!("\nLIMIT {}", limit));
         }
 
+        let param_refs: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
+
         let mut stmt = db.conn().prepare(&sql)?;
-        let rows = stmt.query_map(&params_vec[..], |row| {
+        let rows = stmt.query_map(&param_refs[..], |row| {
             ChangesQueryRow::from_row(row)
         })?;
 
-        let mut table = Self::begin_table(query, "No Changes");
+        //let mut table = Self::begin_table(query, "No Changes");
+
+        let mut changes_rows = Vec::new();
 
         for row in rows {
-            let changes_query_row = row?;
-            table.row(changes_query_row)?;
+            let changes_query_row: ChangesQueryRow = row?;
+            changes_rows.push(changes_query_row);
+            //table.row(changes_query_row)?;
             //println!("id: {}, item_id: {}", changes_query_row.id, changes_query_row.item_id);
         }
+        
+        let mut table = Table::new(&changes_rows);
+        table.with(Style::modern());
+        table.modify(Rows::first(), Alignment::center());
+        println!("{table}");
 
-        table.finish()?;
+        //table.finish()?;
 
         Ok(())
     }
@@ -242,12 +320,12 @@ impl ChangesQuery {
 pub struct Query;
 
 impl Query {
-    pub fn process_query(db: &Database, _query: &str) -> Result<(), FsPulseError> {
+    pub fn process_query(db: &Database, query: &str) -> Result<(), FsPulseError> {
         // for testing during coding
-        let query = "changes where scan:(1) order scan_id asc, id desc limit 10";
-
+        //let query = "changes where scan:(1) order scan_id asc, id desc limit 10";
+        info!("Preparing to execute query: {}", query);
         let mut parsed_query = Query::parse(Rule::query, query)?;
-        println!("Parsed query: {}", parsed_query);
+        info!("Parsed query: {}", parsed_query);
 
         let query_pair = parsed_query.next().unwrap();
         let domain_query_pairs = query_pair.into_inner();
