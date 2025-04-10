@@ -131,6 +131,8 @@ impl ScanFilter {
     }
 }
 
+/*
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateFilter {
     start_date: String,
@@ -150,6 +152,7 @@ impl DateFilter {
         }
     }
 }
+    */
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ChangeFilter {
