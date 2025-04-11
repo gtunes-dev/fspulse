@@ -26,7 +26,21 @@ impl Order {
         ("root_id", "root_id"),
     ];
     */
+    pub const ROOTS_COLS: &[&str] = &[
+        "root_id",
+    ];
 
+    pub const SCANS_COLS: &[&str] = &[
+        "scan_id",
+        "root_id",
+        "state",
+        "hashing",
+        "validating",
+        "time_of_scan",
+        "file_count",
+        "folder_count"
+    ];
+    
     pub const CHANGES_COLS: &[&str] = &[
         "change_id",
         "item_id",
@@ -34,9 +48,7 @@ impl Order {
         "root_id",
     ];
 
-    pub const ROOTS_COLS: &[&str] = &[
-        "root_id",
-    ];
+
 
     //pub const CHANGE_COLS: &'static [&'static str] = &["id", "item_id", "scan_id", "root_id"];
     // pub const ITEM_COLS: &'static [&'static str] = &["item_id", "scan_id"];

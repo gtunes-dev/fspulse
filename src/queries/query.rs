@@ -13,6 +13,7 @@ use super::{filters::{ChangeFilter, DateFilter, Filter, IdFilter}, order::Order,
 #[derive(Debug)]
 enum QueryType {
     Roots,
+    Scans,
     Changes,
 }
 
@@ -49,14 +50,27 @@ impl DomainQuery {
 
     const ROOTS_BASE_SQL: &str = "
         SELECT
-            roots.id as root_id,
+            id as root_id,
             path
         FROM roots";
+
+    const SCANS_BASE_SQL: &str = "
+        SELECT
+            id as scan_id,
+            root_id,
+            state,
+            hashing,
+            validating,
+            time_of_scan,
+            file_count,
+            folder_count
+        FROM scans";
 
     fn new(query_type: QueryType) -> Self {
         let order_cols = match query_type {
             QueryType::Changes => Order::CHANGES_COLS,
             QueryType::Roots => Order::ROOTS_COLS,
+            QueryType::Scans => Order::SCANS_COLS,
         };
 
         DomainQuery {
@@ -78,8 +92,9 @@ impl DomainQuery {
 
     fn get_base_sql(&self) -> &str {
         match self.query_type {
-            QueryType::Changes => Self::CHANGES_BASE_SQL,
             QueryType::Roots => Self::ROOTS_BASE_SQL,
+            QueryType::Scans => Self::SCANS_BASE_SQL,
+            QueryType::Changes => Self::CHANGES_BASE_SQL,
         }
     }
 
@@ -104,7 +119,7 @@ impl DomainQuery {
         Ok(table)
     }
 
-    fn execute_rows(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
+    fn execute_roots(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
         let rows = sql_statment.query_map(sql_params, |row| {
             RootsQueryRow::from_row(row)
         })?;
@@ -112,10 +127,27 @@ impl DomainQuery {
         let mut rows_rows = Vec::new();
 
         for row in rows {
-            let changes_query_row: RootsQueryRow = row?;
-            rows_rows.push(changes_query_row);
-            //table.row(changes_query_row)?;
-            //println!("id: {}, item_id: {}", changes_query_row.id, changes_query_row.item_id);
+            let roots_query_row: RootsQueryRow = row?;
+            rows_rows.push(roots_query_row);
+        }
+        
+        let mut table = Table::new(&rows_rows);
+        table.with(Style::modern());
+        table.modify(Rows::first(), Alignment::center());
+        
+        Ok(table)
+    }    
+    
+    fn execute_scans(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, |row| {
+            ScansQueryRow::from_row(row)
+        })?;
+
+        let mut rows_rows = Vec::new();
+
+        for row in rows {
+            let scans_query_row= row?;
+            rows_rows.push(scans_query_row);
         }
         
         let mut table = Table::new(&rows_rows);
@@ -163,8 +195,9 @@ impl DomainQuery {
         let mut sql_statment = db.conn().prepare(&sql)?;
 
         let table = match self.query_type {
+            QueryType::Roots => self.execute_roots(&mut sql_statment, &sql_params)?,
+            QueryType::Scans => self.execute_scans(&mut sql_statment, &sql_params)?,
             QueryType::Changes => self.execute_changes(&mut sql_statment, &sql_params)?,
-            QueryType::Roots => self.execute_rows(&mut sql_statment, &sql_params)?,
         };
 
         println!("{table}");
@@ -253,6 +286,34 @@ impl RootsQueryRow {
     }
 }
 
+#[derive(Tabled)]
+struct ScansQueryRow {
+    scan_id: i64,
+    root_id: i64,
+    state: i64,
+    hashing: bool,
+    validating: bool,
+    time_of_scan: bool,
+    file_count: i64,
+    folder_count: i64,
+}
+
+impl ScansQueryRow {
+    fn from_row(row: &Row) -> rusqlite::Result<Self> {
+        Ok(
+            ScansQueryRow { 
+                scan_id: row.get(0)?, 
+                root_id: row.get(1)?, 
+                state: row.get(2)?, 
+                hashing: row.get(3)?, 
+                validating: row.get(4)?, 
+                time_of_scan: row.get(5)?, 
+                file_count: row.get(6)?, 
+                folder_count: row.get(7)?, 
+            }
+        )
+    }
+}
 
 impl Query {
     pub fn process_query(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
@@ -266,6 +327,7 @@ impl Query {
         let domain_query = query_children.next().unwrap();
         let query_type = match domain_query.as_rule() {
             Rule::roots_query => QueryType::Roots,
+            Rule::scans_query => QueryType::Scans,
             Rule::changes_query => QueryType::Changes,
             _ => {
                 return Err(FsPulseError::Error(format!("Unsupported query type:\n{}", query_str)));
