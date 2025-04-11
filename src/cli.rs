@@ -305,14 +305,21 @@ impl Cli {
     }
 
     fn handle_interact(db: &mut Database, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
-        let command = Cli::choose_command();
-        match command {
-            CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog),
-            CommandChoice::QuerySimple => Cli::do_interactive_query(db, command),
-            CommandChoice::QueryEditor => Cli::do_interactive_query(db, command),
-            CommandChoice::Report => Cli::do_interactive_report(db),
-            CommandChoice::Exit => Ok(()),
+        loop {
+            // Get the user's command choice.
+            let command = Cli::choose_command();
+            
+            // Process the command.
+            match command {
+                CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
+                CommandChoice::QuerySimple | CommandChoice::QueryEditor => {
+                    Cli::do_interactive_query(db, command)?
+                },
+                CommandChoice::Report => Cli::do_interactive_report(db)?,
+                CommandChoice::Exit => break,
+            }
         }
+        Ok(())
     }
 
     fn choose_command() -> CommandChoice {  

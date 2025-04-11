@@ -27,10 +27,14 @@ impl Order {
     ];
     */
 
-    pub const CHANGE_COLS: &[&str] = &[
+    pub const CHANGES_COLS: &[&str] = &[
         "change_id",
         "item_id",
         "scan_id",
+        "root_id",
+    ];
+
+    pub const ROOTS_COLS: &[&str] = &[
         "root_id",
     ];
 
