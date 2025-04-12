@@ -29,6 +29,7 @@ thiserror = "2.0"
 tabled = "0.18"
 tablestream = { git = "https://github.com/gtunes-dev/tablestream" }
 threadpool = "1.8"
+tico = "2.0"
 toml = "0.8"
 
 [build-dependencies]

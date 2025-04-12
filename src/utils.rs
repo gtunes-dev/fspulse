@@ -1,5 +1,5 @@
 use std::{path::{Path, MAIN_SEPARATOR_STR}, time::Duration};
-
+use tico::tico;
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
@@ -11,45 +11,52 @@ pub struct Utils {
 }
 
 impl Utils {
-    
-    /*
-    pub fn opt_u64_to_opt_i64(opt_u64: Option<u64>) -> Option<i64> {
-        opt_u64.map(|v| v as i64)
-    }
-    */
-
-    /*
-    pub fn opt_u32_to_opt_i64(opt_u32: Option<u32>) -> Option<i64> {
-        opt_u32.map(|v| v as i64 )
-    }
-    */
-
-    /*
-
-    // TODO: Dead code?
-    pub fn string_value_or_none(s: &Option<String>) -> &str {
-        s.as_deref().unwrap_or("None")
-    }
-
-    pub fn str_value_or_none<'a>(s: &'a Option<&'a str>) -> &'a str {
-        s.unwrap_or("None")
-    }
-    */
-
-    pub fn opt_bool_or_none_as_str(opt_bool: Option<bool>) -> String {
+    pub fn display_opt_bool(opt_bool: &Option<bool>) -> String {
         match opt_bool {
-            Some(true) => "T".to_string(),
-            Some(false) => "F".to_string(),
-            None => "-".to_string(),
+            Some(true) => "T".into(),
+            Some(false) => "F".into(),
+            None => "-".into(),
         }
     }
 
-    pub fn opt_i64_or_none_as_str(opt_i64: Option<i64>) -> String {
+    pub fn display_bool(v: &bool) -> String {
+        Utils::display_opt_bool(&Some(*v))
+    }
+
+    pub fn display_opt_str<T: AsRef<str>>(opt: &Option<T>) -> String {
+        match opt {
+            Some(s) => s.as_ref().to_string(),
+            None => "-".to_owned(),
+        }
+    }
+
+    pub fn display_short_path(path: &str) -> String {
+        tico(path, None)
+        /*
+        match opt {
+            Some(s) => tico(s.as_ref(), None),
+            None => "-".to_owned()
+        }
+        */
+    }
+
+    /*
+    pub fn display_short_path<T: AsRef<str>>(opt: &Option<T>) -> String {
+        match opt {
+            Some(s) => tico(s.as_ref(), None),
+            None => "-".to_owned()
+        }
+    }
+    */
+
+    pub fn display_opt_i64(opt_i64: &Option<i64>) -> String {
         match opt_i64 {
             Some(i) => i.to_string(),
-            None => "-".to_string(),
+            None => "-".into(),
         }
     }
+
+
     
     pub fn dir_sep_or_empty(is_dir: bool) -> &'static str {
         if is_dir {
@@ -135,13 +142,7 @@ impl Utils {
     }
     */
 
-    pub fn opt_string_or_none(str: Option<&str>) -> &str {
-        match str {
-            //Some(s) => s.as_str(),
-            Some(s) => s,
-            None => "-",
-        }
-    }
+
 
     pub fn _format_path_for_display(path: &Path, max_len: usize) -> String {
         let path_str = path.to_string_lossy();

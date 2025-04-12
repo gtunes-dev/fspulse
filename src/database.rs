@@ -41,7 +41,7 @@ impl Database {
 
         // Attempt to open the database
         info!("Opening database: {}", db_path.display());
-        let conn = Connection::open(&db_path).map_err(FsPulseError::Database)?;
+        let conn = Connection::open(&db_path).map_err(FsPulseError::DatabaseError)?;
 
         let db = Self { conn: Some(conn), path: db_path.to_string_lossy().into_owned() };
         

@@ -53,7 +53,7 @@ impl Root {
             }),
         )
         .optional()
-        .map_err(FsPulseError::Database)
+        .map_err(FsPulseError::DatabaseError)
     }
 
     pub fn get_by_path(db: &Database, path: &str) -> Result<Option<Self>, FsPulseError> {
@@ -68,7 +68,7 @@ impl Root {
             }),
         )
         .optional()
-        .map_err(FsPulseError::Database)
+        .map_err(FsPulseError::DatabaseError)
     }
 
     pub fn create(db: &Database, path: &str) -> Result<Self, FsPulseError> {

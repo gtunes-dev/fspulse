@@ -88,7 +88,7 @@ impl Item {
             Item::from_row,
         )
         .optional()
-        .map_err(FsPulseError::Database)
+        .map_err(FsPulseError::DatabaseError)
     }
 
     pub fn get_by_root_path_type(
@@ -106,7 +106,7 @@ impl Item {
             Item::from_row,
         )
         .optional()
-        .map_err(FsPulseError::Database)
+        .map_err(FsPulseError::DatabaseError)
     }
 
     pub fn id(&self) -> i64 { self.id }

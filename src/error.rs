@@ -2,15 +2,20 @@ use rusqlite::Error as RusqliteError;
 use thiserror::Error;
 use std::io;
 
+use crate::queries::Rule;
+
 #[derive(Error, Debug)]
 pub enum FsPulseError {
     #[error("I/O error: {0}")]
-    Io(#[from] io::Error),  // Converts io::Error into FsPulseError automatically
+    IoError(#[from] io::Error),  // Converts io::Error into FsPulseError automatically
 
     #[error("Database error: {0}")]
-    Database(#[from] RusqliteError), // Converts rusqlite::Error automatically
+    DatabaseError(#[from] RusqliteError), // Converts rusqlite::Error automatically
 
     #[error("Error: {0}")]
     Error(String), // Allows custom application errors
+
+    #[error("Query parsing error: {0}")]
+    ParsingError(#[from] Box<pest::error::Error<Rule>>), 
 }
 

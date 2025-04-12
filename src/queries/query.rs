@@ -1,19 +1,21 @@
 //use std::io::{self, Stdout};
 
 use log::{error, info};
-use pest::{iterators::{Pair, Pairs}, Parser};
+use pest::{iterators::Pair, Parser};
 use rusqlite::{Row, Statement, ToSql};
 use tabled::{settings::{object::Rows, Alignment, Style}, Table, Tabled};
 //use tablestream::{Column, Stream};
 
 use crate::{database::Database, error::FsPulseError};
+use crate::utils::Utils;
 
-use super::{filters::{ChangeFilter, DateFilter, Filter, IdFilter}, order::Order, QueryParser, Rule};
+use super::{columns::ColumnSet, filters::{ChangeFilter, DateFilter, Filter, IdFilter}, order::Order, QueryParser, Rule};
 
-#[derive(Debug)]
-enum QueryType {
+#[derive(Debug, Copy, Clone)]
+pub enum QueryType {
     Roots,
     Scans,
+    Items,
     Changes,
 }
 
@@ -23,7 +25,7 @@ pub struct Query;
 struct DomainQuery {
     query_type: QueryType,
 
-    order_cols: &'static [&'static str],
+    col_set: ColumnSet,
     
     filters: Vec<Box<dyn Filter>>,
     order: Option<Order>,
@@ -31,51 +33,25 @@ struct DomainQuery {
 }
 
 impl DomainQuery {
+    const ROOTS_BASE_SQL: &str = 
+        "\nFROM roots";
+
+    const SCANS_BASE_SQL: &str =
+        "\nFROM scans";
+
+    const ITEMS_BASE_SQL: &str = 
+        "\nFROM items";
+
     const CHANGES_BASE_SQL: &str  = 
-        "SELECT
-            changes.id as change_id,
-            items.root_id as root_id,
-            scan_id,
-            item_id,
-            change_type,
-            metadata_changed,
-            hash_changed,
-            validity_changed,
-            validity_state_old,
-            validity_state_new,
-            items.path as path
-        FROM changes
+        "\nFROM changes
         JOIN items
             ON changes.item_id = items.id";
 
-    const ROOTS_BASE_SQL: &str = "
-        SELECT
-            id as root_id,
-            path
-        FROM roots";
-
-    const SCANS_BASE_SQL: &str = "
-        SELECT
-            id as scan_id,
-            root_id,
-            state,
-            hashing,
-            validating,
-            time_of_scan,
-            file_count,
-            folder_count
-        FROM scans";
-
     fn new(query_type: QueryType) -> Self {
-        let order_cols = match query_type {
-            QueryType::Changes => Order::CHANGES_COLS,
-            QueryType::Roots => Order::ROOTS_COLS,
-            QueryType::Scans => Order::SCANS_COLS,
-        };
-
         DomainQuery {
             query_type,
-            order_cols,
+
+            col_set: ColumnSet::for_query_type(query_type),
 
             filters: Vec::new(),
             order: None,
@@ -94,8 +70,67 @@ impl DomainQuery {
         match self.query_type {
             QueryType::Roots => Self::ROOTS_BASE_SQL,
             QueryType::Scans => Self::SCANS_BASE_SQL,
+            QueryType::Items => Self::ITEMS_BASE_SQL,
             QueryType::Changes => Self::CHANGES_BASE_SQL,
         }
+    }
+
+    fn execute_roots(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, |row| {
+            RootsQueryRow::from_row(row)
+        })?;
+
+        let mut rows_rows = Vec::new();
+
+        for row in rows {
+            let roots_query_row: RootsQueryRow = row?;
+            rows_rows.push(roots_query_row);
+        }
+        
+        let mut table = Table::new(&rows_rows);
+        table.with(Style::modern());
+        table.modify(Rows::first(), Alignment::center());
+        
+        Ok(table)
+    }    
+
+
+    fn execute_scans(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, |row| {
+            ScansQueryRow::from_row(row)
+        })?;
+
+        let mut rows_rows = Vec::new();
+
+        for row in rows {
+            let scans_query_row= row?;
+            rows_rows.push(scans_query_row);
+        }
+        
+        let mut table = Table::new(&rows_rows);
+        table.with(Style::modern());
+        table.modify(Rows::first(), Alignment::center());
+        
+        Ok(table)
+    }
+
+    fn execute_items(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, |row| {
+            ItemsQueryRow::from_row(row)
+        })?;
+
+        let mut rows_rows = Vec::new();
+
+        for row in rows {
+            let items_query_row= row?;
+            rows_rows.push(items_query_row);
+        }
+        
+        let mut table = Table::new(&rows_rows);
+        table.with(Style::modern());
+        table.modify(Rows::first(), Alignment::center());
+        
+        Ok(table)
     }
 
     fn execute_changes(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
@@ -119,46 +154,8 @@ impl DomainQuery {
         Ok(table)
     }
 
-    fn execute_roots(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
-        let rows = sql_statment.query_map(sql_params, |row| {
-            RootsQueryRow::from_row(row)
-        })?;
-
-        let mut rows_rows = Vec::new();
-
-        for row in rows {
-            let roots_query_row: RootsQueryRow = row?;
-            rows_rows.push(roots_query_row);
-        }
-        
-        let mut table = Table::new(&rows_rows);
-        table.with(Style::modern());
-        table.modify(Rows::first(), Alignment::center());
-        
-        Ok(table)
-    }    
-    
-    fn execute_scans(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
-        let rows = sql_statment.query_map(sql_params, |row| {
-            ScansQueryRow::from_row(row)
-        })?;
-
-        let mut rows_rows = Vec::new();
-
-        for row in rows {
-            let scans_query_row= row?;
-            rows_rows.push(scans_query_row);
-        }
-        
-        let mut table = Table::new(&rows_rows);
-        table.with(Style::modern());
-        table.modify(Rows::first(), Alignment::center());
-        
-        Ok(table)
-    }
-
     fn execute(&self, db: &Database, _query: &str) -> Result<(), FsPulseError> {
-        let mut sql = self.get_base_sql().to_string();
+        let mut sql = format!("{}{}", self.col_set.as_select(), self.get_base_sql(), );
             
         // $TODO: Wrap Filters into a struct that can generate the entire WHERE clause
         let mut params_vec: Vec<Box<dyn ToSql>> = Vec::new();
@@ -197,75 +194,13 @@ impl DomainQuery {
         let table = match self.query_type {
             QueryType::Roots => self.execute_roots(&mut sql_statment, &sql_params)?,
             QueryType::Scans => self.execute_scans(&mut sql_statment, &sql_params)?,
+            QueryType::Items => self.execute_items(&mut sql_statment, &sql_params)?,
             QueryType::Changes => self.execute_changes(&mut sql_statment, &sql_params)?,
         };
 
         println!("{table}");
 
         Ok(())
-    }
-}
-
-#[derive(Tabled)]
-struct ChangesQueryRow {
-    // changes properties
-    #[tabled(rename = "change\nid")]
-    change_id: i64,
-    #[tabled(rename = "root\nid")]
-    root_id: i64,
-    #[tabled(rename = "scan\nid")]
-    scan_id: i64,
-    #[tabled(rename = "item\nid")]
-    item_id: i64,
-    #[tabled(rename = "change\ntype")]
-    change_type: String,
-    #[tabled(rename = "meta\nchange", display = "ChangesQueryRow::display_opt_bool")]
-    metadata_changed: Option<bool>,
-    #[tabled(rename = "hash\nchange", display = "ChangesQueryRow::display_opt_bool")]
-    hash_changed: Option<bool>,
-    #[tabled(rename = "valid\nchange", display = "ChangesQueryRow::display_opt_bool")]
-    validity_changed: Option<bool>,
-    #[tabled(rename = "old\nvalid", display = "ChangesQueryRow::display_opt_string")]
-    validity_state_old: Option<String>,
-    #[tabled(rename = "new\nvalid", display = "ChangesQueryRow::display_opt_string")]
-    validity_state_new: Option<String>,
-
-    // items properties
-    path: String,
-}
-
-impl ChangesQueryRow {
-    pub fn display_opt_bool(opt_bool: &Option<bool>) -> String {
-        match opt_bool {
-            Some(true) => "T".into(),
-            Some(false) => "F".into(),
-            None => "-".into(),
-        }
-    }
-
-    pub fn display_opt_string(opt_string: &Option<String>) -> String {
-        match opt_string {
-            Some(s) => s.into(),
-            None => "-".into(),
-        }
-    }
-
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(
-            ChangesQueryRow { 
-                change_id: row.get(0)?, 
-                root_id: row.get(1)?,
-                scan_id: row.get(2)?, 
-                item_id: row.get(3)?, 
-                change_type: row.get(4)?, 
-                metadata_changed: row.get(5)?, 
-                hash_changed: row.get(6)?, 
-                validity_changed: row.get(7)?,
-                validity_state_old: row.get(8)?,
-                validity_state_new: row.get(9)?,
-                path: row.get(10)?,
-            }
-        )
     }
 }
 
@@ -315,10 +250,113 @@ impl ScansQueryRow {
     }
 }
 
+#[derive(Tabled)]
+struct ItemsQueryRow {
+    item_id: i64,
+    root_id: i64,
+    #[tabled(display = "Utils::display_short_path")]
+    path: String,
+    item_type: String,
+    last_scan: i64,
+    #[tabled(display = "Utils::display_bool")]
+    is_ts: bool,
+    #[tabled(display = "Utils::display_opt_i64")]
+    mod_date: Option<i64>,
+    #[tabled(display = "Utils::display_opt_i64")]
+    file_size: Option<i64>,
+    #[tabled(display = "Utils::display_opt_i64")]
+    last_hash_scan: Option<i64>,
+    #[tabled(display = "Utils::display_opt_i64")]
+    last_val_scan: Option<i64>,
+    val: String,
+    #[tabled(display = "Utils::display_opt_str")]
+    val_error: Option<String>,
+}
+
+impl ItemsQueryRow {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(
+            ItemsQueryRow {
+                    item_id: row.get(0)?,
+                    root_id: row.get(1)?,
+                    path: row.get(2)?,
+                    item_type: row.get(3)?,
+                    last_scan: row.get(4)?,
+                    is_ts: row.get(5)?,
+                    mod_date: row.get(6)?,
+                    file_size: row.get(7)?,
+                    last_hash_scan: row.get(8)?,
+                    last_val_scan: row.get(9)?,
+                    val: row.get(10)?,
+                    val_error: row.get(11)?,
+            }
+        )
+    }
+}
+
+
+#[derive(Tabled)]
+struct ChangesQueryRow {
+    // changes properties
+    change_id: i64,
+    root_id: i64,
+    scan_id: i64,
+    item_id: i64,
+    change_type: String,
+    #[tabled(display = "Utils::display_opt_bool")]
+    meta_change: Option<bool>,
+    #[tabled(display = "Utils::display_opt_bool")]
+    hash_change: Option<bool>,
+    #[tabled(display = "Utils::display_opt_bool")]
+    val_change: Option<bool>,
+    #[tabled(display = "Utils::display_opt_str")]
+    val_old: Option<String>,
+    #[tabled(display = "Utils::display_opt_str")]
+    val_new: Option<String>,
+
+    // items properties
+    path: String,
+}
+
+impl ChangesQueryRow {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(
+            ChangesQueryRow { 
+                change_id: row.get(0)?, 
+                root_id: row.get(1)?,
+                scan_id: row.get(2)?, 
+                item_id: row.get(3)?, 
+                change_type: row.get(4)?, 
+                meta_change: row.get(5)?, 
+                hash_change: row.get(6)?, 
+                val_change: row.get(7)?,
+                val_old: row.get(8)?,
+                val_new: row.get(9)?,
+                path: row.get(10)?,
+            }
+        )
+    }
+}
+
 impl Query {
     pub fn process_query(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
-        info!("Preparing to execute query: {}", query_str);
-        let mut parsed_query = Query::parse(Rule::query, query_str)?;
+        info!("Parsing query: {}", query_str);
+        let mut parsed_query = match QueryParser::parse(Rule::query, query_str) {
+            Ok(parsed_query) => parsed_query,
+            Err(err) => {
+                match err.variant {
+                    pest::error::ErrorVariant::ParsingError{ .. } => {
+                        error!("Query parsing error: {}", err);
+                        println!("Query parsing error: {}", err);
+                        return Ok(())
+                    },
+                    _ => {
+                        return Err(Box::new(err).into());
+                    }
+                }
+            }
+        };
+
         info!("Parsed query: {}", parsed_query);
 
         let query_pair = parsed_query.next().unwrap();
@@ -328,6 +366,7 @@ impl Query {
         let query_type = match domain_query.as_rule() {
             Rule::roots_query => QueryType::Roots,
             Rule::scans_query => QueryType::Scans,
+            Rule::items_query => QueryType::Items,
             Rule::changes_query => QueryType::Changes,
             _ => {
                 return Err(FsPulseError::Error(format!("Unsupported query type:\n{}", query_str)));
@@ -338,19 +377,6 @@ impl Query {
         query.execute(db, query_str)?;
 
         Ok(())
-    }
-
-    fn parse(rule: Rule, s: &str) -> Result<Pairs<Rule>, FsPulseError> {
-        match QueryParser::parse(rule, s) {
-            Ok(pairs) => {
-                Ok(pairs)
-            }
-            Err(e) => {
-                let e_str = e.to_string();
-                error!("Failed to parse query:\n{}", e_str);
-                Err(FsPulseError::Error(format!("Failed to parse query:\n{}", e_str)))
-            }
-        }
     }
 
     fn build(query_type: QueryType, domain_query: Pair<Rule>) -> Result<DomainQuery, FsPulseError> {
@@ -376,7 +402,7 @@ impl Query {
                     query.add_filter(change_filter);
                 },
                 Rule::order_list => {
-                    let order = Order::build(token, query.order_cols)?;
+                    let order = Order::build(token, query.col_set)?;
                     query.order = Some(order);
                 },
                 Rule::limit_val => {

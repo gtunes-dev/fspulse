@@ -340,11 +340,19 @@ impl Cli {
     fn do_interactive_query(db: &Database, choice: CommandChoice) -> Result<(), FsPulseError> {
         match choice {
             CommandChoice::QuerySimple => {
-                let query: String = Input::new()
-                    .with_prompt("Query?")
-                    .interact_text()
-                    .unwrap();
-                Query::process_query(db, &query)?;
+                let mut initial_text = String::new();
+                loop {
+                    let query: String = Input::new()
+                        .with_prompt("Enter query or 'exit'")
+                        .with_initial_text(initial_text)
+                        .interact_text()
+                        .unwrap();
+                    if query.to_lowercase() == "exit" {
+                        break;
+                    }
+                    initial_text = query.clone();
+                    Query::process_query(db, &query)?;
+                }
             },
             CommandChoice::QueryEditor => {
                 if let Some(query) = Editor::new().edit("Enter a query").unwrap() {

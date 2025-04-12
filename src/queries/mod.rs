@@ -1,9 +1,9 @@
-//use pest::Parser;
 use pest_derive::Parser;
 
-pub mod query;
+mod columns;
 mod filters;
 mod order;
+pub mod query;
 
 
 pub use query::Query;

@@ -224,7 +224,7 @@ impl Change {
             )
         )
         .optional()
-        .map_err(FsPulseError::Database)
+        .map_err(FsPulseError::DatabaseError)
     }
 
     pub fn get_validation_transitions_for_scan(db: &Database, scan_id: i64) -> Result<ValidationTransitions, FsPulseError> {
