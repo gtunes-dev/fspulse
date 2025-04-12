@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use dialoguer::theme::ColorfulTheme;
-use dialoguer::Input;
+use dialoguer::{Input, BasicHistory};
 use dialoguer::Select;
 use dialoguer::Editor;
 use indicatif::MultiProgress;
@@ -305,19 +305,17 @@ impl Cli {
     }
 
     fn handle_interact(db: &mut Database, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
-        loop {
-            // Get the user's command choice.
-            let command = Cli::choose_command();
-            
-            // Process the command.
-            match command {
-                CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
-                CommandChoice::QuerySimple | CommandChoice::QueryEditor => {
-                    Cli::do_interactive_query(db, command)?
-                },
-                CommandChoice::Report => Cli::do_interactive_report(db)?,
-                CommandChoice::Exit => break,
-            }
+        // Get the user's command choice.
+        let command = Cli::choose_command();
+        
+        // Process the command.
+        match command {
+            CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
+            CommandChoice::QuerySimple | CommandChoice::QueryEditor => {
+                Cli::do_interactive_query(db, command)?
+            },
+            CommandChoice::Report => Cli::do_interactive_report(db)?,
+            CommandChoice::Exit => {},
         }
         Ok(())
     }
@@ -340,17 +338,20 @@ impl Cli {
     fn do_interactive_query(db: &Database, choice: CommandChoice) -> Result<(), FsPulseError> {
         match choice {
             CommandChoice::QuerySimple => {
-                let mut initial_text = String::new();
+                let mut history = BasicHistory::new().
+                    max_entries(8).
+                    no_duplicates(true);
+
                 loop {
-                    let query: String = Input::new()
-                        .with_prompt("Enter query or 'exit'")
-                        .with_initial_text(initial_text)
+                    let query: String = Input::with_theme(&ColorfulTheme::default())
+                        .history_with(&mut history)
+                        .with_post_completion_text("Query: ")
+                        .with_prompt("Enter query (to exit: 'q' or 'exit'")
                         .interact_text()
                         .unwrap();
                     if query.to_lowercase() == "exit" {
                         break;
                     }
-                    initial_text = query.clone();
                     Query::process_query(db, &query)?;
                 }
             },

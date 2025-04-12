@@ -103,7 +103,7 @@ impl IdFilter {
         }
     }
 
-    pub fn build(id_filter_pair: Pair<Rule>) -> Result<IdFilter, FsPulseError> {
+    pub fn build(id_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
 
         let id_type = IdType::from_rule(id_filter_pair.as_rule());
         let mut id_filter = Self::new(id_type);
@@ -224,7 +224,7 @@ impl DateFilter {
         }
     }
     
-    pub fn build(date_filter_pair: Pair<Rule>) -> Result<DateFilter, FsPulseError> {
+    pub fn build(date_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
         let date_type = DateType::from_rule(date_filter_pair.as_rule());
         let mut date_filter = DateFilter::new(date_type);
 
@@ -295,7 +295,7 @@ impl ChangeFilter {
         Self::default()
     }
 
-    pub fn build(filter_change: Pair<Rule>) -> Result<ChangeFilter, FsPulseError> {
+    pub fn build(filter_change: Pair<Rule>) -> Result<Self, FsPulseError> {
         let mut change_filter = ChangeFilter::new();
         for change in filter_change.into_inner() {
 
@@ -312,38 +312,50 @@ impl ChangeFilter {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct RootFilter {
-    root_ids: Vec<i64>,
 
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PathFilter {
+    path_strs: Vec<String>,
 }
 
-impl Filter for RootFilter {
+impl Filter for PathFilter {
     fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
-        /* 
-        let pred_str = " (root_id IN (?))";
-        let pred_vec: Vec<&dyn ToSql> = self.root_ids.iter()
-            .map(|id| id as &dyn ToSql)
-            .collect();
-        */
-
-        let mut first = true;
-        let mut pred_str = " (root_id IN (".to_string();
+        let mut pred_str = " (".to_string();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
-        for root_id in &self.root_ids {
+
+        let mut first: bool = true;
+        for path_str in &self.path_strs {
             match first {
-                true => {
-                    first = false;
-                    pred_str.push('?');
-                }
-                false => {
-                    pred_str.push_str(", ?");
-                }
+                true => first = false,
+                false => pred_str.push_str(" OR "),
             }
-            pred_vec.push(Box::new(*root_id));
+            pred_str.push_str("(path LIKE ?)");
+
+            //let change_type_str = c.to_string();
+            let like_str = format!("%{path_str}%");
+            pred_vec.push(Box::new(like_str));
         }
-        pred_str.push_str("))");
+
+        pred_str.push(')');
 
         Ok((pred_str, pred_vec))
+    }
+}
+
+impl PathFilter {
+    fn new() -> Self {
+        PathFilter {
+            path_strs: Vec::new(),
+        }
+    }
+
+    pub fn build(path_filter_pair: Pair<Rule>) -> Result<PathFilter, FsPulseError> {
+        let mut path_filter = Self::new();
+
+        for path_spec in path_filter_pair.into_inner() {
+            path_filter.path_strs.push(path_spec.as_str().to_string());
+        }
+
+        Ok(path_filter)
     }
 }

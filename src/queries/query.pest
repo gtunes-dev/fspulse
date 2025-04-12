@@ -46,10 +46,11 @@ path_filter = { ^"path" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ path_list ~ WS* ~ R
 // items:
 // changes: change_id, item_id, scan_id
 order_clause = _{ WS+ ~ ^"order" ~ WS+ ~ ^"by" ~ WS+ ~ order_list }
-order_list   = _{ order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
+order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { column_id ~ (WS+ ~ order_dir)? }
 order_dir    =  { ^"ASC" | ^"DESC" }
-column_id    =  { ^"change_id" | ^"item_id" | ^"scan_id" | ^"root_id" | ^"id" }
+// column_id    =  { ^"change_id" | ^"item_id" | ^"scan_id" | ^"root_id" | ^"id" }
+column_id = { (('a'..'z') | ('A'..'Z') | "_")+ }
 
 limit_clause = _{ WS+ ~ limit_text ~ WS+ ~ limit_val }
 limit_text   = _{ ^"limit" }
@@ -73,13 +74,13 @@ change        =  { ^"A" | ^"D" | ^"M" }
 validity_values = _{ validity ~ (WS* ~ COMMA ~ WS* ~ validity)* }
 validity        =  { ^"V" | ^"I" | ^"N" | ^"U" }
 
-path_list = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ path_spec)* }
+path_list = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ WS* ~ path_spec)* }
 
 path_spec = _{ "'" ~ path ~ "'" }
 path      =  { (("\\'" | (!"'" ~ ANY)))* }
 
 // Basic tokens - all silent
-WS     = _{ " " | "\t" | "\n" }
+WS     = _{ " " | "\t" | NEWLINE }
 COLON  = _{ ":" }
 COMMA  = _{ "," }
 DOTDOT = _{ ".." }

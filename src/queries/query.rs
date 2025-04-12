@@ -9,7 +9,7 @@ use tabled::{settings::{object::Rows, Alignment, Style}, Table, Tabled};
 use crate::{database::Database, error::FsPulseError};
 use crate::utils::Utils;
 
-use super::{columns::ColumnSet, filters::{ChangeFilter, DateFilter, Filter, IdFilter}, order::Order, QueryParser, Rule};
+use super::{columns::ColumnSet, filters::{ChangeFilter, DateFilter, Filter, IdFilter, PathFilter}, order::Order, QueryParser, Rule};
 
 #[derive(Debug, Copy, Clone)]
 pub enum QueryType {
@@ -407,7 +407,11 @@ impl Query {
                 },
                 Rule::limit_val => {
                     query.limit = Some(token.as_str().parse().unwrap());
-                }
+                },
+                Rule::path_filter => {
+                    let path_filter = PathFilter::build(token)?;
+                    query.add_filter(path_filter);
+                },
                 _ => {}
             }
         }
