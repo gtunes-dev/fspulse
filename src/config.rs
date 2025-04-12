@@ -1,7 +1,10 @@
 use std::fs;
 
 use directories::ProjectDirs;
-use figment::{providers::{Format, Serialized, Toml}, Figment};
+use figment::{
+    providers::{Format, Serialized, Toml},
+    Figment,
+};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
@@ -37,9 +40,7 @@ impl Config {
                 fspulse: "info".to_string(),
                 lopdf: "error".to_string(),
             },
-            analysis:  AnalysisConfig {
-                threads: 8,
-            }
+            analysis: AnalysisConfig { threads: 8 },
         };
 
         // If the config file doesn't exist, write the default configuration to disk.
@@ -69,7 +70,7 @@ impl Config {
         // Build a Figment instance that uses the defaults merged with the TOML file (if it exists)
         let figment = Figment::from(Serialized::defaults(default_config.clone()))
             .merge(Toml::file(&config_path));
-        
+
         // Attempt to extract the configuration; on error, log a message and fall back to defaults.
         figment.extract().unwrap_or_else(|err| {
             eprintln!(

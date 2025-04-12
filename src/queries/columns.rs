@@ -1,6 +1,4 @@
-
 use super::query::QueryType;
-
 
 // Define a macro to simplify construction.
 macro_rules! column_spec {
@@ -17,22 +15,21 @@ macro_rules! column_spec {
 #[derive(Debug)]
 pub struct ColumnSpec {
     db_name: &'static str,
-    display_name: &'static str
+    display_name: &'static str,
 }
 
-#[derive(Copy, Clone,  Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct ColumnSet {
     cols: &'static [ColumnSpec],
 }
 
 impl ColumnSet {
     pub fn for_query_type(query_type: QueryType) -> ColumnSet {
-        
         let cols: &'static [ColumnSpec] = match query_type {
-            QueryType::Roots =>  ROOTS_COL_SET,
-            QueryType::Items =>  ITEMS_COL_SET,
-            QueryType::Scans =>  SCANS_COL_SET,
-            QueryType::Changes =>  CHANGES_COL_SET,
+            QueryType::Roots => ROOTS_COL_SET,
+            QueryType::Items => ITEMS_COL_SET,
+            QueryType::Scans => SCANS_COL_SET,
+            QueryType::Changes => CHANGES_COL_SET,
         };
 
         ColumnSet { cols }
@@ -48,12 +45,12 @@ impl ColumnSet {
                 false => sql.push_str(", "),
             }
             sql.push_str(column.db_name);
-        };
+        }
 
         sql
     }
 
-    pub fn display_to_db(&self, display: &str) -> Option<&'static str>  {
+    pub fn display_to_db(&self, display: &str) -> Option<&'static str> {
         let display_lower = display.to_lowercase();
 
         for column in self.cols {
@@ -66,13 +63,10 @@ impl ColumnSet {
     }
 }
 
-pub const ROOTS_COL_SET: &[ColumnSpec] = column_spec![
-    ("id", "root_id"),
-    ("path", "path")
-];
+pub const ROOTS_COL_SET: &[ColumnSpec] = column_spec![("id", "root_id"), ("path", "path")];
 
 pub const SCANS_COL_SET: &[ColumnSpec] = column_spec![
-    ("id",  "scan_id"),
+    ("id", "scan_id"),
     ("root_id", "root_id"),
     ("state", "state"),
     ("hashing", "hashing"),
@@ -81,7 +75,6 @@ pub const SCANS_COL_SET: &[ColumnSpec] = column_spec![
     ("file_count", "file_count"),
     ("folder_count", "folder_count"),
 ];
-
 
 pub const ITEMS_COL_SET: &[ColumnSpec] = column_spec![
     ("id", "item_id"),
@@ -111,4 +104,3 @@ pub const CHANGES_COL_SET: &[ColumnSpec] = column_spec![
     ("validity_state_new", "val_new"),
     ("items.path", "path"),
 ];
-

@@ -5,7 +5,6 @@ mod filters;
 mod order;
 pub mod query;
 
-
 pub use query::Query;
 
 //pub mod parser;

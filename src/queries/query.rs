@@ -1,15 +1,21 @@
-//use std::io::{self, Stdout};
-
 use log::{error, info};
 use pest::{iterators::Pair, Parser};
 use rusqlite::{Row, Statement, ToSql};
-use tabled::{settings::{object::Rows, Alignment, Style}, Table, Tabled};
+use tabled::{
+    settings::{object::Rows, Alignment, Style},
+    Table, Tabled,
+};
 //use tablestream::{Column, Stream};
 
-use crate::{database::Database, error::FsPulseError};
 use crate::utils::Utils;
+use crate::{database::Database, error::FsPulseError};
 
-use super::{columns::ColumnSet, filters::{ChangeFilter, DateFilter, Filter, IdFilter, PathFilter}, order::Order, QueryParser, Rule};
+use super::{
+    columns::ColumnSet,
+    filters::{ChangeFilter, DateFilter, Filter, IdFilter, PathFilter},
+    order::Order,
+    QueryParser, Rule,
+};
 
 #[derive(Debug, Copy, Clone)]
 pub enum QueryType {
@@ -26,24 +32,20 @@ struct DomainQuery {
     query_type: QueryType,
 
     col_set: ColumnSet,
-    
+
     filters: Vec<Box<dyn Filter>>,
     order: Option<Order>,
     limit: Option<i64>,
 }
 
 impl DomainQuery {
-    const ROOTS_BASE_SQL: &str = 
-        "\nFROM roots";
+    const ROOTS_BASE_SQL: &str = "\nFROM roots";
 
-    const SCANS_BASE_SQL: &str =
-        "\nFROM scans";
+    const SCANS_BASE_SQL: &str = "\nFROM scans";
 
-    const ITEMS_BASE_SQL: &str = 
-        "\nFROM items";
+    const ITEMS_BASE_SQL: &str = "\nFROM items";
 
-    const CHANGES_BASE_SQL: &str  = 
-        "\nFROM changes
+    const CHANGES_BASE_SQL: &str = "\nFROM changes
         JOIN items
             ON changes.item_id = items.id";
 
@@ -61,7 +63,7 @@ impl DomainQuery {
 
     fn add_filter<F>(&mut self, filter: F)
     where
-        F: Filter + 'static
+        F: Filter + 'static,
     {
         self.filters.push(Box::new(filter));
     }
@@ -75,10 +77,12 @@ impl DomainQuery {
         }
     }
 
-    fn execute_roots(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
-        let rows = sql_statment.query_map(sql_params, |row| {
-            RootsQueryRow::from_row(row)
-        })?;
+    fn execute_roots(
+        &self,
+        sql_statment: &mut Statement,
+        sql_params: &[&dyn ToSql],
+    ) -> Result<Table, FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, RootsQueryRow::from_row)?;
 
         let mut rows_rows = Vec::new();
 
@@ -86,57 +90,62 @@ impl DomainQuery {
             let roots_query_row: RootsQueryRow = row?;
             rows_rows.push(roots_query_row);
         }
-        
+
         let mut table = Table::new(&rows_rows);
         table.with(Style::modern());
         table.modify(Rows::first(), Alignment::center());
-        
+
         Ok(table)
-    }    
+    }
 
-
-    fn execute_scans(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
-        let rows = sql_statment.query_map(sql_params, |row| {
-            ScansQueryRow::from_row(row)
-        })?;
+    fn execute_scans(
+        &self,
+        sql_statment: &mut Statement,
+        sql_params: &[&dyn ToSql],
+    ) -> Result<Table, FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, ScansQueryRow::from_row)?;
 
         let mut rows_rows = Vec::new();
 
         for row in rows {
-            let scans_query_row= row?;
+            let scans_query_row = row?;
             rows_rows.push(scans_query_row);
         }
-        
+
         let mut table = Table::new(&rows_rows);
         table.with(Style::modern());
         table.modify(Rows::first(), Alignment::center());
-        
+
         Ok(table)
     }
 
-    fn execute_items(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
-        let rows = sql_statment.query_map(sql_params, |row| {
-            ItemsQueryRow::from_row(row)
-        })?;
+    fn execute_items(
+        &self,
+        sql_statment: &mut Statement,
+        sql_params: &[&dyn ToSql],
+    ) -> Result<Table, FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, ItemsQueryRow::from_row)?;
 
         let mut rows_rows = Vec::new();
 
         for row in rows {
-            let items_query_row= row?;
+            let items_query_row = row?;
             rows_rows.push(items_query_row);
         }
-        
+
         let mut table = Table::new(&rows_rows);
         table.with(Style::modern());
         table.modify(Rows::first(), Alignment::center());
-        
+
         Ok(table)
     }
 
-    fn execute_changes(&self, sql_statment: &mut Statement, sql_params: &[&dyn ToSql]) -> Result<Table, FsPulseError> {
-        let rows = sql_statment.query_map(sql_params, |row| {
-            ChangesQueryRow::from_row(row)
-        })?;
+    fn execute_changes(
+        &self,
+        sql_statment: &mut Statement,
+        sql_params: &[&dyn ToSql],
+    ) -> Result<Table, FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, ChangesQueryRow::from_row)?;
 
         let mut changes_rows = Vec::new();
 
@@ -146,17 +155,17 @@ impl DomainQuery {
             //table.row(changes_query_row)?;
             //println!("id: {}, item_id: {}", changes_query_row.id, changes_query_row.item_id);
         }
-        
+
         let mut table = Table::new(&changes_rows);
         table.with(Style::modern());
         table.modify(Rows::first(), Alignment::center());
-        
+
         Ok(table)
     }
 
     fn execute(&self, db: &Database, _query: &str) -> Result<(), FsPulseError> {
-        let mut sql = format!("{}{}", self.col_set.as_select(), self.get_base_sql(), );
-            
+        let mut sql = format!("{}{}", self.col_set.as_select(), self.get_base_sql(),);
+
         // $TODO: Wrap Filters into a struct that can generate the entire WHERE clause
         let mut params_vec: Vec<Box<dyn ToSql>> = Vec::new();
 
@@ -167,7 +176,7 @@ impl DomainQuery {
                 match first {
                     true => {
                         first = false;
-                    },
+                    }
                     false => {
                         sql.push_str(" AND");
                     }
@@ -212,12 +221,10 @@ struct RootsQueryRow {
 
 impl RootsQueryRow {
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
-        Ok(
-            RootsQueryRow { 
-                root_id: row.get(0)?, 
-                path: row.get(1)? 
-            }
-        )
+        Ok(RootsQueryRow {
+            root_id: row.get(0)?,
+            path: row.get(1)?,
+        })
     }
 }
 
@@ -235,18 +242,16 @@ struct ScansQueryRow {
 
 impl ScansQueryRow {
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
-        Ok(
-            ScansQueryRow { 
-                scan_id: row.get(0)?, 
-                root_id: row.get(1)?, 
-                state: row.get(2)?, 
-                hashing: row.get(3)?, 
-                validating: row.get(4)?, 
-                time_of_scan: row.get(5)?, 
-                file_count: row.get(6)?, 
-                folder_count: row.get(7)?, 
-            }
-        )
+        Ok(ScansQueryRow {
+            scan_id: row.get(0)?,
+            root_id: row.get(1)?,
+            state: row.get(2)?,
+            hashing: row.get(3)?,
+            validating: row.get(4)?,
+            time_of_scan: row.get(5)?,
+            file_count: row.get(6)?,
+            folder_count: row.get(7)?,
+        })
     }
 }
 
@@ -275,25 +280,22 @@ struct ItemsQueryRow {
 
 impl ItemsQueryRow {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(
-            ItemsQueryRow {
-                    item_id: row.get(0)?,
-                    root_id: row.get(1)?,
-                    path: row.get(2)?,
-                    item_type: row.get(3)?,
-                    last_scan: row.get(4)?,
-                    is_ts: row.get(5)?,
-                    mod_date: row.get(6)?,
-                    file_size: row.get(7)?,
-                    last_hash_scan: row.get(8)?,
-                    last_val_scan: row.get(9)?,
-                    val: row.get(10)?,
-                    val_error: row.get(11)?,
-            }
-        )
+        Ok(ItemsQueryRow {
+            item_id: row.get(0)?,
+            root_id: row.get(1)?,
+            path: row.get(2)?,
+            item_type: row.get(3)?,
+            last_scan: row.get(4)?,
+            is_ts: row.get(5)?,
+            mod_date: row.get(6)?,
+            file_size: row.get(7)?,
+            last_hash_scan: row.get(8)?,
+            last_val_scan: row.get(9)?,
+            val: row.get(10)?,
+            val_error: row.get(11)?,
+        })
     }
 }
-
 
 #[derive(Tabled)]
 struct ChangesQueryRow {
@@ -320,21 +322,19 @@ struct ChangesQueryRow {
 
 impl ChangesQueryRow {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(
-            ChangesQueryRow { 
-                change_id: row.get(0)?, 
-                root_id: row.get(1)?,
-                scan_id: row.get(2)?, 
-                item_id: row.get(3)?, 
-                change_type: row.get(4)?, 
-                meta_change: row.get(5)?, 
-                hash_change: row.get(6)?, 
-                val_change: row.get(7)?,
-                val_old: row.get(8)?,
-                val_new: row.get(9)?,
-                path: row.get(10)?,
-            }
-        )
+        Ok(ChangesQueryRow {
+            change_id: row.get(0)?,
+            root_id: row.get(1)?,
+            scan_id: row.get(2)?,
+            item_id: row.get(3)?,
+            change_type: row.get(4)?,
+            meta_change: row.get(5)?,
+            hash_change: row.get(6)?,
+            val_change: row.get(7)?,
+            val_old: row.get(8)?,
+            val_new: row.get(9)?,
+            path: row.get(10)?,
+        })
     }
 }
 
@@ -343,18 +343,16 @@ impl Query {
         info!("Parsing query: {}", query_str);
         let mut parsed_query = match QueryParser::parse(Rule::query, query_str) {
             Ok(parsed_query) => parsed_query,
-            Err(err) => {
-                match err.variant {
-                    pest::error::ErrorVariant::ParsingError{ .. } => {
-                        error!("Query parsing error: {}", err);
-                        println!("Query parsing error: {}", err);
-                        return Ok(())
-                    },
-                    _ => {
-                        return Err(Box::new(err).into());
-                    }
+            Err(err) => match err.variant {
+                pest::error::ErrorVariant::ParsingError { .. } => {
+                    error!("Query parsing error: {}", err);
+                    println!("Query parsing error: {}", err);
+                    return Ok(());
                 }
-            }
+                _ => {
+                    return Err(Box::new(err).into());
+                }
+            },
         };
 
         info!("Parsed query: {}", parsed_query);
@@ -369,7 +367,10 @@ impl Query {
             Rule::items_query => QueryType::Items,
             Rule::changes_query => QueryType::Changes,
             _ => {
-                return Err(FsPulseError::Error(format!("Unsupported query type:\n{}", query_str)));
+                return Err(FsPulseError::Error(format!(
+                    "Unsupported query type:\n{}",
+                    query_str
+                )));
             }
         };
 
@@ -385,33 +386,32 @@ impl Query {
         // iterate over the children of changes_query
         for token in domain_query.into_inner() {
             match token.as_rule() {
-                Rule::root_id_filter | 
-                Rule::scan_id_filter |
-                Rule::item_id_filter |
-                Rule::change_id_filter => {
+                Rule::root_id_filter
+                | Rule::scan_id_filter
+                | Rule::item_id_filter
+                | Rule::change_id_filter => {
                     let id_filter = IdFilter::build(token)?;
                     query.add_filter(id_filter);
-                },
-                Rule::scan_date_filter |
-                Rule::mod_date_filter => {
+                }
+                Rule::scan_date_filter | Rule::mod_date_filter => {
                     let date_filter = DateFilter::build(token)?;
                     query.add_filter(date_filter);
-                },
+                }
                 Rule::change_filter => {
                     let change_filter = ChangeFilter::build(token)?;
                     query.add_filter(change_filter);
-                },
+                }
                 Rule::order_list => {
                     let order = Order::build(token, query.col_set)?;
                     query.order = Some(order);
-                },
+                }
                 Rule::limit_val => {
                     query.limit = Some(token.as_str().parse().unwrap());
-                },
+                }
                 Rule::path_filter => {
                     let path_filter = PathFilter::build(token)?;
                     query.add_filter(path_filter);
-                },
+                }
                 _ => {}
             }
         }

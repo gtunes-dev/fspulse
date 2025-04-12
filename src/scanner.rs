@@ -22,26 +22,26 @@ use crate::config::CONFIG;
 use crate::hash::Hash;
 use crate::items::{Item, ItemType};
 use crate::reports::{ReportFormat, Reports};
+use crate::roots::Root;
+use crate::scans::ScanState;
 use crate::utils::Utils;
 use crate::validators::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
-use crate::roots::Root;
-use crate::scans::ScanState;
 
 use crossbeam_channel::bounded;
 use dialoguer::theme::ColorfulTheme;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use log::error;
 use dialoguer::{MultiSelect, Select};
+use log::error;
 use threadpool::ThreadPool;
 //use md5::digest::typenum::Abs;
 use std::collections::VecDeque;
-use std::time::Duration;
-use std::{cmp, fs};
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use std::{cmp, fs};
 
 #[derive(Clone, Debug)]
 struct QueueEntry {
@@ -49,9 +49,7 @@ struct QueueEntry {
     metadata: fs::Metadata,
 }
 
-
-pub struct Scanner {
-}
+pub struct Scanner {}
 
 enum ScanDecision {
     NewScan,
@@ -60,25 +58,29 @@ enum ScanDecision {
 }
 
 impl Scanner {
-    pub fn do_interactive_scan(db: &mut Database, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError>{
-
+    pub fn do_interactive_scan(
+        db: &mut Database,
+        multi_prog: &mut MultiProgress,
+    ) -> Result<(), FsPulseError> {
         let root = match Root::interact_choose_root(db, "Scan which root?")? {
             Some(root) => root,
-            None => return Ok(())
+            None => return Ok(()),
         };
-        
+
         // look for an existing, incomplete scan
         let mut existing_scan = Scan::get_latest_for_root(db, root.id())?
-                .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
+            .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
 
         // if a scan is found, ask the user if it should be stopped or resumed
         let mut scan = match existing_scan.as_mut() {
-            Some(existing_scan) => match Scanner::stop_or_resume_scan(db, &root, existing_scan, true)? {
-                ScanDecision::NewScan => Scanner::initiate_scan_interactive(db, &root)?,
-                ScanDecision::ContinueExisting => *existing_scan,
-                ScanDecision::Exit => return Ok(())
-            },
-            None => Scanner::initiate_scan_interactive(db, &root)?
+            Some(existing_scan) => {
+                match Scanner::stop_or_resume_scan(db, &root, existing_scan, true)? {
+                    ScanDecision::NewScan => Scanner::initiate_scan_interactive(db, &root)?,
+                    ScanDecision::ContinueExisting => *existing_scan,
+                    ScanDecision::Exit => return Ok(()),
+                }
+            }
+            None => Scanner::initiate_scan_interactive(db, &root)?,
         };
 
         Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)
@@ -99,7 +101,7 @@ impl Scanner {
             match selected_flag {
                 0 => hash = true,
                 1 => validate = true,
-                _ => ()
+                _ => (),
             }
         }
 
@@ -107,88 +109,98 @@ impl Scanner {
     }
 
     pub fn do_scan_command(
-        db: &mut Database, 
-        root_id: Option<u32>, 
+        db: &mut Database,
+        root_id: Option<u32>,
         root_path: Option<String>,
-        last: bool, 
+        last: bool,
         hash: bool,
         validate: bool,
         multi_prog: &mut MultiProgress,
     ) -> Result<(), FsPulseError> {
-            // If an incomplete scan exists, find it.
-            let (root, mut existing_scan) = match (root_id, root_path, last) {
-                (Some(root_id), _, _) => {
-                    let root = Root::get_by_id(db, root_id.into())?
-                        .ok_or_else(|| FsPulseError::Error(format!("Root id {} not found", root_id)))?;
-                    // Look for an outstanding scan on the root
-                    let scan = Scan::get_latest_for_root(db, root.id())?
-                        .filter(|s: &Scan| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
-                    (root, scan)
-                },
-                (_, Some(root_path), _) => {
-                    let root_path_buf = Root::validate_and_canonicalize_path(&root_path)?;
-                    let root_path_str = root_path_buf.to_string_lossy().to_string();
+        // If an incomplete scan exists, find it.
+        let (root, mut existing_scan) = match (root_id, root_path, last) {
+            (Some(root_id), _, _) => {
+                let root = Root::get_by_id(db, root_id.into())?
+                    .ok_or_else(|| FsPulseError::Error(format!("Root id {} not found", root_id)))?;
+                // Look for an outstanding scan on the root
+                let scan = Scan::get_latest_for_root(db, root.id())?.filter(|s: &Scan| {
+                    s.state() != ScanState::Completed && s.state() != ScanState::Stopped
+                });
+                (root, scan)
+            }
+            (_, Some(root_path), _) => {
+                let root_path_buf = Root::validate_and_canonicalize_path(&root_path)?;
+                let root_path_str = root_path_buf.to_string_lossy().to_string();
 
-                    let root = Root::get_by_path(db, &root_path_str)?;
-                    match root {
-                        Some(root) => {
-                            // Found the root. Look for an outstanding scan
-                            let scan = Scan::get_latest_for_root(db, root.id())?
-                                .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
-                            (root, scan)
-                        },
-                        None => {
-                            // Create the new root
-                            let new_root = Root::create(db, &root_path_str)?;
-                            (new_root, None)
-                        }
+                let root = Root::get_by_path(db, &root_path_str)?;
+                match root {
+                    Some(root) => {
+                        // Found the root. Look for an outstanding scan
+                        let scan = Scan::get_latest_for_root(db, root.id())?.filter(|s| {
+                            s.state() != ScanState::Completed && s.state() != ScanState::Stopped
+                        });
+                        (root, scan)
                     }
-                },
-                (_, _, true) => {
-                    let scan = Scan::get_latest(db)?
-                        .ok_or_else(|| FsPulseError::Error("No latest scan found".to_string()))?;
-                    let root = Root::get_by_id(db, scan.root_id())?
-                        .ok_or_else(|| FsPulseError::Error(format!("No root found for latest Scan Id {}", scan.id())))?;
-
-                    let return_scan = if scan.state() != ScanState::Completed {
-                        Some(scan)
-                    } else {
-                        None
-                    };
-
-                    (root, return_scan)
-                },
-                _ => {
-                    return Err(FsPulseError::Error("Invalid arguments".into()));
+                    None => {
+                        // Create the new root
+                        let new_root = Root::create(db, &root_path_str)?;
+                        (new_root, None)
+                    }
                 }
-            };
+            }
+            (_, _, true) => {
+                let scan = Scan::get_latest(db)?
+                    .ok_or_else(|| FsPulseError::Error("No latest scan found".to_string()))?;
+                let root = Root::get_by_id(db, scan.root_id())?.ok_or_else(|| {
+                    FsPulseError::Error(format!("No root found for latest Scan Id {}", scan.id()))
+                })?;
 
-            // If scan is present, it is incomplete. Ask the user to decide if it should be resumed or stopped.
-            // Also allows the user to exit without making the choice now
+                let return_scan = if scan.state() != ScanState::Completed {
+                    Some(scan)
+                } else {
+                    None
+                };
 
-            let mut scan = match existing_scan.as_mut() {
-                Some(existing_scan) => match Scanner::stop_or_resume_scan(db, &root, existing_scan, false)? {
+                (root, return_scan)
+            }
+            _ => {
+                return Err(FsPulseError::Error("Invalid arguments".into()));
+            }
+        };
+
+        // If scan is present, it is incomplete. Ask the user to decide if it should be resumed or stopped.
+        // Also allows the user to exit without making the choice now
+
+        let mut scan = match existing_scan.as_mut() {
+            Some(existing_scan) => {
+                match Scanner::stop_or_resume_scan(db, &root, existing_scan, false)? {
                     ScanDecision::NewScan => Scanner::initiate_scan(db, &root, hash, validate)?,
                     ScanDecision::ContinueExisting => {
                         multi_prog.println("Resuming scan")?;
                         *existing_scan
-                    },
-                    ScanDecision::Exit => return Ok(())
-                },
-                None => Scanner::initiate_scan(db, &root, hash, validate)?
-            };
+                    }
+                    ScanDecision::Exit => return Ok(()),
+                }
+            }
+            None => Scanner::initiate_scan(db, &root, hash, validate)?,
+        };
 
-            Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)?;
+        Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)?;
 
-            Reports::report_scan(db, &scan)
+        Reports::report_scan(db, &scan)
     }
 
-    fn do_scan_machine(db: &mut Database, scan: &mut Scan, root: &Root, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
+    fn do_scan_machine(
+        db: &mut Database,
+        scan: &mut Scan,
+        root: &Root,
+        multi_prog: &mut MultiProgress,
+    ) -> Result<(), FsPulseError> {
         multi_prog.println("-- FsPulse Scan --")?;
 
         // Loop through all states, even if resuming, to allow progress updates
         let mut loop_state = ScanState::Scanning;
-        
+
         loop {
             // When the state is completed, the scan is done
             if loop_state == ScanState::Completed {
@@ -203,7 +215,7 @@ impl Scanner {
                     }
                     Utils::finish_section_bar(&bar, "✔ Quick scanning");
                     loop_state = ScanState::Sweeping;
-                },
+                }
                 ScanState::Sweeping => {
                     let bar = Utils::add_section_bar(multi_prog, 2, "Tombstoning deletes...");
                     if scan.state() == ScanState::Sweeping {
@@ -211,7 +223,7 @@ impl Scanner {
                     }
                     Utils::finish_section_bar(&bar, "✔ Tombstoning deletes");
                     loop_state = ScanState::Analyzing;
-                },
+                }
                 ScanState::Analyzing => {
                     // Should never get here in a situation in which scan.state() isn't Analyzing
                     // but we protect against it just in case
@@ -222,8 +234,9 @@ impl Scanner {
                         // bars here and then restore them when we're done
                         let owned_db = std::mem::take(db);
                         let db_arc = Arc::new(Mutex::new(owned_db));
-                        
-                        analysis_result = Scanner::do_state_analyzing(db_arc.clone(), scan, multi_prog);
+
+                        analysis_result =
+                            Scanner::do_state_analyzing(db_arc.clone(), scan, multi_prog);
 
                         // recover the database from the Arc
                         let recovered_db = Arc::try_unwrap(db_arc)
@@ -238,12 +251,15 @@ impl Scanner {
 
                     Utils::finish_section_bar(&bar, "✔ Analyzing");
                     loop_state = ScanState::Completed;
-                },
+                }
                 unexpected => {
-                    return Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", unexpected)));
-                },
+                    return Err(FsPulseError::Error(format!(
+                        "Unexpected incomplete scan state: {}",
+                        unexpected
+                    )));
+                }
             };
-        }   
+        }
 
         println!();
         println!();
@@ -252,16 +268,24 @@ impl Scanner {
         Ok(())
     }
 
-    fn stop_or_resume_scan(db: &mut Database, root: &Root, scan: &mut Scan, report: bool) -> Result<ScanDecision, FsPulseError> {
+    fn stop_or_resume_scan(
+        db: &mut Database,
+        root: &Root,
+        scan: &mut Scan,
+        report: bool,
+    ) -> Result<ScanDecision, FsPulseError> {
         let options = vec![
-            "Resume the scan", 
+            "Resume the scan",
             "Stop & exit",
             "Stop & start a new scan",
             "Exit (decide later)",
         ];
 
         let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!("Found in-progress scan on:'{}'\n\nWhat would you like to do?", root.path()))
+            .with_prompt(format!(
+                "Found in-progress scan on:'{}'\n\nWhat would you like to do?",
+                root.path()
+            ))
             .default(0)
             .items(&options)
             .report(report)
@@ -269,51 +293,54 @@ impl Scanner {
             .unwrap();
 
         let decision = match selection {
-            0 => {
-                match scan.state() {
-                    ScanState::Scanning => ScanDecision::ContinueExisting,
-                    ScanState::Sweeping => ScanDecision::ContinueExisting,
-                    ScanState::Analyzing => ScanDecision::ContinueExisting,
-                    _ => return Err(FsPulseError::Error(format!("Unexpected incomplete scan state: {}", scan.state()))),
+            0 => match scan.state() {
+                ScanState::Scanning => ScanDecision::ContinueExisting,
+                ScanState::Sweeping => ScanDecision::ContinueExisting,
+                ScanState::Analyzing => ScanDecision::ContinueExisting,
+                _ => {
+                    return Err(FsPulseError::Error(format!(
+                        "Unexpected incomplete scan state: {}",
+                        scan.state()
+                    )))
                 }
-            }, 
+            },
             1 => {
                 scan.set_state_stopped(db)?;
-                ScanDecision::Exit   
-            },
+                ScanDecision::Exit
+            }
             2 => {
                 scan.set_state_stopped(db)?;
                 ScanDecision::NewScan
-            },
-            _ => ScanDecision::Exit // exit
+            }
+            _ => ScanDecision::Exit, // exit
         };
 
         Ok(decision)
     }
 
-    fn initiate_scan(db: &mut Database, root: &Root, hashing: bool, validating: bool) -> Result<Scan, FsPulseError> {
+    fn initiate_scan(
+        db: &mut Database,
+        root: &Root,
+        hashing: bool,
+        validating: bool,
+    ) -> Result<Scan, FsPulseError> {
         Scan::create(db, root, hashing, validating)
     }
 
-    fn do_state_scanning(db: &mut Database, root: &Root, scan: &mut Scan, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
+    fn do_state_scanning(
+        db: &mut Database,
+        root: &Root,
+        scan: &mut Scan,
+        multi_prog: &mut MultiProgress,
+    ) -> Result<(), FsPulseError> {
         let root_path_buf = PathBuf::from(root.path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
         let mut q = VecDeque::new();
 
-        let dir_prog = Utils::add_spinner_bar(
-            multi_prog, 
-            "   ", 
-            "Directory:", 
-            true
-        );
+        let dir_prog = Utils::add_spinner_bar(multi_prog, "   ", "Directory:", true);
 
-        let item_prog = Utils::add_spinner_bar(
-            multi_prog, 
-            "   ", 
-            "File:", 
-            true
-        );
+        let item_prog = Utils::add_spinner_bar(multi_prog, "   ", "File:", true);
 
         q.push_back(QueueEntry {
             path: root_path_buf.clone(),
@@ -326,7 +353,13 @@ impl Scanner {
             // Handle the directory itself before iterating its contents. The root dir
             // was previously pushed into the queue - if this is that entry, we skip it
             if q_entry.path != root_path_buf {
-                Scanner::handle_scan_item(db, scan, ItemType::Directory, q_entry.path.as_path(), &q_entry.metadata)?;
+                Scanner::handle_scan_item(
+                    db,
+                    scan,
+                    ItemType::Directory,
+                    q_entry.path.as_path(),
+                    &q_entry.metadata,
+                )?;
             }
 
             let items = fs::read_dir(&q_entry.path)?;
@@ -362,18 +395,23 @@ impl Scanner {
         scan.set_state_sweeping(db)
     }
 
-    fn do_state_sweeping(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> { 
+    fn do_state_sweeping(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> {
         let tx = db.conn_mut().transaction()?;
 
         // Insert deletion records into changes
-            tx.execute(
-                "INSERT INTO changes (scan_id, item_id, change_type)
+        tx.execute(
+            "INSERT INTO changes (scan_id, item_id, change_type)
                 SELECT ?, id, ?
                 FROM items
                 WHERE root_id = ? AND is_tombstone = 0 AND last_scan_id < ?",
-                (scan.id(), ChangeType::Delete.as_str(), scan.root_id(), scan.id()),
-            )?;
-        
+            (
+                scan.id(),
+                ChangeType::Delete.as_str(),
+                scan.root_id(),
+                scan.id(),
+            ),
+        )?;
+
         // Mark unseen items as tombstones
         tx.execute(
             "UPDATE items SET 
@@ -389,11 +427,10 @@ impl Scanner {
     }
 
     fn do_state_analyzing(
-        db: Arc<Mutex<Database>>, 
-        scan: &mut Scan, 
+        db: Arc<Mutex<Database>>,
+        scan: &mut Scan,
         multi_prog: &MultiProgress,
     ) -> Result<(), FsPulseError> {
-
         let hashing = scan.hashing();
         let validating = scan.validating();
 
@@ -404,17 +441,20 @@ impl Scanner {
             return Ok(());
         }
 
-        let file_count = scan.file_count().unwrap_or_default().max(0) as u64;                   // scan.file_count is the total # of files in the scan
-        let analyzed_items= Item::count_analyzed_items(&db.lock().unwrap(), scan.id())?.max(0) as u64;  // may be resuming the scan
+        let file_count = scan.file_count().unwrap_or_default().max(0) as u64; // scan.file_count is the total # of files in the scan
+        let analyzed_items =
+            Item::count_analyzed_items(&db.lock().unwrap(), scan.id())?.max(0) as u64; // may be resuming the scan
 
-        let analysis_prog = multi_prog.add(ProgressBar::new(file_count)
-            .with_style(ProgressStyle::default_bar()
-                .template("{prefix}{msg} [{bar:80}] {pos}/{len} (Remaining: {eta})")
-                .unwrap()
-                .progress_chars("#>-")
-            )
-            .with_prefix("   ")
-            .with_message("Files")
+        let analysis_prog = multi_prog.add(
+            ProgressBar::new(file_count)
+                .with_style(
+                    ProgressStyle::default_bar()
+                        .template("{prefix}{msg} [{bar:80}] {pos}/{len} (Remaining: {eta})")
+                        .unwrap()
+                        .progress_chars("#>-"),
+                )
+                .with_prefix("   ")
+                .with_message("Files"),
         );
 
         analysis_prog.inc(analyzed_items);
@@ -427,8 +467,12 @@ impl Scanner {
         let items_remaining = file_count.saturating_sub(analyzed_items); // avoids underflow
         let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
 
-        let config_threads = CONFIG.get().expect("Config not initialized").analysis.threads;
-        
+        let config_threads = CONFIG
+            .get()
+            .expect("Config not initialized")
+            .analysis
+            .threads;
+
         let num_threads = cmp::min(items_remaining_usize, config_threads);
         let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread
 
@@ -448,7 +492,12 @@ impl Scanner {
                     .unwrap(),
             );
             // Format thread label like [01/20], [02/20], ..., [20/20]
-            let thread_prog_label = format!("   [{:0width$}/{}]", thread_index + 1, num_threads, width = if num_threads >= 10 { 2 } else { 1 });
+            let thread_prog_label = format!(
+                "   [{:0width$}/{}]",
+                thread_index + 1,
+                num_threads,
+                width = if num_threads >= 10 { 2 } else { 1 }
+            );
             thread_prog.set_prefix(thread_prog_label.clone());
             thread_prog.set_message("Waiting...".to_string());
 
@@ -458,7 +507,7 @@ impl Scanner {
                     Scanner::process_item_async(
                         &db,
                         scan_copy,
-                        item, 
+                        item,
                         &analysis_prog_clone,
                         &thread_prog,
                     );
@@ -497,7 +546,9 @@ impl Scanner {
                 last_item_id = item.id();
 
                 // This send will block if the channel already has 100 items.
-                sender.send(item).expect("Failed to send task into the bounded channel");
+                sender
+                    .send(item)
+                    .expect("Failed to send task into the bounded channel");
             }
         }
 
@@ -519,19 +570,20 @@ impl Scanner {
     fn process_item_async(
         db: &Arc<Mutex<Database>>,
         scan: Scan,
-        item: Item, 
+        item: Item,
         analysis_prog: &ProgressBar,
         thread_prog: &ProgressBar,
     ) {
         // TODO: Improve the error handling for all analysis. Need to differentiate
         // between file system errors and actual content errors
-        
+
         let path = Path::new(item.path());
-        
-        let display_path = path.file_name()
+
+        let display_path = path
+            .file_name()
             .unwrap_or(path.as_os_str())
             .to_string_lossy();
-        
+
         let mut new_hash = None;
 
         if scan.hashing() {
@@ -551,10 +603,10 @@ impl Scanner {
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
                     None
-                },
+                }
             };
         }
-        
+
         let mut new_validity_state = ValidationState::Unknown;
         let mut new_validation_error = None;
 
@@ -577,7 +629,7 @@ impl Scanner {
                         Ok((res_validity_state, res_validation_error)) => {
                             new_validity_state = res_validity_state;
                             new_validation_error = res_validation_error;
-                        },
+                        }
                         Err(e) => {
                             let e_str = e.to_string();
                             error!("Error validating '{}': {}", &display_path, e_str);
@@ -587,24 +639,34 @@ impl Scanner {
                     if steady_tick {
                         thread_prog.disable_steady_tick();
                     }
-                },
+                }
                 None => new_validity_state = ValidationState::NoValidator,
             }
         }
 
-        if let Err(error) = Scanner::update_item_analysis(db, &scan, &item, new_hash, new_validity_state, new_validation_error) {
+        if let Err(error) = Scanner::update_item_analysis(
+            db,
+            &scan,
+            &item,
+            new_hash,
+            new_validity_state,
+            new_validation_error,
+        ) {
             let e_str = error.to_string();
-            error!("Error updating item analysis '{}': {}", &display_path, e_str);
+            error!(
+                "Error updating item analysis '{}': {}",
+                &display_path, e_str
+            );
         }
-        
+
         analysis_prog.inc(1);
     }
 
     fn handle_scan_item(
         db: &mut Database,
         scan: &Scan,
-        item_type: ItemType, 
-        path: &Path, 
+        item_type: ItemType,
+        path: &Path,
         metadata: &Metadata,
     ) -> Result<(), FsPulseError> {
         //let conn = &mut db.conn;
@@ -613,12 +675,17 @@ impl Scanner {
         let path_str = path.to_string_lossy();
         let existing_item = Item::get_by_root_path_type(db, scan.root_id(), &path_str, item_type)?;
 
-        let mod_date = metadata.modified()
+        let mod_date = metadata
+            .modified()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs() as i64);
 
-        let file_size = if metadata.is_file() { Some(metadata.len() as i64) } else { None };
+        let file_size = if metadata.is_file() {
+            Some(metadata.len() as i64)
+        } else {
+            None
+        };
 
         // If the item was already processed for this scan, just skip it. We intentionally
         // do not handle the case where the item was seen within this scan, but has since
@@ -628,11 +695,12 @@ impl Scanner {
         // traverse the children within the resumed scan and a tree report will look odd
         if let Some(existing_item) = existing_item {
             if existing_item.last_scan_id() == scan.id() {
-                return Ok(())
+                return Ok(());
             }
 
-            let metadata_changed = existing_item.mod_date() != mod_date || existing_item.file_size() != file_size;
-            
+            let metadata_changed =
+                existing_item.mod_date() != mod_date || existing_item.file_size() != file_size;
+
             if existing_item.is_tombstone() {
                 // Rehydrate a tombstone
                 let tx = db.conn_mut().transaction()?;
@@ -647,10 +715,20 @@ impl Scanner {
                             last_scan_id = ?,
                             last_hash_scan_id = NULL, 
                             last_validation_scan_id = NULL 
-                        WHERE id = ?", 
-                    (mod_date, file_size, ValidationState::Unknown.to_string(), scan.id(), existing_item.id()))?;
+                        WHERE id = ?",
+                    (
+                        mod_date,
+                        file_size,
+                        ValidationState::Unknown.to_string(),
+                        scan.id(),
+                        existing_item.id(),
+                    ),
+                )?;
                 if rows_updated == 0 {
-                        return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
+                    return Err(FsPulseError::Error(format!(
+                        "Item Id {} not found for update",
+                        existing_item.id()
+                    )));
                 }
 
                 tx.execute(
@@ -669,19 +747,20 @@ impl Scanner {
                             validation_error_old
                         ) 
                     VALUES 
-                        (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)", 
+                        (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        scan.id(), 
-                        existing_item.id(), 
-                        ChangeType::Add.as_str(), 
+                        scan.id(),
+                        existing_item.id(),
+                        ChangeType::Add.as_str(),
                         existing_item.mod_date(),
                         mod_date,
                         existing_item.file_size(),
                         file_size,
                         existing_item.file_hash(),
                         existing_item.validity_state_as_str(),
-                        existing_item.validation_error()
-                    ))?;
+                        existing_item.validation_error(),
+                    ),
+                )?;
 
                 tx.commit()?;
             } else if metadata_changed {
@@ -692,13 +771,17 @@ impl Scanner {
                         mod_date = ?, 
                         file_size = ?,             
                         last_scan_id = ? 
-                    WHERE id = ?", 
-                    (mod_date, file_size, scan.id(), existing_item.id()))?;
-                    if rows_updated == 0 {
-                        return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
-                    }
-                    tx.execute(
-                        "INSERT INTO changes 
+                    WHERE id = ?",
+                    (mod_date, file_size, scan.id(), existing_item.id()),
+                )?;
+                if rows_updated == 0 {
+                    return Err(FsPulseError::Error(format!(
+                        "Item Id {} not found for update",
+                        existing_item.id()
+                    )));
+                }
+                tx.execute(
+                    "INSERT INTO changes 
                             (
                                 scan_id, 
                                 item_id, 
@@ -710,28 +793,31 @@ impl Scanner {
                                 file_size_new, 
                                 hash_changed, 
                                 validity_changed) 
-                            VALUES (?, ?, ?, 1, ?, ?, 0, 0)", 
+                            VALUES (?, ?, ?, 1, ?, ?, 0, 0)",
                     (
-                        scan.id(), 
-                        existing_item.id(), 
+                        scan.id(),
+                        existing_item.id(),
                         ChangeType::Modify.as_str(),
                         metadata_changed.then_some(existing_item.mod_date()),
                         metadata_changed.then_some(mod_date),
                         metadata_changed.then_some(existing_item.file_size()),
                         metadata_changed.then_some(file_size),
-                    )
+                    ),
                 )?;
 
                 tx.commit()?;
             } else {
                 // No change - just update last_scan_id
                 let rows_updated = db.conn().execute(
-                    "UPDATE items SET last_scan_id = ? WHERE id = ?", 
-                    (scan.id(), existing_item.id())
+                    "UPDATE items SET last_scan_id = ? WHERE id = ?",
+                    (scan.id(), existing_item.id()),
                 )?;
 
                 if rows_updated == 0 {
-                    return Err(FsPulseError::Error(format!("Item Id {} not found for update", existing_item.id())));
+                    return Err(FsPulseError::Error(format!(
+                        "Item Id {} not found for update",
+                        existing_item.id()
+                    )));
                 }
             }
         } else {
@@ -747,7 +833,7 @@ impl Scanner {
                 (scan.id(), item_id, ChangeType::Add.as_str(), mod_date, file_size))?;
             tx.commit()?;
         }
-        
+
         Ok(())
     }
 
@@ -788,7 +874,7 @@ impl Scanner {
                 c_last_hash_scan_id_old = item.last_hash_scan_id();
                 c_hash_old = item.file_hash();
                 c_hash_new = new_hash.as_deref();
-                
+
                 i_hash = new_hash.as_deref();
             }
 
@@ -797,7 +883,9 @@ impl Scanner {
         }
 
         if scan.validating() {
-            if (item.validity_state() != new_validity_state) || (item.validation_error() != new_validation_error.as_deref()) {
+            if (item.validity_state() != new_validity_state)
+                || (item.validation_error() != new_validation_error.as_deref())
+            {
                 // if either the hash or validation state changes, we update changes
                 update_changes = true;
                 c_validity_changed = Some(true);
@@ -818,7 +906,7 @@ impl Scanner {
 
         let mut db_guard = db.lock().unwrap();
         let conn = db_guard.conn_mut();
-        
+
         let tx = conn.transaction()?; // Start transaction
 
         // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
@@ -854,7 +942,7 @@ impl Scanner {
                         validation_error_old = excluded.validation_error_old,
                         validation_error_new = excluded.validation_error_new",
                 rusqlite::params![
-                    scan.id(), 
+                    scan.id(),
                     item.id(),
                     c_hash_changed,
                     c_last_hash_scan_id_old,
@@ -862,7 +950,7 @@ impl Scanner {
                     c_hash_new,
                     c_validity_changed,
                     c_last_validation_scan_id_old,
-                    c_validity_state_old, 
+                    c_validity_state_old,
                     c_validity_state_new,
                     c_validation_error_old,
                     c_validation_error_new,

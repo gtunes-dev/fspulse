@@ -1,23 +1,24 @@
 use clap::{Parser, Subcommand};
-use dialoguer::theme::ColorfulTheme;
-use dialoguer::{Input, BasicHistory};
-use dialoguer::Select;
-use dialoguer::Editor;
+use dialoguer::{theme::ColorfulTheme, BasicHistory, Editor, Input, Select};
 use indicatif::MultiProgress;
 use log::info;
 
 use std::path::PathBuf;
 
 use crate::database::Database;
-use crate::error::FsPulseError; 
+use crate::error::FsPulseError;
 use crate::queries::Query;
-use crate::reports::{ReportFormat, Reports}; 
+use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
 use crate::scanner::Scanner;
-    
+
 /// CLI for fspulse: A filesystem scan and reporting tool.
 #[derive(Parser)]
-#[command(name = "fspulse", version = "1.0", about = "Filesystem Pulse Scanner and Reporter")]
+#[command(
+    name = "fspulse",
+    version = "1.0",
+    about = "Filesystem Pulse Scanner and Reporter"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -30,7 +31,7 @@ pub enum Command {
     /// among existing items (roots, scans, items, changes) to initiate the
     /// command
     Interact {
-       /// Specifies the directory where the database is stored.
+        /// Specifies the directory where the database is stored.
         /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
         /// The database file will always be named "fspulse.db".
         #[arg(long)]
@@ -63,9 +64,9 @@ pub enum Command {
         #[arg(long)]
         hash: bool,
 
-       /// Validate file contents for known file types (tbd)
-       #[arg(long)]
-       validate: bool,
+        /// Validate file contents for known file types (tbd)
+        #[arg(long)]
+        validate: bool,
     },
 
     /// Generate reports.
@@ -82,7 +83,7 @@ pub enum Command {
 
         /// The query string (e.g., "items where scan:(5)")
         query: String,
-     },
+    },
 }
 
 /// Available report types.
@@ -152,7 +153,7 @@ pub enum ReportType {
         root_id: Option<u32>,
 
         /// Shows all invalid items under a specific root
-        #[arg(long, requires="root_id")]
+        #[arg(long, requires = "root_id")]
         invalid: bool,
 
         /// Report format (csv, table, tree).
@@ -174,7 +175,7 @@ pub enum ReportType {
 
         /// Filter by item ID (shows all changes affecting the item).
         #[arg(long, conflicts_with_all = ["change_id", "scan_id"])]
-        item_id: Option<u32>,        
+        item_id: Option<u32>,
 
         /// Filter by scan ID (shows all changes recorded in this scan).
         #[arg(long, conflicts_with_all = ["change_id", "item_id"])]
@@ -199,7 +200,6 @@ static COMMAND_CHOICES: &[(CommandChoice, &str)] = &[
     (CommandChoice::Scan, "Scan"),
     (CommandChoice::QuerySimple, "Query (Simple)"),
     (CommandChoice::QueryEditor, "Query (Editor)"),
-
     (CommandChoice::Report, "Report"),
     (CommandChoice::Exit, "Exit"),
 ];
@@ -233,37 +233,56 @@ static ITEM_REPORT_CHOICES: &[(ItemReportChoice, &str)] = &[
 ];
 
 impl Cli {
-    pub fn handle_command_line(multi_prog: &mut MultiProgress) -> Result<(), FsPulseError>{
+    pub fn handle_command_line(multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
         let args = Cli::parse();
-        
+
         match args.command {
             Command::Interact { db_path } => {
                 info!("Running interact with db_path: {:?}", db_path);
                 let mut db = Database::new(db_path)?;
-                
+
                 Cli::handle_interact(&mut db, multi_prog)
-            },
-            Command::Scan { db_path, root_id, root_path, last, hash, validate } => {
+            }
+            Command::Scan {
+                db_path,
+                root_id,
+                root_path,
+                last,
+                hash,
+                validate,
+            } => {
                 info!(
                     "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, validate: {}",
                     db_path, root_id, root_path, last, hash, validate
                 );
 
                 let mut db = Database::new(db_path)?;
-                Scanner::do_scan_command(&mut db, root_id, root_path, last, hash, validate, multi_prog)        
+                Scanner::do_scan_command(
+                    &mut db, root_id, root_path, last, hash, validate, multi_prog,
+                )
             }
             Command::Report { report_type } => match report_type {
-                ReportType::Roots { db_path, root_id, root_path, format } => {
+                ReportType::Roots {
+                    db_path,
+                    root_id,
+                    root_path,
+                    format,
+                } => {
                     info!(
                         "Generating roots report with db_path: {:?}, root_id: {:?}, root_path: {:?}, format: {}",
                         db_path, root_id, root_path, format
                     );
                     let db = Database::new(db_path)?;
                     let format: ReportFormat = format.parse()?;
-                    
+
                     Reports::report_roots(&db, root_id, root_path, format)
                 }
-                ReportType::Scans { db_path, scan_id, last, format } => {
+                ReportType::Scans {
+                    db_path,
+                    scan_id,
+                    last,
+                    format,
+                } => {
                     info!(
                         "Generating scans report with db_path: {:?}, scan_id: {:?}, last: {}, format: {}",
                         db_path, scan_id, last, format
@@ -273,7 +292,14 @@ impl Cli {
 
                     Reports::report_scans(&db, scan_id, last, format)
                 }
-                ReportType::Items { db_path, item_id, item_path, root_id, invalid, format } => {
+                ReportType::Items {
+                    db_path,
+                    item_id,
+                    item_path,
+                    root_id,
+                    invalid,
+                    format,
+                } => {
                     info!(
                         "Generating items report with db_path: {:?}, item_id: {:?}, item_path: {:?}, root_id: {:?}, format: {}",
                         db_path, item_id, item_path, root_id, format
@@ -283,7 +309,13 @@ impl Cli {
 
                     Reports::report_items(&db, item_id, item_path, root_id, invalid, format)
                 }
-                ReportType::Changes { db_path, change_id, item_id, scan_id, format } => {
+                ReportType::Changes {
+                    db_path,
+                    change_id,
+                    item_id,
+                    scan_id,
+                    format,
+                } => {
                     info!(
                         "Generating changes report with db_path: {:?}, change_id: {:?}, item_id: {:?}, scan_id: {:?}, format: {}",
                         db_path, change_id, item_id, scan_id, format
@@ -294,43 +326,44 @@ impl Cli {
                     Reports::report_changes(&db, change_id, item_id, scan_id, format)
                 }
             },
-            Command::Query { db_path, query} => {
-                info!(
-                    "Processing query with db_path: {:?}, '{}'", db_path, query
-                );
+            Command::Query { db_path, query } => {
+                info!("Processing query with db_path: {:?}, '{}'", db_path, query);
                 let db = Database::new(db_path)?;
                 Query::process_query(&db, &query)
-            },
+            }
         }
     }
 
-    fn handle_interact(db: &mut Database, multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
+    fn handle_interact(
+        db: &mut Database,
+        multi_prog: &mut MultiProgress,
+    ) -> Result<(), FsPulseError> {
         // Get the user's command choice.
         let command = Cli::choose_command();
-        
+
         // Process the command.
         match command {
             CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
             CommandChoice::QuerySimple | CommandChoice::QueryEditor => {
                 Cli::do_interactive_query(db, command)?
-            },
+            }
             CommandChoice::Report => Cli::do_interactive_report(db)?,
-            CommandChoice::Exit => {},
+            CommandChoice::Exit => {}
         }
         Ok(())
     }
 
-    fn choose_command() -> CommandChoice {  
+    fn choose_command() -> CommandChoice {
         // Build a vector of labels for display.
         let labels: Vec<&str> = COMMAND_CHOICES.iter().map(|&(_, label)| label).collect();
-    
+
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Choose Command")
             .default(0)
             .items(&labels)
             .interact()
             .unwrap();
-    
+
         // Directly select the enum variant.
         COMMAND_CHOICES[selection].0
     }
@@ -338,9 +371,7 @@ impl Cli {
     fn do_interactive_query(db: &Database, choice: CommandChoice) -> Result<(), FsPulseError> {
         match choice {
             CommandChoice::QuerySimple => {
-                let mut history = BasicHistory::new().
-                    max_entries(8).
-                    no_duplicates(true);
+                let mut history = BasicHistory::new().max_entries(8).no_duplicates(true);
 
                 loop {
                     let query: String = Input::with_theme(&ColorfulTheme::default())
@@ -354,15 +385,15 @@ impl Cli {
                     }
                     Query::process_query(db, &query)?;
                 }
-            },
+            }
             CommandChoice::QueryEditor => {
                 if let Some(query) = Editor::new().edit("Enter a query").unwrap() {
                     Query::process_query(db, &query)?;
                 }
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
-        
+
         Ok(())
     }
 
@@ -381,12 +412,15 @@ impl Cli {
             ReportChoice::Roots => Ok(()),
             ReportChoice::Changes => Ok(()),
             ReportChoice::Items => Cli::do_interactive_report_items(db),
-            _ => Ok(())
+            _ => Ok(()),
         }
     }
 
-    fn do_interactive_report_items(db: &Database) -> Result<(), FsPulseError>{
-        let labels: Vec<&str> = ITEM_REPORT_CHOICES.iter().map(|&(_, label)| label).collect();
+    fn do_interactive_report_items(db: &Database) -> Result<(), FsPulseError> {
+        let labels: Vec<&str> = ITEM_REPORT_CHOICES
+            .iter()
+            .map(|&(_, label)| label)
+            .collect();
 
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Choose Item Report Type")
@@ -403,8 +437,8 @@ impl Cli {
                 } else {
                     Ok(())
                 }
-            },
-            _ => Ok(())
+            }
+            _ => Ok(()),
         }
     }
 }

@@ -7,7 +7,7 @@ use super::{columns::ColumnSet, Rule};
 #[derive(Debug)]
 struct OrderSpec {
     column: String,
-    direction: Option<String>
+    direction: Option<String>,
 }
 
 #[derive(Debug)]
@@ -20,21 +20,38 @@ impl Order {
     fn new(col_set: ColumnSet) -> Self {
         Order {
             col_set,
-            order_specs: Vec::new()
+            order_specs: Vec::new(),
         }
     }
 
-    pub fn add_order_spec(&mut self, col_display_name: &str, direction: Option<String>) -> Result<(), FsPulseError>{
-        let db_col_name = self.col_set.display_to_db(col_display_name)
-            .ok_or_else(|| FsPulseError::Error(format!("Invalid column '{}' in order clause", col_display_name)))?;
+    pub fn add_order_spec(
+        &mut self,
+        col_display_name: &str,
+        direction: Option<String>,
+    ) -> Result<(), FsPulseError> {
+        let db_col_name = self
+            .col_set
+            .display_to_db(col_display_name)
+            .ok_or_else(|| {
+                FsPulseError::Error(format!(
+                    "Invalid column '{}' in order clause",
+                    col_display_name
+                ))
+            })?;
 
         for order_spec in &self.order_specs {
-            if order_spec.column  == db_col_name {
-                return Err(FsPulseError::Error(format!("Column '{}' was already specified in order clause", col_display_name)));
+            if order_spec.column == db_col_name {
+                return Err(FsPulseError::Error(format!(
+                    "Column '{}' was already specified in order clause",
+                    col_display_name
+                )));
             }
         }
 
-        self.order_specs.push(OrderSpec { column: db_col_name.into(), direction }  );
+        self.order_specs.push(OrderSpec {
+            column: db_col_name.into(),
+            direction,
+        });
         Ok(())
     }
 
@@ -47,13 +64,12 @@ impl Order {
                     let mut order_parts = element.into_inner();
                     let column_display_name = order_parts.next().unwrap().as_str();
                     let direction = order_parts.next().map(|r| r.as_str().to_uppercase());
-                    
+
                     order.add_order_spec(column_display_name, direction)?;
-                },
+                }
                 _ => unreachable!(),
             }
         }
-        println!("Order: {:?}", order);
 
         Ok(order)
     }
@@ -65,7 +81,7 @@ impl Order {
         for order in &self.order_specs {
             match first {
                 true => first = false,
-                false => order_clause.push_str(", ")
+                false => order_clause.push_str(", "),
             }
 
             order_clause.push_str(&order.column);
@@ -73,7 +89,7 @@ impl Order {
 
             match &order.direction {
                 Some(direction) => order_clause.push_str(direction),
-                None => order_clause.push_str("ASC")
+                None => order_clause.push_str("ASC"),
             }
         }
         order_clause

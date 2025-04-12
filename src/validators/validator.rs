@@ -15,7 +15,7 @@ pub enum ValidationState {
     Unknown,
     Valid,
     Invalid,
-    NoValidator
+    NoValidator,
 }
 
 // macro to simplify code in validators which generates Ok(invalid) results
@@ -43,7 +43,9 @@ impl ValidationState {
     /// Converts from a string representation from the database,
     /// defaulting to `Unknown` for invalid or empty values.
     pub fn from_string(value: &str) -> Self {
-        value.chars().next()
+        value
+            .chars()
+            .next()
             .map(ValidationState::from_char)
             .unwrap_or_default()
     }
@@ -83,7 +85,7 @@ where
 
 pub fn from_path<P>(path: P) -> Option<Box<dyn Validator>>
 where
-    P: AsRef<Path>
+    P: AsRef<Path>,
 {
     path.as_ref().extension().and_then(from_extension)
 }
@@ -91,9 +93,9 @@ where
 /// Defines the behavior of a validator.
 pub trait Validator {
     fn validate(
-        &self, 
-        path: &Path, 
-        validation_pb: &ProgressBar
+        &self,
+        path: &Path,
+        validation_pb: &ProgressBar,
     ) -> Result<(ValidationState, Option<String>), FsPulseError>;
 
     fn wants_steady_tick(&self) -> bool;

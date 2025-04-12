@@ -1,4 +1,8 @@
-use std::{fs::File, io::{BufReader, Read}, path::Path};
+use std::{
+    fs::File,
+    io::{BufReader, Read},
+    path::Path,
+};
 
 use hex::encode;
 use indicatif::ProgressBar;
@@ -16,7 +20,7 @@ impl Hash {
         // The progress bar is mostly set up by our caller. We just need to set the
         // length and go
         hash_prog.set_length(len);
-        
+
         let mut reader = BufReader::new(f);
         let mut hasher = Md5::new();
         let mut buffer = [0; 8192]; // Read in 8KB chunks
@@ -38,7 +42,7 @@ impl Hash {
     pub fn short_md5<'a>(hash: &Option<&'a str>) -> &'a str {
         match hash {
             Some(hash) => &hash[..hash.len().min(7)],
-            None =>  "-"
+            None => "-",
         }
     }
 }

@@ -26,13 +26,10 @@ impl Validator for ClaxonValidator {
         &self,
         path: &Path,
         validation_pb: &ProgressBar,
-    ) -> Result<(ValidationState, Option<String>), FsPulseError> 
-    {
-        let mut reader =  match FlacReader::open(path) {
+    ) -> Result<(ValidationState, Option<String>), FsPulseError> {
+        let mut reader = match FlacReader::open(path) {
             Ok(reader) => reader,
-            Err(e) => {
-                return Ok((ValidationState::Invalid, Some(e.to_string())))
-            }
+            Err(e) => return Ok((ValidationState::Invalid, Some(e.to_string()))),
         };
 
         let mut frame_reader = reader.blocks();
@@ -44,9 +41,7 @@ impl Validator for ClaxonValidator {
             match frame_reader.read_next_or_eof(block.into_buffer()) {
                 Ok(Some(next_block)) => block = next_block,
                 Ok(None) => break, // EOF.
-                Err(e) => {
-                    return Ok((ValidationState::Invalid, Some(e.to_string())))
-                },
+                Err(e) => return Ok((ValidationState::Invalid, Some(e.to_string()))),
             }
             tick_blocks += 1;
             if tick_blocks == Self::BLOCKS_PER_TICK {

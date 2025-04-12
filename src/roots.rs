@@ -1,18 +1,17 @@
-use std::{env, fs};
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 
-use rusqlite::OptionalExtension;
 use crate::database::Database;
 use crate::error::FsPulseError;
-
+use rusqlite::OptionalExtension;
 
 #[derive(Clone, Debug, Default)]
 pub struct Root {
     id: i64,
-    path: String
+    path: String,
 }
 
 impl Root {
@@ -40,18 +39,16 @@ impl Root {
             Ok(Some(roots.remove(selection)))
         }
     }
-    
+
     pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = db.conn();
 
-        conn.query_row(
-            "SELECT path FROM roots WHERE id = ?", 
-            [id], 
-            |row| Ok(Root {
+        conn.query_row("SELECT path FROM roots WHERE id = ?", [id], |row| {
+            Ok(Root {
                 id,
                 path: row.get(0)?,
-            }),
-        )
+            })
+        })
         .optional()
         .map_err(FsPulseError::DatabaseError)
     }
@@ -59,14 +56,12 @@ impl Root {
     pub fn get_by_path(db: &Database, path: &str) -> Result<Option<Self>, FsPulseError> {
         let conn = db.conn();
 
-        conn.query_row(
-            "SELECT id, path FROM roots WHERE path = ?",
-            [path],
-            |row| Ok(Root {
-                id: row.get(0)?,   
-                path: row.get(1)?, 
-            }),
-        )
+        conn.query_row("SELECT id, path FROM roots WHERE path = ?", [path], |row| {
+            Ok(Root {
+                id: row.get(0)?,
+                path: row.get(1)?,
+            })
+        })
         .optional()
         .map_err(FsPulseError::DatabaseError)
     }
@@ -80,10 +75,13 @@ impl Root {
             |row| row.get(0),
         )?;
 
-        Ok(Root { id, path: path.to_owned() })
+        Ok(Root {
+            id,
+            path: path.to_owned(),
+        })
     }
 
-    /* 
+    /*
     pub fn get_or_insert(db: &Database, path: &str) -> Result<Self, FsPulseError> {
         let conn = &db.conn;
 
@@ -109,26 +107,22 @@ impl Root {
     pub fn roots_as_vec(db: &Database) -> Result<Vec<Root>, FsPulseError> {
         let mut roots: Vec<Root> = Vec::new();
 
-        Root::for_each_root(
-            db, 
-            |root| {
-                roots.push(root.clone());
-                Ok(())
-            }
-        )?;
+        Root::for_each_root(db, |root| {
+            roots.push(root.clone());
+            Ok(())
+        })?;
 
         Ok(roots)
     }
 
-    pub fn for_each_root<F>(db: &Database, mut func: F) -> Result<(), FsPulseError> 
+    pub fn for_each_root<F>(db: &Database, mut func: F) -> Result<(), FsPulseError>
     where
         F: FnMut(&Root) -> Result<(), FsPulseError>,
     {
-   
         let mut stmt = db.conn().prepare(
             "SELECT id, path
             FROM roots
-            ORDER BY id ASC"
+            ORDER BY id ASC",
         )?;
 
         let rows = stmt.query_map([], |row| {
@@ -139,8 +133,7 @@ impl Root {
         })?;
 
         for row in rows {
-
-            let root= row?;
+            let root = row?;
             func(&root)?;
         }
 
@@ -156,28 +149,37 @@ impl Root {
         let path = Path::new(path_arg);
 
         let absolute_path = if path.is_absolute() {
-            path.to_owned() 
+            path.to_owned()
         } else {
             env::current_dir()?.join(path)
         };
-        
+
         if !absolute_path.exists() {
-            return Err(FsPulseError::Error(format!("Path '{}' does not exist", absolute_path.display())));
+            return Err(FsPulseError::Error(format!(
+                "Path '{}' does not exist",
+                absolute_path.display()
+            )));
         }
-    
+
         let metadata = fs::symlink_metadata(&absolute_path)?;
 
         if metadata.file_type().is_symlink() {
-            return Err(FsPulseError::Error(format!("Path '{}' is a symlink and not allowed", absolute_path.display())));
+            return Err(FsPulseError::Error(format!(
+                "Path '{}' is a symlink and not allowed",
+                absolute_path.display()
+            )));
         }
-        
+
         if !metadata.is_dir() {
-            return Err(FsPulseError::Error(format!("Path '{}' is not a directory", absolute_path.display())));
+            return Err(FsPulseError::Error(format!(
+                "Path '{}' is not a directory",
+                absolute_path.display()
+            )));
         }
 
         // Canonicalize using Dunce (de-UNC) to strip the "UNC" (e.g., \\?\C) on Windows
         let canonical_path = dunce::canonicalize(absolute_path)?;
-    
+
         Ok(canonical_path)
     }
 }

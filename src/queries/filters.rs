@@ -1,7 +1,7 @@
+use crate::{error::FsPulseError, utils::Utils};
 use pest::iterators::Pair;
 use rusqlite::ToSql;
 use std::fmt::{self, Debug};
-use crate::{error::FsPulseError, utils::Utils};
 
 use super::Rule;
 
@@ -23,23 +23,19 @@ pub enum IdType {
     Item,
     Scan,
     Change,
-
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdSpec {
     Id(i64),
-    IdRange { 
-        id_start: i64, 
-        id_end: i64 
-    },
+    IdRange { id_start: i64, id_end: i64 },
 }
 
 impl fmt::Display for IdType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            IdType::Root   => "root_id",
-            IdType::Item   => "item_id",
-            IdType::Scan   => "scan_id",
+            IdType::Root => "root_id",
+            IdType::Item => "item_id",
+            IdType::Scan => "scan_id",
             IdType::Change => "change_id",
         };
         write!(f, "{}", s)
@@ -53,7 +49,7 @@ impl IdType {
             Rule::item_id_filter => IdType::Item,
             Rule::scan_id_filter => IdType::Scan,
             Rule::change_id_filter => IdType::Change,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -73,19 +69,19 @@ impl Filter for IdFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            
+
             match id_spec {
-                IdSpec::Id (id) => {
+                IdSpec::Id(id) => {
                     pred_str.push_str(&format!("({} = ?)", self.id_type));
                     pred_vec.push(Box::new(*id));
-                },
-                IdSpec::IdRange { id_start, id_end} => {
+                }
+                IdSpec::IdRange { id_start, id_end } => {
                     pred_str.push_str(&format!("({0} >= ? AND {0} <= ?)", self.id_type));
                     pred_vec.push(Box::new(*id_start));
                     pred_vec.push(Box::new(*id_end));
-                },
+                }
             }
-        };
+        }
 
         if self.id_specs.len() > 1 {
             pred_str.push(')');
@@ -99,12 +95,11 @@ impl IdFilter {
     fn new(id_type: IdType) -> Self {
         IdFilter {
             id_type,
-            id_specs: Vec::new()
+            id_specs: Vec::new(),
         }
     }
 
     pub fn build(id_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
-
         let id_type = IdType::from_rule(id_filter_pair.as_rule());
         let mut id_filter = Self::new(id_type);
 
@@ -112,25 +107,18 @@ impl IdFilter {
             match id_spec.as_rule() {
                 Rule::id => {
                     let id: i64 = id_spec.as_str().parse().unwrap();
-                    id_filter.id_specs.push(
-                        IdSpec::Id(
-                            id,
-                        )
-                    )
-                },
+                    id_filter.id_specs.push(IdSpec::Id(id))
+                }
                 Rule::id_range => {
                     let mut range_inner = id_spec.into_inner();
 
                     let id_start: i64 = range_inner.next().unwrap().as_str().parse().unwrap();
                     let id_end: i64 = range_inner.next().unwrap().as_str().parse().unwrap();
-                    id_filter.id_specs.push(
-                        IdSpec::IdRange { 
-                            id_start, 
-                            id_end,
-                        }
-                    )
-                },
-                _ => unreachable!()
+                    id_filter
+                        .id_specs
+                        .push(IdSpec::IdRange { id_start, id_end })
+                }
+                _ => unreachable!(),
             }
         }
 
@@ -152,14 +140,14 @@ pub enum DateType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateSpec {
-    date_start: i64, 
+    date_start: i64,
     date_end: i64,
 }
 impl fmt::Display for DateType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            DateType::ScanDate   => "time_of_scan",
-            DateType::ModDate   => "mod_date",
+            DateType::ScanDate => "time_of_scan",
+            DateType::ModDate => "mod_date",
         };
         write!(f, "{}", s)
     }
@@ -170,7 +158,7 @@ impl DateType {
         match rule {
             Rule::scan_date_filter => DateType::ScanDate,
             Rule::mod_date_filter => DateType::ModDate,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -199,14 +187,15 @@ impl Filter for DateFilter {
                     pred_str.push_str("(scan_id IN (SELECT id FROM scans WHERE time_of_scan >= ? AND time_of_scan <= ?))");
                 }
                 DateType::ModDate => {
-                    return Err(FsPulseError::Error("Date filter isn't yet implemented for moddate".into()));
+                    return Err(FsPulseError::Error(
+                        "Date filter isn't yet implemented for moddate".into(),
+                    ));
                 }
             }
 
             pred_vec.push(Box::new(date_spec.date_start));
             pred_vec.push(Box::new(date_spec.date_end));
         }
-
 
         if self.date_specs.len() > 1 {
             pred_str.push(')');
@@ -220,10 +209,10 @@ impl DateFilter {
     fn new(date_type: DateType) -> Self {
         DateFilter {
             date_type,
-            date_specs: Vec::new()
+            date_specs: Vec::new(),
         }
     }
-    
+
     pub fn build(date_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
         let date_type = DateType::from_rule(date_filter_pair.as_rule());
         let mut date_filter = DateFilter::new(date_type);
@@ -233,26 +222,23 @@ impl DateFilter {
                 Rule::date => {
                     let date_start_str = date_spec.as_str();
                     let (date_start, date_end) = Utils::single_date_bounds(date_start_str)?;
-                    date_filter.date_specs.push(
-                        DateSpec { 
-                            date_start, 
-                            date_end, 
-                        }
-                    );
-                },
+                    date_filter.date_specs.push(DateSpec {
+                        date_start,
+                        date_end,
+                    });
+                }
                 Rule::date_range => {
                     let mut range_inner = date_spec.into_inner();
                     let date_start_str = range_inner.next().unwrap().as_str();
                     let date_end_str = range_inner.next().unwrap().as_str();
-                    let (date_start, date_end) = Utils::range_date_bounds(date_start_str, date_end_str)?;
-                    date_filter.date_specs.push(
-                        DateSpec { 
-                            date_start, 
-                            date_end, 
-                        }
-                    );
-                },
-                _ => unreachable!()
+                    let (date_start, date_end) =
+                        Utils::range_date_bounds(date_start_str, date_end_str)?;
+                    date_filter.date_specs.push(DateSpec {
+                        date_start,
+                        date_end,
+                    });
+                }
+                _ => unreachable!(),
             }
         }
 
@@ -276,12 +262,11 @@ impl Filter for ChangeFilter {
                 true => {
                     first = false;
                     pred_str.push('?');
-                },
+                }
                 false => pred_str.push_str(", ?"),
             }
             let change_type_str = c.to_string();
             pred_vec.push(Box::new(change_type_str));
-
         }
 
         pred_str.push_str("))");
@@ -298,20 +283,21 @@ impl ChangeFilter {
     pub fn build(filter_change: Pair<Rule>) -> Result<Self, FsPulseError> {
         let mut change_filter = ChangeFilter::new();
         for change in filter_change.into_inner() {
-
             let change_str = change.as_str();
             let change_str_upper = change_str.to_uppercase();
 
             // disallow specifying the same type multiple times
             if change_filter.change_types.contains(&change_str_upper) {
-                return Err(FsPulseError::Error(format!("Change filter contains multiple instances of '{}'", change_str)));
+                return Err(FsPulseError::Error(format!(
+                    "Change filter contains multiple instances of '{}'",
+                    change_str
+                )));
             }
             change_filter.change_types.push_str(&change_str_upper);
         }
         Ok(change_filter)
     }
 }
-
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PathFilter {

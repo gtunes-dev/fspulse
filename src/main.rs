@@ -1,15 +1,15 @@
-mod database;
 mod changes;
 mod cli;
 mod config;
+mod database;
 mod error;
 mod hash;
 mod items;
 mod queries;
 mod reports;
 mod roots;
-mod scans;
 mod scanner;
+mod scans;
 mod schema;
 mod utils;
 mod validators;
@@ -25,8 +25,8 @@ use indicatif::MultiProgress;
 use log::{error, info};
 
 fn main() {
-    let project_dirs = ProjectDirs::from("", "", "fspulse")
-        .expect("Could not determine project directories");
+    let project_dirs =
+        ProjectDirs::from("", "", "fspulse").expect("Could not determine project directories");
 
     let config = Config::load_config(&project_dirs);
     CONFIG.set(config).expect("Config already set!");
@@ -39,7 +39,7 @@ fn main() {
     let start = Instant::now();
     let now = Local::now();
     info!("fspulse starting at {}", now.format("%Y-%m-%d %H:%M:%S"));
-    
+
     // Run the command line handler
     let result = Cli::handle_command_line(&mut multi_prog);
 
@@ -60,7 +60,10 @@ fn main() {
 
 pub fn setup_logging(project_dirs: &ProjectDirs) {
     let config = CONFIG.get().expect("Config not initialized");
-    let log_levels = format!("fspulse={}, lopdf={}", config.logging.fspulse, config.logging.lopdf);
+    let log_levels = format!(
+        "fspulse={}, lopdf={}",
+        config.logging.fspulse, config.logging.lopdf
+    );
 
     let log_dir = project_dirs.data_local_dir().join("logs");
 
@@ -68,9 +71,9 @@ pub fn setup_logging(project_dirs: &ProjectDirs) {
         .unwrap()
         .log_to_file(FileSpec::default().directory(log_dir))
         .rotate(
-            Criterion::Size(u64::MAX),       // Effectively disables size-based rotation
-            Naming::TimestampsDirect,        // 💡 Directly logs to a timestamped file (no CURRENT)
-            Cleanup::KeepLogFiles(100),      // Keep 100 most recent log files
+            Criterion::Size(u64::MAX),  // Effectively disables size-based rotation
+            Naming::TimestampsDirect,   // 💡 Directly logs to a timestamped file (no CURRENT)
+            Cleanup::KeepLogFiles(100), // Keep 100 most recent log files
         )
         .start()
         .unwrap();

@@ -24,14 +24,13 @@ impl Validator for ImageValidator {
         &self,
         path: &Path,
         _validation_pb: &ProgressBar,
-    ) -> Result<(ValidationState, Option<String>), FsPulseError>
-    {
+    ) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let open_result = ImageReader::open(path);
         let reader = match open_result {
             Ok(reader) => reader,
             Err(e) => {
                 let e_str = e.to_string();
-                return Ok((ValidationState::Invalid, Some(e_str)))
+                return Ok((ValidationState::Invalid, Some(e_str)));
             }
         };
 
@@ -41,7 +40,7 @@ impl Validator for ImageValidator {
                 let e_str = e.to_string();
                 Ok((ValidationState::Invalid, Some(e_str)))
             }
-        }        
+        }
     }
 
     fn wants_steady_tick(&self) -> bool {

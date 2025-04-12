@@ -1,17 +1,17 @@
-use crate::error::FsPulseError;
 use crate::database::Database;
+use crate::error::FsPulseError;
 use crate::roots::Root;
 
-use rusqlite::{ OptionalExtension, Result, params };
+use rusqlite::{params, OptionalExtension, Result};
 
 use std::fmt;
 
-const SQL_SCAN_ID_OR_LATEST: &str = 
+const SQL_SCAN_ID_OR_LATEST: &str =
     "SELECT id, root_id, state, hashing, validating, time_of_scan, file_count, folder_count
         FROM scans
         WHERE id = IFNULL(?1, (SELECT MAX(id) FROM scans))";
 
-const SQL_LATEST_FOR_ROOT: &str = 
+const SQL_LATEST_FOR_ROOT: &str =
     "SELECT id, root_id, state, hashing, validating, time_of_scan, file_count, folder_count
         FROM scans
         WHERE root_id = ?
@@ -31,7 +31,7 @@ pub struct Scan {
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(i64)]  // Ensures explicit numeric representation
+#[repr(i64)] // Ensures explicit numeric representation
 pub enum ScanState {
     #[default]
     Pending = 0,
@@ -51,7 +51,7 @@ impl ScanState {
             3 => ScanState::Analyzing,
             4 => ScanState::Completed,
             5 => ScanState::Stopped,
-            _ => ScanState::Unknown,  // Handle unknown states
+            _ => ScanState::Unknown, // Handle unknown states
         }
     }
 
@@ -78,7 +78,14 @@ impl fmt::Display for ScanState {
 impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
-    fn new_for_scan(id: i64, root_id: i64, state: i64, hashing: bool, validating: bool, time_of_scan: i64) -> Self {
+    fn new_for_scan(
+        id: i64,
+        root_id: i64,
+        state: i64,
+        hashing: bool,
+        validating: bool,
+        time_of_scan: i64,
+    ) -> Self {
         Scan {
             id,
             root_id,
@@ -90,16 +97,33 @@ impl Scan {
         }
     }
 
-    pub fn create(db: &Database, root: &Root, hashing: bool, validating: bool) -> Result<Self, FsPulseError> {
+    pub fn create(
+        db: &Database,
+        root: &Root,
+        hashing: bool,
+        validating: bool,
+    ) -> Result<Self, FsPulseError> {
         let (scan_id, time_of_scan): (i64, i64) = db.conn().query_row(
             "INSERT INTO scans (root_id, state, hashing, validating, time_of_scan) 
              VALUES (?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
              RETURNING id, time_of_scan",
-            [root.id(), ScanState::Scanning.as_i64(), hashing as i64, validating as i64],
+            [
+                root.id(),
+                ScanState::Scanning.as_i64(),
+                hashing as i64,
+                validating as i64,
+            ],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
-    
-        let scan = Scan::new_for_scan(scan_id, root.id(), ScanState::Scanning.as_i64(), hashing, validating, time_of_scan);
+
+        let scan = Scan::new_for_scan(
+            scan_id,
+            root.id(),
+            ScanState::Scanning.as_i64(),
+            hashing,
+            validating,
+            time_of_scan,
+        );
         Ok(scan)
     }
 
@@ -115,7 +139,11 @@ impl Scan {
         Self::get_by_id_or_latest(db, None, Some(root_id))
     }
 
-    fn get_by_id_or_latest(db: &Database, scan_id: Option<i64>, root_id: Option<i64>) -> Result<Option<Self>, FsPulseError> {
+    fn get_by_id_or_latest(
+        db: &Database,
+        scan_id: Option<i64>,
+        root_id: Option<i64>,
+    ) -> Result<Option<Self>, FsPulseError> {
         let conn = db.conn();
 
         let (query, query_param) = match (scan_id, root_id) {
@@ -126,10 +154,8 @@ impl Scan {
 
         // If the scan id wasn't explicitly specified, load the most recent otherwise,
         // load the specified scan
-        let scan_row: Option<Scan> = conn.query_row(
-            query,
-            params![query_param],
-            |row| {
+        let scan_row: Option<Scan> = conn
+            .query_row(query, params![query_param], |row| {
                 Ok(Scan {
                     id: row.get(0)?,
                     root_id: row.get(1)?,
@@ -140,9 +166,8 @@ impl Scan {
                     file_count: row.get(6)?,
                     folder_count: row.get(7)?,
                 })
-            },
-        )
-        .optional()?;
+            })
+            .optional()?;
 
         Ok(scan_row)
     }
@@ -182,30 +207,41 @@ impl Scan {
     pub fn set_state_sweeping(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning => self.set_state(db, ScanState::Sweeping),
-            _ => Err(FsPulseError::Error(format!("Can't set Scan Id {} to state sweeping from state {}", self.id(), self.state().as_i64())))
+            _ => Err(FsPulseError::Error(format!(
+                "Can't set Scan Id {} to state sweeping from state {}",
+                self.id(),
+                self.state().as_i64()
+            ))),
         }
     }
 
     pub fn set_state_analyzing(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         let tx = db.conn_mut().transaction()?;
 
-        let (file_count, folder_count): (i64, i64) = tx.query_row(
-            "SELECT 
+        let (file_count, folder_count): (i64, i64) = tx
+            .query_row(
+                "SELECT 
                 SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count, 
                 SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count 
                 FROM items WHERE last_scan_id = ?",
                 [self.id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
-            ).unwrap_or((0, 0)); // If no data, default to 0
+            )
+            .unwrap_or((0, 0)); // If no data, default to 0
 
         // Update the scan entity to indicate that it completed
         tx.execute(
             "UPDATE scans SET file_count = ?, folder_count = ?, state = ? WHERE id = ?",
-            (file_count, folder_count, ScanState::Analyzing.as_i64(), self.id)
+            (
+                file_count,
+                folder_count,
+                ScanState::Analyzing.as_i64(),
+                self.id,
+            ),
         )?;
 
         tx.commit()?;
-        
+
         self.state = ScanState::Analyzing.as_i64();
 
         self.file_count = Some(file_count);
@@ -217,7 +253,11 @@ impl Scan {
     pub fn set_state_completed(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Analyzing => self.set_state(db, ScanState::Completed),
-            _ => Err(FsPulseError::Error(format!("Can't set Scan Id {} to state completed from state {}", self.id(), self.state().as_i64())))
+            _ => Err(FsPulseError::Error(format!(
+                "Can't set Scan Id {} to state completed from state {}",
+                self.id(),
+                self.state().as_i64()
+            ))),
         }
     }
 
@@ -229,7 +269,10 @@ impl Scan {
                 self.state = ScanState::Stopped.as_i64();
                 Ok(())
             }
-            _ => Err(FsPulseError::Error(format!("Can't stop scan - invalid state {}", self.state().as_i64())))
+            _ => Err(FsPulseError::Error(format!(
+                "Can't stop scan - invalid state {}",
+                self.state().as_i64()
+            ))),
         }
     }
 
@@ -237,13 +280,16 @@ impl Scan {
         let conn = &mut db.conn_mut();
 
         let rows_updated = conn.execute(
-            "UPDATE scans SET state = ? WHERE id = ?", 
-            [new_state.as_i64(), self.id]
+            "UPDATE scans SET state = ? WHERE id = ?",
+            [new_state.as_i64(), self.id],
         )?;
 
         if rows_updated == 0 {
-            return Err(FsPulseError::Error(
-                format!("Could not update the state of Scan Id {} to {}", self.id, new_state.as_i64())));
+            return Err(FsPulseError::Error(format!(
+                "Could not update the state of Scan Id {} to {}",
+                self.id,
+                new_state.as_i64()
+            )));
         }
 
         self.state = new_state.as_i64();
@@ -251,14 +297,14 @@ impl Scan {
         Ok(())
     }
 
-    pub fn for_each_scan<F>(db: &Database, last: u32, mut func: F) -> Result<(), FsPulseError> 
+    pub fn for_each_scan<F>(db: &Database, last: u32, mut func: F) -> Result<(), FsPulseError>
     where
         F: FnMut(&Database, &Scan) -> Result<(), FsPulseError>,
     {
         if last == 0 {
             return Ok(());
         }
-        
+
         let mut stmt = db.conn().prepare(
             "SELECT 
                 s.id,
@@ -278,14 +324,14 @@ impl Scan {
 
         let rows = stmt.query_map([last], |row| {
             Ok(Scan {
-                id: row.get::<_, i64>(0)?,                              // scan id
-                root_id: row.get::<_, i64>(1)?,                         // root id
-                state: row.get::<_, i64>(2)?,                         // root id
-                hashing: row.get::<_, bool>(3)?,                        // hashing
-                validating: row.get::<_, bool>(4)?,                        // validating
-                time_of_scan: row.get::<_, i64>(5)?,                    // time of scan
-                file_count: row.get::<_, Option<i64>>(6)?,              // file count
-                folder_count: row.get::<_, Option<i64>>(7)?,            // folder count
+                id: row.get::<_, i64>(0)?,                   // scan id
+                root_id: row.get::<_, i64>(1)?,              // root id
+                state: row.get::<_, i64>(2)?,                // root id
+                hashing: row.get::<_, bool>(3)?,             // hashing
+                validating: row.get::<_, bool>(4)?,          // validating
+                time_of_scan: row.get::<_, i64>(5)?,         // time of scan
+                file_count: row.get::<_, Option<i64>>(6)?,   // file count
+                folder_count: row.get::<_, Option<i64>>(7)?, // folder count
             })
         })?;
 
@@ -314,7 +360,7 @@ impl Scan {
                 0
             ) AS prev_scan_id",
             [scan.root_id(), scan.id()],
-            |row| row.get::<_, i64>(0)
+            |row| row.get::<_, i64>(0),
         )?;
 
         // Undo Add (when they are reyhdrates) and Type Change
@@ -363,10 +409,10 @@ impl Scan {
                 FROM changes 
                 WHERE scan_id = ?2
                     AND ((change_type = 'A' AND is_undelete = 1) OR change_type = 'T')
-            )", 
-            [prev_scan_id, scan.id()]
+            )",
+            [prev_scan_id, scan.id()],
         )?;
-        
+
         // Undoing a modify requires selectively copying back (from the change)
         // the property groups that were part of the modify
         tx.execute(
@@ -418,7 +464,7 @@ impl Scan {
                 WHERE scan_id = ?2
                   AND change_type = 'D'
             )",
-            [prev_scan_id, scan.id()]
+            [prev_scan_id, scan.id()],
         )?;
 
         // Mark the scan as stopped
@@ -426,13 +472,11 @@ impl Scan {
             "UPDATE scans
                 SET state = 5
                 WHERE id = ?1",
-            [scan.id()]
+            [scan.id()],
         )?;
 
         // Delete the change records from the stopped scan
-        tx.execute(
-            "DELETE FROM changes WHERE scan_id = ?1", 
-            [scan.id()])?;
+        tx.execute("DELETE FROM changes WHERE scan_id = ?1", [scan.id()])?;
 
         // Final step is to delete the remaining items that were created during
         // the scan. We have to do this after the change records are deleted otherwise
@@ -440,19 +484,17 @@ impl Scan {
         // since we'll be abandoning change records. This operation assumes that the
         // only remaining items with a last_scan_id of the current scan are the simple
         // adds. This should be true :)
-       tx.execute(
-        "DELETE FROM items
-        WHERE last_scan_id = ?", 
-        [scan.id()]
+        tx.execute(
+            "DELETE FROM items
+        WHERE last_scan_id = ?",
+            [scan.id()],
         )?;
 
         tx.commit()?;
 
         Ok(())
-
     }
 }
-
 
 /*
 
@@ -470,7 +512,7 @@ Find previous scan:
 
   **** Undo Delete
 
- 
+
 
 -- Delete all change records for the aborted scan
 DELETE FROM changes
