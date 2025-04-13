@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{offset::LocalResult, DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::{
     path::{Path, MAIN_SEPARATOR_STR},
@@ -34,12 +34,22 @@ impl Utils {
 
     pub fn display_short_path(path: &str) -> String {
         tico(path, None)
-        /*
+    }
+
+    pub fn display_db_time(db_time: &i64) -> String {
+        let datetime_utc = DateTime::<Utc>::from_timestamp(*db_time, 0)
+            .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+
+        let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
+
+        datetime_local.format("%Y-%b-%d %H:%M").to_string()
+    }
+
+    pub fn display_opt_db_time(opt: &Option<i64>) -> String {
         match opt {
-            Some(s) => tico(s.as_ref(), None),
-            None => "-".to_owned()
+            Some(db_time) => Utils::display_db_time(db_time),
+            None => "-".to_owned(),
         }
-        */
     }
 
     /*
@@ -75,6 +85,7 @@ impl Utils {
         datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
     }
 
+    /// Take a UTC timestamp and create a display string in local time
     pub fn format_db_time_short(db_time: i64) -> String {
         let datetime_utc = DateTime::<Utc>::from_timestamp(db_time, 0)
             .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
@@ -105,48 +116,84 @@ impl Utils {
         Ok((start_dt, end_dt))
     }
 
-    /// For a single date, returns (start_timestamp, end_timestamp)
-    /// where start is the beginning (00:00:00) of that day and end is the end (23:59:59) of that day.
+    /// For a single date input (assumed to be in local time), returns (start_timestamp, end_timestamp)
+    /// as UTC timestamps, choosing the earliest possible time for the start (expanding the lower bound)
+    /// and the latest possible time for the end.
     pub fn single_date_bounds(date_str: &str) -> Result<(i64, i64), FsPulseError> {
-        let (start_dt, end_dt) = Self::parse_date_bounds(date_str)?;
-        let start_ts = Utc.from_utc_datetime(&start_dt).timestamp();
-        let end_ts = Utc.from_utc_datetime(&end_dt).timestamp();
+        let (naive_start, naive_end) = Self::parse_date_bounds(date_str)?;
+
+        // For start time, try to use the earliest valid time.
+        let local_start = match Local.from_local_datetime(&naive_start) {
+            LocalResult::Single(dt) => dt,
+            LocalResult::Ambiguous(earliest, _latest) => earliest,
+            LocalResult::None => {
+                // For missing times, you might decide to move forward a minute until a valid time is found.
+                // Here we simply return an error, but you could adjust to your needs.
+                return Err(FsPulseError::Error(format!(
+                    "Local start time '{}' is invalid (e.g., during DST gap)",
+                    date_str
+                )));
+            }
+        };
+
+        // For end time, use the latest valid time.
+        let local_end = match Local.from_local_datetime(&naive_end) {
+            LocalResult::Single(dt) => dt,
+            LocalResult::Ambiguous(_earliest, latest) => latest,
+            LocalResult::None => {
+                return Err(FsPulseError::Error(format!(
+                    "Local end time '{}' is invalid (e.g., during DST gap)",
+                    date_str
+                )));
+            }
+        };
+
+        let start_ts = local_start.with_timezone(&Utc).timestamp();
+        let end_ts = local_end.with_timezone(&Utc).timestamp();
         Ok((start_ts, end_ts))
     }
 
-    /// For a range of dates, returns (start_timestamp, end_timestamp)
-    /// where start is the beginning (00:00:00) of the first date and end is the end (23:59:59) of the second date.
-    /// Returns an error if the first date is after the second.
+    /// Similar modifications would be applied for a date range.
     pub fn range_date_bounds(
         start_date_str: &str,
         end_date_str: &str,
     ) -> Result<(i64, i64), FsPulseError> {
-        // Reuse our helper to get the respective bounds.
-        let (start_dt, _) = Self::parse_date_bounds(start_date_str)?;
-        let (_, end_dt) = Self::parse_date_bounds(end_date_str)?;
+        let (naive_start, _) = Self::parse_date_bounds(start_date_str)?;
+        let (_, naive_end) = Self::parse_date_bounds(end_date_str)?;
 
-        if start_dt > end_dt {
+        let local_start = match Local.from_local_datetime(&naive_start) {
+            LocalResult::Single(dt) => dt,
+            LocalResult::Ambiguous(earliest, _) => earliest,
+            LocalResult::None => {
+                return Err(FsPulseError::Error(format!(
+                    "Local start time '{}' is invalid (e.g., during DST gap)",
+                    start_date_str
+                )));
+            }
+        };
+
+        let local_end = match Local.from_local_datetime(&naive_end) {
+            LocalResult::Single(dt) => dt,
+            LocalResult::Ambiguous(_, latest) => latest,
+            LocalResult::None => {
+                return Err(FsPulseError::Error(format!(
+                    "Local end time '{}' is invalid (e.g., during DST gap)",
+                    end_date_str
+                )));
+            }
+        };
+
+        if local_start > local_end {
             return Err(FsPulseError::Error(format!(
                 "Start date '{}' is after end date '{}'",
                 start_date_str, end_date_str
             )));
         }
 
-        let start_ts = Utc.from_utc_datetime(&start_dt).timestamp();
-        let end_ts = Utc.from_utc_datetime(&end_dt).timestamp();
+        let start_ts = local_start.with_timezone(&Utc).timestamp();
+        let end_ts = local_end.with_timezone(&Utc).timestamp();
         Ok((start_ts, end_ts))
     }
-
-    /*
-
-    pub fn opt_bool_or_none_as_str(opt_bool: Option<bool>) -> &'static str {
-        match opt_bool {
-            Some(true) => "T",
-            Some(false) => "F",
-            None => "-",
-        }
-    }
-    */
 
     pub fn _format_path_for_display(path: &Path, max_len: usize) -> String {
         let path_str = path.to_string_lossy();

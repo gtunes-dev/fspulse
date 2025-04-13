@@ -163,7 +163,12 @@ impl DomainQuery {
         Ok(table)
     }
 
-    fn execute(&self, db: &Database, _query: &str) -> Result<(), FsPulseError> {
+    fn execute(
+        &self,
+        db: &Database,
+        query_type: QueryType,
+        _query: &str,
+    ) -> Result<(), FsPulseError> {
         let mut sql = format!("{}{}", self.col_set.as_select(), self.get_base_sql(),);
 
         // $TODO: Wrap Filters into a struct that can generate the entire WHERE clause
@@ -181,7 +186,7 @@ impl DomainQuery {
                         sql.push_str(" AND");
                     }
                 }
-                let (pred_str, pred_vec) = filter.to_predicate_parts()?;
+                let (pred_str, pred_vec) = filter.to_predicate_parts(query_type)?;
                 sql.push_str(&pred_str);
                 params_vec.extend(pred_vec);
             }
@@ -235,7 +240,8 @@ struct ScansQueryRow {
     state: i64,
     hashing: bool,
     validating: bool,
-    time_of_scan: bool,
+    #[tabled(display = "Utils::display_db_time")]
+    time_of_scan: i64,
     file_count: i64,
     folder_count: i64,
 }
@@ -265,7 +271,7 @@ struct ItemsQueryRow {
     last_scan: i64,
     #[tabled(display = "Utils::display_bool")]
     is_ts: bool,
-    #[tabled(display = "Utils::display_opt_i64")]
+    #[tabled(display = "Utils::display_opt_db_time")]
     mod_date: Option<i64>,
     #[tabled(display = "Utils::display_opt_i64")]
     file_size: Option<i64>,
@@ -307,6 +313,10 @@ struct ChangesQueryRow {
     change_type: String,
     #[tabled(display = "Utils::display_opt_bool")]
     meta_change: Option<bool>,
+    #[tabled(display = "Utils::display_opt_db_time")]
+    mod_date_old: Option<i64>,
+    #[tabled(display = "Utils::display_opt_db_time")]
+    mod_date_new: Option<i64>,
     #[tabled(display = "Utils::display_opt_bool")]
     hash_change: Option<bool>,
     #[tabled(display = "Utils::display_opt_bool")]
@@ -317,6 +327,7 @@ struct ChangesQueryRow {
     val_new: Option<String>,
 
     // items properties
+    #[tabled(display = "Utils::display_short_path")]
     path: String,
 }
 
@@ -329,11 +340,13 @@ impl ChangesQueryRow {
             item_id: row.get(3)?,
             change_type: row.get(4)?,
             meta_change: row.get(5)?,
-            hash_change: row.get(6)?,
-            val_change: row.get(7)?,
-            val_old: row.get(8)?,
-            val_new: row.get(9)?,
-            path: row.get(10)?,
+            mod_date_old: row.get(6)?,
+            mod_date_new: row.get(7)?,
+            hash_change: row.get(8)?,
+            val_change: row.get(9)?,
+            val_old: row.get(10)?,
+            val_new: row.get(11)?,
+            path: row.get(12)?,
         })
     }
 }
@@ -375,7 +388,7 @@ impl Query {
         };
 
         let query = Query::build(query_type, domain_query)?;
-        query.execute(db, query_str)?;
+        query.execute(db, query_type, query_str)?;
 
         Ok(())
     }
@@ -393,7 +406,10 @@ impl Query {
                     let id_filter = IdFilter::build(token)?;
                     query.add_filter(id_filter);
                 }
-                Rule::scan_date_filter | Rule::mod_date_filter => {
+                Rule::time_of_scan_filter
+                | Rule::mod_date_filter
+                | Rule::mod_date_old_filter
+                | Rule::mod_date_new_filter => {
                     let date_filter = DateFilter::build(token)?;
                     query.add_filter(date_filter);
                 }

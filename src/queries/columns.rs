@@ -98,6 +98,8 @@ pub const CHANGES_COL_SET: &[ColumnSpec] = column_spec![
     ("item_id", "item_id"),
     ("change_type", "change_type"),
     ("metadata_changed", "meta_change"),
+    ("mod_date_old", "mod_date_old"),
+    ("mod_date_new", "mod_date_new"),
     ("hash_changed", "hash_change"),
     ("validity_changed", "val_change"),
     ("validity_state_old", "val_old"),

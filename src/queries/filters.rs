@@ -3,12 +3,15 @@ use pest::iterators::Pair;
 use rusqlite::ToSql;
 use std::fmt::{self, Debug};
 
-use super::Rule;
+use super::{query::QueryType, Rule};
 
 /// Defines the behavior of a filter.
 pub trait Filter: Debug {
     /// return predicate text and params
-    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError>;
+    fn to_predicate_parts(
+        &self,
+        query_type: QueryType,
+    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError>;
 }
 
 #[derive(Debug, Clone)]
@@ -55,7 +58,10 @@ impl IdType {
 }
 
 impl Filter for IdFilter {
-    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+    fn to_predicate_parts(
+        &self,
+        _query_type: QueryType,
+    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
@@ -134,8 +140,10 @@ pub struct DateFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DateType {
-    ScanDate,
+    TimeOfScan,
     ModDate,
+    ModDateOld,
+    ModDateNew,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -143,11 +151,14 @@ pub struct DateSpec {
     date_start: i64,
     date_end: i64,
 }
+
 impl fmt::Display for DateType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            DateType::ScanDate => "time_of_scan",
+            DateType::TimeOfScan => "time_of_scan",
             DateType::ModDate => "mod_date",
+            DateType::ModDateOld => "mod_date_old",
+            DateType::ModDateNew => "mod_date_new",
         };
         write!(f, "{}", s)
     }
@@ -156,15 +167,20 @@ impl fmt::Display for DateType {
 impl DateType {
     fn from_rule(rule: Rule) -> Self {
         match rule {
-            Rule::scan_date_filter => DateType::ScanDate,
+            Rule::time_of_scan_filter => DateType::TimeOfScan,
             Rule::mod_date_filter => DateType::ModDate,
+            Rule::mod_date_old_filter => DateType::ModDateOld,
+            Rule::mod_date_new_filter => DateType::ModDateNew,
             _ => unreachable!(),
         }
     }
 }
 
 impl Filter for DateFilter {
-    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+    fn to_predicate_parts(
+        &self,
+        query_type: QueryType,
+    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
 
@@ -180,17 +196,23 @@ impl Filter for DateFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            match self.date_type {
-                DateType::ScanDate => {
-                    // TODO$: This is broken because this query needs to be different for a scans
-                    // query versus a changes query. this current version is inteded for changes
-                    pred_str.push_str("(scan_id IN (SELECT id FROM scans WHERE time_of_scan >= ? AND time_of_scan <= ?))");
+            match (&self.date_type, query_type) {
+                (DateType::TimeOfScan, QueryType::Changes) => pred_str.push_str(
+                    "(scan_id IN (SELECT id FROM scans WHERE time_of_scan BETWEEN ? AND ?))",
+                ),
+                (DateType::TimeOfScan, QueryType::Scans) => {
+                    pred_str.push_str("(time_of_scan BETWEEN ? AND ?)")
                 }
-                DateType::ModDate => {
-                    return Err(FsPulseError::Error(
-                        "Date filter isn't yet implemented for moddate".into(),
-                    ));
+                (DateType::ModDate, QueryType::Items) => {
+                    pred_str.push_str("(mod_date BETWEEN ? AND ?)")
                 }
+                (DateType::ModDateOld, QueryType::Changes) => {
+                    pred_str.push_str("(mod_date_old BETWEEN ? AND ?)")
+                }
+                (DateType::ModDateNew, QueryType::Changes) => {
+                    pred_str.push_str("(mod_date_new BETWEEN ? AND ?)")
+                }
+                _ => unreachable!(),
             }
 
             pred_vec.push(Box::new(date_spec.date_start));
@@ -252,7 +274,10 @@ pub struct ChangeFilter {
 }
 
 impl Filter for ChangeFilter {
-    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+    fn to_predicate_parts(
+        &self,
+        _query_type: QueryType,
+    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = " (change_type IN (".to_string();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
 
@@ -305,7 +330,10 @@ pub struct PathFilter {
 }
 
 impl Filter for PathFilter {
-    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+    fn to_predicate_parts(
+        &self,
+        _query_type: QueryType,
+    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = " (".to_string();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
 
