@@ -377,10 +377,11 @@ impl Cli {
                     let query: String = Input::with_theme(&ColorfulTheme::default())
                         .history_with(&mut history)
                         .with_post_completion_text("Query: ")
-                        .with_prompt("Enter query (to exit: 'q' or 'exit'")
+                        .with_prompt("Enter query (to exit: 'q' or 'exit'\n")
                         .interact_text()
                         .unwrap();
-                    if query.to_lowercase() == "exit" {
+                    let query_lower = query.to_lowercase();
+                    if query_lower == "exit"  || query_lower == "q" {
                         break;
                     }
                     Query::process_query(db, &query)?;

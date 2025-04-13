@@ -23,63 +23,64 @@ impl ItemType {
 
 #[derive(Clone, Debug, Default)]
 pub struct Item {
-    id: i64,
+    item_id: i64,
     root_id: i64,
-    path: String,
+    item_path: String,
     item_type: String,
 
-    last_scan_id: i64,
-    is_tombstone: bool,
+    last_scan: i64,
+    is_ts: bool,
 
     // Metadata property group
     mod_date: Option<i64>,
     file_size: Option<i64>,
 
     // Hash property group
-    last_hash_scan_id: Option<i64>,
+    last_hash_scan: Option<i64>,
     file_hash: Option<String>,
 
     // Validation property group
-    last_validation_scan_id: Option<i64>,
-    validity_state: String,
-    validation_error: Option<String>,
+    last_val_scan: Option<i64>,
+    val: String,
+    val_error: Option<String>,
 }
 
 impl Item {
-    const ITEM_COLUMNS: &str = "id, 
+    const ITEM_COLUMNS: &str = "
+        item_id, 
         root_id, 
-        path,
+        item_path,
         item_type,
-        last_scan_id, 
-        is_tombstone,
+        last_scan, 
+        is_ts,
         mod_date,
         file_size,
-        last_hash_scan_id,
+        last_hash_scan,
         file_hash,
-        last_validation_scan_id,
-        validity_state,
-        validation_error";
+        last_val_scan,
+        val,
+        val_error";
 
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(Item {
-            id: row.get(0)?,
+            item_id: row.get(0)?,
             root_id: row.get(1)?,
-            path: row.get(2)?,
+            item_path: row.get(2)?,
             item_type: row.get(3)?,
-            last_scan_id: row.get(4)?,
-            is_tombstone: row.get(5)?,
+            last_scan: row.get(4)?,
+            is_ts: row.get(5)?,
             mod_date: row.get(6)?,
             file_size: row.get(7)?,
-            last_hash_scan_id: row.get(8)?,
+            last_hash_scan: row.get(8)?,
             file_hash: row.get(9)?,
-            last_validation_scan_id: row.get(10)?,
-            validity_state: row.get(11)?,
-            validation_error: row.get(12)?,
+            last_val_scan: row.get(10)?,
+            val: row.get(11)?,
+            val_error: row.get(12)?,
         })
     }
 
     pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
-        let query = format!("SELECT {} FROM ITEMS WHERE id = ?", Item::ITEM_COLUMNS);
+        let query = format!("SELECT {} FROM ITEMS WHERE item_id = ?", Item::ITEM_COLUMNS);
         db.conn()
             .query_row(&query, params![id], Item::from_row)
             .optional()
@@ -93,7 +94,7 @@ impl Item {
         item_type: ItemType,
     ) -> Result<Option<Self>, FsPulseError> {
         let query = format!(
-            "SELECT {} FROM ITEMS WHERE root_id = ? AND path = ? AND item_type = ?",
+            "SELECT {} FROM ITEMS WHERE root_id = ? AND item_path = ? AND item_type = ?",
             Item::ITEM_COLUMNS
         );
 
@@ -107,23 +108,23 @@ impl Item {
             .map_err(FsPulseError::DatabaseError)
     }
 
-    pub fn id(&self) -> i64 {
-        self.id
+    pub fn item_id(&self) -> i64 {
+        self.item_id
     }
     pub fn root_id(&self) -> i64 {
         self.root_id
     }
-    pub fn path(&self) -> &str {
-        &self.path
+    pub fn item_path(&self) -> &str {
+        &self.item_path
     }
     pub fn item_type(&self) -> &str {
         &self.item_type
     }
-    pub fn last_scan_id(&self) -> i64 {
-        self.last_scan_id
+    pub fn last_scan(&self) -> i64 {
+        self.last_scan
     }
-    pub fn is_tombstone(&self) -> bool {
-        self.is_tombstone
+    pub fn is_ts(&self) -> bool {
+        self.is_ts
     }
     pub fn mod_date(&self) -> Option<i64> {
         self.mod_date
@@ -131,32 +132,32 @@ impl Item {
     pub fn file_size(&self) -> Option<i64> {
         self.file_size
     }
-    pub fn last_hash_scan_id(&self) -> Option<i64> {
-        self.last_hash_scan_id
+    pub fn last_hash_scan(&self) -> Option<i64> {
+        self.last_hash_scan
     }
     pub fn file_hash(&self) -> Option<&str> {
         self.file_hash.as_deref()
     }
-    pub fn last_validation_scan_id(&self) -> Option<i64> {
-        self.last_validation_scan_id
+    pub fn last_val_scan(&self) -> Option<i64> {
+        self.last_val_scan
     }
     pub fn validity_state_as_str(&self) -> &str {
-        &self.validity_state
+        &self.val
     }
-    pub fn validity_state(&self) -> ValidationState {
-        ValidationState::from_string(&self.validity_state)
+    pub fn val(&self) -> ValidationState {
+        ValidationState::from_string(&self.val)
     }
-    pub fn validation_error(&self) -> Option<&str> {
-        self.validation_error.as_deref()
+    pub fn val_error(&self) -> Option<&str> {
+        self.val_error.as_deref()
     }
 
     pub fn count_analyzed_items(db: &Database, scan_id: i64) -> Result<i64, FsPulseError> {
         let mut stmt = db.conn().prepare(
             "SELECT COUNT(*) FROM items
              WHERE
-                last_scan_id = ? AND
+                last_scan = ? AND
                 item_type = 'F' AND
-                (last_hash_scan_id = ? OR last_validation_scan_id = ?)",
+                (last_hash_scan = ? OR last_val_scan = ?)",
         )?;
 
         let count: i64 = stmt.query_row([scan_id, scan_id, scan_id], |row| row.get(0))?;
@@ -175,16 +176,16 @@ impl Item {
             "SELECT {}
             FROM items
              WHERE
-                    last_scan_id = ?
+                    last_scan = ?
                 AND
                     item_type = 'F'
                 AND 
-                    ((? = 1 AND (last_hash_scan_id IS NULL OR last_hash_scan_id < ?))
+                    ((? = 1 AND (last_hash_scan IS NULL OR last_hash_scan < ?))
                     OR 
-                    (? = 1 AND (last_validation_scan_id IS NULL OR last_validation_scan_id < ?)))
+                    (? = 1 AND (last_val_scan IS NULL OR last_val_scan < ?)))
                 AND
-                    id > ?
-             ORDER BY id ASC
+                    item_id > ?
+             ORDER BY item_id ASC
              LIMIT {}",
             Item::ITEM_COLUMNS,
             limit
@@ -220,8 +221,8 @@ impl Item {
         let sql = format!(
             "SELECT {}
              FROM items
-             WHERE root_id = ? AND is_tombstone = 0 AND validity_state = 'I'
-             ORDER BY path ASC",
+             WHERE root_id = ? AND is_ts = 0 AND val = 'I'
+             ORDER BY item_path ASC",
             Item::ITEM_COLUMNS
         );
 
@@ -248,8 +249,8 @@ impl Item {
         let sql = format!(
             "SELECT {}
              FROM items
-             WHERE last_scan_id = ?
-             ORDER BY path ASC",
+             WHERE last_scan = ?
+             ORDER BY item_path ASC",
             Item::ITEM_COLUMNS
         );
 
@@ -275,8 +276,8 @@ impl Item {
         let sql = format!(
             "SELECT {}
              FROM items
-             WHERE path = ?
-             ORDER BY id ASC",
+             WHERE item_path = ?
+             ORDER BY item_id ASC",
             Item::ITEM_COLUMNS
         );
 

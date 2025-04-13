@@ -155,7 +155,7 @@ pub struct DateSpec {
 impl fmt::Display for DateType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            DateType::TimeOfScan => "time_of_scan",
+            DateType::TimeOfScan => "scan_time",
             DateType::ModDate => "mod_date",
             DateType::ModDateOld => "mod_date_old",
             DateType::ModDateNew => "mod_date_new",
@@ -198,10 +198,10 @@ impl Filter for DateFilter {
 
             match (&self.date_type, query_type) {
                 (DateType::TimeOfScan, QueryType::Changes) => pred_str.push_str(
-                    "(scan_id IN (SELECT id FROM scans WHERE time_of_scan BETWEEN ? AND ?))",
+                    "(scan_id IN (SELECT scan_id FROM scans WHERE scan_time BETWEEN ? AND ?))",
                 ),
                 (DateType::TimeOfScan, QueryType::Scans) => {
-                    pred_str.push_str("(time_of_scan BETWEEN ? AND ?)")
+                    pred_str.push_str("(scan_time BETWEEN ? AND ?)")
                 }
                 (DateType::ModDate, QueryType::Items) => {
                     pred_str.push_str("(mod_date BETWEEN ? AND ?)")
@@ -332,7 +332,7 @@ pub struct PathFilter {
 impl Filter for PathFilter {
     fn to_predicate_parts(
         &self,
-        _query_type: QueryType,
+        query_type: QueryType,
     ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = " (".to_string();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
@@ -343,7 +343,11 @@ impl Filter for PathFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            pred_str.push_str("(path LIKE ?)");
+            match query_type {
+                QueryType::Roots => pred_str.push_str("(root_path LIKE ?)"),
+                QueryType::Items => pred_str.push_str("(item_path LIKE ?)"),
+                _ => unreachable!()
+            }
 
             //let change_type_str = c.to_string();
             let like_str = format!("%{path_str}%");

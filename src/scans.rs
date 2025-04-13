@@ -7,25 +7,25 @@ use rusqlite::{params, OptionalExtension, Result};
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT id, root_id, state, hashing, validating, time_of_scan, file_count, folder_count
+    "SELECT scan_id, root_id, state, hashing, validating, scan_time, file_count, folder_count
         FROM scans
-        WHERE id = IFNULL(?1, (SELECT MAX(id) FROM scans))";
+        WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT id, root_id, state, hashing, validating, time_of_scan, file_count, folder_count
+    "SELECT scan_id, root_id, state, hashing, validating, scan_time, file_count, folder_count
         FROM scans
         WHERE root_id = ?
-        ORDER BY id DESC LIMIT 1";
+        ORDER BY scan_id DESC LIMIT 1";
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Scan {
     // Schema fields
-    id: i64,
+    scan_id: i64,
     root_id: i64,
     state: i64,
     hashing: bool,
     validating: bool,
-    time_of_scan: i64,
+    scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
 }
@@ -79,20 +79,20 @@ impl Scan {
     // Create a Scan that will be used during a directory scan
     // In this case, the scan_id is not yet known
     fn new_for_scan(
-        id: i64,
+        scan_id: i64,
         root_id: i64,
         state: i64,
         hashing: bool,
         validating: bool,
-        time_of_scan: i64,
+        scan_time: i64,
     ) -> Self {
         Scan {
-            id,
+            scan_id,
             root_id,
             state,
             hashing,
             validating,
-            time_of_scan,
+            scan_time,
             ..Default::default()
         }
     }
@@ -103,12 +103,12 @@ impl Scan {
         hashing: bool,
         validating: bool,
     ) -> Result<Self, FsPulseError> {
-        let (scan_id, time_of_scan): (i64, i64) = db.conn().query_row(
-            "INSERT INTO scans (root_id, state, hashing, validating, time_of_scan) 
+        let (scan_id, scan_time): (i64, i64) = db.conn().query_row(
+            "INSERT INTO scans (root_id, state, hashing, validating, scan_time) 
              VALUES (?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
-             RETURNING id, time_of_scan",
+             RETURNING scan_id, scan_time",
             [
-                root.id(),
+                root.root_id(),
                 ScanState::Scanning.as_i64(),
                 hashing as i64,
                 validating as i64,
@@ -118,11 +118,11 @@ impl Scan {
 
         let scan = Scan::new_for_scan(
             scan_id,
-            root.id(),
+            root.root_id(),
             ScanState::Scanning.as_i64(),
             hashing,
             validating,
-            time_of_scan,
+            scan_time,
         );
         Ok(scan)
     }
@@ -157,12 +157,12 @@ impl Scan {
         let scan_row: Option<Scan> = conn
             .query_row(query, params![query_param], |row| {
                 Ok(Scan {
-                    id: row.get(0)?,
+                    scan_id: row.get(0)?,
                     root_id: row.get(1)?,
                     state: row.get(2)?,
                     hashing: row.get(3)?,
                     validating: row.get(4)?,
-                    time_of_scan: row.get(5)?,
+                    scan_time: row.get(5)?,
                     file_count: row.get(6)?,
                     folder_count: row.get(7)?,
                 })
@@ -172,8 +172,8 @@ impl Scan {
         Ok(scan_row)
     }
 
-    pub fn id(&self) -> i64 {
-        self.id
+    pub fn scan_id(&self) -> i64 {
+        self.scan_id
     }
 
     pub fn root_id(&self) -> i64 {
@@ -192,8 +192,8 @@ impl Scan {
         self.validating
     }
 
-    pub fn time_of_scan(&self) -> i64 {
-        self.time_of_scan
+    pub fn scan_time(&self) -> i64 {
+        self.scan_time
     }
 
     pub fn file_count(&self) -> Option<i64> {
@@ -209,7 +209,7 @@ impl Scan {
             ScanState::Scanning => self.set_state(db, ScanState::Sweeping),
             _ => Err(FsPulseError::Error(format!(
                 "Can't set Scan Id {} to state sweeping from state {}",
-                self.id(),
+                self.scan_id(),
                 self.state().as_i64()
             ))),
         }
@@ -223,20 +223,20 @@ impl Scan {
                 "SELECT 
                 SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count, 
                 SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count 
-                FROM items WHERE last_scan_id = ?",
-                [self.id],
+                FROM items WHERE last_scan = ?",
+                [self.scan_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .unwrap_or((0, 0)); // If no data, default to 0
 
         // Update the scan entity to indicate that it completed
         tx.execute(
-            "UPDATE scans SET file_count = ?, folder_count = ?, state = ? WHERE id = ?",
+            "UPDATE scans SET file_count = ?, folder_count = ?, state = ? WHERE scan_id = ?",
             (
                 file_count,
                 folder_count,
                 ScanState::Analyzing.as_i64(),
-                self.id,
+                self.scan_id,
             ),
         )?;
 
@@ -255,7 +255,7 @@ impl Scan {
             ScanState::Analyzing => self.set_state(db, ScanState::Completed),
             _ => Err(FsPulseError::Error(format!(
                 "Can't set Scan Id {} to state completed from state {}",
-                self.id(),
+                self.scan_id(),
                 self.state().as_i64()
             ))),
         }
@@ -264,7 +264,6 @@ impl Scan {
     pub fn set_state_stopped(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
-                //self.set_state(db, ScanState::Stopped)
                 Scan::stop_scan(db, self)?;
                 self.state = ScanState::Stopped.as_i64();
                 Ok(())
@@ -280,14 +279,14 @@ impl Scan {
         let conn = &mut db.conn_mut();
 
         let rows_updated = conn.execute(
-            "UPDATE scans SET state = ? WHERE id = ?",
-            [new_state.as_i64(), self.id],
+            "UPDATE scans SET state = ? WHERE scan_id = ?",
+            [new_state.as_i64(), self.scan_id],
         )?;
 
         if rows_updated == 0 {
             return Err(FsPulseError::Error(format!(
                 "Could not update the state of Scan Id {} to {}",
-                self.id,
+                self.scan_id,
                 new_state.as_i64()
             )));
         }
@@ -307,29 +306,29 @@ impl Scan {
 
         let mut stmt = db.conn().prepare(
             "SELECT 
-                s.id,
+                s.scan_id,
                 s.root_id,
                 s.state,
                 s.hashing,
                 s.validating,
-                s.time_of_scan,
+                s.scan_time,
                 s.file_count,
                 s.folder_count
             FROM scans s
-            LEFT JOIN changes c ON s.id = c.scan_id
-            GROUP BY s.id, s.root_id, s.state, s.hashing, s.validating, s.time_of_scan, s.file_count, s.folder_count
-            ORDER BY s.id DESC
+            LEFT JOIN changes c ON s.scan_id = c.scan_id
+            GROUP BY s.scan_id, s.root_id, s.state, s.hashing, s.validating, s.scan_time, s.file_count, s.folder_count
+            ORDER BY s.scan_id DESC
             LIMIT ?"
         )?;
 
         let rows = stmt.query_map([last], |row| {
             Ok(Scan {
-                id: row.get::<_, i64>(0)?,                   // scan id
+                scan_id: row.get::<_, i64>(0)?,                   // scan id
                 root_id: row.get::<_, i64>(1)?,              // root id
                 state: row.get::<_, i64>(2)?,                // root id
                 hashing: row.get::<_, bool>(3)?,             // hashing
                 validating: row.get::<_, bool>(4)?,          // validating
-                time_of_scan: row.get::<_, i64>(5)?,         // time of scan
+                scan_time: row.get::<_, i64>(5)?,         // time of scan
                 file_count: row.get::<_, Option<i64>>(6)?,   // file count
                 folder_count: row.get::<_, Option<i64>>(7)?, // folder count
             })
@@ -351,21 +350,21 @@ impl Scan {
         // scan being stopped
         let prev_scan_id: i64 = tx.query_row(
             "SELECT COALESCE(
-                (SELECT MAX(id)
+                (SELECT MAX(scan_id)
                  FROM scans
                  WHERE root_id = ?
-                   AND id < ?
+                   AND scan_id < ?
                    AND state = 4
                 ),
                 0
             ) AS prev_scan_id",
-            [scan.root_id(), scan.id()],
+            [scan.root_id(), scan.scan_id()],
             |row| row.get::<_, i64>(0),
         )?;
 
         // Undo Add (when they are reyhdrates) and Type Change
         // When an item was previously tombstoned and then was found again during a scan
-        // the item is rehydrated. This means that is_tombstone is set to false and all properties
+        // the item is rehydrated. This means that is_ts is set to false and all properties
         // on the item are cleared and set to new values. In this case the cleared properties are
         // stored in the change record, and we can recover them from there. A type change is
         // handled similarly. When an item that was known to be a file or folder is next seen as the other
@@ -375,42 +374,40 @@ impl Scan {
         tx.execute(
             "UPDATE items
             SET (
-                item_type,
-                is_tombstone,
+                is_ts,
                 mod_date,
                 file_size,
-                last_hash_scan_id,
+                last_hash_scan,
                 file_hash,
-                last_validation_scan_id,
-                validity_state,
-                validation_error,
-                last_scan_id
+                last_val_scan,
+                val,
+                val_error,
+                last_scan
             ) =
             (
                 SELECT 
-                    CASE WHEN c.change_type = 'T' THEN c.prev_item_type ELSE items.item_type END,
-                    CASE WHEN c.change_type = 'A' THEN 1 ELSE items.is_tombstone END,
+                    CASE WHEN c.change_type = 'A' THEN 1 ELSE items.is_ts END,
                     c.mod_date_old,
                     c.file_size_old,
-                    c.last_hash_scan_id_old,
+                    c.last_hash_scan_old,
                     c.hash_old,
-                    c.last_validation_scan_id_old,
-                    c.validity_state_old,
-                    c.validation_error_old,
+                    c.last_val_scan_old,
+                    c.val_old,
+                    c.val_error_old,
                     ?1
                 FROM changes c
-                WHERE c.item_id = items.id
+                WHERE c.item_id = items.item_id
                     AND c.scan_id = ?2
-                    AND ((c.change_type = 'A' AND c.is_undelete = 1) OR c.change_type = 'T')
+                    AND (c.change_type = 'A' AND c.is_undelete = 1)
                 LIMIT 1
             )
-            WHERE id IN (
+            WHERE item_id IN (
                 SELECT item_id 
                 FROM changes 
                 WHERE scan_id = ?2
-                    AND ((change_type = 'A' AND is_undelete = 1) OR change_type = 'T')
+                    AND (change_type = 'A' AND is_undelete = 1)
             )",
-            [prev_scan_id, scan.id()],
+            [prev_scan_id, scan.scan_id()],
         )?;
 
         // Undoing a modify requires selectively copying back (from the change)
@@ -420,74 +417,74 @@ impl Scan {
             SET (
                 mod_date, 
                 file_size, 
-                last_hash_scan_id, 
+                last_hash_scan, 
                 file_hash,
-                last_validation_scan_id, 
-                validity_state, 
-                validation_error, 
-                last_scan_id
+                last_val_scan, 
+                val, 
+                val_error, 
+                last_scan
             ) =
             (
             SELECT 
-                CASE WHEN c.metadata_changed = 1 THEN COALESCE(c.mod_date_old, items.mod_date) ELSE items.mod_date END,
-                CASE WHEN c.metadata_changed = 1 THEN COALESCE(c.file_size_old, items.file_size) ELSE items.size END,
-                CASE WHEN c.hash_changed = 1 THEN c.last_hash_scan_id_old ELSE items.last_hash_scan_id END,
-                CASE WHEN c.hash_changed = 1 THEN c.hash_old ELSE items.file_hash END,
-                CASE WHEN c.validity_changed = 1 THEN c.last_validation_scan_id_old ELSE items.last_validation_scan_id END,
-                CASE WHEN c.validity_changed = 1 THEN c.validity_state_old ELSE items.validity_state END,
-                CASE WHEN c.validity_changed = 1 THEN c.validation_error_old ELSE items.validation_error END,
+                CASE WHEN c.meta_change = 1 THEN COALESCE(c.mod_date_old, items.mod_date) ELSE items.mod_date END,
+                CASE WHEN c.meta_change = 1 THEN COALESCE(c.file_size_old, items.file_size) ELSE items.file_size END,
+                CASE WHEN c.hash_change = 1 THEN c.last_hash_scan_old ELSE items.last_hash_scan END,
+                CASE WHEN c.hash_change = 1 THEN c.hash_old ELSE items.file_hash END,
+                CASE WHEN c.val_change = 1 THEN c.last_val_scan_old ELSE items.last_val_scan END,
+                CASE WHEN c.val_change = 1 THEN c.val_old ELSE items.val END,
+                CASE WHEN c.val_change = 1 THEN c.val_error_old ELSE items.val_error END,
                 ?1
             FROM changes c
-            WHERE c.item_id = items.id 
+            WHERE c.item_id = items.item_id 
                 AND c.scan_id = ?2
                 AND c.change_type = 'M'
             LIMIT 1
             )
-            WHERE last_scan_id = ?2
+            WHERE last_scan = ?2
             AND EXISTS (
                 SELECT 1 FROM changes c 
-                WHERE c.item_id = items.id 
+                WHERE c.item_id = items.item_id 
                     AND c.scan_id = ?2
                     AND c.change_type = 'M'
             )", 
-            [prev_scan_id, scan.id()]
+            [prev_scan_id, scan.scan_id()]
         )?;
 
         // Undo deletes. This is simple because deletes just set the tombstone flag
         tx.execute(
             "UPDATE items
-            SET is_tombstone = 0,
-                last_scan_id = ?1
-            WHERE id IN (
+            SET is_ts = 0,
+                last_scan = ?1
+            WHERE item_id IN (
                 SELECT item_id
                 FROM changes
                 WHERE scan_id = ?2
                   AND change_type = 'D'
             )",
-            [prev_scan_id, scan.id()],
+            [prev_scan_id, scan.scan_id()],
         )?;
 
         // Mark the scan as stopped
         tx.execute(
             "UPDATE scans
                 SET state = 5
-                WHERE id = ?1",
-            [scan.id()],
+                WHERE scan_id = ?1",
+            [scan.scan_id()],
         )?;
 
         // Delete the change records from the stopped scan
-        tx.execute("DELETE FROM changes WHERE scan_id = ?1", [scan.id()])?;
+        tx.execute("DELETE FROM changes WHERE scan_id = ?1", [scan.scan_id()])?;
 
         // Final step is to delete the remaining items that were created during
         // the scan. We have to do this after the change records are deleted otherwise
         // attemping to delete these rows will generate a referential integrity violation
         // since we'll be abandoning change records. This operation assumes that the
-        // only remaining items with a last_scan_id of the current scan are the simple
+        // only remaining items with a last_scan of the current scan are the simple
         // adds. This should be true :)
         tx.execute(
             "DELETE FROM items
-        WHERE last_scan_id = ?",
-            [scan.id()],
+        WHERE last_scan = ?",
+            [scan.scan_id()],
         )?;
 
         tx.commit()?;
@@ -495,27 +492,3 @@ impl Scan {
         Ok(())
     }
 }
-
-/*
-
-Undo a scan
-Find previous scan:
-
-
-
-**** Undo Add or Type Change
-
-
-**** Undo Modify
-
-
-
-  **** Undo Delete
-
-
-
--- Delete all change records for the aborted scan
-DELETE FROM changes
-WHERE scan_id = :scan_id;
-
-*/

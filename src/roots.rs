@@ -10,8 +10,8 @@ use rusqlite::OptionalExtension;
 
 #[derive(Clone, Debug, Default)]
 pub struct Root {
-    id: i64,
-    path: String,
+    root_id: i64,
+    root_path: String,
 }
 
 impl Root {
@@ -22,7 +22,7 @@ impl Root {
             return Ok(None);
         }
 
-        let mut labels: Vec<&str> = roots.iter().map(|root| root.path()).collect();
+        let mut labels: Vec<&str> = roots.iter().map(|root| root.root_path()).collect();
         labels.push("Exit");
 
         let selection = Select::with_theme(&ColorfulTheme::default())
@@ -40,68 +40,53 @@ impl Root {
         }
     }
 
-    pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
+    pub fn get_by_id(db: &Database, root_id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = db.conn();
 
-        conn.query_row("SELECT path FROM roots WHERE id = ?", [id], |row| {
+        conn.query_row("SELECT root_path FROM roots WHERE root_id = ?", [root_id], |row| {
             Ok(Root {
-                id,
-                path: row.get(0)?,
+                root_id,
+                root_path: row.get(0)?,
             })
         })
         .optional()
         .map_err(FsPulseError::DatabaseError)
     }
 
-    pub fn get_by_path(db: &Database, path: &str) -> Result<Option<Self>, FsPulseError> {
+    pub fn get_by_path(db: &Database, root_path: &str) -> Result<Option<Self>, FsPulseError> {
         let conn = db.conn();
 
-        conn.query_row("SELECT id, path FROM roots WHERE path = ?", [path], |row| {
+        conn.query_row("SELECT root_id, root_path FROM roots WHERE root_path = ?", [root_path], |row| {
             Ok(Root {
-                id: row.get(0)?,
-                path: row.get(1)?,
+                root_id: row.get(0)?,
+                root_path: row.get(1)?,
             })
         })
         .optional()
         .map_err(FsPulseError::DatabaseError)
     }
 
-    pub fn create(db: &Database, path: &str) -> Result<Self, FsPulseError> {
+    pub fn create(db: &Database, root_path: &str) -> Result<Self, FsPulseError> {
         let conn = db.conn();
 
-        let id: i64 = conn.query_row(
-            "INSERT INTO roots (path) VALUES (?) RETURNING id",
-            [path],
+        let root_id: i64 = conn.query_row(
+            "INSERT INTO roots (root_path) VALUES (?) RETURNING root_id",
+            [root_path],
             |row| row.get(0),
         )?;
 
         Ok(Root {
-            id,
-            path: path.to_owned(),
+            root_id,
+            root_path: root_path.to_owned(),
         })
     }
 
-    /*
-    pub fn get_or_insert(db: &Database, path: &str) -> Result<Self, FsPulseError> {
-        let conn = &db.conn;
-
-        conn.execute("INSERT OR IGNORE INTO roots (path) VALUES (?)", [path])?;
-
-        let id: i64 = conn.query_row(
-            "SELECT id FROM roots WHERE path = ?",
-            [path],
-            |row| row.get(0),
-        )?;
-
-        Ok(Root { id, path: path.to_owned() })
-    } */
-
-    pub fn id(&self) -> i64 {
-        self.id
+    pub fn root_id(&self) -> i64 {
+        self.root_id
     }
 
-    pub fn path(&self) -> &str {
-        &self.path
+    pub fn root_path(&self) -> &str {
+        &self.root_path
     }
 
     pub fn roots_as_vec(db: &Database) -> Result<Vec<Root>, FsPulseError> {
@@ -120,15 +105,15 @@ impl Root {
         F: FnMut(&Root) -> Result<(), FsPulseError>,
     {
         let mut stmt = db.conn().prepare(
-            "SELECT id, path
+            "SELECT root_id, root_path
             FROM roots
-            ORDER BY id ASC",
+            ORDER BY root_id ASC",
         )?;
 
         let rows = stmt.query_map([], |row| {
             Ok(Root {
-                id: row.get::<_, i64>(0)?,      // root path id
-                path: row.get::<_, String>(1)?, // path
+                root_id: row.get::<_, i64>(0)?,      
+                root_path: row.get::<_, String>(1)?,
             })
         })?;
 

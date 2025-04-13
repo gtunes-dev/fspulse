@@ -2,13 +2,13 @@
 // 1. Initial scan.
 //      - New items: create Item with metadata,last_scan; create change (Add)
 //      - For each found item:
-//          - If tombstone: Update item type, metadata, is_tombstone, last_scan; null hash, valid; create change (Add)
+//          - If tombstone: Update item type, metadata, is_ts, last_scan; null hash, valid; create change (Add)
 //          - If folder <-> file change: update Item metadata, last_scan; null hash, valid; create change (Type Changed)
 //          - If metadata change: update Item metadata, last_scan; create change (Modify)
 //  (Set State to 2)
 // 2. Tombstone
 //      - For each previously seen, non-tombstone item:
-//          - Set is_tombstone; create change (Delete)
+//          - Set is_ts; create change (Delete)
 //  (If --hash or --validate, set state to 3 else set state to [TBD])
 // 3. Hash and/or Validate
 //      - For each non-tombstone, file item with last_scan < current scan:
@@ -68,7 +68,7 @@ impl Scanner {
         };
 
         // look for an existing, incomplete scan
-        let mut existing_scan = Scan::get_latest_for_root(db, root.id())?
+        let mut existing_scan = Scan::get_latest_for_root(db, root.root_id())?
             .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
 
         // if a scan is found, ask the user if it should be stopped or resumed
@@ -123,7 +123,7 @@ impl Scanner {
                 let root = Root::get_by_id(db, root_id.into())?
                     .ok_or_else(|| FsPulseError::Error(format!("Root id {} not found", root_id)))?;
                 // Look for an outstanding scan on the root
-                let scan = Scan::get_latest_for_root(db, root.id())?.filter(|s: &Scan| {
+                let scan = Scan::get_latest_for_root(db, root.root_id())?.filter(|s: &Scan| {
                     s.state() != ScanState::Completed && s.state() != ScanState::Stopped
                 });
                 (root, scan)
@@ -136,7 +136,7 @@ impl Scanner {
                 match root {
                     Some(root) => {
                         // Found the root. Look for an outstanding scan
-                        let scan = Scan::get_latest_for_root(db, root.id())?.filter(|s| {
+                        let scan = Scan::get_latest_for_root(db, root.root_id())?.filter(|s| {
                             s.state() != ScanState::Completed && s.state() != ScanState::Stopped
                         });
                         (root, scan)
@@ -152,7 +152,7 @@ impl Scanner {
                 let scan = Scan::get_latest(db)?
                     .ok_or_else(|| FsPulseError::Error("No latest scan found".to_string()))?;
                 let root = Root::get_by_id(db, scan.root_id())?.ok_or_else(|| {
-                    FsPulseError::Error(format!("No root found for latest Scan Id {}", scan.id()))
+                    FsPulseError::Error(format!("No root found for latest Scan Id {}", scan.scan_id()))
                 })?;
 
                 let return_scan = if scan.state() != ScanState::Completed {
@@ -284,7 +284,7 @@ impl Scanner {
         let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt(format!(
                 "Found in-progress scan on:'{}'\n\nWhat would you like to do?",
-                root.path()
+                root.root_path()
             ))
             .default(0)
             .items(&options)
@@ -333,7 +333,7 @@ impl Scanner {
         scan: &mut Scan,
         multi_prog: &mut MultiProgress,
     ) -> Result<(), FsPulseError> {
-        let root_path_buf = PathBuf::from(root.path());
+        let root_path_buf = PathBuf::from(root.root_path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
         let mut q = VecDeque::new();
@@ -401,24 +401,24 @@ impl Scanner {
         // Insert deletion records into changes
         tx.execute(
             "INSERT INTO changes (scan_id, item_id, change_type)
-                SELECT ?, id, ?
+                SELECT ?, item_id, ?
                 FROM items
-                WHERE root_id = ? AND is_tombstone = 0 AND last_scan_id < ?",
+                WHERE root_id = ? AND is_ts = 0 AND last_scan < ?",
             (
-                scan.id(),
+                scan.scan_id(),
                 ChangeType::Delete.as_str(),
                 scan.root_id(),
-                scan.id(),
+                scan.scan_id(),
             ),
         )?;
 
         // Mark unseen items as tombstones
         tx.execute(
             "UPDATE items SET 
-                is_tombstone = 1,
-                last_scan_id = ?
-            WHERE root_id = ? AND last_scan_id < ? AND is_tombstone = 0",
-            (scan.id(), scan.root_id(), scan.id()),
+                is_ts = 1,
+                last_scan = ?
+            WHERE root_id = ? AND last_scan < ? AND is_ts = 0",
+            (scan.scan_id(), scan.root_id(), scan.scan_id()),
         )?;
 
         tx.commit()?;
@@ -443,7 +443,7 @@ impl Scanner {
 
         let file_count = scan.file_count().unwrap_or_default().max(0) as u64; // scan.file_count is the total # of files in the scan
         let analyzed_items =
-            Item::count_analyzed_items(&db.lock().unwrap(), scan.id())?.max(0) as u64; // may be resuming the scan
+            Item::count_analyzed_items(&db.lock().unwrap(), scan.scan_id())?.max(0) as u64; // may be resuming the scan
 
         let analysis_prog = multi_prog.add(
             ProgressBar::new(file_count)
@@ -527,7 +527,7 @@ impl Scanner {
         loop {
             let items = Item::fetch_next_analysis_batch(
                 &db.lock().unwrap(),
-                scan.id(),
+                scan.scan_id(),
                 scan.hashing(),
                 scan.validating(),
                 last_item_id,
@@ -543,7 +543,7 @@ impl Scanner {
                 // it in calls to fetch_next_analysis_batch to avoid picking up unprocessed
                 // items that we've already picked up. This avoids a race condition
                 // in which we'd pick up unprocessed items that are currently being processed
-                last_item_id = item.id();
+                last_item_id = item.item_id();
 
                 // This send will block if the channel already has 100 items.
                 sender
@@ -577,7 +577,7 @@ impl Scanner {
         // TODO: Improve the error handling for all analysis. Need to differentiate
         // between file system errors and actual content errors
 
-        let path = Path::new(item.path());
+        let path = Path::new(item.item_path());
 
         let display_path = path
             .file_name()
@@ -607,8 +607,8 @@ impl Scanner {
             };
         }
 
-        let mut new_validity_state = ValidationState::Unknown;
-        let mut new_validation_error = None;
+        let mut new_val = ValidationState::Unknown;
+        let mut new_val_error = None;
 
         if scan.validating() {
             let validator = from_path(path);
@@ -627,20 +627,20 @@ impl Scanner {
                     }
                     match v.validate(path, thread_prog) {
                         Ok((res_validity_state, res_validation_error)) => {
-                            new_validity_state = res_validity_state;
-                            new_validation_error = res_validation_error;
+                            new_val = res_validity_state;
+                            new_val_error = res_validation_error;
                         }
                         Err(e) => {
                             let e_str = e.to_string();
                             error!("Error validating '{}': {}", &display_path, e_str);
-                            new_validity_state = ValidationState::Invalid;
+                            new_val = ValidationState::Invalid;
                         }
                     }
                     if steady_tick {
                         thread_prog.disable_steady_tick();
                     }
                 }
-                None => new_validity_state = ValidationState::NoValidator,
+                None => new_val = ValidationState::NoValidator,
             }
         }
 
@@ -649,8 +649,8 @@ impl Scanner {
             &scan,
             &item,
             new_hash,
-            new_validity_state,
-            new_validation_error,
+            new_val,
+            new_val_error,
         ) {
             let e_str = error.to_string();
             error!(
@@ -694,40 +694,40 @@ impl Scanner {
         // was resumed and the item has changed into a directory. In this case, we'll still
         // traverse the children within the resumed scan and a tree report will look odd
         if let Some(existing_item) = existing_item {
-            if existing_item.last_scan_id() == scan.id() {
+            if existing_item.last_scan() == scan.scan_id() {
                 return Ok(());
             }
 
-            let metadata_changed =
+            let meta_change =
                 existing_item.mod_date() != mod_date || existing_item.file_size() != file_size;
 
-            if existing_item.is_tombstone() {
+            if existing_item.is_ts() {
                 // Rehydrate a tombstone
                 let tx = db.conn_mut().transaction()?;
                 let rows_updated = tx.execute(
                     "UPDATE items SET 
-                            is_tombstone = 0, 
+                            is_ts = 0, 
                             mod_date = ?, 
                             file_size = ?, 
                             file_hash = NULL, 
-                            validity_state = ?,
-                            validation_error = NULL,
-                            last_scan_id = ?,
-                            last_hash_scan_id = NULL, 
-                            last_validation_scan_id = NULL 
-                        WHERE id = ?",
+                            val = ?,
+                            val_error = NULL,
+                            last_scan = ?,
+                            last_hash_scan = NULL, 
+                            last_val_scan = NULL 
+                        WHERE item_id = ?",
                     (
                         mod_date,
                         file_size,
                         ValidationState::Unknown.to_string(),
-                        scan.id(),
-                        existing_item.id(),
+                        scan.scan_id(),
+                        existing_item.item_id(),
                     ),
                 )?;
                 if rows_updated == 0 {
                     return Err(FsPulseError::Error(format!(
                         "Item Id {} not found for update",
-                        existing_item.id()
+                        existing_item.item_id()
                     )));
                 }
 
@@ -743,14 +743,14 @@ impl Scanner {
                             file_size_old, 
                             file_size_new, 
                             hash_old,
-                            validity_state_old, 
-                            validation_error_old
+                            val_old, 
+                            val_error_old
                         ) 
                     VALUES 
                         (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        scan.id(),
-                        existing_item.id(),
+                        scan.scan_id(),
+                        existing_item.item_id(),
                         ChangeType::Add.as_str(),
                         existing_item.mod_date(),
                         mod_date,
@@ -758,26 +758,26 @@ impl Scanner {
                         file_size,
                         existing_item.file_hash(),
                         existing_item.validity_state_as_str(),
-                        existing_item.validation_error(),
+                        existing_item.val_error(),
                     ),
                 )?;
 
                 tx.commit()?;
-            } else if metadata_changed {
+            } else if meta_change {
                 let tx = db.conn_mut().transaction()?;
 
                 let rows_updated = tx.execute(
                     "UPDATE items SET
                         mod_date = ?, 
                         file_size = ?,             
-                        last_scan_id = ? 
-                    WHERE id = ?",
-                    (mod_date, file_size, scan.id(), existing_item.id()),
+                        last_scan = ? 
+                    WHERE item_id = ?",
+                    (mod_date, file_size, scan.scan_id(), existing_item.item_id()),
                 )?;
                 if rows_updated == 0 {
                     return Err(FsPulseError::Error(format!(
                         "Item Id {} not found for update",
-                        existing_item.id()
+                        existing_item.item_id()
                     )));
                 }
                 tx.execute(
@@ -786,37 +786,37 @@ impl Scanner {
                                 scan_id, 
                                 item_id, 
                                 change_type, 
-                                metadata_changed, 
+                                meta_change, 
                                 mod_date_old, 
                                 mod_date_new, 
                                 file_size_old, 
                                 file_size_new, 
-                                hash_changed, 
-                                validity_changed) 
+                                hash_change, 
+                                val_change) 
                             VALUES (?, ?, ?, 1, ?, ?, 0, 0)",
                     (
-                        scan.id(),
-                        existing_item.id(),
+                        scan.scan_id(),
+                        existing_item.item_id(),
                         ChangeType::Modify.as_str(),
-                        metadata_changed.then_some(existing_item.mod_date()),
-                        metadata_changed.then_some(mod_date),
-                        metadata_changed.then_some(existing_item.file_size()),
-                        metadata_changed.then_some(file_size),
+                        meta_change.then_some(existing_item.mod_date()),
+                        meta_change.then_some(mod_date),
+                        meta_change.then_some(existing_item.file_size()),
+                        meta_change.then_some(file_size),
                     ),
                 )?;
 
                 tx.commit()?;
             } else {
-                // No change - just update last_scan_id
+                // No change - just update last_scan
                 let rows_updated = db.conn().execute(
-                    "UPDATE items SET last_scan_id = ? WHERE id = ?",
-                    (scan.id(), existing_item.id()),
+                    "UPDATE items SET last_scan = ? WHERE item_id = ?",
+                    (scan.scan_id(), existing_item.item_id()),
                 )?;
 
                 if rows_updated == 0 {
                     return Err(FsPulseError::Error(format!(
                         "Item Id {} not found for update",
-                        existing_item.id()
+                        existing_item.item_id()
                     )));
                 }
             }
@@ -824,13 +824,13 @@ impl Scanner {
             // Item is new, insert into items and changes tables
             let tx = db.conn_mut().transaction()?;
 
-            tx.execute("INSERT INTO items (root_id, path, item_type, mod_date, file_size, validity_state, last_scan_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (scan.root_id(), &path_str, item_type.as_str(), mod_date, file_size, ValidationState::Unknown.to_string(), scan.id()))?;
+            tx.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, file_size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (scan.root_id(), &path_str, item_type.as_str(), mod_date, file_size, ValidationState::Unknown.to_string(), scan.scan_id()))?;
 
             let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
-            tx.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, file_size_new, hash_changed, validity_changed) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
-                (scan.id(), item_id, ChangeType::Add.as_str(), mod_date, file_size))?;
+            tx.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, file_size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
+                (scan.scan_id(), item_id, ChangeType::Add.as_str(), mod_date, file_size))?;
             tx.commit()?;
         }
 
@@ -842,36 +842,36 @@ impl Scanner {
         scan: &Scan,
         item: &Item,
         new_hash: Option<String>,
-        new_validity_state: ValidationState,
-        new_validation_error: Option<String>,
+        new_val: ValidationState,
+        new_val_error: Option<String>,
     ) -> Result<(), FsPulseError> {
         let mut update_changes = false;
 
         // values to use when updating the changes table
-        let mut c_hash_changed = Some(false);
-        let mut c_last_hash_scan_id_old = None;
+        let mut c_hash_change = Some(false);
+        let mut c_last_hash_scan_old = None;
         let mut c_hash_old = None;
         let mut c_hash_new = None;
-        let mut c_validity_changed = Some(false);
-        let mut c_last_validation_scan_id_old = None;
-        let mut c_validity_state_old = None;
-        let mut c_validity_state_new = None;
-        let mut c_validation_error_old = None;
-        let mut c_validation_error_new = None;
+        let mut c_val_change = Some(false);
+        let mut c_last_val_scan_old = None;
+        let mut c_val_old = None;
+        let mut c_val_new = None;
+        let mut c_val_error_old = None;
+        let mut c_val_error_new = None;
 
         // values to use in the item update
         let mut i_hash = item.file_hash();
-        let mut i_validity_state = item.validity_state();
-        let mut i_validation_error = item.validation_error();
-        let mut i_last_hash_scan_id = item.last_hash_scan_id();
-        let mut i_last_validation_scan_id = item.last_validation_scan_id();
+        let mut i_val = item.val();
+        let mut i_val_error = item.val_error();
+        let mut i_last_hash_scan = item.last_hash_scan();
+        let mut i_last_val_scan = item.last_val_scan();
 
         if scan.hashing() {
             if item.file_hash() != new_hash.as_deref() {
                 // if either the hash or validation state changes, we update changes
                 update_changes = true;
-                c_hash_changed = Some(true);
-                c_last_hash_scan_id_old = item.last_hash_scan_id();
+                c_hash_change = Some(true);
+                c_last_hash_scan_old = item.last_hash_scan();
                 c_hash_old = item.file_hash();
                 c_hash_new = new_hash.as_deref();
 
@@ -879,29 +879,29 @@ impl Scanner {
             }
 
             // Update the last scan id whether or not anything changed
-            i_last_hash_scan_id = Some(scan.id());
+            i_last_hash_scan = Some(scan.scan_id());
         }
 
         if scan.validating() {
-            if (item.validity_state() != new_validity_state)
-                || (item.validation_error() != new_validation_error.as_deref())
+            if (item.val() != new_val)
+                || (item.val_error() != new_val_error.as_deref())
             {
                 // if either the hash or validation state changes, we update changes
                 update_changes = true;
-                c_validity_changed = Some(true);
-                c_last_validation_scan_id_old = item.last_validation_scan_id();
-                c_validity_state_old = Some(item.validity_state().as_str());
-                c_validity_state_new = Some(new_validity_state.as_str());
-                c_validation_error_old = item.validation_error();
-                c_validation_error_new = new_validation_error.as_deref();
+                c_val_change = Some(true);
+                c_last_val_scan_old = item.last_val_scan();
+                c_val_old = Some(item.val().as_str());
+                c_val_new = Some(new_val.as_str());
+                c_val_error_old = item.val_error();
+                c_val_error_new = new_val_error.as_deref();
 
                 // always update the item when the validation state changes
-                i_validity_state = new_validity_state;
-                i_validation_error = new_validation_error.as_deref();
+                i_val = new_val;
+                i_val_error = new_val_error.as_deref();
             }
 
             // update the last validation scan id whether or not anything changed
-            i_last_validation_scan_id = Some(scan.id());
+            i_last_val_scan = Some(scan.scan_id());
         }
 
         let mut db_guard = db.lock().unwrap();
@@ -916,44 +916,44 @@ impl Scanner {
                         scan_id, 
                         item_id, 
                         change_type, 
-                        metadata_changed, 
-                        hash_changed, 
-                        last_hash_scan_id_old, 
+                        meta_change, 
+                        hash_change, 
+                        last_hash_scan_old,
                         hash_old,
                         hash_new,
-                        validity_changed,
-                        last_validation_scan_id_old,
-                        validity_state_old, 
-                        validity_state_new,
-                        validation_error_old,
-                        validation_error_new
+                        val_change,
+                        last_val_scan_old,
+                        val_old, 
+                        val_new,
+                        val_error_old,
+                        val_error_new
                     )
                     VALUES (?, ?, 'M', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scan_id, item_id) 
                     DO UPDATE SET
-                        hash_changed = excluded.hash_changed,
-                        last_hash_scan_id_old = excluded.last_hash_scan_id_old,
+                        hash_change = excluded.hash_change,
+                        last_hash_scan_old = excluded.last_hash_scan_old,
                         hash_old = excluded.hash_old,
                         hash_new = excluded.hash_new,
-                        validity_changed = excluded.validity_changed,
-                        last_validation_scan_id_old = excluded.last_validation_scan_id_old,
-                        validity_state_old = excluded.validity_state_old,
-                        validity_state_new = excluded.validity_state_new,
-                        validation_error_old = excluded.validation_error_old,
-                        validation_error_new = excluded.validation_error_new",
+                        val_change = excluded.val_change,
+                        last_val_scan_old = excluded.last_val_scan_old,
+                        val_old = excluded.val_old,
+                        val_new = excluded.val_new,
+                        val_error_old = excluded.val_error_old,
+                        val_error_new = excluded.val_error_new",
                 rusqlite::params![
-                    scan.id(),
-                    item.id(),
-                    c_hash_changed,
-                    c_last_hash_scan_id_old,
+                    scan.scan_id(),
+                    item.item_id(),
+                    c_hash_change,
+                    c_last_hash_scan_old,
                     c_hash_old,
                     c_hash_new,
-                    c_validity_changed,
-                    c_last_validation_scan_id_old,
-                    c_validity_state_old,
-                    c_validity_state_new,
-                    c_validation_error_old,
-                    c_validation_error_new,
+                    c_val_change,
+                    c_last_val_scan_old,
+                    c_val_old,
+                    c_val_new,
+                    c_val_error_old,
+                    c_val_error_new,
                 ],
             )?;
         }
@@ -963,18 +963,18 @@ impl Scanner {
             "UPDATE items 
             SET 
                 file_hash = ?,
-                validity_state = ?,
-                validation_error = ?,
-                last_hash_scan_id = ?,
-                last_validation_scan_id = ?
-            WHERE id = ?",
+                val = ?,
+                val_error = ?,
+                last_hash_scan = ?,
+                last_val_scan = ?
+            WHERE item_id = ?",
             rusqlite::params![
                 i_hash,
-                i_validity_state.as_str(),
-                i_validation_error,
-                i_last_hash_scan_id,
-                i_last_validation_scan_id,
-                item.id()
+                i_val.as_str(),
+                i_val_error,
+                i_last_hash_scan,
+                i_last_val_scan,
+                item.item_id()
             ],
         )?;
 

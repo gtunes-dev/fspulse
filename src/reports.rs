@@ -79,7 +79,7 @@ impl Reports {
                     .ok_or_else(|| {
                         FsPulseError::Error(format!("Root Path '{}' not found", &root_path))
                     })?
-                    .id(),
+                    .root_id(),
                 (None, None) => {
                     // should be unreachable
                     return Err(FsPulseError::Error("No path specified".to_string()));
@@ -138,7 +138,7 @@ impl Reports {
                 if invalid {
                     Self::print_invalid_items_as_table(db, &root)?;
                 } else {
-                    let scan = Scan::get_latest_for_root(db, root.id())?.ok_or_else(|| {
+                    let scan = Scan::get_latest_for_root(db, root.root_id())?.ok_or_else(|| {
                         FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id))
                     })?;
 
@@ -197,11 +197,11 @@ impl Reports {
     ) -> Result<(), FsPulseError> {
         let root = Root::get_by_id(db, scan.root_id())?
             .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", scan.root_id())))?;
-        let table_title = format!("Scan (Root Path: '{}')", root.path());
+        let table_title = format!("Scan (Root Path: '{}')", root.root_path());
 
         let mut stream = Reports::begin_scans_table(&table_title, "No Scan");
 
-        let change_counts = ChangeCounts::get_by_scan_id(db, scan.id())?;
+        let change_counts = ChangeCounts::get_by_scan_id(db, scan.scan_id())?;
         stream.row((*scan, change_counts))?;
 
         stream.finish()?;
@@ -213,7 +213,7 @@ impl Reports {
         let mut stream = Reports::begin_scans_table("Scans", "No Scans");
 
         Scan::for_each_scan(db, last, |db, scan| {
-            let change_counts = ChangeCounts::get_by_scan_id(db, scan.id())?;
+            let change_counts = ChangeCounts::get_by_scan_id(db, scan.scan_id())?;
             stream.row((*scan, change_counts))?;
             Ok(())
         })?;
@@ -227,7 +227,7 @@ impl Reports {
         Stream::new(
             io::stdout(),
             vec![
-                Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", s.id()))
+                Column::new(|f, (s, _): &(Scan, ChangeCounts)| write!(f, "{}", s.scan_id()))
                     .header("ID")
                     .right()
                     .min_width(6),
@@ -246,7 +246,7 @@ impl Reports {
                     .header("Validating")
                     .center(),
                 Column::new(|f, (s, _): &(Scan, ChangeCounts)| {
-                    write!(f, "{}", Utils::format_db_time_short(s.time_of_scan()))
+                    write!(f, "{}", Utils::format_db_time_short(s.scan_time()))
                 })
                 .header("Time"),
                 Column::new(|f, (s, _): &(Scan, ChangeCounts)| {
@@ -289,11 +289,11 @@ impl Reports {
         Stream::new(
             io::stdout(),
             vec![
-                Column::new(|f, root: &Root| write!(f, "{}", root.id()))
+                Column::new(|f, root: &Root| write!(f, "{}", root.root_id()))
                     .header("ID")
                     .right()
                     .min_width(6),
-                Column::new(|f, root: &Root| write!(f, "{}", root.path()))
+                Column::new(|f, root: &Root| write!(f, "{}", root.root_path()))
                     .header("Path")
                     .left()
                     .min_width(109),
@@ -307,11 +307,11 @@ impl Reports {
         Stream::new(
             io::stdout(),
             vec![
-                Column::new(|f, i: &Item| write!(f, "{}", i.id()))
+                Column::new(|f, i: &Item| write!(f, "{}", i.item_id()))
                     .header("ID")
                     .right()
                     .min_width(6),
-                Column::new(|f, i: &Item| write!(f, "{}", i.path()))
+                Column::new(|f, i: &Item| write!(f, "{}", i.item_path()))
                     .header("Path")
                     .left(),
                 Column::new(|f, i: &Item| {
@@ -326,13 +326,13 @@ impl Reports {
                     write!(
                         f,
                         "{}",
-                        Utils::display_opt_i64(&i.last_validation_scan_id())
+                        Utils::display_opt_i64(&i.last_val_scan())
                     )
                 })
                 .header("Last Valid Scan")
                 .right(),
                 Column::new(|f, i: &Item| {
-                    write!(f, "{}", Utils::display_opt_str(&i.validation_error()))
+                    write!(f, "{}", Utils::display_opt_str(&i.val_error()))
                 })
                 .header("Validation Error")
                 .left(),
@@ -346,17 +346,17 @@ impl Reports {
         Stream::new(
             io::stdout(),
             vec![
-                Column::new(|f, i: &Item| write!(f, "{}", i.id()))
+                Column::new(|f, i: &Item| write!(f, "{}", i.item_id()))
                     .header("ID")
                     .right()
                     .min_width(6),
                 Column::new(|f, i: &Item| write!(f, "{}", i.root_id()))
                     .header("Root ID")
                     .right(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.path()))
+                Column::new(|f, i: &Item| write!(f, "{}", i.item_path()))
                     .header("Path")
                     .left(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.is_tombstone()))
+                Column::new(|f, i: &Item| write!(f, "{}", i.is_ts()))
                     .header("Tombstone")
                     .center(),
                 Column::new(|f, i: &Item| write!(f, "{}", i.item_type()))
@@ -372,14 +372,14 @@ impl Reports {
                     .right(),
                 Column::new(|f, i: &Item| write!(f, "{}", Hash::short_md5(&i.file_hash())))
                     .center(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.validity_state()))
+                Column::new(|f, i: &Item| write!(f, "{}", i.val()))
                     .header("Valid State")
                     .center(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.last_scan_id()))
+                Column::new(|f, i: &Item| write!(f, "{}", i.last_scan()))
                     .header("Last Scan")
                     .right(),
                 Column::new(|f, i: &Item| {
-                    write!(f, "{}", Utils::display_opt_i64(&i.last_hash_scan_id()))
+                    write!(f, "{}", Utils::display_opt_i64(&i.last_hash_scan()))
                 })
                 .header("Last Hash Scan")
                 .right(),
@@ -387,7 +387,7 @@ impl Reports {
                     write!(
                         f,
                         "{}",
-                        Utils::display_opt_i64(&i.last_validation_scan_id())
+                        Utils::display_opt_i64(&i.last_val_scan())
                     )
                 })
                 .header("Last Valid Scan")
@@ -402,7 +402,7 @@ impl Reports {
         Stream::new(
             io::stdout(),
             vec![
-                Column::new(|f, c: &Change| write!(f, "{}", c.id))
+                Column::new(|f, c: &Change| write!(f, "{}", c.change_id))
                     .header("Id")
                     .right()
                     .min_width(6),
@@ -427,7 +427,7 @@ impl Reports {
                 .header("Undelete")
                 .center(),
                 Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_bool(&c.metadata_changed))
+                    write!(f, "{}", Utils::display_opt_bool(&c.meta_change))
                 })
                 .header("MD Changed")
                 .center(),
@@ -452,7 +452,7 @@ impl Reports {
                 .header("Size (new)")
                 .right(),
                 Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_bool(&c.hash_changed))
+                    write!(f, "{}", Utils::display_opt_bool(&c.hash_change))
                 })
                 .header("Hash Changed")
                 .center(),
@@ -460,17 +460,17 @@ impl Reports {
                     .header("Prev Hash")
                     .center(),
                 Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_bool(&c.validity_changed))
+                    write!(f, "{}", Utils::display_opt_bool(&c.val_change))
                 })
                 .header("Val Changed")
                 .center(),
                 Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_str(&c.validity_state_new()))
+                    write!(f, "{}", Utils::display_opt_str(&c.val_new()))
                 })
                 .header("Val State")
                 .center(),
                 Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_str(&c.validity_state_old()))
+                    write!(f, "{}", Utils::display_opt_str(&c.val_old()))
                 })
                 .header("Prev Val State")
                 .center(),
@@ -554,16 +554,16 @@ impl Reports {
             .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", scan.root_id())))?;
 
         Self::print_center(width, "Changes");
-        Self::print_center(width, &format!("Root Path: '{}'", root.path()));
+        Self::print_center(width, &format!("Root Path: '{}'", root.root_path()));
 
         Self::hr(width);
 
-        let root_path = Path::new(root.path());
+        let root_path = Path::new(root.root_path());
         let mut path_stack: Vec<PathBuf> = Vec::new(); // Stack storing directory paths
         let mut change_count = 0;
 
         // TODO: identify changes as metadata and/or hash
-        Change::for_each_change_in_scan(db, scan.id(), |change| {
+        Change::for_each_change_in_scan(db, scan.scan_id(), |change| {
             let is_dir = change.item_type == "D";
 
             let (indent_level, new_path) =
@@ -576,7 +576,7 @@ impl Reports {
                 change.change_type,
                 new_path.to_string_lossy(),
                 Utils::dir_sep_or_empty(is_dir),
-                change.id,
+                change.change_id,
             );
 
             change_count += 1;
@@ -598,8 +598,8 @@ impl Reports {
         let mut stream = Self::begin_changes_table(
             &format!(
                 "Changes (Item Id: {}, Item Path: '{}'",
-                item.id(),
-                item.path()
+                item.item_id(),
+                item.item_path()
             ),
             "No Changes",
         );
@@ -616,11 +616,11 @@ impl Reports {
 
     pub fn print_invalid_items_as_table(db: &Database, root: &Root) -> Result<(), FsPulseError> {
         let mut stream = Self::begin_invalid_items_table(
-            &format!("Invalid Items (Root Path: '{}'", root.path()),
+            &format!("Invalid Items (Root Path: '{}'", root.root_path()),
             "No Invalid Items",
         );
 
-        Item::for_each_invalid_item_in_root(db, root.id(), |item| {
+        Item::for_each_invalid_item_in_root(db, root.root_id(), |item| {
             stream.row(item.clone())?;
             Ok(())
         })?;
@@ -635,9 +635,9 @@ impl Reports {
         root: &Root,
     ) -> Result<(), FsPulseError> {
         let mut stream =
-            Self::begin_items_table(&format!("Items (Root Path: '{}'", root.path()), "No Items");
+            Self::begin_items_table(&format!("Items (Root Path: '{}'", root.root_path()), "No Items");
 
-        Item::for_each_item_in_latest_scan(db, scan.id(), |item| {
+        Item::for_each_item_in_latest_scan(db, scan.scan_id(), |item| {
             stream.row(item.clone())?;
             Ok(())
         })?;
@@ -654,8 +654,8 @@ impl Reports {
     ) -> Result<(), FsPulseError> {
         let title = format!(
             "Items (Root Id: {}, Root Path: '{}'",
-            root.id(),
-            root.path()
+            root.root_id(),
+            root.root_path()
         );
         let width = max(100, title.len() + 20);
 
@@ -663,21 +663,21 @@ impl Reports {
         Self::print_center(width, &title);
         Self::hr(width);
 
-        let root_path = Path::new(root.path());
+        let root_path = Path::new(root.root_path());
         let mut path_stack: Vec<PathBuf> = Vec::new();
         let mut item_count = 0;
 
-        Item::for_each_item_in_latest_scan(db, scan.id(), |item| {
+        Item::for_each_item_in_latest_scan(db, scan.scan_id(), |item| {
             let is_dir = item.item_type() == "D";
 
             let (indent_level, new_path) =
-                Self::get_tree_path(&mut path_stack, root_path, item.path(), is_dir);
+                Self::get_tree_path(&mut path_stack, root_path, item.item_path(), is_dir);
 
             // Print the item
             println!(
                 "{}[{}] {}{}",
                 " ".repeat(indent_level * 4),
-                item.id(),
+                item.item_id(),
                 new_path.to_string_lossy(),
                 Utils::dir_sep_or_empty(is_dir),
             );
@@ -719,7 +719,7 @@ impl Reports {
         let root = Root::get_by_id(db, scan.root_id())?
             .ok_or_else(|| FsPulseError::Error("Root Not Found".to_string()))?;
 
-        let changes = ChangeCounts::get_by_scan_id(db, scan.id())?;
+        let changes = ChangeCounts::get_by_scan_id(db, scan.scan_id())?;
 
         // Build the report line by line
         let mut report = Vec::new();
@@ -747,13 +747,13 @@ impl Reports {
         report.push(format!(
             "{}         {}",
             label_style.apply_to("Scan Id:"),
-            scan.id()
+            scan.scan_id()
         ));
         report.push(format!(
             "{}          {}   (Root Id: {})",
             label_style.apply_to("Path:"),
-            root.path(),
-            root.id()
+            root.root_path(),
+            root.root_id()
         ));
         report.push(format!(
             "{}         {}",
@@ -802,7 +802,7 @@ impl Reports {
         // New Validation Transitions Section
         report.push(header_style.apply_to("Validation Transitions").to_string());
         if scan.validating() {
-            let validation_changes = Change::get_validation_transitions_for_scan(db, scan.id())?;
+            let validation_changes = Change::get_validation_transitions_for_scan(db, scan.scan_id())?;
 
             // From Unknown transitions
             report.push(label_style.apply_to("From Unknown:").to_string());

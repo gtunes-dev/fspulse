@@ -37,7 +37,7 @@ item_id_filter   = { ^"item_id" ~ id_filter_body }
 change_id_filter = { ^"change_id" ~ id_filter_body }
 
 // date filters
-time_of_scan_filter = { ^"time_of_scan" ~ date_filter_body }
+time_of_scan_filter = { ^"scan_time" ~ date_filter_body }
 mod_date_filter     = { ^"mod_date" ~ date_filter_body }
 mod_date_old_filter = { ^"mod_date_old" ~ date_filter_body }
 mod_date_new_filter = { ^"mod_date_new" ~ date_filter_body }

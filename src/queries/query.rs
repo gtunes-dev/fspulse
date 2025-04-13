@@ -47,7 +47,7 @@ impl DomainQuery {
 
     const CHANGES_BASE_SQL: &str = "\nFROM changes
         JOIN items
-            ON changes.item_id = items.id";
+            ON changes.item_id = items.item_id";
 
     fn new(query_type: QueryType) -> Self {
         DomainQuery {
@@ -183,7 +183,7 @@ impl DomainQuery {
                         first = false;
                     }
                     false => {
-                        sql.push_str(" AND");
+                        sql.push_str(" AND ");
                     }
                 }
                 let (pred_str, pred_vec) = filter.to_predicate_parts(query_type)?;
@@ -221,14 +221,14 @@ impl DomainQuery {
 #[derive(Tabled)]
 struct RootsQueryRow {
     root_id: i64,
-    path: String,
+    root_path: String,
 }
 
 impl RootsQueryRow {
     fn from_row(row: &Row) -> rusqlite::Result<Self> {
         Ok(RootsQueryRow {
             root_id: row.get(0)?,
-            path: row.get(1)?,
+            root_path: row.get(1)?,
         })
     }
 }
@@ -241,7 +241,7 @@ struct ScansQueryRow {
     hashing: bool,
     validating: bool,
     #[tabled(display = "Utils::display_db_time")]
-    time_of_scan: i64,
+    scan_time: i64,
     file_count: i64,
     folder_count: i64,
 }
@@ -254,7 +254,7 @@ impl ScansQueryRow {
             state: row.get(2)?,
             hashing: row.get(3)?,
             validating: row.get(4)?,
-            time_of_scan: row.get(5)?,
+            scan_time: row.get(5)?,
             file_count: row.get(6)?,
             folder_count: row.get(7)?,
         })
@@ -266,7 +266,7 @@ struct ItemsQueryRow {
     item_id: i64,
     root_id: i64,
     #[tabled(display = "Utils::display_short_path")]
-    path: String,
+    item_path: String,
     item_type: String,
     last_scan: i64,
     #[tabled(display = "Utils::display_bool")]
@@ -289,7 +289,7 @@ impl ItemsQueryRow {
         Ok(ItemsQueryRow {
             item_id: row.get(0)?,
             root_id: row.get(1)?,
-            path: row.get(2)?,
+            item_path: row.get(2)?,
             item_type: row.get(3)?,
             last_scan: row.get(4)?,
             is_ts: row.get(5)?,
@@ -328,7 +328,7 @@ struct ChangesQueryRow {
 
     // items properties
     #[tabled(display = "Utils::display_short_path")]
-    path: String,
+    item_path: String,
 }
 
 impl ChangesQueryRow {
@@ -346,7 +346,7 @@ impl ChangesQueryRow {
             val_change: row.get(9)?,
             val_old: row.get(10)?,
             val_new: row.get(11)?,
-            path: row.get(12)?,
+            item_path: row.get(12)?,
         })
     }
 }
