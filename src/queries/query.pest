@@ -6,28 +6,29 @@ query = { SOI ~ WS* ~ (roots_query | scans_query | items_query | changes_query) 
 
 roots_query         =  { ^"roots" ~ (WS+ ~ ^"where" ~ WS+ ~ roots_filter_list)? ~ order_clause? ~ limit_clause? }
 roots_filter_list   = _{ roots_filter_choice ~ (WS* ~ COMMA ~ WS* ~ roots_filter_choice)* }
-roots_filter_choice = _{ root_id_filter | path_filter }
+roots_filter_choice = _{ root_id_filter | root_path_filter }
 
 scans_query         =  { ^"scans" ~ (WS+ ~ ^"where" ~ WS+ ~ scans_filter_list)? ~ order_clause? ~ limit_clause? }
 scans_filter_list   = _{ scans_filter_choice ~ (WS* ~ COMMA ~ WS* ~ scans_filter_choice)* }
-scans_filter_choice = _{ scan_id_filter | root_id_filter | time_of_scan_filter }
+scans_filter_choice = _{ scan_id_filter | root_id_filter | scan_time_filter }
 
 items_query         =  { ^"items" ~ (WS+ ~ ^"where" ~ WS+ ~ items_filter_list)? ~ order_clause? ~ limit_clause? }
 items_filter_list   = _{ items_filter_choice ~ (WS* ~ COMMA ~ WS* ~ items_filter_choice)* }
-items_filter_choice = _{ item_id_filter | root_id_filter | path_filter | mod_date_filter | validity_filter }
+items_filter_choice = _{ item_id_filter | root_id_filter | item_path_filter | mod_date_filter | validity_filter }
 
 changes_query         =  { ^"changes" ~ (WS+ ~ ^"where" ~ WS+ ~ changes_filter_list)? ~ order_clause? ~ limit_clause? }
 changes_filter_list   = _{ changes_filter_choice ~ (WS* ~ COMMA ~ WS* ~ changes_filter_choice)* }
 changes_filter_choice = _{
     change_id_filter
+  | root_id_filter
   | scan_id_filter
   | item_id_filter
-  | time_of_scan_filter
+  | scan_time_filter
+  | item_path_filter
   | change_filter
   | mod_date_old_filter
   | mod_date_new_filter
   | validity_filter
-  | root_id_filter
 }
 
 // id filters
@@ -37,19 +38,20 @@ item_id_filter   = { ^"item_id" ~ id_filter_body }
 change_id_filter = { ^"change_id" ~ id_filter_body }
 
 // date filters
-time_of_scan_filter = { ^"scan_time" ~ date_filter_body }
+scan_time_filter    = { ^"scan_time" ~ date_filter_body }
 mod_date_filter     = { ^"mod_date" ~ date_filter_body }
 mod_date_old_filter = { ^"mod_date_old" ~ date_filter_body }
 mod_date_new_filter = { ^"mod_date_new" ~ date_filter_body }
+
+// path filters - finds items by substring (case insensitive)
+root_path_filter = { ^"root_path" ~ path_filter_body }
+item_path_filter = { ^"item_path" ~ path_filter_body }
 
 // Validity filter (V, I, N, U) e.g., validity:(V) or validity:(V,I)
 validity_filter = { ^"validity" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ validity_values ~ WS* ~ RPAREN }
 
 // Change filter: e.g., change:(A) or change:(A,M)
 change_filter = { ^"change" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_values ~ WS* ~ RPAREN }
-
-// path filter - finds items with a path that contains the specified value (may be substring)
-path_filter = { ^"path" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ path_list ~ WS* ~ RPAREN }
 
 // Column allowability is implemented in code
 // 
@@ -80,16 +82,16 @@ date_spec        = _{ date_range | date }
 date_range       =  { date ~ WS* ~ DOTDOT ~ date }
 date             =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
+path_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ path_list ~ WS* ~ RPAREN }
+path_list        = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ WS* ~ path_spec)* }
+path_spec        = _{ "'" ~ path ~ "'" }
+path             =  { (("\\'" | (!"'" ~ ANY)))* }
+
 change_values = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
 change        =  { ^"A" | ^"D" | ^"M" }
 
 validity_values = _{ validity ~ (WS* ~ COMMA ~ WS* ~ validity)* }
 validity        =  { ^"V" | ^"I" | ^"N" | ^"U" }
-
-path_list = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ WS* ~ path_spec)* }
-
-path_spec = _{ "'" ~ path ~ "'" }
-path      =  { (("\\'" | (!"'" ~ ANY)))* }
 
 // Basic tokens - all silent
 WS     = _{ " " | "\t" | NEWLINE }

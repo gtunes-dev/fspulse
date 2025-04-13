@@ -406,7 +406,7 @@ impl Query {
                     let id_filter = IdFilter::build(token)?;
                     query.add_filter(id_filter);
                 }
-                Rule::time_of_scan_filter
+                Rule::scan_time_filter
                 | Rule::mod_date_filter
                 | Rule::mod_date_old_filter
                 | Rule::mod_date_new_filter => {
@@ -424,7 +424,8 @@ impl Query {
                 Rule::limit_val => {
                     query.limit = Some(token.as_str().parse().unwrap());
                 }
-                Rule::path_filter => {
+                Rule::root_path_filter
+                | Rule::item_path_filter => {
                     let path_filter = PathFilter::build(token)?;
                     query.add_filter(path_filter);
                 }

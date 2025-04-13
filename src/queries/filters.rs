@@ -33,17 +33,19 @@ pub enum IdSpec {
     IdRange { id_start: i64, id_end: i64 },
 }
 
+/*
 impl fmt::Display for IdType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            IdType::Root => "root_id",
-            IdType::Item => "item_id",
-            IdType::Scan => "scan_id",
-            IdType::Change => "change_id",
+            IdType::Root => "roots.root_id",
+            IdType::Item => "items.item_id",
+            IdType::Scan => "scans.scan_id",
+            IdType::Change => "changes.change_id",
         };
         write!(f, "{}", s)
     }
 }
+    */
 
 impl IdType {
     fn from_rule(rule: Rule) -> Self {
@@ -60,11 +62,25 @@ impl IdType {
 impl Filter for IdFilter {
     fn to_predicate_parts(
         &self,
-        _query_type: QueryType,
+        query_type: QueryType,
     ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
+
+        let id_col = match (query_type, &self.id_type)  {
+            (QueryType::Roots, IdType::Root) => "roots.root_id",
+            (QueryType::Scans, IdType::Scan) => "scans.scan_id",
+            (QueryType::Scans, IdType::Root) => "scans.root_id",
+            (QueryType::Items, IdType::Item) => "items.item_id",
+            (QueryType::Items, IdType::Root) => "items.root_id",
+            (QueryType::Changes, IdType::Change) => "changes.change_id",
+            (QueryType::Changes, IdType::Scan) => "changes.scan_id",
+            (QueryType::Changes, IdType::Item) => "changes.item_id",
+            (QueryType::Changes, IdType::Root) => "items.root_id",
+            _ => unreachable!()
+
+        };
 
         if self.id_specs.len() > 1 {
             pred_str.push('(');
@@ -78,11 +94,11 @@ impl Filter for IdFilter {
 
             match id_spec {
                 IdSpec::Id(id) => {
-                    pred_str.push_str(&format!("({} = ?)", self.id_type));
+                    pred_str.push_str(&format!("({} = ?)", id_col));
                     pred_vec.push(Box::new(*id));
                 }
                 IdSpec::IdRange { id_start, id_end } => {
-                    pred_str.push_str(&format!("({0} >= ? AND {0} <= ?)", self.id_type));
+                    pred_str.push_str(&format!("({0} >= ? AND {0} <= ?)", id_col));
                     pred_vec.push(Box::new(*id_start));
                     pred_vec.push(Box::new(*id_end));
                 }
@@ -140,7 +156,7 @@ pub struct DateFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DateType {
-    TimeOfScan,
+    ScanTime,
     ModDate,
     ModDateOld,
     ModDateNew,
@@ -155,7 +171,7 @@ pub struct DateSpec {
 impl fmt::Display for DateType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            DateType::TimeOfScan => "scan_time",
+            DateType::ScanTime => "scan_time",
             DateType::ModDate => "mod_date",
             DateType::ModDateOld => "mod_date_old",
             DateType::ModDateNew => "mod_date_new",
@@ -167,7 +183,7 @@ impl fmt::Display for DateType {
 impl DateType {
     fn from_rule(rule: Rule) -> Self {
         match rule {
-            Rule::time_of_scan_filter => DateType::TimeOfScan,
+            Rule::scan_time_filter => DateType::ScanTime,
             Rule::mod_date_filter => DateType::ModDate,
             Rule::mod_date_old_filter => DateType::ModDateOld,
             Rule::mod_date_new_filter => DateType::ModDateNew,
@@ -197,10 +213,10 @@ impl Filter for DateFilter {
             }
 
             match (&self.date_type, query_type) {
-                (DateType::TimeOfScan, QueryType::Changes) => pred_str.push_str(
+                (DateType::ScanTime, QueryType::Changes) => pred_str.push_str(
                     "(scan_id IN (SELECT scan_id FROM scans WHERE scan_time BETWEEN ? AND ?))",
                 ),
-                (DateType::TimeOfScan, QueryType::Scans) => {
+                (DateType::ScanTime, QueryType::Scans) => {
                     pred_str.push_str("(scan_time BETWEEN ? AND ?)")
                 }
                 (DateType::ModDate, QueryType::Items) => {
@@ -324,9 +340,26 @@ impl ChangeFilter {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PathFilter {
+    path_type: PathType,
     path_strs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PathType {
+    RootPath,
+    ItemPath,
+}
+
+impl PathType {
+    fn from_rule(rule: Rule) -> Self {
+        match rule {
+            Rule::root_path_filter => PathType::RootPath,
+            Rule::item_path_filter => PathType::ItemPath,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl Filter for PathFilter {
@@ -343,13 +376,17 @@ impl Filter for PathFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            match query_type {
-                QueryType::Roots => pred_str.push_str("(root_path LIKE ?)"),
-                QueryType::Items => pred_str.push_str("(item_path LIKE ?)"),
-                _ => unreachable!()
-            }
 
-            //let change_type_str = c.to_string();
+            let path_col = match (query_type, &self.path_type) {
+                (QueryType::Roots, PathType::RootPath) => "roots.root_path",
+                (QueryType::Items, PathType::ItemPath) => "items.item_path",
+                (QueryType::Changes, PathType::ItemPath) => "items.item_path",
+                _ => unreachable!()
+            };
+
+            pred_str.push_str(&format!("({path_col} LIKE ?)"));
+
+
             let like_str = format!("%{path_str}%");
             pred_vec.push(Box::new(like_str));
         }
@@ -361,14 +398,15 @@ impl Filter for PathFilter {
 }
 
 impl PathFilter {
-    fn new() -> Self {
+    fn new(rule: Rule) -> Self {
         PathFilter {
+            path_type: PathType::from_rule(rule),
             path_strs: Vec::new(),
         }
     }
 
     pub fn build(path_filter_pair: Pair<Rule>) -> Result<PathFilter, FsPulseError> {
-        let mut path_filter = Self::new();
+        let mut path_filter = Self::new(path_filter_pair.as_rule());
 
         for path_spec in path_filter_pair.into_inner() {
             path_filter.path_strs.push(path_spec.as_str().to_string());
