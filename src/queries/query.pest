@@ -33,6 +33,65 @@ changes_filter_choice = _{
   | val_new_filter
 }
 
+show_clause   =  { show_col_spec ~ (WS* ~ COMMA ~ WS* ~ show_col_spec)* }
+show_col_spec = _{ (id_show | date_show | bool_show | path_show) }
+
+id_col = { (^"root_id" | ^"scan_id" | ^"item_id" | ^"change_id" | ^"last_scan" | ^"last_hash_scan" | ^"last_val_scan") }
+
+id_show             =  { id_col ~ id_display_modifier? }
+id_display_modifier = _{ WS* ~ "@" ~ WS* ~ id_display_mode }
+id_display_mode     =  { "nodisplay" }
+
+id_filter        =  { id_col ~ id_filter_body }
+id_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ id_filter_values ~ WS* ~ RPAREN }
+id_filter_values = _{ id_spec ~ (WS* ~ COMMA ~ WS* ~ id_spec)* }
+id_spec          = _{ id_range | id }
+id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
+id               =  { WS* ~ ASCII_DIGIT+ }
+
+date_col = { "scan_time" | "mod_date" | "mod_date_old" | "mod_date_new" }
+
+date_show             =  { date_col ~ date_display_modifier? }
+date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }
+date_display_mode     =  { ("full" | "short") }
+
+date_filter      =  { date_col ~ date_filter_body }
+date_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ date_values ~ WS* ~ RPAREN }
+date_values      = _{ date_spec ~ (WS* ~ COMMA ~ date_spec)* }
+date_spec        = _{ date_range | date }
+date_range       =  { date ~ WS* ~ DOTDOT ~ date }
+date             =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
+
+bool_col = { "hashing" | "validating" }
+
+bool_show             =  { bool_col ~ bool_display_modifier? }
+bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }
+bool_display_mode     =  { ("full" | "short") }
+
+bool_filter = { bool_col ~ bool_filter_body }
+bool_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_list ~ WS* ~ RPAREN }
+bool_list        = _{ bool ~ (WS* ~ COMMA ~ WS* ~ bool)* }
+bool             =  { ^"TRUE" | ^"T" | ^"FALSE" | ^"F" }
+
+path_col              =  { "item_path" | "root_path" }
+
+path_show             =  { path_col ~ path_display_modifier? }
+path_display_modifier = _{ WS* ~ "@" ~ path_display_mode }
+path_display_mode     =  { "full" | "relative" | "shortened" | "name" }
+
+path_filter      =  { path_col ~ path_filter_body }
+path_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ path_list ~ WS* ~ RPAREN }
+path_list        = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ WS* ~ path_spec)* }
+path_spec        = _{ "'" ~ path ~ "'" }
+path             =  { (("\\'" | (!"'" ~ ANY)))* }
+
+val_col = { "val_old" | "val_new" | "val" }
+
+val_show = { val_col ~ val_display_modifier? }
+val_display_modifier = _{ WS* ~ "@" ~ WS* ~ val_display_mode }
+val_display_mode = { "full" | "short" }
+
+
 // id filters
 root_id_filter        = { ^"root_id" ~ id_filter_body }
 scan_id_filter        = { ^"scan_id" ~ id_filter_body }
@@ -81,23 +140,6 @@ limit_clause = _{ WS+ ~ limit_text ~ WS+ ~ limit_val }
 limit_text   = _{ ^"limit" }
 limit_val    =  { ASCII_DIGIT+ }
 
-id_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ id_filter_values ~ WS* ~ RPAREN }
-id_filter_values = _{ id_spec ~ (WS* ~ COMMA ~ WS* ~ id_spec)* }
-id_spec          = _{ id_range | id }
-id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
-id               =  { WS* ~ ASCII_DIGIT+ }
-
-date_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ date_values ~ WS* ~ RPAREN }
-date_values      = _{ date_spec ~ (WS* ~ COMMA ~ date_spec)* }
-date_spec        = _{ date_range | date }
-date_range       =  { date ~ WS* ~ DOTDOT ~ date }
-date             =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
-
-path_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ path_list ~ WS* ~ RPAREN }
-path_list        = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ WS* ~ path_spec)* }
-path_spec        = _{ "'" ~ path ~ "'" }
-path             =  { (("\\'" | (!"'" ~ ANY)))* }
-
 item_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ item_type ~ WS* ~ RPAREN }
 item_type             =  { ^"FILE" | "F" | ^"DIRECTORY" | "D" }
 
@@ -112,9 +154,7 @@ val_nullable_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_nullable_li
 val_nullable_list        = _{ val_nullable ~ (WS* ~ COMMA ~ WS* ~ val_nullable)* }
 val_nullable             =  { null | val }
 
-bool_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_list ~ WS* ~ RPAREN }
-bool_list        = _{ bool ~ (WS* ~ COMMA ~ WS* ~ bool)* }
-bool             =  { ^"TRUE" | ^"T" | ^"FALSE" | ^"F" }
+
 
 bool_nullable_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_nullable_list ~ WS* ~ RPAREN }
 bool_nullable_list        = _{ bool_nullable ~ (WS* ~ COMMA ~ WS* ~ bool_nullable)* }
