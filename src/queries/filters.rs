@@ -27,6 +27,9 @@ pub enum IdType {
     Item,
     Scan,
     Change,
+    LastScan,
+    LastHashScan,
+    LastValScan,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdSpec {
@@ -55,6 +58,9 @@ impl IdType {
             Rule::item_id_filter => IdType::Item,
             Rule::scan_id_filter => IdType::Scan,
             Rule::change_id_filter => IdType::Change,
+            Rule::last_scan_filter => IdType::LastScan,
+            Rule::last_hash_scan_filter => IdType::LastHashScan,
+            Rule::last_val_scan_filter => IdType::LastValScan,
             _ => unreachable!(),
         }
     }
@@ -75,6 +81,9 @@ impl Filter for IdFilter {
             (QueryType::Scans, IdType::Root) => "scans.root_id",
             (QueryType::Items, IdType::Item) => "items.item_id",
             (QueryType::Items, IdType::Root) => "items.root_id",
+            (QueryType::Items, IdType::LastScan) => "items.last_scan",
+            (QueryType::Items, IdType::LastHashScan) => "items.last_hash_scan",
+            (QueryType::Items, IdType::LastValScan) => "items.last_val_scan",
             (QueryType::Changes, IdType::Change) => "changes.change_id",
             (QueryType::Changes, IdType::Scan) => "changes.scan_id",
             (QueryType::Changes, IdType::Item) => "changes.item_id",
@@ -293,6 +302,7 @@ enum StringFilterType {
     MetaChange,
     ValOld,
     ValNew,
+    ItemType,
     //HashChange,
     //ValChange
 }
@@ -307,6 +317,7 @@ impl StringFilterType {
             Rule::meta_change_filter => Self::MetaChange,
             Rule::val_old_filter => Self::ValOld,
             Rule::val_new_filter => Self::ValNew,
+            Rule::item_type_filter => Self::ItemType,
             _ => unreachable!(),
         }
     }
@@ -337,6 +348,7 @@ impl Filter for StringFilter {
             StringFilterType::MetaChange => "changes.meta_change",
             StringFilterType::ValOld => "changes.val_old",
             StringFilterType::ValNew => "changes.val_new",
+            StringFilterType::ItemType => "items.item_type",
         };
 
         if self.str_values.iter().len() > 1 {
@@ -375,6 +387,7 @@ impl StringFilter {
             StringFilterType::MetaChange => &Self::BOOL_NULLABLE_VALUES,
             StringFilterType::ValOld => &Self::VAL_NULLABLE_VALUES,
             StringFilterType::ValNew => &Self::VAL_NULLABLE_VALUES,
+            StringFilterType::ItemType => &Self::ITEM_TYPE_VALUES,
         };
 
         StringFilter {
@@ -453,6 +466,13 @@ impl StringFilter {
         "U" => "U",
         "NULL" => "NULL",
         "-" => "NULL",
+    };
+
+    const ITEM_TYPE_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+        "FILE" => "F",
+        "F" => "F",
+        "DIRECTORY" => "D",
+        "D" => "D",
     };
 }
 

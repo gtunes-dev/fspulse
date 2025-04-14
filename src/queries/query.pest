@@ -14,7 +14,7 @@ scans_filter_choice = _{ scan_id_filter | root_id_filter | scan_time_filter | ha
 
 items_query         =  { ^"items" ~ (WS+ ~ ^"where" ~ WS+ ~ items_filter_list)? ~ order_clause? ~ limit_clause? }
 items_filter_list   = _{ items_filter_choice ~ (WS* ~ COMMA ~ WS* ~ items_filter_choice)* }
-items_filter_choice = _{ item_id_filter | root_id_filter | item_path_filter | mod_date_filter | val_filter }
+items_filter_choice = _{ item_id_filter | root_id_filter | item_path_filter | last_scan_filter | item_type_filter | mod_date_filter | last_hash_scan_filter | last_val_scan_filter | val_filter }
 
 changes_query         =  { ^"changes" ~ (WS+ ~ ^"where" ~ WS+ ~ changes_filter_list)? ~ order_clause? ~ limit_clause? }
 changes_filter_list   = _{ changes_filter_choice ~ (WS* ~ COMMA ~ WS* ~ changes_filter_choice)* }
@@ -34,10 +34,13 @@ changes_filter_choice = _{
 }
 
 // id filters
-root_id_filter   = { ^"root_id" ~ id_filter_body }
-scan_id_filter   = { ^"scan_id" ~ id_filter_body }
-item_id_filter   = { ^"item_id" ~ id_filter_body }
-change_id_filter = { ^"change_id" ~ id_filter_body }
+root_id_filter        = { ^"root_id" ~ id_filter_body }
+scan_id_filter        = { ^"scan_id" ~ id_filter_body }
+item_id_filter        = { ^"item_id" ~ id_filter_body }
+change_id_filter      = { ^"change_id" ~ id_filter_body }
+last_scan_filter      = { ^"last_scan" ~ id_filter_body }
+last_hash_scan_filter = { ^"last_hash_scan" ~ id_filter_body }
+last_val_scan_filter  = { ^"last_val_scan" ~ id_filter_body }
 
 // date filters
 scan_time_filter    = { ^"scan_time" ~ date_filter_body }
@@ -57,6 +60,8 @@ validating_filter = { ^"validating" ~ bool_filter_body }
 val_filter     = { ^"val" ~ val_filter_body }
 val_old_filter = { ^"val_old" ~ val_nullable_filter_body }
 val_new_filter = { ^"val_new" ~ val_nullable_filter_body }
+
+item_type_filter = { ^"item_type" ~ item_type_filter_body }
 
 // Bool filters
 meta_change_filter = { ^"meta_change" ~ bool_nullable_filter_body }
@@ -92,6 +97,9 @@ path_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ path_list ~ WS* ~ RPARE
 path_list        = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ WS* ~ path_spec)* }
 path_spec        = _{ "'" ~ path ~ "'" }
 path             =  { (("\\'" | (!"'" ~ ANY)))* }
+
+item_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ item_type ~ WS* ~ RPAREN }
+item_type             =  { ^"FILE" | "F" | ^"DIRECTORY" | "D" }
 
 change_type_filter_body = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
 change                  =  { ^"ADD" | ^"A" | ^"DELETE" | ^"D" | ^"MODIFY" | ^"M" }

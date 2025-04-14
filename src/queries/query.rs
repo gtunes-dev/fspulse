@@ -239,7 +239,9 @@ struct ScansQueryRow {
     scan_id: i64,
     root_id: i64,
     state: i64,
+    #[tabled(display = "Utils::display_bool")]
     hashing: bool,
+    #[tabled(display = "Utils::display_bool")]
     validating: bool,
     #[tabled(display = "Utils::display_db_time")]
     scan_time: i64,
@@ -403,7 +405,10 @@ impl Query {
                 Rule::root_id_filter
                 | Rule::scan_id_filter
                 | Rule::item_id_filter
-                | Rule::change_id_filter => {
+                | Rule::change_id_filter
+                | Rule::last_scan_filter
+                | Rule::last_hash_scan_filter
+                | Rule::last_val_scan_filter => {
                     let id_filter = IdFilter::build(token)?;
                     query.add_filter(id_filter);
                 }
@@ -420,7 +425,8 @@ impl Query {
                 | Rule::val_filter
                 | Rule::meta_change_filter
                 | Rule::val_old_filter
-                | Rule::val_new_filter => {
+                | Rule::val_new_filter
+                | Rule::item_type_filter => {
                     let string_filter = StringFilter::build(token)?;
                     query.add_filter(string_filter);
                 }
