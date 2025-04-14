@@ -15,11 +15,9 @@ pub enum FsPulseError {
     #[error("Database error: {0}")]
     DatabaseError(#[from] RusqliteError), // Converts rusqlite::Error automatically
 
-
-
     #[error("Query parsing error: {0}")]
     ParsingError(#[from] Box<pest::error::Error<Rule>>),
 
-    //#[error("Query parsing error: {0}")]
-    //CustomParsingError(String),
+    #[error("Query parsing error: {0}")]
+    CustomParsingError(String),
 }

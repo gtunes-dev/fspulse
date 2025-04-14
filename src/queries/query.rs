@@ -12,7 +12,7 @@ use crate::{database::Database, error::FsPulseError};
 
 use super::{
     columns::ColumnSet,
-    filters::{ChangeFilter, DateFilter, Filter, IdFilter, PathFilter},
+    filters::{DateFilter, Filter, IdFilter, PathFilter, StringFilter},
     order::Order,
     QueryParser, Rule,
 };
@@ -202,6 +202,7 @@ impl DomainQuery {
         }
 
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
+        println!("SQL: {sql}");
 
         let mut sql_statment = db.conn().prepare(&sql)?;
 
@@ -413,9 +414,15 @@ impl Query {
                     let date_filter = DateFilter::build(token)?;
                     query.add_filter(date_filter);
                 }
-                Rule::change_filter => {
-                    let change_filter = ChangeFilter::build(token)?;
-                    query.add_filter(change_filter);
+                Rule::hashing_filter
+                | Rule::validating_filter
+                | Rule::change_type_filter
+                | Rule::val_filter
+                | Rule::meta_change_filter
+                | Rule::val_old_filter
+                | Rule::val_new_filter => {
+                    let string_filter = StringFilter::build(token)?;
+                    query.add_filter(string_filter);
                 }
                 Rule::order_list => {
                     let order = Order::build(token, query.col_set)?;
@@ -424,8 +431,7 @@ impl Query {
                 Rule::limit_val => {
                     query.limit = Some(token.as_str().parse().unwrap());
                 }
-                Rule::root_path_filter
-                | Rule::item_path_filter => {
+                Rule::root_path_filter | Rule::item_path_filter => {
                     let path_filter = PathFilter::build(token)?;
                     query.add_filter(path_filter);
                 }

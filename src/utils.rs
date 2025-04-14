@@ -42,7 +42,7 @@ impl Utils {
 
         let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
 
-        datetime_local.format("%Y-%b-%d %H:%M").to_string()
+        datetime_local.format("%Y-%m-%d %H:%M").to_string()
     }
 
     pub fn display_opt_db_time(opt: &Option<i64>) -> String {

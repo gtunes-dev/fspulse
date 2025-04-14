@@ -1,9 +1,10 @@
 use crate::{error::FsPulseError, utils::Utils};
 use pest::iterators::Pair;
+use phf_macros::phf_ordered_map;
 use rusqlite::ToSql;
 use std::fmt::{self, Debug};
 
-use super::{query::QueryType, Rule};
+use super::{columns::StringMap, query::QueryType, Rule};
 
 /// Defines the behavior of a filter.
 pub trait Filter: Debug {
@@ -68,7 +69,7 @@ impl Filter for IdFilter {
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
 
-        let id_col = match (query_type, &self.id_type)  {
+        let id_col = match (query_type, &self.id_type) {
             (QueryType::Roots, IdType::Root) => "roots.root_id",
             (QueryType::Scans, IdType::Scan) => "scans.scan_id",
             (QueryType::Scans, IdType::Root) => "scans.root_id",
@@ -78,8 +79,7 @@ impl Filter for IdFilter {
             (QueryType::Changes, IdType::Scan) => "changes.scan_id",
             (QueryType::Changes, IdType::Item) => "changes.item_id",
             (QueryType::Changes, IdType::Root) => "items.root_id",
-            _ => unreachable!()
-
+            _ => unreachable!(),
         };
 
         if self.id_specs.len() > 1 {
@@ -284,60 +284,176 @@ impl DateFilter {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct ChangeFilter {
-    change_types: String,
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StringFilterType {
+    Hashing,
+    Validating,
+    ChangeType,
+    Val,
+    MetaChange,
+    ValOld,
+    ValNew,
+    //HashChange,
+    //ValChange
 }
 
-impl Filter for ChangeFilter {
+impl StringFilterType {
+    fn from_rule(rule: Rule) -> Self {
+        match rule {
+            Rule::hashing_filter => Self::Hashing,
+            Rule::validating_filter => Self::Validating,
+            Rule::change_type_filter => Self::ChangeType,
+            Rule::val_filter => Self::Val,
+            Rule::meta_change_filter => Self::MetaChange,
+            Rule::val_old_filter => Self::ValOld,
+            Rule::val_new_filter => Self::ValNew,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct StringFilter {
+    filter_type: StringFilterType,
+    str_map: StringMap,
+
+    str_values: Vec<String>,
+}
+
+impl Filter for StringFilter {
     fn to_predicate_parts(
         &self,
         _query_type: QueryType,
     ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
-        let mut pred_str = " (change_type IN (".to_string();
+        let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
-
         let mut first: bool = true;
-        for c in self.change_types.chars() {
-            match first {
-                true => {
-                    first = false;
-                    pred_str.push('?');
-                }
-                false => pred_str.push_str(", ?"),
-            }
-            let change_type_str = c.to_string();
-            pred_vec.push(Box::new(change_type_str));
+
+        let col_name = match self.filter_type {
+            StringFilterType::Hashing => "scans.hashing",
+            StringFilterType::Validating => "scans.validating",
+            StringFilterType::ChangeType => "changes.change_type",
+            StringFilterType::Val => "items.val",
+            StringFilterType::MetaChange => "changes.meta_change",
+            StringFilterType::ValOld => "changes.val_old",
+            StringFilterType::ValNew => "changes.val_new",
+        };
+
+        if self.str_values.iter().len() > 1 {
+            pred_str.push('(');
         }
 
-        pred_str.push_str("))");
+        for str_val in &self.str_values {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+
+            if str_val == "NULL" {
+                pred_str.push_str(&format!("({} IS NULL)", col_name));
+            } else {
+                pred_str.push_str(&format!("({} = ?)", col_name));
+                pred_vec.push(Box::new(str_val.to_owned()));
+            }
+        }
+
+        if self.str_values.iter().len() > 1 {
+            pred_str.push(')');
+        }
 
         Ok((pred_str, pred_vec))
     }
 }
 
-impl ChangeFilter {
-    fn new() -> Self {
-        Self::default()
-    }
+impl StringFilter {
+    fn new(filter_type: StringFilterType) -> Self {
+        let str_map = match filter_type {
+            StringFilterType::Hashing => &Self::BOOL_VALUES,
+            StringFilterType::Validating => &Self::BOOL_VALUES,
+            StringFilterType::ChangeType => &Self::CHANGE_TYPE_VALUES,
+            StringFilterType::Val => &Self::VAL_VALUES,
+            StringFilterType::MetaChange => &Self::BOOL_NULLABLE_VALUES,
+            StringFilterType::ValOld => &Self::VAL_NULLABLE_VALUES,
+            StringFilterType::ValNew => &Self::VAL_NULLABLE_VALUES,
+        };
 
-    pub fn build(filter_change: Pair<Rule>) -> Result<Self, FsPulseError> {
-        let mut change_filter = ChangeFilter::new();
-        for change in filter_change.into_inner() {
-            let change_str = change.as_str();
-            let change_str_upper = change_str.to_uppercase();
-
-            // disallow specifying the same type multiple times
-            if change_filter.change_types.contains(&change_str_upper) {
-                return Err(FsPulseError::Error(format!(
-                    "Change filter contains multiple instances of '{}'",
-                    change_str
-                )));
-            }
-            change_filter.change_types.push_str(&change_str_upper);
+        StringFilter {
+            filter_type,
+            str_map: StringMap::new(str_map),
+            str_values: Vec::new(),
         }
-        Ok(change_filter)
     }
+
+    pub fn build(string_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
+        let filter_type = StringFilterType::from_rule(string_filter_pair.as_rule());
+        let mut string_filter = StringFilter::new(filter_type);
+
+        for str_val_pair in string_filter_pair.into_inner() {
+            let val_str = str_val_pair.as_str();
+            let val_str_upper = val_str.to_ascii_uppercase();
+
+            let mapped_str = string_filter.str_map.get(&val_str_upper);
+            match mapped_str {
+                Some(s) => string_filter.str_values.push(s.to_owned()),
+                None => {
+                    return Err(FsPulseError::CustomParsingError(format!(
+                        "Invalid filter value: '{}'",
+                        val_str
+                    )));
+                }
+            }
+        }
+        Ok(string_filter)
+    }
+
+    pub const BOOL_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+        "TRUE" => "1",
+        "T" => "1",
+        "FALSE" => "0",
+        "F" => "0",
+    };
+
+    const BOOL_NULLABLE_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+        "TRUE" => "1",
+        "T" => "1",
+        "FALSE" => "0",
+        "F" => "0",
+        "NULL" => "NULL",
+        "-" => "NULL",
+    };
+
+    const CHANGE_TYPE_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+        "ADD" => "A",
+        "A" => "A",
+        "DELETE" => "D",
+        "D" => "D",
+        "MODIFY" => "M",
+        "M" => "M",
+    };
+
+    const VAL_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+        "VALID" => "V",
+        "V" => "V",
+        "INVALID" => "I",
+        "I" => "I",
+        "NO_VALIDATOR" => "N",
+        "N" => "N",
+        "UNKNOWN" => "U",
+        "U" => "U",
+    };
+
+    const VAL_NULLABLE_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+        "VALID" => "V",
+        "V" => "V",
+        "INVALID" => "I",
+        "I" => "I",
+        "NOT_VALIDATED" => "N",
+        "N" => "N",
+        "UNKNOWN" => "U",
+        "U" => "U",
+        "NULL" => "NULL",
+        "-" => "NULL",
+    };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -381,11 +497,10 @@ impl Filter for PathFilter {
                 (QueryType::Roots, PathType::RootPath) => "roots.root_path",
                 (QueryType::Items, PathType::ItemPath) => "items.item_path",
                 (QueryType::Changes, PathType::ItemPath) => "items.item_path",
-                _ => unreachable!()
+                _ => unreachable!(),
             };
 
             pred_str.push_str(&format!("({path_col} LIKE ?)"));
-
 
             let like_str = format!("%{path_str}%");
             pred_vec.push(Box::new(like_str));

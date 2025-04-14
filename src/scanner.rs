@@ -152,7 +152,10 @@ impl Scanner {
                 let scan = Scan::get_latest(db)?
                     .ok_or_else(|| FsPulseError::Error("No latest scan found".to_string()))?;
                 let root = Root::get_by_id(db, scan.root_id())?.ok_or_else(|| {
-                    FsPulseError::Error(format!("No root found for latest Scan Id {}", scan.scan_id()))
+                    FsPulseError::Error(format!(
+                        "No root found for latest Scan Id {}",
+                        scan.scan_id()
+                    ))
                 })?;
 
                 let return_scan = if scan.state() != ScanState::Completed {
@@ -644,14 +647,9 @@ impl Scanner {
             }
         }
 
-        if let Err(error) = Scanner::update_item_analysis(
-            db,
-            &scan,
-            &item,
-            new_hash,
-            new_val,
-            new_val_error,
-        ) {
+        if let Err(error) =
+            Scanner::update_item_analysis(db, &scan, &item, new_hash, new_val, new_val_error)
+        {
             let e_str = error.to_string();
             error!(
                 "Error updating item analysis '{}': {}",
@@ -790,10 +788,8 @@ impl Scanner {
                                 mod_date_old, 
                                 mod_date_new, 
                                 file_size_old, 
-                                file_size_new, 
-                                hash_change, 
-                                val_change) 
-                            VALUES (?, ?, ?, 1, ?, ?, 0, 0)",
+                                file_size_new) 
+                            VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
                     (
                         scan.scan_id(),
                         existing_item.item_id(),
@@ -883,9 +879,7 @@ impl Scanner {
         }
 
         if scan.validating() {
-            if (item.val() != new_val)
-                || (item.val_error() != new_val_error.as_deref())
-            {
+            if (item.val() != new_val) || (item.val_error() != new_val_error.as_deref()) {
                 // if either the hash or validation state changes, we update changes
                 update_changes = true;
                 c_val_change = Some(true);

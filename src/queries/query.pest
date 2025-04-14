@@ -10,11 +10,11 @@ roots_filter_choice = _{ root_id_filter | root_path_filter }
 
 scans_query         =  { ^"scans" ~ (WS+ ~ ^"where" ~ WS+ ~ scans_filter_list)? ~ order_clause? ~ limit_clause? }
 scans_filter_list   = _{ scans_filter_choice ~ (WS* ~ COMMA ~ WS* ~ scans_filter_choice)* }
-scans_filter_choice = _{ scan_id_filter | root_id_filter | scan_time_filter }
+scans_filter_choice = _{ scan_id_filter | root_id_filter | scan_time_filter | hashing_filter | validating_filter }
 
 items_query         =  { ^"items" ~ (WS+ ~ ^"where" ~ WS+ ~ items_filter_list)? ~ order_clause? ~ limit_clause? }
 items_filter_list   = _{ items_filter_choice ~ (WS* ~ COMMA ~ WS* ~ items_filter_choice)* }
-items_filter_choice = _{ item_id_filter | root_id_filter | item_path_filter | mod_date_filter | validity_filter }
+items_filter_choice = _{ item_id_filter | root_id_filter | item_path_filter | mod_date_filter | val_filter }
 
 changes_query         =  { ^"changes" ~ (WS+ ~ ^"where" ~ WS+ ~ changes_filter_list)? ~ order_clause? ~ limit_clause? }
 changes_filter_list   = _{ changes_filter_choice ~ (WS* ~ COMMA ~ WS* ~ changes_filter_choice)* }
@@ -25,10 +25,12 @@ changes_filter_choice = _{
   | item_id_filter
   | scan_time_filter
   | item_path_filter
-  | change_filter
+  | change_type_filter
+  | meta_change_filter
   | mod_date_old_filter
   | mod_date_new_filter
-  | validity_filter
+  | val_old_filter
+  | val_new_filter
 }
 
 // id filters
@@ -47,25 +49,29 @@ mod_date_new_filter = { ^"mod_date_new" ~ date_filter_body }
 root_path_filter = { ^"root_path" ~ path_filter_body }
 item_path_filter = { ^"item_path" ~ path_filter_body }
 
+// scan filters - hashing and validating
+hashing_filter    = { ^"hashing" ~ bool_filter_body }
+validating_filter = { ^"validating" ~ bool_filter_body }
+
 // Validity filter (V, I, N, U) e.g., validity:(V) or validity:(V,I)
-validity_filter = { ^"validity" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ validity_values ~ WS* ~ RPAREN }
+val_filter     = { ^"val" ~ val_filter_body }
+val_old_filter = { ^"val_old" ~ val_nullable_filter_body }
+val_new_filter = { ^"val_new" ~ val_nullable_filter_body }
+
+// Bool filters
+meta_change_filter = { ^"meta_change" ~ bool_nullable_filter_body }
 
 // Change filter: e.g., change:(A) or change:(A,M)
-change_filter = { ^"change" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_values ~ WS* ~ RPAREN }
+change_type_filter = { ^"change" ~ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_type_filter_body ~ WS* ~ RPAREN }
 
-// Column allowability is implemented in code
-// 
-// roots : root_id, path
-// scans: scan_id
-// items:
-// changes: change_id, item_id, scan_id
+// Optional order clause - column_id validated in code
 order_clause = _{ WS+ ~ ^"order" ~ WS+ ~ ^"by" ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { column_id ~ (WS+ ~ order_dir)? }
-order_dir    =  { ^"ASC" | ^"DESC" }
-// column_id    =  { ^"change_id" | ^"item_id" | ^"scan_id" | ^"root_id" | ^"id" }
-column_id = { (('a'..'z') | ('A'..'Z') | "_")+ }
+column_id    =  { (('a'..'z') | ('A'..'Z') | "_")+ }
+order_dir    =  { ^"ASCENDING" | ^"ASC" | ^"DESCENDING" | ^"DESC" }
 
+// optional limit clause
 limit_clause = _{ WS+ ~ limit_text ~ WS+ ~ limit_val }
 limit_text   = _{ ^"limit" }
 limit_val    =  { ASCII_DIGIT+ }
@@ -87,11 +93,26 @@ path_list        = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ WS* ~ path_spec)* }
 path_spec        = _{ "'" ~ path ~ "'" }
 path             =  { (("\\'" | (!"'" ~ ANY)))* }
 
-change_values = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
-change        =  { ^"A" | ^"D" | ^"M" }
+change_type_filter_body = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
+change                  =  { ^"ADD" | ^"A" | ^"DELETE" | ^"D" | ^"MODIFY" | ^"M" }
 
-validity_values = _{ validity ~ (WS* ~ COMMA ~ WS* ~ validity)* }
-validity        =  { ^"V" | ^"I" | ^"N" | ^"U" }
+val_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_list ~ WS* ~ RPAREN }
+val_list        = _{ val ~ (WS* ~ COMMA ~ WS* ~ val)* }
+val             =  { ^"VALID" | ^"V" | ^"INVALID" | ^"I" | ^"NO_VALIDATOR" | ^"N" | ^"UNKNOWN" | ^"U" }
+
+val_nullable_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_nullable_list ~ WS* ~ RPAREN }
+val_nullable_list        = _{ val_nullable ~ (WS* ~ COMMA ~ WS* ~ val_nullable)* }
+val_nullable             =  { null | val }
+
+bool_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_list ~ WS* ~ RPAREN }
+bool_list        = _{ bool ~ (WS* ~ COMMA ~ WS* ~ bool)* }
+bool             =  { ^"TRUE" | ^"T" | ^"FALSE" | ^"F" }
+
+bool_nullable_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_nullable_list ~ WS* ~ RPAREN }
+bool_nullable_list        = _{ bool_nullable ~ (WS* ~ COMMA ~ WS* ~ bool_nullable)* }
+bool_nullable             =  { null | bool }
+
+null = { "-" | ^"NULL" }
 
 // Basic tokens - all silent
 WS     = _{ " " | "\t" | NEWLINE }

@@ -50,8 +50,8 @@ CREATE TABLE IF NOT EXISTS items (
 
     -- Validation Property Group
     last_val_scan INTEGER,                  -- Id of last scan during which file was validated
-    val CHAR(1) NOT NULL,               -- Validation state of file
-    val_error TEXT,                      -- Description of invalid state
+    val CHAR(1) NOT NULL,                   -- Validation state of file
+    val_error TEXT,                          -- Description of invalid state
 
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (last_scan) REFERENCES scans(scan_id),
@@ -88,12 +88,12 @@ CREATE TABLE IF NOT EXISTS changes (
     hash_new TEXT DEFAULT NULL,                 -- Stores the new hash (if changed)
 
     -- Validation Properties (Add or Modify)
-    val_change BOOLEAN DEFAULT NULL,      -- Not Null if "A" or "M", True if hash changed
+    val_change BOOLEAN DEFAULT NULL,        -- Not Null if "A" or "M", True if hash changed
     last_val_scan_old INTEGER DEFAULT NULL,  -- Id of last scan during which validation was done
-    val_old CHAR(1) DEFAULT NULL,    -- Stores the previous validation state (if changed)
-    val_new CHAR(1) DEFAULT NULL,    -- If the validation state changes, current state is stored here
-    val_error_old DEFAULT NULL,          -- Stores the previous validation error (if changed)
-    val_error_new DEFAULT NULL,          -- Stores the new validation error (if changed)
+    val_old CHAR(1) DEFAULT NULL,           -- Stores the previous validation state (if changed)
+    val_new CHAR(1) DEFAULT NULL,           -- If the validation state changes, current state is stored here
+    val_error_old DEFAULT NULL,             -- Stores the previous validation error (if changed)
+    val_error_new DEFAULT NULL,             -- Stores the new validation error (if changed)
 
     FOREIGN KEY (scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (item_id) REFERENCES items(item_id),
