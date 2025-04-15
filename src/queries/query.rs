@@ -73,7 +73,17 @@ impl DomainQuery {
         }
     }
 
-    fn add_filter<F>(&mut self, filter: F)
+    /*
+    pub fn has_column(&self, column_name: &str) -> bool {
+        self.col_set.contains_column(column_name)
+    }
+    */
+
+    pub fn get_column_db(&self, column_name: &str) -> Option<&'static str> {
+        self.col_set.get_column_db(column_name)
+    }
+
+    pub fn add_filter<F>(&mut self, filter: F)
     where
         F: Filter + 'static,
     {
@@ -374,7 +384,7 @@ impl Query {
             Err(err) => match err.variant {
                 pest::error::ErrorVariant::ParsingError { .. } => {
                     error!("Query parsing error: {}", err);
-                    println!("Query parsing error: {}", err);
+                    println!("{}", err);
                     return Ok(());
                 }
                 _ => {
@@ -392,7 +402,21 @@ impl Query {
         let query_type = QueryType::from_str(query_type_pair.as_str());
         let mut query = DomainQuery::new(query_type);
 
-        Query::build(&mut query, &mut query_iter)?;
+        let res = Query::build(&mut query, &mut query_iter);
+        match res {
+            Ok(()) => {}
+            Err(err) => match err {
+                FsPulseError::CustomParsingError(ref msg) => {
+                    info!("Query parsing error: {}", msg);
+                    println!("Query parsing error: {}", msg);
+                    return Ok(());
+                }
+                other_error => {
+                    return Err(other_error);
+                }
+            },
+        };
+
         query.execute(db, query_type, query_str)?;
 
         Ok(())
@@ -403,12 +427,10 @@ impl Query {
             println!("{:?}", token.as_rule());
             match token.as_rule() {
                 Rule::id_filter => {
-                    let id_filter = IdFilter::build(token)?;
-                    query.add_filter(id_filter);
+                    IdFilter::add_to_query(token, query)?;
                 }
                 Rule::date_filter => {
-                    let date_filter = DateFilter::build(token)?;
-                    query.add_filter(date_filter);
+                    DateFilter::add_to_query(token, query)?;
                 }
                 Rule::bool_filter
                 | Rule::val_filter

@@ -12,6 +12,12 @@ impl StringMap {
         StringMap { str_map }
     }
 
+    /* 
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.str_map.contains_key(key)
+    }
+    */
+
     pub fn get(&self, key: &str) -> Option<&'static str> {
         self.str_map.get(key).copied()
     }
@@ -90,6 +96,15 @@ impl ColumnSet {
         ColumnSet {
             str_map: StringMap::new(query_cols),
         }
+    }
+    /* 
+    pub fn contains_column(&self, column_name: &str) -> bool {
+        self.str_map.contains_key(column_name)
+    }
+    */
+
+    pub fn get_column_db(&self, column_name: &str) -> Option<&'static str> {
+        self.str_map.get(column_name)
     }
 
     pub fn as_select(&self) -> String {

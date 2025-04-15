@@ -39,9 +39,9 @@ id_display_mode     =  { nodisplay }
 id_filter        =  { id_col ~ id_filter_body }
 id_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ id_filter_values ~ WS* ~ RPAREN }
 id_filter_values = _{ id_spec ~ (WS* ~ COMMA ~ WS* ~ id_spec)* }
-id_spec          = _{ id_range | id }
+id_spec          = _{ null | id_range | id }
 id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
-id               =  { WS* ~ (null | ASCII_DIGIT+) }
+id               =  { WS* ~ ASCII_DIGIT+ }
 
 // Date Columns
 date_col = { "scan_time" | "mod_date" | "mod_date_old" | "mod_date_new" }
@@ -118,7 +118,7 @@ change_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_list ~ WS
 change_list             = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
 change                  =  { null | "ADD" | "add" | ^"A" | "DELETE" | "delete" | ^"D" | "MODIFY" | "modify" | "M" }
 
-null      = _{ "-" | "NULL" | "null" }
+null      =  { "-" | "NULL" | "null" }
 nodisplay = _{ "NODISPLAY" | "nodisplay" }
 
 // Basic tokens - all silent

@@ -52,15 +52,6 @@ impl Utils {
         }
     }
 
-    /*
-    pub fn display_short_path<T: AsRef<str>>(opt: &Option<T>) -> String {
-        match opt {
-            Some(s) => tico(s.as_ref(), None),
-            None => "-".to_owned()
-        }
-    }
-    */
-
     pub fn display_opt_i64(opt_i64: &Option<i64>) -> String {
         match opt_i64 {
             Some(i) => i.to_string(),
@@ -104,14 +95,15 @@ impl Utils {
     /// - end of day (23:59:59)
     fn parse_date_bounds(date_str: &str) -> Result<(NaiveDateTime, NaiveDateTime), FsPulseError> {
         let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|_| {
-            FsPulseError::Error(format!("Failed to parse '{}' as a valid date", date_str))
+            FsPulseError::CustomParsingError(format!("Invalid date: '{}'", date_str))
         })?;
 
         let start_dt = date.and_hms_opt(0, 0, 0).ok_or_else(|| {
-            FsPulseError::Error(format!("Failed to create start time for '{}'", date_str))
+            FsPulseError::CustomParsingError(format!("Unable to create start time for '{}'", date_str))
         })?;
+
         let end_dt = date.and_hms_opt(23, 59, 59).ok_or_else(|| {
-            FsPulseError::Error(format!("Failed to create end time for '{}'", date_str))
+            FsPulseError::CustomParsingError(format!("Unable to create end time for '{}'", date_str))
         })?;
         Ok((start_dt, end_dt))
     }
@@ -129,10 +121,7 @@ impl Utils {
             LocalResult::None => {
                 // For missing times, you might decide to move forward a minute until a valid time is found.
                 // Here we simply return an error, but you could adjust to your needs.
-                return Err(FsPulseError::Error(format!(
-                    "Local start time '{}' is invalid (e.g., during DST gap)",
-                    date_str
-                )));
+                return Err(FsPulseError::CustomParsingError(format!("Invalid time '{}')", date_str)));
             }
         };
 
@@ -141,10 +130,7 @@ impl Utils {
             LocalResult::Single(dt) => dt,
             LocalResult::Ambiguous(_earliest, latest) => latest,
             LocalResult::None => {
-                return Err(FsPulseError::Error(format!(
-                    "Local end time '{}' is invalid (e.g., during DST gap)",
-                    date_str
-                )));
+                return Err(FsPulseError::CustomParsingError(format!("Invalid time '{}')", date_str)));
             }
         };
 
@@ -165,10 +151,7 @@ impl Utils {
             LocalResult::Single(dt) => dt,
             LocalResult::Ambiguous(earliest, _) => earliest,
             LocalResult::None => {
-                return Err(FsPulseError::Error(format!(
-                    "Local start time '{}' is invalid (e.g., during DST gap)",
-                    start_date_str
-                )));
+                return Err(FsPulseError::CustomParsingError(format!("Invalid start time '{}')", start_date_str)));
             }
         };
 
@@ -176,15 +159,12 @@ impl Utils {
             LocalResult::Single(dt) => dt,
             LocalResult::Ambiguous(_, latest) => latest,
             LocalResult::None => {
-                return Err(FsPulseError::Error(format!(
-                    "Local end time '{}' is invalid (e.g., during DST gap)",
-                    end_date_str
-                )));
+                return Err(FsPulseError::CustomParsingError(format!("Invalid end time '{}')", end_date_str)));
             }
         };
 
         if local_start > local_end {
-            return Err(FsPulseError::Error(format!(
+            return Err(FsPulseError::CustomParsingError(format!(
                 "Start date '{}' is after end date '{}'",
                 start_date_str, end_date_str
             )));

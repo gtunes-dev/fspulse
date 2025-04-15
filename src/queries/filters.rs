@@ -2,9 +2,9 @@ use crate::{error::FsPulseError, utils::Utils};
 use pest::iterators::Pair;
 use phf_macros::phf_ordered_map;
 use rusqlite::ToSql;
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 
-use super::{columns::StringMap, query::QueryType, Rule};
+use super::{columns::StringMap, query::{DomainQuery, QueryType}, Rule};
 
 /// Defines the behavior of a filter.
 pub trait Filter: Debug {
@@ -17,84 +17,30 @@ pub trait Filter: Debug {
 
 #[derive(Debug, Clone)]
 pub struct IdFilter {
-    id_type: IdType,
+    id_col_db: &'static str,
     id_specs: Vec<IdSpec>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IdType {
-    Root,
-    Item,
-    Scan,
-    Change,
-    LastScan,
-    LastHashScan,
-    LastValScan,
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdSpec {
     Id(i64),
     IdRange { id_start: i64, id_end: i64 },
-}
-
-/*
-impl fmt::Display for IdType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            IdType::Root => "roots.root_id",
-            IdType::Item => "items.item_id",
-            IdType::Scan => "scans.scan_id",
-            IdType::Change => "changes.change_id",
-        };
-        write!(f, "{}", s)
-    }
-}
-    */
-
-impl IdType {
-    fn from_column(column: &str) -> Self {
-        match column {
-            "root_id" => IdType::Root,
-            "item_id" => IdType::Item,
-            "scan_id" => IdType::Scan,
-            "change_id" => IdType::Change,
-            "last_scan" => IdType::LastScan,
-            "last_hash_scan" => IdType::LastHashScan,
-            "last_val_scan" => IdType::LastValScan,
-            _ => unreachable!(),
-        }
-    }
+    Null,
 }
 
 impl Filter for IdFilter {
     fn to_predicate_parts(
         &self,
-        query_type: QueryType,
+        _query_type: QueryType,
     ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
 
-        let id_col = match (query_type, &self.id_type) {
-            (QueryType::Roots, IdType::Root) => "roots.root_id",
-            (QueryType::Scans, IdType::Scan) => "scans.scan_id",
-            (QueryType::Scans, IdType::Root) => "scans.root_id",
-            (QueryType::Items, IdType::Item) => "items.item_id",
-            (QueryType::Items, IdType::Root) => "items.root_id",
-            (QueryType::Items, IdType::LastScan) => "items.last_scan",
-            (QueryType::Items, IdType::LastHashScan) => "items.last_hash_scan",
-            (QueryType::Items, IdType::LastValScan) => "items.last_val_scan",
-            (QueryType::Changes, IdType::Change) => "changes.change_id",
-            (QueryType::Changes, IdType::Scan) => "changes.scan_id",
-            (QueryType::Changes, IdType::Item) => "changes.item_id",
-            (QueryType::Changes, IdType::Root) => "items.root_id",
-            _ => unreachable!(),
-        };
-
         if self.id_specs.len() > 1 {
             pred_str.push('(');
         }
-
+        
         for id_spec in &self.id_specs {
             match first {
                 true => first = false,
@@ -103,13 +49,16 @@ impl Filter for IdFilter {
 
             match id_spec {
                 IdSpec::Id(id) => {
-                    pred_str.push_str(&format!("({} = ?)", id_col));
+                    pred_str.push_str(&format!("({} = ?)", &self.id_col_db));
                     pred_vec.push(Box::new(*id));
                 }
                 IdSpec::IdRange { id_start, id_end } => {
-                    pred_str.push_str(&format!("({0} >= ? AND {0} <= ?)", id_col));
+                    pred_str.push_str(&format!("({0} >= ? AND {0} <= ?)", &self.id_col_db));
                     pred_vec.push(Box::new(*id_start));
                     pred_vec.push(Box::new(*id_end));
+                }
+                IdSpec::Null => {
+                    pred_str.push_str(&format!("({} IS NULL)", &self.id_col_db))
                 }
             }
         }
@@ -123,18 +72,22 @@ impl Filter for IdFilter {
 }
 
 impl IdFilter {
-    fn new(id_type: IdType) -> Self {
+    fn new(id_col_db: &'static str) -> Self {
         IdFilter {
-            id_type,
+            id_col_db,
             id_specs: Vec::new(),
         }
     }
 
-    pub fn build(id_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
+    pub fn add_to_query(id_filter_pair: Pair<Rule>, query: &mut DomainQuery) -> Result<(), FsPulseError> {
         let mut iter = id_filter_pair.into_inner();
-        let id_col = iter.next().unwrap();
-        let id_type = IdType::from_column(id_col.as_str());
-        let mut id_filter = Self::new(id_type);
+        let id_col_pair = iter.next().unwrap();
+        let id_col = id_col_pair.as_str().to_owned();
+
+        let mut id_filter = match query.get_column_db(&id_col) {
+            Some(id_col_db)=> Self::new(id_col_db),
+            None => return Err(FsPulseError::CustomParsingError(format!("Column not found: '{}'", id_col)))
+        };
 
         for id_spec in iter {
             match id_spec.as_rule() {
@@ -151,66 +104,38 @@ impl IdFilter {
                         .id_specs
                         .push(IdSpec::IdRange { id_start, id_end })
                 }
+                Rule::null => {
+                    id_filter.id_specs.push(IdSpec::Null)
+                }
                 _ => unreachable!(),
             }
         }
 
-        Ok(id_filter)
+        query.add_filter(id_filter);
+
+        Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct DateFilter {
-    date_type: DateType,
+    date_col_db: &'static str,
     date_specs: Vec<DateSpec>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DateType {
-    ScanTime,
-    ModDate,
-    ModDateOld,
-    ModDateNew,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DateSpec {
-    date_start: i64,
-    date_end: i64,
-}
-
-impl fmt::Display for DateType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            DateType::ScanTime => "scan_time",
-            DateType::ModDate => "mod_date",
-            DateType::ModDateOld => "mod_date_old",
-            DateType::ModDateNew => "mod_date_new",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-impl DateType {
-    fn from_column(column: &str) -> Self {
-        match column {
-            "scan_time" => DateType::ScanTime,
-            "mod date" => DateType::ModDate,
-            "mod_date_old" => DateType::ModDateOld,
-            "mod_date_new" => DateType::ModDateNew,
-            _ => unreachable!(),
-        }
-    }
+pub enum DateSpec {
+    DateRange { date_start: i64, date_end: i64 },
+    Null,
 }
 
 impl Filter for DateFilter {
     fn to_predicate_parts(
         &self,
-        query_type: QueryType,
+        _query_type: QueryType,
     ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
-
         let mut first = true;
 
         if self.date_specs.len() > 1 {
@@ -223,27 +148,21 @@ impl Filter for DateFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            match (&self.date_type, query_type) {
-                (DateType::ScanTime, QueryType::Changes) => pred_str.push_str(
-                    "(scan_id IN (SELECT scan_id FROM scans WHERE scan_time BETWEEN ? AND ?))",
-                ),
-                (DateType::ScanTime, QueryType::Scans) => {
-                    pred_str.push_str("(scan_time BETWEEN ? AND ?)")
-                }
-                (DateType::ModDate, QueryType::Items) => {
-                    pred_str.push_str("(mod_date BETWEEN ? AND ?)")
-                }
-                (DateType::ModDateOld, QueryType::Changes) => {
-                    pred_str.push_str("(mod_date_old BETWEEN ? AND ?)")
-                }
-                (DateType::ModDateNew, QueryType::Changes) => {
-                    pred_str.push_str("(mod_date_new BETWEEN ? AND ?)")
-                }
-                _ => unreachable!(),
-            }
+            // $TODO: We used to sort of support filtering Changes on "scan_time" with:
+            //      (scan_id IN (SELECT scan_id FROM scans WHERE scan_time BETWEEN ? AND ?))
+            // At present, filtering is limited to actual date columns. Need to revisit the
+            // idea of join columns
 
-            pred_vec.push(Box::new(date_spec.date_start));
-            pred_vec.push(Box::new(date_spec.date_end));
+            match date_spec {
+                DateSpec::DateRange { date_start, date_end } =>  {
+                    pred_str.push_str(&format!("({} BETWEEN ? AND ?)", &self.date_col_db));
+                    pred_vec.push(Box::new(*date_start));
+                    pred_vec.push(Box::new(*date_end));
+                }
+                DateSpec::Null => {
+                    pred_str.push_str(&format!("({} IS NULL)", &self.date_col_db))
+                }
+            }  
         }
 
         if self.date_specs.len() > 1 {
@@ -255,28 +174,29 @@ impl Filter for DateFilter {
 }
 
 impl DateFilter {
-    fn new(date_type: DateType) -> Self {
+    fn new(date_col_db: &'static str) -> Self {
         DateFilter {
-            date_type,
+            date_col_db,
             date_specs: Vec::new(),
         }
     }
 
-    pub fn build(date_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
+    pub fn add_to_query(date_filter_pair: Pair<Rule>, query: &mut DomainQuery) -> Result<(), FsPulseError> {
         let mut iter = date_filter_pair.into_inner();
-        let date_col = iter.next().unwrap();
-        let date_type = DateType::from_column(date_col.as_str());
-        let mut date_filter = DateFilter::new(date_type);
+        let date_col_pair = iter.next().unwrap();
+        let date_col = date_col_pair.as_str().to_owned();
+
+        let mut date_filter = match query.get_column_db(&date_col) {
+            Some(date_col_db) => Self::new(date_col_db),
+            None => return Err(FsPulseError::CustomParsingError(format!("Column not found: '{}'", date_col)))
+        };
 
         for date_spec in iter {
             match date_spec.as_rule() {
                 Rule::date => {
                     let date_start_str = date_spec.as_str();
                     let (date_start, date_end) = Utils::single_date_bounds(date_start_str)?;
-                    date_filter.date_specs.push(DateSpec {
-                        date_start,
-                        date_end,
-                    });
+                    date_filter.date_specs.push(DateSpec::DateRange { date_start, date_end })
                 }
                 Rule::date_range => {
                     let mut range_inner = date_spec.into_inner();
@@ -284,16 +204,18 @@ impl DateFilter {
                     let date_end_str = range_inner.next().unwrap().as_str();
                     let (date_start, date_end) =
                         Utils::range_date_bounds(date_start_str, date_end_str)?;
-                    date_filter.date_specs.push(DateSpec {
-                        date_start,
-                        date_end,
-                    });
+                    date_filter.date_specs.push(DateSpec::DateRange { date_start, date_end });
+                }
+                Rule::null => {
+                    date_filter.date_specs.push(DateSpec::Null);
                 }
                 _ => unreachable!(),
             }
         }
 
-        Ok(date_filter)
+        query.add_filter(date_filter);
+
+        Ok(())
     }
 }
 
