@@ -52,15 +52,15 @@ impl fmt::Display for IdType {
     */
 
 impl IdType {
-    fn from_rule(rule: Rule) -> Self {
-        match rule {
-            Rule::root_id_filter => IdType::Root,
-            Rule::item_id_filter => IdType::Item,
-            Rule::scan_id_filter => IdType::Scan,
-            Rule::change_id_filter => IdType::Change,
-            Rule::last_scan_filter => IdType::LastScan,
-            Rule::last_hash_scan_filter => IdType::LastHashScan,
-            Rule::last_val_scan_filter => IdType::LastValScan,
+    fn from_column(column: &str) -> Self {
+        match column {
+            "root_id" => IdType::Root,
+            "item_id" => IdType::Item,
+            "scan_id" => IdType::Scan,
+            "change_id" => IdType::Change,
+            "last_scan" => IdType::LastScan,
+            "last_hash_scan" => IdType::LastHashScan,
+            "last_val_scan" => IdType::LastValScan,
             _ => unreachable!(),
         }
     }
@@ -131,10 +131,12 @@ impl IdFilter {
     }
 
     pub fn build(id_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
-        let id_type = IdType::from_rule(id_filter_pair.as_rule());
+        let mut iter = id_filter_pair.into_inner();
+        let id_col = iter.next().unwrap();
+        let id_type = IdType::from_column(id_col.as_str());
         let mut id_filter = Self::new(id_type);
 
-        for id_spec in id_filter_pair.into_inner() {
+        for id_spec in iter {
             match id_spec.as_rule() {
                 Rule::id => {
                     let id: i64 = id_spec.as_str().parse().unwrap();
@@ -190,12 +192,12 @@ impl fmt::Display for DateType {
 }
 
 impl DateType {
-    fn from_rule(rule: Rule) -> Self {
-        match rule {
-            Rule::scan_time_filter => DateType::ScanTime,
-            Rule::mod_date_filter => DateType::ModDate,
-            Rule::mod_date_old_filter => DateType::ModDateOld,
-            Rule::mod_date_new_filter => DateType::ModDateNew,
+    fn from_column(column: &str) -> Self {
+        match column {
+            "scan_time" => DateType::ScanTime,
+            "mod date" => DateType::ModDate,
+            "mod_date_old" => DateType::ModDateOld,
+            "mod_date_new" => DateType::ModDateNew,
             _ => unreachable!(),
         }
     }
@@ -261,10 +263,12 @@ impl DateFilter {
     }
 
     pub fn build(date_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
-        let date_type = DateType::from_rule(date_filter_pair.as_rule());
+        let mut iter = date_filter_pair.into_inner();
+        let date_col = iter.next().unwrap();
+        let date_type = DateType::from_column(date_col.as_str());
         let mut date_filter = DateFilter::new(date_type);
 
-        for date_spec in date_filter_pair.into_inner() {
+        for date_spec in iter {
             match date_spec.as_rule() {
                 Rule::date => {
                     let date_start_str = date_spec.as_str();
@@ -308,16 +312,16 @@ enum StringFilterType {
 }
 
 impl StringFilterType {
-    fn from_rule(rule: Rule) -> Self {
-        match rule {
-            Rule::hashing_filter => Self::Hashing,
-            Rule::validating_filter => Self::Validating,
-            Rule::change_type_filter => Self::ChangeType,
-            Rule::val_filter => Self::Val,
-            Rule::meta_change_filter => Self::MetaChange,
-            Rule::val_old_filter => Self::ValOld,
-            Rule::val_new_filter => Self::ValNew,
-            Rule::item_type_filter => Self::ItemType,
+    fn from_column(column: &str) -> Self {
+        match column {
+            "hashing" => Self::Hashing,
+            "validating" => Self::Validating,
+            "change_type" => Self::ChangeType,
+            "val" => Self::Val,
+            "meta_change" => Self::MetaChange,
+            "val_old" => Self::ValOld,
+            "val_new" => Self::ValNew,
+            "item_type" => Self::ItemType,
             _ => unreachable!(),
         }
     }
@@ -398,10 +402,12 @@ impl StringFilter {
     }
 
     pub fn build(string_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
-        let filter_type = StringFilterType::from_rule(string_filter_pair.as_rule());
-        let mut string_filter = StringFilter::new(filter_type);
+        let mut iter = string_filter_pair.into_inner();
+        let string_col = iter.next().unwrap().as_str();
+        let string_type = StringFilterType::from_column(string_col);
+        let mut string_filter = Self::new(string_type);
 
-        for str_val_pair in string_filter_pair.into_inner() {
+        for str_val_pair in iter {
             let val_str = str_val_pair.as_str();
             let val_str_upper = val_str.to_ascii_uppercase();
 
@@ -489,10 +495,10 @@ pub enum PathType {
 }
 
 impl PathType {
-    fn from_rule(rule: Rule) -> Self {
-        match rule {
-            Rule::root_path_filter => PathType::RootPath,
-            Rule::item_path_filter => PathType::ItemPath,
+    fn from_column(column: &str) -> Self {
+        match column {
+            "root_path" => PathType::RootPath,
+            "item_path" => PathType::ItemPath,
             _ => unreachable!(),
         }
     }
@@ -533,17 +539,20 @@ impl Filter for PathFilter {
 }
 
 impl PathFilter {
-    fn new(rule: Rule) -> Self {
+    fn new(path_type: PathType) -> Self {
         PathFilter {
-            path_type: PathType::from_rule(rule),
+            path_type,
             path_strs: Vec::new(),
         }
     }
 
     pub fn build(path_filter_pair: Pair<Rule>) -> Result<PathFilter, FsPulseError> {
-        let mut path_filter = Self::new(path_filter_pair.as_rule());
+        let mut iter = path_filter_pair.into_inner();
+        let path_col = iter.next().unwrap().as_str();
+        let path_type = PathType::from_column(path_col);
+        let mut path_filter = PathFilter::new(path_type);
 
-        for path_spec in path_filter_pair.into_inner() {
+        for path_spec in iter {
             path_filter.path_strs.push(path_spec.as_str().to_string());
         }
 

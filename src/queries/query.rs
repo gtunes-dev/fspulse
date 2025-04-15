@@ -1,5 +1,5 @@
 use log::{error, info};
-use pest::{iterators::Pair, Parser};
+use pest::{iterators::Pairs, Parser};
 use rusqlite::{Row, Statement, ToSql};
 use tabled::{
     settings::{object::Rows, Alignment, Style},
@@ -25,10 +25,22 @@ pub enum QueryType {
     Changes,
 }
 
+impl QueryType {
+    fn from_str(query_type: &str) -> Self {
+        match query_type {
+            "roots" => QueryType::Roots,
+            "scans" => QueryType::Scans,
+            "items" => QueryType::Items,
+            "changes" => QueryType::Changes,
+            _ => unreachable!(),
+        }
+    }
+}
+
 pub struct Query;
 
 #[derive(Debug)]
-struct DomainQuery {
+pub struct DomainQuery {
     query_type: QueryType,
 
     col_set: ColumnSet,
@@ -374,61 +386,40 @@ impl Query {
         info!("Parsed query: {}", parsed_query);
 
         let query_pair = parsed_query.next().unwrap();
-        let mut query_children = query_pair.into_inner();
+        let mut query_iter = query_pair.into_inner();
 
-        let domain_query = query_children.next().unwrap();
-        let query_type = match domain_query.as_rule() {
-            Rule::roots_query => QueryType::Roots,
-            Rule::scans_query => QueryType::Scans,
-            Rule::items_query => QueryType::Items,
-            Rule::changes_query => QueryType::Changes,
-            _ => {
-                return Err(FsPulseError::Error(format!(
-                    "Unsupported query type:\n{}",
-                    query_str
-                )));
-            }
-        };
+        let query_type_pair = query_iter.next().unwrap();
+        let query_type = QueryType::from_str(query_type_pair.as_str());
+        let mut query = DomainQuery::new(query_type);
 
-        let query = Query::build(query_type, domain_query)?;
+        Query::build(&mut query, &mut query_iter)?;
         query.execute(db, query_type, query_str)?;
 
         Ok(())
     }
 
-    fn build(query_type: QueryType, domain_query: Pair<Rule>) -> Result<DomainQuery, FsPulseError> {
-        let mut query = DomainQuery::new(query_type);
-
-        // iterate over the children of changes_query
-        for token in domain_query.into_inner() {
+    fn build(query: &mut DomainQuery, query_iter: &mut Pairs<Rule>) -> Result<(), FsPulseError> {
+        for token in query_iter {
+            println!("{:?}", token.as_rule());
             match token.as_rule() {
-                Rule::root_id_filter
-                | Rule::scan_id_filter
-                | Rule::item_id_filter
-                | Rule::change_id_filter
-                | Rule::last_scan_filter
-                | Rule::last_hash_scan_filter
-                | Rule::last_val_scan_filter => {
+                Rule::id_filter => {
                     let id_filter = IdFilter::build(token)?;
                     query.add_filter(id_filter);
                 }
-                Rule::scan_time_filter
-                | Rule::mod_date_filter
-                | Rule::mod_date_old_filter
-                | Rule::mod_date_new_filter => {
+                Rule::date_filter => {
                     let date_filter = DateFilter::build(token)?;
                     query.add_filter(date_filter);
                 }
-                Rule::hashing_filter
-                | Rule::validating_filter
-                | Rule::change_type_filter
+                Rule::bool_filter
                 | Rule::val_filter
-                | Rule::meta_change_filter
-                | Rule::val_old_filter
-                | Rule::val_new_filter
-                | Rule::item_type_filter => {
+                | Rule::item_type_filter
+                | Rule::change_type_filter => {
                     let string_filter = StringFilter::build(token)?;
                     query.add_filter(string_filter);
+                }
+                Rule::path_filter => {
+                    let path_filter = PathFilter::build(token)?;
+                    query.add_filter(path_filter);
                 }
                 Rule::order_list => {
                     let order = Order::build(token, query.col_set)?;
@@ -437,14 +428,11 @@ impl Query {
                 Rule::limit_val => {
                     query.limit = Some(token.as_str().parse().unwrap());
                 }
-                Rule::root_path_filter | Rule::item_path_filter => {
-                    let path_filter = PathFilter::build(token)?;
-                    query.add_filter(path_filter);
-                }
+
                 _ => {}
             }
         }
 
-        Ok(query)
+        Ok(())
     }
 }
