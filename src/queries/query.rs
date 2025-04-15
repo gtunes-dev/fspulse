@@ -432,16 +432,20 @@ impl Query {
                 Rule::date_filter => {
                     DateFilter::add_to_query(token, query)?;
                 }
-                Rule::bool_filter
-                | Rule::val_filter
-                | Rule::item_type_filter
-                | Rule::change_type_filter => {
-                    let string_filter = StringFilter::build(token)?;
-                    query.add_filter(string_filter);
+                Rule::bool_filter => {
+                    StringFilter::add_bool_filter_to_query(token, query)?;
+                }
+                Rule::val_filter => {
+                    StringFilter::add_val_filter_to_query(token, query)?;
+                }
+                Rule::item_type_filter => {
+                    StringFilter::add_item_type_filter_to_query(token, query)?;
+                }
+                Rule::change_type_filter => {
+                    StringFilter::add_change_type_filter_to_query(token, query)?;
                 }
                 Rule::path_filter => {
-                    let path_filter = PathFilter::build(token)?;
-                    query.add_filter(path_filter);
+                    PathFilter::add_to_query(token, query)?;
                 }
                 Rule::order_list => {
                     let order = Order::build(token, query.col_set)?;

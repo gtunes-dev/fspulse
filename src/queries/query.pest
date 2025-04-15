@@ -95,7 +95,7 @@ val_list        = _{ val ~ (WS* ~ COMMA ~ WS* ~ val)* }
 val             =  { null | "VALID" | "valid" | ^"V" | "INVALID" | "invalid" | ^"I" | "NO_VALIDATOR" | "no_validator" | ^"N" | "UNKNOWN" | "unknown" | ^"U" }
 
 // Item Type Columns
-item_type_col = _{ "item_type" }
+item_type_col = { "item_type" }
 
 item_type_show         =  { item_type_col ~ item_type_modifier? }
 item_type_modifier     = _{ WS* ~ "@" ~ WS* ~ item_type_display_mode }
@@ -107,7 +107,7 @@ item_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ item_type ~ WS* ~ RPAREN
 item_type             =  { "FILE" | "file" | ^"F" | "DIRECTORY" | "directory" | "DIR" | "dir" | ^"D" }
 
 // Change Type Columns
-change_type_col = _{ "change_type" }
+change_type_col = { "change_type" }
 
 change_type_show         =  { change_type_col ~ change_type_modifier? }
 change_type_modifier     = _{ WS* ~ "@" ~ WS* ~ change_type_display_mode }

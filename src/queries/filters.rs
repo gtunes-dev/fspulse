@@ -4,7 +4,12 @@ use phf_macros::phf_ordered_map;
 use rusqlite::ToSql;
 use std::fmt::Debug;
 
-use super::{columns::StringMap, query::{DomainQuery, QueryType}, Rule};
+type OrderedStrMap = phf::OrderedMap<&'static str, &'static str>;
+
+use super::{
+    query::{DomainQuery, QueryType},
+    Rule,
+};
 
 /// Defines the behavior of a filter.
 pub trait Filter: Debug {
@@ -40,7 +45,7 @@ impl Filter for IdFilter {
         if self.id_specs.len() > 1 {
             pred_str.push('(');
         }
-        
+
         for id_spec in &self.id_specs {
             match first {
                 true => first = false,
@@ -57,9 +62,7 @@ impl Filter for IdFilter {
                     pred_vec.push(Box::new(*id_start));
                     pred_vec.push(Box::new(*id_end));
                 }
-                IdSpec::Null => {
-                    pred_str.push_str(&format!("({} IS NULL)", &self.id_col_db))
-                }
+                IdSpec::Null => pred_str.push_str(&format!("({} IS NULL)", &self.id_col_db)),
             }
         }
 
@@ -79,14 +82,22 @@ impl IdFilter {
         }
     }
 
-    pub fn add_to_query(id_filter_pair: Pair<Rule>, query: &mut DomainQuery) -> Result<(), FsPulseError> {
+    pub fn add_to_query(
+        id_filter_pair: Pair<Rule>,
+        query: &mut DomainQuery,
+    ) -> Result<(), FsPulseError> {
         let mut iter = id_filter_pair.into_inner();
         let id_col_pair = iter.next().unwrap();
         let id_col = id_col_pair.as_str().to_owned();
 
         let mut id_filter = match query.get_column_db(&id_col) {
-            Some(id_col_db)=> Self::new(id_col_db),
-            None => return Err(FsPulseError::CustomParsingError(format!("Column not found: '{}'", id_col)))
+            Some(id_col_db) => Self::new(id_col_db),
+            None => {
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Column not found: '{}'",
+                    id_col
+                )))
+            }
         };
 
         for id_spec in iter {
@@ -104,9 +115,7 @@ impl IdFilter {
                         .id_specs
                         .push(IdSpec::IdRange { id_start, id_end })
                 }
-                Rule::null => {
-                    id_filter.id_specs.push(IdSpec::Null)
-                }
+                Rule::null => id_filter.id_specs.push(IdSpec::Null),
                 _ => unreachable!(),
             }
         }
@@ -154,15 +163,16 @@ impl Filter for DateFilter {
             // idea of join columns
 
             match date_spec {
-                DateSpec::DateRange { date_start, date_end } =>  {
+                DateSpec::DateRange {
+                    date_start,
+                    date_end,
+                } => {
                     pred_str.push_str(&format!("({} BETWEEN ? AND ?)", &self.date_col_db));
                     pred_vec.push(Box::new(*date_start));
                     pred_vec.push(Box::new(*date_end));
                 }
-                DateSpec::Null => {
-                    pred_str.push_str(&format!("({} IS NULL)", &self.date_col_db))
-                }
-            }  
+                DateSpec::Null => pred_str.push_str(&format!("({} IS NULL)", &self.date_col_db)),
+            }
         }
 
         if self.date_specs.len() > 1 {
@@ -181,14 +191,22 @@ impl DateFilter {
         }
     }
 
-    pub fn add_to_query(date_filter_pair: Pair<Rule>, query: &mut DomainQuery) -> Result<(), FsPulseError> {
+    pub fn add_to_query(
+        date_filter_pair: Pair<Rule>,
+        query: &mut DomainQuery,
+    ) -> Result<(), FsPulseError> {
         let mut iter = date_filter_pair.into_inner();
         let date_col_pair = iter.next().unwrap();
         let date_col = date_col_pair.as_str().to_owned();
 
         let mut date_filter = match query.get_column_db(&date_col) {
             Some(date_col_db) => Self::new(date_col_db),
-            None => return Err(FsPulseError::CustomParsingError(format!("Column not found: '{}'", date_col)))
+            None => {
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Column not found: '{}'",
+                    date_col
+                )))
+            }
         };
 
         for date_spec in iter {
@@ -196,7 +214,10 @@ impl DateFilter {
                 Rule::date => {
                     let date_start_str = date_spec.as_str();
                     let (date_start, date_end) = Utils::single_date_bounds(date_start_str)?;
-                    date_filter.date_specs.push(DateSpec::DateRange { date_start, date_end })
+                    date_filter.date_specs.push(DateSpec::DateRange {
+                        date_start,
+                        date_end,
+                    })
                 }
                 Rule::date_range => {
                     let mut range_inner = date_spec.into_inner();
@@ -204,7 +225,10 @@ impl DateFilter {
                     let date_end_str = range_inner.next().unwrap().as_str();
                     let (date_start, date_end) =
                         Utils::range_date_bounds(date_start_str, date_end_str)?;
-                    date_filter.date_specs.push(DateSpec::DateRange { date_start, date_end });
+                    date_filter.date_specs.push(DateSpec::DateRange {
+                        date_start,
+                        date_end,
+                    });
                 }
                 Rule::null => {
                     date_filter.date_specs.push(DateSpec::Null);
@@ -219,41 +243,9 @@ impl DateFilter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum StringFilterType {
-    Hashing,
-    Validating,
-    ChangeType,
-    Val,
-    MetaChange,
-    ValOld,
-    ValNew,
-    ItemType,
-    //HashChange,
-    //ValChange
-}
-
-impl StringFilterType {
-    fn from_column(column: &str) -> Self {
-        match column {
-            "hashing" => Self::Hashing,
-            "validating" => Self::Validating,
-            "change_type" => Self::ChangeType,
-            "val" => Self::Val,
-            "meta_change" => Self::MetaChange,
-            "val_old" => Self::ValOld,
-            "val_new" => Self::ValNew,
-            "item_type" => Self::ItemType,
-            _ => unreachable!(),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct StringFilter {
-    filter_type: StringFilterType,
-    str_map: StringMap,
-
+    str_col_db: &'static str,
     str_values: Vec<String>,
 }
 
@@ -266,17 +258,6 @@ impl Filter for StringFilter {
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first: bool = true;
 
-        let col_name = match self.filter_type {
-            StringFilterType::Hashing => "scans.hashing",
-            StringFilterType::Validating => "scans.validating",
-            StringFilterType::ChangeType => "changes.change_type",
-            StringFilterType::Val => "items.val",
-            StringFilterType::MetaChange => "changes.meta_change",
-            StringFilterType::ValOld => "changes.val_old",
-            StringFilterType::ValNew => "changes.val_new",
-            StringFilterType::ItemType => "items.item_type",
-        };
-
         if self.str_values.iter().len() > 1 {
             pred_str.push('(');
         }
@@ -288,9 +269,9 @@ impl Filter for StringFilter {
             }
 
             if str_val == "NULL" {
-                pred_str.push_str(&format!("({} IS NULL)", col_name));
+                pred_str.push_str(&format!("({} IS NULL)", &self.str_col_db));
             } else {
-                pred_str.push_str(&format!("({} = ?)", col_name));
+                pred_str.push_str(&format!("({} = ?)", &self.str_col_db));
                 pred_vec.push(Box::new(str_val.to_owned()));
             }
         }
@@ -304,38 +285,39 @@ impl Filter for StringFilter {
 }
 
 impl StringFilter {
-    fn new(filter_type: StringFilterType) -> Self {
-        let str_map = match filter_type {
-            StringFilterType::Hashing => &Self::BOOL_VALUES,
-            StringFilterType::Validating => &Self::BOOL_VALUES,
-            StringFilterType::ChangeType => &Self::CHANGE_TYPE_VALUES,
-            StringFilterType::Val => &Self::VAL_VALUES,
-            StringFilterType::MetaChange => &Self::BOOL_NULLABLE_VALUES,
-            StringFilterType::ValOld => &Self::VAL_NULLABLE_VALUES,
-            StringFilterType::ValNew => &Self::VAL_NULLABLE_VALUES,
-            StringFilterType::ItemType => &Self::ITEM_TYPE_VALUES,
-        };
-
+    fn new(str_col_db: &'static str) -> Self {
         StringFilter {
-            filter_type,
-            str_map: StringMap::new(str_map),
+            str_col_db,
             str_values: Vec::new(),
         }
     }
 
-    pub fn build(string_filter_pair: Pair<Rule>) -> Result<Self, FsPulseError> {
+    fn add_str_filter_to_query(
+        string_filter_pair: Pair<Rule>,
+        str_map: OrderedStrMap,
+        query: &mut DomainQuery,
+    ) -> Result<(), FsPulseError> {
         let mut iter = string_filter_pair.into_inner();
-        let string_col = iter.next().unwrap().as_str();
-        let string_type = StringFilterType::from_column(string_col);
-        let mut string_filter = Self::new(string_type);
+        let str_col_pair = iter.next().unwrap();
+        let str_col = str_col_pair.as_str().to_owned();
+
+        let mut str_filter = match query.get_column_db(&str_col) {
+            Some(str_col_db) => Self::new(str_col_db),
+            None => {
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Column not found: '{}'",
+                    str_col
+                )))
+            }
+        };
 
         for str_val_pair in iter {
             let val_str = str_val_pair.as_str();
             let val_str_upper = val_str.to_ascii_uppercase();
 
-            let mapped_str = string_filter.str_map.get(&val_str_upper);
+            let mapped_str = str_map.get(&val_str_upper).copied();
             match mapped_str {
-                Some(s) => string_filter.str_values.push(s.to_owned()),
+                Some(s) => str_filter.str_values.push(s.to_owned()),
                 None => {
                     return Err(FsPulseError::CustomParsingError(format!(
                         "Invalid filter value: '{}'",
@@ -344,17 +326,40 @@ impl StringFilter {
                 }
             }
         }
-        Ok(string_filter)
+        query.add_filter(str_filter);
+
+        Ok(())
     }
 
-    pub const BOOL_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
-        "TRUE" => "1",
-        "T" => "1",
-        "FALSE" => "0",
-        "F" => "0",
-    };
+    pub fn add_bool_filter_to_query(
+        bool_filter_pair: Pair<Rule>,
+        query: &mut DomainQuery,
+    ) -> Result<(), FsPulseError> {
+        Self::add_str_filter_to_query(bool_filter_pair, Self::BOOL_VALUES, query)
+    }
 
-    const BOOL_NULLABLE_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+    pub fn add_change_type_filter_to_query(
+        change_type_filter_pair: Pair<Rule>,
+        query: &mut DomainQuery,
+    ) -> Result<(), FsPulseError> {
+        Self::add_str_filter_to_query(change_type_filter_pair, Self::CHANGE_TYPE_VALUES, query)
+    }
+
+    pub fn add_val_filter_to_query(
+        val_filter_pair: Pair<Rule>,
+        query: &mut DomainQuery,
+    ) -> Result<(), FsPulseError> {
+        Self::add_str_filter_to_query(val_filter_pair, Self::VAL_VALUES, query)
+    }
+
+    pub fn add_item_type_filter_to_query(
+        item_type_filter_pair: Pair<Rule>,
+        query: &mut DomainQuery,
+    ) -> Result<(), FsPulseError> {
+        Self::add_str_filter_to_query(item_type_filter_pair, Self::ITEM_TYPE_VALUES, query)
+    }
+
+    const BOOL_VALUES: OrderedStrMap = phf_ordered_map! {
         "TRUE" => "1",
         "T" => "1",
         "FALSE" => "0",
@@ -363,7 +368,7 @@ impl StringFilter {
         "-" => "NULL",
     };
 
-    const CHANGE_TYPE_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+    const CHANGE_TYPE_VALUES: OrderedStrMap = phf_ordered_map! {
         "ADD" => "A",
         "A" => "A",
         "DELETE" => "D",
@@ -372,18 +377,7 @@ impl StringFilter {
         "M" => "M",
     };
 
-    const VAL_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
-        "VALID" => "V",
-        "V" => "V",
-        "INVALID" => "I",
-        "I" => "I",
-        "NO_VALIDATOR" => "N",
-        "N" => "N",
-        "UNKNOWN" => "U",
-        "U" => "U",
-    };
-
-    const VAL_NULLABLE_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+    const VAL_VALUES: OrderedStrMap = phf_ordered_map! {
         "VALID" => "V",
         "V" => "V",
         "INVALID" => "I",
@@ -396,7 +390,7 @@ impl StringFilter {
         "-" => "NULL",
     };
 
-    const ITEM_TYPE_VALUES: phf::OrderedMap<&'static str, &'static str> = phf_ordered_map! {
+    const ITEM_TYPE_VALUES: OrderedStrMap = phf_ordered_map! {
         "FILE" => "F",
         "F" => "F",
         "DIRECTORY" => "D",
@@ -406,30 +400,14 @@ impl StringFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PathFilter {
-    path_type: PathType,
+    path_col_db: &'static str,
     path_strs: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PathType {
-    RootPath,
-    ItemPath,
-}
-
-impl PathType {
-    fn from_column(column: &str) -> Self {
-        match column {
-            "root_path" => PathType::RootPath,
-            "item_path" => PathType::ItemPath,
-            _ => unreachable!(),
-        }
-    }
 }
 
 impl Filter for PathFilter {
     fn to_predicate_parts(
         &self,
-        query_type: QueryType,
+        _query_type: QueryType,
     ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = " (".to_string();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
@@ -441,14 +419,7 @@ impl Filter for PathFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            let path_col = match (query_type, &self.path_type) {
-                (QueryType::Roots, PathType::RootPath) => "roots.root_path",
-                (QueryType::Items, PathType::ItemPath) => "items.item_path",
-                (QueryType::Changes, PathType::ItemPath) => "items.item_path",
-                _ => unreachable!(),
-            };
-
-            pred_str.push_str(&format!("({path_col} LIKE ?)"));
+            pred_str.push_str(&format!("({} LIKE ?)", &self.path_col_db));
 
             let like_str = format!("%{path_str}%");
             pred_vec.push(Box::new(like_str));
@@ -461,23 +432,36 @@ impl Filter for PathFilter {
 }
 
 impl PathFilter {
-    fn new(path_type: PathType) -> Self {
+    fn new(path_col_db: &'static str) -> Self {
         PathFilter {
-            path_type,
+            path_col_db,
             path_strs: Vec::new(),
         }
     }
 
-    pub fn build(path_filter_pair: Pair<Rule>) -> Result<PathFilter, FsPulseError> {
+    pub fn add_to_query(
+        path_filter_pair: Pair<Rule>,
+        query: &mut DomainQuery,
+    ) -> Result<(), FsPulseError> {
         let mut iter = path_filter_pair.into_inner();
         let path_col = iter.next().unwrap().as_str();
-        let path_type = PathType::from_column(path_col);
-        let mut path_filter = PathFilter::new(path_type);
+
+        let mut path_filter = match query.get_column_db(path_col) {
+            Some(path_col_db) => Self::new(path_col_db),
+            None => {
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Column not found: '{}'",
+                    path_col
+                )))
+            }
+        };
 
         for path_spec in iter {
             path_filter.path_strs.push(path_spec.as_str().to_string());
         }
 
-        Ok(path_filter)
+        query.add_filter(path_filter);
+
+        Ok(())
     }
 }
