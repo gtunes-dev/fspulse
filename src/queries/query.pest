@@ -10,18 +10,18 @@ query_type = { "roots" | "scans" | "items" | "changes" }
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter       = _{ (id_filter | date_filter | bool_filter | path_filter | val_filter | item_type_filter | change_type_filter) }
+filter       = _{ id_filter | date_filter | bool_filter | path_filter | val_filter | item_type_filter | change_type_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ (id_show | date_show | bool_show | path_show | val_show | item_type_show | change_type_show) }
+show_spec   = _{ id_show | date_show | bool_show | path_show | val_show | item_type_show | change_type_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { (id_col | date_col | bool_col | path_col | val_col | item_type_col | change_type_col) }
+order_column =  { id_col | date_col | bool_col | path_col | val_col | item_type_col | change_type_col }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause
@@ -30,7 +30,7 @@ limit_text   = _{ ^"limit" }
 limit_val    =  { ASCII_DIGIT+ }
 
 // Identity Columns
-id_col = { ("root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan" | "last_val_scan") }
+id_col = { "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan" | "last_val_scan" }
 
 id_show             =  { id_col ~ id_display_modifier? }
 id_display_modifier = _{ WS* ~ "@" ~ WS* ~ id_display_mode }
@@ -48,7 +48,7 @@ date_col = { "scan_time" | "mod_date" | "mod_date_old" | "mod_date_new" }
 
 date_show             =  { date_col ~ date_display_modifier? }
 date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }
-date_display_mode     =  { "full" | "short" | nodisplay }
+date_display_mode     =  { full | short | nodisplay }
 
 date_filter      =  { date_col ~ date_filter_body }
 date_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ date_values ~ WS* ~ RPAREN }
@@ -62,7 +62,7 @@ bool_col = { "hashing" | "validating" | "meta_change" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }
-bool_display_mode     =  { ("full" | "short" | nodisplay) }
+bool_display_mode     =  { full | short | nodisplay }
 
 bool_filter      =  { bool_col ~ bool_filter_body }
 bool_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_list ~ WS* ~ RPAREN }
@@ -74,7 +74,7 @@ path_col = { "item_path" | "root_path" }
 
 path_show             =  { path_col ~ path_display_modifier? }
 path_display_modifier = _{ WS* ~ "@" ~ path_display_mode }
-path_display_mode     =  { "full" | "relative" | "shortened" | "name" | nodisplay }
+path_display_mode     =  { full | relative | short | name | nodisplay }
 
 path_filter      =  { path_col ~ path_filter_body }
 path_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ path_list ~ WS* ~ RPAREN }
@@ -87,7 +87,7 @@ val_col = { "val_old" | "val_new" | "val" }
 
 val_show             =  { val_col ~ val_display_modifier? }
 val_display_modifier = _{ WS* ~ "@" ~ WS* ~ val_display_mode }
-val_display_mode     =  { "full" | "short" | nodisplay }
+val_display_mode     =  { full | short | nodisplay }
 
 val_filter      =  { val_col ~ val_filter_body }
 val_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_list ~ WS* ~ RPAREN }
@@ -99,7 +99,7 @@ item_type_col = { "item_type" }
 
 item_type_show         =  { item_type_col ~ item_type_modifier? }
 item_type_modifier     = _{ WS* ~ "@" ~ WS* ~ item_type_display_mode }
-item_type_display_mode =  { "full" | "short" | nodisplay }
+item_type_display_mode =  { full | short | nodisplay }
 
 item_type_filter = { item_type_col ~ item_type_filter_body }
 
@@ -111,14 +111,20 @@ change_type_col = { "change_type" }
 
 change_type_show         =  { change_type_col ~ change_type_modifier? }
 change_type_modifier     = _{ WS* ~ "@" ~ WS* ~ change_type_display_mode }
-change_type_display_mode =  { "full" | "short" | nodisplay }
+change_type_display_mode =  { full | short | nodisplay }
 
 change_type_filter      =  { change_type_col ~ change_type_filter_body }
 change_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_list ~ WS* ~ RPAREN }
 change_list             = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
 change                  =  { null | "ADD" | "add" | ^"A" | "DELETE" | "delete" | ^"D" | "MODIFY" | "modify" | "M" }
 
-null      =  { "-" | "NULL" | "null" }
+null = { "-" | "NULL" | "null" }
+
+// Format specifiers
+short     = _{ "SHORT" | "short" }
+full      = _{ "FULL" | "full" }
+name      = _{ "NAME" | "name" }
+relative  = _{ "RELATIVE" | "relative" }
 nodisplay = _{ "NODISPLAY" | "nodisplay" }
 
 // Basic tokens - all silent

@@ -40,6 +40,19 @@ impl ValidationState {
         }
     }
 
+    pub fn short_str_to_full(s: &str) -> Result<&str, FsPulseError> {
+        match s {
+            "U" => Ok("Unknown"),
+            "V" => Ok("Valid"),
+            "I" => Ok("Invalid"),
+            "N" => Ok("No Validator"),
+            _ => Err(FsPulseError::Error(format!(
+                "Invalid validation state: '{}'",
+                s
+            ))),
+        }
+    }
+
     /// Converts from a string representation from the database,
     /// defaulting to `Unknown` for invalid or empty values.
     pub fn from_string(value: &str) -> Self {

@@ -2,22 +2,26 @@ use log::{error, info};
 use pest::{iterators::Pairs, Parser};
 use rusqlite::{Row, Statement, ToSql};
 use tabled::{
+    builder::Builder,
     settings::{object::Rows, Alignment, Style},
     Table, Tabled,
 };
-//use tablestream::{Column, Stream};
-
-use crate::utils::Utils;
-use crate::{database::Database, error::FsPulseError};
 
 use super::{
-    columns::ColumnSet,
-    filters::{DateFilter, Filter, IdFilter, PathFilter, StringFilter},
+    columns::{ColSet, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS},
+    show::{ScansQueryRow, Show},
+};
+//use tablestream::{Column, Stream};
+
+use crate::{database::Database, error::FsPulseError, utils::Utils};
+
+use super::{
+    filter::{DateFilter, Filter, IdFilter, PathFilter, StringFilter},
     order::Order,
     QueryParser, Rule,
 };
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum QueryType {
     Roots,
     Scans,
@@ -41,11 +45,11 @@ pub struct Query;
 
 #[derive(Debug)]
 pub struct DomainQuery {
-    query_type: QueryType,
-
-    col_set: ColumnSet,
+    pub query_type: QueryType,
+    pub col_set: ColSet,
 
     filters: Vec<Box<dyn Filter>>,
+    show: Show,
     order: Option<Order>,
     limit: Option<i64>,
 }
@@ -65,22 +69,24 @@ impl DomainQuery {
         DomainQuery {
             query_type,
 
-            col_set: ColumnSet::for_query_type(query_type),
+            col_set: Self::col_set_for_query_type(query_type),
 
             filters: Vec::new(),
+            show: Show::new(),
             order: None,
             limit: None,
         }
     }
 
-    /*
-    pub fn has_column(&self, column_name: &str) -> bool {
-        self.col_set.contains_column(column_name)
-    }
-    */
+    fn col_set_for_query_type(query_type: QueryType) -> ColSet {
+        let query_cols = match query_type {
+            QueryType::Roots => &ROOTS_QUERY_COLS,
+            QueryType::Items => &ITEMS_QUERY_COLS,
+            QueryType::Scans => &SCANS_QUERY_COLS,
+            QueryType::Changes => &CHANGES_QUERY_COLS,
+        };
 
-    pub fn get_column_db(&self, column_name: &str) -> Option<&'static str> {
-        self.col_set.get_column_db(column_name)
+        ColSet::new(query_cols)
     }
 
     pub fn add_filter<F>(&mut self, filter: F)
@@ -166,6 +172,7 @@ impl DomainQuery {
         &self,
         sql_statment: &mut Statement,
         sql_params: &[&dyn ToSql],
+        builder: &mut Builder,
     ) -> Result<Table, FsPulseError> {
         let rows = sql_statment.query_map(sql_params, ChangesQueryRow::from_row)?;
 
@@ -173,11 +180,13 @@ impl DomainQuery {
 
         for row in rows {
             let changes_query_row: ChangesQueryRow = row?;
+            self.show.append_changes_row(&changes_query_row, builder)?;
+
             changes_rows.push(changes_query_row);
+
             //table.row(changes_query_row)?;
             //println!("id: {}, item_id: {}", changes_query_row.id, changes_query_row.item_id);
         }
-
         let mut table = Table::new(&changes_rows);
         table.with(Style::modern());
         table.modify(Rows::first(), Alignment::center());
@@ -228,14 +237,34 @@ impl DomainQuery {
 
         let mut sql_statment = db.conn().prepare(&sql)?;
 
+        // $TODO: shouldn't have to pass the query type here - can be stored in the show at
+        // creation or we can use some other patterh
+        let mut builder = self.show.as_builder();
+
         let table = match self.query_type {
             QueryType::Roots => self.execute_roots(&mut sql_statment, &sql_params)?,
             QueryType::Scans => self.execute_scans(&mut sql_statment, &sql_params)?,
             QueryType::Items => self.execute_items(&mut sql_statment, &sql_params)?,
-            QueryType::Changes => self.execute_changes(&mut sql_statment, &sql_params)?,
+            QueryType::Changes => {
+                self.execute_changes(&mut sql_statment, &sql_params, &mut builder)?
+            }
         };
 
-        println!("{table}");
+        let qt = self.query_type;
+        if qt == QueryType::Changes {
+            let mut little_table = builder.build();
+            self.show.set_column_aligments(&mut little_table);
+            little_table.with(Style::modern());
+            little_table.modify(Rows::first(), Alignment::center());
+
+            //little_table.modify(Columns::single(0), Alignment::right());
+            println!("{little_table}");
+
+            println!();
+            println!();
+        } else {
+            println!("{table}");
+        }
 
         Ok(())
     }
@@ -252,36 +281,6 @@ impl RootsQueryRow {
         Ok(RootsQueryRow {
             root_id: row.get(0)?,
             root_path: row.get(1)?,
-        })
-    }
-}
-
-#[derive(Tabled)]
-struct ScansQueryRow {
-    scan_id: i64,
-    root_id: i64,
-    state: i64,
-    #[tabled(display = "Utils::display_bool")]
-    hashing: bool,
-    #[tabled(display = "Utils::display_bool")]
-    validating: bool,
-    #[tabled(display = "Utils::display_db_time")]
-    scan_time: i64,
-    file_count: i64,
-    folder_count: i64,
-}
-
-impl ScansQueryRow {
-    fn from_row(row: &Row) -> rusqlite::Result<Self> {
-        Ok(ScansQueryRow {
-            scan_id: row.get(0)?,
-            root_id: row.get(1)?,
-            state: row.get(2)?,
-            hashing: row.get(3)?,
-            validating: row.get(4)?,
-            scan_time: row.get(5)?,
-            file_count: row.get(6)?,
-            folder_count: row.get(7)?,
         })
     }
 }
@@ -329,31 +328,31 @@ impl ItemsQueryRow {
 }
 
 #[derive(Tabled)]
-struct ChangesQueryRow {
+pub struct ChangesQueryRow {
     // changes properties
-    change_id: i64,
-    root_id: i64,
-    scan_id: i64,
-    item_id: i64,
-    change_type: String,
+    pub change_id: i64,
+    pub root_id: i64,
+    pub scan_id: i64,
+    pub item_id: i64,
+    pub change_type: String,
     #[tabled(display = "Utils::display_opt_bool")]
-    meta_change: Option<bool>,
+    pub meta_change: Option<bool>,
     #[tabled(display = "Utils::display_opt_db_time")]
-    mod_date_old: Option<i64>,
+    pub mod_date_old: Option<i64>,
     #[tabled(display = "Utils::display_opt_db_time")]
-    mod_date_new: Option<i64>,
+    pub mod_date_new: Option<i64>,
     #[tabled(display = "Utils::display_opt_bool")]
-    hash_change: Option<bool>,
+    pub hash_change: Option<bool>,
     #[tabled(display = "Utils::display_opt_bool")]
-    val_change: Option<bool>,
+    pub val_change: Option<bool>,
     #[tabled(display = "Utils::display_opt_str")]
-    val_old: Option<String>,
+    pub val_old: Option<String>,
     #[tabled(display = "Utils::display_opt_str")]
-    val_new: Option<String>,
+    pub val_new: Option<String>,
 
     // items properties
     #[tabled(display = "Utils::display_short_path")]
-    item_path: String,
+    pub item_path: String,
 }
 
 impl ChangesQueryRow {
@@ -447,14 +446,16 @@ impl Query {
                 Rule::path_filter => {
                     PathFilter::add_to_query(token, query)?;
                 }
+                Rule::show_list => {
+                    query.show.build_from_pest_pair(token, query.col_set)?;
+                }
                 Rule::order_list => {
-                    let order = Order::build(token, query.col_set)?;
+                    let order = Order::from_pest_pair(token, query.col_set)?;
                     query.order = Some(order);
                 }
                 Rule::limit_val => {
                     query.limit = Some(token.as_str().parse().unwrap());
                 }
-
                 _ => {}
             }
         }

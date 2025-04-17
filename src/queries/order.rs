@@ -2,7 +2,7 @@ use pest::iterators::Pair;
 
 use crate::error::FsPulseError;
 
-use super::{columns::ColumnSet, Rule};
+use super::{columns::ColSet, Rule};
 
 #[derive(Debug)]
 struct OrderSpec {
@@ -12,12 +12,12 @@ struct OrderSpec {
 
 #[derive(Debug)]
 pub struct Order {
-    col_set: ColumnSet,
+    col_set: ColSet,
     order_specs: Vec<OrderSpec>,
 }
 
 impl Order {
-    fn new(col_set: ColumnSet) -> Self {
+    fn new(col_set: ColSet) -> Self {
         Order {
             col_set,
             order_specs: Vec::new(),
@@ -29,19 +29,16 @@ impl Order {
         col_display_name: &str,
         direction: Option<String>,
     ) -> Result<(), FsPulseError> {
-        let db_col_name = self
-            .col_set
-            .display_to_db(col_display_name)
-            .ok_or_else(|| {
-                FsPulseError::Error(format!(
-                    "Invalid column '{}' in order clause",
-                    col_display_name
-                ))
-            })?;
+        let db_col_name = self.col_set.get_name_db(col_display_name).ok_or_else(|| {
+            FsPulseError::CustomParsingError(format!(
+                "Invalid column '{}' in order clause",
+                col_display_name
+            ))
+        })?;
 
         for order_spec in &self.order_specs {
             if order_spec.column == db_col_name {
-                return Err(FsPulseError::Error(format!(
+                return Err(FsPulseError::CustomParsingError(format!(
                     "Column '{}' was already specified in order clause",
                     col_display_name
                 )));
@@ -55,7 +52,7 @@ impl Order {
         Ok(())
     }
 
-    pub fn build(order_list: Pair<Rule>, col_set: ColumnSet) -> Result<Self, FsPulseError> {
+    pub fn from_pest_pair(order_list: Pair<Rule>, col_set: ColSet) -> Result<Self, FsPulseError> {
         let mut order = Self::new(col_set);
 
         for element in order_list.into_inner() {

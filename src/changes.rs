@@ -80,10 +80,10 @@ pub struct Change {
     pub hash_old: Option<String>,  // Meaningful if undelete or hash_change
     #[allow(dead_code)]
     pub hash_new: Option<String>, // Meaningful if hash_change
-    pub val_change: Option<bool>, // Present if "M", True if validation changed, else False
+    pub val_change: Option<bool>,  // Present if "M", True if validation changed, else False
     #[allow(dead_code)]
     pub last_val_scan_old: Option<i64>, // Present if "M" and validation changed
-    pub val_old: Option<String>, // Validation state of the item if val_change = true
+    pub val_old: Option<String>,   // Validation state of the item if val_change = true
     #[allow(dead_code)]
     pub val_new: Option<String>, // Meaningful if undelete or val_change
     #[allow(dead_code)]
@@ -132,6 +132,16 @@ impl ChangeType {
             Self::Delete => "D",
             Self::Modify => "M",
             Self::NoChange => "N",
+        }
+    }
+
+    pub fn short_str_to_full(s: &str) -> Result<&str, FsPulseError> {
+        match s {
+            "A" => Ok("Add"),
+            "D" => Ok("Delete"),
+            "M" => Ok("Modify"),
+            "N" => Ok("No Change"),
+            _ => Err(FsPulseError::Error(format!("Invalid change type: '{}'", s))),
         }
     }
 }

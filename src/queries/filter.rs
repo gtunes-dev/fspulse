@@ -90,7 +90,7 @@ impl IdFilter {
         let id_col_pair = iter.next().unwrap();
         let id_col = id_col_pair.as_str().to_owned();
 
-        let mut id_filter = match query.get_column_db(&id_col) {
+        let mut id_filter = match query.col_set.get_name_db(&id_col) {
             Some(id_col_db) => Self::new(id_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
@@ -199,7 +199,7 @@ impl DateFilter {
         let date_col_pair = iter.next().unwrap();
         let date_col = date_col_pair.as_str().to_owned();
 
-        let mut date_filter = match query.get_column_db(&date_col) {
+        let mut date_filter = match query.col_set.get_name_db(&date_col) {
             Some(date_col_db) => Self::new(date_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
@@ -301,7 +301,7 @@ impl StringFilter {
         let str_col_pair = iter.next().unwrap();
         let str_col = str_col_pair.as_str().to_owned();
 
-        let mut str_filter = match query.get_column_db(&str_col) {
+        let mut str_filter = match query.col_set.get_name_db(&str_col) {
             Some(str_col_db) => Self::new(str_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
@@ -446,7 +446,7 @@ impl PathFilter {
         let mut iter = path_filter_pair.into_inner();
         let path_col = iter.next().unwrap().as_str();
 
-        let mut path_filter = match query.get_column_db(path_col) {
+        let mut path_filter = match query.col_set.get_name_db(path_col) {
             Some(path_col_db) => Self::new(path_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(

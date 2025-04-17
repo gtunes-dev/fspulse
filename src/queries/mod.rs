@@ -1,9 +1,10 @@
 use pest_derive::Parser;
 
 mod columns;
-mod filters;
+mod filter;
 mod order;
 pub mod query;
+mod show;
 
 pub use query::Query;
 
