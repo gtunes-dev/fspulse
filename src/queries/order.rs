@@ -29,12 +29,15 @@ impl Order {
         col_display_name: &str,
         direction: Option<String>,
     ) -> Result<(), FsPulseError> {
-        let db_col_name = self.col_set.get_name_db(col_display_name).ok_or_else(|| {
-            FsPulseError::CustomParsingError(format!(
-                "Invalid column '{}' in order clause",
-                col_display_name
-            ))
-        })?;
+        let db_col_name = self
+            .col_set
+            .col_name_to_db(col_display_name)
+            .ok_or_else(|| {
+                FsPulseError::CustomParsingError(format!(
+                    "Invalid column '{}' in order clause",
+                    col_display_name
+                ))
+            })?;
 
         for order_spec in &self.order_specs {
             if order_spec.column == db_col_name {

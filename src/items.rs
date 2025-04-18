@@ -19,6 +19,16 @@ impl ItemType {
             ItemType::Other => "O",
         }
     }
+
+    pub fn short_str_to_full(s: &str) -> Result<&str, FsPulseError> {
+        match s {
+            "F" => Ok("File"),
+            "D" => Ok("Directory"),
+            "S" => Ok("Symlink"),
+            "O" => Ok("Other"),
+            _ => Err(FsPulseError::Error(format!("Invalid item type: '{}'", s))),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]

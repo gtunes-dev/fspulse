@@ -6,7 +6,7 @@ mod order;
 pub mod query;
 mod show;
 
-pub use query::Query;
+//pub use query::QueryProcessor;
 
 //pub mod parser;
 

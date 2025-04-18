@@ -6,18 +6,12 @@ use std::fmt::Debug;
 
 type OrderedStrMap = phf::OrderedMap<&'static str, &'static str>;
 
-use super::{
-    query::{DomainQuery, QueryType},
-    Rule,
-};
+use super::{query::Query, Rule};
 
 /// Defines the behavior of a filter.
 pub trait Filter: Debug {
     /// return predicate text and params
-    fn to_predicate_parts(
-        &self,
-        query_type: QueryType,
-    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError>;
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError>;
 }
 
 #[derive(Debug, Clone)]
@@ -34,10 +28,7 @@ pub enum IdSpec {
 }
 
 impl Filter for IdFilter {
-    fn to_predicate_parts(
-        &self,
-        _query_type: QueryType,
-    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
@@ -84,13 +75,13 @@ impl IdFilter {
 
     pub fn add_to_query(
         id_filter_pair: Pair<Rule>,
-        query: &mut DomainQuery,
+        query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         let mut iter = id_filter_pair.into_inner();
         let id_col_pair = iter.next().unwrap();
         let id_col = id_col_pair.as_str().to_owned();
 
-        let mut id_filter = match query.col_set.get_name_db(&id_col) {
+        let mut id_filter = match query.col_set().col_name_to_db(&id_col) {
             Some(id_col_db) => Self::new(id_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
@@ -120,7 +111,7 @@ impl IdFilter {
             }
         }
 
-        query.add_filter(id_filter);
+        query.add_filter(Box::new(id_filter));
 
         Ok(())
     }
@@ -139,10 +130,7 @@ pub enum DateSpec {
 }
 
 impl Filter for DateFilter {
-    fn to_predicate_parts(
-        &self,
-        _query_type: QueryType,
-    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
@@ -193,13 +181,13 @@ impl DateFilter {
 
     pub fn add_to_query(
         date_filter_pair: Pair<Rule>,
-        query: &mut DomainQuery,
+        query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         let mut iter = date_filter_pair.into_inner();
         let date_col_pair = iter.next().unwrap();
         let date_col = date_col_pair.as_str().to_owned();
 
-        let mut date_filter = match query.col_set.get_name_db(&date_col) {
+        let mut date_filter = match query.col_set().col_name_to_db(&date_col) {
             Some(date_col_db) => Self::new(date_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
@@ -237,7 +225,7 @@ impl DateFilter {
             }
         }
 
-        query.add_filter(date_filter);
+        query.add_filter(Box::new(date_filter));
 
         Ok(())
     }
@@ -250,10 +238,7 @@ pub struct StringFilter {
 }
 
 impl Filter for StringFilter {
-    fn to_predicate_parts(
-        &self,
-        _query_type: QueryType,
-    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first: bool = true;
@@ -295,13 +280,13 @@ impl StringFilter {
     fn add_str_filter_to_query(
         string_filter_pair: Pair<Rule>,
         str_map: OrderedStrMap,
-        query: &mut DomainQuery,
+        query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         let mut iter = string_filter_pair.into_inner();
         let str_col_pair = iter.next().unwrap();
         let str_col = str_col_pair.as_str().to_owned();
 
-        let mut str_filter = match query.col_set.get_name_db(&str_col) {
+        let mut str_filter = match query.col_set().col_name_to_db(&str_col) {
             Some(str_col_db) => Self::new(str_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
@@ -326,35 +311,35 @@ impl StringFilter {
                 }
             }
         }
-        query.add_filter(str_filter);
+        query.add_filter(Box::new(str_filter));
 
         Ok(())
     }
 
     pub fn add_bool_filter_to_query(
         bool_filter_pair: Pair<Rule>,
-        query: &mut DomainQuery,
+        query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         Self::add_str_filter_to_query(bool_filter_pair, Self::BOOL_VALUES, query)
     }
 
     pub fn add_change_type_filter_to_query(
         change_type_filter_pair: Pair<Rule>,
-        query: &mut DomainQuery,
+        query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         Self::add_str_filter_to_query(change_type_filter_pair, Self::CHANGE_TYPE_VALUES, query)
     }
 
     pub fn add_val_filter_to_query(
         val_filter_pair: Pair<Rule>,
-        query: &mut DomainQuery,
+        query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         Self::add_str_filter_to_query(val_filter_pair, Self::VAL_VALUES, query)
     }
 
     pub fn add_item_type_filter_to_query(
         item_type_filter_pair: Pair<Rule>,
-        query: &mut DomainQuery,
+        query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         Self::add_str_filter_to_query(item_type_filter_pair, Self::ITEM_TYPE_VALUES, query)
     }
@@ -405,10 +390,7 @@ pub struct PathFilter {
 }
 
 impl Filter for PathFilter {
-    fn to_predicate_parts(
-        &self,
-        _query_type: QueryType,
-    ) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = " (".to_string();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
 
@@ -441,12 +423,12 @@ impl PathFilter {
 
     pub fn add_to_query(
         path_filter_pair: Pair<Rule>,
-        query: &mut DomainQuery,
+        query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         let mut iter = path_filter_pair.into_inner();
         let path_col = iter.next().unwrap().as_str();
 
-        let mut path_filter = match query.col_set.get_name_db(path_col) {
+        let mut path_filter = match query.col_set().col_name_to_db(path_col) {
             Some(path_col_db) => Self::new(path_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
@@ -460,7 +442,7 @@ impl PathFilter {
             path_filter.path_strs.push(path_spec.as_str().to_string());
         }
 
-        query.add_filter(path_filter);
+        query.add_filter(Box::new(path_filter));
 
         Ok(())
     }

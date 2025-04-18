@@ -1,46 +1,16 @@
 use crate::{
-    changes::ChangeType, error::FsPulseError, utils::Utils, validators::validator::ValidationState,
+    changes::ChangeType, error::FsPulseError, items::ItemType, utils::Utils,
+    validators::validator::ValidationState,
 };
 use chrono::{DateTime, Local, Utc};
 use pest::iterators::Pair;
-use rusqlite::Row;
 use tabled::{
     builder::Builder,
     settings::{object::Columns, Alignment},
-    Table, Tabled,
+    Table,
 };
 
-use super::{columns::ColSet, query::ChangesQueryRow, Rule};
-
-#[derive(Tabled)]
-pub struct ScansQueryRow {
-    scan_id: i64,
-    root_id: i64,
-    state: i64,
-    #[tabled(display = "Utils::display_bool")]
-    hashing: bool,
-    #[tabled(display = "Utils::display_bool")]
-    validating: bool,
-    #[tabled(display = "Utils::display_db_time")]
-    scan_time: i64,
-    file_count: i64,
-    folder_count: i64,
-}
-
-impl ScansQueryRow {
-    pub fn from_row(row: &Row) -> rusqlite::Result<Self> {
-        Ok(ScansQueryRow {
-            scan_id: row.get(0)?,
-            root_id: row.get(1)?,
-            state: row.get(2)?,
-            hashing: row.get(3)?,
-            validating: row.get(4)?,
-            scan_time: row.get(5)?,
-            file_count: row.get(6)?,
-            folder_count: row.get(7)?,
-        })
-    }
-}
+use super::{columns::ColSet, Rule};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Format {
@@ -66,18 +36,18 @@ impl Format {
         }
     }
 
-    fn format_i64(val: i64) -> String {
+    pub fn format_i64(val: i64) -> String {
         val.to_string()
     }
 
-    fn _format_opt_i64(val: Option<i64>) -> String {
+    pub fn format_opt_i64(val: Option<i64>) -> String {
         match val {
             Some(i) => Format::format_i64(i),
             None => "-".into(),
         }
     }
 
-    fn format_date(val: i64, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_date(val: i64, format: Format) -> Result<String, FsPulseError> {
         let datetime_utc = DateTime::<Utc>::from_timestamp(val, 0)
             .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
 
@@ -94,14 +64,14 @@ impl Format {
         Ok(datetime_local.format(format_str).to_string())
     }
 
-    fn format_opt_date(val: Option<i64>, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_opt_date(val: Option<i64>, format: Format) -> Result<String, FsPulseError> {
         match val {
             Some(val) => Self::format_date(val, format),
             None => Ok("-".into()),
         }
     }
 
-    fn format_bool(val: bool, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_bool(val: bool, format: Format) -> Result<String, FsPulseError> {
         let s = match (val, format) {
             (true, Format::Short | Format::None) => "T",
             (true, Format::Full) => "True",
@@ -115,7 +85,7 @@ impl Format {
         Ok(s.into())
     }
 
-    fn format_opt_bool(val: Option<bool>, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_opt_bool(val: Option<bool>, format: Format) -> Result<String, FsPulseError> {
         match val {
             Some(val) => Self::format_bool(val, format),
             None => Ok("-".into()),
@@ -123,14 +93,24 @@ impl Format {
     }
 
     // $TODO format (need the root path)
-    fn _format_path(path_val: &str, format: Format) -> String {
+    pub fn format_path(val: &str, format: Format) -> Result<String, FsPulseError> {
         match format {
-            Format::Short => Utils::display_short_path(path_val),
-            _ => path_val.to_owned(),
+            Format::Short => Ok(Utils::display_short_path(val)),
+            Format::Full | Format::None => Ok(val.to_owned()),
+            Format::Relative => Ok(Utils::display_short_path(val)),
+            _ => Err(FsPulseError::Error("Invalid path format".into())),
         }
     }
 
-    fn format_change_type(val: &str, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_item_type(val: &str, format: Format) -> Result<String, FsPulseError> {
+        match format {
+            Format::Full => Ok(ItemType::short_str_to_full(val)?.to_owned()),
+            Format::Short | Format::None => Ok(val.to_owned()),
+            _ => Err(FsPulseError::Error("Invalid item_type format".into())),
+        }
+    }
+
+    pub fn format_change_type(val: &str, format: Format) -> Result<String, FsPulseError> {
         match format {
             Format::Full => Ok(ChangeType::short_str_to_full(val)?.to_owned()),
             Format::Short | Format::None => Ok(val.to_owned()),
@@ -138,7 +118,7 @@ impl Format {
         }
     }
 
-    fn format_val(val: &str, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_val(val: &str, format: Format) -> Result<String, FsPulseError> {
         match format {
             Format::Full => Ok(ValidationState::short_str_to_full(val)?.to_owned()),
             Format::Short | Format::None => Ok(val.to_owned()),
@@ -148,73 +128,57 @@ impl Format {
         }
     }
 
-    fn format_opt_val(val: Option<&str>, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_opt_val(val: Option<&str>, format: Format) -> Result<String, FsPulseError> {
         match val {
             Some(val) => Self::format_val(val, format),
             None => Ok("-".into()),
         }
     }
+
+    pub fn format_string(val: &str) -> String {
+        val.to_owned()
+    }
+
+    pub fn format_opt_string(val: &Option<String>) -> String {
+        match val {
+            Some(val) => Self::format_string(val),
+            None => "-".into(),
+        }
+    }
 }
 
 #[derive(Debug)]
-struct DisplayCol {
-    display_col: &'static str,
-    alignment: Alignment,
-    format: Format,
+pub struct DisplayCol {
+    pub display_col: &'static str,
+    pub alignment: Alignment,
+    pub format: Format,
 }
 
 #[derive(Debug)]
 pub struct Show {
-    display_cols: Vec<DisplayCol>,
+    col_set: ColSet,
+    pub display_cols: Vec<DisplayCol>,
 }
 
 impl Show {
-    pub fn new() -> Self {
+    pub fn new(col_set: ColSet) -> Self {
         Show {
+            col_set,
             display_cols: Vec::new(),
         }
     }
 
-    pub fn as_builder(&self) -> Builder {
+    pub fn make_builder(&mut self) -> Builder {
         let mut builder = Builder::default();
+
+        // If no display columns were specified, add the default column set
+        if self.display_cols.is_empty() {
+            self.add_default_columns();
+        }
 
         let header: Vec<&'static str> = self.display_cols.iter().map(|dc| dc.display_col).collect();
         builder.push_record(header);
         builder
-    }
-
-    pub fn append_changes_row(
-        &self,
-        change: &ChangesQueryRow,
-        builder: &mut Builder,
-    ) -> Result<(), FsPulseError> {
-        let mut row: Vec<String> = Vec::new();
-
-        for col in &self.display_cols {
-            let col_string = match col.display_col {
-                "change_id" => Format::format_i64(change.change_id),
-                "root_id" => Format::format_i64(change.root_id),
-                "scan_id" => Format::format_i64(change.scan_id),
-                "item_id" => Format::format_i64(change.item_id),
-                "change_type" => Format::format_change_type(&change.change_type, col.format)?,
-                "meta_change" => Format::format_opt_bool(change.meta_change, col.format)?,
-                "mod_date_old" => Format::format_opt_date(change.mod_date_old, col.format)?,
-                "mod_date_new" => Format::format_opt_date(change.mod_date_new, col.format)?,
-                "hash_change" => Format::format_opt_bool(change.hash_change, col.format)?,
-                "val_change" => Format::format_opt_bool(change.val_change, col.format)?,
-                "val_old" => Format::format_opt_val(change.val_old.as_deref(), col.format)?,
-                "val_new" => Format::format_opt_val(change.val_new.as_deref(), col.format)?,
-                _ => {
-                    return Err(FsPulseError::Error("Invalid column".into()));
-                }
-            };
-
-            row.push(col_string);
-        }
-
-        builder.push_record(row);
-
-        Ok(())
     }
 
     pub fn set_column_aligments(&self, table: &mut Table) {
@@ -222,15 +186,35 @@ impl Show {
             table.modify(Columns::single(col_index), col.alignment);
         }
     }
+    pub fn add_all_columns(&mut self) {
+        for (col, col_spec) in self.col_set.entries() {
+            self.display_cols.push(DisplayCol {
+                display_col: col,
+                alignment: col_spec.align,
+                format: Format::None,
+            });
+        }
+    }
 
-    pub fn build_from_pest_pair(
-        &mut self,
-        show_list: Pair<Rule>,
-        col_set: ColSet,
-    ) -> Result<(), FsPulseError> {
+    pub fn add_default_columns(&mut self) {
+        for (col, col_spec) in self.col_set.entries() {
+            if col_spec.is_default {
+                self.display_cols.push(DisplayCol {
+                    display_col: col,
+                    alignment: col_spec.align,
+                    format: Format::None,
+                });
+            }
+        }
+    }
+
+    pub fn build_from_pest_pair(&mut self, show_list: Pair<Rule>) -> Result<(), FsPulseError> {
         for element in show_list.into_inner() {
             match element.as_rule() {
-                Rule::id_show
+                Rule::all => self.add_all_columns(),
+                Rule::default => self.add_default_columns(),
+                Rule::int_show
+                | Rule::id_show
                 | Rule::date_show
                 | Rule::bool_show
                 | Rule::path_show
@@ -240,7 +224,7 @@ impl Show {
                     let mut path_show_parts = element.into_inner();
                     let display_col = path_show_parts.next().unwrap().as_str();
 
-                    match col_set.col_set().get_entry(display_col) {
+                    match self.col_set.col_set().get_entry(display_col) {
                         Some((key, display_col)) => {
                             let format = match path_show_parts.next() {
                                 Some(format_pair) => Format::from_str(format_pair.as_str()),

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::queries::Query;
+use crate::queries::query::QueryProcessor;
 use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
 use crate::scanner::Scanner;
@@ -329,7 +329,7 @@ impl Cli {
             Command::Query { db_path, query } => {
                 info!("Processing query with db_path: {:?}, '{}'", db_path, query);
                 let db = Database::new(db_path)?;
-                Query::process_query(&db, &query)
+                QueryProcessor::process_query(&db, &query)
             }
         }
     }
@@ -384,12 +384,12 @@ impl Cli {
                     if query_lower == "exit" || query_lower == "q" {
                         break;
                     }
-                    Query::process_query(db, &query)?;
+                    QueryProcessor::process_query(db, &query)?;
                 }
             }
             CommandChoice::QueryEditor => {
                 if let Some(query) = Editor::new().edit("Enter a query").unwrap() {
-                    Query::process_query(db, &query)?;
+                    QueryProcessor::process_query(db, &query)?;
                 }
             }
             _ => unreachable!(),

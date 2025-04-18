@@ -15,7 +15,7 @@ filter       = _{ id_filter | date_filter | bool_filter | path_filter | val_filt
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ id_show | date_show | bool_show | path_show | val_show | item_type_show | change_type_show }
+show_spec   = _{ default | all | int_show | id_show | date_show | bool_show | path_show | val_show | item_type_show | change_type_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
@@ -118,8 +118,15 @@ change_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_list ~ WS
 change_list             = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
 change                  =  { null | "ADD" | "add" | ^"A" | "DELETE" | "delete" | ^"D" | "MODIFY" | "modify" | "M" }
 
+// Integer columns
+int_col = { "file_size" | "file_count" |  "folder_count" }
+int_show = { int_col }
+
+
 null = { "-" | "NULL" | "null" }
 
+default = { "default" | "DEFAULT" }
+all = { "all" | "ALL" }
 // Format specifiers
 short     = _{ "SHORT" | "short" }
 full      = _{ "FULL" | "full" }
