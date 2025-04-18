@@ -400,7 +400,7 @@ impl ChangeCounts {
                 ChangeType::Add => change_counts.set_count_of(ChangeType::Add, count),
                 ChangeType::Delete => change_counts.set_count_of(ChangeType::Delete, count),
                 ChangeType::Modify => change_counts.set_count_of(ChangeType::Modify, count),
-                ChangeType::NoChange => change_counts.set_count_of(ChangeType::Modify, count),
+                ChangeType::NoChange => change_counts.set_count_of(ChangeType::NoChange, count),
             }
         }
 

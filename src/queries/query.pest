@@ -73,11 +73,11 @@ string_col = { "file_hash" | "val_error" }
 
 string_show = { string_col }
 
-string_filter = { string_col ~ string_filter_body }
+string_filter      =  { string_col ~ string_filter_body }
 string_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ string_list ~ WS* ~ RPAREN }
-string_list = _{ WS* ~ string_spec ~ (WS* ~ COMMA ~ WS* ~ string_spec)* }
-string_spec = _{ "'" ~ string ~ "'" }
-string = { (("\\'" | (!"'" ~ ANY)))* }
+string_list        = _{ WS* ~ string_spec ~ (WS* ~ COMMA ~ WS* ~ string_spec)* }
+string_spec        = _{ null | ("'" ~ string ~ "'") }
+string             =  { (("\\'" | (!"'" ~ ANY)))* }
 
 // Path Columns
 path_col = { "item_path" | "root_path" }
@@ -129,14 +129,13 @@ change_list             = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
 change                  =  { null | "ADD" | "add" | ^"A" | "DELETE" | "delete" | ^"D" | "MODIFY" | "modify" | "M" }
 
 // Integer columns
-int_col = { "file_size" | "file_count" |  "folder_count" }
+int_col  = { "file_size" | "file_count" | "folder_count" | "adds" | "modifies" | "deletes" }
 int_show = { int_col }
-
 
 null = { "-" | "NULL" | "null" }
 
 default = { "default" | "DEFAULT" }
-all = { "all" | "ALL" }
+all     = { "all" | "ALL" }
 // Format specifiers
 short     = _{ "SHORT" | "short" }
 full      = _{ "FULL" | "full" }

@@ -48,20 +48,22 @@ pub trait Query {
         self.query_impl_mut().filters.push(filter);
     }
 
-    fn cols_as_select(&self) -> String {
-        let mut sql = "SELECT ".to_string();
+    fn cols_as_col_list(&self) -> String {
+        let mut col_list = String::new();
 
         let mut first = true;
 
         for col_spec in self.query_impl().col_set.values() {
-            match first {
-                true => first = false,
-                false => sql.push_str(", "),
+            if col_spec.in_col_list {
+                match first {
+                    true => first = false,
+                    false => col_list.push_str(", "),
+                }
+                col_list.push_str(col_spec.name_db);
             }
-            sql.push_str(col_spec.name_db);
         }
 
-        sql
+        col_list
     }
 
     fn build_query_table(
@@ -71,40 +73,50 @@ pub trait Query {
     ) -> Result<Table, FsPulseError>;
 
     fn prepare_and_execute(&mut self, db: &Database) -> Result<(), FsPulseError> {
-        let mut sql = format!("{}{}", self.cols_as_select(), self.query_impl().base_sql);
+        let col_list = self.cols_as_col_list();
 
         // $TODO: Wrap Filters into a struct that can generate the entire WHERE clause
         let mut params_vec: Vec<Box<dyn ToSql>> = Vec::new();
 
+        let mut where_clause = String::new();
+
         if !self.query_impl().filters.is_empty() {
             let mut first = true;
-            sql.push_str("\nWHERE ");
+            where_clause.push_str("\nWHERE ");
             for filter in &self.query_impl().filters {
                 match first {
                     true => {
                         first = false;
                     }
                     false => {
-                        sql.push_str(" AND ");
+                        where_clause.push_str(" AND ");
                     }
                 }
                 let (pred_str, pred_vec) = filter.to_predicate_parts()?;
-                sql.push_str(&pred_str);
+                where_clause.push_str(&pred_str);
                 params_vec.extend(pred_vec);
             }
         }
 
-        if let Some(order) = self.order() {
-            let order_clause = order.to_order_clause();
-            sql.push_str(&order_clause);
-        }
+        let order_clause = match self.order() {
+            Some(order) => order.to_order_clause(),
+            None => String::new(),
+        };
 
-        if let Some(limit) = &self.query_impl().limit {
-            sql.push_str(&format!("\nLIMIT {}", limit));
-        }
+        let limit_clause = match &self.query_impl().limit {
+            Some(limit) => format!("\nLIMIT {}", limit),
+            None => String::new(),
+        };
+
+        let sql = self
+            .query_impl()
+            .sql_template
+            .replace("{col_list}", &col_list)
+            .replace("{where_clause}", &where_clause)
+            .replace("{order_clause}", &order_clause)
+            .replace("{limit_clause}", &limit_clause);
 
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
-        // println!("SQL: {sql}");
 
         let mut sql_statement = db.conn().prepare(&sql)?;
 
@@ -115,6 +127,7 @@ pub trait Query {
         table.modify(Rows::first(), Alignment::center());
 
         println!("{table}");
+        //println!("SQL: {sql}");
 
         Ok(())
     }
@@ -123,17 +136,17 @@ pub trait Query {
 fn make_query(query_type: &str) -> Box<dyn Query> {
     match query_type {
         "roots" => Box::new(RootsQuery {
-            imp: QueryImpl::new(QueryImpl::ROOTS_BASE_SQL, ColSet::new(&ROOTS_QUERY_COLS)),
+            imp: QueryImpl::new(QueryImpl::ROOTS_SQL_QUERY, ColSet::new(&ROOTS_QUERY_COLS)),
         }),
         "scans" => Box::new(ScansQuery {
-            imp: QueryImpl::new(QueryImpl::SCANS_BASE_SQL, ColSet::new(&SCANS_QUERY_COLS)),
+            imp: QueryImpl::new(QueryImpl::SCANS_SQL_QUERY, ColSet::new(&SCANS_QUERY_COLS)),
         }),
         "items" => Box::new(ItemsQuery {
-            imp: QueryImpl::new(QueryImpl::ITEMS_BASE_SQL, ColSet::new(&ITEMS_QUERY_COLS)),
+            imp: QueryImpl::new(QueryImpl::ITEMS_SQL_QUERY, ColSet::new(&ITEMS_QUERY_COLS)),
         }),
         "changes" => Box::new(ChangesQuery {
             imp: QueryImpl::new(
-                QueryImpl::CHANGES_BASE_SQL,
+                QueryImpl::CHANGES_SQL_QUERY,
                 ColSet::new(&CHANGES_QUERY_COLS),
             ),
         }),
@@ -313,6 +326,9 @@ impl ScansQuery {
                 "scan_time" => Format::format_date(scan.scan_time, col.format)?,
                 "file_count" => Format::format_i64(scan.file_count),
                 "folder_count" => Format::format_i64(scan.folder_count),
+                "adds" => Format::format_i64(scan.adds),
+                "modifies" => Format::format_i64(scan.modifies),
+                "deletes" => Format::format_i64(scan.deletes),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -399,7 +415,7 @@ pub struct QueryProcessor;
 
 #[derive(Debug)]
 pub struct QueryImpl {
-    base_sql: &'static str,
+    sql_template: &'static str,
     col_set: ColSet,
 
     filters: Vec<Box<dyn Filter>>,
@@ -409,16 +425,41 @@ pub struct QueryImpl {
 }
 
 impl QueryImpl {
-    pub const ROOTS_BASE_SQL: &str = "\nFROM roots";
-    const SCANS_BASE_SQL: &str = "\nFROM scans";
-    const ITEMS_BASE_SQL: &str = "\nFROM items";
-    const CHANGES_BASE_SQL: &str = "\nFROM changes
-        JOIN items
-            ON changes.item_id = items.item_id";
+    const ROOTS_SQL_QUERY: &str = "SELECT {col_list}
+        FROM roots
+        {where_clause}
+        {order_clause},
+        {limit_clause}";
 
-    fn new(base_sql: &'static str, col_set: ColSet) -> Self {
+    const SCANS_SQL_QUERY: &str = "SELECT {col_list},
+            COUNT(*) FILTER (WHERE changes.change_type = 'A') AS adds,
+            COUNT(*) FILTER (WHERE changes.change_type = 'M') AS modifies,
+            COUNT(*) FILTER (WHERE changes.change_type = 'D') AS deletes
+        FROM scans
+        LEFT JOIN changes
+            ON changes.scan_id = scans.scan_id
+        {where_clause}
+        GROUP BY scans.scan_id
+        {order_clause}
+        {limit_clause}";
+
+    const ITEMS_SQL_QUERY: &str = "SELECT {col_list}
+        FROM items
+        {where_clause}
+        {order_clause}
+        {limit_clause}";
+
+    const CHANGES_SQL_QUERY: &str = "SELECT {col_list}
+        FROM changes
+        JOIN items
+            ON changes.item_id = items.item_id
+        {where_clause}
+        {order_clause}
+        {limit_clause}";
+
+    fn new(sql_template: &'static str, col_set: ColSet) -> Self {
         QueryImpl {
-            base_sql,
+            sql_template,
             col_set,
 
             filters: Vec::new(),
@@ -525,6 +566,9 @@ pub struct ScansQueryRow {
     scan_time: i64,
     file_count: i64,
     folder_count: i64,
+    adds: i64,
+    modifies: i64,
+    deletes: i64,
 }
 
 impl ScansQueryRow {
@@ -538,6 +582,9 @@ impl ScansQueryRow {
             scan_time: row.get(5)?,
             file_count: row.get(6)?,
             folder_count: row.get(7)?,
+            adds: row.get(8)?,
+            modifies: row.get(9)?,
+            deletes: row.get(10)?,
         })
     }
 }
@@ -591,7 +638,7 @@ impl QueryProcessor {
 
     fn build(query: &mut dyn Query, query_iter: &mut Pairs<Rule>) -> Result<(), FsPulseError> {
         for token in query_iter {
-            println!("{:?}", token.as_rule());
+            //println!("{:?}", token.as_rule());
             match token.as_rule() {
                 Rule::id_filter => {
                     IdFilter::add_to_query(token, query)?;
