@@ -64,11 +64,10 @@ pub trait Query {
         sql
     }
 
-    fn execute(
-        &self,
+    fn build_query_table(
+        &mut self,
         sql_statement: &mut Statement,
         sql_params: &[&dyn ToSql],
-        builder: &mut Builder,
     ) -> Result<Table, FsPulseError>;
 
     fn prepare_and_execute(&mut self, db: &Database) -> Result<(), FsPulseError> {
@@ -109,18 +108,15 @@ pub trait Query {
 
         let mut sql_statement = db.conn().prepare(&sql)?;
 
-        let mut builder = self.query_impl_mut().show.make_builder();
+        //let mut builder = self.query_impl_mut().show.make_builder();
 
-        let table = self.execute(&mut sql_statement, &sql_params, &mut builder)?;
+        let mut table = self.build_query_table(&mut sql_statement, &sql_params)?;
 
         // new table strategy
-        let mut new_table = builder.build();
-        self.query_impl().show.set_column_aligments(&mut new_table);
-        new_table.with(Style::modern());
-        new_table.modify(Rows::first(), Alignment::center());
-        println!("{new_table}");
-        println!();
-        println!();
+        //let mut new_table = builder.build();
+        self.query_impl().show.set_column_aligments(&mut table);
+        table.with(Style::modern());
+        table.modify(Rows::first(), Alignment::center());
 
         println!("{table}");
 
@@ -157,25 +153,20 @@ impl Query for RootsQuery {
         &mut self.imp
     }
 
-    fn execute(
-        &self,
-        sql_statment: &mut Statement,
+    fn build_query_table(
+        &mut self,
+        sql_statement: &mut Statement,
         sql_params: &[&dyn ToSql],
-        builder: &mut Builder,
     ) -> Result<Table, FsPulseError> {
-        let rows = sql_statment.query_map(sql_params, RootsQueryRow::from_row)?;
-
-        let mut rows_rows = Vec::new();
+        let rows = sql_statement.query_map(sql_params, RootsQueryRow::from_row)?;
+        let mut builder = self.query_impl_mut().show.make_builder();
 
         for row in rows {
             let roots_query_row: RootsQueryRow = row?;
-            self.append_roots_row(&roots_query_row, builder)?;
-            rows_rows.push(roots_query_row);
+            self.append_roots_row(&roots_query_row, &mut builder)?;
         }
 
-        let mut table = Table::new(&rows_rows);
-        table.with(Style::modern());
-        table.modify(Rows::first(), Alignment::center());
+        let table = builder.build();
 
         Ok(table)
     }
@@ -218,26 +209,20 @@ impl Query for ItemsQuery {
         &mut self.imp
     }
 
-    fn execute(
-        &self,
+    fn build_query_table(
+        &mut self,
         sql_statment: &mut Statement,
         sql_params: &[&dyn ToSql],
-        builder: &mut Builder,
     ) -> Result<Table, FsPulseError> {
         let rows = sql_statment.query_map(sql_params, ItemsQueryRow::from_row)?;
-
-        let mut rows_rows = Vec::new();
+        let mut builder: Builder = self.query_impl_mut().show.make_builder();
 
         for row in rows {
             let items_query_row = row?;
-
-            self.append_items_row(&items_query_row, builder)?;
-            rows_rows.push(items_query_row);
+            self.append_items_row(&items_query_row, &mut builder)?;
         }
 
-        let mut table = Table::new(&rows_rows);
-        table.with(Style::modern());
-        table.modify(Rows::first(), Alignment::center());
+        let table = builder.build();
 
         Ok(table)
     }
@@ -265,6 +250,7 @@ impl ItemsQuery {
                 "is_ts" => Format::format_bool(item.is_ts, col.format)?,
                 "mod_date" => Format::format_opt_date(item.mod_date, col.format)?,
                 "file_size" => Format::format_opt_i64(item.file_size),
+                "file_hash" => Format::format_opt_string(&item.file_hash),
                 "last_hash_scan" => Format::format_opt_i64(item.last_hash_scan),
                 "last_val_scan" => Format::format_opt_i64(item.last_val_scan),
                 "val" => Format::format_val(&item.val, col.format)?,
@@ -291,25 +277,20 @@ impl Query for ScansQuery {
         &mut self.imp
     }
 
-    fn execute(
-        &self,
+    fn build_query_table(
+        &mut self,
         sql_statment: &mut Statement,
         sql_params: &[&dyn ToSql],
-        builder: &mut Builder,
     ) -> Result<Table, FsPulseError> {
         let rows = sql_statment.query_map(sql_params, ScansQueryRow::from_row)?;
-
-        let mut rows_rows = Vec::new();
+        let mut builder = self.query_impl_mut().show.make_builder();
 
         for row in rows {
             let scans_query_row = row?;
-            self.append_scans_row(&scans_query_row, builder)?;
-            rows_rows.push(scans_query_row);
+            self.append_scans_row(&scans_query_row, &mut builder)?;
         }
 
-        let mut table = Table::new(&rows_rows);
-        table.with(Style::modern());
-        table.modify(Rows::first(), Alignment::center());
+        let table = builder.build();
 
         Ok(table)
     }
@@ -358,30 +339,20 @@ impl Query for ChangesQuery {
         &mut self.imp
     }
 
-    fn execute(
-        &self,
+    fn build_query_table(
+        &mut self,
         sql_statment: &mut Statement,
         sql_params: &[&dyn ToSql],
-        builder: &mut Builder,
     ) -> Result<Table, FsPulseError> {
         let rows = sql_statment.query_map(sql_params, ChangesQueryRow::from_row)?;
-
-        let mut changes_rows = Vec::new();
+        let mut builder: Builder = self.query_impl_mut().show.make_builder();
 
         for row in rows {
             let changes_query_row: ChangesQueryRow = row?;
-            //self.show().append_changes_row(&changes_query_row, builder)?;
 
-            self.append_changes_row(&changes_query_row, builder)?;
-
-            changes_rows.push(changes_query_row);
-
-            //table.row(changes_query_row)?;
-            //println!("id: {}, item_id: {}", changes_query_row.id, changes_query_row.item_id);
+            self.append_changes_row(&changes_query_row, &mut builder)?;
         }
-        let mut table = Table::new(&changes_rows);
-        table.with(Style::modern());
-        table.modify(Rows::first(), Alignment::center());
+        let table = builder.build();
 
         Ok(table)
     }
@@ -476,26 +447,19 @@ impl RootsQueryRow {
     }
 }
 
-#[derive(Tabled)]
 struct ItemsQueryRow {
     item_id: i64,
     root_id: i64,
-    #[tabled(display = "Utils::display_short_path")]
     item_path: String,
     item_type: String,
     last_scan: i64,
-    #[tabled(display = "Utils::display_bool")]
     is_ts: bool,
-    #[tabled(display = "Utils::display_opt_db_time")]
     mod_date: Option<i64>,
-    #[tabled(display = "Utils::display_opt_i64")]
     file_size: Option<i64>,
-    #[tabled(display = "Utils::display_opt_i64")]
+    file_hash: Option<String>,
     last_hash_scan: Option<i64>,
-    #[tabled(display = "Utils::display_opt_i64")]
     last_val_scan: Option<i64>,
     val: String,
-    #[tabled(display = "Utils::display_opt_str")]
     val_error: Option<String>,
 }
 
@@ -510,10 +474,11 @@ impl ItemsQueryRow {
             is_ts: row.get(5)?,
             mod_date: row.get(6)?,
             file_size: row.get(7)?,
-            last_hash_scan: row.get(8)?,
-            last_val_scan: row.get(9)?,
-            val: row.get(10)?,
-            val_error: row.get(11)?,
+            file_hash: row.get(8)?,
+            last_hash_scan: row.get(9)?,
+            last_val_scan: row.get(10)?,
+            val: row.get(11)?,
+            val_error: row.get(12)?,
         })
     }
 }
@@ -667,6 +632,9 @@ impl QueryProcessor {
                 }
                 Rule::path_filter => {
                     PathFilter::add_to_query(token, query)?;
+                }
+                Rule::string_filter => {
+                    StringFilter::add_string_filter_to_query(token, query)?;
                 }
                 Rule::show_list => {
                     query.show_mut().build_from_pest_pair(token)?;

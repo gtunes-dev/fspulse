@@ -234,9 +234,14 @@ impl DateFilter {
 #[derive(Debug)]
 pub struct StringFilter {
     str_col_db: &'static str,
+    equality_match: bool,
     str_values: Vec<String>,
 }
 
+// TODO: This is handling null like a string bug it should be handling it specially
+// Should have a filed on StringFilter called "has_null" which gets set when
+// the null rule is seen (not the "null" value) and, when that value is set
+// we generate the like. As it stands, you can never search for a file like 'null'
 impl Filter for StringFilter {
     fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
@@ -256,8 +261,17 @@ impl Filter for StringFilter {
             if str_val == "NULL" {
                 pred_str.push_str(&format!("({} IS NULL)", &self.str_col_db));
             } else {
-                pred_str.push_str(&format!("({} = ?)", &self.str_col_db));
-                pred_vec.push(Box::new(str_val.to_owned()));
+                match self.equality_match {
+                    true => {
+                        pred_str.push_str(&format!("({} = ?)", &self.str_col_db));
+                        pred_vec.push(Box::new(str_val.to_owned()));
+                    }
+                    false => {
+                        pred_str.push_str(&format!("({} LIKE ?)", &self.str_col_db));
+                        let like_param = format!("%{str_val}%");
+                        pred_vec.push(Box::new(like_param));
+                    }
+                }
             }
         }
 
@@ -270,9 +284,10 @@ impl Filter for StringFilter {
 }
 
 impl StringFilter {
-    fn new(str_col_db: &'static str) -> Self {
+    fn new(str_col_db: &'static str, equality_match: bool) -> Self {
         StringFilter {
             str_col_db,
+            equality_match,
             str_values: Vec::new(),
         }
     }
@@ -282,12 +297,24 @@ impl StringFilter {
         str_map: OrderedStrMap,
         query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
+        Self::add_opt_str_filter_to_query(string_filter_pair, Some(str_map), query)
+    }
+
+    fn add_opt_str_filter_to_query(
+        string_filter_pair: Pair<Rule>,
+        opt_str_map: Option<OrderedStrMap>,
+        query: &mut dyn Query,
+    ) -> Result<(), FsPulseError> {
         let mut iter = string_filter_pair.into_inner();
         let str_col_pair = iter.next().unwrap();
         let str_col = str_col_pair.as_str().to_owned();
 
+        // If a str_map is provided, then the filter will generate equality predicates
+        // If no str_map is provided, the filter will generate LIKE predicates
+        let equality_match = opt_str_map.is_some();
+
         let mut str_filter = match query.col_set().col_name_to_db(&str_col) {
-            Some(str_col_db) => Self::new(str_col_db),
+            Some(str_col_db) => Self::new(str_col_db, equality_match),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
                     "Column not found: '{}'",
@@ -297,19 +324,25 @@ impl StringFilter {
         };
 
         for str_val_pair in iter {
-            let val_str = str_val_pair.as_str();
-            let val_str_upper = val_str.to_ascii_uppercase();
-
-            let mapped_str = str_map.get(&val_str_upper).copied();
-            match mapped_str {
-                Some(s) => str_filter.str_values.push(s.to_owned()),
-                None => {
-                    return Err(FsPulseError::CustomParsingError(format!(
-                        "Invalid filter value: '{}'",
-                        val_str
-                    )));
+            let query_val_str = str_val_pair.as_str();
+            let val_str = match opt_str_map {
+                None => query_val_str.to_owned(),
+                Some(ref str_map) => {
+                    let val_str_upper = query_val_str.to_ascii_uppercase();
+                    let mapped_str = str_map.get(&val_str_upper).copied();
+                    match mapped_str {
+                        Some(s) => s.to_owned(),
+                        None => {
+                            return Err(FsPulseError::CustomParsingError(format!(
+                                "Invalid filter value: '{}'",
+                                query_val_str
+                            )));
+                        }
+                    }
                 }
-            }
+            };
+
+            str_filter.str_values.push(val_str);
         }
         query.add_filter(Box::new(str_filter));
 
@@ -342,6 +375,13 @@ impl StringFilter {
         query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         Self::add_str_filter_to_query(item_type_filter_pair, Self::ITEM_TYPE_VALUES, query)
+    }
+
+    pub fn add_string_filter_to_query(
+        string_filter_pair: Pair<Rule>,
+        query: &mut dyn Query,
+    ) -> Result<(), FsPulseError> {
+        Self::add_opt_str_filter_to_query(string_filter_pair, None, query)
     }
 
     const BOOL_VALUES: OrderedStrMap = phf_ordered_map! {

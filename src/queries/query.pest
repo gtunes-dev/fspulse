@@ -10,12 +10,12 @@ query_type = { "roots" | "scans" | "items" | "changes" }
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter       = _{ id_filter | date_filter | bool_filter | path_filter | val_filter | item_type_filter | change_type_filter }
+filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | int_show | id_show | date_show | bool_show | path_show | val_show | item_type_show | change_type_show }
+show_spec   = _{ default | all | int_show | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | change_type_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
@@ -68,6 +68,16 @@ bool_filter      =  { bool_col ~ bool_filter_body }
 bool_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_list ~ WS* ~ RPAREN }
 bool_list        = _{ bool ~ (WS* ~ COMMA ~ WS* ~ bool)* }
 bool             =  { null | "TRUE" | "true" | ^"T" | "FALSE" | "false" | ^"F" }
+
+string_col = { "file_hash" | "val_error" }
+
+string_show = { string_col }
+
+string_filter = { string_col ~ string_filter_body }
+string_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ string_list ~ WS* ~ RPAREN }
+string_list = _{ WS* ~ string_spec ~ (WS* ~ COMMA ~ WS* ~ string_spec)* }
+string_spec = _{ "'" ~ string ~ "'" }
+string = { (("\\'" | (!"'" ~ ANY)))* }
 
 // Path Columns
 path_col = { "item_path" | "root_path" }

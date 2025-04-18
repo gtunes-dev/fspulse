@@ -217,6 +217,7 @@ impl Show {
                 | Rule::id_show
                 | Rule::date_show
                 | Rule::bool_show
+                | Rule::string_show
                 | Rule::path_show
                 | Rule::val_show
                 | Rule::item_type_show

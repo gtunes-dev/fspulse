@@ -46,6 +46,7 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "is_ts" => ColSpec::new("is_ts", true, Alignment::center()),
     "mod_date" => ColSpec::new("mod_date", true, Alignment::center()),
     "file_size" => ColSpec::new("file_size", false, Alignment::right()),
+    "file_hash" => ColSpec::new("file_hash", false, Alignment::left()),
     "last_hash_scan" => ColSpec::new("last_hash_scan", false, Alignment::right()),
     "last_val_scan" => ColSpec::new("last_val_scan", false, Alignment::right()),
     "val" => ColSpec::new("val", false, Alignment::center()),
@@ -96,51 +97,4 @@ impl ColSet {
             None => None,
         }
     }
-
-    /*     pub fn as_select(&self) -> String {
-        let mut sql = "SELECT ".to_string();
-
-        let mut first = true;
-
-        for col_spec in self.col_map.values() {
-            match first {
-                true => first = false,
-                false => sql.push_str(", "),
-            }
-            sql.push_str(col_spec.name_db);
-        }
-
-        sql
-    } */
-
-    /*
-    pub fn get_column_db(&self, column_name: &str) -> Option<&'static str> {
-        self.str_map.get(column_name)
-    }
-
-    pub fn get_column(&self, column_name: &str) -> Option<&'static str> {
-        self.str_map.get_key(column_name)
-    }
-
-    pub fn as_select(&self) -> String {
-        let mut sql = "SELECT ".to_string();
-
-        let mut first = true;
-
-        for (_, col_name) in self.str_map.entries_iter() {
-            match first {
-                true => first = false,
-                false => sql.push_str(", "),
-            }
-            sql.push_str(col_name);
-        }
-
-        sql
-    }
-
-    pub fn display_to_db(&self, display_col: &str) -> Option<&'static str> {
-        let display_lower = display_col.to_ascii_lowercase();
-        self.str_map.get(&display_lower)
-    }
-    */
 }
