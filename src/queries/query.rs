@@ -4,7 +4,7 @@ use rusqlite::{Row, Statement, ToSql};
 use tabled::{
     builder::Builder,
     settings::{object::Rows, Alignment, Style},
-    Table, Tabled,
+    Table,
 };
 
 use super::{
@@ -13,7 +13,7 @@ use super::{
 };
 //use tablestream::{Column, Stream};
 
-use crate::{database::Database, error::FsPulseError, utils::Utils};
+use crate::{database::Database, error::FsPulseError};
 
 use super::{
     filter::{DateFilter, Filter, IdFilter, PathFilter, StringFilter},
@@ -104,16 +104,12 @@ pub trait Query {
         }
 
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
-        println!("SQL: {sql}");
+        // println!("SQL: {sql}");
 
         let mut sql_statement = db.conn().prepare(&sql)?;
 
-        //let mut builder = self.query_impl_mut().show.make_builder();
-
         let mut table = self.build_query_table(&mut sql_statement, &sql_params)?;
 
-        // new table strategy
-        //let mut new_table = builder.build();
         self.query_impl().show.set_column_aligments(&mut table);
         table.with(Style::modern());
         table.modify(Rows::first(), Alignment::center());
@@ -376,6 +372,7 @@ impl ChangesQuery {
                 "root_id" => Format::format_i64(change.root_id),
                 "scan_id" => Format::format_i64(change.scan_id),
                 "item_id" => Format::format_i64(change.item_id),
+                "item_path" => Format::format_path(&change.item_path, col.format)?,
                 "change_type" => Format::format_change_type(&change.change_type, col.format)?,
                 "meta_change" => Format::format_opt_bool(change.meta_change, col.format)?,
                 "mod_date_old" => Format::format_opt_date(change.mod_date_old, col.format)?,
@@ -432,7 +429,6 @@ impl QueryImpl {
     }
 }
 
-#[derive(Tabled)]
 struct RootsQueryRow {
     root_id: i64,
     root_path: String,
@@ -456,8 +452,8 @@ struct ItemsQueryRow {
     is_ts: bool,
     mod_date: Option<i64>,
     file_size: Option<i64>,
-    file_hash: Option<String>,
     last_hash_scan: Option<i64>,
+    file_hash: Option<String>,
     last_val_scan: Option<i64>,
     val: String,
     val_error: Option<String>,
@@ -474,8 +470,8 @@ impl ItemsQueryRow {
             is_ts: row.get(5)?,
             mod_date: row.get(6)?,
             file_size: row.get(7)?,
-            file_hash: row.get(8)?,
-            last_hash_scan: row.get(9)?,
+            last_hash_scan: row.get(8)?,
+            file_hash: row.get(9)?,
             last_val_scan: row.get(10)?,
             val: row.get(11)?,
             val_error: row.get(12)?,
@@ -483,32 +479,21 @@ impl ItemsQueryRow {
     }
 }
 
-#[derive(Tabled)]
 pub struct ChangesQueryRow {
     // changes properties
     pub change_id: i64,
     pub root_id: i64,
     pub scan_id: i64,
     pub item_id: i64,
-    pub change_type: String,
-    #[tabled(display = "Utils::display_opt_bool")]
-    pub meta_change: Option<bool>,
-    #[tabled(display = "Utils::display_opt_db_time")]
-    pub mod_date_old: Option<i64>,
-    #[tabled(display = "Utils::display_opt_db_time")]
-    pub mod_date_new: Option<i64>,
-    #[tabled(display = "Utils::display_opt_bool")]
-    pub hash_change: Option<bool>,
-    #[tabled(display = "Utils::display_opt_bool")]
-    pub val_change: Option<bool>,
-    #[tabled(display = "Utils::display_opt_str")]
-    pub val_old: Option<String>,
-    #[tabled(display = "Utils::display_opt_str")]
-    pub val_new: Option<String>,
-
-    // items properties
-    #[tabled(display = "Utils::display_short_path")]
     pub item_path: String,
+    pub change_type: String,
+    pub meta_change: Option<bool>,
+    pub mod_date_old: Option<i64>,
+    pub mod_date_new: Option<i64>,
+    pub hash_change: Option<bool>,
+    pub val_change: Option<bool>,
+    pub val_old: Option<String>,
+    pub val_new: Option<String>,
 }
 
 impl ChangesQueryRow {
@@ -518,29 +503,25 @@ impl ChangesQueryRow {
             root_id: row.get(1)?,
             scan_id: row.get(2)?,
             item_id: row.get(3)?,
-            change_type: row.get(4)?,
-            meta_change: row.get(5)?,
-            mod_date_old: row.get(6)?,
-            mod_date_new: row.get(7)?,
-            hash_change: row.get(8)?,
-            val_change: row.get(9)?,
-            val_old: row.get(10)?,
-            val_new: row.get(11)?,
-            item_path: row.get(12)?,
+            item_path: row.get(4)?,
+            change_type: row.get(5)?,
+            meta_change: row.get(6)?,
+            mod_date_old: row.get(7)?,
+            mod_date_new: row.get(8)?,
+            hash_change: row.get(9)?,
+            val_change: row.get(10)?,
+            val_old: row.get(11)?,
+            val_new: row.get(12)?,
         })
     }
 }
 
-#[derive(Tabled)]
 pub struct ScansQueryRow {
     scan_id: i64,
     root_id: i64,
     state: i64,
-    #[tabled(display = "Utils::display_bool")]
     hashing: bool,
-    #[tabled(display = "Utils::display_bool")]
     validating: bool,
-    #[tabled(display = "Utils::display_db_time")]
     scan_time: i64,
     file_count: i64,
     folder_count: i64,

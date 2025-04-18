@@ -46,8 +46,8 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "is_ts" => ColSpec::new("is_ts", true, Alignment::center()),
     "mod_date" => ColSpec::new("mod_date", true, Alignment::center()),
     "file_size" => ColSpec::new("file_size", false, Alignment::right()),
-    "file_hash" => ColSpec::new("file_hash", false, Alignment::left()),
     "last_hash_scan" => ColSpec::new("last_hash_scan", false, Alignment::right()),
+    "file_hash" => ColSpec::new("file_hash", false, Alignment::left()),
     "last_val_scan" => ColSpec::new("last_val_scan", false, Alignment::right()),
     "val" => ColSpec::new("val", false, Alignment::center()),
     "val_error" => ColSpec::new("val_error", false, Alignment::left()),
@@ -58,6 +58,7 @@ pub const CHANGES_QUERY_COLS: ColMap = phf_ordered_map! {
     "root_id" => ColSpec::new("items.root_id", true, Alignment::right()),
     "scan_id"  => ColSpec::new("changes.scan_id", true, Alignment::right()),
     "item_id" => ColSpec::new("changes.item_id", true, Alignment::right()),
+    "item_path" => ColSpec::new("items.item_path", false, Alignment::left()),
     "change_type" => ColSpec::new("change_type", true, Alignment::center()),
     "meta_change" => ColSpec::new("meta_change", false, Alignment::center()),
     "mod_date_old" => ColSpec::new("mod_date_old", false, Alignment::center()),
@@ -66,7 +67,6 @@ pub const CHANGES_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_change" => ColSpec::new("val_change", false, Alignment::center()),
     "val_old" => ColSpec::new("val_old", false, Alignment::center()),
     "val_new" => ColSpec::new("val_new", false, Alignment::center()),
-    "item_path" => ColSpec::new("items.item_path", false, Alignment::left()),
 };
 
 #[derive(Debug, Copy, Clone)]

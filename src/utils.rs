@@ -21,9 +21,11 @@ impl Utils {
         }
     }
 
+    /* 
     pub fn display_bool(v: &bool) -> String {
         Utils::display_opt_bool(&Some(*v))
     }
+    */
 
     pub fn display_opt_str<T: AsRef<str>>(opt: &Option<T>) -> String {
         match opt {
@@ -36,21 +38,21 @@ impl Utils {
         tico(path, None)
     }
 
-    pub fn display_db_time(db_time: &i64) -> String {
+/*     pub fn display_db_time(db_time: &i64) -> String {
         let datetime_utc = DateTime::<Utc>::from_timestamp(*db_time, 0)
             .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
 
         let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
 
         datetime_local.format("%Y-%m-%d %H:%M").to_string()
-    }
+    } */
 
-    pub fn display_opt_db_time(opt: &Option<i64>) -> String {
+/*     pub fn display_opt_db_time(opt: &Option<i64>) -> String {
         match opt {
             Some(db_time) => Utils::display_db_time(db_time),
             None => "-".to_owned(),
         }
-    }
+    } */
 
     pub fn display_opt_i64(opt_i64: &Option<i64>) -> String {
         match opt_i64 {
@@ -99,11 +101,17 @@ impl Utils {
         })?;
 
         let start_dt = date.and_hms_opt(0, 0, 0).ok_or_else(|| {
-            FsPulseError::CustomParsingError(format!("Unable to create start time for '{}'", date_str))
+            FsPulseError::CustomParsingError(format!(
+                "Unable to create start time for '{}'",
+                date_str
+            ))
         })?;
 
         let end_dt = date.and_hms_opt(23, 59, 59).ok_or_else(|| {
-            FsPulseError::CustomParsingError(format!("Unable to create end time for '{}'", date_str))
+            FsPulseError::CustomParsingError(format!(
+                "Unable to create end time for '{}'",
+                date_str
+            ))
         })?;
         Ok((start_dt, end_dt))
     }
@@ -121,7 +129,10 @@ impl Utils {
             LocalResult::None => {
                 // For missing times, you might decide to move forward a minute until a valid time is found.
                 // Here we simply return an error, but you could adjust to your needs.
-                return Err(FsPulseError::CustomParsingError(format!("Invalid time '{}')", date_str)));
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Invalid time '{}')",
+                    date_str
+                )));
             }
         };
 
@@ -130,7 +141,10 @@ impl Utils {
             LocalResult::Single(dt) => dt,
             LocalResult::Ambiguous(_earliest, latest) => latest,
             LocalResult::None => {
-                return Err(FsPulseError::CustomParsingError(format!("Invalid time '{}')", date_str)));
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Invalid time '{}')",
+                    date_str
+                )));
             }
         };
 
@@ -151,7 +165,10 @@ impl Utils {
             LocalResult::Single(dt) => dt,
             LocalResult::Ambiguous(earliest, _) => earliest,
             LocalResult::None => {
-                return Err(FsPulseError::CustomParsingError(format!("Invalid start time '{}')", start_date_str)));
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Invalid start time '{}')",
+                    start_date_str
+                )));
             }
         };
 
@@ -159,7 +176,10 @@ impl Utils {
             LocalResult::Single(dt) => dt,
             LocalResult::Ambiguous(_, latest) => latest,
             LocalResult::None => {
-                return Err(FsPulseError::CustomParsingError(format!("Invalid end time '{}')", end_date_str)));
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Invalid end time '{}')",
+                    end_date_str
+                )));
             }
         };
 
