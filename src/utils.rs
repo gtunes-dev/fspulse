@@ -38,22 +38,6 @@ impl Utils {
         tico(path, None)
     }
 
-/*     pub fn display_db_time(db_time: &i64) -> String {
-        let datetime_utc = DateTime::<Utc>::from_timestamp(*db_time, 0)
-            .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-
-        let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
-
-        datetime_local.format("%Y-%m-%d %H:%M").to_string()
-    } */
-
-/*     pub fn display_opt_db_time(opt: &Option<i64>) -> String {
-        match opt {
-            Some(db_time) => Utils::display_db_time(db_time),
-            None => "-".to_owned(),
-        }
-    } */
-
     pub fn display_opt_i64(opt_i64: &Option<i64>) -> String {
         match opt_i64 {
             Some(i) => i.to_string(),
