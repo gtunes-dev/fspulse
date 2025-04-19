@@ -6,17 +6,17 @@ FsPulse supports persistent, user-defined configuration through a file named `co
 
 ## Finding `config.toml`
 
-FsPulse uses the [directories](https://docs.rs/directories) crate to determine the appropriate location for configuration files based on your operating system.
+FsPulse uses the [directories](https://docs.rs/directories) crate to determine the appropriate location for configuration files and logs based on your operating system. Specifically, FsPulse uses the **local data directory** (`ProjectDirs::data_local_dir()`), which resolves to platform-specific standard paths:
 
 ### Where it's stored:
 
-| Platform | Base Location         | Example             |
-|----------|------------------------|---------------------|
-| Linux    | `$HOME`               | `/home/alice`       |
-| macOS    | `$HOME`               | `/Users/Alice`      |
-| Windows  | `{FOLDERID_Profile}`  | `C:\Users\Alice`   |
+| Platform | Location Description     | Example Path                                                  |
+|----------|---------------------------|---------------------------------------------------------------|
+| Linux    | `$XDG_DATA_HOME`          | `/home/alice/.local/share/fspulse`                           |
+| macOS    | Application Support       | `/Users/alice/Library/Application Support/fspulse`           |
+| Windows  | Local AppData             | `C:\Users\Alice\AppData\Local\fspulse`                   |
 
-On the first run, if no `config.toml` is found, FsPulse will automatically create one with default settings appropriate for your platform.
+These are all managed internally via the `directories` crate. On first run, FsPulse will automatically create this directory and write a default `config.toml` there if one doesn't exist.
 
 > Tip: You can delete `config.toml` at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.
 
@@ -51,7 +51,7 @@ FsPulse uses the Rust [`log`](https://docs.rs/log) crate, and so does the PDF va
 
 ### Log File Behavior
 
-- Logs are written to a `logs/` folder in the same directory as `config.toml`
+- Logs are written to a `logs/` folder inside the same local data directory as `config.toml`
 - Each run of FsPulse creates a new log file, named using the current date and time
 - FsPulse retains up to **100** log files; older files are automatically deleted
 

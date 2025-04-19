@@ -304,15 +304,15 @@ fspulse query "changes where val_new:(I) show default, val_old, val_new order by
 <p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior and analysis settings such as thread usage.</p>
 <hr />
 <h2 id="finding-configtoml"><a class="header" href="#finding-configtoml">Finding <code>config.toml</code></a></h2>
-<p>FsPulse uses the <a href="https://docs.rs/directories">directories</a> crate to determine the appropriate location for configuration files based on your operating system.</p>
+<p>FsPulse uses the <a href="https://docs.rs/directories">directories</a> crate to determine the appropriate location for configuration files and logs based on your operating system. Specifically, FsPulse uses the <strong>local data directory</strong> (<code>ProjectDirs::data_local_dir()</code>), which resolves to platform-specific standard paths:</p>
 <h3 id="where-its-stored"><a class="header" href="#where-its-stored">Where it's stored:</a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Base Location</th><th>Example</th></tr></thead><tbody>
-<tr><td>Linux</td><td><code>$HOME</code></td><td><code>/home/alice</code></td></tr>
-<tr><td>macOS</td><td><code>$HOME</code></td><td><code>/Users/Alice</code></td></tr>
-<tr><td>Windows</td><td><code>{FOLDERID_Profile}</code></td><td><code>C:\Users\Alice</code></td></tr>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Location Description</th><th>Example Path</th></tr></thead><tbody>
+<tr><td>Linux</td><td><code>$XDG_DATA_HOME</code></td><td><code>/home/alice/.local/share/fspulse</code></td></tr>
+<tr><td>macOS</td><td>Application Support</td><td><code>/Users/alice/Library/Application Support/fspulse</code></td></tr>
+<tr><td>Windows</td><td>Local AppData</td><td><code>C:\Users\Alice\AppData\Local\fspulse</code></td></tr>
 </tbody></table>
 </div>
-<p>On the first run, if no <code>config.toml</code> is found, FsPulse will automatically create one with default settings appropriate for your platform.</p>
+<p>These are all managed internally via the <code>directories</code> crate. On first run, FsPulse will automatically create this directory and write a default <code>config.toml</code> there if one doesn't exist.</p>
 <blockquote>
 <p>Tip: You can delete <code>config.toml</code> at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.</p>
 </blockquote>
@@ -339,7 +339,7 @@ threads = 8
 </ul>
 <h3 id="log-file-behavior"><a class="header" href="#log-file-behavior">Log File Behavior</a></h3>
 <ul>
-<li>Logs are written to a <code>logs/</code> folder in the same directory as <code>config.toml</code></li>
+<li>Logs are written to a <code>logs/</code> folder inside the same local data directory as <code>config.toml</code></li>
 <li>Each run of FsPulse creates a new log file, named using the current date and time</li>
 <li>FsPulse retains up to <strong>100</strong> log files; older files are automatically deleted</li>
 </ul>
@@ -734,6 +734,22 @@ changes where val_new:(I) show default, val_old, val_new
 
         </div>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
 
