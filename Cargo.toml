@@ -13,7 +13,7 @@ dialoguer = { version = "0.11", features = ["history"] }
 dunce = "1.0"
 directories = "6.0"
 figment = { version = "0.10", features = ["toml"] }
-flexi_logger = "0.29"
+flexi_logger = "0.30"
 hex = "0.4"
 indicatif = "0.17"
 image = "0.25"
@@ -25,7 +25,7 @@ pest = "2.8"
 pest_derive = "2.8"
 phf = "0.11"
 phf_macros = "0.11"
-rusqlite = { version = "0.33", features = ["bundled"] }
+rusqlite = { version = "0.35", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
 tabled = "0.18"
