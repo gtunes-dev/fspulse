@@ -25,6 +25,7 @@ pub struct Scan {
     state: i64,
     hashing: bool,
     validating: bool,
+    #[allow(dead_code)]
     scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
@@ -192,9 +193,11 @@ impl Scan {
         self.validating
     }
 
+    /*
     pub fn scan_time(&self) -> i64 {
         self.scan_time
     }
+    */
 
     pub fn file_count(&self) -> Option<i64> {
         self.file_count
@@ -292,52 +295,6 @@ impl Scan {
         }
 
         self.state = new_state.as_i64();
-
-        Ok(())
-    }
-
-    pub fn for_each_scan<F>(db: &Database, last: u32, mut func: F) -> Result<(), FsPulseError>
-    where
-        F: FnMut(&Database, &Scan) -> Result<(), FsPulseError>,
-    {
-        if last == 0 {
-            return Ok(());
-        }
-
-        let mut stmt = db.conn().prepare(
-            "SELECT 
-                s.scan_id,
-                s.root_id,
-                s.state,
-                s.hashing,
-                s.validating,
-                s.scan_time,
-                s.file_count,
-                s.folder_count
-            FROM scans s
-            LEFT JOIN changes c ON s.scan_id = c.scan_id
-            GROUP BY s.scan_id, s.root_id, s.state, s.hashing, s.validating, s.scan_time, s.file_count, s.folder_count
-            ORDER BY s.scan_id DESC
-            LIMIT ?"
-        )?;
-
-        let rows = stmt.query_map([last], |row| {
-            Ok(Scan {
-                scan_id: row.get::<_, i64>(0)?,                   // scan id
-                root_id: row.get::<_, i64>(1)?,              // root id
-                state: row.get::<_, i64>(2)?,                // root id
-                hashing: row.get::<_, bool>(3)?,             // hashing
-                validating: row.get::<_, bool>(4)?,          // validating
-                scan_time: row.get::<_, i64>(5)?,         // time of scan
-                file_count: row.get::<_, Option<i64>>(6)?,   // file count
-                folder_count: row.get::<_, Option<i64>>(7)?, // folder count
-            })
-        })?;
-
-        for row in rows {
-            let scan = row?;
-            func(db, &scan)?;
-        }
 
         Ok(())
     }

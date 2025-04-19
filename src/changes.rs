@@ -407,15 +407,6 @@ impl ChangeCounts {
         Ok(change_counts)
     }
 
-    pub fn count_of(&self, change_type: ChangeType) -> i64 {
-        match change_type {
-            ChangeType::Add => self.add_count,
-            ChangeType::Delete => self.delete_count,
-            ChangeType::Modify => self.modify_count,
-            ChangeType::NoChange => self.no_change_count,
-        }
-    }
-
     pub fn set_count_of(&mut self, change_type: ChangeType, count: i64) {
         let target = match change_type {
             ChangeType::Add => &mut self.add_count,
