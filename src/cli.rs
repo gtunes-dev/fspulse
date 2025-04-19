@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use dialoguer::{theme::ColorfulTheme, BasicHistory, Editor, Input, Select};
+use dialoguer::{theme::ColorfulTheme, BasicHistory, Input, Select};
 use indicatif::MultiProgress;
 use log::info;
 
@@ -191,15 +191,15 @@ pub enum ReportType {
 enum CommandChoice {
     Scan,
     QuerySimple,
-    QueryEditor,
+    //QueryEditor,
     Report,
     Exit,
 }
 
 static COMMAND_CHOICES: &[(CommandChoice, &str)] = &[
     (CommandChoice::Scan, "Scan"),
-    (CommandChoice::QuerySimple, "Query (Simple)"),
-    (CommandChoice::QueryEditor, "Query (Editor)"),
+    (CommandChoice::QuerySimple, "Query"),
+    // (CommandChoice::QueryEditor, "Query (Editor)"),
     (CommandChoice::Report, "Report"),
     (CommandChoice::Exit, "Exit"),
 ];
@@ -344,9 +344,7 @@ impl Cli {
         // Process the command.
         match command {
             CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
-            CommandChoice::QuerySimple | CommandChoice::QueryEditor => {
-                Cli::do_interactive_query(db, command)?
-            }
+            CommandChoice::QuerySimple => Cli::do_interactive_query(db, command)?,
             CommandChoice::Report => Cli::do_interactive_report(db)?,
             CommandChoice::Exit => {}
         }
@@ -384,11 +382,6 @@ impl Cli {
                     if query_lower == "exit" || query_lower == "q" {
                         break;
                     }
-                    QueryProcessor::process_query(db, &query)?;
-                }
-            }
-            CommandChoice::QueryEditor => {
-                if let Some(query) = Editor::new().edit("Enter a query").unwrap() {
                     QueryProcessor::process_query(db, &query)?;
                 }
             }

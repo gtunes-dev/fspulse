@@ -580,7 +580,7 @@ impl Reports {
         // Header Section
         report.push(
             header_style
-                .apply_to("===============================================")
+                .apply_to("                                                   ")
                 .to_string(),
         );
         report.push(
@@ -590,7 +590,7 @@ impl Reports {
         );
         report.push(
             header_style
-                .apply_to("===============================================")
+                .apply_to("                                                   ")
                 .to_string(),
         );
         report.push(String::new());

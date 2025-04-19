@@ -1,0 +1,6 @@
+[book]
+authors = ["gtunes-dev"]
+language = "en"
+multilingual = false
+src = "src"
+title = "FsPulse"
