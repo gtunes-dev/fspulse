@@ -25,6 +25,7 @@ pub enum IdSpec {
     Id(i64),
     IdRange { id_start: i64, id_end: i64 },
     Null,
+    NotNull,
 }
 
 impl Filter for IdFilter {
@@ -54,6 +55,7 @@ impl Filter for IdFilter {
                     pred_vec.push(Box::new(*id_end));
                 }
                 IdSpec::Null => pred_str.push_str(&format!("({} IS NULL)", &self.id_col_db)),
+                IdSpec::NotNull => pred_str.push_str(&format!("({} IS NOT NULL)", &self.id_col_db)),
             }
         }
 
@@ -107,6 +109,7 @@ impl IdFilter {
                         .push(IdSpec::IdRange { id_start, id_end })
                 }
                 Rule::null => id_filter.id_specs.push(IdSpec::Null),
+                Rule::not_null => id_filter.id_specs.push(IdSpec::NotNull),
                 _ => unreachable!(),
             }
         }
@@ -127,6 +130,7 @@ pub struct DateFilter {
 pub enum DateSpec {
     DateRange { date_start: i64, date_end: i64 },
     Null,
+    NotNull,
 }
 
 impl Filter for DateFilter {
@@ -160,6 +164,9 @@ impl Filter for DateFilter {
                     pred_vec.push(Box::new(*date_end));
                 }
                 DateSpec::Null => pred_str.push_str(&format!("({} IS NULL)", &self.date_col_db)),
+                DateSpec::NotNull => {
+                    pred_str.push_str(&format!("({} IS NOT NULL)", &self.date_col_db))
+                }
             }
         }
 
@@ -218,9 +225,8 @@ impl DateFilter {
                         date_end,
                     });
                 }
-                Rule::null => {
-                    date_filter.date_specs.push(DateSpec::Null);
-                }
+                Rule::null => date_filter.date_specs.push(DateSpec::Null),
+                Rule::not_null => date_filter.date_specs.push(DateSpec::NotNull),
                 _ => unreachable!(),
             }
         }
@@ -234,6 +240,8 @@ impl DateFilter {
 #[derive(Debug)]
 pub struct StringFilter {
     str_col_db: &'static str,
+    match_null: bool,
+    match_not_null: bool,
     equality_match: bool,
     str_values: Vec<String>,
 }
@@ -248,8 +256,28 @@ impl Filter for StringFilter {
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first: bool = true;
 
-        if self.str_values.iter().len() > 1 {
+        let mut pred_count = self.str_values.iter().len();
+        if self.match_null {
+            pred_count += 1
+        };
+        if self.match_not_null {
+            pred_count += 1
+        };
+
+        if pred_count > 1 {
             pred_str.push('(');
+        }
+        if self.match_null {
+            first = false;
+            pred_str.push_str(&format!("({} IS NULL)", &self.str_col_db));
+        }
+
+        if self.match_not_null {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+            pred_str.push_str(&format!("({} IS NOT NULL)", &self.str_col_db));
         }
 
         for str_val in &self.str_values {
@@ -258,24 +286,20 @@ impl Filter for StringFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            if str_val == "NULL" {
-                pred_str.push_str(&format!("({} IS NULL)", &self.str_col_db));
-            } else {
-                match self.equality_match {
-                    true => {
-                        pred_str.push_str(&format!("({} = ?)", &self.str_col_db));
-                        pred_vec.push(Box::new(str_val.to_owned()));
-                    }
-                    false => {
-                        pred_str.push_str(&format!("({} LIKE ?)", &self.str_col_db));
-                        let like_param = format!("%{str_val}%");
-                        pred_vec.push(Box::new(like_param));
-                    }
+            match self.equality_match {
+                true => {
+                    pred_str.push_str(&format!("({} = ?)", &self.str_col_db));
+                    pred_vec.push(Box::new(str_val.to_owned()));
+                }
+                false => {
+                    pred_str.push_str(&format!("({} LIKE ?)", &self.str_col_db));
+                    let like_param = format!("%{str_val}%");
+                    pred_vec.push(Box::new(like_param));
                 }
             }
         }
 
-        if self.str_values.iter().len() > 1 {
+        if pred_count > 1 {
             pred_str.push(')');
         }
 
@@ -287,6 +311,8 @@ impl StringFilter {
     fn new(str_col_db: &'static str, equality_match: bool) -> Self {
         StringFilter {
             str_col_db,
+            match_null: false,
+            match_not_null: false,
             equality_match,
             str_values: Vec::new(),
         }
@@ -324,25 +350,30 @@ impl StringFilter {
         };
 
         for str_val_pair in iter {
-            let query_val_str = str_val_pair.as_str();
-            let val_str = match opt_str_map {
-                None => query_val_str.to_owned(),
-                Some(ref str_map) => {
-                    let val_str_upper = query_val_str.to_ascii_uppercase();
-                    let mapped_str = str_map.get(&val_str_upper).copied();
-                    match mapped_str {
-                        Some(s) => s.to_owned(),
-                        None => {
-                            return Err(FsPulseError::CustomParsingError(format!(
-                                "Invalid filter value: '{}'",
-                                query_val_str
-                            )));
+            match str_val_pair.as_rule() {
+                Rule::null => str_filter.match_null = true,
+                Rule::not_null => str_filter.match_not_null = true,
+                _ => {
+                    let query_val_str = str_val_pair.as_str();
+                    let val_str = match opt_str_map {
+                        None => query_val_str.to_owned(),
+                        Some(ref str_map) => {
+                            let val_str_upper = query_val_str.to_ascii_uppercase();
+                            let mapped_str = str_map.get(&val_str_upper).copied();
+                            match mapped_str {
+                                Some(s) => s.to_owned(),
+                                None => {
+                                    return Err(FsPulseError::CustomParsingError(format!(
+                                        "Invalid filter value: '{}'",
+                                        query_val_str
+                                    )));
+                                }
+                            }
                         }
-                    }
+                    };
+                    str_filter.str_values.push(val_str);
                 }
-            };
-
-            str_filter.str_values.push(val_str);
+            }
         }
         query.add_filter(Box::new(str_filter));
 

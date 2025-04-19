@@ -48,22 +48,22 @@ pub trait Query {
         self.query_impl_mut().filters.push(filter);
     }
 
-    fn cols_as_col_list(&self) -> String {
-        let mut col_list = String::new();
+    fn cols_as_select_list(&self) -> String {
+        let mut select_list = String::new();
 
         let mut first = true;
 
         for col_spec in self.query_impl().col_set.values() {
-            if col_spec.in_col_list {
+            if col_spec.in_select_list {
                 match first {
                     true => first = false,
-                    false => col_list.push_str(", "),
+                    false => select_list.push_str(", "),
                 }
-                col_list.push_str(col_spec.name_db);
+                select_list.push_str(col_spec.name_db);
             }
         }
 
-        col_list
+        select_list
     }
 
     fn build_query_table(
@@ -73,7 +73,7 @@ pub trait Query {
     ) -> Result<Table, FsPulseError>;
 
     fn prepare_and_execute(&mut self, db: &Database) -> Result<(), FsPulseError> {
-        let col_list = self.cols_as_col_list();
+        let select_list = self.cols_as_select_list();
 
         // $TODO: Wrap Filters into a struct that can generate the entire WHERE clause
         let mut params_vec: Vec<Box<dyn ToSql>> = Vec::new();
@@ -111,10 +111,12 @@ pub trait Query {
         let sql = self
             .query_impl()
             .sql_template
-            .replace("{col_list}", &col_list)
+            .replace("{select_list}", &select_list)
             .replace("{where_clause}", &where_clause)
             .replace("{order_clause}", &order_clause)
             .replace("{limit_clause}", &limit_clause);
+
+        // println!("SQL: {sql}");
 
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
 
@@ -127,7 +129,6 @@ pub trait Query {
         table.modify(Rows::first(), Alignment::center());
 
         println!("{table}");
-        //println!("SQL: {sql}");
 
         Ok(())
     }
@@ -397,6 +398,8 @@ impl ChangesQuery {
                 "val_change" => Format::format_opt_bool(change.val_change, col.format)?,
                 "val_old" => Format::format_opt_val(change.val_old.as_deref(), col.format)?,
                 "val_new" => Format::format_opt_val(change.val_new.as_deref(), col.format)?,
+                "val_error_old" => Format::format_opt_string(&change.val_error_old),
+                "val_error_new" => Format::format_opt_string(&change.val_error_new),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -425,13 +428,13 @@ pub struct QueryImpl {
 }
 
 impl QueryImpl {
-    const ROOTS_SQL_QUERY: &str = "SELECT {col_list}
+    const ROOTS_SQL_QUERY: &str = "SELECT {select_list}
         FROM roots
         {where_clause}
-        {order_clause},
+        {order_clause}
         {limit_clause}";
 
-    const SCANS_SQL_QUERY: &str = "SELECT {col_list},
+    const SCANS_SQL_QUERY: &str = "SELECT {select_list},
             COUNT(*) FILTER (WHERE changes.change_type = 'A') AS adds,
             COUNT(*) FILTER (WHERE changes.change_type = 'M') AS modifies,
             COUNT(*) FILTER (WHERE changes.change_type = 'D') AS deletes
@@ -443,13 +446,13 @@ impl QueryImpl {
         {order_clause}
         {limit_clause}";
 
-    const ITEMS_SQL_QUERY: &str = "SELECT {col_list}
+    const ITEMS_SQL_QUERY: &str = "SELECT {select_list}
         FROM items
         {where_clause}
         {order_clause}
         {limit_clause}";
 
-    const CHANGES_SQL_QUERY: &str = "SELECT {col_list}
+    const CHANGES_SQL_QUERY: &str = "SELECT {select_list}
         FROM changes
         JOIN items
             ON changes.item_id = items.item_id
@@ -535,6 +538,8 @@ pub struct ChangesQueryRow {
     pub val_change: Option<bool>,
     pub val_old: Option<String>,
     pub val_new: Option<String>,
+    pub val_error_old: Option<String>,
+    pub val_error_new: Option<String>,
 }
 
 impl ChangesQueryRow {
@@ -553,6 +558,8 @@ impl ChangesQueryRow {
             val_change: row.get(10)?,
             val_old: row.get(11)?,
             val_new: row.get(12)?,
+            val_error_old: row.get(13)?,
+            val_error_new: row.get(14)?,
         })
     }
 }

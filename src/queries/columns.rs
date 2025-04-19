@@ -8,7 +8,7 @@ pub type ColMap = phf::OrderedMap<&'static str, ColSpec>;
 pub struct ColSpec {
     pub name_db: &'static str,
     pub is_default: bool,
-    pub in_col_list: bool,
+    pub in_select_list: bool,
     pub align: Alignment,
 }
 
@@ -16,13 +16,13 @@ impl ColSpec {
     const fn new(
         name_db: &'static str,
         is_default: bool,
-        in_col_list: bool,
+        in_select_list: bool,
         align: Alignment,
     ) -> Self {
         ColSpec {
             name_db,
             is_default,
-            in_col_list,
+            in_select_list,
             align,
         }
     }
@@ -77,6 +77,8 @@ pub const CHANGES_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_change" => ColSpec::new("val_change", false, true, Alignment::center()),
     "val_old" => ColSpec::new("val_old", false, true, Alignment::center()),
     "val_new" => ColSpec::new("val_new", false, true, Alignment::center()),
+    "val_error_old" => ColSpec::new("val_error_old", false, true, Alignment::left()),
+    "val_error_new" => ColSpec::new("val_error_new", false, true, Alignment::left()),
 };
 
 #[derive(Debug, Copy, Clone)]

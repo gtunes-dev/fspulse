@@ -10,18 +10,19 @@ query_type = { "roots" | "scans" | "items" | "changes" }
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter }
+// TODO: Add int filter
+filter = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | int_show | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | change_type_show }
+show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | change_type_show | int_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { id_col | date_col | bool_col | path_col | val_col | item_type_col | change_type_col }
+order_column =  { id_col | date_col | bool_col | string_col | path_col | val_col | item_type_col | change_type_col | int_col }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause
@@ -39,7 +40,7 @@ id_display_mode     =  { nodisplay }
 id_filter        =  { id_col ~ id_filter_body }
 id_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ id_filter_values ~ WS* ~ RPAREN }
 id_filter_values = _{ id_spec ~ (WS* ~ COMMA ~ WS* ~ id_spec)* }
-id_spec          = _{ null | id_range | id }
+id_spec          = _{ null | not_null | id_range | id }
 id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
 id               =  { WS* ~ ASCII_DIGIT+ }
 
@@ -53,7 +54,7 @@ date_display_mode     =  { full | short | nodisplay }
 date_filter      =  { date_col ~ date_filter_body }
 date_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ date_values ~ WS* ~ RPAREN }
 date_values      = _{ date_spec ~ (WS* ~ COMMA ~ date_spec)* }
-date_spec        = _{ null | date_range | date }
+date_spec        = _{ null | not_null | date_range | date }
 date_range       =  { date ~ WS* ~ DOTDOT ~ date }
 date             =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
@@ -67,16 +68,16 @@ bool_display_mode     =  { full | short | nodisplay }
 bool_filter      =  { bool_col ~ bool_filter_body }
 bool_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_list ~ WS* ~ RPAREN }
 bool_list        = _{ bool ~ (WS* ~ COMMA ~ WS* ~ bool)* }
-bool             =  { null | "TRUE" | "true" | ^"T" | "FALSE" | "false" | ^"F" }
+bool             =  { null | not_null | "TRUE" | "true" | ^"T" | "FALSE" | "false" | ^"F" }
 
-string_col = { "file_hash" | "val_error" }
+string_col = { "file_hash" | "val_error" | "val_error_old" | "val_error_new" }
 
 string_show = { string_col }
 
 string_filter      =  { string_col ~ string_filter_body }
 string_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ string_list ~ WS* ~ RPAREN }
 string_list        = _{ WS* ~ string_spec ~ (WS* ~ COMMA ~ WS* ~ string_spec)* }
-string_spec        = _{ null | ("'" ~ string ~ "'") }
+string_spec        = _{ null | not_null | ("'" ~ string ~ "'") }
 string             =  { (("\\'" | (!"'" ~ ANY)))* }
 
 // Path Columns
@@ -102,7 +103,7 @@ val_display_mode     =  { full | short | nodisplay }
 val_filter      =  { val_col ~ val_filter_body }
 val_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_list ~ WS* ~ RPAREN }
 val_list        = _{ val ~ (WS* ~ COMMA ~ WS* ~ val)* }
-val             =  { null | "VALID" | "valid" | ^"V" | "INVALID" | "invalid" | ^"I" | "NO_VALIDATOR" | "no_validator" | ^"N" | "UNKNOWN" | "unknown" | ^"U" }
+val             =  { null | not_null | "VALID" | "valid" | ^"V" | "INVALID" | "invalid" | ^"I" | "NO_VALIDATOR" | "no_validator" | ^"N" | "UNKNOWN" | "unknown" | ^"U" }
 
 // Item Type Columns
 item_type_col = { "item_type" }
@@ -126,16 +127,18 @@ change_type_display_mode =  { full | short | nodisplay }
 change_type_filter      =  { change_type_col ~ change_type_filter_body }
 change_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_list ~ WS* ~ RPAREN }
 change_list             = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
-change                  =  { null | "ADD" | "add" | ^"A" | "DELETE" | "delete" | ^"D" | "MODIFY" | "modify" | "M" }
+change                  =  { null | not_null | "ADD" | "add" | ^"A" | "DELETE" | "delete" | ^"D" | "MODIFY" | "modify" | "M" }
 
 // Integer columns
 int_col  = { "file_size" | "file_count" | "folder_count" | "adds" | "modifies" | "deletes" }
 int_show = { int_col }
 
-null = { "-" | "NULL" | "null" }
+null     = { "-" | "NULL" | "null" }
+not_null = { "not null" | "NOT NULL" }
 
 default = { "default" | "DEFAULT" }
 all     = { "all" | "ALL" }
+
 // Format specifiers
 short     = _{ "SHORT" | "short" }
 full      = _{ "FULL" | "full" }
