@@ -50,7 +50,7 @@ impl Reports {
             Some(scan_id) => &format!("scans where scan_id:({})", scan_id),
             None => &format!("scans order by scan_id desc limit {}", last),
         };
-        
+
         println!(">> Generated query: {}", query);
         QueryProcessor::process_query(db, query)
     }
@@ -61,12 +61,10 @@ impl Reports {
         root_path: Option<String>,
         _format: ReportFormat,
     ) -> Result<(), FsPulseError> {
-        
-
         let query = match (root_id, root_path) {
             (None, None) => "roots order by root_id asc",
             (Some(root_id), _) => &format!("roots where root_id:({})", root_id),
-            (_, Some(root_path)) => &format!("roots where root_path:('{}')", root_path)
+            (_, Some(root_path)) => &format!("roots where root_path:('{}')", root_path),
         };
 
         println!("Query: {query}");
@@ -565,9 +563,9 @@ impl Reports {
 
     pub fn report_scan(db: &Database, scan: &Scan) -> Result<(), FsPulseError> {
         // Define your styles
-        let header_style = Style::new().cyan().bold().underlined();
-        let label_style = Style::new().white();
-        let command_style = Style::new().green();
+        let header = Style::new().cyan().bold();
+        let label = Style::new().white();
+        let command = Style::new().green();
 
         let root = Root::get_by_id(db, scan.root_id())?
             .ok_or_else(|| FsPulseError::Error("Root Not Found".to_string()))?;
@@ -578,137 +576,166 @@ impl Reports {
         let mut report = Vec::new();
 
         // Header Section
-        report.push(
-            header_style
-                .apply_to("                                                   ")
-                .to_string(),
-        );
-        report.push(
-            header_style
-                .apply_to("           FS Pulse Scan Report")
-                .to_string(),
-        );
-        report.push(
-            header_style
-                .apply_to("                                                   ")
-                .to_string(),
-        );
+
+        let title_width = 60;
+
+        let bar = header.apply_to("=".repeat(title_width)).to_string();
+        let title_text = "FS Pulse Scan Report";
+        let inset = title_width - ((title_width / 2) + (title_text.len() / 2));
+        let title = format!("{}{}", " ".repeat(inset), header.apply_to(title_text));
+
+        report.push(bar.to_owned());
+        report.push(title);
+        report.push(bar);
+
         report.push(String::new());
 
         // Scan Info Section
-        report.push(header_style.apply_to("Scan Info").to_string());
+        report.push(header.apply_to("Scan Info").to_string());
         report.push(format!(
             "{}         {}",
-            label_style.apply_to("Scan Id:"),
+            label.apply_to("Scan Id:"),
             scan.scan_id()
         ));
         report.push(format!(
             "{}          {}   (Root Id: {})",
-            label_style.apply_to("Path:"),
+            label.apply_to("Path:"),
             root.root_path(),
             root.root_id()
         ));
         report.push(format!(
             "{}         {}",
-            label_style.apply_to("Files:"),
+            label.apply_to("Files:"),
             Utils::display_opt_i64(&scan.file_count())
         ));
         report.push(format!(
             "{}       {}",
-            label_style.apply_to("Folders:"),
+            label.apply_to("Folders:"),
             Utils::display_opt_i64(&scan.folder_count())
         ));
+
+        report.push(String::new());
+
+        report.push("Tip: use query to display all scan properties".to_string());
+        report.push(format!(
+            "> {}",
+            command.apply_to(format!(
+                "fspulse query 'scans where scan_id:({}) show all'",
+                scan.scan_id()
+            ))
+        ));
+
         report.push(String::new());
 
         // Change Summary Section
-        report.push(header_style.apply_to("Change Summary").to_string());
+        report.push(header.apply_to("Change Summary").to_string());
         report.push(format!(
             "{}     {}",
-            label_style.apply_to("Additions:"),
+            label.apply_to("Additions:"),
             changes.add_count
         ));
         report.push(format!(
             "{} {}",
-            label_style.apply_to("Modifications:"),
+            label.apply_to("Modifications:"),
             changes.modify_count
         ));
         report.push(format!(
             "{}     {}",
-            label_style.apply_to("Deletions:"),
+            label.apply_to("Deletions:"),
             changes.delete_count
         ));
         report.push(String::new());
 
+        report.push("Tip: use queries to explore changes".to_string());
+        report.push(format!(
+            "> {}",
+            command.apply_to(format!("fspulse query 'changes where scan_id:({}) show default, item_path order by item_path'", scan.scan_id()))
+        ));
+        report.push(format!(
+            "> {}",
+            command.apply_to(format!("fspulse 'query changes where scan_id:({}), change_type:(A) show default, item_path order by item_path'", scan.scan_id()))
+        ));
+        report.push(format!(
+            "> {}",
+            command.apply_to(format!("fspulse 'query changes where scan_id:({}), change_type:(M) show default, item_path order by item_path", scan.scan_id()))
+        ));
+        report.push(format!(
+            "> {}",
+            command.apply_to(format!("fspulse query changes where scan_id:({}), change_type:(D) show default, item_path order by item_path'", scan.scan_id()))
+        ));
+
+        report.push(String::new());
+
         // Hash Mode Section
-        report.push(header_style.apply_to("Hash Summary").to_string());
+        report.push(header.apply_to("Hash Summary").to_string());
         if !scan.hashing() {
             report.push("Hash mode was not specified".to_string());
         }
         report.push(format!(
             "{}   {}    • {} for complete info.",
-            label_style.apply_to("Changed Hashes:"),
+            label.apply_to("Changed Hashes:"),
             4,
-            command_style.apply_to("Run 'fs hash-details'")
+            command.apply_to("Run 'fs hash-details'")
         ));
         report.push(String::new());
 
         // New Validation Transitions Section
-        report.push(header_style.apply_to("Validation Transitions").to_string());
+        report.push(header.apply_to("Validation Transitions").to_string());
         if scan.validating() {
             let validation_changes =
                 Change::get_validation_transitions_for_scan(db, scan.scan_id())?;
 
             // From Unknown transitions
-            report.push(label_style.apply_to("From Unknown:").to_string());
+            report.push(label.apply_to("From Unknown:").to_string());
             report.push(format!(
                 "    {}         {}    • {}",
-                label_style.apply_to("-> Valid:"),
+                label.apply_to("-> Valid:"),
                 validation_changes.unknown_to_valid,
-                command_style.apply_to("Run 'fs list-new-valid'")
+                command.apply_to("Run 'fs list-new-valid'")
             ));
             report.push(format!(
                 "    {}       {}    • {}",
-                label_style.apply_to("-> Invalid:"),
+                label.apply_to("-> Invalid:"),
                 validation_changes.unknown_to_invalid,
-                command_style.apply_to("Run 'fs list-new-invalid'")
+                command.apply_to("Run 'fs list-new-invalid'")
             ));
             report.push(format!(
                 "    {}  {}    • {}",
-                label_style.apply_to("-> No Validator:"),
+                label.apply_to("-> No Validator:"),
                 validation_changes.unknown_to_no_validator,
-                command_style.apply_to("Run 'fs list-new-no-validator'")
+                command.apply_to("Run 'fs list-new-no-validator'")
             ));
             report.push(String::new());
 
             // From Valid transitions
-            report.push(label_style.apply_to("From Valid:").to_string());
+            report.push(label.apply_to("From Valid:").to_string());
             report.push(format!(
                 "    {}       {}    • {}",
-                label_style.apply_to("-> Invalid:"),
+                label.apply_to("-> Invalid:"),
                 validation_changes.valid_to_invalid,
-                command_style.apply_to("Run 'fs list-valid-to-invalid'")
+                command.apply_to("Run 'fs list-valid-to-invalid'")
             ));
             report.push(format!(
                 "    {}  {}    • {}",
-                label_style.apply_to("-> No Validator:"),
+                label.apply_to("-> No Validator:"),
                 validation_changes.valid_to_no_validator,
-                command_style.apply_to("Run 'fs list-valid-to-no-validator'")
+                command.apply_to("Run 'fs list-valid-to-no-validator'")
             ));
             report.push(String::new());
 
             // From No Validator transitions
-            report.push(label_style.apply_to("From No Validator:").to_string());
+            report.push(label.apply_to("From No Validator:").to_string());
             report.push(format!(
                 "    {}         {}    • {}",
-                label_style.apply_to("-> Valid:"),
+                label.apply_to("-> Valid:"),
                 validation_changes.no_validator_to_valid,
-                command_style.apply_to("Run 'fs list-no-validator-to-valid'")
+                command.apply_to("Run 'fs list-no-validator-to-valid'")
             ));
             report.push(format!(
                 "    {}       {}    • {}",
-                label_style.apply_to("-> Invalid:"),
+                label.apply_to("-> Invalid:"),
                 validation_changes.no_validator_to_invalid,
-                command_style.apply_to("Run 'fs list-no-validator-to-invalid'")
+                command.apply_to("Run 'fs list-no-validator-to-invalid'")
             ));
             report.push(String::new());
         } else {
@@ -718,7 +745,7 @@ impl Reports {
         // Next Steps
         report.push(format!(
             "{} Use the commands above for further analysis.",
-            label_style.apply_to("Next Steps:")
+            label.apply_to("Next Steps:")
         ));
 
         // Join all lines and print the report

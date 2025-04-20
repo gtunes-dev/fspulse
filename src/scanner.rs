@@ -21,7 +21,6 @@ use crate::changes::ChangeType;
 use crate::config::CONFIG;
 use crate::hash::Hash;
 use crate::items::{Item, ItemType};
-use crate::queries::query::QueryProcessor;
 use crate::reports::Reports;
 use crate::roots::Root;
 use crate::scans::ScanState;
@@ -267,11 +266,11 @@ impl Scanner {
 
         println!();
         println!();
-        //Reports::print_scan(db, scan, ReportFormat::Table)?;
+        Reports::report_scan(db, scan)?;
 
-        println!("Completed scan and several previous scans on this root:");
-        let query = format!("scans where root_id:({}) show all order by scan_id desc limit 5", scan.root_id());
-        QueryProcessor::process_query(db, &query)?;
+        //println!("Completed scan and several previous scans on this root:");
+        //let query = format!("scans where root_id:({}) show all order by scan_id desc limit 5", scan.root_id());
+        //QueryProcessor::process_query(db, &query)?;
 
         Ok(())
     }

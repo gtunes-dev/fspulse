@@ -9,6 +9,7 @@ use tabled::{
 
 use super::{
     columns::{ColSet, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS},
+    filter::EnumFilter,
     show::{Format, Show},
 };
 //use tablestream::{Column, Stream};
@@ -325,8 +326,8 @@ impl ScansQuery {
                 "hashing" => Format::format_bool(scan.hashing, col.format)?,
                 "validating" => Format::format_bool(scan.validating, col.format)?,
                 "scan_time" => Format::format_date(scan.scan_time, col.format)?,
-                "file_count" => Format::format_i64(scan.file_count),
-                "folder_count" => Format::format_i64(scan.folder_count),
+                "file_count" => Format::format_opt_i64(scan.file_count),
+                "folder_count" => Format::format_opt_i64(scan.folder_count),
                 "adds" => Format::format_i64(scan.adds),
                 "modifies" => Format::format_i64(scan.modifies),
                 "deletes" => Format::format_i64(scan.deletes),
@@ -571,8 +572,8 @@ pub struct ScansQueryRow {
     hashing: bool,
     validating: bool,
     scan_time: i64,
-    file_count: i64,
-    folder_count: i64,
+    file_count: Option<i64>,
+    folder_count: Option<i64>,
     adds: i64,
     modifies: i64,
     deletes: i64,
@@ -653,17 +654,11 @@ impl QueryProcessor {
                 Rule::date_filter => {
                     DateFilter::add_to_query(token, query)?;
                 }
-                Rule::bool_filter => {
-                    StringFilter::add_bool_filter_to_query(token, query)?;
-                }
-                Rule::val_filter => {
-                    StringFilter::add_val_filter_to_query(token, query)?;
-                }
-                Rule::item_type_filter => {
-                    StringFilter::add_item_type_filter_to_query(token, query)?;
-                }
-                Rule::change_type_filter => {
-                    StringFilter::add_change_type_filter_to_query(token, query)?;
+                Rule::bool_filter
+                | Rule::val_filter
+                | Rule::item_type_filter
+                | Rule::change_type_filter => {
+                    EnumFilter::add_enum_filter_to_query(token, query)?;
                 }
                 Rule::path_filter => {
                     PathFilter::add_to_query(token, query)?;

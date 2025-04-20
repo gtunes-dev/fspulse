@@ -246,10 +246,6 @@ pub struct StringFilter {
     str_values: Vec<String>,
 }
 
-// TODO: This is handling null like a string bug it should be handling it specially
-// Should have a filed on StringFilter called "has_null" which gets set when
-// the null rule is seen (not the "null" value) and, when that value is set
-// we generate the like. As it stands, you can never search for a file like 'null'
 impl Filter for StringFilter {
     fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
@@ -318,14 +314,6 @@ impl StringFilter {
         }
     }
 
-    fn add_str_filter_to_query(
-        string_filter_pair: Pair<Rule>,
-        str_map: OrderedStrMap,
-        query: &mut dyn Query,
-    ) -> Result<(), FsPulseError> {
-        Self::add_opt_str_filter_to_query(string_filter_pair, Some(str_map), query)
-    }
-
     fn add_opt_str_filter_to_query(
         string_filter_pair: Pair<Rule>,
         opt_str_map: Option<OrderedStrMap>,
@@ -380,77 +368,150 @@ impl StringFilter {
         Ok(())
     }
 
-    pub fn add_bool_filter_to_query(
-        bool_filter_pair: Pair<Rule>,
-        query: &mut dyn Query,
-    ) -> Result<(), FsPulseError> {
-        Self::add_str_filter_to_query(bool_filter_pair, Self::BOOL_VALUES, query)
-    }
-
-    pub fn add_change_type_filter_to_query(
-        change_type_filter_pair: Pair<Rule>,
-        query: &mut dyn Query,
-    ) -> Result<(), FsPulseError> {
-        Self::add_str_filter_to_query(change_type_filter_pair, Self::CHANGE_TYPE_VALUES, query)
-    }
-
-    pub fn add_val_filter_to_query(
-        val_filter_pair: Pair<Rule>,
-        query: &mut dyn Query,
-    ) -> Result<(), FsPulseError> {
-        Self::add_str_filter_to_query(val_filter_pair, Self::VAL_VALUES, query)
-    }
-
-    pub fn add_item_type_filter_to_query(
-        item_type_filter_pair: Pair<Rule>,
-        query: &mut dyn Query,
-    ) -> Result<(), FsPulseError> {
-        Self::add_str_filter_to_query(item_type_filter_pair, Self::ITEM_TYPE_VALUES, query)
-    }
-
     pub fn add_string_filter_to_query(
         string_filter_pair: Pair<Rule>,
         query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         Self::add_opt_str_filter_to_query(string_filter_pair, None, query)
     }
+}
 
-    const BOOL_VALUES: OrderedStrMap = phf_ordered_map! {
-        "TRUE" => "1",
-        "T" => "1",
-        "FALSE" => "0",
-        "F" => "0",
-        "NULL" => "NULL",
-        "-" => "NULL",
-    };
+#[derive(Debug)]
+pub struct EnumFilter {
+    enum_col_db: &'static str,
+    match_null: bool,
+    match_not_null: bool,
+    enum_vals: Vec<String>,
+}
 
-    const CHANGE_TYPE_VALUES: OrderedStrMap = phf_ordered_map! {
-        "ADD" => "A",
-        "A" => "A",
-        "DELETE" => "D",
-        "D" => "D",
-        "MODIFY" => "M",
-        "M" => "M",
-    };
+impl Filter for EnumFilter {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+        let mut pred_str = String::new();
+        let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
+        let mut first = true;
 
-    const VAL_VALUES: OrderedStrMap = phf_ordered_map! {
-        "VALID" => "V",
-        "V" => "V",
-        "INVALID" => "I",
-        "I" => "I",
-        "NOT_VALIDATED" => "N",
-        "N" => "N",
-        "UNKNOWN" => "U",
-        "U" => "U",
-        "NULL" => "NULL",
-        "-" => "NULL",
-    };
+        let mut pred_count = self.enum_vals.iter().len();
+        if self.match_null {
+            pred_count += 1
+        };
+        if self.match_not_null {
+            pred_count += 1
+        };
 
-    const ITEM_TYPE_VALUES: OrderedStrMap = phf_ordered_map! {
-        "FILE" => "F",
-        "F" => "F",
-        "DIRECTORY" => "D",
-        "D" => "D",
+        if pred_count > 1 {
+            pred_str.push('(');
+        }
+
+        if self.match_null {
+            first = false;
+            pred_str.push_str(&format!("({} IS NULL)", &self.enum_col_db));
+        }
+
+        if self.match_not_null {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+            pred_str.push_str(&format!("({} IS NOT NULL)", &self.enum_col_db));
+        }
+
+        for enum_val in &self.enum_vals {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+
+            pred_str.push_str(&format!("({} = ?)", &self.enum_col_db));
+            pred_vec.push(Box::new(enum_val.to_owned()));
+        }
+
+        if pred_count > 1 {
+            pred_str.push(')');
+        }
+
+        Ok((pred_str, pred_vec))
+    }
+}
+
+impl EnumFilter {
+    fn new(enum_col_db: &'static str) -> Self {
+        EnumFilter {
+            enum_col_db,
+            match_null: false,
+            match_not_null: false,
+            enum_vals: Vec::new(),
+        }
+    }
+
+    pub fn add_enum_filter_to_query(
+        enum_filter_pair: Pair<Rule>,
+        query: &mut dyn Query,
+    ) -> Result<(), FsPulseError> {
+        let mut iter = enum_filter_pair.into_inner();
+        let enum_col_pair = iter.next().unwrap();
+        let enum_col = enum_col_pair.as_str().to_owned();
+
+        let mut enum_filter = match query.col_set().col_name_to_db(&enum_col) {
+            Some(enum_col_db) => Self::new(enum_col_db),
+            None => {
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Column not found: '{}'",
+                    enum_col
+                )))
+            }
+        };
+
+        for enum_val_pair in iter {
+            match enum_val_pair.as_rule() {
+                Rule::null => enum_filter.match_null = true,
+                Rule::not_null => enum_filter.match_not_null = true,
+                rule => {
+                    let rule_str = format!("{:?}", rule);
+                    let val_opt = Self::ENUM_RULES.get(&rule_str).copied();
+                    match val_opt {
+                        Some(val) => enum_filter.enum_vals.push(val.to_owned()),
+                        None => {
+                            return Err(FsPulseError::CustomParsingError(format!(
+                                "Invalid filter value: '{}'",
+                                enum_val_pair.as_str()
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+
+        query.add_filter(Box::new(enum_filter));
+
+        Ok(())
+    }
+
+    // We use a single, common map for all of the enum mappings
+    // The parser grammar guarantees that values are valid for a given
+    // enum type. We stringify rule names because there is no
+    // straightforward way to include a rule in a static mapping
+    // Null and Not Null are not expressed in these mapping - they
+    // are handled directly in code
+    const ENUM_RULES: OrderedStrMap = phf_ordered_map! {
+        // bool values
+        "bool_true" => "1",
+        "bool_false" => "0",
+
+        // val values
+        "val_valid" => "V",
+        "val_invalid" => "I",
+        "val_not_validated" => "N",
+        "val_unknown" => "U",
+
+        // change type values
+        "change_add" => "A",
+        "change_modify" => "M",
+        "change_delete" => "D",
+
+        // item_type values
+        "item_file" => "F",
+        "item_directory" => "D",
+        "item_symlink" => "S",
     };
 }
 

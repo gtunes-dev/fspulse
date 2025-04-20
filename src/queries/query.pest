@@ -59,7 +59,7 @@ date_range       =  { date ~ WS* ~ DOTDOT ~ date }
 date             =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
-bool_col = { "hashing" | "validating" | "meta_change" }
+bool_col = { "hashing" | "validating" | "hash_change" | "meta_change" | "val_change" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }
@@ -68,7 +68,9 @@ bool_display_mode     =  { full | short | nodisplay }
 bool_filter      =  { bool_col ~ bool_filter_body }
 bool_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ bool_list ~ WS* ~ RPAREN }
 bool_list        = _{ bool ~ (WS* ~ COMMA ~ WS* ~ bool)* }
-bool             =  { null | not_null | "TRUE" | "true" | ^"T" | "FALSE" | "false" | ^"F" }
+bool             = _{ null | not_null | bool_true | bool_false }
+bool_true        =  { "TRUE" | "true" | "True" | ^"T" }
+bool_false       =  { "FALSE" | "false" | "False" | ^"F" }
 
 string_col = { "file_hash" | "val_error" | "val_error_old" | "val_error_new" }
 
@@ -100,10 +102,14 @@ val_show             =  { val_col ~ val_display_modifier? }
 val_display_modifier = _{ WS* ~ "@" ~ WS* ~ val_display_mode }
 val_display_mode     =  { full | short | nodisplay }
 
-val_filter      =  { val_col ~ val_filter_body }
-val_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_list ~ WS* ~ RPAREN }
-val_list        = _{ val ~ (WS* ~ COMMA ~ WS* ~ val)* }
-val             =  { null | not_null | "VALID" | "valid" | ^"V" | "INVALID" | "invalid" | ^"I" | "NO_VALIDATOR" | "no_validator" | ^"N" | "UNKNOWN" | "unknown" | ^"U" }
+val_filter       =  { val_col ~ val_filter_body }
+val_filter_body  = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_list ~ WS* ~ RPAREN }
+val_list         = _{ val ~ (WS* ~ COMMA ~ WS* ~ val)* }
+val              = _{ null | not_null | val_valid | val_invalid | val_no_validator | val_unknown }
+val_valid        =  { "VALID" | "valid" | "Valid" | ^"V" }
+val_invalid      =  { "INVALID" | "invalid" | "Invalid" | ^"I" }
+val_no_validator =  { "NO VALIDATOR" | "no validator" | "No Validator" | ^"N" }
+val_unknown      =  { "UNKNOWN" | "unknown" | "Unknown" | ^"U" }
 
 // Item Type Columns
 item_type_col = { "item_type" }
@@ -115,7 +121,10 @@ item_type_display_mode =  { full | short | nodisplay }
 item_type_filter = { item_type_col ~ item_type_filter_body }
 
 item_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ item_type ~ WS* ~ RPAREN }
-item_type             =  { "FILE" | "file" | ^"F" | "DIRECTORY" | "directory" | "DIR" | "dir" | ^"D" }
+item_type             = _{ item_file | item_directory | item_symlink }
+item_file             =  { "FILE" | "file" | "File" | ^"F" }
+item_directory        =  { "DIRECTORY" | "directory" | "Directory" | "DIR" | "dir" | "Dir" | ^"D" }
+item_symlink          =  { "SYMLINK" | "symlink" | "Symlink" | ^"S" }
 
 // Change Type Columns
 change_type_col = { "change_type" }
@@ -127,7 +136,10 @@ change_type_display_mode =  { full | short | nodisplay }
 change_type_filter      =  { change_type_col ~ change_type_filter_body }
 change_type_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_list ~ WS* ~ RPAREN }
 change_list             = _{ change ~ (WS* ~ COMMA ~ WS* ~ change)* }
-change                  =  { null | not_null | "ADD" | "add" | ^"A" | "DELETE" | "delete" | ^"D" | "MODIFY" | "modify" | "M" }
+change                  = _{ null | not_null | change_add | change_modify | change_delete }
+change_add              =  { "ADD" | "add" | "Add" | ^"A" }
+change_modify           =  { "MODIFY" | "modify" | "Modify" | ^"M" }
+change_delete           =  { "DELETE" | "delete" | "Delete" | ^"D" }
 
 // Integer columns
 int_col  = { "file_size" | "file_count" | "folder_count" | "adds" | "modifies" | "deletes" }
