@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Interactive Mode - FsPulse</title>
+        <title>Command-Line Interface - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -155,70 +155,96 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h1>
-<p>FsPulse includes an interactive mode that provides a menu-driven interface for common tasks.</p>
-<p><img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/interact.png" alt="Interactive menu" /></p>
-<p>To launch interactive mode:</p>
-<pre><code class="language-sh">fspulse interact
+                        <h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h1>
+<p>FsPulse provides two primary modes of operation:</p>
+<ul>
+<li>A powerful <strong>command-line interface</strong> (CLI)</li>
+<li>An interactive, menu-driven interface described in the <a href="interactive_mode.html">Interactive Mode</a> section</li>
+</ul>
+<p>This page documents the full CLI, including top-level commands, available subcommands, and commonly used options.</p>
+<hr />
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<p>At any time, you can get help from the CLI using:</p>
+<pre><code class="language-sh">fspulse --help
+fspulse &lt;command&gt; --help
+</code></pre>
+<p>For example:</p>
+<pre><code class="language-sh">fspulse scan --help
+fspulse report items --help
 </code></pre>
 <hr />
-<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p>The interactive menu offers the following options:</p>
-<ul>
-<li><strong>Scan</strong> — Re-scan a previously scanned root</li>
-<li><strong>Query</strong> — Run custom queries using the query language</li>
-<li><strong>Report</strong> — View predefined summary reports</li>
-<li><strong>Exit</strong> — Close interactive mode</li>
-</ul>
-<hr />
-<h2 id="scan"><a class="header" href="#scan">Scan</a></h2>
-<p>This option lets you scan a folder that has already been scanned.</p>
-<blockquote>
-<p>⚠️ You must first perform a scan from the command line using:</p>
-</blockquote>
-<pre><code class="language-sh">fspulse scan --root-path /your/path
+<h2 id="top-level-commands"><a class="header" href="#top-level-commands">Top-Level Commands</a></h2>
+<h3 id="interact"><a class="header" href="#interact"><code>interact</code></a></h3>
+<p>Launches FsPulse in interactive mode.</p>
+<pre><code class="language-sh">fspulse interact [--db-path &lt;path&gt;]
 </code></pre>
-<p>Once a root has been scanned at least once, it becomes available in the interactive menu.</p>
-<p>Interactive scans allow you to toggle:</p>
 <ul>
-<li><strong>Hashing</strong> — compute MD5 file hashes</li>
-<li><strong>Validation</strong> — check file content integrity for supported types</li>
+<li>Allows users to choose scan or report actions through a guided menu</li>
+<li>Only usable for roots that have already been scanned</li>
 </ul>
-<hr />
-<h2 id="query"><a class="header" href="#query">Query</a></h2>
-<p>Allows you to enter queries using FsPulse’s <a href="query.html">query syntax</a>.</p>
-<ul>
-<li>Use full expressions like:
-<pre><code class="language-sh">items where item_path:('photos')
-changes where val_new:(I) show default, val_old, val_new
+<h3 id="scan"><a class="header" href="#scan"><code>scan</code></a></h3>
+<p>Performs a filesystem scan.</p>
+<pre><code class="language-sh">fspulse scan [--db-path &lt;path&gt;] [--root-id &lt;id&gt; | --root-path &lt;path&gt; | --last] [--hash] [--validate]
 </code></pre>
-</li>
-<li>Queries may be repeated until you type <code>q</code> or <code>exit</code></li>
-<li>Query errors provide detailed syntax feedback</li>
-<li>Use the ↑ and ↓ arrow keys to scroll through previous entries in your session</li>
-</ul>
-<hr />
-<h2 id="report"><a class="header" href="#report">Report</a></h2>
-<p>Provides quick access to common predefined reports:</p>
 <ul>
-<li>List all roots</li>
-<li>Show recent scans</li>
-<li>Display invalid items</li>
-<li>View changes from the latest scan</li>
+<li><code>--root-id</code> — scan an existing root by ID</li>
+<li><code>--root-path</code> — scan a new or existing root by its path</li>
+<li><code>--last</code> — scan the most recently scanned root</li>
+<li><code>--hash</code> — compute MD5 hashes</li>
+<li><code>--validate</code> — validate files for known formats (see <a href="validators.html">Validators</a>)</li>
 </ul>
-<p>Reports are internally implemented as saved queries and will expand over time.</p>
+<h3 id="report"><a class="header" href="#report"><code>report</code></a></h3>
+<p>Generates prebuilt reports about roots, scans, items, or changes.</p>
+<pre><code class="language-sh">fspulse report &lt;subcommand&gt; [options]
+</code></pre>
+<p>Available subcommands:</p>
+<h4 id="roots"><a class="header" href="#roots"><code>roots</code></a></h4>
+<pre><code class="language-sh">fspulse report roots [--db-path &lt;path&gt;] [--root-id &lt;id&gt; | --root-path &lt;path&gt;]
+</code></pre>
+<h4 id="scans"><a class="header" href="#scans"><code>scans</code></a></h4>
+<pre><code class="language-sh">fspulse report scans [--db-path &lt;path&gt;] [--scan-id &lt;id&gt; | --last &lt;N&gt;]
+</code></pre>
+<h4 id="items"><a class="header" href="#items"><code>items</code></a></h4>
+<pre><code class="language-sh">fspulse report items [--db-path &lt;path&gt;] [--item-id &lt;id&gt; | --item-path &lt;path&gt; | --root-id &lt;id&gt;] [--invalid]
+</code></pre>
+<h4 id="changes"><a class="header" href="#changes"><code>changes</code></a></h4>
+<pre><code class="language-sh">fspulse report changes [--db-path &lt;path&gt;] [--change-id &lt;id&gt; | --item-id &lt;id&gt; | --scan-id &lt;id&gt;]
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>--invalid</code> on <code>items</code> requires <code>--root-id</code></li>
+</ul>
+<h3 id="query"><a class="header" href="#query"><code>query</code></a></h3>
+<p>Executes a structured query using FsPulse's flexible syntax.</p>
+<pre><code class="language-sh">fspulse query [--db-path &lt;path&gt;] "&lt;query string&gt;"
+</code></pre>
+<p>Example:</p>
+<pre><code class="language-sh">fspulse query "items where item_path:('docs') order by mod_date desc limit 10"
+</code></pre>
+<p>See <a href="query.html">Query Syntax</a> for full details.</p>
 <hr />
-<p>Interactive mode is especially helpful for exploring your data once scans are available, and for learning the query syntax interactively.</p>
+<h2 id="shared-option---db-path"><a class="header" href="#shared-option---db-path">Shared Option: <code>--db-path</code></a></h2>
+<p>Many commands support the optional <code>--db-path</code> parameter to specify a custom SQLite database location.</p>
+<ul>
+<li>If omitted, FsPulse defaults to the appropriate system-specific location using the <a href="https://docs.rs/directories">directories</a> crate</li>
+<li>The database file is always named <code>fspulse.db</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-sh">fspulse scan --root-path /home/user/data --db-path /tmp/fspulse
+fspulse query --db-path /var/fspulse "changes where val_new:(I)"
+</code></pre>
+<hr />
+<p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="query.html">Query Syntax</a> · <a href="configuration.html">Configuration</a></p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="cli.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="query.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="validators.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="interactive_mode.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -228,11 +254,11 @@ changes where val_new:(I) show default, val_old, val_new
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="cli.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="query.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="validators.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="interactive_mode.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

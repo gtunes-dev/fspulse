@@ -372,61 +372,123 @@ threads = 8
 <pre><code class="language-text">DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 </code></pre>
 <hr />
-<h2 id="column-availability-by-domain"><a class="header" href="#column-availability-by-domain">Column Availability by Domain</a></h2>
-<p>The table below shows which columns are available in each domain:</p>
-<div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th><th style="text-align: center">Roots</th><th style="text-align: center">Scans</th><th style="text-align: center">Items</th><th style="text-align: center">Changes</th></tr></thead><tbody>
-<tr><td><code>root_id</code></td><td>Integer</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>scan_id</code></td><td>Integer</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>item_id</code></td><td>Integer</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>change_id</code></td><td>Integer</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>item_path</code></td><td>Path</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>root_path</code></td><td>Path</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>file_size</code></td><td>Integer</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>val</code>, <code>val_old</code>, <code>val_new</code></td><td>Validation Status</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>val_error</code>, <code>val_error_old</code>, <code>val_error_new</code></td><td>String</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>mod_date</code></td><td>Date</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>mod_date_old</code>, <code>mod_date_new</code></td><td>Date</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>hashing</code></td><td>Boolean</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">–</td><td style="text-align: center">–</td></tr>
-<tr><td><code>validating</code></td><td>Boolean</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">–</td><td style="text-align: center">–</td></tr>
-<tr><td><code>item_type</code></td><td>Item Type Enum</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>change_type</code></td><td>Change Type Enum</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>meta_change</code></td><td>Boolean</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">–</td><td style="text-align: center">✓</td></tr>
-<tr><td><code>scan_time</code></td><td>Date</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">–</td><td style="text-align: center">–</td></tr>
-<tr><td><code>adds</code>, <code>modifies</code>, <code>deletes</code></td><td>Integer</td><td style="text-align: center">–</td><td style="text-align: center">✓</td><td style="text-align: center">–</td><td style="text-align: center">–</td></tr>
+<h2 id="column-availability"><a class="header" href="#column-availability">Column Availability</a></h2>
+<h3 id="roots-domain"><a class="header" href="#roots-domain"><code>roots</code> Domain</a></h3>
+<p>All queries that retrieve root information begin with the keyword <code>roots</code>:</p>
+<pre><code class="language-text">roots [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th></tr></thead><tbody>
+<tr><td><code>root_id</code></td><td>Integer</td></tr>
+<tr><td><code>root_path</code></td><td>Path</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h3 id="scans-domain"><a class="header" href="#scans-domain"><code>scans</code> Domain</a></h3>
+<p>All queries that retrieve scan information begin with the keyword <code>scans</code>:</p>
+<pre><code class="language-text">scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th></tr></thead><tbody>
+<tr><td><code>scan_id</code></td><td>Integer</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td></tr>
+<tr><td><code>root_path</code></td><td>Path</td></tr>
+<tr><td><code>scan_time</code></td><td>Date</td></tr>
+<tr><td><code>hashing</code></td><td>Boolean</td></tr>
+<tr><td><code>validating</code></td><td>Boolean</td></tr>
+<tr><td><code>adds</code></td><td>Integer</td></tr>
+<tr><td><code>modifies</code></td><td>Integer</td></tr>
+<tr><td><code>deletes</code></td><td>Integer</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h3 id="items-domain"><a class="header" href="#items-domain"><code>items</code> Domain</a></h3>
+<p>All queries that retrieve item information begin with the keyword <code>items</code>:</p>
+<pre><code class="language-text">items [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th></tr></thead><tbody>
+<tr><td><code>item_id</code></td><td>Integer</td></tr>
+<tr><td><code>scan_id</code></td><td>Integer</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td></tr>
+<tr><td><code>item_path</code></td><td>Path</td></tr>
+<tr><td><code>root_path</code></td><td>Path</td></tr>
+<tr><td><code>file_size</code></td><td>Integer</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td></tr>
+<tr><td><code>val</code></td><td>Validation Status</td></tr>
+<tr><td><code>val_error</code></td><td>String</td></tr>
+<tr><td><code>mod_date</code></td><td>Date</td></tr>
+<tr><td><code>item_type</code></td><td>Item Type Enum</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h3 id="changes-domain"><a class="header" href="#changes-domain"><code>changes</code> Domain</a></h3>
+<p>All queries that retrieve change history begin with the keyword <code>changes</code>:</p>
+<pre><code class="language-text">changes [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th></tr></thead><tbody>
+<tr><td><code>change_id</code></td><td>Integer</td></tr>
+<tr><td><code>scan_id</code></td><td>Integer</td></tr>
+<tr><td><code>item_id</code></td><td>Integer</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td></tr>
+<tr><td><code>item_path</code></td><td>Path</td></tr>
+<tr><td><code>root_path</code></td><td>Path</td></tr>
+<tr><td><code>file_size</code></td><td>Integer</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td></tr>
+<tr><td><code>val_old</code></td><td>Validation Status</td></tr>
+<tr><td><code>val_new</code></td><td>Validation Status</td></tr>
+<tr><td><code>val_error_old</code></td><td>String</td></tr>
+<tr><td><code>val_error_new</code></td><td>String</td></tr>
+<tr><td><code>mod_date_old</code></td><td>Date</td></tr>
+<tr><td><code>mod_date_new</code></td><td>Date</td></tr>
+<tr><td><code>item_type</code></td><td>Item Type Enum</td></tr>
+<tr><td><code>change_type</code></td><td>Change Type Enum</td></tr>
+<tr><td><code>meta_change</code></td><td>Boolean</td></tr>
 </tbody></table>
 </div>
 <hr />
 <h2 id="the-where-clause"><a class="header" href="#the-where-clause">The <code>WHERE</code> Clause</a></h2>
-<p>The <code>WHERE</code> clause filters results using one or more conditions, each written as:</p>
+<p>The <code>WHERE</code> clause filters results using one or more filters. Each filter has the structure:</p>
 <pre><code class="language-text">column_name:(value1, value2, ...)
 </code></pre>
-<p>Each value must be valid for the column's type:</p>
+<p>Values must match the column’s type. You can use individual values, ranges (when supported), or a comma-separated combination. Values are <strong>not quoted</strong> unless explicitly shown.</p>
+<div class="table-wrapper"><table><thead><tr><th>Type</th><th>Examples</th><th>Notes</th></tr></thead><tbody>
+<tr><td>Integer</td><td><code>5</code>, <code>1..5</code>, <code>3, 5, 7..9</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Supports ranges and nullability. Ranges are inclusive.</td></tr>
+<tr><td>Date</td><td><code>2024-01-01</code>, <code>2024-01-01..2024-06-30</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Use <code>YYYY-MM-DD</code>. Ranges are inclusive.</td></tr>
+<tr><td>Boolean</td><td><code>true</code>, <code>false</code>, <code>T</code>, <code>F</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Values are unquoted. Null values are allowed in all-lower or all-upper case.</td></tr>
+<tr><td>String</td><td><code>'example'</code>, <code>'error: missing EOF'</code>, <code>null</code>, <code>NULL</code></td><td>Quoted strings. Null values are allowed in all-lower or all-upper case.</td></tr>
+<tr><td>Path</td><td><code>'photos/reports'</code>, <code>'file.txt'</code></td><td>Must be quoted. <strong>Null values are not supported.</strong></td></tr>
+<tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Valid (V), Invalid (I), No Validator (N), Unknown (U). Unquoted. Ranges not supported.</td></tr>
+<tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>File (F), Directory (D). Unquoted. Ranges not supported.</td></tr>
+<tr><td>Change Type Enum</td><td><code>A</code>, <code>D</code>, <code>M</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Add (A), Delete (D), Modify (M). Unquoted. Ranges not supported.</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="combining-filters"><a class="header" href="#combining-filters">Combining Filters</a></h2>
+<p>When specifying multiple values within a single filter, the match is logically <strong>OR</strong>. When specifying multiple filters across different columns, the match is logically <strong>AND</strong>.</p>
+<p>For example:</p>
+<pre><code class="language-text">scans where scan_time:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), hashing:(T)
+</code></pre>
+<p>This query matches scans that:</p>
 <ul>
-<li><strong>Integer</strong>: numbers, ranges (e.g., <code>1..5</code>)</li>
-<li><strong>Date</strong>: <code>YYYY-MM-DD</code>, ranges, <code>null</code>, <code>not null</code></li>
-<li><strong>Boolean</strong>: <code>true</code>, <code>false</code>, <code>T</code>, <code>F</code>, <code>null</code>, <code>not null</code></li>
-<li><strong>String/Path</strong>: quoted strings</li>
-<li><strong>Enums</strong>: e.g., <code>V</code>, <code>I</code>, <code>A</code>, <code>D</code>, <code>M</code> depending on type</li>
+<li>Occurred in <strong>either</strong> the first week of January 2025 <strong>or</strong> the first week of February 2025</li>
+<li><strong>AND</strong> were performed with hashing enabled</li>
 </ul>
 <hr />
 <h2 id="the-show-clause"><a class="header" href="#the-show-clause">The <code>SHOW</code> Clause</a></h2>
-<p>Controls which columns are shown and how they’re formatted. If omitted, a default column set is used.</p>
+<p>The <code>SHOW</code> clause controls which columns are displayed and how some of them are formatted. If omitted, a default column set is used.</p>
 <p>You may specify:</p>
 <ul>
 <li>A list of column names</li>
 <li>The keyword <code>default</code> to insert the default set</li>
 <li>The keyword <code>all</code> to show all available columns</li>
 </ul>
-<p>Some columns support formatting via <code>@</code> modifiers:</p>
+<p>Formatting modifiers can be applied using the <code>@</code> symbol:</p>
 <pre><code class="language-text">item_path@name, mod_date@short
 </code></pre>
-<h3 id="format-specifiers"><a class="header" href="#format-specifiers">Format Specifiers</a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Type</th><th>Format Modes</th></tr></thead><tbody>
+<h3 id="format-specifiers-by-type"><a class="header" href="#format-specifiers-by-type">Format Specifiers by Type</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Type</th><th>Allowed Format Modifiers</th></tr></thead><tbody>
 <tr><td>Date</td><td><code>full</code>, <code>short</code>, <code>nodisplay</code></td></tr>
 <tr><td>Path</td><td><code>full</code>, <code>relative</code>, <code>short</code>, <code>name</code>, <code>nodisplay</code></td></tr>
-<tr><td>Validation/Item/Change/Boolean</td><td><code>full</code>, <code>short</code>, <code>nodisplay</code></td></tr>
-<tr><td>Integer/String</td><td>(no formatting options)</td></tr>
+<tr><td>Validation / Enum / Boolean</td><td><code>full</code>, <code>short</code>, <code>nodisplay</code></td></tr>
+<tr><td>Integer / String</td><td><em>(no formatting options)</em></td></tr>
 </tbody></table>
 </div>
 <hr />
@@ -450,6 +512,86 @@ changes where val_new:(I) show default, val_old, val_new order by change_id desc
 </code></pre>
 <hr />
 <p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="validators.html">Validators</a> · <a href="configuration.html">Configuration</a></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h1>
+<p>FsPulse provides two primary modes of operation:</p>
+<ul>
+<li>A powerful <strong>command-line interface</strong> (CLI)</li>
+<li>An interactive, menu-driven interface described in the <a href="interactive_mode.html">Interactive Mode</a> section</li>
+</ul>
+<p>This page documents the full CLI, including top-level commands, available subcommands, and commonly used options.</p>
+<hr />
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<p>At any time, you can get help from the CLI using:</p>
+<pre><code class="language-sh">fspulse --help
+fspulse &lt;command&gt; --help
+</code></pre>
+<p>For example:</p>
+<pre><code class="language-sh">fspulse scan --help
+fspulse report items --help
+</code></pre>
+<hr />
+<h2 id="top-level-commands"><a class="header" href="#top-level-commands">Top-Level Commands</a></h2>
+<h3 id="interact"><a class="header" href="#interact"><code>interact</code></a></h3>
+<p>Launches FsPulse in interactive mode.</p>
+<pre><code class="language-sh">fspulse interact [--db-path &lt;path&gt;]
+</code></pre>
+<ul>
+<li>Allows users to choose scan or report actions through a guided menu</li>
+<li>Only usable for roots that have already been scanned</li>
+</ul>
+<h3 id="scan"><a class="header" href="#scan"><code>scan</code></a></h3>
+<p>Performs a filesystem scan.</p>
+<pre><code class="language-sh">fspulse scan [--db-path &lt;path&gt;] [--root-id &lt;id&gt; | --root-path &lt;path&gt; | --last] [--hash] [--validate]
+</code></pre>
+<ul>
+<li><code>--root-id</code> — scan an existing root by ID</li>
+<li><code>--root-path</code> — scan a new or existing root by its path</li>
+<li><code>--last</code> — scan the most recently scanned root</li>
+<li><code>--hash</code> — compute MD5 hashes</li>
+<li><code>--validate</code> — validate files for known formats (see <a href="validators.html">Validators</a>)</li>
+</ul>
+<h3 id="report"><a class="header" href="#report"><code>report</code></a></h3>
+<p>Generates prebuilt reports about roots, scans, items, or changes.</p>
+<pre><code class="language-sh">fspulse report &lt;subcommand&gt; [options]
+</code></pre>
+<p>Available subcommands:</p>
+<h4 id="roots"><a class="header" href="#roots"><code>roots</code></a></h4>
+<pre><code class="language-sh">fspulse report roots [--db-path &lt;path&gt;] [--root-id &lt;id&gt; | --root-path &lt;path&gt;]
+</code></pre>
+<h4 id="scans"><a class="header" href="#scans"><code>scans</code></a></h4>
+<pre><code class="language-sh">fspulse report scans [--db-path &lt;path&gt;] [--scan-id &lt;id&gt; | --last &lt;N&gt;]
+</code></pre>
+<h4 id="items"><a class="header" href="#items"><code>items</code></a></h4>
+<pre><code class="language-sh">fspulse report items [--db-path &lt;path&gt;] [--item-id &lt;id&gt; | --item-path &lt;path&gt; | --root-id &lt;id&gt;] [--invalid]
+</code></pre>
+<h4 id="changes"><a class="header" href="#changes"><code>changes</code></a></h4>
+<pre><code class="language-sh">fspulse report changes [--db-path &lt;path&gt;] [--change-id &lt;id&gt; | --item-id &lt;id&gt; | --scan-id &lt;id&gt;]
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>--invalid</code> on <code>items</code> requires <code>--root-id</code></li>
+</ul>
+<h3 id="query"><a class="header" href="#query"><code>query</code></a></h3>
+<p>Executes a structured query using FsPulse's flexible syntax.</p>
+<pre><code class="language-sh">fspulse query [--db-path &lt;path&gt;] "&lt;query string&gt;"
+</code></pre>
+<p>Example:</p>
+<pre><code class="language-sh">fspulse query "items where item_path:('docs') order by mod_date desc limit 10"
+</code></pre>
+<p>See <a href="query.html">Query Syntax</a> for full details.</p>
+<hr />
+<h2 id="shared-option---db-path"><a class="header" href="#shared-option---db-path">Shared Option: <code>--db-path</code></a></h2>
+<p>Many commands support the optional <code>--db-path</code> parameter to specify a custom SQLite database location.</p>
+<ul>
+<li>If omitted, FsPulse defaults to the appropriate system-specific location using the <a href="https://docs.rs/directories">directories</a> crate</li>
+<li>The database file is always named <code>fspulse.db</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-sh">fspulse scan --root-path /home/user/data --db-path /tmp/fspulse
+fspulse query --db-path /var/fspulse "changes where val_new:(I)"
+</code></pre>
+<hr />
+<p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="query.html">Query Syntax</a> · <a href="configuration.html">Configuration</a></p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h1>
 <p>FsPulse includes an interactive mode that provides a menu-driven interface for common tasks.</p>
 <p><img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/interact.png" alt="Interactive menu" /></p>
@@ -466,7 +608,7 @@ changes where val_new:(I) show default, val_old, val_new order by change_id desc
 <li><strong>Exit</strong> — Close interactive mode</li>
 </ul>
 <hr />
-<h2 id="scan"><a class="header" href="#scan">Scan</a></h2>
+<h2 id="scan-1"><a class="header" href="#scan-1">Scan</a></h2>
 <p>This option lets you scan a folder that has already been scanned.</p>
 <blockquote>
 <p>⚠️ You must first perform a scan from the command line using:</p>
@@ -480,7 +622,7 @@ changes where val_new:(I) show default, val_old, val_new order by change_id desc
 <li><strong>Validation</strong> — check file content integrity for supported types</li>
 </ul>
 <hr />
-<h2 id="query"><a class="header" href="#query">Query</a></h2>
+<h2 id="query-1"><a class="header" href="#query-1">Query</a></h2>
 <p>Allows you to enter queries using FsPulse’s <a href="query.html">query syntax</a>.</p>
 <ul>
 <li>Use full expressions like:
@@ -493,7 +635,7 @@ changes where val_new:(I) show default, val_old, val_new
 <li>Use the ↑ and ↓ arrow keys to scroll through previous entries in your session</li>
 </ul>
 <hr />
-<h2 id="report"><a class="header" href="#report">Report</a></h2>
+<h2 id="report-1"><a class="header" href="#report-1">Report</a></h2>
 <p>Provides quick access to common predefined reports:</p>
 <ul>
 <li>List all roots</li>
@@ -547,7 +689,7 @@ changes where val_new:(I) show default, val_old, val_new
 <li>You can scan a root multiple times over time.</li>
 </ul>
 <hr />
-<h2 id="scan-1"><a class="header" href="#scan-1">Scan</a></h2>
+<h2 id="scan-2"><a class="header" href="#scan-2">Scan</a></h2>
 <p>A <strong>scan</strong> is a snapshot of a root directory at a specific point in time.</p>
 <p>Each scan records metadata about:</p>
 <ul>
