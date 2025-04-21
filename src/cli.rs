@@ -64,9 +64,16 @@ pub enum Command {
         #[arg(long)]
         hash: bool,
 
-        /// Validate file contents for known file types (tbd)
-        #[arg(long)]
+        /// Validate file contents for known file types
+        /// Will validate new items or items on which the modification date
+        /// or file size has changed
+        #[arg(long, conflicts_with = "force_validate")]
         validate: bool,
+
+        /// Validate file contents for known file types
+        /// Will validate all items including items that have not changed
+        #[arg(long, conflicts_with = "validate")]
+        force_validate: bool,
     },
 
     /// Generate reports.
@@ -250,15 +257,16 @@ impl Cli {
                 last,
                 hash,
                 validate,
+                force_validate,
             } => {
                 info!(
-                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, validate: {}",
-                    db_path, root_id, root_path, last, hash, validate
+                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, validate: {}, force_validate: {}",
+                    db_path, root_id, root_path, last, hash, validate, force_validate
                 );
 
                 let mut db = Database::new(db_path)?;
                 Scanner::do_scan_command(
-                    &mut db, root_id, root_path, last, hash, validate, multi_prog,
+                    &mut db, root_id, root_path, last, hash, validate, force_validate, multi_prog,
                 )
             }
             Command::Report { report_type } => match report_type {
@@ -343,7 +351,8 @@ impl Cli {
 
         // Process the command.
         match command {
-            CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
+            // TODO: support force validate
+            CommandChoice::Scan => Scanner::do_interactive_scan(db, false, multi_prog)?,
             CommandChoice::QuerySimple => Cli::do_interactive_query(db, command)?,
             CommandChoice::Report => Cli::do_interactive_report(db)?,
             CommandChoice::Exit => {}

@@ -178,6 +178,68 @@ impl Change {
         self.val_new.as_deref()
     }
 
+    pub fn get_by_scan_item(db: &Database, scan_id: i64, item_id: i64) -> Result<Option<Self>, FsPulseError> {
+        let conn = db.conn();
+
+        conn.query_row(
+            "SELECT 
+                items.item_type, 
+                items.item_path, 
+                change_id,
+                scan_id,
+                changes.item_id,
+                change_type,
+                is_undelete,
+                meta_change,
+                mod_date_old,
+                mod_date_new,
+                file_size_old,
+                file_size_new,
+                hash_change,
+                last_hash_scan_old,
+                hash_old,
+                hash_new,
+                val_change,
+                last_val_scan_old,
+                val_old,
+                val_new,
+                val_error_old,
+                val_error_new
+            FROM changes
+            JOIN items ON items.item_id = changes.item_id
+            WHERE changes.scan_id = ? AND changes.item_id = ?",
+            [scan_id, item_id],
+            |row| {
+                Ok(Change {
+                    item_type: row.get(0)?,
+                    item_path: row.get(1)?,
+                    change_id: row.get(2)?,
+                    scan_id: row.get(3)?,
+                    item_id: row.get(4)?,
+                    change_type: row.get(5)?,
+                    is_undelete: row.get(6)?,
+                    meta_change: row.get(7)?,
+                    mod_date_old: row.get(8)?,
+                    mod_date_new: row.get(9)?,
+                    file_size_old: row.get(10)?,
+                    file_size_new: row.get(11)?,
+                    hash_change: row.get(12)?,
+                    last_hash_scan_old: row.get(13)?,
+                    hash_old: row.get(14)?,
+                    hash_new: row.get(15)?,
+                    val_change: row.get(16)?,
+                    last_val_scan_old: row.get(17)?,
+                    val_old: row.get(18)?,
+                    val_new: row.get(19)?,
+                    val_error_old: row.get(20)?,
+                    val_error_new: row.get(21)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(FsPulseError::DatabaseError)
+    }
+
     pub fn get_by_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = db.conn();
 
@@ -206,8 +268,8 @@ impl Change {
                 val_error_old,
                 val_error_new
             FROM changes
-            JOIN items ON items.id = changes.item_id
-            WHERE changes.id = ?",
+            JOIN items ON items.item_id = changes.item_id
+            WHERE changes.change_id = ?",
             [change_id],
             |row| {
                 Ok(Change {
