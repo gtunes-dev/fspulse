@@ -17,7 +17,7 @@
 // 4. Completed
 // 5. Stopped
 
-use crate::changes::ChangeType;
+use crate::changes::{Change, ChangeType};
 use crate::config::CONFIG;
 use crate::hash::Hash;
 use crate::items::{Item, ItemType};
@@ -60,6 +60,7 @@ enum ScanDecision {
 impl Scanner {
     pub fn do_interactive_scan(
         db: &mut Database,
+        force_validate: bool,
         multi_prog: &mut MultiProgress,
     ) -> Result<(), FsPulseError> {
         let root = match Root::interact_choose_root(db, "Scan which root?")? {
@@ -83,7 +84,7 @@ impl Scanner {
             None => Scanner::initiate_scan_interactive(db, &root)?,
         };
 
-        Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)
+        Scanner::do_scan_machine(db, &mut scan, force_validate, &root, multi_prog)
     }
 
     fn initiate_scan_interactive(db: &mut Database, root: &Root) -> Result<Scan, FsPulseError> {
@@ -105,9 +106,12 @@ impl Scanner {
             }
         }
 
-        Scanner::initiate_scan(db, root, hash, validate)
+        // TODO: Support force validate from interactive mode
+
+        Scanner::initiate_scan(db, root, hash, validate, false)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn do_scan_command(
         db: &mut Database,
         root_id: Option<u32>,
@@ -115,6 +119,7 @@ impl Scanner {
         last: bool,
         hash: bool,
         validate: bool,
+        force_validate: bool,
         multi_prog: &mut MultiProgress,
     ) -> Result<(), FsPulseError> {
         // If an incomplete scan exists, find it.
@@ -177,7 +182,7 @@ impl Scanner {
         let mut scan = match existing_scan.as_mut() {
             Some(existing_scan) => {
                 match Scanner::stop_or_resume_scan(db, &root, existing_scan, false)? {
-                    ScanDecision::NewScan => Scanner::initiate_scan(db, &root, hash, validate)?,
+                    ScanDecision::NewScan => Scanner::initiate_scan(db, &root, hash, validate, force_validate)?,
                     ScanDecision::ContinueExisting => {
                         multi_prog.println("Resuming scan")?;
                         *existing_scan
@@ -185,10 +190,10 @@ impl Scanner {
                     ScanDecision::Exit => return Ok(()),
                 }
             }
-            None => Scanner::initiate_scan(db, &root, hash, validate)?,
+            None => Scanner::initiate_scan(db, &root, hash, validate, force_validate)?,
         };
 
-        Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)?;
+        Scanner::do_scan_machine(db, &mut scan, force_validate, &root, multi_prog)?;
 
         Reports::report_scan(db, &scan)
     }
@@ -196,6 +201,7 @@ impl Scanner {
     fn do_scan_machine(
         db: &mut Database,
         scan: &mut Scan,
+        force_validate: bool,
         root: &Root,
         multi_prog: &mut MultiProgress,
     ) -> Result<(), FsPulseError> {
@@ -239,7 +245,7 @@ impl Scanner {
                         let db_arc = Arc::new(Mutex::new(owned_db));
 
                         analysis_result =
-                            Scanner::do_state_analyzing(db_arc.clone(), scan, multi_prog);
+                            Scanner::do_state_analyzing(db_arc.clone(), scan, force_validate, multi_prog);
 
                         // recover the database from the Arc
                         let recovered_db = Arc::try_unwrap(db_arc)
@@ -330,8 +336,9 @@ impl Scanner {
         root: &Root,
         hashing: bool,
         validating: bool,
+        force_validating: bool,
     ) -> Result<Scan, FsPulseError> {
-        Scan::create(db, root, hashing, validating)
+        Scan::create(db, root, hashing, validating | force_validating)
     }
 
     fn do_state_scanning(
@@ -436,6 +443,7 @@ impl Scanner {
     fn do_state_analyzing(
         db: Arc<Mutex<Database>>,
         scan: &mut Scan,
+        force_validate: bool,
         multi_prog: &MultiProgress,
     ) -> Result<(), FsPulseError> {
         let hashing = scan.hashing();
@@ -514,6 +522,7 @@ impl Scanner {
                     Scanner::process_item_async(
                         &db,
                         scan_copy,
+                        force_validate,
                         item,
                         &analysis_prog_clone,
                         &thread_prog,
@@ -577,6 +586,7 @@ impl Scanner {
     fn process_item_async(
         db: &Arc<Mutex<Database>>,
         scan: Scan,
+        force_validate: bool,
         item: Item,
         analysis_prog: &ProgressBar,
         thread_prog: &ProgressBar,
@@ -617,42 +627,85 @@ impl Scanner {
         let mut new_val = ValidationState::Unknown;
         let mut new_val_error = None;
 
-        if scan.validating() {
-            let validator = from_path(path);
-            match validator {
-                Some(v) => {
-                    thread_prog.set_style(
-                        ProgressStyle::default_spinner()
-                            .template("{prefix} {spinner} {msg}")
-                            .unwrap(),
-                    );
-                    thread_prog.set_message(format!("Validating: '{}'", &display_path));
-                    let steady_tick = v.wants_steady_tick();
+        let mut validate_item = scan.validating();
 
-                    if steady_tick {
-                        thread_prog.enable_steady_tick(Duration::from_millis(250));
-                    }
-                    match v.validate(path, thread_prog) {
-                        Ok((res_validity_state, res_validation_error)) => {
-                            new_val = res_validity_state;
-                            new_val_error = res_validation_error;
-                        }
-                        Err(e) => {
+        if validate_item {
+            // Determine if the file needs to be validated
+            if !force_validate {
+                // Find the change record for this file if one exists
+                // We will only validate the item if one of the following is true:
+                //      1. The item has never been validated
+                //      2. The item is new - will be identified by an Add change
+                //      3. The item is modified - will be identified by a Mod change with meta_change
+                if item.last_val_scan().is_none() {
+                    validate_item = true;
+                } else {
+                    let db = db.lock().unwrap();
+                    //let change = Change::get_by_scan_item(&db, scan.scan_id(), item.item_id());
+                    let change_res =  Change::get_by_scan_item(&db, scan.scan_id(), item.item_id());
+                    match change_res {
+                        Ok(opt_change) => {
+                            match opt_change {
+                                Some(change) => {
+                                    if change.change_type == "M" {
+                                        match change.meta_change {
+                                            Some(true) => { validate_item = true; }
+                                            Some(false) | None => { validate_item = false; }
+                                        }
+                                    } else if change.change_type == "A" {
+                                        validate_item = true;
+                                    }
+                                }
+                                None => { validate_item = false; }
+                            }
+                        },
+                        Err(e) =>  {
+                            // No great option here = just log it and force the validation
                             let e_str = e.to_string();
-                            error!("Error validating '{}': {}", &display_path, e_str);
-                            new_val = ValidationState::Invalid;
+                            error!("Error retrieving change during force validate asessment '{}", e_str);
+                            validate_item = true;
                         }
-                    }
-                    if steady_tick {
-                        thread_prog.disable_steady_tick();
                     }
                 }
-                None => new_val = ValidationState::NoValidator,
+            }
+
+            if validate_item {
+                let validator = from_path(path);
+                match validator {
+                    Some(v) => {
+                        thread_prog.set_style(
+                            ProgressStyle::default_spinner()
+                                .template("{prefix} {spinner} {msg}")
+                                .unwrap(),
+                        );
+                        thread_prog.set_message(format!("Validating: '{}'", &display_path));
+                        let steady_tick = v.wants_steady_tick();
+
+                        if steady_tick {
+                            thread_prog.enable_steady_tick(Duration::from_millis(250));
+                        }
+                        match v.validate(path, thread_prog) {
+                            Ok((res_validity_state, res_validation_error)) => {
+                                new_val = res_validity_state;
+                                new_val_error = res_validation_error;
+                            }
+                            Err(e) => {
+                                let e_str = e.to_string();
+                                error!("Error validating '{}': {}", &display_path, e_str);
+                                new_val = ValidationState::Invalid;
+                            }
+                        }
+                        if steady_tick {
+                            thread_prog.disable_steady_tick();
+                        }
+                    }
+                    None => new_val = ValidationState::NoValidator,
+                }
             }
         }
 
         if let Err(error) =
-            Scanner::update_item_analysis(db, &scan, &item, new_hash, new_val, new_val_error)
+            Scanner::update_item_analysis(db, &scan, validate_item, &item, new_hash, new_val, new_val_error)
         {
             let e_str = error.to_string();
             error!(
@@ -840,6 +893,7 @@ impl Scanner {
     pub fn update_item_analysis(
         db: &Arc<Mutex<Database>>,
         scan: &Scan,
+        validate_item: bool,
         item: &Item,
         new_hash: Option<String>,
         new_val: ValidationState,
@@ -882,7 +936,7 @@ impl Scanner {
             i_last_hash_scan = Some(scan.scan_id());
         }
 
-        if scan.validating() {
+        if validate_item {
             if (item.val() != new_val) || (item.val_error() != new_val_error.as_deref()) {
                 // if either the hash or validation state changes, we update changes
                 update_changes = true;
