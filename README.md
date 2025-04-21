@@ -25,7 +25,7 @@ Full user guide is available here:
 Key sections:
 - [Getting Started](https://gtunes-dev.github.io/fspulse/getting_started.html)
 - [Query Syntax](https://gtunes-dev.github.io/fspulse/query.html)
-- [Command-Line Interface] (https://gtunes-dev.github.io/fspulse/cli.html)
+- [Command-Line Interface](https://gtunes-dev.github.io/fspulse/cli.html)
 - [Interactive Mode](https://gtunes-dev.github.io/fspulse/interactive_mode.html)
 - [Scanning](https://gtunes-dev.github.io/fspulse/scanning.html)
 - [Validators](https://gtunes-dev.github.io/fspulse/validators.html)
