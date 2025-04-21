@@ -283,10 +283,10 @@ impl Change {
                         AND i.val = 'I'
                     THEN 1 ELSE 0 END), 0) AS no_validator_to_invalid
             FROM changes c
-                JOIN items i ON c.item_id = i.id
+                JOIN items i ON c.item_id = i.item_id
             WHERE c.scan_id = ?
                 AND i.item_type = 'F'
-                AND i.is_ts = 0;";
+                AND i.is_ts = 0";
 
         let validation_transitions = conn.query_row(sql, params![scan_id], |row| {
             Ok(ValidationTransitions {

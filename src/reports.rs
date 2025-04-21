@@ -563,8 +563,9 @@ impl Reports {
 
     pub fn report_scan(db: &Database, scan: &Scan) -> Result<(), FsPulseError> {
         // Define your styles
-        let header = Style::new().cyan().bold();
-        let label = Style::new().white();
+        let title = Style::new().cyan().bold();
+        let header = Style::new().cyan().bold().underlined();
+        let label = Style::new().white().bold();
         let command = Style::new().green();
 
         let root = Root::get_by_id(db, scan.root_id())?
@@ -579,10 +580,10 @@ impl Reports {
 
         let title_width = 60;
 
-        let bar = header.apply_to("=".repeat(title_width)).to_string();
+        let bar = title.apply_to("=".repeat(title_width)).to_string();
         let title_text = "FS Pulse Scan Report";
         let inset = title_width - ((title_width / 2) + (title_text.len() / 2));
-        let title = format!("{}{}", " ".repeat(inset), header.apply_to(title_text));
+        let title = format!("{}{}", " ".repeat(inset), title.apply_to(title_text));
 
         report.push(bar.to_owned());
         report.push(title);
@@ -592,13 +593,14 @@ impl Reports {
 
         // Scan Info Section
         report.push(header.apply_to("Scan Info").to_string());
+        report.push(String::new());
         report.push(format!(
-            "{}         {}",
+            "{}       {}",
             label.apply_to("Scan Id:"),
             scan.scan_id()
         ));
         report.push(format!(
-            "{}          {}   (Root Id: {})",
+            "{}          {} [root_id: {}]",
             label.apply_to("Path:"),
             root.root_path(),
             root.root_id()
@@ -629,6 +631,8 @@ impl Reports {
 
         // Change Summary Section
         report.push(header.apply_to("Change Summary").to_string());
+        report.push(String::new());
+
         report.push(format!(
             "{}     {}",
             label.apply_to("Additions:"),
@@ -657,96 +661,109 @@ impl Reports {
         ));
         report.push(format!(
             "> {}",
-            command.apply_to(format!("fspulse 'query changes where scan_id:({}), change_type:(M) show default, item_path order by item_path", scan.scan_id()))
+            command.apply_to(format!("fspulse 'query changes where scan_id:({}), change_type:(M) show default, item_path order by item_path'", scan.scan_id()))
         ));
         report.push(format!(
             "> {}",
-            command.apply_to(format!("fspulse query changes where scan_id:({}), change_type:(D) show default, item_path order by item_path'", scan.scan_id()))
+            command.apply_to(format!("fspulse 'query changes where scan_id:({}), change_type:(D) show default, item_path order by item_path'", scan.scan_id()))
         ));
 
         report.push(String::new());
 
         // Hash Mode Section
-        report.push(header.apply_to("Hash Summary").to_string());
+        report.push(header.apply_to("Hash Changes").to_string());
+        report.push(String::new());
+
         if !scan.hashing() {
             report.push("Hash mode was not specified".to_string());
+        } else {
+            report.push("Tip: query for all hash changes".to_string());
+            report.push(format!(
+                "> {}",
+                command.apply_to(format!("fspulse 'query changes where scan_id:({}), hash_change:(T) show default, hash_change, item_path'", scan.scan_id()))
+            ));
+
+            report.push(
+                "Tip: query for all hash changes without mod date or file size changes".to_string(),
+            );
+            report.push(format!(
+                "> {}",
+                command.apply_to(format!("fspulse 'query changes where scan_id:({}), hash_change:(T), meta_change:(F)  show default, hash_change, item_path'", scan.scan_id()))
+            ));
         }
-        report.push(format!(
-            "{}   {}    • {} for complete info.",
-            label.apply_to("Changed Hashes:"),
-            4,
-            command.apply_to("Run 'fs hash-details'")
-        ));
         report.push(String::new());
 
         // New Validation Transitions Section
-        report.push(header.apply_to("Validation Transitions").to_string());
-        if scan.validating() {
+        report.push(header.apply_to("Validation Changes").to_string());
+        report.push(String::new());
+
+        if !scan.validating() {
+            report.push("Validation mode was not specified".to_string());
+        } else {
             let validation_changes =
                 Change::get_validation_transitions_for_scan(db, scan.scan_id())?;
 
             // From Unknown transitions
             report.push(label.apply_to("From Unknown:").to_string());
             report.push(format!(
-                "    {}         {}    • {}",
-                label.apply_to("-> Valid:"),
-                validation_changes.unknown_to_valid,
-                command.apply_to("Run 'fs list-new-valid'")
+                "    {}         {}",
+                label.apply_to(format!("{:<17}", "-> Valid:")),
+                validation_changes.unknown_to_valid
             ));
             report.push(format!(
-                "    {}       {}    • {}",
-                label.apply_to("-> Invalid:"),
+                "    {}         {}",
+                label.apply_to(format!("{:<17}", "-> Invalid:")),
                 validation_changes.unknown_to_invalid,
-                command.apply_to("Run 'fs list-new-invalid'")
             ));
             report.push(format!(
-                "    {}  {}    • {}",
-                label.apply_to("-> No Validator:"),
+                "    {}         {}",
+                label.apply_to(format!("{:<17}", "-> No Validator:")),
                 validation_changes.unknown_to_no_validator,
-                command.apply_to("Run 'fs list-new-no-validator'")
             ));
             report.push(String::new());
 
             // From Valid transitions
             report.push(label.apply_to("From Valid:").to_string());
             report.push(format!(
-                "    {}       {}    • {}",
-                label.apply_to("-> Invalid:"),
+                "    {}         {}",
+                label.apply_to(format!("{:<17}", "-> Invalid:")),
                 validation_changes.valid_to_invalid,
-                command.apply_to("Run 'fs list-valid-to-invalid'")
             ));
             report.push(format!(
-                "    {}  {}    • {}",
-                label.apply_to("-> No Validator:"),
+                "    {}         {}",
+                label.apply_to(format!("{:<17}", "-> No Validator:")),
                 validation_changes.valid_to_no_validator,
-                command.apply_to("Run 'fs list-valid-to-no-validator'")
             ));
             report.push(String::new());
 
             // From No Validator transitions
             report.push(label.apply_to("From No Validator:").to_string());
             report.push(format!(
-                "    {}         {}    • {}",
-                label.apply_to("-> Valid:"),
+                "    {}         {}",
+                label.apply_to(format!("{:<17}", "-> Valid:")),
                 validation_changes.no_validator_to_valid,
-                command.apply_to("Run 'fs list-no-validator-to-valid'")
             ));
             report.push(format!(
-                "    {}       {}    • {}",
-                label.apply_to("-> Invalid:"),
+                "    {}         {}",
+                label.apply_to(format!("{:<17}", "-> Invalid:")),
                 validation_changes.no_validator_to_invalid,
-                command.apply_to("Run 'fs list-no-validator-to-invalid'")
             ));
             report.push(String::new());
-        } else {
-            report.push("Validation mode was not specified".to_string());
-        };
+            report.push("Tip: query for all newly identified invalid items".to_string());
+            report.push(format!(
+                "> {}",
+                command.apply_to(format!("fspulse query changes where scan_id:({}), val_change:(T), val:(I) show default, val, item_path'", scan.scan_id()))
+            ));
+        }
 
+        report.push(String::new());
         // Next Steps
         report.push(format!(
             "{} Use the commands above for further analysis.",
             label.apply_to("Next Steps:")
         ));
+
+        report.push(String::new());
 
         // Join all lines and print the report
         println!("{}", report.join("\n"));
