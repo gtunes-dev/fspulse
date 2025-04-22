@@ -1,7 +1,19 @@
 [package]
 name = "fspulse"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
+authors = ["The FsPulse Developers"]
+description = "FsPulse is a fast, cross-platform filesystem scanner and change tracker."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/gtunes-dev/fspulse"
+homepage = "https://github.com/gtunes-dev/fspulse"
+keywords = ["filesystem", "scanner", "rust", "cli"]
+categories = ["command-line-utilities"]
+readme = "README.md"
+
+[[bin]]
+name = "fspulse"
+path = "src/main.rs"
 
 [dependencies]
 chrono = { version = "0.4", features = ["clock"] }
