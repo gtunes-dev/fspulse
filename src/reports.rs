@@ -1,7 +1,6 @@
 use crate::changes::{Change, ChangeCounts};
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::hash::Hash;
 use crate::items::Item;
 use crate::queries::query::QueryProcessor;
 use crate::roots::Root;
@@ -11,16 +10,13 @@ use crate::utils::Utils;
 use console::Style;
 use rusqlite::Result;
 use std::cmp::max;
-use std::io::{self, Stdout};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use tablestream::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReportFormat {
     Tree,
     Table,
-    Csv,
 }
 
 impl FromStr for ReportFormat {
@@ -29,7 +25,6 @@ impl FromStr for ReportFormat {
         match s.to_lowercase().as_str() {
             "tree" => Ok(ReportFormat::Tree),
             "table" => Ok(ReportFormat::Table),
-            "csv" => Ok(ReportFormat::Csv),
             _ => Err(FsPulseError::Error("Invalid format specified.".to_string())),
         }
     }
@@ -44,14 +39,13 @@ impl Reports {
         db: &Database,
         scan_id: Option<u32>,
         last: u32,
-        _format: ReportFormat,
     ) -> Result<(), FsPulseError> {
         let query = match scan_id {
             Some(scan_id) => &format!("scans where scan_id:({})", scan_id),
             None => &format!("scans order by scan_id desc limit {}", last),
         };
 
-        println!(">> Generated query: {}", query);
+        //println!(">> Generated query: {}", query);
         QueryProcessor::process_query(db, query)
     }
 
@@ -59,7 +53,6 @@ impl Reports {
         db: &Database,
         root_id: Option<u32>,
         root_path: Option<String>,
-        _format: ReportFormat,
     ) -> Result<(), FsPulseError> {
         let query = match (root_id, root_path) {
             (None, None) => "roots order by root_id asc",
@@ -67,7 +60,7 @@ impl Reports {
             (_, Some(root_path)) => &format!("roots where root_path:('{}')", root_path),
         };
 
-        println!("Query: {query}");
+        //println!("Query: {query}");
         QueryProcessor::process_query(db, query)?;
 
         Ok(())
@@ -81,57 +74,30 @@ impl Reports {
         invalid: bool,
         format: ReportFormat,
     ) -> Result<(), FsPulseError> {
-        match (item_id, item_path, root_id) {
-            (Some(item_id), _, _) => {
-                // TODO: In the single item case, "tree" is not a valid report format
-                let item = Item::get_by_id(db, item_id.into())?;
-
-                let mut stream =
-                    Self::begin_items_table("Item", &format!("Item {} Not Found", item_id));
-
-                if let Some(item) = item {
-                    stream.row(item)?;
-                }
-
-                stream.finish()?;
-            }
-            (_, Some(item_path), _) => {
-                let mut stream = Self::begin_items_table(
-                    "Items",
-                    &format!("Item Path '{}' Not Found", item_path),
-                );
-                Item::for_each_item_with_path(db, &item_path, |item| {
-                    stream.row(item.clone())?;
-                    Ok(())
-                })?;
-
-                stream.finish()?;
-            }
-            (_, _, Some(root_id)) => {
-                let root = Root::get_by_id(db, root_id.into())?
-                    .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", root_id)))?;
-
-                if invalid {
-                    Self::print_invalid_items_as_table(db, &root)?;
-                } else {
-                    let scan = Scan::get_latest_for_root(db, root.root_id())?.ok_or_else(|| {
-                        FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id))
-                    })?;
-
-                    match format {
-                        ReportFormat::Tree => {
-                            Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?
-                        }
-                        ReportFormat::Table => {
-                            Self::print_last_seen_scan_items_as_table(db, &scan, &root)?
-                        }
-                        _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
+        if format == ReportFormat::Table {
+            let query = match (item_id, item_path, root_id) {
+                (Some(item_id), _, _,) =>  &format!("items where item_id:({})", item_id),
+                (_, Some(item_path), _) => &format!("items where item_path:({}) order by item_path asc", item_path),
+                (_, _, Some(root_id)) => {
+                    match invalid {
+                        false => &format!("items where root_id:({}), is_ts:(F) order by item_path asc", root_id),
+                        true => &format!("items where root_id:({}), val:(I), is_ts:(F) show default, val, val_error order by item_path asc", root_id)
                     }
                 }
-            }
-            _ => {
-                // Should never get here
-            }
+                _ => return Err(FsPulseError::Error("Item reports require additional parameters".into()))
+            };
+
+            QueryProcessor::process_query(db, query)?;
+        } else if let Some(root_id) = root_id {
+            // TODO: Does this even make sense???
+            let root = Root::get_by_id(db, root_id.into())?
+                .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", root_id)))?;
+
+            let scan = Scan::get_latest_for_root(db, root.root_id())?.ok_or_else(|| {
+                FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id))
+            })?;
+
+            Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?;
         }
 
         Ok(())
@@ -142,191 +108,22 @@ impl Reports {
         change_id: Option<u32>,
         item_id: Option<u32>,
         scan_id: Option<u32>,
-        format: ReportFormat,
     ) -> Result<(), FsPulseError> {
-        match (change_id, item_id, scan_id) {
-            (Some(change_id), None, None) => {
-                let change = Change::get_by_id(db, change_id.into())?;
-                let mut stream = Self::begin_changes_table("Change", "No Change Found");
-                if let Some(change) = change {
-                    stream.row(change)?;
-                }
-                stream.finish()?;
+        let query = match (change_id, item_id, scan_id) {
+            (Some(change_id), None, None) => format!("changes where change_id:({})", change_id),
+            (None, Some(item_id), None) => format!(
+                "changes where item_id:({}) show default, item_path order by change_id desc",
+                item_id
+            ),
+            (None, None, Some(scan_id)) => {
+                format!("changes where scan_id:({}) order_by change_id asc", scan_id)
             }
-            (None, Some(item_id), None) => {
-                Self::print_item_changes_as_table(db, item_id.into())?;
-            }
-            (None, None, Some(scan_id)) => match format {
-                ReportFormat::Table => Self::print_scan_changes_as_table(db, scan_id.into())?,
-                ReportFormat::Tree => Self::print_scan_changes_as_tree(db, scan_id.into())?,
-                _ => return Err(FsPulseError::Error("Unsupported format.".to_string())),
-            },
-            _ => {}
-        }
+            _ => return Err(FsPulseError::Error("Change reports require additional parameters".into()))
+        };
+
+        QueryProcessor::process_query(db, &query)?;
+
         Ok(())
-    }
-
-    fn begin_invalid_items_table(title: &str, empty_row: &str) -> Stream<Item, Stdout> {
-        Stream::new(
-            io::stdout(),
-            vec![
-                Column::new(|f, i: &Item| write!(f, "{}", i.item_id()))
-                    .header("ID")
-                    .right()
-                    .min_width(6),
-                Column::new(|f, i: &Item| write!(f, "{}", i.item_path()))
-                    .header("Path")
-                    .left(),
-                Column::new(|f, i: &Item| {
-                    write!(f, "{}", Utils::format_db_time_short_or_none(i.mod_date()))
-                })
-                .header("Modified")
-                .left(),
-                Column::new(|f, i: &Item| write!(f, "{}", Utils::display_opt_i64(&i.file_size())))
-                    .header("Size")
-                    .right(),
-                Column::new(|f, i: &Item| {
-                    write!(f, "{}", Utils::display_opt_i64(&i.last_val_scan()))
-                })
-                .header("Last Valid Scan")
-                .right(),
-                Column::new(|f, i: &Item| write!(f, "{}", Utils::display_opt_str(&i.val_error())))
-                    .header("Validation Error")
-                    .left(),
-            ],
-        )
-        .title(title)
-        .empty_row(empty_row)
-    }
-
-    fn begin_items_table(title: &str, empty_row: &str) -> Stream<Item, Stdout> {
-        Stream::new(
-            io::stdout(),
-            vec![
-                Column::new(|f, i: &Item| write!(f, "{}", i.item_id()))
-                    .header("ID")
-                    .right()
-                    .min_width(6),
-                Column::new(|f, i: &Item| write!(f, "{}", i.root_id()))
-                    .header("Root ID")
-                    .right(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.item_path()))
-                    .header("Path")
-                    .left(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.is_ts()))
-                    .header("Tombstone")
-                    .center(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.item_type()))
-                    .header("Type")
-                    .center(),
-                Column::new(|f, i: &Item| {
-                    write!(f, "{}", Utils::format_db_time_short_or_none(i.mod_date()))
-                })
-                .header("Modified")
-                .left(),
-                Column::new(|f, i: &Item| write!(f, "{}", Utils::display_opt_i64(&i.file_size())))
-                    .header("Size")
-                    .right(),
-                Column::new(|f, i: &Item| write!(f, "{}", Hash::short_md5(&i.file_hash())))
-                    .center(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.val()))
-                    .header("Valid State")
-                    .center(),
-                Column::new(|f, i: &Item| write!(f, "{}", i.last_scan()))
-                    .header("Last Scan")
-                    .right(),
-                Column::new(|f, i: &Item| {
-                    write!(f, "{}", Utils::display_opt_i64(&i.last_hash_scan()))
-                })
-                .header("Last Hash Scan")
-                .right(),
-                Column::new(|f, i: &Item| {
-                    write!(f, "{}", Utils::display_opt_i64(&i.last_val_scan()))
-                })
-                .header("Last Valid Scan")
-                .right(),
-            ],
-        )
-        .title(title)
-        .empty_row(empty_row)
-    }
-
-    fn begin_changes_table(title: &str, empty_row: &str) -> Stream<Change, Stdout> {
-        Stream::new(
-            io::stdout(),
-            vec![
-                Column::new(|f, c: &Change| write!(f, "{}", c.change_id))
-                    .header("Id")
-                    .right()
-                    .min_width(6),
-                Column::new(|f, c: &Change| write!(f, "{}", c.scan_id))
-                    .header("Scan Id")
-                    .right(),
-                Column::new(|f, c: &Change| write!(f, "{}", c.item_id))
-                    .header("Item Id")
-                    .right(),
-                Column::new(|f, c: &Change| write!(f, "{}", c.change_type))
-                    .header("Change Type")
-                    .center(),
-                Column::new(|f, c: &Change| write!(f, "{}", c.item_type))
-                    .header("Item Type")
-                    .center(),
-                Column::new(|f, c: &Change| write!(f, "{}", c.item_path))
-                    .header("Item Path")
-                    .left(),
-                Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_bool(&c.is_undelete))
-                })
-                .header("Undelete")
-                .center(),
-                Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_bool(&c.meta_change))
-                })
-                .header("MD Changed")
-                .center(),
-                Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::format_db_time_short_or_none(c.mod_date_old))
-                })
-                .header("Mod Date (old)")
-                .center(),
-                Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::format_db_time_short_or_none(c.mod_date_new))
-                })
-                .header("Mod Date (new)")
-                .center(),
-                Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_i64(&c.file_size_old))
-                })
-                .header("Size (old)")
-                .right(),
-                Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_i64(&c.file_size_new))
-                })
-                .header("Size (new)")
-                .right(),
-                Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_bool(&c.hash_change))
-                })
-                .header("Hash Changed")
-                .center(),
-                Column::new(|f, c: &Change| write!(f, "{}", Hash::short_md5(&c.hash_old())))
-                    .header("Prev Hash")
-                    .center(),
-                Column::new(|f, c: &Change| {
-                    write!(f, "{}", Utils::display_opt_bool(&c.val_change))
-                })
-                .header("Val Changed")
-                .center(),
-                Column::new(|f, c: &Change| write!(f, "{}", Utils::display_opt_str(&c.val_new())))
-                    .header("Val State")
-                    .center(),
-                Column::new(|f, c: &Change| write!(f, "{}", Utils::display_opt_str(&c.val_old())))
-                    .header("Prev Val State")
-                    .center(),
-            ],
-        )
-        .title(title)
-        .empty_row(empty_row)
     }
 
     fn get_tree_path(
@@ -380,20 +177,7 @@ impl Reports {
         (indent_level, new_path.to_path_buf())
     }
 
-    fn print_scan_changes_as_table(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
-        let mut stream =
-            Reports::begin_changes_table(&format!("Changes - Scan ID: {}", scan_id), "No Changes");
-
-        Change::for_each_change_in_scan(db, scan_id, |change| {
-            stream.row(change.clone())?;
-            Ok(())
-        })?;
-
-        stream.finish()?;
-
-        Ok(())
-    }
-
+    /* *
     fn print_scan_changes_as_tree(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
         let width = 100;
 
@@ -439,6 +223,9 @@ impl Reports {
         Self::hr(width);
         Ok(())
     }
+    */
+
+    /* *
 
     fn print_item_changes_as_table(db: &Database, item_id: i64) -> Result<(), FsPulseError> {
         let item = Item::get_by_id(db, item_id)?
@@ -462,41 +249,7 @@ impl Reports {
 
         Ok(())
     }
-
-    pub fn print_invalid_items_as_table(db: &Database, root: &Root) -> Result<(), FsPulseError> {
-        let mut stream = Self::begin_invalid_items_table(
-            &format!("Invalid Items (Root Path: '{}'", root.root_path()),
-            "No Invalid Items",
-        );
-
-        Item::for_each_invalid_item_in_root(db, root.root_id(), |item| {
-            stream.row(item.clone())?;
-            Ok(())
-        })?;
-
-        stream.finish()?;
-        Ok(())
-    }
-
-    fn print_last_seen_scan_items_as_table(
-        db: &Database,
-        scan: &Scan,
-        root: &Root,
-    ) -> Result<(), FsPulseError> {
-        let mut stream = Self::begin_items_table(
-            &format!("Items (Root Path: '{}'", root.root_path()),
-            "No Items",
-        );
-
-        Item::for_each_item_in_latest_scan(db, scan.scan_id(), |item| {
-            stream.row(item.clone())?;
-            Ok(())
-        })?;
-
-        stream.finish()?;
-
-        Ok(())
-    }
+    */
 
     fn print_last_seen_scan_items_as_tree(
         db: &Database,

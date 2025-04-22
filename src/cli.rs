@@ -147,9 +147,6 @@ The database file will always be named 'fspulse.db'."#)]
 
         #[arg(long, conflicts_with = "root_id", help = "Show details for the root with the specified path")]
         root_path: Option<String>,
-
-        #[arg(long, default_value = "table", value_parser = ["csv", "table"], help = "Report format (csv, table)")]
-        format: String,
     },
 
     #[command(about = "Report on scans")]
@@ -164,9 +161,6 @@ The database file will always be named 'fspulse.db'."#)]
 
         #[arg(long, default_value_t = 10, conflicts_with = "scan_id", help = "Show last N scans (default: 10)")]
         last: u32,
-
-        #[arg(long, default_value = "table", value_parser = ["csv", "table"], help = "Report format (csv, table)")]
-        format: String,
     },
 
     #[command(about = "Report on scanned items")]
@@ -182,13 +176,13 @@ The database file will always be named 'fspulse.db'."#)]
         #[arg(long, conflicts_with_all = ["item_id", "root_id"], help = "Show items by file path (may appear in multiple roots)")]
         item_path: Option<String>,
 
-        #[arg(long, conflicts_with_all = ["item_id", "item_path"], help = "Show items from the most recent scan of a specific root")]
+        #[arg(long, conflicts_with_all = ["item_id", "item_path"], help = "Show all items under the specific root")]
         root_id: Option<u32>,
 
         #[arg(long, requires = "root_id", help = "Show all invalid items under the specified root")]
         invalid: bool,
 
-        #[arg(long, default_value = "table", value_parser = ["csv", "table", "tree"], help = "Report format (csv, table, tree)")]
+        #[arg(long, default_value = "table", value_parser = ["table", "tree"], help = "Report format (table or tree)")]
         format: String,
     },
 
@@ -207,9 +201,6 @@ The database file will always be named 'fspulse.db'."#)]
 
         #[arg(long, conflicts_with_all = ["change_id", "item_id"], help = "Filter by scan ID (shows all changes from this scan)")]
         scan_id: Option<u32>,
-
-        #[arg(long, default_value = "table", value_parser = ["csv", "table", "tree"], help = "Report format (csv, table, tree — tree only valid with scan-id)")]
-        format: String,
     },
 }
 
@@ -301,31 +292,27 @@ impl Cli {
                     db_path,
                     root_id,
                     root_path,
-                    format,
                 } => {
                     info!(
-                        "Generating roots report with db_path: {:?}, root_id: {:?}, root_path: {:?}, format: {}",
-                        db_path, root_id, root_path, format
+                        "Generating roots report with db_path: {:?}, root_id: {:?}, root_path: {:?}",
+                        db_path, root_id, root_path,
                     );
                     let db = Database::new(db_path)?;
-                    let format: ReportFormat = format.parse()?;
 
-                    Reports::report_roots(&db, root_id, root_path, format)
+                    Reports::report_roots(&db, root_id, root_path)
                 }
                 ReportType::Scans {
                     db_path,
                     scan_id,
                     last,
-                    format,
                 } => {
                     info!(
-                        "Generating scans report with db_path: {:?}, scan_id: {:?}, last: {}, format: {}",
-                        db_path, scan_id, last, format
+                        "Generating scans report with db_path: {:?}, scan_id: {:?}, last: {}",
+                        db_path, scan_id, last,
                     );
                     let db = Database::new(db_path)?;
-                    let format: ReportFormat = format.parse()?;
 
-                    Reports::report_scans(&db, scan_id, last, format)
+                    Reports::report_scans(&db, scan_id, last)
                 }
                 ReportType::Items {
                     db_path,
@@ -349,16 +336,14 @@ impl Cli {
                     change_id,
                     item_id,
                     scan_id,
-                    format,
                 } => {
                     info!(
-                        "Generating changes report with db_path: {:?}, change_id: {:?}, item_id: {:?}, scan_id: {:?}, format: {}",
-                        db_path, change_id, item_id, scan_id, format
+                        "Generating changes report with db_path: {:?}, change_id: {:?}, item_id: {:?}, scan_id: {:?}",
+                        db_path, change_id, item_id, scan_id,
                     );
                     let db = Database::new(db_path)?;
-                    let format: ReportFormat = format.parse()?;
 
-                    Reports::report_changes(&db, change_id, item_id, scan_id, format)
+                    Reports::report_changes(&db, change_id, item_id, scan_id)
                 }
             },
             Command::Query { db_path, query } => {
@@ -468,7 +453,8 @@ impl Cli {
             ItemReportChoice::InvalidItems => {
                 let root = Root::interact_choose_root(db, "Invalid items for which root?")?;
                 if let Some(root) = root {
-                    Reports::print_invalid_items_as_table(db, &root)
+                    let root_id_32: u32 = root.root_id().try_into().unwrap();
+                    Reports::report_items(db, None, None, Some(root_id_32), true, ReportFormat::Table)
                 } else {
                     Ok(())
                 }

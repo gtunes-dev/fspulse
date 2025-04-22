@@ -1,68 +1,12 @@
 use std::str::FromStr;
 
-use log::info;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::params;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
 
-const SQL_FOR_EACH_CHANGE_IN_SCAN: &str = "SELECT 
-        items.item_type,
-        items.item_path,
-        change_id,
-        scan_id,
-        changes.item_id,
-        change_type,
-        is_undelete,
-        meta_change,
-        mod_date_old,
-        mod_date_new,
-        file_size_old,
-        file_size_new,
-        hash_change,
-        last_hash_scan_old,
-        hash_old,
-        hash_new,
-        val_change,
-        last_val_scan_old,
-        val_old,
-        val_new,
-        val_error_old,
-        val_error_new
-    FROM changes
-    JOIN items ON items.item_id = changes.item_id
-    WHERE changes.scan_id = ?
-    ORDER BY items.item_path ASC";
-
-const SQL_FOR_EACH_CHANGE_IN_ITEM: &str = "SELECT 
-        items.item_type,
-        items.item_path,
-        change_id,
-        scan_id,
-        changes.item_id,
-        change_type,
-        is_undelete,
-        meta_change,
-        mod_date_old,
-        mod_date_new,
-        file_size_old,
-        file_size_new,
-        hash_change,
-        last_hash_scan_old,
-        hash_old,
-        hash_new,
-        val_change,
-        last_val_scan_old,
-        val_old,
-        val_new,
-        val_error_old,
-        val_error_new
-    FROM changes
-    JOIN items ON items.item_id = changes.item_id
-    WHERE changes.item_id = ?
-    ORDER BY changes.change_id ASC";
-
 #[derive(Clone, Debug, Default)]
+#[allow(dead_code)]
 pub struct Change {
     pub change_id: i64,
     pub scan_id: i64,
@@ -168,76 +112,17 @@ impl FromStr for ChangeType {
 
 impl Change {
     // TODO: Implement accessors for other fields
+    #[allow(dead_code)]
     pub fn hash_old(&self) -> Option<&str> {
         self.hash_old.as_deref()
     }
+    #[allow(dead_code)]
     pub fn val_old(&self) -> Option<&str> {
         self.val_old.as_deref()
     }
+    #[allow(dead_code)]
     pub fn val_new(&self) -> Option<&str> {
         self.val_new.as_deref()
-    }
-
-    pub fn get_by_id(db: &Database, change_id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
-
-        conn.query_row(
-            "SELECT 
-                items.item_type, 
-                items.item_path, 
-                change_id,
-                scan_id,
-                changes.item_id,
-                change_type,
-                is_undelete,
-                meta_change,
-                mod_date_old,
-                mod_date_new,
-                file_size_old,
-                file_size_new,
-                hash_change,
-                last_hash_scan_old,
-                hash_old,
-                hash_new,
-                val_change,
-                last_val_scan_old,
-                val_old,
-                val_new,
-                val_error_old,
-                val_error_new
-            FROM changes
-            JOIN items ON items.item_id = changes.item_id
-            WHERE changes.change_id = ?",
-            [change_id],
-            |row| {
-                Ok(Change {
-                    item_type: row.get(0)?,
-                    item_path: row.get(1)?,
-                    change_id: row.get(2)?,
-                    scan_id: row.get(3)?,
-                    item_id: row.get(4)?,
-                    change_type: row.get(5)?,
-                    is_undelete: row.get(6)?,
-                    meta_change: row.get(7)?,
-                    mod_date_old: row.get(8)?,
-                    mod_date_new: row.get(9)?,
-                    file_size_old: row.get(10)?,
-                    file_size_new: row.get(11)?,
-                    hash_change: row.get(12)?,
-                    last_hash_scan_old: row.get(13)?,
-                    hash_old: row.get(14)?,
-                    hash_new: row.get(15)?,
-                    val_change: row.get(16)?,
-                    last_val_scan_old: row.get(17)?,
-                    val_old: row.get(18)?,
-                    val_new: row.get(19)?,
-                    val_error_old: row.get(20)?,
-                    val_error_new: row.get(21)?,
-                })
-            },
-        )
-        .optional()
-        .map_err(FsPulseError::DatabaseError)
     }
 
     pub fn get_validation_transitions_for_scan(
@@ -301,81 +186,6 @@ impl Change {
         })?;
 
         Ok(validation_transitions)
-    }
-
-    pub fn for_each_change_in_scan<F>(
-        db: &Database,
-        scan_id: i64,
-        func: F,
-    ) -> Result<(), FsPulseError>
-    where
-        F: FnMut(&Change) -> Result<(), FsPulseError>,
-    {
-        Self::for_each_change_impl(db, SQL_FOR_EACH_CHANGE_IN_SCAN, scan_id, func)
-    }
-
-    pub fn for_each_change_in_item<F>(
-        db: &Database,
-        item_id: i64,
-        func: F,
-    ) -> Result<(), FsPulseError>
-    where
-        F: FnMut(&Change) -> Result<(), FsPulseError>,
-    {
-        Self::for_each_change_impl(db, SQL_FOR_EACH_CHANGE_IN_ITEM, item_id, func)
-    }
-
-    pub fn for_each_change_impl<F>(
-        db: &Database,
-        sql_query: &str,
-        sql_query_param: i64,
-        mut func: F,
-    ) -> Result<(), FsPulseError>
-    where
-        F: FnMut(&Change) -> Result<(), FsPulseError>,
-    {
-        let mut _change_count = 0; // used only for logging
-
-        let mut stmt = db.conn().prepare(sql_query)?;
-
-        let rows = stmt.query_map([sql_query_param], |row| {
-            Ok(Change {
-                item_type: row.get(0)?,
-                item_path: row.get(1)?,
-                change_id: row.get(2)?,
-                scan_id: row.get(3)?,
-                item_id: row.get(4)?,
-                change_type: row.get(5)?,
-                is_undelete: row.get(6)?,
-                meta_change: row.get(7)?,
-                mod_date_old: row.get(8)?,
-                mod_date_new: row.get(9)?,
-                file_size_old: row.get(10)?,
-                file_size_new: row.get(11)?,
-                hash_change: row.get(12)?,
-                last_hash_scan_old: row.get(13)?,
-                hash_old: row.get(14)?,
-                hash_new: row.get(15)?,
-                val_change: row.get(16)?,
-                last_val_scan_old: row.get(17)?,
-                val_old: row.get(18)?,
-                val_new: row.get(19)?,
-                val_error_old: row.get(20)?,
-                val_error_new: row.get(21)?,
-            })
-        })?;
-
-        for row in rows {
-            let change = row?;
-
-            func(&change)?;
-            _change_count += 1;
-        }
-        info!(
-            "for_each_scan_change_impl - id: {}, changes: {}",
-            sql_query_param, _change_count
-        );
-        Ok(())
     }
 }
 

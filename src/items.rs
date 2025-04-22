@@ -99,6 +99,7 @@ impl ItemType {
 #[derive(Clone, Debug, Default)]
 pub struct Item {
     item_id: i64,
+    #[allow(dead_code)]
     root_id: i64,
     item_path: String,
     item_type: String,
@@ -111,10 +112,12 @@ pub struct Item {
     file_size: Option<i64>,
 
     // Hash property group
+    #[allow(dead_code)]
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
 
     // Validation property group
+    #[allow(dead_code)]
     last_val_scan: Option<i64>,
     val: String,
     val_error: Option<String>,
@@ -153,7 +156,8 @@ impl Item {
             val_error: row.get(12)?,
         })
     }
-
+    
+    #[allow(dead_code)]
     pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         let query = format!("SELECT {} FROM ITEMS WHERE item_id = ?", Item::ITEM_COLUMNS);
         db.conn()
@@ -186,6 +190,8 @@ impl Item {
     pub fn item_id(&self) -> i64 {
         self.item_id
     }
+
+    #[allow(dead_code)]
     pub fn root_id(&self) -> i64 {
         self.root_id
     }
@@ -207,21 +213,27 @@ impl Item {
     pub fn file_size(&self) -> Option<i64> {
         self.file_size
     }
+    #[allow(dead_code)]
     pub fn last_hash_scan(&self) -> Option<i64> {
         self.last_hash_scan
     }
     pub fn file_hash(&self) -> Option<&str> {
         self.file_hash.as_deref()
     }
+
+    #[allow(dead_code)]
     pub fn last_val_scan(&self) -> Option<i64> {
         self.last_val_scan
     }
     pub fn validity_state_as_str(&self) -> &str {
         &self.val
     }
+
+    #[allow(dead_code)]
     pub fn val(&self) -> ValidationState {
         ValidationState::from_string(&self.val)
     }
+
     pub fn val_error(&self) -> Option<&str> {
         self.val_error.as_deref()
     }
@@ -374,6 +386,7 @@ FROM candidates"#;
         Ok(analysis_items)
     }
 
+    /* 
     pub fn for_each_invalid_item_in_root<F>(
         db: &Database,
         root_id: i64,
@@ -401,6 +414,7 @@ FROM candidates"#;
 
         Ok(())
     }
+    */
 
     pub fn for_each_item_in_latest_scan<F>(
         db: &Database,
@@ -421,33 +435,6 @@ FROM candidates"#;
         let mut stmt = db.conn().prepare(&sql)?;
 
         let rows = stmt.query_map([scan_id], Item::from_row)?;
-
-        for row in rows {
-            let item = row?;
-            func(&item)?;
-        }
-        Ok(())
-    }
-
-    pub fn for_each_item_with_path<F>(
-        db: &Database,
-        path: &str,
-        mut func: F,
-    ) -> Result<(), FsPulseError>
-    where
-        F: FnMut(&Item) -> Result<(), FsPulseError>,
-    {
-        let sql = format!(
-            "SELECT {}
-             FROM items
-             WHERE item_path = ?
-             ORDER BY item_id ASC",
-            Item::ITEM_COLUMNS
-        );
-
-        let mut stmt = db.conn().prepare(&sql)?;
-
-        let rows = stmt.query_map([path], Item::from_row)?;
 
         for row in rows {
             let item = row?;

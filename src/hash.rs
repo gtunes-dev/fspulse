@@ -39,10 +39,12 @@ impl Hash {
         Ok(encode(hash))
     }
 
+    /*
     pub fn short_md5<'a>(hash: &Option<&'a str>) -> &'a str {
         match hash {
             Some(hash) => &hash[..hash.len().min(7)],
             None => "-",
         }
     }
+    */
 }

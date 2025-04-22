@@ -164,9 +164,11 @@ impl Scan {
         Self::get_by_id_or_latest(db, None, None)
     }
 
+    /*
     pub fn get_by_id(db: &Database, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
         Self::get_by_id_or_latest(db, Some(scan_id), None)
     }
+    */
 
     pub fn get_latest_for_root(db: &Database, root_id: i64) -> Result<Option<Self>, FsPulseError> {
         Self::get_by_id_or_latest(db, None, Some(root_id))
@@ -531,9 +533,9 @@ impl Scan {
                 root_id: row.get::<_, i64>(1)?, // root id
                 state: row.get::<_, i64>(2)?,   // root id
                 analysis_spec: AnalysisSpec {
-                    is_hash: row.get::<_, bool>(3)?,    // hash new or changed
+                    is_hash: row.get::<_, bool>(3)?,  // hash new or changed
                     hash_all: row.get::<_, bool>(4)?, // Hash or re-hash everything
-                    is_val: row.get::<_, bool>(5)?,     // val new or changed
+                    is_val: row.get::<_, bool>(5)?,   // val new or changed
                     val_all: row.get::<_, bool>(6)?,  // Val or  re-val everything
                 },
                 scan_time: row.get::<_, i64>(7)?, // time of scan

@@ -13,27 +13,6 @@ const NO_DIR_SEPARATOR: &str = "";
 pub struct Utils {}
 
 impl Utils {
-    pub fn display_opt_bool(opt_bool: &Option<bool>) -> String {
-        match opt_bool {
-            Some(true) => "T".into(),
-            Some(false) => "F".into(),
-            None => "-".into(),
-        }
-    }
-
-    /* 
-    pub fn display_bool(v: &bool) -> String {
-        Utils::display_opt_bool(&Some(*v))
-    }
-    */
-
-    pub fn display_opt_str<T: AsRef<str>>(opt: &Option<T>) -> String {
-        match opt {
-            Some(s) => s.as_ref().to_string(),
-            None => "-".to_owned(),
-        }
-    }
-
     pub fn display_short_path(path: &str) -> String {
         tico(path, None)
     }
@@ -62,6 +41,7 @@ impl Utils {
         datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
     }
 
+    /*
     /// Take a UTC timestamp and create a display string in local time
     pub fn format_db_time_short(db_time: i64) -> String {
         let datetime_utc = DateTime::<Utc>::from_timestamp(db_time, 0)
@@ -75,6 +55,7 @@ impl Utils {
     pub fn format_db_time_short_or_none(db_time: Option<i64>) -> String {
         db_time.map_or("-".to_string(), Self::format_db_time_short)
     }
+    */
 
     /// Parses a single date string (yyyy-mm-dd) and returns the NaiveDateTime values for:
     /// - start of day (00:00:00)
