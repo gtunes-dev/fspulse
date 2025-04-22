@@ -272,10 +272,10 @@ FROM candidates"#;
         let mut stmt = conn.prepare(sql)?;
         let mut rows = stmt.query(params![
             analysis_spec.is_hash() as i64,
-            analysis_spec.force_hash() as i64,
+            analysis_spec.hash_all() as i64,
             scan_id,
             analysis_spec.is_val() as i64,
-            analysis_spec.force_val() as i64
+            analysis_spec.val_all() as i64
         ])?;
     
         if let Some(row) = rows.next()? {
@@ -321,7 +321,7 @@ FROM candidates"#;
                 i.val_error,
             CASE
                 WHEN $1 = 0 THEN 0  -- hash disabled
-                WHEN $2 = 1 AND i.last_hash_scan < $3 THEN 1  -- force_hash
+                WHEN $2 = 1 AND i.last_hash_scan < $3 THEN 1  -- hash_all
                 WHEN c.change_type IS NULL AND i.file_hash IS NULL THEN 1
                 WHEN c.change_type = 'A' THEN 1
                 WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
@@ -329,7 +329,7 @@ FROM candidates"#;
             END AS needs_hash,
             CASE
                 WHEN $4 = 0 THEN 0  -- val disabled
-                WHEN $5 = 1 AND i.last_val_scan < $3 THEN 1  -- force_val
+                WHEN $5 = 1 AND i.last_val_scan < $3 THEN 1  -- val_all
                 WHEN c.change_type IS NULL AND i.val IS NULL THEN 1
                 WHEN c.change_type = 'A' THEN 1
                 WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
@@ -360,10 +360,10 @@ FROM candidates"#;
         let rows = stmt.query_map(
             [
                 analysis_spec.is_hash() as i64,
-                analysis_spec.force_hash() as i64,
+                analysis_spec.hash_all() as i64,
                 scan_id,
                 analysis_spec.is_val() as i64,
-                analysis_spec.force_val() as i64,
+                analysis_spec.val_all() as i64,
                 last_item_id,
             ],
             AnalysisItem::from_row,

@@ -23,10 +23,10 @@ CREATE TABLE IF NOT EXISTS scans (
     scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,          -- Links scan to a root path
     state INTEGER NOT NULL,            -- The state of the scan (0 = Pending, 1 = Scanning, 2 = Sweeping, 3 = Analyzing, 4 = Completed, 5 = Stopped)
-    is_hash BOOLEAN NOT NULL,     -- Indicates the scan computes hashes for files
-    force_hash BOOLEAN NOT NULL,       -- Indicates hashing was forced on all items
-    is_val BOOLEAN NOT NULL,      -- Indicates the scan validates file contents
-    force_val BOOLEAN NOT NULL,        -- Indicates validation was forced on all items
+    is_hash BOOLEAN NOT NULL,     -- Hash new or changed files
+    hash_all BOOLEAN NOT NULL,       -- Hash all items including unchanged and previously hashed
+    is_val BOOLEAN NOT NULL,      -- Validate the contents of files
+    val_all BOOLEAN NOT NULL,        -- Validate all items including unchanged and previously validated
     scan_time INTEGER NOT NULL,        -- Timestamp of when scan was performed (UTC)
     file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
     folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
@@ -113,7 +113,7 @@ pub const UPGRADE_2_TO_3_SQL: &str = r#"
 --
 -- Schema Upgrade: Version 2 → 3
 --
--- This migration modifies the 'scans' table to add force_hash/force_val flags
+-- This migration modifies the 'scans' table to add hash_all/val_all flags
 -- and renames 'hashing' → 'is_hash' and 'validating' → 'is_val'.
 --
 -- Following SQLite's official guidance:
@@ -142,9 +142,9 @@ CREATE TABLE new_scans (
     root_id INTEGER NOT NULL,
     state INTEGER NOT NULL,
     is_hash BOOLEAN NOT NULL,
-    force_hash BOOLEAN NOT NULL,
+    hash_all BOOLEAN NOT NULL,
     is_val BOOLEAN NOT NULL,
-    force_val BOOLEAN NOT NULL,
+    val_all BOOLEAN NOT NULL,
     scan_time INTEGER NOT NULL,
     file_count INTEGER DEFAULT NULL,
     folder_count INTEGER DEFAULT NULL,
@@ -154,8 +154,8 @@ CREATE TABLE new_scans (
 -- Copy data from old scans table into new_scans
 INSERT INTO new_scans (
     scan_id, root_id, state,
-    is_hash, force_hash,
-    is_val, force_val,
+    is_hash, hash_all,
+    is_val, val_all,
     scan_time, file_count, folder_count
 )
 SELECT 

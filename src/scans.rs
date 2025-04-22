@@ -7,12 +7,12 @@ use rusqlite::{params, OptionalExtension, Result};
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, state, is_hash, force_hash, is_val, force_val, scan_time, file_count, folder_count
+    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, state, is_hash, force_hash, is_val, force_val, scan_time, file_count, folder_count
+    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -20,34 +20,34 @@ const SQL_LATEST_FOR_ROOT: &str =
 #[derive(Copy, Clone, Debug)]
 pub struct AnalysisSpec {
     is_hash: bool,
-    force_hash: bool,
+    hash_all: bool,
     is_val: bool,
-    force_val: bool,
+    val_all: bool,
 }
 
 impl AnalysisSpec {
-    pub fn new(is_hash: bool, force_hash: bool, is_val: bool, force_val: bool) -> Self {
+    pub fn new(is_hash: bool, hash_all: bool, is_val: bool, val_all: bool) -> Self {
         AnalysisSpec {
             is_hash,
-            force_hash,
+            hash_all,
             is_val,
-            force_val,
+            val_all,
         }
     }
     pub fn is_hash(&self) -> bool {
         self.is_hash
     }
 
-    pub fn force_hash(&self) -> bool {
-        self.force_hash
+    pub fn hash_all(&self) -> bool {
+        self.hash_all
     }
 
     pub fn is_val(&self) -> bool {
         self.is_val
     }
 
-    pub fn force_val(&self) -> bool {
-        self.force_val
+    pub fn val_all(&self) -> bool {
+        self.val_all
     }
 }
 
@@ -136,16 +136,16 @@ impl Scan {
         analysis_spec: &AnalysisSpec,
     ) -> Result<Self, FsPulseError> {
         let (scan_id, scan_time): (i64, i64) = db.conn().query_row(
-            "INSERT INTO scans (root_id, state, is_hash, force_hash, is_val, force_val, scan_time) 
+            "INSERT INTO scans (root_id, state, is_hash, hash_all, is_val, val_all, scan_time) 
              VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
              RETURNING scan_id, scan_time",
             [
                 root.root_id(),
                 ScanState::Scanning.as_i64(),
                 analysis_spec.is_hash as i64,
-                analysis_spec.force_hash as i64,
+                analysis_spec.hash_all as i64,
                 analysis_spec.is_val as i64,
-                analysis_spec.force_val as i64,
+                analysis_spec.val_all as i64,
             ],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
@@ -195,9 +195,9 @@ impl Scan {
                     state: row.get(2)?,
                     analysis_spec: AnalysisSpec {
                         is_hash: row.get(3)?,
-                        force_hash: row.get(4)?,
+                        hash_all: row.get(4)?,
                         is_val: row.get(5)?,
-                        force_val: row.get(6)?,
+                        val_all: row.get(6)?,
                     },
                     scan_time: row.get(7)?,
                     file_count: row.get(8)?,
@@ -512,15 +512,15 @@ impl Scan {
                 s.root_id,
                 s.state,
                 s.is_hash,
-                s.force_hash,
+                s.hash_all,
                 s.is_val,
-                s.force_val,
+                s.val_all,
                 s.scan_time,
                 s.file_count,
                 s.folder_count
             FROM scans s
             LEFT JOIN changes c ON s.scan_id = c.scan_id
-            GROUP BY s.scan_id, s.root_id, s.state, s.is_hash, s.force_hash, s.is_val, s.force_val, s.scan_time, s.file_count, s.folder_count
+            GROUP BY s.scan_id, s.root_id, s.state, s.is_hash, s.hash_all, s.is_val, s.val_all, s.scan_time, s.file_count, s.folder_count
             ORDER BY s.scan_id DESC
             LIMIT ?"
         )?;
@@ -531,10 +531,10 @@ impl Scan {
                 root_id: row.get::<_, i64>(1)?, // root id
                 state: row.get::<_, i64>(2)?,   // root id
                 analysis_spec: AnalysisSpec {
-                    is_hash: row.get::<_, bool>(3)?,    // is a hash scan
-                    force_hash: row.get::<_, bool>(4)?, // force a re-hash of everything
-                    is_val: row.get::<_, bool>(5)?,     // is a val scan
-                    force_val: row.get::<_, bool>(6)?,  // force a re-val of everything
+                    is_hash: row.get::<_, bool>(3)?,    // hash new or changed
+                    hash_all: row.get::<_, bool>(4)?, // Hash or re-hash everything
+                    is_val: row.get::<_, bool>(5)?,     // val new or changed
+                    val_all: row.get::<_, bool>(6)?,  // Val or  re-val everything
                 },
                 scan_time: row.get::<_, i64>(7)?, // time of scan
                 file_count: row.get::<_, Option<i64>>(8)?, // file count

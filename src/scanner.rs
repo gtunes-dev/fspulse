@@ -28,6 +28,7 @@ use crate::utils::Utils;
 use crate::validators::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
+use console::style;
 use crossbeam_channel::bounded;
 use dialoguer::theme::ColorfulTheme;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -87,26 +88,47 @@ impl Scanner {
     }
 
     fn initiate_scan_interactive(db: &mut Database, root: &Root) -> Result<Scan, FsPulseError> {
-        let flags = vec!["hash", "validate"];
-        let selection = MultiSelect::new()
-            .with_prompt("Hash or Validate (space to select, enter to continue)")
-            .items(&flags)
-            .interact()
-            .unwrap();
+        let flags = vec![
+            "Hash",
+            "Hash All (requires Hash)",
+            "Validate",
+            "Validate All (requires Validate)",
+        ];
+        
+        let analysis_spec = loop {
+            let selection = MultiSelect::new()
+                .with_prompt("Hash or Validate (space to select, enter to continue)")
+                .items(&flags)
+                .interact()
+                .unwrap();
 
-        let mut hash = false;
-        let mut validate = false;
-
-        for selected_flag in selection.iter() {
-            match selected_flag {
-                0 => hash = true,
-                1 => validate = true,
-                _ => (),
+            let mut hash = false;
+            let mut hash_all = false;
+            let mut validate = false;
+            let mut validate_all = false;
+        
+            for selected_flag in selection.iter() {
+                match selected_flag {
+                    0 => hash = true,
+                    1 => hash_all = true,
+                    2 => validate = true,
+                    3 => validate_all = true,
+                    _ => (),
+                }
             }
-        }
 
-        // $TODO: Right now, all hash/val scans are force all. Fix this!
-        let analysis_spec = AnalysisSpec::new(hash, false, validate, false);
+            if !hash && hash_all {
+                println!("{}", style("Invalid: Selecting 'Hash All' requires selecting 'Hash'").yellow());
+                continue;
+            }
+            
+            if !validate && validate_all {
+                println!("{}", style("Invalid: Selecting 'Validate All' requires selecting 'Validate'").yellow());
+                continue;
+            }
+
+            break AnalysisSpec::new(hash, hash_all, validate, validate_all)
+        };
 
         Scanner::initiate_scan(db, root, &analysis_spec)
     }

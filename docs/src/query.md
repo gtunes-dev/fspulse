@@ -53,9 +53,9 @@ scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 | `root_path`  | Path     |
 | `scan_time`  | Date     |
 | `is_hash`    | Boolean  |
-| `force_hash` | Boolean  |
+| `hash_all`   | Boolean  |
 | `is_val`     | Boolean  |
-| `force_val`  | Boolean  |
+| `val_all`    | Boolean  |
 | `adds`       | Integer  |
 | `modifies`   | Integer  |
 | `deletes`    | Integer  |

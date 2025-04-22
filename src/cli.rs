@@ -62,28 +62,28 @@ pub enum Command {
         last: bool,
 
         /// Hash files using md5 and compare to previous known hashes
-        /// By default, files will be hashed if they have not had
+        /// Files will be hashed if they have not had
         /// a hash computed or if their modification date or file size
         /// has changed
         #[arg(long)]
         hash: bool,
 
-        /// Force all files to be hashed or re-hashed. Requires
-        /// "hash" to be passed
+        /// Hash all files including files whose sieze
+        /// and modification date have not changed
         #[arg(long, requires = "hash")]
-        force_hash: bool,
+        hash_all: bool,
 
         /// Validate file contents for known file types
-        /// By default, files will be validated if they have not
+        /// Files will be validated if they have not
         /// had a hash computed or if their modification date or file
         /// size has changed
         #[arg(long)]
         validate: bool,
 
-        /// Force all files to be validated or re-validated. Requires
-        /// "validate" to be passed
+        /// Validate all files including files whose size and
+        /// modification have not changed
         #[arg(long, requires = "validate")]
-        force_validate: bool,
+        validate_all: bool,
     },
 
     /// Generate reports.
@@ -266,17 +266,17 @@ impl Cli {
                 root_path,
                 last,
                 hash,
-                force_hash,
+                hash_all,
                 validate,
-                force_validate,
+                validate_all,
             } => {
                 info!(
-                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, force_hash: {}, validate: {}, force_validate: {}",
-                    db_path, root_id, root_path, last, hash, force_hash, validate, force_validate
+                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, hash_all: {}, validate: {}, validate_all: {}",
+                    db_path, root_id, root_path, last, hash, hash_all, validate, validate_all
                 );
 
                 let mut db = Database::new(db_path)?;
-                let analysis_spec = AnalysisSpec::new(hash, force_hash, validate, force_validate);
+                let analysis_spec = AnalysisSpec::new(hash, hash_all, validate, validate_all);
                 Scanner::do_scan_command(
                     &mut db, root_id, root_path, last, &analysis_spec, multi_prog,
                 )
@@ -390,24 +390,30 @@ impl Cli {
         match choice {
             CommandChoice::QuerySimple => {
                 let mut history = BasicHistory::new().max_entries(8).no_duplicates(true);
-
+    
                 loop {
-                    let query: String = Input::with_theme(&ColorfulTheme::default())
-                        .history_with(&mut history)
-                        .with_post_completion_text("Query: ")
-                        .with_prompt("Enter query (or 'q' or 'exit'):")
-                        .interact_text()
-                        .unwrap();
+                    let query: String = {
+                        // Limit scope of dialoguer-related objects
+                        Input::with_theme(&ColorfulTheme::default())
+                            .history_with(&mut history)
+                            .with_post_completion_text("Query: ")
+                            .with_prompt("Enter query (or 'q' or 'exit'):")
+                            .interact_text()
+                            .unwrap()
+                    };
+    
                     let query_lower = query.to_lowercase();
                     if query_lower == "exit" || query_lower == "q" {
                         break;
                     }
+    
+                    // All interactive objects are dropped at this point
                     QueryProcessor::process_query(db, &query)?;
                 }
             }
             _ => unreachable!(),
         }
-
+    
         Ok(())
     }
 
