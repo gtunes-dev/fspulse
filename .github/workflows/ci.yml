@@ -6,7 +6,13 @@ on:
       - main
     tags:
       - 'v*'
+    paths-ignore:
+      - 'assets/**'
+      - 'docs/**'
   pull_request:
+    paths-ignore:
+      - 'assets/**'
+      - 'docs/**'
 
 jobs:
   build-matrix:
