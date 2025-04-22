@@ -11,6 +11,11 @@ keywords = ["filesystem", "scanner", "rust", "cli"]
 categories = ["command-line-utilities"]
 readme = "README.md"
 
+exclude = [
+  ".github",
+  ".gitignore"
+]
+
 [[bin]]
 name = "fspulse"
 path = "src/main.rs"
