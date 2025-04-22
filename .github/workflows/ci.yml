@@ -43,6 +43,10 @@ jobs:
           toolchain: stable
           override: true
 
+      - name: Add macOS target
+        if: matrix.os == 'macos-latest'
+        run: rustup target add x86_64-apple-darwin
+
       - name: Run Clippy (Linting)
         run: cargo clippy --all-targets --all-features -- -D warnings
 
