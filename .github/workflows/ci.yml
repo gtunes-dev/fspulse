@@ -66,7 +66,11 @@ jobs:
           fi
           cp target/${{ matrix.target }}/release/$bin_name dist/$bin_name
           cd dist
-          version=${GITHUB_REF#refs/tags/v}
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF#refs/tags/v}"
+          else
+            version="dev"
+          fi
           archive_name=fspulse-v$version-${{ matrix.target }}.${{ matrix.ext }}
           if [[ "${{ matrix.ext }}" == "zip" ]]; then
             7z a ../$archive_name $bin_name > /dev/null
