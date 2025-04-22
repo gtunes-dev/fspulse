@@ -158,6 +158,11 @@
                         <h1 id="concepts"><a class="header" href="#concepts">Concepts</a></h1>
 <p>FsPulse is centered around tracking and understanding the state of the file system over time. The core entities in FsPulse — roots, scans, items, and changes — represent a layered model of this information.</p>
 <hr />
+<h2 id="scans"><a class="header" href="#scans">Scans</a></h2>
+<p>Scans are the units of work performed by FsPulse. A scan is performed on a file system tree specified by
+a path. A scan deeply traverses the specified path and its children, recording information on the
+files and directories discovered. The details of scanning are explained in <a href="scanning.html">Scanning</a>.</p>
+<hr />
 <h2 id="root"><a class="header" href="#root">Root</a></h2>
 <p>A <strong>root</strong> is the starting point for a scan. It represents a specific path on the file system that you explicitly tell FsPulse to track.</p>
 <p>Each root is stored persistently in the database, and every scan you perform refers back to a root.</p>
