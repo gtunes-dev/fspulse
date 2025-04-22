@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use dialoguer::{theme::ColorfulTheme, BasicHistory, Input, Select};
 use indicatif::MultiProgress;
 use log::info;
@@ -28,178 +28,187 @@ pub struct Cli {
 /// Available commands in fspulse.
 #[derive(Subcommand)]
 pub enum Command {
-    /// Interactively choose the command type (Scan or Report) and then choose from
-    /// among existing items (roots, scans, items, changes) to initiate the
-    /// command
+    #[command(
+        about = "Interactively select and run a command",
+        long_about = r#"Launches interactive mode where you can choose from one of the main command types:
+Scan, Report, or Query.
+
+Once a command type is selected, you’ll be prompted to select from relevant existing items
+such as roots, scans, items, or changes. The selected command will then be run using your choices."#
+    )]
     Interact {
-        /// Specifies the directory where the database is stored.
-        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
-        /// The database file will always be named "fspulse.db".
-        #[arg(long)]
+        #[arg(
+            long,
+            help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#
+        )]
         db_path: Option<PathBuf>,
     },
-    /// Perform a filesystem scan on a specified "root". If the root has been scanned previously,
-    /// it can be identified by its root-id. A root can also be identified by path by
-    /// specifying a root-path. In the case of root-path, an existing root will be used if
-    /// one exists and, if not, a new root will be created
+
+    #[command(
+        about = "Scan the filesystem and track changes",
+        long_about = r#"Performs a scan on a specified root path or root-id.
+
+If the root has been scanned before, it can be referenced by its root-id.
+Alternatively, use a root path. If the specified path matches an existing
+root, it will be reused; otherwise, a new root will be created.
+
+Scans can optionally compute hashes and validate files, based on modification
+timestamps and file size."#
+    )]
     Scan {
-        /// Specifies the directory where the database is stored.
-        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
-        /// The database file will always be named "fspulse.db".
-        #[arg(long)]
+        #[arg(
+            long,
+            help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#
+        )]
         db_path: Option<PathBuf>,
 
-        /// Scan a known root by id
-        #[arg(long, conflicts_with_all = ["root_path", "last"])]
+        #[arg(long, conflicts_with_all = ["root_path", "last"], help = "Scan a previously recorded root by numeric ID")]
         root_id: Option<u32>,
 
-        /// Scan a known or new root by path (must be a directory)
-        #[arg(long, conflicts_with_all = ["root_id", "last"])]
+        #[arg(long, conflicts_with_all = ["root_id", "last"], help = "Scan a known or new root by path (must be a directory)")]
         root_path: Option<String>,
 
-        /// Scan the root which was scanned most recently
-        #[arg(long, conflicts_with_all = ["root_id", "root_path"])]
+        #[arg(long, conflicts_with_all = ["root_id", "root_path"], help = "Scan the most recently scanned root")]
         last: bool,
 
-        /// Hash files using md5 and compare to previous known hashes
-        /// Files will be hashed if they have not had
-        /// a hash computed or if their modification date or file size
-        /// has changed
-        #[arg(long)]
+        #[arg(
+            long,
+            help = r#"Hash files using MD5 and compare to previous values.
+Files will be hashed if no hash exists, or if their size or modification date has changed."#
+        )]
         hash: bool,
 
-        /// Hash all files including files whose sieze
-        /// and modification date have not changed
-        #[arg(long, requires = "hash")]
+        #[arg(
+            long,
+            requires = "hash",
+            help = "Hash all files, even if unchanged since last scan"
+        )]
         hash_all: bool,
 
-        /// Validate file contents for known file types
-        /// Files will be validated if they have not
-        /// had a hash computed or if their modification date or file
-        /// size has changed
-        #[arg(long)]
+        #[arg(
+            long,
+            help = r#"Validate file contents for known file types.
+Files will be validated if they are missing validation data, or if their size or modification date has changed."#
+        )]
         validate: bool,
 
-        /// Validate all files including files whose size and
-        /// modification have not changed
-        #[arg(long, requires = "validate")]
+        #[arg(
+            long,
+            requires = "validate",
+            help = "Validate all files, even if unchanged since last scan"
+        )]
         validate_all: bool,
     },
 
-    /// Generate reports.
+    #[command(
+        about = "Generate reports",
+        long_about = "Generate detailed reports about roots, scans, items, or changes stored in the FsPulse database."
+    )]
     Report {
         #[command(subcommand)]
         report_type: ReportType,
     },
+
+    #[command(
+        about = "Execute a query and view results",
+        long_about = r#"Execute a query using the FsPulse query language and return results in tabular form.
+
+Example query: items where scan:(5) order by path limit 10"#
+    )]
     Query {
-        /// Specifies the directory where the database is stored.
-        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
-        /// The database file will always be named "fspulse.db".
-        #[arg(long)]
+        #[arg(
+            long,
+            help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#
+        )]
         db_path: Option<PathBuf>,
 
-        /// The query string (e.g., "items where scan:(5)")
+        #[arg(help = "The query string (e.g., \"items where scan:(5)\")")]
         query: String,
     },
 }
 
-/// Available report types.
 #[derive(Subcommand)]
 pub enum ReportType {
-    /// Reports on "roots" which have been scanned in the past
+    #[command(about = "Report on known root paths")]
     Roots {
-        /// Specifies the directory where the database is stored.
-        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
-        /// The database file will always be named "fspulse.db".
-        #[arg(long)]
+        #[arg(long, help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#)]
         db_path: Option<PathBuf>,
 
-        /// Show details of the root with the specified id
-        #[arg(long, conflicts_with = "root_path")]
+        #[arg(long, conflicts_with = "root_path", help = "Show details for the root with the specified ID")]
         root_id: Option<u32>,
 
-        /// Show details of the root with the specified path
-        #[arg(long, conflicts_with = "root_id")]
+        #[arg(long, conflicts_with = "root_id", help = "Show details for the root with the specified path")]
         root_path: Option<String>,
 
-        /// Report format (csv, table).
-        #[arg(long, default_value = "table", value_parser = ["csv", "table"])]
+        #[arg(long, default_value = "table", value_parser = ["csv", "table"], help = "Report format (csv, table)")]
         format: String,
     },
 
-    /// Reports on scans.
+    #[command(about = "Report on scans")]
     Scans {
-        /// Specifies the directory where the database is stored.
-        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
-        /// The database file will always be named "fspulse.db".
-        #[arg(long)]
+        #[arg(long, help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#)]
         db_path: Option<PathBuf>,
 
-        /// Filter by scan ID.
-        #[arg(long, conflicts_with = "last")]
+        #[arg(long, conflicts_with = "last", help = "Filter by specific scan ID")]
         scan_id: Option<u32>,
 
-        /// Show last N scans (default: 10)
-        #[arg(long, default_value_t = 10, conflicts_with = "scan_id")]
+        #[arg(long, default_value_t = 10, conflicts_with = "scan_id", help = "Show last N scans (default: 10)")]
         last: u32,
 
-        /// Report format (csv, table).
-        #[arg(long, default_value = "table", value_parser = ["csv", "table"])]
+        #[arg(long, default_value = "table", value_parser = ["csv", "table"], help = "Report format (csv, table)")]
         format: String,
     },
 
-    /// Reports on items.
+    #[command(about = "Report on scanned items")]
     Items {
-        /// Specifies the directory where the database is stored.
-        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
-        /// The database file will always be named "fspulse.db".
-        #[arg(long)]
+        #[arg(long, help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#)]
         db_path: Option<PathBuf>,
 
-        /// Show a specific Item
-        #[arg(long, conflicts_with_all = ["item_path", "root_id"])]
+        #[arg(long, conflicts_with_all = ["item_path", "root_id"], help = "Show a specific item by ID")]
         item_id: Option<u32>,
 
-        /// Show all items with a specific path (an item may appear in multiple roots
-        /// (in the case where one root is a subdirectory of another)
-        #[arg(long, conflicts_with_all = ["item_id", "root_id"])]
+        #[arg(long, conflicts_with_all = ["item_id", "root_id"], help = "Show items by file path (may appear in multiple roots)")]
         item_path: Option<String>,
 
-        /// Shows the items seen on the most recent scan of the specified root
-        #[arg(long, conflicts_with_all = ["item_id", "item_path"])]
+        #[arg(long, conflicts_with_all = ["item_id", "item_path"], help = "Show items from the most recent scan of a specific root")]
         root_id: Option<u32>,
 
-        /// Shows all invalid items under a specific root
-        #[arg(long, requires = "root_id")]
+        #[arg(long, requires = "root_id", help = "Show all invalid items under the specified root")]
         invalid: bool,
 
-        /// Report format (csv, table, tree).
-        #[arg(long, default_value = "table", value_parser = ["csv", "table", "tree"])]
+        #[arg(long, default_value = "table", value_parser = ["csv", "table", "tree"], help = "Report format (csv, table, tree)")]
         format: String,
     },
 
-    /// Reports on changes.
+    #[command(about = "Report on changes between scans")]
     Changes {
-        /// Specifies the directory where the database is stored.
-        /// Defaults to the user's home directory (`~/` on Unix, `%USERPROFILE%\` on Windows).
-        /// The database file will always be named "fspulse.db".
-        #[arg(long)]
+        #[arg(long, help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#)]
         db_path: Option<PathBuf>,
 
-        /// Filter by change ID.
-        #[arg(long, conflicts_with_all = ["item_id", "scan_id"])]
+        #[arg(long, conflicts_with_all = ["item_id", "scan_id"], help = "Filter by change ID")]
         change_id: Option<u32>,
 
-        /// Filter by item ID (shows all changes affecting the item).
-        #[arg(long, conflicts_with_all = ["change_id", "scan_id"])]
+        #[arg(long, conflicts_with_all = ["change_id", "scan_id"], help = "Filter by item ID (shows all changes affecting the item)")]
         item_id: Option<u32>,
 
-        /// Filter by scan ID (shows all changes recorded in this scan).
-        #[arg(long, conflicts_with_all = ["change_id", "item_id"])]
+        #[arg(long, conflicts_with_all = ["change_id", "item_id"], help = "Filter by scan ID (shows all changes from this scan)")]
         scan_id: Option<u32>,
 
-        /// Report format (csv, table, tree - tree only valid with scan-id).
-        #[arg(long, default_value = "table", value_parser = ["csv", "table", "tree"])]
+        #[arg(long, default_value = "table", value_parser = ["csv", "table", "tree"], help = "Report format (csv, table, tree — tree only valid with scan-id)")]
         format: String,
     },
 }
@@ -208,7 +217,6 @@ pub enum ReportType {
 enum CommandChoice {
     Scan,
     QuerySimple,
-    //QueryEditor,
     Report,
     Exit,
 }
@@ -216,7 +224,6 @@ enum CommandChoice {
 static COMMAND_CHOICES: &[(CommandChoice, &str)] = &[
     (CommandChoice::Scan, "Scan"),
     (CommandChoice::QuerySimple, "Query"),
-    // (CommandChoice::QueryEditor, "Query (Editor)"),
     (CommandChoice::Report, "Report"),
     (CommandChoice::Exit, "Exit"),
 ];
@@ -251,7 +258,10 @@ static ITEM_REPORT_CHOICES: &[(ItemReportChoice, &str)] = &[
 
 impl Cli {
     pub fn handle_command_line(multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
-        let args = Cli::parse();
+        //let args = Cli::parse();
+        let matches = Cli::command().term_width(0).get_matches();
+
+        let args = Cli::from_arg_matches(&matches).unwrap();
 
         match args.command {
             Command::Interact { db_path } => {
@@ -278,7 +288,12 @@ impl Cli {
                 let mut db = Database::new(db_path)?;
                 let analysis_spec = AnalysisSpec::new(hash, hash_all, validate, validate_all);
                 Scanner::do_scan_command(
-                    &mut db, root_id, root_path, last, &analysis_spec, multi_prog,
+                    &mut db,
+                    root_id,
+                    root_path,
+                    last,
+                    &analysis_spec,
+                    multi_prog,
                 )
             }
             Command::Report { report_type } => match report_type {
@@ -390,7 +405,7 @@ impl Cli {
         match choice {
             CommandChoice::QuerySimple => {
                 let mut history = BasicHistory::new().max_entries(8).no_duplicates(true);
-    
+
                 loop {
                     let query: String = {
                         // Limit scope of dialoguer-related objects
@@ -401,19 +416,19 @@ impl Cli {
                             .interact_text()
                             .unwrap()
                     };
-    
+
                     let query_lower = query.to_lowercase();
                     if query_lower == "exit" || query_lower == "q" {
                         break;
                     }
-    
+
                     // All interactive objects are dropped at this point
                     QueryProcessor::process_query(db, &query)?;
                 }
             }
             _ => unreachable!(),
         }
-    
+
         Ok(())
     }
 
