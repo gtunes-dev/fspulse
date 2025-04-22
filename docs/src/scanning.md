@@ -20,6 +20,69 @@ Once a scan on a root has begun, it must complete or be explicitly stopped befor
 
 ---
 
+## Hashing
+
+Hashing is a key capabilities of FsPulse.
+
+FsPulse uses the standard MD5 message-digest algorithm to compute digital fingerprints of file contents.
+The intent of hashing is to enable the detection of changes to file content in cases where the modification
+date and file size have not changed. One example of a case where this might occur is data decay. FsPulse
+can be used to create a hash baseline by scanning with the "hash" option. By default, a "hash" scan will
+compute hashes for items that have never been hashed or whose file size or modification date has changed.
+If the "hash-all" flag is passed along with the "hash" flag, FsPulse will hash all files, including those
+that have been previously hashed. If a hash is detected to have changed, a change record will be created.
+
+The query below, for example, will find and show changes where file metadata has not changed, but the
+file's hash has changed.
+
+  ```sh
+  fspulse query 'changes where meta_change:(F), hash_change:(T) show default, item_path order by change_id desc'
+  ```
+
+## Validating
+
+FsPulse can attempt to assess the "validity" of files. 
+
+FsPulse uses community-contributed libraries to "validate" files. Validation is implemented as
+opening and reading or traversing the file. These community libraries raise a variety of "errors"
+when invalid content is encountered.
+
+FsPulse's ability to validate files is limited to the capabilities of the libraries that it uses
+and these libraries vary in terms of completeness and accuracy. In some cases, such as FsPulse's use
+of lopdf to validate PDF files, false positive "errors" may be detected as a consequence of lopdf
+encountering PDF file contents it does not yet understand. Despite these limitations, FsPulse
+offers a unique and effective view into potential validity issues in files.
+
+As with hash options, FsPulse has two command-line flags related to validation: "validate" and "validate-all".
+
+Passing "validate" will cause FsPulse to perform a validation pass on all files that have never been validated
+or have changed in terms of modification date or size. Passing "validate-all" will cause FsPulse to validate
+all files.
+
+Validation states are stored in the database as:
+- U: Unknown. No validation has been performed
+- N: No Validator. No validator exists for this file type
+- V: Valid. Validation was performed and no errors were encountered
+- I: Invalid. Validation was performed and an error was encountered
+
+In the case of 'I', the validation error will be stored as val_error on the Item alongside the
+validation state, which is stored as val. When an item's validation state changes in any way,
+the change is recorded on a change record and the old and new states are both available on that
+record. 
+
+If a validation pass produces an error which is identical to the previously seen error, no change
+is recorded.
+
+An example of a query that displays validation state changes is:
+
+ ```sh
+  fspulse query 'changes where val_change:(T) show default, item_path order by change_id desc'
+  ```
+
+  Additional queries can be easily composed which filter on specific old and new validation states.
+
+---
+
 ## In-Progress Scans
 
 FsPulse is designed to be resilient to interruptions like system crashes or power loss. If a scan stops before completing, FsPulse saves its state so it can be resumed later.

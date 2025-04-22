@@ -3,6 +3,13 @@
 FsPulse is centered around tracking and understanding the state of the file system over time. The core entities in FsPulse — roots, scans, items, and changes — represent a layered model of this information.
 
 ---
+## Scans
+
+Scans are the units of work performed by FsPulse. A scan is performed on a file system tree specified by
+a path. A scan deeply traverses the specified path and its children, recording information on the
+files and directories discovered. The details of scanning are explained in [Scanning](scanning.md). 
+
+---
 
 ## Root
 
