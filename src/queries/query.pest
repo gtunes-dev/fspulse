@@ -59,7 +59,7 @@ date_range       =  { date ~ WS* ~ DOTDOT ~ date }
 date             =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
-bool_col = { "hashing" | "validating" | "hash_change" | "meta_change" | "val_change" }
+bool_col = { "is_hash" | "force_hash" | "is_val" | "force_val" | "hash_change" | "meta_change" | "val_change" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }

@@ -674,7 +674,7 @@ impl Reports {
         report.push(header.apply_to("Hash Changes").to_string());
         report.push(String::new());
 
-        if !scan.hashing() {
+        if !scan.analysis_spec().is_hash() {
             report.push("Hash mode was not specified".to_string());
         } else {
             report.push("Tip: query for all hash changes".to_string());
@@ -697,7 +697,7 @@ impl Reports {
         report.push(header.apply_to("Validation Changes").to_string());
         report.push(String::new());
 
-        if !scan.validating() {
+        if !scan.analysis_spec().is_val() {
             report.push("Validation mode was not specified".to_string());
         } else {
             let validation_changes =

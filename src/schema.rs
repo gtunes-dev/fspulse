@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '2');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '3');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -18,13 +18,16 @@ CREATE TABLE IF NOT EXISTS roots (
 CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (root_path);
 
 -- Scans table tracks individual scan sessions
+-- Scans table tracks individual scan sessions
 CREATE TABLE IF NOT EXISTS scans (
     scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,          -- Links scan to a root path
     state INTEGER NOT NULL,            -- The state of the scan (0 = Pending, 1 = Scanning, 2 = Sweeping, 3 = Analyzing, 4 = Completed, 5 = Stopped)
-    hashing BOOLEAN NOT NULL,          -- Indicated the scan computes hashes for files
-    validating BOOLEAN NOT NULL,       -- Indicates the scan validates file contents
-    scan_time INTEGER NOT NULL,     -- Timestamp of when scan was performed (UTC)
+    is_hash BOOLEAN NOT NULL,     -- Indicates the scan computes hashes for files
+    force_hash BOOLEAN NOT NULL,       -- Indicates hashing was forced on all items
+    is_val BOOLEAN NOT NULL,      -- Indicates the scan validates file contents
+    force_val BOOLEAN NOT NULL,        -- Indicates validation was forced on all items
+    scan_time INTEGER NOT NULL,        -- Timestamp of when scan was performed (UTC)
     file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
     folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
     FOREIGN KEY (root_id) REFERENCES roots(root_id)
@@ -104,4 +107,80 @@ CREATE TABLE IF NOT EXISTS changes (
 CREATE INDEX IF NOT EXISTS idx_changes_scan_type ON changes (scan_id, change_type);
 
 COMMIT;
+"#;
+
+pub const UPGRADE_2_TO_3_SQL: &str = r#"
+--
+-- Schema Upgrade: Version 2 → 3
+--
+-- This migration modifies the 'scans' table to add force_hash/force_val flags
+-- and renames 'hashing' → 'is_hash' and 'validating' → 'is_val'.
+--
+-- Following SQLite's official guidance:
+-- https://www.sqlite.org/lang_altertable.html
+--
+-- We avoid renaming the original table. Instead, we:
+-- 1. Disable foreign keys BEFORE the transaction.
+-- 2. Create a new version of 'scans' as 'new_scans'.
+-- 3. Copy the old contents into 'new_scans'.
+-- 4. Drop the original 'scans'.
+-- 5. Rename 'new_scans' to 'scans'.
+--
+-- This preserves foreign key relationships in dependent tables like 'items' and 'changes'.
+--
+-- Disable foreign key constraints BEFORE transaction starts
+PRAGMA foreign_keys = OFF;
+
+BEGIN TRANSACTION;
+
+-- Verify schema version is exactly 2
+SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '2' THEN 1 ELSE 0 END);
+
+-- Create new_scans table with updated schema
+CREATE TABLE new_scans (
+    scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    root_id INTEGER NOT NULL,
+    state INTEGER NOT NULL,
+    is_hash BOOLEAN NOT NULL,
+    force_hash BOOLEAN NOT NULL,
+    is_val BOOLEAN NOT NULL,
+    force_val BOOLEAN NOT NULL,
+    scan_time INTEGER NOT NULL,
+    file_count INTEGER DEFAULT NULL,
+    folder_count INTEGER DEFAULT NULL,
+    FOREIGN KEY (root_id) REFERENCES roots(root_id)
+);
+
+-- Copy data from old scans table into new_scans
+INSERT INTO new_scans (
+    scan_id, root_id, state,
+    is_hash, force_hash,
+    is_val, force_val,
+    scan_time, file_count, folder_count
+)
+SELECT 
+    scan_id, root_id, state,
+    hashing, hashing,
+    validating, validating,
+    scan_time, file_count, folder_count
+FROM scans;
+
+-- Drop old scans table
+DROP TABLE scans;
+
+-- Rename new_scans to scans
+ALTER TABLE new_scans RENAME TO scans;
+
+-- Recreate any indexes if needed (none currently defined on scans)
+
+-- Update schema version
+UPDATE meta SET value = '3' WHERE key = 'schema_version';
+
+-- Update sqlite_sequence to preserve AUTOINCREMENT
+UPDATE sqlite_sequence SET seq = (SELECT MAX(scan_id) FROM scans) WHERE name = 'scans';
+
+COMMIT;
+
+-- Re-enable foreign key constraints
+PRAGMA foreign_keys = ON;
 "#;

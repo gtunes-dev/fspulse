@@ -7,24 +7,57 @@ use rusqlite::{params, OptionalExtension, Result};
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, state, hashing, validating, scan_time, file_count, folder_count
+    "SELECT scan_id, root_id, state, is_hash, force_hash, is_val, force_val, scan_time, file_count, folder_count
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, state, hashing, validating, scan_time, file_count, folder_count
+    "SELECT scan_id, root_id, state, is_hash, force_hash, is_val, force_val, scan_time, file_count, folder_count
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug)]
+pub struct AnalysisSpec {
+    is_hash: bool,
+    force_hash: bool,
+    is_val: bool,
+    force_val: bool,
+}
+
+impl AnalysisSpec {
+    pub fn new(is_hash: bool, force_hash: bool, is_val: bool, force_val: bool) -> Self {
+        AnalysisSpec {
+            is_hash,
+            force_hash,
+            is_val,
+            force_val,
+        }
+    }
+    pub fn is_hash(&self) -> bool {
+        self.is_hash
+    }
+
+    pub fn force_hash(&self) -> bool {
+        self.force_hash
+    }
+
+    pub fn is_val(&self) -> bool {
+        self.is_val
+    }
+
+    pub fn force_val(&self) -> bool {
+        self.force_val
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub struct Scan {
     // Schema fields
     scan_id: i64,
     root_id: i64,
     state: i64,
-    hashing: bool,
-    validating: bool,
+    analysis_spec: AnalysisSpec,
     #[allow(dead_code)]
     scan_time: i64,
     file_count: Option<i64>,
@@ -83,36 +116,36 @@ impl Scan {
         scan_id: i64,
         root_id: i64,
         state: i64,
-        hashing: bool,
-        validating: bool,
+        analysis_spec: AnalysisSpec,
         scan_time: i64,
     ) -> Self {
         Scan {
             scan_id,
             root_id,
             state,
-            hashing,
-            validating,
+            analysis_spec,
             scan_time,
-            ..Default::default()
+            file_count: None,
+            folder_count: None,
         }
     }
 
     pub fn create(
         db: &Database,
         root: &Root,
-        hashing: bool,
-        validating: bool,
+        analysis_spec: &AnalysisSpec,
     ) -> Result<Self, FsPulseError> {
         let (scan_id, scan_time): (i64, i64) = db.conn().query_row(
-            "INSERT INTO scans (root_id, state, hashing, validating, scan_time) 
-             VALUES (?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
+            "INSERT INTO scans (root_id, state, is_hash, force_hash, is_val, force_val, scan_time) 
+             VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
              RETURNING scan_id, scan_time",
             [
                 root.root_id(),
                 ScanState::Scanning.as_i64(),
-                hashing as i64,
-                validating as i64,
+                analysis_spec.is_hash as i64,
+                analysis_spec.force_hash as i64,
+                analysis_spec.is_val as i64,
+                analysis_spec.force_val as i64,
             ],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
@@ -121,8 +154,7 @@ impl Scan {
             scan_id,
             root.root_id(),
             ScanState::Scanning.as_i64(),
-            hashing,
-            validating,
+            *analysis_spec,
             scan_time,
         );
         Ok(scan)
@@ -161,11 +193,15 @@ impl Scan {
                     scan_id: row.get(0)?,
                     root_id: row.get(1)?,
                     state: row.get(2)?,
-                    hashing: row.get(3)?,
-                    validating: row.get(4)?,
-                    scan_time: row.get(5)?,
-                    file_count: row.get(6)?,
-                    folder_count: row.get(7)?,
+                    analysis_spec: AnalysisSpec {
+                        is_hash: row.get(3)?,
+                        force_hash: row.get(4)?,
+                        is_val: row.get(5)?,
+                        force_val: row.get(6)?,
+                    },
+                    scan_time: row.get(7)?,
+                    file_count: row.get(8)?,
+                    folder_count: row.get(9)?,
                 })
             })
             .optional()?;
@@ -185,12 +221,8 @@ impl Scan {
         ScanState::from_i64(self.state)
     }
 
-    pub fn hashing(&self) -> bool {
-        self.hashing
-    }
-
-    pub fn validating(&self) -> bool {
-        self.validating
+    pub fn analysis_spec(&self) -> &AnalysisSpec {
+        &self.analysis_spec
     }
 
     /*
@@ -429,6 +461,20 @@ impl Scan {
             [scan.scan_id()],
         )?;
 
+        // Find the items that had their last_scan updated but where no change
+        // record was created, and reset their last_scan
+        tx.execute(
+            "UPDATE items
+             SET last_scan = ?1
+             WHERE last_scan = ?2
+               AND NOT EXISTS (
+                 SELECT 1 FROM changes c
+                 WHERE c.item_id = items.item_id
+                   AND c.scan_id = ?2
+               )",
+            [prev_scan_id, scan.scan_id()],
+        )?;
+
         // Delete the change records from the stopped scan
         tx.execute("DELETE FROM changes WHERE scan_id = ?1", [scan.scan_id()])?;
 
@@ -465,28 +511,34 @@ impl Scan {
                 s.scan_id,
                 s.root_id,
                 s.state,
-                s.hashing,
-                s.validating,
+                s.is_hash,
+                s.force_hash,
+                s.is_val,
+                s.force_val,
                 s.scan_time,
                 s.file_count,
                 s.folder_count
             FROM scans s
             LEFT JOIN changes c ON s.scan_id = c.scan_id
-            GROUP BY s.scan_id, s.root_id, s.state, s.hashing, s.validating, s.scan_time, s.file_count, s.folder_count
+            GROUP BY s.scan_id, s.root_id, s.state, s.is_hash, s.force_hash, s.is_val, s.force_val, s.scan_time, s.file_count, s.folder_count
             ORDER BY s.scan_id DESC
             LIMIT ?"
         )?;
 
         let rows = stmt.query_map([last], |row| {
             Ok(Scan {
-                scan_id: row.get::<_, i64>(0)?,                   // scan id
-                root_id: row.get::<_, i64>(1)?,              // root id
-                state: row.get::<_, i64>(2)?,                // root id
-                hashing: row.get::<_, bool>(3)?,             // hashing
-                validating: row.get::<_, bool>(4)?,          // validating
-                scan_time: row.get::<_, i64>(5)?,         // time of scan
-                file_count: row.get::<_, Option<i64>>(6)?,   // file count
-                folder_count: row.get::<_, Option<i64>>(7)?, // folder count
+                scan_id: row.get::<_, i64>(0)?, // scan id
+                root_id: row.get::<_, i64>(1)?, // root id
+                state: row.get::<_, i64>(2)?,   // root id
+                analysis_spec: AnalysisSpec {
+                    is_hash: row.get::<_, bool>(3)?,    // is a hash scan
+                    force_hash: row.get::<_, bool>(4)?, // force a re-hash of everything
+                    is_val: row.get::<_, bool>(5)?,     // is a val scan
+                    force_val: row.get::<_, bool>(6)?,  // force a re-val of everything
+                },
+                scan_time: row.get::<_, i64>(7)?, // time of scan
+                file_count: row.get::<_, Option<i64>>(8)?, // file count
+                folder_count: row.get::<_, Option<i64>>(9)?, // folder count
             })
         })?;
 

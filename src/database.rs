@@ -1,12 +1,11 @@
-use crate::error::FsPulseError;
-use crate::schema::CREATE_SCHEMA_SQL;
+use crate::{error::FsPulseError, schema::CREATE_SCHEMA_SQL, schema::UPGRADE_2_TO_3_SQL};
 use directories::BaseDirs;
 use log::info;
 use rusqlite::{Connection, OptionalExtension, Result};
 use std::path::PathBuf;
 
 const DB_FILENAME: &str = "fspulse.db";
-const SCHEMA_VERSION: &str = "2";
+const SCHEMA_VERSION: &str = "3";
 
 #[derive(Debug, Default)]
 pub struct Database {
@@ -85,13 +84,27 @@ impl Database {
 
         match stored_version.as_deref() {
             Some(SCHEMA_VERSION) => Ok(()), // Schema is up to date
+            Some("2") => self.upgrade_2_to_3(),
             Some(_) => Err(FsPulseError::Error("Schema version mismatch".to_string())),
             None => Err(FsPulseError::Error("Schema version missing".to_string())),
         }
     }
 
     fn create_schema(&self) -> Result<(), FsPulseError> {
+        info!(
+            "Database is uninitialized - creating schema at version {}",
+            SCHEMA_VERSION
+        );
         self.conn().execute_batch(CREATE_SCHEMA_SQL)?;
+        info!("Database successfully initialized");
+        Ok(())
+    }
+
+    fn upgrade_2_to_3(&self) -> Result<(), FsPulseError> {
+        info!("Upgrading database schema 2 => 3");
+        self.conn().execute_batch(UPGRADE_2_TO_3_SQL)?;
+        info!("Database successfully upgraded");
+
         Ok(())
     }
 }

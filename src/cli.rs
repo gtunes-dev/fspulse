@@ -11,6 +11,7 @@ use crate::queries::query::QueryProcessor;
 use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
 use crate::scanner::Scanner;
+use crate::scans::AnalysisSpec;
 
 /// CLI for fspulse: A filesystem scan and reporting tool.
 #[derive(Parser)]
@@ -61,18 +62,27 @@ pub enum Command {
         last: bool,
 
         /// Hash files using md5 and compare to previous known hashes
+        /// By default, files will be hashed if they have not had
+        /// a hash computed or if their modification date or file size
+        /// has changed
         #[arg(long)]
         hash: bool,
 
-        /// Validate file contents for known file types
-        /// Will validate new items or items on which the modification date
-        /// or file size has changed
-        #[arg(long, conflicts_with = "force_validate")]
-        validate: bool,
+        /// Force all files to be hashed or re-hashed. Requires
+        /// "hash" to be passed
+        #[arg(long, requires = "hash")]
+        force_hash: bool,
 
         /// Validate file contents for known file types
-        /// Will validate all items including items that have not changed
-        #[arg(long, conflicts_with = "validate")]
+        /// By default, files will be validated if they have not
+        /// had a hash computed or if their modification date or file
+        /// size has changed
+        #[arg(long)]
+        validate: bool,
+
+        /// Force all files to be validated or re-validated. Requires
+        /// "validate" to be passed
+        #[arg(long, requires = "validate")]
         force_validate: bool,
     },
 
@@ -256,17 +266,19 @@ impl Cli {
                 root_path,
                 last,
                 hash,
+                force_hash,
                 validate,
                 force_validate,
             } => {
                 info!(
-                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, validate: {}, force_validate: {}",
-                    db_path, root_id, root_path, last, hash, validate, force_validate
+                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, force_hash: {}, validate: {}, force_validate: {}",
+                    db_path, root_id, root_path, last, hash, force_hash, validate, force_validate
                 );
 
                 let mut db = Database::new(db_path)?;
+                let analysis_spec = AnalysisSpec::new(hash, force_hash, validate, force_validate);
                 Scanner::do_scan_command(
-                    &mut db, root_id, root_path, last, hash, validate, force_validate, multi_prog,
+                    &mut db, root_id, root_path, last, &analysis_spec, multi_prog,
                 )
             }
             Command::Report { report_type } => match report_type {
@@ -351,8 +363,7 @@ impl Cli {
 
         // Process the command.
         match command {
-            // TODO: support force validate
-            CommandChoice::Scan => Scanner::do_interactive_scan(db, false, multi_prog)?,
+            CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
             CommandChoice::QuerySimple => Cli::do_interactive_query(db, command)?,
             CommandChoice::Report => Cli::do_interactive_report(db)?,
             CommandChoice::Exit => {}

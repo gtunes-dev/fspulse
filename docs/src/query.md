@@ -52,8 +52,10 @@ scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 | `root_id`    | Integer  |
 | `root_path`  | Path     |
 | `scan_time`  | Date     |
-| `hashing`    | Boolean  |
-| `validating` | Boolean  |
+| `is_hash`    | Boolean  |
+| `force_hash` | Boolean  |
+| `is_val`     | Boolean  |
+| `force_val`  | Boolean  |
 | `adds`       | Integer  |
 | `modifies`   | Integer  |
 | `deletes`    | Integer  |
