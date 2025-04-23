@@ -3,10 +3,10 @@ name: Create GitHub Release From Changelog
 on:
   push:
     tags:
-      - 'v*'  # Trigger on version tags like v0.0.6
+      - 'v*'
 
 permissions:
-  contents: write  # Needed to create the GitHub release
+  contents: write
 
 jobs:
   release:
@@ -15,9 +15,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Read changelog entry for this tag
+      - name: Read changelog for this version
         id: changelog
-        uses: mskelton/changelog-reader-action@v1
+        uses: mindsers/changelog-reader-action@v2
         with:
           version: ${{ github.ref_name }}
 
