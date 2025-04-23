@@ -8,8 +8,9 @@ on:
       - 'v*'
     paths-ignore:
       - 'assets/**'
-      - 'docs/**'
+      - 'docs/**'      
       - 'scripts/**'
+
   pull_request:
     paths-ignore:
       - 'assets/**'
@@ -85,7 +86,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
-          files: fspulse-v${{ github.ref_name != '' && github.ref_name != null && github.ref_name || 'unknown' }}-${{ matrix.target }}.${{ matrix.ext }}
+          files: fspulse-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.ext }}
 
       - name: Upload build artifact (fallback)
         if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/v')
