@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.0.5] - 2025-04-22
+## [v0.0.5] - 2025-04-22
 ### Fixed
 - SQL query bug where tombstones were incorrectly included in hash/validation candidate sets
 - Corrected hash/validate progress logic for newly added items
@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.0.4] - 2025-04-20
+## [v0.0.4] - 2025-04-20
 ### Added
 - Interactive query mode with readline history
 - Colorized validation summaries using `console`
@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.0.3] - 2025-04-15
+## [v0.0.3] - 2025-04-15
 ### Added
 - `--validate` and `--hash` CLI flags
 - Structured query parsing with Pest PEG grammar
@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.0.2] - 2025-04-10
+## [v0.0.2] - 2025-04-10
 ### Added
 - SQLite-backed schema with version tracking
 - Change tracking using tombstones and generation-based scanning
@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.0.1] - 2025-04-01
+## [v0.0.1] - 2025-04-01
 ### Added
 - Initial CLI scaffold with `clap`
 - Basic scan and record of directory metadata
