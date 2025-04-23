@@ -10,12 +10,14 @@ on:
       - 'assets/**'
       - 'docs/**'      
       - 'scripts/**'
+      - '.github/workflows/**'
 
   pull_request:
     paths-ignore:
       - 'assets/**'
       - 'docs/**'
-
+      - '.github/workflows/**'
+      
 jobs:
   build-matrix:
     runs-on: ${{ matrix.os }}
