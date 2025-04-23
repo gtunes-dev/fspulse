@@ -1,0 +1,31 @@
+name: Create GitHub Release From Changelog
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v0.0.6
+
+permissions:
+  contents: write  # Needed to create the GitHub release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read changelog entry for this tag
+        id: changelog
+        uses: mskelton/changelog-reader-action@v1
+        with:
+          version: ${{ github.ref_name }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.changelog }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

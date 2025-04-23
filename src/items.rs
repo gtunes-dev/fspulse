@@ -1,7 +1,9 @@
 use rusqlite::{self, params, OptionalExtension};
 
-use crate::{database::Database, error::FsPulseError, scans::AnalysisSpec, validators::validator::ValidationState};
-
+use crate::{
+    database::Database, error::FsPulseError, scans::AnalysisSpec,
+    validators::validator::ValidationState,
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct AnalysisItem {
@@ -62,7 +64,7 @@ impl AnalysisItem {
             val: row.get(5)?,
             val_error: row.get(6)?,
             needs_hash: row.get(7)?,
-            needs_val: row.get(8)?
+            needs_val: row.get(8)?,
         })
     }
 }
@@ -156,7 +158,7 @@ impl Item {
             val_error: row.get(12)?,
         })
     }
-    
+
     #[allow(dead_code)]
     pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
         let query = format!("SELECT {} FROM ITEMS WHERE item_id = ?", Item::ITEM_COLUMNS);
@@ -245,41 +247,44 @@ impl Item {
     ) -> Result<(u64, u64), FsPulseError> {
         let sql = r#"
             WITH candidates AS (
-    SELECT 
-        i.item_id,
-        i.last_hash_scan,
-        i.last_val_scan,
-        CASE
-            WHEN $1 = 0 THEN 0
-            WHEN $2 = 1 AND i.last_hash_scan < $3 THEN 1
-            WHEN c.change_type IS NULL AND i.file_hash IS NULL THEN 1
-            WHEN c.change_type = 'A' THEN 1
-            WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
-            ELSE 0
-        END AS needs_hash,
-        CASE
-            WHEN $4 = 0 THEN 0
-            WHEN $5 = 1 AND i.last_val_scan < $3 THEN 1
-            WHEN c.change_type IS NULL AND i.val IS NULL THEN 1
-            WHEN c.change_type = 'A' THEN 1
-            WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
-            ELSE 0
-        END AS needs_val
-    FROM items i
-    LEFT JOIN changes c
-        ON c.item_id = i.item_id AND c.scan_id = $3
-    WHERE
-        i.last_scan = $3 AND
-        i.item_type = 'F'
-)
-SELECT
-    COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
-    COALESCE(SUM(CASE 
-        WHEN (needs_hash = 1 AND last_hash_scan = $3) 
-           OR (needs_val = 1 AND last_val_scan = $3)
-        THEN 1 ELSE 0 END), 0) AS total_done
-FROM candidates"#;
-    
+            SELECT 
+                i.item_id,
+                i.last_hash_scan,
+                i.file_hash,
+                i.last_val_scan,
+                i.val,
+                CASE
+                    WHEN $1 = 0 THEN 0
+                    WHEN $2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan IS NULL OR i.last_hash_scan < $3) THEN 1
+                    WHEN i.file_hash IS NULL THEN 1
+                    WHEN c.change_type = 'A' THEN 1
+                    WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
+                    ELSE 0
+                END AS needs_hash,
+                CASE
+                    WHEN $4 = 0 THEN 0
+                    WHEN $5 = 1 AND (i.val = 'U' OR i.last_val_scan IS NULL OR i.last_val_scan < $3) THEN 1
+                    WHEN i.val = 'U' THEN 1
+                    WHEN c.change_type = 'A' THEN 1
+                    WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
+                    ELSE 0
+                END AS needs_val
+            FROM items i
+            LEFT JOIN changes c
+                ON c.item_id = i.item_id AND c.scan_id = $3
+            WHERE
+                i.last_scan = $3 AND
+                i.item_type = 'F' AND
+                i.is_ts = 0
+        )
+        SELECT
+            COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
+            COALESCE(SUM(CASE 
+                WHEN (needs_hash = 1 AND last_hash_scan = $3) 
+                OR (needs_val = 1 AND last_val_scan = $3)
+                THEN 1 ELSE 0 END), 0) AS total_done
+        FROM candidates"#;
+
         let conn = db.conn();
         let mut stmt = conn.prepare(sql)?;
         let mut rows = stmt.query(params![
@@ -289,7 +294,7 @@ FROM candidates"#;
             analysis_spec.is_val() as i64,
             analysis_spec.val_all() as i64
         ])?;
-    
+
         if let Some(row) = rows.next()? {
             let total_needed = row.get::<_, i64>(0)? as u64;
             let total_done = row.get::<_, i64>(1)? as u64;
@@ -321,9 +326,8 @@ FROM candidates"#;
         last_item_id: i64,
         limit: usize, // Parameterized limit
     ) -> Result<Vec<AnalysisItem>, FsPulseError> {
-
-        let query = 
-            format!("SELECT
+        let query = format!(
+            "SELECT
                 i.item_id,
                 i.item_path,
                 i.last_hash_scan,
@@ -333,39 +337,46 @@ FROM candidates"#;
                 i.val_error,
             CASE
                 WHEN $1 = 0 THEN 0  -- hash disabled
-                WHEN $2 = 1 AND i.last_hash_scan < $3 THEN 1  -- hash_all
-                WHEN c.change_type IS NULL AND i.file_hash IS NULL THEN 1
+                WHEN $2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan < $3) THEN 1  -- hash_all
+                WHEN i.file_hash IS NULL THEN 1
                 WHEN c.change_type = 'A' THEN 1
                 WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
                 ELSE 0
             END AS needs_hash,
             CASE
                 WHEN $4 = 0 THEN 0  -- val disabled
-                WHEN $5 = 1 AND i.last_val_scan < $3 THEN 1  -- val_all
-                WHEN c.change_type IS NULL AND i.val IS NULL THEN 1
+                WHEN $5 = 1 AND (i.val = 'U' OR i.last_val_scan < $3) THEN 1  -- val_all
+                WHEN i.val = 'U' THEN 1
                 WHEN c.change_type = 'A' THEN 1
                 WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
                 ELSE 0
-            END AS needs_val
+        END AS needs_val
         FROM items i
         LEFT JOIN changes c
             ON c.item_id = i.item_id AND c.scan_id = $3
         WHERE
             i.last_scan = $3
             AND i.item_type = 'F'
-            AND (
-                ($2 = 1 AND i.last_hash_scan < $3) OR
-                ($5 = 1 AND i.last_val_scan < $3) OR
-                (
-                    (c.change_type IS NULL AND ($1 = 1 AND i.file_hash IS NULL OR $4 = 1 AND i.val IS NULL)) OR
-                    (c.change_type = 'A') OR
-                    (c.change_type = 'M' AND c.meta_change = 1)
-                )
-            )
+            AND i.is_ts = 0
             AND i.item_id > $6
+            AND (
+                ($1 = 1 AND (  -- hash enabled
+                    ($2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan < $3)) OR
+                    i.file_hash IS NULL OR
+                    c.change_type = 'A' OR
+                    (c.change_type = 'M' AND c.meta_change = 1)
+                )) OR
+                ($4 = 1 AND (  -- val enabled
+                    ($5 = 1 AND (i.val = 'U' OR i.last_val_scan < $3)) OR
+                    i.val = 'U' OR
+                    c.change_type = 'A' OR
+                    (c.change_type = 'M' AND c.meta_change = 1)
+                ))
+            )
         ORDER BY i.item_id ASC
-        LIMIT {}", 
-        limit);
+        LIMIT {}",
+            limit
+        );
 
         let mut stmt = db.conn().prepare(&query)?;
 
@@ -386,7 +397,7 @@ FROM candidates"#;
         Ok(analysis_items)
     }
 
-    /* 
+    /*
     pub fn for_each_invalid_item_in_root<F>(
         db: &Database,
         root_id: i64,
