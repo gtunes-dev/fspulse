@@ -13,12 +13,6 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     steps:
-      - name: Get version from tag
-        id: tag_name
-        run: |
-          echo "current_version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-        shell: bash
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -27,14 +21,14 @@ jobs:
         uses: mindsers/changelog-reader-action@v2
         with:
           validation_level: warn
-          version: ${{ steps.tag_name.outputs.current_version }}
+          version: ${{ github.ref_name }}
           path: ./CHANGELOG.md
 
       - name: Create or update GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          name: Release ${{ steps.changelog_reader.outputs.version }}
+          name: Release ${{ github.ref_name }}
           body: ${{ steps.changelog_reader.outputs.changes }}
           prerelease: ${{ steps.changelog_reader.outputs.status == 'prereleased' }}
           draft: ${{ steps.changelog_reader.outputs.status == 'unreleased' }}
