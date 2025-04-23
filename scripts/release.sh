@@ -25,7 +25,7 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
 fi
 
 # Verify changelog contains this version
-if ! grep -q "## \[v$VERSION\]" CHANGELOG.md; then
+if ! grep -Eq "^## \\[v$VERSION\\]" CHANGELOG.md; then
   echo "❌ ERROR: CHANGELOG.md does not contain entry for version v$VERSION"
   echo "Please add a section like '## [v$VERSION] - YYYY-MM-DD' before releasing."
   exit 1
@@ -35,7 +35,7 @@ echo
 echo "✅ Found changelog entry for v$VERSION"
 echo
 echo "🔍 Changelog preview:"
-awk "/## \[v$VERSION\]/,/^## \[v/" CHANGELOG.md | head -n -1 || true
+awk "/^## \[v$VERSION\]/ {found=1; print; next} /^## \[v/ && found {exit} found" CHANGELOG.md
 echo
 
 # Update version in Cargo.toml
