@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v0.0.6] - 2025-04-23
+### Fixed
+- Fix remaining file count for analysis phase
+
+---
+
 ## [v0.0.5] - 2025-04-22
 ### Fixed
 - SQL query bug where tombstones were incorrectly included in hash/validation candidate sets
