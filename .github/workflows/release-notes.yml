@@ -10,22 +10,33 @@ permissions:
 
 jobs:
   release:
+    name: Create Release
     runs-on: ubuntu-latest
     steps:
+      - name: Get version from tag
+        id: tag_name
+        run: |
+          echo "current_version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        shell: bash
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Read changelog for this version
-        id: changelog
+        id: changelog_reader
         uses: mindsers/changelog-reader-action@v2
         with:
-          version: ${{ github.ref_name }}
+          validation_level: warn
+          version: ${{ steps.tag_name.outputs.current_version }}
+          path: ./CHANGELOG.md
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Create or update GitHub Release
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          body: ${{ steps.changelog.outputs.changelog }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+          name: Release ${{ steps.changelog_reader.outputs.version }}
+          body: ${{ steps.changelog_reader.outputs.changes }}
+          prerelease: ${{ steps.changelog_reader.outputs.status == 'prereleased' }}
+          draft: ${{ steps.changelog_reader.outputs.status == 'unreleased' }}
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}

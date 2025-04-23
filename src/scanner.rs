@@ -34,7 +34,7 @@ use dialoguer::theme::ColorfulTheme;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use dialoguer::{MultiSelect, Select};
-use log::error;
+use log::{error, info};
 use threadpool::ThreadPool;
 //use md5::digest::typenum::Abs;
 use std::collections::VecDeque;
@@ -607,6 +607,8 @@ impl Scanner {
 
         let path = Path::new(analysis_item.item_path());
 
+        info!("Beginning analysis of: {:?}", path);
+
         let display_path = path
             .file_name()
             .unwrap_or(path.as_os_str())
@@ -688,6 +690,9 @@ impl Scanner {
         }
 
         analysis_prog.inc(1);
+
+        info!("Done analyzing: {:?}", path);
+
     }
 
     fn handle_scan_item(
