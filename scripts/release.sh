@@ -8,9 +8,9 @@
 
 set -euo pipefail
 
-# Require exactly one argument: the version number (e.g., 0.0.5)
+# Require exactly one argument: the version number (e.g., 0.0.6)
 if [ $# -ne 1 ]; then
-  echo "Usage: $0 <new-version> (e.g. 0.0.5)"
+  echo "Usage: $0 <new-version> (e.g. 0.0.6)"
   exit 1
 fi
 
@@ -39,16 +39,23 @@ awk "/## \[v$VERSION\]/,/^## \[v/" CHANGELOG.md | head -n -1 || true
 echo
 
 # Update version in Cargo.toml
-echo "📦 Updating version in Cargo.toml to $VERSION..."
+echo "📦 Updating Cargo.toml to version $VERSION..."
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 
-# Commit version change
-git add Cargo.toml
+# Ensure Cargo.lock is updated
+echo "🔧 Running cargo check to update Cargo.lock if needed..."
+cargo check > /dev/null
+
+# Stage and commit version and lockfile
+git add Cargo.toml Cargo.lock
 git commit -m "Release version $VERSION"
 
-# Tag and push
+# Create and push the tag
+echo "🏷️ Tagging $TAG..."
 git tag "$TAG"
 git push origin main
 git push origin "$TAG"
 
 echo "✅ Release $VERSION pushed. GitHub Actions should now build and publish the release."
+echo "📦 When ready, run:"
+echo "   cargo publish --token <your-token>"
