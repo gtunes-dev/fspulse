@@ -28,7 +28,11 @@ fi
 echo "Updating Cargo.toml to version $VERSION..."
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 
-# Stage and commit the version bump
+# Ensure Cargo.lock is in sync before committing
+echo "Checking dependencies to ensure Cargo.lock is updated..."
+cargo check > /dev/null
+
+# Stage and commit the version bump and lockfile
 git add Cargo.toml Cargo.lock
 git commit -m "Bump version to $VERSION"
 
