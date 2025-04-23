@@ -10,12 +10,14 @@ on:
       - 'assets/**'
       - 'docs/**'      
       - 'scripts/**'
+      - 'CHANGELOG.md'
       - '.github/workflows/**'
 
   pull_request:
     paths-ignore:
       - 'assets/**'
       - 'docs/**'
+      - 'CHANGELOG.md'
       - '.github/workflows/**'
       
 jobs:
