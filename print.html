@@ -395,6 +395,10 @@ threads = 8
 <li><code>threads</code>: number of worker threads (default: <code>8</code>)</li>
 </ul>
 <p>You can adjust this based on your system's CPU count or performance needs.</p>
+<ul>
+<li><code>hash</code>: hash function to use when hashing files. Values can be <code>sha2</code> or <code>md5</code> (default: <code>sha2</code>)</li>
+</ul>
+<p>Sha2 is more secure but is slower. It is appropriate for most users.</p>
 <hr />
 <h2 id="new-settings-and-restoring-defaults"><a class="header" href="#new-settings-and-restoring-defaults">New Settings and Restoring Defaults</a></h2>
 <p>FsPulse may expand its configuration options over time. When new settings are introduced, they won't automatically appear in your existing <code>config.toml</code>. To take advantage of new options, either:</p>
