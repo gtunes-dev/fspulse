@@ -174,7 +174,7 @@
 <hr />
 <h2 id="hashing"><a class="header" href="#hashing">Hashing</a></h2>
 <p>Hashing is a key capabilities of FsPulse.</p>
-<p>FsPulse uses the standard MD5 message-digest algorithm to compute digital fingerprints of file contents.
+<p>FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents.
 The intent of hashing is to enable the detection of changes to file content in cases where the modification
 date and file size have not changed. One example of a case where this might occur is data decay. FsPulse
 can be used to create a hash baseline by scanning with the "hash" option. By default, a "hash" scan will
@@ -280,7 +280,7 @@ is recorded.</p>
 <h3 id="3-analysis"><a class="header" href="#3-analysis">3. Analysis</a></h3>
 <p>This phase runs only if the scan is started with <code>--hash</code> and/or <code>--validate</code>.</p>
 <ul>
-<li><strong>Hashing</strong> — Computes an MD5 hash of file contents</li>
+<li><strong>Hashing</strong> — Computes a SHA2 hash of file contents</li>
 <li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity</li>
 </ul>
 <p>If either the hash or validation result changes:</p>

@@ -163,7 +163,7 @@
 <ul>
 <li><strong>Directory Scanning</strong> — Track additions, deletions, and modifications of files and directories.</li>
 <li><strong>Content Validation</strong> — Validate file formats such as FLAC, JPEG, GIF, BMP, PNG, TIFF, and PDF.</li>
-<li><strong>MD5 Hashing</strong> — Optionally detect file content changes beyond metadata.</li>
+<li><strong>SHA2 Hashing</strong> — Optionally detect file content changes beyond metadata.</li>
 <li><strong>Powerful Querying</strong> — Access scan results directly with flexible, SQL-like queries.</li>
 <li><strong>Interactive Mode</strong> — Navigate and explore scan results using a menu-driven shell interface.</li>
 </ul>
@@ -214,7 +214,7 @@ fspulse query "changes where val_new:(I) show default, val_old, val_new order by
 <hr />
 <h2 id="hashing"><a class="header" href="#hashing">Hashing</a></h2>
 <p>Hashing is a key capabilities of FsPulse.</p>
-<p>FsPulse uses the standard MD5 message-digest algorithm to compute digital fingerprints of file contents.
+<p>FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents.
 The intent of hashing is to enable the detection of changes to file content in cases where the modification
 date and file size have not changed. One example of a case where this might occur is data decay. FsPulse
 can be used to create a hash baseline by scanning with the "hash" option. By default, a "hash" scan will
@@ -320,7 +320,7 @@ is recorded.</p>
 <h3 id="3-analysis"><a class="header" href="#3-analysis">3. Analysis</a></h3>
 <p>This phase runs only if the scan is started with <code>--hash</code> and/or <code>--validate</code>.</p>
 <ul>
-<li><strong>Hashing</strong> — Computes an MD5 hash of file contents</li>
+<li><strong>Hashing</strong> — Computes a SHA2 hash of file contents</li>
 <li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity</li>
 </ul>
 <p>If either the hash or validation result changes:</p>
@@ -598,8 +598,8 @@ fspulse report items --help
 <li><code>--root-id</code> — scan an existing root by ID</li>
 <li><code>--root-path</code> — scan a new or existing root by its path</li>
 <li><code>--last</code> — scan the most recently scanned root</li>
-<li><code>--hash</code> — compute MD5 hashes on new or changed files</li>
-<li><code>--hash-all</code> — compute MD5 hashes on all files (requires --hash)</li>
+<li><code>--hash</code> — compute SHA2 hashes on new or changed files</li>
+<li><code>--hash-all</code> — compute SHA2 hashes on all files (requires --hash)</li>
 <li><code>--validate</code> — validate new or changed files with known formats (see <a href="validators.html">Validators</a>)</li>
 <li><code>--validate-all</code> — validate all files (requires --validate)</li>
 </ul>
@@ -671,7 +671,7 @@ fspulse query --db-path /var/fspulse "changes where val_new:(I)"
 <p>Once a root has been scanned at least once, it becomes available in the interactive menu.</p>
 <p>Interactive scans allow you to toggle:</p>
 <ul>
-<li><strong>Hashing</strong> — compute MD5 file hashes</li>
+<li><strong>Hashing</strong> — compute SHA2 file hashes</li>
 <li><strong>Validation</strong> — check file content integrity for supported types</li>
 </ul>
 <hr />
