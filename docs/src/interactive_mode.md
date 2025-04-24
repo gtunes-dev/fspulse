@@ -36,7 +36,7 @@ fspulse scan --root-path /your/path
 Once a root has been scanned at least once, it becomes available in the interactive menu.
 
 Interactive scans allow you to toggle:
-- **Hashing** — compute MD5 file hashes
+- **Hashing** — compute SHA2 file hashes
 - **Validation** — check file content integrity for supported types
 
 ---

@@ -24,7 +24,7 @@ Once a scan on a root has begun, it must complete or be explicitly stopped befor
 
 Hashing is a key capabilities of FsPulse.
 
-FsPulse uses the standard MD5 message-digest algorithm to compute digital fingerprints of file contents.
+FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents.
 The intent of hashing is to enable the detection of changes to file content in cases where the modification
 date and file size have not changed. One example of a case where this might occur is data decay. FsPulse
 can be used to create a hash baseline by scanning with the "hash" option. By default, a "hash" scan will
@@ -144,7 +144,7 @@ Moved files appear as deletes and adds, as FsPulse does not yet track move opera
 
 This phase runs only if the scan is started with `--hash` and/or `--validate`.
 
-- **Hashing** — Computes an MD5 hash of file contents
+- **Hashing** — Computes a SHA2 hash of file contents
 - **Validation** — Uses file-type-specific validators to check content integrity
 
 If either the hash or validation result changes:

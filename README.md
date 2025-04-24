@@ -10,7 +10,7 @@
 
 - **Directory Scanning** — Track file and folder additions, deletions, and modifications
 - **Content Validation** — Validate file types such as FLAC, JPEG, PNG, GIF, BMP, and PDF
-- **MD5 Hashing** — Optionally detect content changes beyond metadata
+- **SHA2 Hashing** — Optionally detect content changes beyond metadata
 - **Powerful Querying** — SQL-inspired query language for flexible results
 - **Interactive Mode** — Menu-driven exploration once scanning is underway
 

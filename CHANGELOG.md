@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.8] - Unreleased
+
+### Changed
+
+- Fix a few missed references to MD5 in doc book and CLI help
 
 ## [v0.0.7] - 2025-04-23
 
@@ -17,8 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Config [analysis]\hash with allowable values of "md5" and "sha2". If not specified,
-  "sha2" will be used.
+- Config [analysis]\hash with allowable values of "md5" and "sha2". If not specified, "sha2" will be used.
   Note: see documentation on config.
 
 ## [v0.0.6] - 2025-04-23

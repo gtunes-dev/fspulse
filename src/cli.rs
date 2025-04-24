@@ -77,7 +77,7 @@ The database file will always be named 'fspulse.db'."#
 
         #[arg(
             long,
-            help = r#"Hash files using MD5 and compare to previous values.
+            help = r#"Hash files using SHA2 and compare to previous values.
 Files will be hashed if no hash exists, or if their size or modification date has changed."#
         )]
         hash: bool,

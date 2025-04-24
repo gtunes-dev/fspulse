@@ -8,7 +8,7 @@ FsPulse is a Rust-based command-line tool designed to capture and analyze direct
 
 - **Directory Scanning** — Track additions, deletions, and modifications of files and directories.
 - **Content Validation** — Validate file formats such as FLAC, JPEG, GIF, BMP, PNG, TIFF, and PDF.
-- **MD5 Hashing** — Optionally detect file content changes beyond metadata.
+- **SHA2 Hashing** — Optionally detect file content changes beyond metadata.
 - **Powerful Querying** — Access scan results directly with flexible, SQL-like queries.
 - **Interactive Mode** — Navigate and explore scan results using a menu-driven shell interface.
 

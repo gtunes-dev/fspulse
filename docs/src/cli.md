@@ -49,8 +49,8 @@ fspulse scan [--db-path <path>] [--root-id <id> | --root-path <path> | --last] [
 - `--root-id` — scan an existing root by ID
 - `--root-path` — scan a new or existing root by its path
 - `--last` — scan the most recently scanned root
-- `--hash` — compute MD5 hashes on new or changed files
-- `--hash-all` — compute MD5 hashes on all files (requires --hash)
+- `--hash` — compute SHA2 hashes on new or changed files
+- `--hash-all` — compute SHA2 hashes on all files (requires --hash)
 - `--validate` — validate new or changed files with known formats (see [Validators](validators.md))
 - `--validate-all` — validate all files (requires --validate)
 
