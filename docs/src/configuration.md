@@ -65,6 +65,10 @@ The `[analysis]` section controls how many threads are used during the **analysi
 
 You can adjust this based on your system's CPU count or performance needs.
 
+- `hash`: hash function to use when hashing files. Values can be `sha2` or `md5` (default: `sha2`)
+
+Sha2 is more secure but is slower. It is appropriate for most users.
+
 ---
 
 ## New Settings and Restoring Defaults

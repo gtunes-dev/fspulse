@@ -692,6 +692,7 @@ dependencies = [
  "phf_macros",
  "rusqlite",
  "serde",
+ "sha2",
  "static_vcruntime",
  "tabled",
  "thiserror 2.0.12",

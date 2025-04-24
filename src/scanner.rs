@@ -18,7 +18,7 @@
 // 5. Stopped
 
 use crate::changes::ChangeType;
-use crate::config::CONFIG;
+use crate::config::{HashFunc, CONFIG};
 use crate::hash::Hash;
 use crate::items::{AnalysisItem, Item, ItemType};
 use crate::reports::Reports;
@@ -36,7 +36,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use dialoguer::{MultiSelect, Select};
 use log::{error, info};
 use threadpool::ThreadPool;
-//use md5::digest::typenum::Abs;
+
 use std::collections::VecDeque;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
@@ -94,7 +94,7 @@ impl Scanner {
             "Validate",
             "Validate All (requires Validate)",
         ];
-        
+
         let analysis_spec = loop {
             let selection = MultiSelect::new()
                 .with_prompt("Hash or Validate (space to select, enter to continue)")
@@ -106,7 +106,7 @@ impl Scanner {
             let mut hash_all = false;
             let mut validate = false;
             let mut validate_all = false;
-        
+
             for selected_flag in selection.iter() {
                 match selected_flag {
                     0 => hash = true,
@@ -118,16 +118,23 @@ impl Scanner {
             }
 
             if !hash && hash_all {
-                println!("{}", style("Invalid: Selecting 'Hash All' requires selecting 'Hash'").yellow());
-                continue;
-            }
-            
-            if !validate && validate_all {
-                println!("{}", style("Invalid: Selecting 'Validate All' requires selecting 'Validate'").yellow());
+                println!(
+                    "{}",
+                    style("Invalid: Selecting 'Hash All' requires selecting 'Hash'").yellow()
+                );
                 continue;
             }
 
-            break AnalysisSpec::new(hash, hash_all, validate, validate_all)
+            if !validate && validate_all {
+                println!(
+                    "{}",
+                    style("Invalid: Selecting 'Validate All' requires selecting 'Validate'")
+                        .yellow()
+                );
+                continue;
+            }
+
+            break AnalysisSpec::new(hash, hash_all, validate, validate_all);
         };
 
         Scanner::initiate_scan(db, root, &analysis_spec)
@@ -496,13 +503,15 @@ impl Scanner {
         let items_remaining = analyze_total.saturating_sub(analyze_done); // avoids underflow
         let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
 
-        let config_threads = CONFIG
-            .get()
-            .expect("Config not initialized")
-            .analysis
-            .threads;
+        let (thread_count, hash_func) = {
+            let config = CONFIG.get().expect("Config not initialized");
+            let thread_count = config.analysis.threads();
+            let hash_func = config.analysis.hash_func();
 
-        let num_threads = cmp::min(items_remaining_usize, config_threads);
+            (thread_count, hash_func)
+        };
+
+        let num_threads = cmp::min(items_remaining_usize, thread_count);
         let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread
 
         for thread_index in 0..num_threads {
@@ -539,6 +548,7 @@ impl Scanner {
                         analysis_item,
                         &analysis_prog_clone,
                         &thread_prog,
+                        hash_func,
                     );
                 }
                 thread_prog.set_style(
@@ -601,6 +611,7 @@ impl Scanner {
         analysis_item: AnalysisItem,
         analysis_prog: &ProgressBar,
         thread_prog: &ProgressBar,
+        hash_func: HashFunc,
     ) {
         // TODO: Improve the error handling for all analysis. Need to differentiate
         // between file system errors and actual content errors
@@ -628,7 +639,7 @@ impl Scanner {
             thread_prog.set_position(0); // reset in case left from previous
             thread_prog.set_length(0);
 
-            new_hash = match Hash::compute_md5_hash(path, thread_prog) {
+            new_hash = match Hash::compute_hash(path, thread_prog, hash_func) {
                 Ok(hash_s) => Some(hash_s),
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
@@ -692,7 +703,6 @@ impl Scanner {
         analysis_prog.inc(1);
 
         info!("Done analyzing: {:?}", path);
-
     }
 
     fn handle_scan_item(
