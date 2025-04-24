@@ -169,23 +169,61 @@
 </ul>
 <p>FsPulse is designed to scale across large file systems while maintaining clarity and control for the user.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h1>
-<h2 id="building-from-source"><a class="header" href="#building-from-source">Building from Source</a></h2>
-<p>To build FsPulse from source:</p>
+<p>FsPulse can be installed in one of three ways:</p>
+<ol>
+<li><strong>Install via <a href="https://crates.io/crates/fspulse">crates.io</a></strong></li>
+<li><strong>Clone and build from source</strong></li>
+<li><strong>Download a pre-built release binary from GitHub</strong></li>
+</ol>
+<p>Choose the method that works best for your platform and preferences.</p>
+<hr />
+<h2 id="1-install-via-cratesio"><a class="header" href="#1-install-via-cratesio">1. Install via Crates.io</a></h2>
+<p>The easiest way to get FsPulse is via <a href="https://crates.io/crates/fspulse">crates.io</a>:</p>
+<pre><code class="language-sh">cargo install fspulse
+</code></pre>
+<p>This will download, compile, and install the latest version of FsPulse into Cargo’s <code>bin</code> directory, typically <code>~/.cargo/bin</code>. That directory is usually already in your <code>PATH</code>. If it's not, you may need to add it manually.</p>
+<p>Then run:</p>
+<pre><code class="language-sh">fspulse --help
+</code></pre>
+<p>To upgrade to the latest version later:</p>
+<pre><code class="language-sh">cargo install fspulse --force
+</code></pre>
+<hr />
+<h2 id="2-clone-and-build-from-source"><a class="header" href="#2-clone-and-build-from-source">2. Clone and Build from Source</a></h2>
+<p>If you prefer working directly with the source code (for example, to contribute or try out development versions):</p>
 <pre><code class="language-sh">git clone https://github.com/gtunes-dev/fspulse.git
 cd fspulse
 cargo build --release
 </code></pre>
-<p>You can then run the binary from the <code>target/release</code> directory or move it to a directory included in your system's <code>PATH</code>:</p>
+<p>Then run it from the release build directory:</p>
 <pre><code class="language-sh">./target/release/fspulse --help
 </code></pre>
+<hr />
+<h2 id="3-download-pre-built-release-binaries"><a class="header" href="#3-download-pre-built-release-binaries">3. Download Pre-Built Release Binaries</a></h2>
+<p>Pre-built release binaries for Linux, macOS, and Windows are available on the <a href="https://github.com/gtunes-dev/fspulse/releases">GitHub Releases page</a>:</p>
+<ol>
+<li>Visit the releases page.</li>
+<li>Download the appropriate archive for your operating system.</li>
+<li>Unpack the archive.</li>
+<li>Optionally move the <code>fspulse</code> binary to a directory included in your <code>PATH</code>.</li>
+</ol>
+<p>For example, on Unix systems:</p>
+<pre><code class="language-sh">mv fspulse /usr/local/bin/
+</code></pre>
+<p>Then confirm it's working:</p>
+<pre><code class="language-sh">fspulse --help
+</code></pre>
+<hr />
 <h2 id="first-scan"><a class="header" href="#first-scan">First Scan</a></h2>
 <p>To scan a directory:</p>
 <pre><code class="language-sh">fspulse scan --root-path /some/directory
 </code></pre>
+<hr />
 <h2 id="interactive-exploration"><a class="header" href="#interactive-exploration">Interactive Exploration</a></h2>
 <p>After scanning, you can explore results in an interactive shell:</p>
 <pre><code class="language-sh">fspulse interact
 </code></pre>
+<hr />
 <h2 id="querying"><a class="header" href="#querying">Querying</a></h2>
 <p>Use flexible, SQL-like queries to retrieve and filter scan results:</p>
 <pre><code class="language-sh"># Items whose path contains 'reports'
@@ -194,7 +232,7 @@ fspulse query "items where item_path:('reports')"
 # Changes involving items detected as invalid
 fspulse query "changes where val_new:(I) show default, val_old, val_new order by change_id desc"
 </code></pre>
-<p>See the <a href="query.html">Query Syntax</a> page for details.</p>
+<p>See the <a href="query.html">Query Syntax</a> page for more examples.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="scanning"><a class="header" href="#scanning">Scanning</a></h1>
 <p>FsPulse scans are at the core of how it tracks changes to the file system over time. A scan creates a snapshot of a root directory and analyzes changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
 <hr />
