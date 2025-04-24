@@ -33,6 +33,7 @@ lopdf = "error"
 
 [analysis]
 threads = 8
+hash = "sha2"
 ```
 
 ---
