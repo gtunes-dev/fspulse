@@ -410,15 +410,15 @@ impl Reports {
         ));
         report.push(format!(
             "> {}",
-            command.apply_to(format!("fspulse 'query changes where scan_id:({}), change_type:(A) show default, item_path order by item_path'", scan.scan_id()))
+            command.apply_to(format!("fspulse query 'changes where scan_id:({}), change_type:(A) show default, item_path order by item_path'", scan.scan_id()))
         ));
         report.push(format!(
             "> {}",
-            command.apply_to(format!("fspulse 'query changes where scan_id:({}), change_type:(M) show default, item_path order by item_path'", scan.scan_id()))
+            command.apply_to(format!("fspulse query 'changes where scan_id:({}), change_type:(M) show default, item_path order by item_path'", scan.scan_id()))
         ));
         report.push(format!(
             "> {}",
-            command.apply_to(format!("fspulse 'query changes where scan_id:({}), change_type:(D) show default, item_path order by item_path'", scan.scan_id()))
+            command.apply_to(format!("fspulse query 'changes where scan_id:({}), change_type:(D) show default, item_path order by item_path'", scan.scan_id()))
         ));
 
         report.push(String::new());
@@ -505,7 +505,7 @@ impl Reports {
             report.push("Tip: query for all newly identified invalid items".to_string());
             report.push(format!(
                 "> {}",
-                command.apply_to(format!("fspulse query changes where scan_id:({}), val_change:(T), val:(I) show default, val, item_path'", scan.scan_id()))
+                command.apply_to(format!("fspulse query 'changes where scan_id:({}), val_change:(T), val_new:(I) show default, item_path, val_new, val_error_new order by item_path'", scan.scan_id()))
             ));
         }
 

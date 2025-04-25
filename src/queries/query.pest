@@ -72,7 +72,7 @@ bool             = _{ null | not_null | bool_true | bool_false }
 bool_true        =  { "TRUE" | "true" | "True" | ^"T" }
 bool_false       =  { "FALSE" | "false" | "False" | ^"F" }
 
-string_col = { "file_hash" | "val_error" | "val_error_old" | "val_error_new" }
+string_col = { "file_hash" | "val_error_old" | "val_error_new" | "val_error" }
 
 string_show = { string_col }
 
