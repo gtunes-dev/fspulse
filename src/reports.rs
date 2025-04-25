@@ -433,7 +433,7 @@ impl Reports {
             report.push("Tip: query for all hash changes".to_string());
             report.push(format!(
                 "> {}",
-                command.apply_to(format!("fspulse 'query changes where scan_id:({}), hash_change:(T) show default, hash_change, item_path'", scan.scan_id()))
+                command.apply_to(format!("fspulse query 'changes where scan_id:({}), hash_change:(T) show default, hash_change, item_path'", scan.scan_id()))
             ));
 
             report.push(
@@ -441,7 +441,7 @@ impl Reports {
             );
             report.push(format!(
                 "> {}",
-                command.apply_to(format!("fspulse 'query changes where scan_id:({}), hash_change:(T), meta_change:(F)  show default, hash_change, item_path'", scan.scan_id()))
+                command.apply_to(format!("fspulse query 'changes where scan_id:({}), hash_change:(T), meta_change:(F)  show default, hash_change, item_path'", scan.scan_id()))
             ));
         }
         report.push(String::new());
