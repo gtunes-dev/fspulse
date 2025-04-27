@@ -3,12 +3,10 @@ use pest_derive::Parser;
 mod columns;
 mod filter;
 mod order;
-pub(crate) mod model;
+mod process;
 mod show;
 
-//pub use query::QueryProcessor;
-
-//pub mod parser;
+pub use process::QueryProcessor;
 
 #[derive(Parser)]
 #[grammar = "query/query.pest"]

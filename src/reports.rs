@@ -2,7 +2,7 @@ use crate::changes::{Change, ChangeCounts};
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::items::Item;
-use crate::query::model::QueryProcessor;
+use crate::query::QueryProcessor;
 use crate::roots::Root;
 use crate::scans::Scan;
 use crate::utils::Utils;

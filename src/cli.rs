@@ -7,7 +7,8 @@ use std::path::PathBuf;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::query::model::QueryProcessor;
+use crate::explore::Explorer;
+use crate::query::QueryProcessor;
 use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
 use crate::scanner::Scanner;
@@ -103,7 +104,19 @@ Files will be validated if they are missing validation data, or if their size or
         )]
         validate_all: bool,
     },
-
+    #[command(
+        about = "Interactive data explorer",
+        long_about = "Interactive, terminal-ui based data exploration of Roots, Scans, Items, and Changes"
+    )]
+    Explore {
+        #[arg(
+            long,
+            help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#
+        )]
+        db_path: Option<PathBuf>,
+    },
     #[command(
         about = "Generate reports",
         long_about = "Generate detailed reports about roots, scans, items, or changes stored in the FsPulse database."
@@ -208,6 +221,7 @@ The database file will always be named 'fspulse.db'."#)]
 enum CommandChoice {
     Scan,
     QuerySimple,
+    Explore,
     Report,
     Exit,
 }
@@ -215,6 +229,7 @@ enum CommandChoice {
 static COMMAND_CHOICES: &[(CommandChoice, &str)] = &[
     (CommandChoice::Scan, "Scan"),
     (CommandChoice::QuerySimple, "Query"),
+    (CommandChoice::Explore, "Explore"),
     (CommandChoice::Report, "Report"),
     (CommandChoice::Exit, "Exit"),
 ];
@@ -286,6 +301,16 @@ impl Cli {
                     &analysis_spec,
                     multi_prog,
                 )
+            }
+            Command::Explore { db_path } => {
+                info!(
+                    "Initiating interative explorer",
+                );
+
+                let db = Database::new(db_path)?;
+                let mut explorer = Explorer::new();
+                explorer.explore(&db)
+
             }
             Command::Report { report_type } => match report_type {
                 ReportType::Roots {
@@ -365,6 +390,7 @@ impl Cli {
         match command {
             CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
             CommandChoice::QuerySimple => Cli::do_interactive_query(db, command)?,
+            CommandChoice::Explore => Cli::do_interactive_explore(db)?,
             CommandChoice::Report => Cli::do_interactive_report(db)?,
             CommandChoice::Exit => {}
         }
@@ -415,6 +441,11 @@ impl Cli {
         }
 
         Ok(())
+    }
+
+    fn do_interactive_explore(db: &Database) -> Result<(), FsPulseError> {
+        let mut explorer = Explorer::new();
+        explorer.explore(db)
     }
 
     fn do_interactive_report(db: &Database) -> Result<(), FsPulseError> {

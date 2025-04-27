@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod database;
 mod error;
+mod explore;
 mod hash;
 mod items;
 mod query;
