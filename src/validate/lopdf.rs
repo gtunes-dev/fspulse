@@ -6,9 +6,10 @@ use lopdf::{Document, Object};
 
 use crate::error::FsPulseError;
 use crate::try_invalid;
-use crate::validators::Validator;
+use crate::validate::validator::Validator;
 
 use super::validator::ValidationState;
+
 
 /// Validator implementation for pdf audio files using the lopdf crate.
 pub struct LopdfValidator;

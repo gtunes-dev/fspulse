@@ -25,7 +25,7 @@ use crate::reports::Reports;
 use crate::roots::Root;
 use crate::scans::{AnalysisSpec, ScanState};
 use crate::utils::Utils;
-use crate::validators::validator::{from_path, ValidationState};
+use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
 use console::style;

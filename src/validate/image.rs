@@ -5,9 +5,8 @@ use indicatif::ProgressBar;
 use image::ImageReader;
 
 use crate::error::FsPulseError;
-use crate::validators::Validator;
 
-use super::validator::ValidationState;
+use super::validator::{ValidationState, Validator};
 
 /// Validator implementation for FLAC audio files using the Claxon crate.
 pub struct ImageValidator;

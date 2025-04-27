@@ -2,7 +2,7 @@ use rusqlite::Error as RusqliteError;
 use std::io;
 use thiserror::Error;
 
-use crate::queries::Rule;
+use crate::query::Rule;
 
 #[derive(Error, Debug)]
 pub enum FsPulseError {

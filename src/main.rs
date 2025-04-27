@@ -5,14 +5,14 @@ mod database;
 mod error;
 mod hash;
 mod items;
-mod queries;
+mod query;
 mod reports;
 mod roots;
 mod scanner;
 mod scans;
 mod schema;
 mod utils;
-mod validators;
+mod validate;
 
 use std::time::Instant;
 

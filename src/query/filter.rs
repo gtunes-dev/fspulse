@@ -6,7 +6,7 @@ use std::fmt::Debug;
 
 type OrderedStrMap = phf::OrderedMap<&'static str, &'static str>;
 
-use super::{query::Query, Rule};
+use super::{model::Query, Rule};
 
 /// Defines the behavior of a filter.
 pub trait Filter: Debug {

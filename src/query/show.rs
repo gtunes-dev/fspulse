@@ -1,7 +1,8 @@
+use crate::validate::validator::ValidationState;
 use crate::{
     changes::ChangeType, error::FsPulseError, items::ItemType, utils::Utils,
-    validators::validator::ValidationState,
 };
+
 use chrono::{DateTime, Local, Utc};
 use pest::iterators::Pair;
 use tabled::{

@@ -3,7 +3,7 @@ use pest_derive::Parser;
 mod columns;
 mod filter;
 mod order;
-pub mod query;
+pub(crate) mod model;
 mod show;
 
 //pub use query::QueryProcessor;
@@ -11,5 +11,5 @@ mod show;
 //pub mod parser;
 
 #[derive(Parser)]
-#[grammar = "queries/query.pest"]
+#[grammar = "query/query.pest"]
 pub struct QueryParser;

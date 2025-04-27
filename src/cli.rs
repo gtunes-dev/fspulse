@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::queries::query::QueryProcessor;
+use crate::query::model::QueryProcessor;
 use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
 use crate::scanner::Scanner;

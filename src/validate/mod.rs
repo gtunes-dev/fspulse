@@ -3,4 +3,4 @@ pub mod image;
 pub mod lopdf;
 pub mod validator;
 
-pub use validator::Validator;
+//pub use Validator;

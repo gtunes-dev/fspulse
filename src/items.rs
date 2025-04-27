@@ -2,7 +2,7 @@ use rusqlite::{self, params, OptionalExtension};
 
 use crate::{
     database::Database, error::FsPulseError, scans::AnalysisSpec,
-    validators::validator::ValidationState,
+    validate::validator::ValidationState,
 };
 
 #[derive(Clone, Debug, Default)]
