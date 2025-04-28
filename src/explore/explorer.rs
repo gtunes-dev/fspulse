@@ -9,9 +9,8 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
-    text::Line,
     widgets::{Block, Borders, Paragraph},
     Terminal,
 };
@@ -27,6 +26,31 @@ enum Focus {
 pub struct Explorer {
     focus: Focus,
     column_frame: ColumnFrame,
+
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    let vertical_middle = popup_layout[1];
+
+    let horizontal_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical_middle);
+
+    horizontal_layout[1]
 }
 
 impl Explorer {
@@ -97,6 +121,12 @@ impl Explorer {
                     .style(Style::default().bg(Color::Blue).fg(Color::White))
                     .block(help_block);
                 f.render_widget(help_paragraph, help_chunk);
+
+                // Draw the type selector if it's open
+                if self.column_frame.dropdown_open {
+                    let popup_area = centered_rect(20, 30, f.area());                    
+                    self.column_frame.draw_dropdown(f, popup_area);
+                }
             })?;
 
             // Handle input
@@ -165,7 +195,7 @@ impl Explorer {
     fn help_text(&self) -> &'static str {
         match self.focus {
             Focus::Filters => "Tab: Next Section  |  q: Quit  |  Focus: Filters",
-            Focus::ColumnSelector => "Tab: Next Section  |  q: Quit  |  Focus: Type & Columns",
+            Focus::ColumnSelector => "Tab: Next Section  |  Space/Enter: Select/Toggle  |  +/-: Move Column  |  q: Quit  |  Focus: Type & Columns",
             Focus::DataGrid => "Tab: Next Section  |  q: Quit  |  Focus: Data Grid",
         }
     }

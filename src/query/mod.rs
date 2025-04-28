@@ -1,12 +1,13 @@
 use pest_derive::Parser;
 
-mod columns;
+pub mod columns;
 mod filter;
 mod order;
 mod process;
 mod show;
 
 pub use process::QueryProcessor;
+pub use columns::ColMap;
 
 #[derive(Parser)]
 #[grammar = "query/query.pest"]
