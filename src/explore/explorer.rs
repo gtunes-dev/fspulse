@@ -9,7 +9,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::text::{Line, Text};
-use ratatui::widgets::Wrap;
+use ratatui::widgets::{Clear, Wrap};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -132,6 +132,8 @@ impl Explorer {
                 // Draw the type selector if it's open
                 if self.column_frame.dropdown_open {
                     let popup_area = centered_rect(20, 30, f.area());
+                    // Clear the popup area before drawing into it
+                    f.render_widget(Clear, popup_area);
                     self.column_frame.draw_dropdown(f, popup_area);
                 }
 
@@ -170,6 +172,9 @@ impl Explorer {
                         .alignment(Alignment::Center)
                         .wrap(Wrap { trim: true })
                         .block(block);
+
+                    // Clear the popup area to avoid bleed-through
+                    f.render_widget(Clear, popup_area);
 
                     f.render_widget(paragraph, popup_area);
                 }
@@ -260,8 +265,8 @@ impl Explorer {
     fn help_text(&self) -> &'static str {
         match self.focus {
             Focus::Filters => "Tab: Next Section  |  r: Refresh  |  q: Quit  |  Focus: Filters",
-            Focus::ColumnSelector => "Tab: Next Section  |  Space/Enter: Select/Toggle  |  +/-: Move Column  |  r: Refresh  |  q: Quit  |  Focus: Type & Columns",
-            Focus::DataGrid => "Tab: Next Section  |  r: Refresh  |  q: Quit  |  Focus: Data Grid",
+            Focus::ColumnSelector => "Tab: Next Section  |  Space/Enter: Toggle  |  +/-: Reorder  |  r: Refresh  |  q: Quit  |  Focus: Type & Columns",
+            Focus::DataGrid => "↑↓: Scroll  |  PgUp/PgDn: Page  |  Home/End: Top/Bottom  |  Tab: Next Section  |  r: Refresh  |  q: Quit  |  Focus: Data Grid",
         }
     }
 

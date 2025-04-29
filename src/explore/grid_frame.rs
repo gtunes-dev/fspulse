@@ -3,7 +3,10 @@ use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Style, Stylize},
     text::{Span, Text},
-    widgets::{Block, Borders, Cell, Row, Table, TableState},
+    widgets::{
+        Block, Borders, Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget,
+        Table, TableState,
+    },
     Frame,
 };
 
@@ -14,11 +17,10 @@ use super::column_frame::ColInfo;
 pub struct GridFrame {
     pub columns: Vec<String>,
     pub col_infos: Vec<ColInfo>,
-    pub rows: Vec<Vec<String>>,
-    pub cursor_row: usize,
-    pub scroll_offset: usize,
-    pub area: Rect,
+    pub rows: Vec<Row<'static>>,
+    pub column_constraints: Vec<Constraint>,
     pub table_state: TableState,
+    pub area: Rect,
 }
 
 impl GridFrame {
@@ -27,14 +29,13 @@ impl GridFrame {
             columns: Vec::new(),
             col_infos: Vec::new(),
             rows: Vec::new(),
-            cursor_row: 0,
-            scroll_offset: 0,
-            area: Rect::default(),
+            column_constraints: Vec::new(),
             table_state: {
                 let mut state = TableState::default();
                 state.select(Some(0));
                 state
             },
+            area: Rect::default(),
         }
     }
 
@@ -42,42 +43,61 @@ impl GridFrame {
         &mut self,
         columns: Vec<String>,
         col_infos: Vec<ColInfo>,
-        rows: Vec<Vec<String>>,
+        raw_rows: Vec<Vec<String>>,
     ) {
         self.columns = columns;
         self.col_infos = col_infos;
-        self.rows = rows;
-        self.cursor_row = 0;
-        self.scroll_offset = 0;
-        self.table_state.select(Some(0));
-    }
 
-    pub fn set_area(&mut self, new_area: Rect) {
-        self.area = new_area;
-        // We can later add scroll adjustment logic here if needed
+        // Build aligned Rows once, store as static (owned Strings are fine)
+        self.rows = raw_rows
+            .into_iter()
+            .map(|row| {
+                let cells = row
+                    .into_iter()
+                    .zip(&self.col_infos)
+                    .map(|(value, col_info)| {
+                        let text = Text::from(value).alignment(col_info.col_align);
+                        Cell::from(text)
+                    });
+                Row::new(cells)
+            })
+            .collect();
+
+        // Build constraints based on column type and header length
+        fn col_size(header: &str, default: usize) -> usize {
+            header.len().max(default)
+        }
+
+        self.column_constraints = self
+            .columns
+            .iter()
+            .zip(&self.col_infos)
+            .map(|(col_name, col_info)| match col_info.col_type {
+                ColType::Id => Constraint::Length(col_size(col_name, 9) as u16),
+                ColType::Int => Constraint::Length(col_size(col_name, 8) as u16),
+                ColType::Enum => Constraint::Length(col_size(col_name, 1) as u16),
+                ColType::Bool => Constraint::Length(col_size(col_name, 1) as u16),
+                ColType::Date => Constraint::Length(col_size(col_name, 6) as u16),
+                ColType::Path => Constraint::Min(30),
+                ColType::String => Constraint::Min(15),
+            })
+            .collect();
+
+        // Reset selection
+        self.table_state = {
+            let mut state = TableState::default();
+            state.select(Some(0));
+            state
+        };
     }
 
     pub fn draw(&mut self, f: &mut Frame, area: Rect, is_focused: bool) {
-        self.set_area(area);
-        let visible_rows = self.visible_rows();
+        self.area = area;
 
-        let start = self.scroll_offset;
-        let end = (self.scroll_offset + visible_rows).min(self.rows.len());
+        // Set up for drawing
+        let total_rows = self.rows.len();
+        let visible_rows = area.height.saturating_sub(2) as usize; // 1 header + 1 border
 
-        let displayed_rows = self.rows[start..end].iter().enumerate().map(|(i, row)| {
-            let cells = row.iter().zip(&self.col_infos).map(|(value, col_info)| {
-                let text = Text::from(value.clone()).alignment(col_info.col_align);
-                Cell::from(text)
-            });
-
-            let mut ratatui_row = Row::new(cells);
-
-            if self.cursor_row == start + i && is_focused {
-                ratatui_row = ratatui_row.style(Style::default().fg(Color::Yellow).bold());
-            }
-
-            ratatui_row
-        });
         let header = Row::new(self.columns.iter().map(|h| Span::raw(h.clone())))
             .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
 
@@ -90,39 +110,65 @@ impl GridFrame {
             Block::default().borders(Borders::ALL).title("Data Grid")
         };
 
-        let column_constraints = self
-            .col_infos
-            .iter()
-            .map(|col_info| match col_info.col_type {
-                ColType::Id | ColType::Int => Constraint::Min(8),
-                ColType::Bool => Constraint::Length(3),
-                ColType::Date => Constraint::Length(12),
-                ColType::Path => Constraint::Min(20),
-                ColType::Enum => Constraint::Min(3),
-                ColType::String => Constraint::Min(15),
-            })
-            .collect::<Vec<_>>();
-
-        let table = Table::new(displayed_rows, column_constraints)
+        let table = Table::new(self.rows.clone(), self.column_constraints.clone())
             .header(header)
             .block(block)
-            .row_highlight_style(Style::default().fg(Color::Yellow));
+            .row_highlight_style(Style::default().fg(Color::Yellow))
+            .highlight_symbol(">> ");
 
+        // Draw table
         f.render_stateful_widget(table, area, &mut self.table_state);
+
+        // Draw scrollbar
+        if total_rows > visible_rows {
+            if let Some(selected) = self.table_state.selected() {
+                let mut scrollbar_state = ScrollbarState::new(total_rows)
+                    .viewport_content_length(visible_rows)
+                    .position(selected);
+
+                Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                    .thumb_symbol("▐")
+                    .track_symbol(Some(" "))
+                    .render(area, f.buffer_mut(), &mut scrollbar_state);
+            }
+        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
+        let total_rows = self.rows.len();
+
         match key.code {
+            KeyCode::Home => {
+                self.table_state.select(Some(0));
+            }
+            KeyCode::End => {
+                self.table_state.select(Some(self.rows.len().saturating_sub(1)));
+            }
             KeyCode::Up => {
-                if self.cursor_row > 0 {
-                    self.cursor_row -= 1;
-                    self.table_state.select(Some(self.cursor_row));
+                if let Some(selected) = self.table_state.selected() {
+                    if selected > 0 {
+                        self.table_state.select(Some(selected - 1));
+                    }
                 }
             }
             KeyCode::Down => {
-                if self.cursor_row + 1 < self.rows.len() {
-                    self.cursor_row += 1;
-                    self.table_state.select(Some(self.cursor_row));
+                if let Some(selected) = self.table_state.selected() {
+                    if selected + 1 < total_rows {
+                        self.table_state.select(Some(selected + 1));
+                    }
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(selected) = self.table_state.selected() {
+                    let new_selected = selected.saturating_sub(self.visible_rows());
+                    self.table_state.select(Some(new_selected));
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(selected) = self.table_state.selected() {
+                    let new_selected =
+                        (selected + self.visible_rows()).min(self.rows.len().saturating_sub(1));
+                    self.table_state.select(Some(new_selected));
                 }
             }
             _ => {}
@@ -130,6 +176,6 @@ impl GridFrame {
     }
 
     pub fn visible_rows(&self) -> usize {
-        self.area.height.saturating_sub(2) as usize // 1 for header + 1 for borders
+        self.area.height.saturating_sub(2) as usize
     }
 }
