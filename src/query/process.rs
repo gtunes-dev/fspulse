@@ -686,7 +686,25 @@ impl QueryProcessor {
     pub fn execute_query_and_print(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
         let mut qrb = QueryResultBuilder::new();
 
-        Self::process_query(db, query_str, &mut qrb)?;
+        match Self::process_query(db, query_str, &mut qrb) {
+            Ok(()) => {}
+            Err(err) => match err {
+                FsPulseError::ParsingError(inner) => {
+                    error!("Query parsing error: {}", inner);
+                    println!("{}", inner);
+                    return Ok(());
+                }
+                FsPulseError::CustomParsingError(msg) => {
+                    error!("Query parsing error: {}", msg);
+                    println!("{}", msg);
+                    return Ok(());
+                }
+                _ => {
+                    return Err(err.into());
+                }
+            },
+        };
+
         let table = qrb.table.as_mut().unwrap();
 
         table.with(Style::modern());
@@ -703,19 +721,9 @@ impl QueryProcessor {
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
         info!("Parsing query: {}", query_str);
-        let mut parsed_query = match QueryParser::parse(Rule::query, query_str) {
-            Ok(parsed_query) => parsed_query,
-            Err(err) => match err.variant {
-                pest::error::ErrorVariant::ParsingError { .. } => {
-                    error!("Query parsing error: {}", err);
-                    println!("{}", err);
-                    return Ok(());
-                }
-                _ => {
-                    return Err(Box::new(err).into());
-                }
-            },
-        };
+
+        let mut parsed_query = QueryParser::parse(Rule::query, query_str)
+            .map_err(|err| FsPulseError::ParsingError(Box::new(err)))?;
 
         info!("Parsed query: {}", parsed_query);
 
@@ -723,7 +731,6 @@ impl QueryProcessor {
         let mut query_iter = query_pair.into_inner();
 
         let query_type_pair = query_iter.next().unwrap();
-        //let query_type = QueryType::from_str(query_type_pair.as_str());
 
         let mut query = make_query(query_type_pair.as_str());
 

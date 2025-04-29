@@ -45,7 +45,7 @@ id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
 id               =  { WS* ~ ASCII_DIGIT+ }
 
 // Date Columns
-date_col = { "scan_time" | "mod_date" | "mod_date_old" | "mod_date_new" }
+date_col = { "scan_time" | "mod_date_old" | "mod_date_new" | "mod_date" }
 
 date_show             =  { date_col ~ date_display_modifier? }
 date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }
@@ -142,7 +142,7 @@ change_modify           =  { "MODIFY" | "modify" | "Modify" | ^"M" }
 change_delete           =  { "DELETE" | "delete" | "Delete" | ^"D" }
 
 // Integer columns
-int_col  = { "file_size" | "file_count" | "folder_count" | "adds" | "modifies" | "deletes" }
+int_col  = { "file_size" | "file_count" | "folder_count" | "adds" | "modifies" | "deletes" | "state" }
 int_show = { int_col }
 
 null     = { "-" | "NULL" | "null" }
