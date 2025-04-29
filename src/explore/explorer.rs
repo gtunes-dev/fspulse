@@ -8,6 +8,8 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use ratatui::text::{Line, Text};
+use ratatui::widgets::Wrap;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -16,6 +18,7 @@ use ratatui::{
     Terminal,
 };
 
+use super::column_frame::ColInfo;
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 enum Focus {
@@ -131,11 +134,60 @@ impl Explorer {
                     let popup_area = centered_rect(20, 30, f.area());
                     self.column_frame.draw_dropdown(f, popup_area);
                 }
+
+                // Draw error popup if needed
+                if let Some(ref msg) = self.error_message {
+                    let popup_area = centered_rect(60, 20, f.area());
+                    let popup_height = popup_area.height as usize;
+
+                    let block = Block::default()
+                        .title("Error")
+                        .title_alignment(Alignment::Center)
+                        .borders(Borders::ALL)
+                        .border_type(ratatui::widgets::BorderType::Double);
+
+                    let mut lines = Vec::new();
+
+                    lines.push(Line::styled(
+                        msg.clone(),
+                        Style::default().fg(Color::White).bg(Color::Red).bold(),
+                    ));
+
+                    // Calculate how many blank lines we need
+                    let used_lines = 1 /* error message */ + 1 /* instruction */;
+                    let available_space = popup_height.saturating_sub(used_lines + 2); // 2 for top/bottom padding
+                    for _ in 0..available_space {
+                        lines.push(Line::raw(""));
+                    }
+
+                    lines.push(Line::styled(
+                        "(press Esc or Enter to dismiss)",
+                        Style::default().fg(Color::Gray).bg(Color::Red),
+                    ));
+
+                    let paragraph = Paragraph::new(Text::from(lines))
+                        .style(Style::default().bg(Color::Red))
+                        .alignment(Alignment::Center)
+                        .wrap(Wrap { trim: true })
+                        .block(block);
+
+                    f.render_widget(paragraph, popup_area);
+                }
             })?;
 
             // Handle input
             if event::poll(std::time::Duration::from_millis(250))? {
                 if let Event::Key(key) = event::read()? {
+                    if self.error_message.is_some() {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Enter => {
+                                self.error_message = None;
+                                continue; // Skip handling below
+                            }
+                            _ => continue, // Ignore all other keys while popup is open
+                        }
+                    }
+
                     match key.code {
                         KeyCode::Char('q') => {
                             break;
@@ -155,6 +207,9 @@ impl Explorer {
                         _ => match self.focus {
                             Focus::ColumnSelector => {
                                 self.column_frame.handle_key(key);
+                            }
+                            Focus::DataGrid => {
+                                self.grid_frame.handle_key(key);
                             }
                             _ => {}
                         },
@@ -210,8 +265,11 @@ impl Explorer {
         }
     }
 
-    fn build_query_and_columns(&mut self) -> Result<(String, Vec<String>), FsPulseError> {
+    fn build_query_and_columns(
+        &mut self,
+    ) -> Result<(String, Vec<String>, Vec<ColInfo>), FsPulseError> {
         let mut cols = Vec::new();
+        let mut col_infos = Vec::new();
 
         // Build the new query
         let mut query = self.column_frame.selected_type.name().to_ascii_lowercase();
@@ -228,6 +286,7 @@ impl Explorer {
                     false => query.push_str(", "),
                 }
                 cols.push(col.name.to_owned());
+                col_infos.push(col.col_info);
                 query.push_str(col.name);
             }
         }
@@ -240,15 +299,15 @@ impl Explorer {
 
         // TODO: Build the limit clause once we figure out what the UI is
 
-        Ok((query, cols))
+        Ok((query, cols, col_infos))
     }
 
     fn refresh_query(&mut self, db: &Database) -> Result<(), FsPulseError> {
-        let (query_str, columns) = self.build_query_and_columns()?;
+        let (query_str, columns, col_types) = self.build_query_and_columns()?;
 
         match QueryProcessor::execute_query(db, &query_str) {
             Ok(rows) => {
-                self.grid_frame.set_data(columns, rows);
+                self.grid_frame.set_data(columns, col_types, rows);
                 self.error_message = None;
                 Ok(())
             }

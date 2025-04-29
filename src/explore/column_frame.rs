@@ -6,8 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
-
-use crate::query::{columns, ColMap};
+use crate::query::{columns::{self, ColType}, ColMap};
 
 #[derive(Debug, Clone, Copy)]
 pub enum TypeSelection {
@@ -45,10 +44,16 @@ impl TypeSelection {
         }
     }
 }
+#[derive(Debug, Clone, Copy)]
+pub struct ColInfo {
+    pub col_align: Alignment,
+    pub col_type: ColType,
+}
 
 pub struct ColumnOption {
     pub name: &'static str,
     pub selected: bool,
+    pub col_info: ColInfo,
 }
 
 pub struct ColumnFrame {
@@ -180,6 +185,10 @@ impl ColumnFrame {
             .map(|(col_name, col_spec)| ColumnOption {
                 name: col_name,
                 selected: col_spec.is_default,
+                col_info: ColInfo {
+                    col_align: col_spec.col_align.to_ratatui(),
+                    col_type: col_spec.col_type,
+                },
             })
             .collect()
     }

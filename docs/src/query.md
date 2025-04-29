@@ -175,9 +175,9 @@ item_path@name, mod_date@short
 
 | Type                         | Allowed Format Modifiers                          |
 |------------------------------|---------------------------------------------------|
-| Date                         | `full`, `short`, `nodisplay`                      |
-| Path                         | `full`, `relative`, `short`, `name`, `nodisplay`  |
-| Validation / Enum / Boolean  | `full`, `short`, `nodisplay`                      |
+| Date                         | `full`, `short`                                   |
+| Path                         | `full`, `relative`, `short`, `name`               |
+| Validation / Enum / Boolean  | `full`, `short`                                   |
 | Integer / String             | *(no formatting options)*                         |
 
 ---

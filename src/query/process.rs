@@ -686,6 +686,9 @@ impl QueryProcessor {
     pub fn execute_query_and_print(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
         let mut qrb = QueryResultBuilder::new();
 
+        dbg!(std::any::type_name::<tabled::settings::Alignment>());
+
+
         match Self::process_query(db, query_str, &mut qrb) {
             Ok(()) => {}
             Err(err) => match err {
@@ -700,7 +703,7 @@ impl QueryProcessor {
                     return Ok(());
                 }
                 _ => {
-                    return Err(err.into());
+                    return Err(err);
                 }
             },
         };

@@ -14,7 +14,6 @@ use super::{columns::ColSet, Rule};
 #[derive(Debug, Copy, Clone)]
 pub enum Format {
     None,
-    NoDisplay,
     Short,
     Full,
     Relative,
@@ -26,7 +25,6 @@ impl Format {
         let format_upper = format.to_ascii_uppercase();
 
         match format_upper.as_str() {
-            "NODISPLAY" => Self::NoDisplay,
             "SHORT" => Self::Short,
             "FULL" => Self::Full,
             "RELATIVE" => Self::Relative,
@@ -189,7 +187,7 @@ impl Show {
         for (col, col_spec) in self.col_set.entries() {
             self.display_cols.push(DisplayCol {
                 display_col: col,
-                alignment: col_spec.align,
+                alignment: col_spec.col_align.to_tabled(),
                 format: Format::None,
             });
         }
@@ -200,7 +198,7 @@ impl Show {
             if col_spec.is_default {
                 self.display_cols.push(DisplayCol {
                     display_col: col,
-                    alignment: col_spec.align,
+                    alignment: col_spec.col_align.to_tabled(),
                     format: Format::None,
                 });
             }
@@ -232,7 +230,7 @@ impl Show {
                             };
                             self.display_cols.push(DisplayCol {
                                 display_col: key,
-                                alignment: display_col.align,
+                                alignment: display_col.col_align.to_tabled(),
                                 format,
                             })
                         }
