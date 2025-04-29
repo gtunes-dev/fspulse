@@ -1,3 +1,4 @@
+use crate::query::QueryProcessor;
 use crate::{database::Database, error::FsPulseError};
 
 use std::io;
@@ -15,7 +16,7 @@ use ratatui::{
     Terminal,
 };
 
-use super::column_frame::ColumnFrame;
+use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 enum Focus {
     Filters,
@@ -26,7 +27,8 @@ enum Focus {
 pub struct Explorer {
     focus: Focus,
     column_frame: ColumnFrame,
-
+    grid_frame: GridFrame,
+    error_message: Option<String>,
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -58,10 +60,12 @@ impl Explorer {
         Self {
             focus: Focus::Filters,
             column_frame: ColumnFrame::new(),
+            grid_frame: GridFrame::new(),
+            error_message: None,
         }
     }
 
-    pub fn explore(&mut self, _db: &Database) -> Result<(), FsPulseError> {
+    pub fn explore(&mut self, db: &Database) -> Result<(), FsPulseError> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -108,9 +112,9 @@ impl Explorer {
                     .draw(f, left_chunk, matches!(self.focus, Focus::ColumnSelector));
 
                 // Draw right (data grid)
-                let data_block =
-                    Self::focused_block("Data Grid", matches!(self.focus, Focus::DataGrid));
-                f.render_widget(data_block, right_chunk);
+                // Draw right (data grid)
+                self.grid_frame
+                    .draw(f, right_chunk, matches!(self.focus, Focus::DataGrid));
 
                 // Draw bottom (help/status)
                 let help_block = Block::default()
@@ -124,7 +128,7 @@ impl Explorer {
 
                 // Draw the type selector if it's open
                 if self.column_frame.dropdown_open {
-                    let popup_area = centered_rect(20, 30, f.area());                    
+                    let popup_area = centered_rect(20, 30, f.area());
                     self.column_frame.draw_dropdown(f, popup_area);
                 }
             })?;
@@ -135,6 +139,12 @@ impl Explorer {
                     match key.code {
                         KeyCode::Char('q') => {
                             break;
+                        }
+                        KeyCode::Char('r') => {
+                            match self.refresh_query(db) {
+                                Ok(()) => {}
+                                Err(err) => self.error_message = Some(err.to_string()),
+                            };
                         }
                         KeyCode::Tab => {
                             self.focus = self.next_focus();
@@ -194,9 +204,55 @@ impl Explorer {
     /// Returns help text depending on which frame is focused
     fn help_text(&self) -> &'static str {
         match self.focus {
-            Focus::Filters => "Tab: Next Section  |  q: Quit  |  Focus: Filters",
-            Focus::ColumnSelector => "Tab: Next Section  |  Space/Enter: Select/Toggle  |  +/-: Move Column  |  q: Quit  |  Focus: Type & Columns",
-            Focus::DataGrid => "Tab: Next Section  |  q: Quit  |  Focus: Data Grid",
+            Focus::Filters => "Tab: Next Section  |  r: Refresh  |  q: Quit  |  Focus: Filters",
+            Focus::ColumnSelector => "Tab: Next Section  |  Space/Enter: Select/Toggle  |  +/-: Move Column  |  r: Refresh  |  q: Quit  |  Focus: Type & Columns",
+            Focus::DataGrid => "Tab: Next Section  |  r: Refresh  |  q: Quit  |  Focus: Data Grid",
+        }
+    }
+
+    fn build_query_and_columns(&mut self) -> Result<(String, Vec<String>), FsPulseError> {
+        let mut cols = Vec::new();
+
+        // Build the new query
+        let mut query = self.column_frame.selected_type.name().to_ascii_lowercase();
+
+        // TODO: Build the "where" clause after we've built the UI for filters
+
+        // Build the "show" clause and cols vector
+        query.push_str(" show ");
+        let mut first_col = true;
+        for col in self.column_frame.current_columns() {
+            if col.selected {
+                match first_col {
+                    true => first_col = false,
+                    false => query.push_str(", "),
+                }
+                cols.push(col.name.to_owned());
+                query.push_str(col.name);
+            }
+        }
+
+        if first_col {
+            return Err(FsPulseError::Error("No columns selected".into()));
+        }
+
+        // TODO: Build the "order by" clause once we have UI for that
+
+        // TODO: Build the limit clause once we figure out what the UI is
+
+        Ok((query, cols))
+    }
+
+    fn refresh_query(&mut self, db: &Database) -> Result<(), FsPulseError> {
+        let (query_str, columns) = self.build_query_and_columns()?;
+
+        match QueryProcessor::execute_query(db, &query_str) {
+            Ok(rows) => {
+                self.grid_frame.set_data(columns, rows);
+                self.error_message = None;
+                Ok(())
+            }
+            Err(err) => Err(err),
         }
     }
 }

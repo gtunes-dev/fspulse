@@ -1,7 +1,5 @@
 use crate::validate::validator::ValidationState;
-use crate::{
-    changes::ChangeType, error::FsPulseError, items::ItemType, utils::Utils,
-};
+use crate::{changes::ChangeType, error::FsPulseError, items::ItemType, utils::Utils};
 
 use chrono::{DateTime, Local, Utc};
 use pest::iterators::Pair;
@@ -169,17 +167,17 @@ impl Show {
         }
     }
 
-    pub fn make_builder(&mut self) -> Builder {
-        let mut builder = Builder::default();
-
+    pub fn ensure_columns(&mut self) {
         // If no display columns were specified, add the default column set
         if self.display_cols.is_empty() {
             self.add_default_columns();
         }
+    }
 
+    pub fn prepare_builder(&mut self, builder: &mut Builder) {
+        self.ensure_columns();
         let header: Vec<&'static str> = self.display_cols.iter().map(|dc| dc.display_col).collect();
         builder.push_record(header);
-        builder
     }
 
     pub fn set_column_aligments(&self, table: &mut Table) {
@@ -253,4 +251,3 @@ impl Show {
         Ok(())
     }
 }
-

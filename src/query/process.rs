@@ -22,6 +22,77 @@ use super::{
     QueryParser, Rule,
 };
 
+pub trait QueryResult {
+    fn prepare(&mut self, show: &mut Show);
+    fn add_row(&mut self, row: Vec<String>);
+    fn finalize(&mut self, show: &mut Show);
+}
+
+struct QueryResultBuilder {
+    tabled_builder: Option<Builder>,
+    table: Option<Table>,
+}
+
+impl QueryResult for QueryResultBuilder {
+    fn prepare(&mut self, show: &mut Show) {
+        if let Some(builder) = self.tabled_builder.as_mut() {
+            show.prepare_builder(builder);
+        } else {
+            panic!("QueryResultBuilder used after finalize");
+        }
+    }
+
+    fn add_row(&mut self, row: Vec<String>) {
+        self.tabled_builder
+            .as_mut()
+            .expect("QueryResultBuilder used after finalize")
+            .push_record(row);
+    }
+
+    fn finalize(&mut self, show: &mut Show) {
+        if let Some(builder) = self.tabled_builder.take() {
+            let mut table = builder.build();
+            show.set_column_aligments(&mut table);
+            self.table = Some(table);
+        } else {
+            panic!("Attempted to finalize twice");
+        }
+    }
+}
+
+impl QueryResultBuilder {
+    fn new() -> Self {
+        QueryResultBuilder {
+            tabled_builder: Some(Builder::new()),
+            table: None,
+        }
+    }
+}
+
+struct QueryResultVector {
+    row_vec: Vec<Vec<String>>,
+}
+
+impl QueryResult for QueryResultVector {
+    fn prepare(&mut self, show: &mut Show) {
+        show.ensure_columns();
+    }
+    fn add_row(&mut self, row: Vec<String>) {
+        self.row_vec.push(row);
+    }
+    fn finalize(&mut self, _show: &mut Show) {
+        // Nothing to do
+    }
+}
+
+impl QueryResultVector {
+    fn new() -> Self {
+        QueryResultVector {
+            row_vec: Vec::new(),
+        }
+    }
+}
+
 /// Defines the behavior of a validator.
 pub trait Query {
     fn query_impl(&self) -> &QueryImpl;
@@ -67,13 +138,18 @@ pub trait Query {
         select_list
     }
 
-    fn build_query_table(
+    fn build_query_result(
         &mut self,
         sql_statement: &mut Statement,
         sql_params: &[&dyn ToSql],
-    ) -> Result<Table, FsPulseError>;
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError>;
 
-    fn prepare_and_execute(&mut self, db: &Database) -> Result<(), FsPulseError> {
+    fn prepare_and_execute(
+        &mut self,
+        db: &Database,
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
         let select_list = self.cols_as_select_list();
 
         // $TODO: Wrap Filters into a struct that can generate the entire WHERE clause
@@ -123,13 +199,7 @@ pub trait Query {
 
         let mut sql_statement = db.conn().prepare(&sql)?;
 
-        let mut table = self.build_query_table(&mut sql_statement, &sql_params)?;
-
-        self.query_impl().show.set_column_aligments(&mut table);
-        table.with(Style::modern());
-        table.modify(Rows::first(), Alignment::center());
-
-        println!("{table}");
+        self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
 
         Ok(())
     }
@@ -164,22 +234,22 @@ impl Query for RootsQuery {
         &mut self.imp
     }
 
-    fn build_query_table(
+    fn build_query_result(
         &mut self,
         sql_statement: &mut Statement,
         sql_params: &[&dyn ToSql],
-    ) -> Result<Table, FsPulseError> {
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
         let rows = sql_statement.query_map(sql_params, RootsQueryRow::from_row)?;
-        let mut builder = self.query_impl_mut().show.make_builder();
+
+        query_result.prepare(&mut self.query_impl_mut().show);
 
         for row in rows {
             let roots_query_row: RootsQueryRow = row?;
-            self.append_roots_row(&roots_query_row, &mut builder)?;
+            self.append_roots_row(&roots_query_row, query_result)?;
         }
 
-        let table = builder.build();
-
-        Ok(table)
+        Ok(())
     }
 }
 struct RootsQuery {
@@ -190,7 +260,7 @@ impl RootsQuery {
     pub fn append_roots_row(
         &self,
         root: &RootsQueryRow,
-        builder: &mut Builder,
+        query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
         let mut row: Vec<String> = Vec::new();
 
@@ -206,7 +276,7 @@ impl RootsQuery {
             row.push(col_string);
         }
 
-        builder.push_record(row);
+        query_result.add_row(row);
 
         Ok(())
     }
@@ -220,22 +290,22 @@ impl Query for ItemsQuery {
         &mut self.imp
     }
 
-    fn build_query_table(
+    fn build_query_result(
         &mut self,
         sql_statment: &mut Statement,
         sql_params: &[&dyn ToSql],
-    ) -> Result<Table, FsPulseError> {
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
         let rows = sql_statment.query_map(sql_params, ItemsQueryRow::from_row)?;
-        let mut builder: Builder = self.query_impl_mut().show.make_builder();
+
+        query_result.prepare(&mut self.query_impl_mut().show);
 
         for row in rows {
             let items_query_row = row?;
-            self.append_items_row(&items_query_row, &mut builder)?;
+            self.append_items_row(&items_query_row, query_result)?;
         }
 
-        let table = builder.build();
-
-        Ok(table)
+        Ok(())
     }
 }
 
@@ -247,7 +317,7 @@ impl ItemsQuery {
     pub fn append_items_row(
         &self,
         item: &ItemsQueryRow,
-        builder: &mut Builder,
+        query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
         let mut row: Vec<String> = Vec::new();
 
@@ -274,7 +344,7 @@ impl ItemsQuery {
             row.push(col_string);
         }
 
-        builder.push_record(row);
+        query_result.add_row(row);
 
         Ok(())
     }
@@ -288,22 +358,22 @@ impl Query for ScansQuery {
         &mut self.imp
     }
 
-    fn build_query_table(
+    fn build_query_result(
         &mut self,
         sql_statment: &mut Statement,
         sql_params: &[&dyn ToSql],
-    ) -> Result<Table, FsPulseError> {
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
         let rows = sql_statment.query_map(sql_params, ScansQueryRow::from_row)?;
-        let mut builder = self.query_impl_mut().show.make_builder();
+
+        query_result.prepare(&mut self.query_impl_mut().show);
 
         for row in rows {
             let scans_query_row = row?;
-            self.append_scans_row(&scans_query_row, &mut builder)?;
+            self.append_scans_row(&scans_query_row, query_result)?;
         }
 
-        let table = builder.build();
-
-        Ok(table)
+        Ok(())
     }
 }
 struct ScansQuery {
@@ -314,7 +384,7 @@ impl ScansQuery {
     pub fn append_scans_row(
         &self,
         scan: &ScansQueryRow,
-        builder: &mut Builder,
+        query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
         let mut row: Vec<String> = Vec::new();
 
@@ -341,7 +411,7 @@ impl ScansQuery {
             row.push(col_string);
         }
 
-        builder.push_record(row);
+        query_result.add_row(row);
 
         Ok(())
     }
@@ -355,22 +425,23 @@ impl Query for ChangesQuery {
         &mut self.imp
     }
 
-    fn build_query_table(
+    fn build_query_result(
         &mut self,
         sql_statment: &mut Statement,
         sql_params: &[&dyn ToSql],
-    ) -> Result<Table, FsPulseError> {
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
         let rows = sql_statment.query_map(sql_params, ChangesQueryRow::from_row)?;
-        let mut builder: Builder = self.query_impl_mut().show.make_builder();
+
+        query_result.prepare(&mut self.query_impl_mut().show);
 
         for row in rows {
             let changes_query_row: ChangesQueryRow = row?;
 
-            self.append_changes_row(&changes_query_row, &mut builder)?;
+            self.append_changes_row(&changes_query_row, query_result)?;
         }
-        let table = builder.build();
 
-        Ok(table)
+        Ok(())
     }
 }
 struct ChangesQuery {
@@ -381,7 +452,7 @@ impl ChangesQuery {
     pub fn append_changes_row(
         &self,
         change: &ChangesQueryRow,
-        builder: &mut Builder,
+        query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
         let mut row: Vec<String> = Vec::new();
 
@@ -411,7 +482,7 @@ impl ChangesQuery {
             row.push(col_string);
         }
 
-        builder.push_record(row);
+        query_result.add_row(row);
 
         Ok(())
     }
@@ -604,7 +675,33 @@ impl ScansQueryRow {
 }
 
 impl QueryProcessor {
-    pub fn process_query(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
+    pub fn execute_query(db: &Database, query_str: &str) -> Result<Vec<Vec<String>>, FsPulseError> {
+        let mut qrv = QueryResultVector::new();
+
+        Self::process_query(db, query_str, &mut qrv)?;
+
+        Ok(qrv.row_vec)
+    }
+
+    pub fn execute_query_and_print(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
+        let mut qrb = QueryResultBuilder::new();
+
+        Self::process_query(db, query_str, &mut qrb)?;
+        let table = qrb.table.as_mut().unwrap();
+
+        table.with(Style::modern());
+        table.modify(Rows::first(), Alignment::center());
+
+        println!("{table}");
+
+        Ok(())
+    }
+
+    fn process_query(
+        db: &Database,
+        query_str: &str,
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
         info!("Parsing query: {}", query_str);
         let mut parsed_query = match QueryParser::parse(Rule::query, query_str) {
             Ok(parsed_query) => parsed_query,
@@ -645,7 +742,8 @@ impl QueryProcessor {
             },
         };
 
-        query.prepare_and_execute(db)?;
+        query.prepare_and_execute(db, query_result)?;
+        query_result.finalize(&mut query.query_impl_mut().show);
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use crate::{error::FsPulseError, schema::CREATE_SCHEMA_SQL, schema::UPGRADE_2_TO_3_SQL};
+ use crate::{error::FsPulseError, schema::CREATE_SCHEMA_SQL, schema::UPGRADE_2_TO_3_SQL};
 use directories::BaseDirs;
 use log::info;
 use rusqlite::{Connection, OptionalExtension, Result};

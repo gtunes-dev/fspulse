@@ -46,7 +46,7 @@ impl Reports {
         };
 
         //println!(">> Generated query: {}", query);
-        QueryProcessor::process_query(db, query)
+        QueryProcessor::execute_query_and_print(db, query)
     }
 
     pub fn report_roots(
@@ -61,7 +61,7 @@ impl Reports {
         };
 
         //println!("Query: {query}");
-        QueryProcessor::process_query(db, query)?;
+        QueryProcessor::execute_query_and_print(db, query)?;
 
         Ok(())
     }
@@ -87,7 +87,7 @@ impl Reports {
                 _ => return Err(FsPulseError::Error("Item reports require additional parameters".into()))
             };
 
-            QueryProcessor::process_query(db, query)?;
+            QueryProcessor::execute_query_and_print(db, query)?;
         } else if let Some(root_id) = root_id {
             // TODO: Does this even make sense???
             let root = Root::get_by_id(db, root_id.into())?
@@ -121,7 +121,7 @@ impl Reports {
             _ => return Err(FsPulseError::Error("Change reports require additional parameters".into()))
         };
 
-        QueryProcessor::process_query(db, &query)?;
+        QueryProcessor::execute_query_and_print(db, &query)?;
 
         Ok(())
     }

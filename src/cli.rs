@@ -374,7 +374,7 @@ impl Cli {
             Command::Query { db_path, query } => {
                 info!("Processing query with db_path: {:?}, '{}'", db_path, query);
                 let db = Database::new(db_path)?;
-                QueryProcessor::process_query(&db, &query)
+                QueryProcessor::execute_query_and_print(&db, &query)
             }
         }
     }
@@ -434,7 +434,7 @@ impl Cli {
                     }
 
                     // All interactive objects are dropped at this point
-                    QueryProcessor::process_query(db, &query)?;
+                    QueryProcessor::execute_query_and_print(db, &query)?;
                 }
             }
             _ => unreachable!(),
