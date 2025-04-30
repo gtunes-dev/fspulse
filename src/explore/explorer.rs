@@ -18,7 +18,7 @@ use ratatui::{
     Terminal,
 };
 
-use super::column_frame::ColInfo;
+use super::domain_model::{ColInfo, DomainModel};
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 enum Focus {
@@ -28,6 +28,7 @@ enum Focus {
 }
 
 pub struct Explorer {
+    model: DomainModel,
     focus: Focus,
     column_frame: ColumnFrame,
     grid_frame: GridFrame,
@@ -61,6 +62,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 impl Explorer {
     pub fn new() -> Self {
         Self {
+            model: DomainModel::new(),
             focus: Focus::Filters,
             column_frame: ColumnFrame::new(),
             grid_frame: GridFrame::new(),
@@ -111,8 +113,12 @@ impl Explorer {
                 f.render_widget(filter_block, top_chunk);
 
                 // Draw left (Type selector + Column list)
-                self.column_frame
-                    .draw(f, left_chunk, matches!(self.focus, Focus::ColumnSelector));
+                self.column_frame.draw(
+                    &self.model,
+                    f,
+                    left_chunk,
+                    matches!(self.focus, Focus::ColumnSelector),
+                );
 
                 // Draw right (data grid)
                 // Draw right (data grid)
@@ -211,7 +217,7 @@ impl Explorer {
                         }
                         _ => match self.focus {
                             Focus::ColumnSelector => {
-                                self.column_frame.handle_key(key);
+                                self.column_frame.handle_key(&mut self.model, key);
                             }
                             Focus::DataGrid => {
                                 self.grid_frame.handle_key(key);
@@ -277,14 +283,14 @@ impl Explorer {
         let mut col_infos = Vec::new();
 
         // Build the new query
-        let mut query = self.column_frame.selected_type.name().to_ascii_lowercase();
+        let mut query = self.model.current_type().name().to_ascii_lowercase();
 
         // TODO: Build the "where" clause after we've built the UI for filters
 
         // Build the "show" clause and cols vector
         query.push_str(" show ");
         let mut first_col = true;
-        for col in self.column_frame.current_columns() {
+        for col in self.model.current_columns() {
             if col.selected {
                 match first_col {
                     true => first_col = false,

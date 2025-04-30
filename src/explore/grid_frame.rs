@@ -12,7 +12,7 @@ use ratatui::{
 
 use crate::query::columns::ColType;
 
-use super::column_frame::ColInfo;
+use super::domain_model::ColInfo;
 
 pub struct GridFrame {
     pub columns: Vec<String>,

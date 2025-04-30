@@ -6,90 +6,19 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
-use crate::query::{columns::{self, ColType}, ColMap};
 
-#[derive(Debug, Clone, Copy)]
-pub enum TypeSelection {
-    Roots,
-    Scans,
-    Items,
-    Changes,
-}
-
-impl TypeSelection {
-    pub fn all_types() -> &'static [TypeSelection] {
-        &[
-            TypeSelection::Roots,
-            TypeSelection::Scans,
-            TypeSelection::Items,
-            TypeSelection::Changes,
-        ]
-    }
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            TypeSelection::Roots => "Roots",
-            TypeSelection::Scans => "Scans",
-            TypeSelection::Items => "Items",
-            TypeSelection::Changes => "Changes",
-        }
-    }
-
-    pub fn index(&self) -> usize {
-        match self {
-            TypeSelection::Roots => 0,
-            TypeSelection::Scans => 1,
-            TypeSelection::Items => 2,
-            TypeSelection::Changes => 3,
-        }
-    }
-}
-#[derive(Debug, Clone, Copy)]
-pub struct ColInfo {
-    pub col_align: Alignment,
-    pub col_type: ColType,
-}
-
-pub struct ColumnOption {
-    pub name: &'static str,
-    pub selected: bool,
-    pub col_info: ColInfo,
-}
+use super::domain_model::{DomainModel, TypeSelection};
 
 pub struct ColumnFrame {
-    pub selected_type: TypeSelection,
     pub cursor_position: usize,
     pub dropdown_open: bool,
     pub dropdown_cursor: usize,
     pub scroll_offset: usize,
     pub area: Rect,
-
-    pub roots_columns: Vec<ColumnOption>,
-    pub scans_columns: Vec<ColumnOption>,
-    pub items_columns: Vec<ColumnOption>,
-    pub changes_columns: Vec<ColumnOption>,
 }
 
 impl ColumnFrame {
-    pub fn current_columns(&self) -> &Vec<ColumnOption> {
-        match self.selected_type {
-            TypeSelection::Roots => &self.roots_columns,
-            TypeSelection::Scans => &self.scans_columns,
-            TypeSelection::Items => &self.items_columns,
-            TypeSelection::Changes => &self.changes_columns,
-        }
-    }
-
-    pub fn current_columns_mut(&mut self) -> &mut Vec<ColumnOption> {
-        match self.selected_type {
-            TypeSelection::Roots => &mut self.roots_columns,
-            TypeSelection::Scans => &mut self.scans_columns,
-            TypeSelection::Items => &mut self.items_columns,
-            TypeSelection::Changes => &mut self.changes_columns,
-        }
-    }
-
-    pub fn handle_key(&mut self, key: KeyEvent) {
+    pub fn handle_key(&mut self, model: &mut DomainModel, key: KeyEvent) {
         match key.code {
             KeyCode::Down => {
                 if self.dropdown_open {
@@ -97,7 +26,7 @@ impl ColumnFrame {
                         self.dropdown_cursor += 1;
                     }
                 } else {
-                    self.move_down();
+                    self.move_down(model);
                 }
             }
             KeyCode::Up => {
@@ -113,7 +42,7 @@ impl ColumnFrame {
                 if !self.dropdown_open && self.cursor_position >= 1 {
                     let idx = self.cursor_position - 1;
                     if idx > 0 {
-                        let current_cols = self.current_columns_mut();
+                        let current_cols = model.current_columns_mut();
                         let item = current_cols.remove(idx);
                         current_cols.insert(idx - 1, item);
 
@@ -125,7 +54,7 @@ impl ColumnFrame {
             KeyCode::Char('-') => {
                 if !self.dropdown_open && self.cursor_position >= 1 {
                     let idx = self.cursor_position - 1;
-                    let current_cols = self.current_columns_mut();
+                    let current_cols = model.current_columns_mut();
                     if idx < current_cols.len() - 1 {
                         let item = current_cols.remove(idx);
                         current_cols.insert(idx + 1, item);
@@ -138,16 +67,17 @@ impl ColumnFrame {
             KeyCode::Char(' ') | KeyCode::Enter => {
                 if self.dropdown_open {
                     // Select the highlighted type
-                    self.selected_type = TypeSelection::all_types()[self.dropdown_cursor];
+                    let current_type = TypeSelection::all_types()[self.dropdown_cursor];
+                    model.set_current_type(current_type);
                     self.dropdown_open = false;
                     self.cursor_position = 0; // return cursor to Type line
                 } else if self.cursor_position == 0 {
                     // Open dropdown if cursor is on Type
                     self.dropdown_open = true;
-                    self.dropdown_cursor = self.selected_type.index();
+                    self.dropdown_cursor = model.current_type().index();
                 } else {
                     let idx = self.cursor_position - 1;
-                    if let Some(col) = self.current_columns_mut().get_mut(idx) {
+                    if let Some(col) = model.current_columns_mut().get_mut(idx) {
                         col.selected = !col.selected;
                     }
                 }
@@ -166,39 +96,20 @@ impl ColumnFrame {
 impl ColumnFrame {
     pub fn new() -> Self {
         Self {
-            selected_type: TypeSelection::Roots,
             cursor_position: 0,
             dropdown_open: false,
             dropdown_cursor: 0,
             scroll_offset: 0,
             area: Rect::default(),
-            roots_columns: Self::column_options_from_map(&columns::ROOTS_QUERY_COLS),
-            scans_columns: Self::column_options_from_map(&columns::SCANS_QUERY_COLS),
-            items_columns: Self::column_options_from_map(&columns::ITEMS_QUERY_COLS),
-            changes_columns: Self::column_options_from_map(&columns::CHANGES_QUERY_COLS),
         }
     }
 
-    pub fn column_options_from_map(col_map: &ColMap) -> Vec<ColumnOption> {
-        col_map
-            .entries()
-            .map(|(col_name, col_spec)| ColumnOption {
-                name: col_name,
-                selected: col_spec.is_default,
-                col_info: ColInfo {
-                    col_align: col_spec.col_align.to_ratatui(),
-                    col_type: col_spec.col_type,
-                },
-            })
-            .collect()
-    }
-
-    pub fn draw(&mut self, f: &mut Frame, area: Rect, is_focused: bool) {
+    pub fn draw(&mut self, model: &DomainModel, f: &mut Frame, area: Rect, is_focused: bool) {
         self.set_area(area);
         let mut lines = Vec::new();
 
         // Always draw the collapsed Type selector line
-        let type_display = format!(" {} ▼ ", self.selected_type.name()); // Add spaces around name
+        let type_display = format!(" {} ▼ ", model.current_type().name()); // Add spaces around name
         let mut type_line = Line::from(vec![
             "Type: ".into(),
             type_display.clone().bg(Color::Blue).fg(Color::White),
@@ -214,7 +125,7 @@ impl ColumnFrame {
         lines.push(Line::from(" "));
 
         let visible_rows = self.visible_rows();
-        for (i, col) in self
+        for (i, col) in model
             .current_columns()
             .iter()
             .enumerate()
@@ -265,8 +176,8 @@ impl ColumnFrame {
         }
     }
 
-    pub fn move_down(&mut self) {
-        if self.cursor_position < self.current_columns().len() {
+    pub fn move_down(&mut self, model: &DomainModel) {
+        if self.cursor_position < model.current_columns().len() {
             self.cursor_position += 1;
 
             if self.cursor_position >= 1 {
@@ -328,13 +239,14 @@ impl ColumnFrame {
     fn correct_scroll_for_resize(&mut self, new_visible_rows: usize) {
         if self.cursor_position >= 1 {
             let column_idx = self.cursor_position - 1;
-    
+
             if column_idx < self.scroll_offset {
                 self.scroll_offset = column_idx;
             } else if column_idx >= self.scroll_offset + new_visible_rows {
                 self.scroll_offset = column_idx.saturating_sub(new_visible_rows.saturating_sub(1));
             } else {
-                let max_scroll_offset = column_idx.saturating_sub(new_visible_rows.saturating_sub(1));
+                let max_scroll_offset =
+                    column_idx.saturating_sub(new_visible_rows.saturating_sub(1));
                 if self.scroll_offset > max_scroll_offset {
                     self.scroll_offset = max_scroll_offset;
                 }
