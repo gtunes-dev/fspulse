@@ -1,4 +1,3 @@
-use clap::error;
 use ratatui::{
     crossterm::event::{Event, KeyCode, KeyEvent},
     layout::{Alignment, Constraint, Direction, Layout, Position, Rect},
@@ -8,9 +7,13 @@ use ratatui::{
 };
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::query::{columns::{ColType, ColTypeInfo}, QueryProcessor};
+use crate::query::{columns::ColTypeInfo, QueryProcessor};
 
-use super::{domain_model::ColInfo, explorer::ExplorerAction, message_box::{MessageBox, MessageBoxType}};
+use super::{
+    domain_model::{ColInfo, Filter},
+    explorer::ExplorerAction,
+    message_box::{MessageBox, MessageBoxType},
+};
 
 enum FilterWindowType {
     Add,
@@ -45,7 +48,7 @@ impl FilterWindow {
         Self::new(FilterWindowType::Add, col_name, col_info)
     }
 
-    pub fn draw(&mut self, f: &mut Frame) {
+    pub fn draw(&mut self, f: &mut Frame, is_top_window: bool) {
         let screen = f.area();
 
         let popup_width = screen.width.min(80);
@@ -101,8 +104,10 @@ impl FilterWindow {
         f.render_widget(input_paragraph, top_layout[2]);
 
         // Cursor positioning
-        let x = self.input.visual_cursor().saturating_sub(scroll) as u16;
-        f.set_cursor_position(Position::new(top_layout[2].x + 1 + x, top_layout[2].y + 1));
+        if (is_top_window) {
+            let x = self.input.visual_cursor().saturating_sub(scroll) as u16;
+            f.set_cursor_position(Position::new(top_layout[2].x + 1 + x, top_layout[2].y + 1));
+        }
 
         // Spacer
         f.render_widget(Paragraph::new(" "), top_layout[3]);
@@ -134,7 +139,8 @@ impl FilterWindow {
             ColType::Path | ColType::String => "Tip: Case-insensitive substring match",
         };
         */
-        let tip_paragraph = Paragraph::new(self.col_type_info.tip).style(Style::default().fg(Color::Gray));
+        let tip_paragraph =
+            Paragraph::new(self.col_type_info.tip).style(Style::default().fg(Color::Gray));
         f.render_widget(tip_paragraph, footer_layout[0]);
 
         // Divider
@@ -158,12 +164,20 @@ impl FilterWindow {
                 return Some(ExplorerAction::Dismiss);
             }
             KeyCode::Enter => {
-                // tbd
-                let input_val = self.input.value();
+                let mut input_val = self.input.value();
                 let err_str = QueryProcessor::validate_filter(self.col_type_info.rule, input_val);
                 match err_str {
-                    Some(err_str) => { return Some(ExplorerAction::ShowMessage(MessageBox::new(MessageBoxType::Info, err_str))); },
-                    None => {}
+                    Some(err_str) => {
+                        return Some(ExplorerAction::ShowMessage(MessageBox::new(
+                            MessageBoxType::Info,
+                            err_str,
+                        )));
+                    }
+                    None => {
+                        input_val = input_val.trim();
+                        let filter = Filter::new(self.col_name, self.col_type_info.type_name, input_val.to_owned());
+                        return Some(ExplorerAction::AddFilter(filter));
+                    }
                 }
             }
             _ => {

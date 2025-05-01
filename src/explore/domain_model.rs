@@ -56,9 +56,19 @@ pub struct ColumnOption {
 
 #[derive(Debug, Clone)]
 pub struct Filter {
-    pub column: String,
+    pub col_name: &'static str,
+    pub type_name: &'static str,
     pub filter_text: String,
-    pub type_name: String,
+}
+
+impl Filter {
+    pub fn new(col_name: &'static str, type_name: &'static str, filter_text: String) -> Self {
+        Filter {
+            col_name,
+            type_name,
+            filter_text,
+        }
+    }
 }
 
 struct DomainState {
@@ -68,7 +78,10 @@ struct DomainState {
 
 impl DomainState {
     fn new(columns: Vec<ColumnOption>) -> Self {
-        DomainState { columns, filters: Vec::new() }
+        DomainState {
+            columns,
+            filters: Vec::new(),
+        }
     }
 }
 
@@ -137,7 +150,7 @@ impl DomainModel {
         &self.current_state().filters
     }
 
-    pub fn _current_filters_mut(&mut self) -> &mut Vec<Filter> {
+    pub fn current_filters_mut(&mut self) -> &mut Vec<Filter> {
         self.current_state_mut().filters.as_mut()
     }
 

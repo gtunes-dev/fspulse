@@ -102,7 +102,7 @@ impl ColumnFrame {
                     .current_columns()
                     .get(self.cursor_position.saturating_sub(1))
                 {
-                    explorer_action = Some(ExplorerAction::AddFilter(
+                    explorer_action = Some(ExplorerAction::ShowAddFilter(
                         FilterWindow::new_add_filter_window(col_option.name, col_option.col_info),
                     ));
                 };

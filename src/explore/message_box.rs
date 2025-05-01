@@ -39,12 +39,14 @@ impl MessageBox {
             .borders(Borders::ALL)
             .border_type(BorderType::Double);
 
-        let mut lines = Vec::new();
+            let mut lines = Vec::new();
 
-        lines.push(Line::styled(
-            self.message.to_owned(),
-            Style::default().fg(Color::White).bg(Color::Red).bold(),
-        ));
+        for message_line in self.message.split('\n') {
+            lines.push(Line::styled(
+                message_line.to_owned(),
+                Style::default().fg(self.fg_color()).bg(self.bg_color()).bold(),
+            ));
+        }
 
         // Calculate how many blank lines we need
         let used_lines = 1 /* error message */ + 1 /* instruction */;
@@ -55,17 +57,30 @@ impl MessageBox {
 
         lines.push(Line::styled(
             "(press Esc or Enter to dismiss)",
-            Style::default().fg(Color::Gray).bg(Color::Red),
+            Style::default().fg(self.fg_color()).bg(self.bg_color()),
         ));
 
         let paragraph = Paragraph::new(Text::from(lines))
-            .style(Style::default().bg(Color::Red))
-            .alignment(Alignment::Center)
+            .style(Style::default().bg(self.bg_color()))
+            .alignment(Alignment::Left)
             .wrap(Wrap { trim: true })
             .block(block);
 
         // Clear the popup area to avoid bleed-through
         f.render_widget(Clear, popup_area);
         f.render_widget(paragraph, popup_area);
+    }
+
+    fn fg_color(&self) -> Color {
+        match self.message_box_type {
+            MessageBoxType::Info => Color::Black,
+            MessageBoxType::Error => Color::Black,
+        }
+    }
+    fn bg_color(&self) -> Color {
+        match self.message_box_type {
+            MessageBoxType::Info => Color::Gray,
+            MessageBoxType::Error => Color::Red,
+        }
     }
 }

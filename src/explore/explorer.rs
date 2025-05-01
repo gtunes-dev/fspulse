@@ -1,9 +1,13 @@
 use crate::query::QueryProcessor;
 use crate::{database::Database, error::FsPulseError};
 
-use ratatui::crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent,
+};
 use ratatui::crossterm::execute;
-use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use ratatui::crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use ratatui::widgets::{Block, Clear};
 use ratatui::{
     backend::CrosstermBackend,
@@ -14,7 +18,7 @@ use ratatui::{
 };
 use std::io;
 
-use super::domain_model::{ColInfo, DomainModel};
+use super::domain_model::{ColInfo, DomainModel, Filter};
 use super::filter_frame::FilterFrame;
 use super::filter_window::FilterWindow;
 use super::message_box::{MessageBox, MessageBoxType};
@@ -29,8 +33,9 @@ enum Focus {
 
 pub enum ExplorerAction {
     Dismiss,
-    AddFilter(FilterWindow),
+    ShowAddFilter(FilterWindow),
     ShowMessage(MessageBox),
+    AddFilter(Filter),
 }
 
 pub struct Explorer {
@@ -71,7 +76,7 @@ impl Explorer {
                 let vertical_chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
-                        Constraint::Length(3), // Filters
+                        Constraint::Length(8), // Filters
                         Constraint::Min(0),    // Main content
                         Constraint::Length(2), // Help/status
                     ])
@@ -131,13 +136,14 @@ impl Explorer {
                     self.column_frame.draw_dropdown(f, popup_area);
                 }
 
+                if let Some(ref mut filter_window) = self.filter_window {
+                    let is_top_window = self.message_box.is_none();
+                    filter_window.draw(f, is_top_window);
+                }
+
                 // Draw the message box if needed
                 if let Some(ref message_box) = self.message_box {
                     message_box.draw(f);
-                }
-
-                if let Some(ref mut filter_window) = self.filter_window {
-                    filter_window.draw(f);
                 }
             })?;
 
@@ -170,7 +176,7 @@ impl Explorer {
                             self.focus = self.prev_focus();
                         }
                         _ => {
-                            self.dispatch_key(key);
+                            self.dispatch_key_to_active_frame(key);
                         }
                     }
                 }
@@ -188,7 +194,38 @@ impl Explorer {
         Ok(())
     }
 
-    fn dispatch_key(&mut self, key: KeyEvent) {
+    fn modal_input_handled(&mut self, key: KeyEvent) -> bool {
+        if let Some(ref message_box) = self.message_box {
+            if message_box.is_dismiss_event(key) {
+                self.message_box = None;
+            }
+            // skip all handling below
+            return true;
+        }
+
+        if let Some(ref mut filter_window) = self.filter_window {
+            let action = filter_window.handle_key(key);
+            if let Some(action) = action {
+                match action {
+                    ExplorerAction::Dismiss => self.filter_window = None,
+                    ExplorerAction::ShowMessage(message_box) => {
+                        self.message_box = Some(message_box)
+                    }
+                    ExplorerAction::AddFilter(filter) => {
+                        self.model.current_filters_mut().push(filter);
+                        self.filter_window = None;
+                    }    
+                    _ => {}
+                }
+            }
+
+            return true;
+        }
+
+        false
+    }
+
+    fn dispatch_key_to_active_frame(&mut self, key: KeyEvent) {
         let action = match self.focus {
             Focus::ColumnSelector => self.column_frame.handle_key(&mut self.model, key),
             Focus::DataGrid => self.grid_frame.handle_key(key),
@@ -198,13 +235,14 @@ impl Explorer {
         if let Some(action) = action {
             match action {
                 ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
-                ExplorerAction::AddFilter(filter_window) => {
+                ExplorerAction::ShowAddFilter(filter_window) => {
                     self.filter_window = Some(filter_window)
                 }
                 _ => unreachable!(),
             }
         }
     }
+    
     fn next_focus(&self) -> Focus {
         match self.focus {
             Focus::Filters => Focus::ColumnSelector,
@@ -221,30 +259,7 @@ impl Explorer {
         }
     }
 
-    fn modal_input_handled(&mut self, key: KeyEvent) -> bool {
-        if let Some(ref message_box) = self.message_box {
-            if message_box.is_dismiss_event(key) {
-                self.message_box = None;
-            }
-            // skip all handling below
-            return true;
-        }
-
-        if let Some(ref mut filter_window) = self.filter_window {
-            let action = filter_window.handle_key(key);
-            if let Some(action) = action {
-                match action {
-                    ExplorerAction::Dismiss => self.filter_window = None,
-                    ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
-                    _ => {}
-                }
-            }
-
-            return true;
-        }
-
-        false
-    }
+ 
 
     /// Returns help text depending on which frame is focused
     fn help_text(&self) -> &'static str {

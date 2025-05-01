@@ -61,7 +61,8 @@ pub enum ColType {
 impl ColType {
     pub fn info(&self) -> ColTypeInfo {
         match self {
-            ColType::Id => ColTypeInfo::new(Rule::id_filter_values, "Id", "1, 3, 4..6"),
+            ColType::Id => ColTypeInfo::new(Rule::id_filter_EOI, "Id", "Tip: Enter one or more ids or ranges 3, 4..6"),
+            ColType::Date => ColTypeInfo::new(Rule::date_filter_EOI, "Date", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
             _ => ColTypeInfo::new(Rule::id_filter_values, "Id", "1, 3, 4..6"),
         }
     }

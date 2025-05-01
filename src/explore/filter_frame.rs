@@ -33,9 +33,9 @@ impl FilterFrame {
 
         let rows = model.current_filters().iter().map(|f| {
             Row::new(vec![
-                Span::raw(f.column.clone()),
-                Span::raw(f.type_name.clone()),
-                Span::raw(f.filter_text.clone()),
+                Span::raw(f.col_name),
+                Span::raw(f.type_name),
+                Span::raw(f.filter_text.to_owned()),
             ])
         });
 
