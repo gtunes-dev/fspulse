@@ -235,6 +235,7 @@ impl Explorer {
             if let Some(action) = action {
                 match action {
                     ExplorerAction::Dismiss => self.filter_window = None,
+                    ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
                     _ => {}
                 }
             }

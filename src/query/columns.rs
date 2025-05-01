@@ -1,6 +1,8 @@
 use phf::ordered_map::{Entries, Values};
 use phf_macros::phf_ordered_map;
 
+use super::Rule;
+
 pub type ColMap = phf::OrderedMap<&'static str, ColSpec>;
 
 #[derive(Debug)]
@@ -29,6 +31,23 @@ impl ColAlign {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct ColTypeInfo {
+    pub rule: Rule,
+    pub type_name: &'static str,
+    pub tip: &'static str,
+}
+
+impl ColTypeInfo {
+    fn new(rule: Rule, type_name: &'static str, tip: &'static str) -> Self {
+        ColTypeInfo {
+            rule,
+            type_name,
+            tip,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum ColType {
     Id,
     Date,
@@ -36,7 +55,16 @@ pub enum ColType {
     String,
     Path,
     Enum,
-    Int
+    Int,
+}
+
+impl ColType {
+    pub fn info(&self) -> ColTypeInfo {
+        match self {
+            ColType::Id => ColTypeInfo::new(Rule::id_filter_values, "Id", "1, 3, 4..6"),
+            _ => ColTypeInfo::new(Rule::id_filter_values, "Id", "1, 3, 4..6"),
+        }
+    }
 }
 
 #[derive(Debug)]

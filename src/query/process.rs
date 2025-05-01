@@ -758,6 +758,13 @@ impl QueryProcessor {
         Ok(())
     }
 
+    pub fn validate_filter(rule: Rule, filter: &str) -> Option<String> {
+        match QueryParser::parse(rule, filter) {
+            Ok(_) => None,
+            Err(e) => Some(e.to_string()),
+        }
+    }
+
     fn build(query: &mut dyn Query, query_iter: &mut Pairs<Rule>) -> Result<(), FsPulseError> {
         for token in query_iter {
             //println!("{:?}", token.as_rule());

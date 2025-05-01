@@ -1,3 +1,4 @@
+use clap::error;
 use ratatui::{
     crossterm::event::{Event, KeyCode, KeyEvent},
     layout::{Alignment, Constraint, Direction, Layout, Position, Rect},
@@ -7,9 +8,9 @@ use ratatui::{
 };
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::query::columns::ColType;
+use crate::query::{columns::{ColType, ColTypeInfo}, QueryProcessor};
 
-use super::{domain_model::ColInfo, explorer::ExplorerAction};
+use super::{domain_model::ColInfo, explorer::ExplorerAction, message_box::{MessageBox, MessageBoxType}};
 
 enum FilterWindowType {
     Add,
@@ -19,6 +20,7 @@ pub struct FilterWindow {
     filter_window_type: FilterWindowType,
     col_name: &'static str,
     col_info: ColInfo,
+    col_type_info: ColTypeInfo,
     input: Input,
     error: Option<String>,
 }
@@ -33,6 +35,7 @@ impl FilterWindow {
             filter_window_type,
             col_name,
             col_info,
+            col_type_info: col_info.col_type.info(),
             input: Input::default(),
             error: None,
         }
@@ -122,6 +125,7 @@ impl FilterWindow {
             .split(footer_area);
 
         // Tip
+        /*
         let tip_text = match self.col_info.col_type {
             ColType::Id | ColType::Int => "Tip: Enter a list or range like 1, 3..5, 10",
             ColType::Date => "Tip: Dates or ranges: 2023-01-01, 2023-02..2023-03",
@@ -129,7 +133,8 @@ impl FilterWindow {
             ColType::Bool => "Tip: true or false",
             ColType::Path | ColType::String => "Tip: Case-insensitive substring match",
         };
-        let tip_paragraph = Paragraph::new(tip_text).style(Style::default().fg(Color::Gray));
+        */
+        let tip_paragraph = Paragraph::new(self.col_type_info.tip).style(Style::default().fg(Color::Gray));
         f.render_widget(tip_paragraph, footer_layout[0]);
 
         // Divider
@@ -154,6 +159,12 @@ impl FilterWindow {
             }
             KeyCode::Enter => {
                 // tbd
+                let input_val = self.input.value();
+                let err_str = QueryProcessor::validate_filter(self.col_type_info.rule, input_val);
+                match err_str {
+                    Some(err_str) => { return Some(ExplorerAction::ShowMessage(MessageBox::new(MessageBoxType::Info, err_str))); },
+                    None => {}
+                }
             }
             _ => {
                 self.input.handle_event(&Event::Key(key));
