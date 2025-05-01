@@ -1,18 +1,13 @@
-use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
-    layout::{Constraint, Rect},
-    style::{Color, Style, Stylize},
-    text::{Span, Text},
-    widgets::{
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Rect}, style::{Color, Style, Stylize}, text::{Span, Text}, widgets::{
         Block, Borders, Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget,
         Table, TableState,
-    },
-    Frame,
+    }, Frame
 };
 
 use crate::query::columns::ColType;
 
-use super::domain_model::ColInfo;
+use super::{domain_model::ColInfo, explorer::ExplorerAction};
 
 pub struct GridFrame {
     pub columns: Vec<String>,
@@ -134,7 +129,7 @@ impl GridFrame {
         }
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) {
+    pub fn handle_key(&mut self, key: KeyEvent)  -> Option<ExplorerAction> {
         let total_rows = self.rows.len();
 
         match key.code {
@@ -173,6 +168,8 @@ impl GridFrame {
             }
             _ => {}
         }
+
+        None
     }
 
     pub fn visible_rows(&self) -> usize {

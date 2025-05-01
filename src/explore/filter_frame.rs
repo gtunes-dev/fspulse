@@ -1,32 +1,22 @@
 use ratatui::{
     layout::{Constraint, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     text::Span,
     widgets::{Block, Borders, Row, Table, TableState},
     Frame,
 };
 
-#[derive(Debug, Clone)]
-pub struct Filter {
-    pub column: String,
-    pub filter_text: String,
-    pub type_name: String,
-}
+use super::{domain_model::DomainModel, explorer::ExplorerAction};
 
 pub struct FilterFrame {
-    filters: Vec<Filter>,
     table_state: TableState,
     area: Rect,
 }
 
 impl FilterFrame {
     pub fn new() -> Self {
-        let mut state = TableState::default();
-        state.select(Some(0));
-
         Self {
-            filters: Vec::new(),
-            table_state: state,
+            table_state: TableState::default(),
             area: Rect::default(),
         }
     }
@@ -35,18 +25,13 @@ impl FilterFrame {
         self.area = area;
     }
 
-    pub fn set_filters(&mut self, filters: Vec<Filter>) {
-        self.filters = filters;
-        self.table_state.select(Some(0));
-    }
-
-    pub fn draw(&mut self, f: &mut Frame, area: Rect, is_focused: bool) {
+    pub fn draw(&mut self, model: &DomainModel, f: &mut Frame, area: Rect, is_focused: bool) {
         self.set_area(area);
 
         let header = Row::new(vec!["Column", "Type", "Filter"])
             .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
 
-        let rows = self.filters.iter().map(|f| {
+        let rows = model.current_filters().iter().map(|f| {
             Row::new(vec![
                 Span::raw(f.column.clone()),
                 Span::raw(f.type_name.clone()),
@@ -76,5 +61,9 @@ impl FilterFrame {
             .highlight_symbol("» ");
 
         f.render_stateful_widget(table, area, &mut self.table_state);
+    }
+
+    pub fn handle_key(&self) -> Option<ExplorerAction> {
+        None
     }
 }

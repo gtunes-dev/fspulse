@@ -1,24 +1,39 @@
-use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
-    layout::{Alignment, Rect},
-    style::{Color, Modifier, Style, Stylize},
-    text::Line,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Frame,
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Rect}, style::{Color, Modifier, Style, Stylize}, text::Line, widgets::{Block, Borders, List, ListItem, ListState, Paragraph}, Frame
 };
 
-use super::domain_model::{DomainModel, TypeSelection};
+use super::{
+    domain_model::{DomainModel, TypeSelection},
+    explorer::ExplorerAction,
+    filter_window::FilterWindow,
+};
 
 pub struct ColumnFrame {
-    pub cursor_position: usize,
-    pub dropdown_open: bool,
-    pub dropdown_cursor: usize,
-    pub scroll_offset: usize,
-    pub area: Rect,
+    cursor_position: usize,
+    dropdown_open: bool,
+    dropdown_cursor: usize,
+    scroll_offset: usize,
+    area: Rect,
 }
 
 impl ColumnFrame {
-    pub fn handle_key(&mut self, model: &mut DomainModel, key: KeyEvent) {
+    pub fn new() -> Self {
+        Self {
+            cursor_position: 0,
+            dropdown_open: false,
+            dropdown_cursor: 0,
+            scroll_offset: 0,
+            area: Rect::default(),
+        }
+    }
+
+    pub fn is_dropdown_open(&self) -> bool {
+        self.dropdown_open
+    }
+
+    pub fn handle_key(&mut self, model: &mut DomainModel, key: KeyEvent) -> Option<ExplorerAction> {
+        let mut explorer_action = None;
+
         match key.code {
             KeyCode::Down => {
                 if self.dropdown_open {
@@ -82,6 +97,16 @@ impl ColumnFrame {
                     }
                 }
             }
+            KeyCode::Char('f') => {
+                if let Some(col_option) = model
+                    .current_columns()
+                    .get(self.cursor_position.saturating_sub(1))
+                {
+                    explorer_action = Some(ExplorerAction::AddFilter(
+                        FilterWindow::new_add_filter_window(col_option.name, col_option.col_info),
+                    ));
+                };
+            }
             KeyCode::Esc => {
                 if self.dropdown_open {
                     // Cancel dropdown
@@ -90,18 +115,8 @@ impl ColumnFrame {
             }
             _ => {}
         }
-    }
-}
 
-impl ColumnFrame {
-    pub fn new() -> Self {
-        Self {
-            cursor_position: 0,
-            dropdown_open: false,
-            dropdown_cursor: 0,
-            scroll_offset: 0,
-            area: Rect::default(),
-        }
+        explorer_action
     }
 
     pub fn draw(&mut self, model: &DomainModel, f: &mut Frame, area: Rect, is_focused: bool) {
@@ -161,6 +176,15 @@ impl ColumnFrame {
             .alignment(Alignment::Left);
 
         f.render_widget(paragraph, area);
+
+        /*
+        // Draw Add Filter popup if active
+        if self.add_filter_state.is_some() {
+            let popup_area = Utils::centered_rect(60, 20, f.area());
+            f.render_widget(Clear, popup_area); // prevent bleed-through
+            self.draw_add_filter(f, popup_area);
+        }
+        */
     }
 
     pub fn move_up(&mut self) {

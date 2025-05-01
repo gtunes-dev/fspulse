@@ -1,24 +1,24 @@
 use crate::query::QueryProcessor;
 use crate::{database::Database, error::FsPulseError};
 
-use std::io;
-
-use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use ratatui::text::{Line, Text};
-use ratatui::widgets::{Clear, Wrap};
+use ratatui::crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent};
+use ratatui::crossterm::execute;
+use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use ratatui::widgets::{Block, Clear};
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Stylize},
-    widgets::{Block, Borders, Paragraph},
+    layout::{Alignment, Constraint, Direction, Layout},
+    style::{Color, Style},
+    widgets::{Borders, Paragraph},
     Terminal,
 };
+use std::io;
 
 use super::domain_model::{ColInfo, DomainModel};
+use super::filter_frame::FilterFrame;
+use super::filter_window::FilterWindow;
+use super::message_box::{MessageBox, MessageBoxType};
+use super::utils::Utils;
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 enum Focus {
@@ -27,36 +27,20 @@ enum Focus {
     DataGrid,
 }
 
+pub enum ExplorerAction {
+    Dismiss,
+    AddFilter(FilterWindow),
+    ShowMessage(MessageBox),
+}
+
 pub struct Explorer {
     model: DomainModel,
     focus: Focus,
     column_frame: ColumnFrame,
     grid_frame: GridFrame,
-    error_message: Option<String>,
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    let vertical_middle = popup_layout[1];
-
-    let horizontal_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(vertical_middle);
-
-    horizontal_layout[1]
+    filter_frame: FilterFrame,
+    filter_window: Option<FilterWindow>,
+    message_box: Option<MessageBox>,
 }
 
 impl Explorer {
@@ -66,7 +50,9 @@ impl Explorer {
             focus: Focus::Filters,
             column_frame: ColumnFrame::new(),
             grid_frame: GridFrame::new(),
-            error_message: None,
+            filter_frame: FilterFrame::new(),
+            filter_window: None,
+            message_box: None,
         }
     }
 
@@ -108,9 +94,12 @@ impl Explorer {
                 let right_chunk = main_chunks[1];
 
                 // Draw top (filters)
-                let filter_block =
-                    Self::focused_block("Filters", matches!(self.focus, Focus::Filters));
-                f.render_widget(filter_block, top_chunk);
+                self.filter_frame.draw(
+                    &self.model,
+                    f,
+                    top_chunk,
+                    matches!(self.focus, Focus::Filters),
+                );
 
                 // Draw left (Type selector + Column list)
                 self.column_frame.draw(
@@ -120,7 +109,6 @@ impl Explorer {
                     matches!(self.focus, Focus::ColumnSelector),
                 );
 
-                // Draw right (data grid)
                 // Draw right (data grid)
                 self.grid_frame
                     .draw(f, right_chunk, matches!(self.focus, Focus::DataGrid));
@@ -136,67 +124,28 @@ impl Explorer {
                 f.render_widget(help_paragraph, help_chunk);
 
                 // Draw the type selector if it's open
-                if self.column_frame.dropdown_open {
-                    let popup_area = centered_rect(20, 30, f.area());
+                if self.column_frame.is_dropdown_open() {
+                    let popup_area = Utils::centered_rect(20, 30, f.area());
                     // Clear the popup area before drawing into it
                     f.render_widget(Clear, popup_area);
                     self.column_frame.draw_dropdown(f, popup_area);
                 }
 
-                // Draw error popup if needed
-                if let Some(ref msg) = self.error_message {
-                    let popup_area = centered_rect(60, 20, f.area());
-                    let popup_height = popup_area.height as usize;
+                // Draw the message box if needed
+                if let Some(ref message_box) = self.message_box {
+                    message_box.draw(f);
+                }
 
-                    let block = Block::default()
-                        .title("Error")
-                        .title_alignment(Alignment::Center)
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Double);
-
-                    let mut lines = Vec::new();
-
-                    lines.push(Line::styled(
-                        msg.clone(),
-                        Style::default().fg(Color::White).bg(Color::Red).bold(),
-                    ));
-
-                    // Calculate how many blank lines we need
-                    let used_lines = 1 /* error message */ + 1 /* instruction */;
-                    let available_space = popup_height.saturating_sub(used_lines + 2); // 2 for top/bottom padding
-                    for _ in 0..available_space {
-                        lines.push(Line::raw(""));
-                    }
-
-                    lines.push(Line::styled(
-                        "(press Esc or Enter to dismiss)",
-                        Style::default().fg(Color::Gray).bg(Color::Red),
-                    ));
-
-                    let paragraph = Paragraph::new(Text::from(lines))
-                        .style(Style::default().bg(Color::Red))
-                        .alignment(Alignment::Center)
-                        .wrap(Wrap { trim: true })
-                        .block(block);
-
-                    // Clear the popup area to avoid bleed-through
-                    f.render_widget(Clear, popup_area);
-
-                    f.render_widget(paragraph, popup_area);
+                if let Some(ref mut filter_window) = self.filter_window {
+                    filter_window.draw(f);
                 }
             })?;
 
             // Handle input
             if event::poll(std::time::Duration::from_millis(250))? {
                 if let Event::Key(key) = event::read()? {
-                    if self.error_message.is_some() {
-                        match key.code {
-                            KeyCode::Esc | KeyCode::Enter => {
-                                self.error_message = None;
-                                continue; // Skip handling below
-                            }
-                            _ => continue, // Ignore all other keys while popup is open
-                        }
+                    if self.modal_input_handled(key) {
+                        continue;
                     }
 
                     match key.code {
@@ -206,7 +155,12 @@ impl Explorer {
                         KeyCode::Char('r') => {
                             match self.refresh_query(db) {
                                 Ok(()) => {}
-                                Err(err) => self.error_message = Some(err.to_string()),
+                                Err(err) => {
+                                    self.message_box = Some(MessageBox::new(
+                                        MessageBoxType::Error,
+                                        err.to_string(),
+                                    ))
+                                }
                             };
                         }
                         KeyCode::Tab => {
@@ -215,15 +169,9 @@ impl Explorer {
                         KeyCode::BackTab => {
                             self.focus = self.prev_focus();
                         }
-                        _ => match self.focus {
-                            Focus::ColumnSelector => {
-                                self.column_frame.handle_key(&mut self.model, key);
-                            }
-                            Focus::DataGrid => {
-                                self.grid_frame.handle_key(key);
-                            }
-                            _ => {}
-                        },
+                        _ => {
+                            self.dispatch_key(key);
+                        }
                     }
                 }
             }
@@ -240,6 +188,23 @@ impl Explorer {
         Ok(())
     }
 
+    fn dispatch_key(&mut self, key: KeyEvent) {
+        let action = match self.focus {
+            Focus::ColumnSelector => self.column_frame.handle_key(&mut self.model, key),
+            Focus::DataGrid => self.grid_frame.handle_key(key),
+            Focus::Filters => self.filter_frame.handle_key(),
+        };
+
+        if let Some(action) = action {
+            match action {
+                ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
+                ExplorerAction::AddFilter(filter_window) => {
+                    self.filter_window = Some(filter_window)
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
     fn next_focus(&self) -> Focus {
         match self.focus {
             Focus::Filters => Focus::ColumnSelector,
@@ -256,15 +221,28 @@ impl Explorer {
         }
     }
 
-    fn focused_block(title: &str, is_focused: bool) -> Block {
-        if is_focused {
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Double)
-                .title(title.bold())
-        } else {
-            Block::default().borders(Borders::ALL).title(title)
+    fn modal_input_handled(&mut self, key: KeyEvent) -> bool {
+        if let Some(ref message_box) = self.message_box {
+            if message_box.is_dismiss_event(key) {
+                self.message_box = None;
+            }
+            // skip all handling below
+            return true;
         }
+
+        if let Some(ref mut filter_window) = self.filter_window {
+            let action = filter_window.handle_key(key);
+            if let Some(action) = action {
+                match action {
+                    ExplorerAction::Dismiss => self.filter_window = None,
+                    _ => {}
+                }
+            }
+
+            return true;
+        }
+
+        false
     }
 
     /// Returns help text depending on which frame is focused
@@ -319,7 +297,7 @@ impl Explorer {
         match QueryProcessor::execute_query(db, &query_str) {
             Ok(rows) => {
                 self.grid_frame.set_data(columns, col_types, rows);
-                self.error_message = None;
+                //self.error_message = None;
                 Ok(())
             }
             Err(err) => Err(err),

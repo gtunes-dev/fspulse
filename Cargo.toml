@@ -53,6 +53,7 @@ tabled = "0.18"
 threadpool = "1.8"
 tico = "2.0"
 toml = "0.8"
+tui-input = "0.12"
 
 [build-dependencies]
 static_vcruntime = "2.0"
