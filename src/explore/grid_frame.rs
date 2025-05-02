@@ -4,8 +4,7 @@ use ratatui::{
     style::{Color, Style, Stylize},
     text::{Span, Text},
     widgets::{
-        Block, Borders, Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget,
-        Table, TableState,
+        Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState
     },
     Frame,
 };
@@ -77,7 +76,7 @@ impl GridFrame {
                 ColType::Int => Constraint::Length(col_size(col_name, 8) as u16),
                 ColType::Val | ColType::ItemType | ColType::ChangeType => Constraint::Length(col_size(col_name, 1) as u16),
                 ColType::Bool => Constraint::Length(col_size(col_name, 1) as u16),
-                ColType::Date => Constraint::Length(col_size(col_name, 6) as u16),
+                ColType::Date => Constraint::Length(col_size(col_name, 10) as u16),
                 ColType::Path => Constraint::Min(30),
                 ColType::String => Constraint::Min(15),
             })
@@ -101,14 +100,7 @@ impl GridFrame {
         let header = Row::new(self.columns.iter().map(|h| Span::raw(h.clone())))
             .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
 
-        let block = if is_focused {
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Double)
-                .title("Data Grid")
-        } else {
-            Block::default().borders(Borders::ALL).title("Data Grid")
-        };
+        let block = Utils::new_frame_block(is_focused, "Data Grid");
 
         let table = Table::new(self.rows.clone(), self.column_constraints.clone())
             .header(header)

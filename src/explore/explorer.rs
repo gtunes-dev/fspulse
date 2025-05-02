@@ -36,6 +36,9 @@ pub enum ExplorerAction {
     ShowAddFilter(FilterWindow),
     ShowMessage(MessageBox),
     AddFilter(Filter),
+    ShowEditFilter(usize),
+    DeleteFilter(usize),
+    UpdateFilter(usize, String),
 }
 
 pub struct Explorer {
@@ -214,8 +217,15 @@ impl Explorer {
                     ExplorerAction::AddFilter(filter) => {
                         self.model.current_filters_mut().push(filter);
                         self.filter_window = None;
-                        self.filter_frame.set_selected(self.model.current_filters().len());
-                    }    
+                        self.filter_frame
+                            .set_selected(self.model.current_filters().len());
+                    }
+                    ExplorerAction::UpdateFilter(filter_index, new_filter_text) => {
+                        if let Some(filter) = self.model.current_filters_mut().get_mut(filter_index) {
+                            filter.filter_text = new_filter_text;
+                        }
+                        self.filter_window = None;
+                    }
                     _ => {}
                 }
             }
@@ -239,11 +249,23 @@ impl Explorer {
                 ExplorerAction::ShowAddFilter(filter_window) => {
                     self.filter_window = Some(filter_window)
                 }
+                ExplorerAction::DeleteFilter(filter_index) => {
+                    self.model.current_filters_mut().remove(filter_index);
+                    if filter_index > self.model.current_filters().len() {
+                        self.filter_frame.set_selected(filter_index - 1);
+                    }
+                }
+                ExplorerAction::ShowEditFilter(filter_index) => {
+                    if let Some(filter) = self.model.current_filters().get(filter_index) {
+                        let edit_filter_window = FilterWindow::new_edit_filter_window(filter.col_name, filter_index, filter.col_type_info);
+                        self.filter_window = Some(edit_filter_window);
+                    }
+                }
                 _ => unreachable!(),
             }
         }
     }
-    
+
     fn next_focus(&self) -> Focus {
         match self.focus {
             Focus::Filters => Focus::ColumnSelector,
@@ -259,8 +281,6 @@ impl Explorer {
             Focus::DataGrid => Focus::ColumnSelector,
         }
     }
-
- 
 
     /// Returns help text depending on which frame is focused
     fn help_text(&self) -> &'static str {
@@ -280,7 +300,20 @@ impl Explorer {
         // Build the new query
         let mut query = self.model.current_type().name().to_ascii_lowercase();
 
-        // TODO: Build the "where" clause after we've built the UI for filters
+        // Build the where clause
+        let mut first_filter = true;
+        for filter in self.model.current_filters() {
+            if first_filter {
+                query.push_str(" where ");
+                first_filter = false;
+            } else {
+                query.push_str(", ");
+            }
+            query.push_str(filter.col_name);
+            query.push_str(":(");
+            query.push_str(&filter.filter_text);
+            query.push(')')
+        }
 
         // Build the "show" clause and cols vector
         query.push_str(" show ");

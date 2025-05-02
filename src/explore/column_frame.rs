@@ -5,7 +5,7 @@ use ratatui::{
 use super::{
     domain_model::{DomainModel, TypeSelection},
     explorer::ExplorerAction,
-    filter_window::FilterWindow,
+    filter_window::FilterWindow, utils::Utils,
 };
 
 pub struct ColumnFrame {
@@ -103,7 +103,7 @@ impl ColumnFrame {
                     .get(self.cursor_position.saturating_sub(1))
                 {
                     explorer_action = Some(ExplorerAction::ShowAddFilter(
-                        FilterWindow::new_add_filter_window(col_option.name, col_option.col_info),
+                        FilterWindow::new_add_filter_window(col_option.name, col_option.col_info.col_type.info()),
                     ));
                 };
             }
@@ -160,16 +160,7 @@ impl ColumnFrame {
             lines.push(line);
         }
 
-        let block = if is_focused {
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Double)
-                .title("Type & Columns")
-        } else {
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Type & Columns")
-        };
+        let block = Utils::new_frame_block(is_focused, "Columns");
 
         let paragraph = Paragraph::new(lines)
             .block(block)

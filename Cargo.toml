@@ -48,6 +48,7 @@ ratatui = "0.29"
 rusqlite = { version = "0.35", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10"
+strum = "0.27"
 thiserror = "2.0"
 tabled = "0.18"
 threadpool = "1.8"

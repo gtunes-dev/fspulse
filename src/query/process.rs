@@ -686,9 +686,6 @@ impl QueryProcessor {
     pub fn execute_query_and_print(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
         let mut qrb = QueryResultBuilder::new();
 
-        dbg!(std::any::type_name::<tabled::settings::Alignment>());
-
-
         match Self::process_query(db, query_str, &mut qrb) {
             Ok(()) => {}
             Err(err) => match err {
@@ -698,7 +695,7 @@ impl QueryProcessor {
                     return Ok(());
                 }
                 FsPulseError::CustomParsingError(msg) => {
-                    error!("Query parsing error: {}", msg);
+                    info!("Query parsing error: {}", msg);
                     println!("{}", msg);
                     return Ok(());
                 }
@@ -737,20 +734,7 @@ impl QueryProcessor {
 
         let mut query = make_query(query_type_pair.as_str());
 
-        let res = QueryProcessor::build(&mut *query, &mut query_iter);
-        match res {
-            Ok(()) => {}
-            Err(err) => match err {
-                FsPulseError::CustomParsingError(ref msg) => {
-                    info!("Query parsing error: {}", msg);
-                    println!("Query parsing error: {}", msg);
-                    return Ok(());
-                }
-                other_error => {
-                    return Err(other_error);
-                }
-            },
-        };
+        QueryProcessor::build(&mut *query, &mut query_iter)?;
 
         query.prepare_and_execute(db, query_result)?;
         query_result.finalize(&mut query.query_impl_mut().show);

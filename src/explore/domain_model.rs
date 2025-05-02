@@ -1,7 +1,7 @@
 use ratatui::layout::Alignment;
 
 use crate::query::{
-    columns::{self, ColType},
+    columns::{self, ColType, ColTypeInfo},
     ColMap,
 };
 
@@ -58,14 +58,16 @@ pub struct ColumnOption {
 pub struct Filter {
     pub col_name: &'static str,
     pub type_name: &'static str,
+    pub col_type_info: ColTypeInfo,
     pub filter_text: String,
 }
 
 impl Filter {
-    pub fn new(col_name: &'static str, type_name: &'static str, filter_text: String) -> Self {
+    pub fn new(col_name: &'static str, type_name: &'static str, col_type_info: ColTypeInfo, filter_text: String) -> Self {
         Filter {
             col_name,
             type_name,
+            col_type_info,
             filter_text,
         }
     }

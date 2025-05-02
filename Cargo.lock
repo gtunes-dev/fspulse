@@ -933,6 +933,7 @@ dependencies = [
  "serde",
  "sha2",
  "static_vcruntime",
+ "strum 0.27.1",
  "tabled",
  "thiserror 2.0.12",
  "threadpool",
@@ -1998,7 +1999,7 @@ dependencies = [
  "itertools 0.13.0",
  "lru",
  "paste",
- "strum",
+ "strum 0.26.3",
  "unicode-segmentation",
  "unicode-truncate 1.1.0",
  "unicode-width 0.2.0",
@@ -2032,7 +2033,7 @@ dependencies = [
  "itertools 0.13.0",
  "lru",
  "paste",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.12",
  "unicode-segmentation",
  "unicode-truncate 2.0.0",
@@ -2082,7 +2083,7 @@ dependencies = [
  "itertools 0.13.0",
  "line-clipping",
  "ratatui-core",
- "strum",
+ "strum 0.26.3",
  "time",
  "unicode-segmentation",
  "unicode-width 0.2.0",
@@ -2428,6 +2429,12 @@ checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
  "strum_macros",
 ]
+
+[[package]]
+name = "strum"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f64def088c51c9510a8579e3c5d67c65349dcf755e5479ad3d010aa6454e2c32"
 
 [[package]]
 name = "strum_macros"

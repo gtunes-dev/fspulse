@@ -10,7 +10,7 @@ use tui_input::{backend::crossterm::EventHandler, Input};
 use crate::query::{columns::ColTypeInfo, QueryProcessor};
 
 use super::{
-    domain_model::{ColInfo, Filter},
+    domain_model::Filter,
     explorer::ExplorerAction,
     message_box::{MessageBox, MessageBoxType},
 };
@@ -32,23 +32,32 @@ impl FilterWindow {
         filter_window_type: FilterWindowType,
         col_name: &'static str,
         filter_index: Option<usize>,
-        col_info: ColInfo,
+        col_type_info: ColTypeInfo,
     ) -> Self {
         FilterWindow {
             filter_window_type,
             col_name,
             filter_index,
-            col_type_info: col_info.col_type.info(),
+            col_type_info,
             input: Input::default(),
         }
     }
 
-    pub fn new_add_filter_window(col_name: &'static str, col_info: ColInfo) -> Self {
-        Self::new(FilterWindowType::Add, col_name, None, col_info)
+    pub fn new_add_filter_window(col_name: &'static str, col_type_info: ColTypeInfo) -> Self {
+        Self::new(FilterWindowType::Add, col_name, None, col_type_info)
     }
 
-    pub fn _new_edit_filter_window(col_name: &'static str, filter_index: usize, col_info: ColInfo) -> Self {
-        Self::new(FilterWindowType::Edit, col_name, Some(filter_index), col_info)
+    pub fn new_edit_filter_window(
+        col_name: &'static str,
+        filter_index: usize,
+        col_type_info: ColTypeInfo,
+    ) -> Self {
+        Self::new(
+            FilterWindowType::Edit,
+            col_name,
+            Some(filter_index),
+            col_type_info,
+        )
     }
 
     pub fn draw(&mut self, f: &mut Frame, is_top_window: bool) {
@@ -133,15 +142,6 @@ impl FilterWindow {
             .split(footer_area);
 
         // Tip
-        /*
-        let tip_text = match self.col_info.col_type {
-            ColType::Id | ColType::Int => "Tip: Enter a list or range like 1, 3..5, 10",
-            ColType::Date => "Tip: Dates or ranges: 2023-01-01, 2023-02..2023-03",
-            ColType::Enum => "Tip: One or more enum values, like A,M",
-            ColType::Bool => "Tip: true or false",
-            ColType::Path | ColType::String => "Tip: Case-insensitive substring match",
-        };
-        */
         let tip_paragraph =
             Paragraph::new(self.col_type_info.tip).style(Style::default().fg(Color::Gray));
         f.render_widget(tip_paragraph, footer_layout[0]);
@@ -178,10 +178,22 @@ impl FilterWindow {
                     }
                     None => {
                         input_val = input_val.trim();
-                        let filter = Filter::new(self.col_name, self.col_type_info.type_name, input_val.to_owned());
+                        
                         match self.filter_window_type {
-                            FilterWindowType::Add => return Some(ExplorerAction::AddFilter(filter)),
-                            FilterWindowType::Edit => {},
+                            FilterWindowType::Add => {
+                                let filter = Filter::new(
+                                    self.col_name,
+                                    self.col_type_info.type_name,
+                                    self.col_type_info,
+                                    input_val.to_owned(),
+                                );
+                                return Some(ExplorerAction::AddFilter(filter))
+                            }
+                            FilterWindowType::Edit => {
+                                if let Some(filter_index) = self.filter_index {
+                                    return Some(ExplorerAction::UpdateFilter(filter_index, input_val.to_owned()))
+                                }
+                            }
                         }
                     }
                 }

@@ -1,11 +1,10 @@
 use ratatui::{
-    crossterm::event::KeyEvent,
+    crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Rect},
     style::{Color, Style, Stylize},
     text::Span,
     widgets::{
-        Block, Borders, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget,
-        Table, TableState,
+        Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState,
     },
     Frame,
 };
@@ -53,14 +52,7 @@ impl FilterFrame {
 
         let total_rows = rows.len();
 
-        let block = if is_focused {
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Double)
-                .title("Filters")
-        } else {
-            Block::default().borders(Borders::ALL).title("Filters")
-        };
+        let block = Utils::new_frame_block(is_focused, "Filters");
 
         let constraints = vec![
             Constraint::Length(15),
@@ -95,9 +87,44 @@ impl FilterFrame {
     pub fn handle_key(&mut self, model: &DomainModel, key: KeyEvent) -> Option<ExplorerAction> {
         let total_rows = model.current_filters().len();
         let visible_rows = self.visible_rows();
-        Utils::handle_table_state_keys(&mut self.table_state, total_rows, visible_rows, key);
 
-        None
+        match key.code {
+            KeyCode::Char('x') => {
+                let selected = self.table_state.selected();
+                match selected {
+                    Some(selected) => {
+                        if selected <= model.current_filters().len() {
+                            Some(ExplorerAction::DeleteFilter(selected))
+                        } else {
+                            None
+                        }
+                    }
+                    None => None,
+                }
+            }
+            KeyCode::Char('e') => {
+                let selected = self.table_state.selected();
+                match selected {
+                    Some(selected) => {
+                        if selected <= model.current_filters().len() {
+                            Some(ExplorerAction::ShowEditFilter(selected))
+                        } else {
+                            None
+                        }
+                    }
+                    None => None,
+                }
+            }
+            _ => {
+                Utils::handle_table_state_keys(
+                    &mut self.table_state,
+                    total_rows,
+                    visible_rows,
+                    key,
+                );
+                None
+            }
+        }
     }
 
     fn visible_rows(&self) -> usize {

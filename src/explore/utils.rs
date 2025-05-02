@@ -1,7 +1,5 @@
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent},
-    layout::{Constraint, Direction, Layout, Rect},
-    widgets::TableState,
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Direction, Layout, Rect}, style::Color, widgets::{Block, BorderType, Borders, TableState}
 };
 
 pub struct Utils;
@@ -80,5 +78,20 @@ impl Utils {
         }
 
         handled
+    }
+
+    pub fn new_frame_block(is_focused: bool, title_str: &'static str) -> Block<'static> {
+        let block = if is_focused {
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Double)
+                .border_style(Color::LightCyan)
+                .title_style(Color::White)
+                .title(title_str)
+        } else {
+            Block::default().borders(Borders::ALL).title(title_str)
+        };
+
+        return block;
     }
 }
