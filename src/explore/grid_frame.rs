@@ -1,13 +1,18 @@
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Rect}, style::{Color, Style, Stylize}, text::{Span, Text}, widgets::{
+    crossterm::event::KeyEvent,
+    layout::{Constraint, Rect},
+    style::{Color, Style, Stylize},
+    text::{Span, Text},
+    widgets::{
         Block, Borders, Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget,
         Table, TableState,
-    }, Frame
+    },
+    Frame,
 };
 
 use crate::query::columns::ColType;
 
-use super::{domain_model::ColInfo, explorer::ExplorerAction};
+use super::{domain_model::ColInfo, explorer::ExplorerAction, utils::Utils};
 
 pub struct GridFrame {
     pub columns: Vec<String>,
@@ -70,7 +75,7 @@ impl GridFrame {
             .map(|(col_name, col_info)| match col_info.col_type {
                 ColType::Id => Constraint::Length(col_size(col_name, 9) as u16),
                 ColType::Int => Constraint::Length(col_size(col_name, 8) as u16),
-                ColType::Enum => Constraint::Length(col_size(col_name, 1) as u16),
+                ColType::Val | ColType::ItemType | ColType::ChangeType => Constraint::Length(col_size(col_name, 1) as u16),
                 ColType::Bool => Constraint::Length(col_size(col_name, 1) as u16),
                 ColType::Date => Constraint::Length(col_size(col_name, 6) as u16),
                 ColType::Path => Constraint::Min(30),
@@ -91,7 +96,7 @@ impl GridFrame {
 
         // Set up for drawing
         let total_rows = self.rows.len();
-        let visible_rows = area.height.saturating_sub(2) as usize; // 1 header + 1 border
+        let visible_rows = self.visible_rows();
 
         let header = Row::new(self.columns.iter().map(|h| Span::raw(h.clone())))
             .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
@@ -109,7 +114,7 @@ impl GridFrame {
             .header(header)
             .block(block)
             .row_highlight_style(Style::default().fg(Color::Yellow))
-            .highlight_symbol(">> ");
+            .highlight_symbol("» ");
 
         // Draw table
         f.render_stateful_widget(table, area, &mut self.table_state);
@@ -129,50 +134,15 @@ impl GridFrame {
         }
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent)  -> Option<ExplorerAction> {
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
         let total_rows = self.rows.len();
-
-        match key.code {
-            KeyCode::Home => {
-                self.table_state.select(Some(0));
-            }
-            KeyCode::End => {
-                self.table_state.select(Some(self.rows.len().saturating_sub(1)));
-            }
-            KeyCode::Up => {
-                if let Some(selected) = self.table_state.selected() {
-                    if selected > 0 {
-                        self.table_state.select(Some(selected - 1));
-                    }
-                }
-            }
-            KeyCode::Down => {
-                if let Some(selected) = self.table_state.selected() {
-                    if selected + 1 < total_rows {
-                        self.table_state.select(Some(selected + 1));
-                    }
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(selected) = self.table_state.selected() {
-                    let new_selected = selected.saturating_sub(self.visible_rows());
-                    self.table_state.select(Some(new_selected));
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(selected) = self.table_state.selected() {
-                    let new_selected =
-                        (selected + self.visible_rows()).min(self.rows.len().saturating_sub(1));
-                    self.table_state.select(Some(new_selected));
-                }
-            }
-            _ => {}
-        }
+        let visible_rows = self.visible_rows();
+        Utils::handle_table_state_keys(&mut self.table_state, total_rows, visible_rows, key);
 
         None
     }
 
     pub fn visible_rows(&self) -> usize {
-        self.area.height.saturating_sub(2) as usize
+        self.area.height.saturating_sub(3) as usize
     }
 }

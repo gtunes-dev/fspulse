@@ -9,7 +9,7 @@ use tabled::{
 
 use super::{
     columns::{ColSet, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS},
-    filter::EnumFilter,
+    filter::{EnumFilter, IntFilter},
     show::{Format, Show},
 };
 //use tablestream::{Column, Stream};
@@ -786,6 +786,9 @@ impl QueryProcessor {
                 }
                 Rule::string_filter => {
                     StringFilter::add_string_filter_to_query(token, query)?;
+                }
+                Rule::int_filter => {
+                    IntFilter::add_int_filter_to_query(token, query)?;
                 }
                 Rule::show_list => {
                     query.show_mut().build_from_pest_pair(token)?;

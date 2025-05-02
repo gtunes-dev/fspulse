@@ -214,6 +214,7 @@ impl Explorer {
                     ExplorerAction::AddFilter(filter) => {
                         self.model.current_filters_mut().push(filter);
                         self.filter_window = None;
+                        self.filter_frame.set_selected(self.model.current_filters().len());
                     }    
                     _ => {}
                 }
@@ -229,7 +230,7 @@ impl Explorer {
         let action = match self.focus {
             Focus::ColumnSelector => self.column_frame.handle_key(&mut self.model, key),
             Focus::DataGrid => self.grid_frame.handle_key(key),
-            Focus::Filters => self.filter_frame.handle_key(),
+            Focus::Filters => self.filter_frame.handle_key(&self.model, key),
         };
 
         if let Some(action) = action {

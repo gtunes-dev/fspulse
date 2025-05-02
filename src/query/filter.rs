@@ -579,3 +579,77 @@ impl PathFilter {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Comparator {
+    GreaterThan,
+    LessThan,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntFilter {
+    int_col_db: &'static str,
+    comparator: Comparator,
+    int_value: i64,
+}
+
+impl Filter for IntFilter {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+        let mut pred_str = String::new();
+        let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
+
+        pred_str.push('(');
+        pred_str.push_str(self.int_col_db);
+
+        match self.comparator {
+            Comparator::GreaterThan => pred_str.push_str(" > ?)"),
+            Comparator::LessThan => pred_str.push_str(" < ?)"),
+        }
+
+        pred_vec.push(Box::new(self.int_value));
+
+        Ok((pred_str, pred_vec))
+    }
+}
+
+impl IntFilter {
+    fn new(int_col_db: &'static str, comparator: Comparator, int_value: i64) -> Self {
+        IntFilter {
+            int_col_db,
+            comparator,
+            int_value,
+        }
+    }
+
+    pub fn add_int_filter_to_query(
+        int_filter_pair: Pair<Rule>,
+        query: &mut dyn Query,
+    ) -> Result<(), FsPulseError> {
+        let mut iter = int_filter_pair.into_inner();
+        let int_col_pair = iter.next().unwrap();
+
+        let int_col = int_col_pair.as_str().to_owned();
+        let int_col_db = match query.col_set().col_name_to_db(&int_col) {
+            Some(int_col_db) => int_col_db,
+            None => {
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Column not found: '{}'",
+                    int_col
+                )))
+            }
+        };
+
+        let comparator = match iter.next().unwrap().as_rule() {
+            Rule::GT => Comparator::GreaterThan,
+            Rule::LT => Comparator::LessThan,
+            _ => unreachable!()
+        };
+
+        let int_value: i64 = iter.next().unwrap().as_str().parse().unwrap();
+        let int_filter = IntFilter::new(int_col_db, comparator, int_value);
+        
+        query.add_filter(Box::new(int_filter));
+
+        Ok(())
+    }
+}

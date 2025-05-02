@@ -54,7 +54,9 @@ pub enum ColType {
     Bool,
     String,
     Path,
-    Enum,
+    Val,
+    ItemType,
+    ChangeType,
     Int,
 }
 
@@ -63,7 +65,13 @@ impl ColType {
         match self {
             ColType::Id => ColTypeInfo::new(Rule::id_filter_EOI, "Id", "Tip: Enter one or more ids or ranges 3, 4..6"),
             ColType::Date => ColTypeInfo::new(Rule::date_filter_EOI, "Date", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
-            _ => ColTypeInfo::new(Rule::id_filter_values, "Id", "1, 3, 4..6"),
+            ColType::Bool => ColTypeInfo::new(Rule::bool_filter_EOI, "Boolean", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
+            ColType::String => ColTypeInfo::new(Rule::string_filter_EOI, "String", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
+            ColType::Path => ColTypeInfo::new(Rule::path_filter_EOI, "Path", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
+            ColType::Val => ColTypeInfo::new(Rule::val_filter_EOI, "Val", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
+            ColType::ItemType => ColTypeInfo::new(Rule::item_type_filter_EOI, "Item Type", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
+            ColType::ChangeType => ColTypeInfo::new(Rule::change_type_filter_EOI, "Change Type", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
+            ColType::Int => ColTypeInfo::new(Rule::int_filter_EOI, "Int", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
         }
     }
 }
@@ -120,7 +128,7 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "item_id" => ColSpec::new("item_id", true, true, ColType::Id, ColAlign::Right),
     "root_id" => ColSpec::new("root_id", true, true, ColType::Id, ColAlign::Right),
     "item_path" => ColSpec::new("item_path", true, true, ColType::Path, ColAlign::Left),
-    "item_type" => ColSpec::new("item_type", true, true, ColType::Enum, ColAlign::Center),
+    "item_type" => ColSpec::new("item_type", true, true, ColType::ItemType, ColAlign::Center),
     "last_scan" => ColSpec::new("last_scan", true, true, ColType::Id, ColAlign::Right),
     "is_ts" => ColSpec::new("is_ts", true, true, ColType::Bool, ColAlign::Center),
     "mod_date" => ColSpec::new("mod_date", true, true, ColType::Date, ColAlign::Center),
@@ -128,7 +136,7 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "last_hash_scan" => ColSpec::new("last_hash_scan", false, true, ColType::Id, ColAlign::Right),
     "file_hash" => ColSpec::new("file_hash", false, true, ColType::String, ColAlign::Left),
     "last_val_scan" => ColSpec::new("last_val_scan", false, true, ColType::Id, ColAlign::Right),
-    "val" => ColSpec::new("val", false, true, ColType::Enum, ColAlign::Center),
+    "val" => ColSpec::new("val", false, true, ColType::Val, ColAlign::Center),
     "val_error" => ColSpec::new("val_error", false, true, ColType::String, ColAlign::Left),
 };
 
@@ -138,14 +146,14 @@ pub const CHANGES_QUERY_COLS: ColMap = phf_ordered_map! {
     "scan_id"  => ColSpec::new("changes.scan_id", true, true, ColType::Id, ColAlign::Right),
     "item_id" => ColSpec::new("changes.item_id", true, true, ColType::Id, ColAlign::Right),
     "item_path" => ColSpec::new("items.item_path", false, true, ColType::Path, ColAlign::Left),
-    "change_type" => ColSpec::new("change_type", true, true, ColType::Enum, ColAlign::Center),
+    "change_type" => ColSpec::new("change_type", true, true, ColType::ChangeType, ColAlign::Center),
     "meta_change" => ColSpec::new("meta_change", false, true, ColType::Bool, ColAlign::Center),
     "mod_date_old" => ColSpec::new("mod_date_old", false, true, ColType::Date, ColAlign::Center),
     "mod_date_new" => ColSpec::new("mod_date_new", false, true, ColType::Date, ColAlign::Center),
     "hash_change" => ColSpec::new("hash_change", false, true, ColType::Bool, ColAlign::Center),
     "val_change" => ColSpec::new("val_change", false, true, ColType::Bool, ColAlign::Center),
-    "val_old" => ColSpec::new("val_old", false, true, ColType::Enum, ColAlign::Center),
-    "val_new" => ColSpec::new("val_new", false, true, ColType::Enum, ColAlign::Center),
+    "val_old" => ColSpec::new("val_old", false, true, ColType::Val, ColAlign::Center),
+    "val_new" => ColSpec::new("val_new", false, true, ColType::Val, ColAlign::Center),
     "val_error_old" => ColSpec::new("val_error_old", false, true, ColType::String, ColAlign::Left),
     "val_error_new" => ColSpec::new("val_error_new", false, true, ColType::String, ColAlign::Left),
 };

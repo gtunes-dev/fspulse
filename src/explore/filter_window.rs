@@ -17,35 +17,38 @@ use super::{
 
 enum FilterWindowType {
     Add,
-    // TBD: Add Edit
+    Edit,
 }
 pub struct FilterWindow {
     filter_window_type: FilterWindowType,
     col_name: &'static str,
-    col_info: ColInfo,
+    filter_index: Option<usize>,
     col_type_info: ColTypeInfo,
     input: Input,
-    error: Option<String>,
 }
 
 impl FilterWindow {
     fn new(
         filter_window_type: FilterWindowType,
         col_name: &'static str,
+        filter_index: Option<usize>,
         col_info: ColInfo,
     ) -> Self {
         FilterWindow {
             filter_window_type,
             col_name,
-            col_info,
+            filter_index,
             col_type_info: col_info.col_type.info(),
             input: Input::default(),
-            error: None,
         }
     }
 
     pub fn new_add_filter_window(col_name: &'static str, col_info: ColInfo) -> Self {
-        Self::new(FilterWindowType::Add, col_name, col_info)
+        Self::new(FilterWindowType::Add, col_name, None, col_info)
+    }
+
+    pub fn _new_edit_filter_window(col_name: &'static str, filter_index: usize, col_info: ColInfo) -> Self {
+        Self::new(FilterWindowType::Edit, col_name, Some(filter_index), col_info)
     }
 
     pub fn draw(&mut self, f: &mut Frame, is_top_window: bool) {
@@ -104,7 +107,7 @@ impl FilterWindow {
         f.render_widget(input_paragraph, top_layout[2]);
 
         // Cursor positioning
-        if (is_top_window) {
+        if is_top_window {
             let x = self.input.visual_cursor().saturating_sub(scroll) as u16;
             f.set_cursor_position(Position::new(top_layout[2].x + 1 + x, top_layout[2].y + 1));
         }
@@ -176,7 +179,10 @@ impl FilterWindow {
                     None => {
                         input_val = input_val.trim();
                         let filter = Filter::new(self.col_name, self.col_type_info.type_name, input_val.to_owned());
-                        return Some(ExplorerAction::AddFilter(filter));
+                        match self.filter_window_type {
+                            FilterWindowType::Add => return Some(ExplorerAction::AddFilter(filter)),
+                            FilterWindowType::Edit => {},
+                        }
                     }
                 }
             }
