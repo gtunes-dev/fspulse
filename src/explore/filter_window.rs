@@ -51,13 +51,15 @@ impl FilterWindow {
         col_name: &'static str,
         filter_index: usize,
         col_type_info: ColTypeInfo,
+        filter_text: String,
     ) -> Self {
-        Self::new(
-            FilterWindowType::Edit,
-            col_name,
-            Some(filter_index),
-            col_type_info,
-        )
+        FilterWindow{
+                filter_window_type: FilterWindowType::Edit,
+                col_name,
+                filter_index: Some(filter_index),
+                col_type_info,
+                input: Input::default().with_value(filter_text),
+            }
     }
 
     pub fn draw(&mut self, f: &mut Frame, is_top_window: bool) {

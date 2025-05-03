@@ -18,8 +18,9 @@ use ratatui::{
 };
 use std::io;
 
+use super::column_frame::ColumnFrameView;
 use super::domain_model::{ColInfo, DomainModel, Filter};
-use super::filter_frame::FilterFrame;
+use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_window::FilterWindow;
 use super::message_box::{MessageBox, MessageBoxType};
 use super::utils::Utils;
@@ -64,6 +65,89 @@ impl Explorer {
         }
     }
 
+    fn draw(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    ) -> Result<(), FsPulseError> {
+        terminal.draw(|f| {
+            let full_area = f.area(); // updated here
+
+            // Split vertically: Filters / Main / Help
+            let vertical_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(8), // Filters
+                    Constraint::Min(0),    // Main content
+                    Constraint::Length(2), // Help/status
+                ])
+                .split(full_area);
+
+            let top_chunk = vertical_chunks[0];
+            let main_chunk = vertical_chunks[1];
+            let help_chunk = vertical_chunks[2];
+
+            // Inside the main content, split horizontally
+            let main_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Length(30), // Left (Type + Columns)
+                    Constraint::Min(0),     // Right (Data Grid)
+                ])
+                .split(main_chunk);
+
+            let left_chunk = main_chunks[0];
+            let right_chunk = main_chunks[1];
+
+            let filter_frame_view = FilterFrameView::new(
+                &mut self.filter_frame,
+                &self.model,
+                matches!(self.focus, Focus::Filters),
+            );
+            f.render_widget(filter_frame_view, top_chunk);
+
+            let column_frame_view = ColumnFrameView::new(
+                &mut self.column_frame,
+                &self.model,
+                matches!(self.focus, Focus::ColumnSelector),
+            );
+            f.render_widget(column_frame_view, left_chunk);
+
+            // Draw right (data grid)
+            self.grid_frame
+                .draw(f, right_chunk, matches!(self.focus, Focus::DataGrid));
+
+            // Draw bottom (help/status)
+            let help_block = Block::default()
+                .borders(Borders::TOP)
+                .title("Help")
+                .title_alignment(Alignment::Center);
+            let help_paragraph = Paragraph::new(self.help_text())
+                .style(Style::default().bg(Color::Blue).fg(Color::White))
+                .block(help_block);
+            f.render_widget(help_paragraph, help_chunk);
+
+            // Draw the type selector if it's open
+            if self.column_frame.is_dropdown_open() {
+                let popup_area = Utils::centered_rect(20, 30, f.area());
+                // Clear the popup area before drawing into it
+                f.render_widget(Clear, popup_area);
+                self.column_frame.draw_dropdown(f, popup_area);
+            }
+
+            if let Some(ref mut filter_window) = self.filter_window {
+                let is_top_window = self.message_box.is_none();
+                filter_window.draw(f, is_top_window);
+            }
+
+            // Draw the message box if needed
+            if let Some(ref message_box) = self.message_box {
+                message_box.draw(f);
+            }
+        })?;
+
+        Ok(())
+    }
+
     pub fn explore(&mut self, db: &Database) -> Result<(), FsPulseError> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
@@ -72,83 +156,7 @@ impl Explorer {
         let mut terminal = Terminal::new(backend)?;
 
         loop {
-            terminal.draw(|f| {
-                let full_area = f.area(); // updated here
-
-                // Split vertically: Filters / Main / Help
-                let vertical_chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Length(8), // Filters
-                        Constraint::Min(0),    // Main content
-                        Constraint::Length(2), // Help/status
-                    ])
-                    .split(full_area);
-
-                let top_chunk = vertical_chunks[0];
-                let main_chunk = vertical_chunks[1];
-                let help_chunk = vertical_chunks[2];
-
-                // Inside the main content, split horizontally
-                let main_chunks = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Length(30), // Left (Type + Columns)
-                        Constraint::Min(0),     // Right (Data Grid)
-                    ])
-                    .split(main_chunk);
-
-                let left_chunk = main_chunks[0];
-                let right_chunk = main_chunks[1];
-
-                // Draw top (filters)
-                self.filter_frame.draw(
-                    &self.model,
-                    f,
-                    top_chunk,
-                    matches!(self.focus, Focus::Filters),
-                );
-
-                // Draw left (Type selector + Column list)
-                self.column_frame.draw(
-                    &self.model,
-                    f,
-                    left_chunk,
-                    matches!(self.focus, Focus::ColumnSelector),
-                );
-
-                // Draw right (data grid)
-                self.grid_frame
-                    .draw(f, right_chunk, matches!(self.focus, Focus::DataGrid));
-
-                // Draw bottom (help/status)
-                let help_block = Block::default()
-                    .borders(Borders::TOP)
-                    .title("Help")
-                    .title_alignment(Alignment::Center);
-                let help_paragraph = Paragraph::new(self.help_text())
-                    .style(Style::default().bg(Color::Blue).fg(Color::White))
-                    .block(help_block);
-                f.render_widget(help_paragraph, help_chunk);
-
-                // Draw the type selector if it's open
-                if self.column_frame.is_dropdown_open() {
-                    let popup_area = Utils::centered_rect(20, 30, f.area());
-                    // Clear the popup area before drawing into it
-                    f.render_widget(Clear, popup_area);
-                    self.column_frame.draw_dropdown(f, popup_area);
-                }
-
-                if let Some(ref mut filter_window) = self.filter_window {
-                    let is_top_window = self.message_box.is_none();
-                    filter_window.draw(f, is_top_window);
-                }
-
-                // Draw the message box if needed
-                if let Some(ref message_box) = self.message_box {
-                    message_box.draw(f);
-                }
-            })?;
+            self.draw(&mut terminal)?;
 
             // Handle input
             if event::poll(std::time::Duration::from_millis(250))? {
@@ -221,7 +229,8 @@ impl Explorer {
                             .set_selected(self.model.current_filters().len());
                     }
                     ExplorerAction::UpdateFilter(filter_index, new_filter_text) => {
-                        if let Some(filter) = self.model.current_filters_mut().get_mut(filter_index) {
+                        if let Some(filter) = self.model.current_filters_mut().get_mut(filter_index)
+                        {
                             filter.filter_text = new_filter_text;
                         }
                         self.filter_window = None;
@@ -257,7 +266,12 @@ impl Explorer {
                 }
                 ExplorerAction::ShowEditFilter(filter_index) => {
                     if let Some(filter) = self.model.current_filters().get(filter_index) {
-                        let edit_filter_window = FilterWindow::new_edit_filter_window(filter.col_name, filter_index, filter.col_type_info);
+                        let edit_filter_window = FilterWindow::new_edit_filter_window(
+                            filter.col_name,
+                            filter_index,
+                            filter.col_type_info,
+                            filter.filter_text.to_owned(),
+                        );
                         self.filter_window = Some(edit_filter_window);
                     }
                 }

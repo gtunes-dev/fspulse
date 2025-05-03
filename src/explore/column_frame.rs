@@ -1,5 +1,5 @@
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Rect}, style::{Color, Modifier, Style, Stylize}, text::Line, widgets::{Block, Borders, List, ListItem, ListState, Paragraph}, Frame
+    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Rect}, style::{Color, Modifier, Style, Stylize}, text::Line, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Widget}, Frame
 };
 
 use super::{
@@ -119,65 +119,6 @@ impl ColumnFrame {
         explorer_action
     }
 
-    pub fn draw(&mut self, model: &DomainModel, f: &mut Frame, area: Rect, is_focused: bool) {
-        self.set_area(area);
-        let mut lines = Vec::new();
-
-        // Always draw the collapsed Type selector line
-        let type_display = format!(" {} ▼ ", model.current_type().name()); // Add spaces around name
-        let mut type_line = Line::from(vec![
-            "Type: ".into(),
-            type_display.clone().bg(Color::Blue).fg(Color::White),
-        ]);
-
-        if self.cursor_position == 0 && is_focused && !self.dropdown_open {
-            type_line = type_line.style(Style::default().fg(Color::Yellow).bold());
-        }
-
-        lines.push(type_line);
-
-        // Spacer
-        lines.push(Line::from(" "));
-
-        let visible_rows = self.visible_rows();
-        for (i, col) in model
-            .current_columns()
-            .iter()
-            .enumerate()
-            .skip(self.scroll_offset)
-            .take(visible_rows)
-        {
-            let checked = if col.selected { "[x]" } else { "[ ]" };
-
-            let text = format!("{checked} {:<20}", col.name);
-
-            let mut line = Line::from(text);
-
-            if self.cursor_position == i + 1 && is_focused && !self.dropdown_open {
-                line = line.style(Style::default().fg(Color::Yellow).bold());
-            }
-
-            lines.push(line);
-        }
-
-        let block = Utils::new_frame_block(is_focused, "Columns");
-
-        let paragraph = Paragraph::new(lines)
-            .block(block)
-            .alignment(Alignment::Left);
-
-        f.render_widget(paragraph, area);
-
-        /*
-        // Draw Add Filter popup if active
-        if self.add_filter_state.is_some() {
-            let popup_area = Utils::centered_rect(60, 20, f.area());
-            f.render_widget(Clear, popup_area); // prevent bleed-through
-            self.draw_add_filter(f, popup_area);
-        }
-        */
-    }
-
     pub fn move_up(&mut self) {
         if self.cursor_position > 0 {
             self.cursor_position -= 1;
@@ -267,5 +208,70 @@ impl ColumnFrame {
                 }
             }
         }
+    }
+}
+
+pub struct ColumnFrameView<'a> {
+    frame: &'a mut ColumnFrame,
+    model: &'a DomainModel,
+    has_focus: bool,
+}
+
+impl <'a> ColumnFrameView<'a> {
+    pub fn new(frame: &'a mut ColumnFrame, model: &'a DomainModel, has_focus: bool) -> Self {
+        Self { frame, model, has_focus }
+    }
+}
+
+impl<'a> Widget for ColumnFrameView<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.frame.set_area(area);
+        let mut lines = Vec::new();
+
+        // Always draw the collapsed Type selector line
+        let type_display = format!(" {} ▼ ", self.model.current_type().name()); // Add spaces around name
+        let mut type_line = Line::from(vec![
+            "Type: ".into(),
+            type_display.clone().bg(Color::Blue).fg(Color::White),
+        ]);
+
+        if self.frame.cursor_position == 0 && self.has_focus && !self.frame.dropdown_open {
+            type_line = type_line.style(Style::default().fg(Color::Yellow).bold());
+        }
+
+        lines.push(type_line);
+
+        // Spacer
+        lines.push(Line::from(" "));
+
+        let visible_rows = self.frame.visible_rows();
+        for (i, col) in self.model
+            .current_columns()
+            .iter()
+            .enumerate()
+            .skip(self.frame.scroll_offset)
+            .take(visible_rows)
+        {
+            let checked = if col.selected { "[x]" } else { "[ ]" };
+
+            let text = format!("{checked} {:<20}", col.name);
+
+            let mut line = Line::from(text);
+
+            if self.frame.cursor_position == i + 1 && self.has_focus && !self.frame.dropdown_open {
+                line = line.style(Style::default().fg(Color::Yellow).bold());
+            }
+
+            lines.push(line);
+        }
+
+        let block = Utils::new_frame_block(self.has_focus, "Columns");
+
+        Paragraph::new(lines)
+            .block(block)
+            .alignment(Alignment::Left)
+            .render(area, buf);
+
+        //f.render_widget(paragraph, area);
     }
 }

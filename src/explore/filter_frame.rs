@@ -1,12 +1,13 @@
 use ratatui::{
+    buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Rect},
     style::{Color, Style, Stylize},
     text::Span,
     widgets::{
         Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState,
+        Widget,
     },
-    Frame,
 };
 
 use super::{domain_model::DomainModel, explorer::ExplorerAction, utils::Utils};
@@ -34,54 +35,6 @@ impl FilterFrame {
 
     pub fn set_selected(&mut self, new_selected: usize) {
         self.table_state.select(Some(new_selected));
-    }
-
-    pub fn draw(&mut self, model: &DomainModel, f: &mut Frame, area: Rect, is_focused: bool) {
-        self.set_area(area);
-
-        let header = Row::new(vec!["Column", "Type", "Filter"])
-            .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
-
-        let rows = model.current_filters().iter().map(|f| {
-            Row::new(vec![
-                Span::raw(f.col_name),
-                Span::raw(f.type_name),
-                Span::raw(f.filter_text.to_owned()),
-            ])
-        });
-
-        let total_rows = rows.len();
-
-        let block = Utils::new_frame_block(is_focused, "Filters");
-
-        let constraints = vec![
-            Constraint::Length(15),
-            Constraint::Length(10),
-            Constraint::Min(10),
-        ];
-
-        let table = Table::new(rows, constraints)
-            .header(header)
-            .block(block)
-            .row_highlight_style(Style::default().fg(Color::Yellow))
-            .highlight_symbol("» ");
-
-        f.render_stateful_widget(table, area, &mut self.table_state);
-
-        // Draw scrollbar
-        let visible_rows = self.visible_rows();
-        if total_rows > visible_rows {
-            if let Some(selected) = self.table_state.selected() {
-                let mut scrollbar_state = ScrollbarState::new(total_rows)
-                    .viewport_content_length(visible_rows)
-                    .position(selected);
-
-                Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .thumb_symbol("▐")
-                    .track_symbol(Some(" "))
-                    .render(area, f.buffer_mut(), &mut scrollbar_state);
-            }
-        }
     }
 
     pub fn handle_key(&mut self, model: &DomainModel, key: KeyEvent) -> Option<ExplorerAction> {
@@ -129,5 +82,71 @@ impl FilterFrame {
 
     fn visible_rows(&self) -> usize {
         self.area.height.saturating_sub(3) as usize
+    }
+}
+
+pub struct FilterFrameView<'a> {
+    frame: &'a mut FilterFrame,
+    model: &'a DomainModel,
+    has_focus: bool,
+}
+
+impl<'a> FilterFrameView<'a> {
+    pub fn new(frame: &'a mut FilterFrame, model: &'a DomainModel, has_focus: bool) -> Self {
+        Self {
+            frame,
+            model,
+            has_focus,
+        }
+    }
+}
+
+impl<'a> Widget for FilterFrameView<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.frame.set_area(area);
+
+        let header = Row::new(vec!["Column", "Type", "Filter"])
+            .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
+
+        let rows = self.model.current_filters().iter().map(|f| {
+            Row::new(vec![
+                Span::raw(f.col_name),
+                Span::raw(f.type_name),
+                Span::raw(f.filter_text.to_owned()),
+            ])
+        });
+
+        let total_rows = rows.len();
+
+        let block = Utils::new_frame_block(self.has_focus, "Filters");
+
+        let constraints = vec![
+            Constraint::Length(15),
+            Constraint::Length(10),
+            Constraint::Min(10),
+        ];
+
+        let table = Table::new(rows, constraints)
+            .header(header)
+            .block(block)
+            .row_highlight_style(Style::default().fg(Color::Yellow))
+            .highlight_symbol("» ");
+
+        <Table as StatefulWidget>::render(table, area, buf, &mut self.frame.table_state);
+
+        // Draw scrollbar
+        let visible_rows = self.frame.visible_rows();
+        if total_rows > visible_rows {
+            if let Some(selected) = self.frame.table_state.selected() {
+                let mut scrollbar_state = ScrollbarState::new(total_rows)
+                    .viewport_content_length(visible_rows)
+                    .position(selected);
+
+                Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                    .thumb_symbol("▐")
+                    .track_symbol(Some(" "))
+                    .render(area, buf, &mut scrollbar_state);
+            }
+        }
     }
 }
