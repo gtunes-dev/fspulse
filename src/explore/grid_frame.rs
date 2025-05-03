@@ -1,17 +1,12 @@
 use ratatui::{
-    crossterm::event::KeyEvent,
-    layout::{Constraint, Rect},
-    style::{Color, Style, Stylize},
-    text::{Span, Text},
-    widgets::{
-        Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState
+    buffer::Buffer, crossterm::event::KeyEvent, layout::{Constraint, Rect}, style::{Color, Style, Stylize}, text::{Span, Text}, widgets::{
+        Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState, Widget
     },
-    Frame,
 };
 
 use crate::query::columns::ColType;
 
-use super::{domain_model::ColInfo, explorer::ExplorerAction, utils::Utils};
+use super::{domain_model::{ColInfo, DomainModel}, explorer::ExplorerAction, utils::Utils};
 
 pub struct GridFrame {
     pub columns: Vec<String>,
@@ -90,42 +85,6 @@ impl GridFrame {
         };
     }
 
-    pub fn draw(&mut self, f: &mut Frame, area: Rect, is_focused: bool) {
-        self.area = area;
-
-        // Set up for drawing
-        let total_rows = self.rows.len();
-        let visible_rows = self.visible_rows();
-
-        let header = Row::new(self.columns.iter().map(|h| Span::raw(h.clone())))
-            .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
-
-        let block = Utils::new_frame_block(is_focused, "Data Grid");
-
-        let table = Table::new(self.rows.clone(), self.column_constraints.clone())
-            .header(header)
-            .block(block)
-            .row_highlight_style(Style::default().fg(Color::Yellow))
-            .highlight_symbol("» ");
-
-        // Draw table
-        f.render_stateful_widget(table, area, &mut self.table_state);
-
-        // Draw scrollbar
-        if total_rows > visible_rows {
-            if let Some(selected) = self.table_state.selected() {
-                let mut scrollbar_state = ScrollbarState::new(total_rows)
-                    .viewport_content_length(visible_rows)
-                    .position(selected);
-
-                Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .thumb_symbol("▐")
-                    .track_symbol(Some(" "))
-                    .render(area, f.buffer_mut(), &mut scrollbar_state);
-            }
-        }
-    }
-
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
         let total_rows = self.rows.len();
         let visible_rows = self.visible_rows();
@@ -137,4 +96,58 @@ impl GridFrame {
     pub fn visible_rows(&self) -> usize {
         self.area.height.saturating_sub(3) as usize
     }
+}
+
+pub struct GridFrameView<'a> {
+    frame: &'a mut GridFrame,
+    model: &'a DomainModel,
+    has_focus: bool,
+}
+
+impl<'a> GridFrameView<'a> {
+    pub fn new(frame: &'a mut GridFrame, model: &'a DomainModel, has_focus: bool) -> Self {
+        Self {
+            frame,
+            model,
+            has_focus,
+        }
+    }
+}
+
+impl<'a> Widget for GridFrameView<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.frame.area = area;
+
+        // Set up for drawing
+        let total_rows = self.frame.rows.len();
+        let visible_rows = self.frame.visible_rows();
+
+        let header = Row::new(self.frame.columns.iter().map(|h| Span::raw(h.clone())))
+            .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
+
+        let block = Utils::new_frame_block(self.has_focus, "Data Grid");
+
+        let table = Table::new(self.frame.rows.clone(), self.frame.column_constraints.clone())
+            .header(header)
+            .block(block)
+            .row_highlight_style(Style::default().fg(Color::Yellow))
+            .highlight_symbol("» ");
+
+        <Table as StatefulWidget>::render(table, area, buf, &mut self.frame.table_state);
+
+        // Draw scrollbar
+        if total_rows > visible_rows {
+            if let Some(selected) = self.frame.table_state.selected() {
+                let mut scrollbar_state = ScrollbarState::new(total_rows)
+                    .viewport_content_length(visible_rows)
+                    .position(selected);
+
+                Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                    .thumb_symbol("▐")
+                    .track_symbol(Some(" "))
+                    .render(area, buf, &mut scrollbar_state);
+            }
+        }
+    }
+
 }

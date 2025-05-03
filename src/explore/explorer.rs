@@ -22,6 +22,7 @@ use super::column_frame::ColumnFrameView;
 use super::domain_model::{ColInfo, DomainModel, Filter};
 use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_window::FilterWindow;
+use super::grid_frame::GridFrameView;
 use super::message_box::{MessageBox, MessageBoxType};
 use super::utils::Utils;
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
@@ -113,8 +114,8 @@ impl Explorer {
             f.render_widget(column_frame_view, left_chunk);
 
             // Draw right (data grid)
-            self.grid_frame
-                .draw(f, right_chunk, matches!(self.focus, Focus::DataGrid));
+            let grid_frame_view = GridFrameView::new(&mut self.grid_frame, &self.model, matches!(self.focus, Focus::DataGrid));
+            f.render_widget(grid_frame_view, right_chunk); 
 
             // Draw bottom (help/status)
             let help_block = Block::default()
