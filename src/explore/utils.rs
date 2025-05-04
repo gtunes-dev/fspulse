@@ -1,5 +1,5 @@
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Direction, Layout, Rect}, style::Color, widgets::{Block, BorderType, Borders, TableState}
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Direction, Flex, Layout, Rect}, style::Color, widgets::{Block, BorderType, Borders, TableState}
 };
 
 pub struct Utils;
@@ -27,6 +27,28 @@ impl Utils {
             .split(vertical_middle);
 
         horizontal_layout[1]
+    }
+
+    pub fn _center_horizontal(area: Rect, width: u16) -> Rect {
+        let [area] = Layout::horizontal([Constraint::Length(width)])
+            .flex(Flex::Center)
+            .areas(area);
+        area
+    }
+
+    pub fn _center_vertical(area: Rect, height: u16) -> Rect {
+        let [area] = Layout::vertical([Constraint::Length(height)])
+            .flex(Flex::Center)
+            .areas(area);
+        area
+    }
+
+    pub fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
+        let [area] = Layout::horizontal([horizontal])
+            .flex(Flex::Center)
+            .areas(area);
+        let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
+        area
     }
 
     pub fn handle_table_state_keys(
@@ -80,7 +102,21 @@ impl Utils {
         handled
     }
 
-    pub fn new_frame_block(is_focused: bool, title_str: &'static str) -> Block<'static> {
+    pub fn new_frame_block(is_focused: bool) -> Block<'static> {
+        let block = if is_focused {
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Double)
+                .border_style(Color::LightCyan)
+                .title_style(Color::White)
+        } else {
+            Block::default().borders(Borders::ALL)
+        };
+
+        block
+    }
+
+    pub fn new_frame_block_with_title(is_focused: bool, title_str: &'static str) -> Block<'static> {
         let block = if is_focused {
             Block::default()
                 .borders(Borders::ALL)
@@ -92,6 +128,6 @@ impl Utils {
             Block::default().borders(Borders::ALL).title(title_str)
         };
 
-        return block;
+        block
     }
 }

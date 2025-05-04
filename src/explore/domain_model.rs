@@ -1,4 +1,4 @@
-use ratatui::layout::Alignment;
+use ratatui::{layout::Alignment, text::Line};
 
 use crate::query::{
     columns::{self, ColType, ColTypeInfo},
@@ -40,6 +40,15 @@ impl TypeSelection {
             TypeSelection::Changes => 3,
         }
     }
+
+    pub fn title(&self) -> Line<'static> {
+        match self {
+            TypeSelection::Roots => Line::from(" Roots (R) "),
+            TypeSelection::Scans => Line::from(" Scans (S) "),
+            TypeSelection::Items => Line::from(" Items (I) "),
+            TypeSelection::Changes => Line::from(" Changes (C) "),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -76,6 +85,7 @@ impl Filter {
 struct DomainState {
     pub columns: Vec<ColumnOption>,
     pub filters: Vec<Filter>,
+    pub limit: String,
 }
 
 impl DomainState {
@@ -83,6 +93,7 @@ impl DomainState {
         DomainState {
             columns,
             filters: Vec::new(),
+            limit: "100".to_owned(),
         }
     }
 }
@@ -154,6 +165,14 @@ impl DomainModel {
 
     pub fn current_filters_mut(&mut self) -> &mut Vec<Filter> {
         self.current_state_mut().filters.as_mut()
+    }
+
+    pub fn current_limit(&self) -> String {
+        self.current_state().limit.clone()
+    }
+
+    pub fn set_current_limit(&mut self, new_limit: String) {
+        self.current_state_mut().limit = new_limit;
     }
 
     fn column_options_from_map(col_map: &ColMap) -> Vec<ColumnOption> {

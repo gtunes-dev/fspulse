@@ -101,7 +101,7 @@ impl<'a> FilterFrameView<'a> {
     }
 }
 
-impl<'a> Widget for FilterFrameView<'a> {
+impl Widget for FilterFrameView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.frame.set_area(area);
 
@@ -118,7 +118,7 @@ impl<'a> Widget for FilterFrameView<'a> {
 
         let total_rows = rows.len();
 
-        let block = Utils::new_frame_block(self.has_focus, "Filters");
+        let block = Utils::new_frame_block_with_title(self.has_focus, "Filters");
 
         let constraints = vec![
             Constraint::Length(15),

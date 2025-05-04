@@ -8,7 +8,8 @@ use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use ratatui::widgets::{Block, Clear};
+use ratatui::symbols;
+use ratatui::widgets::{Block, Clear, Tabs};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
@@ -19,10 +20,12 @@ use ratatui::{
 use std::io;
 
 use super::column_frame::ColumnFrameView;
-use super::domain_model::{ColInfo, DomainModel, Filter};
+use super::domain_model::{ColInfo, DomainModel, Filter, TypeSelection};
 use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_window::FilterWindow;
 use super::grid_frame::GridFrameView;
+use super::input_box::{InputBox, InputBoxState};
+use super::limit_widget::LimitWidget;
 use super::message_box::{MessageBox, MessageBoxType};
 use super::utils::Utils;
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
@@ -35,22 +38,26 @@ enum Focus {
 
 pub enum ExplorerAction {
     Dismiss,
+    RefreshQuery,
     ShowAddFilter(FilterWindow),
     ShowMessage(MessageBox),
     AddFilter(Filter),
     ShowEditFilter(usize),
     DeleteFilter(usize),
     UpdateFilter(usize, String),
+    SetLimit(String),
 }
 
 pub struct Explorer {
     model: DomainModel,
     focus: Focus,
+    needs_query_refresh: bool,
     column_frame: ColumnFrame,
     grid_frame: GridFrame,
     filter_frame: FilterFrame,
     filter_window: Option<FilterWindow>,
     message_box: Option<MessageBox>,
+    input_box: Option<InputBox>,
 }
 
 impl Explorer {
@@ -58,11 +65,13 @@ impl Explorer {
         Self {
             model: DomainModel::new(),
             focus: Focus::Filters,
+            needs_query_refresh: true,
             column_frame: ColumnFrame::new(),
             grid_frame: GridFrame::new(),
             filter_frame: FilterFrame::new(),
             filter_window: None,
             message_box: None,
+            input_box: None,
         }
     }
 
@@ -77,15 +86,40 @@ impl Explorer {
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
+                    Constraint::Length(3), // Tabs
                     Constraint::Length(8), // Filters
                     Constraint::Min(0),    // Main content
                     Constraint::Length(2), // Help/status
                 ])
                 .split(full_area);
 
-            let top_chunk = vertical_chunks[0];
-            let main_chunk = vertical_chunks[1];
-            let help_chunk = vertical_chunks[2];
+            let tab_chunk = vertical_chunks[0];
+            let top_chunk = vertical_chunks[1];
+            let main_chunk = vertical_chunks[2];
+            let help_chunk = vertical_chunks[3];
+
+            let titles = TypeSelection::all_types().iter().map(|t| t.title());
+
+            let mut tabs_width: u16 = TypeSelection::all_types()
+                .iter()
+                .map(|l| l.title().width() as u16) // Line::width() is in ratatui >=0.25
+                .sum::<u16>()
+                + ((titles.len().saturating_sub(1)) as u16);
+
+            tabs_width += 3 * 3; // " * " in between each tab
+
+            let tabs_rect = Utils::center(
+                tab_chunk,
+                Constraint::Length(tabs_width),
+                Constraint::Length(1),
+            );
+
+            let tabs = Tabs::new(titles)
+                .highlight_style(Style::default().bg(Color::Gray).fg(Color::Black))
+                .divider(symbols::DOT)
+                .select(0);
+
+            f.render_widget(tabs, tabs_rect);
 
             // Inside the main content, split horizontally
             let main_chunks = Layout::default()
@@ -106,16 +140,26 @@ impl Explorer {
             );
             f.render_widget(filter_frame_view, top_chunk);
 
+            // render the left chunk
+            let left_layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(3), Constraint::Fill(1)])
+                .split(left_chunk);
+
+            let limit_widget = LimitWidget::new(self.model.current_limit(), true);
+            f.render_widget(limit_widget, left_layout[0]);
+
             let column_frame_view = ColumnFrameView::new(
                 &mut self.column_frame,
                 &self.model,
                 matches!(self.focus, Focus::ColumnSelector),
             );
-            f.render_widget(column_frame_view, left_chunk);
+            f.render_widget(column_frame_view, left_layout[1]);
 
             // Draw right (data grid)
-            let grid_frame_view = GridFrameView::new(&mut self.grid_frame, &self.model, matches!(self.focus, Focus::DataGrid));
-            f.render_widget(grid_frame_view, right_chunk); 
+            let grid_frame_view =
+                GridFrameView::new(&mut self.grid_frame, matches!(self.focus, Focus::DataGrid));
+            f.render_widget(grid_frame_view, right_chunk);
 
             // Draw bottom (help/status)
             let help_block = Block::default()
@@ -144,6 +188,17 @@ impl Explorer {
             if let Some(ref message_box) = self.message_box {
                 message_box.draw(f);
             }
+
+            if let Some(ref input_box) = self.input_box {
+                let input_rect =
+                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
+                f.render_widget(Clear, input_rect);
+                let mut input_state = InputBoxState::new();
+                f.render_stateful_widget(input_box.clone(), input_rect, &mut input_state);
+                if let Some((x, y)) = input_state.cursor_pos {
+                    f.set_cursor_position((x, y));
+                }
+            }
         })?;
 
         Ok(())
@@ -157,6 +212,9 @@ impl Explorer {
         let mut terminal = Terminal::new(backend)?;
 
         loop {
+            if self.needs_query_refresh {
+                self.refresh_query(db);
+            }
             self.draw(&mut terminal)?;
 
             // Handle input
@@ -167,19 +225,17 @@ impl Explorer {
                     }
 
                     match key.code {
+                        KeyCode::Char('L') => {
+                            self.input_box = Some(InputBox::new(
+                                "Choose a new limit".into(),
+                                Some(self.model.current_limit()),
+                            ));
+                        }
                         KeyCode::Char('q') => {
                             break;
                         }
                         KeyCode::Char('r') => {
-                            match self.refresh_query(db) {
-                                Ok(()) => {}
-                                Err(err) => {
-                                    self.message_box = Some(MessageBox::new(
-                                        MessageBoxType::Error,
-                                        err.to_string(),
-                                    ))
-                                }
-                            };
+                            self.needs_query_refresh = true;
                         }
                         KeyCode::Tab => {
                             self.focus = self.next_focus();
@@ -228,6 +284,8 @@ impl Explorer {
                         self.filter_window = None;
                         self.filter_frame
                             .set_selected(self.model.current_filters().len());
+
+                        self.needs_query_refresh = true;
                     }
                     ExplorerAction::UpdateFilter(filter_index, new_filter_text) => {
                         if let Some(filter) = self.model.current_filters_mut().get_mut(filter_index)
@@ -235,6 +293,26 @@ impl Explorer {
                             filter.filter_text = new_filter_text;
                         }
                         self.filter_window = None;
+
+                        self.needs_query_refresh = true;
+                    }
+                    _ => {}
+                }
+            }
+
+            return true;
+        }
+
+        if let Some(ref mut input_box) = self.input_box {
+            let action = input_box.handle_key(key);
+            if let Some(action) = action {
+                match action {
+                    ExplorerAction::Dismiss => self.input_box = None,
+                    ExplorerAction::SetLimit(new_limit) => {
+                        self.model.set_current_limit(new_limit);
+                        self.input_box = None;
+
+                        self.needs_query_refresh = true;
                     }
                     _ => {}
                 }
@@ -255,6 +333,7 @@ impl Explorer {
 
         if let Some(action) = action {
             match action {
+                ExplorerAction::RefreshQuery => self.needs_query_refresh = true,
                 ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
                 ExplorerAction::ShowAddFilter(filter_window) => {
                     self.filter_window = Some(filter_window)
@@ -264,6 +343,8 @@ impl Explorer {
                     if filter_index > self.model.current_filters().len() {
                         self.filter_frame.set_selected(filter_index - 1);
                     }
+
+                    self.needs_query_refresh = true;
                 }
                 ExplorerAction::ShowEditFilter(filter_index) => {
                     if let Some(filter) = self.model.current_filters().get(filter_index) {
@@ -351,12 +432,28 @@ impl Explorer {
 
         // TODO: Build the "order by" clause once we have UI for that
 
-        // TODO: Build the limit clause once we figure out what the UI is
+        // Build the Limit clause
+        let limit = self.model.current_limit();
+        if !limit.is_empty() {
+            query.push_str(" limit ");
+            query.push_str(&limit);
+        }
 
         Ok((query, cols, col_infos))
     }
 
-    fn refresh_query(&mut self, db: &Database) -> Result<(), FsPulseError> {
+    fn refresh_query(&mut self, db: &Database) {
+        match self.refresh_query_impl(db) {
+            Ok(()) => {}
+            Err(err) => {
+                self.message_box = Some(MessageBox::new(MessageBoxType::Error, err.to_string()))
+            }
+        }
+
+        self.needs_query_refresh = false;
+    }
+
+    fn refresh_query_impl(&mut self, db: &Database) -> Result<(), FsPulseError> {
         let (query_str, columns, col_types) = self.build_query_and_columns()?;
 
         match QueryProcessor::execute_query(db, &query_str) {

@@ -63,6 +63,8 @@ impl ColumnFrame {
 
                         // maintain the current selection
                         self.cursor_position -= 1;
+
+                        explorer_action = Some(ExplorerAction::RefreshQuery)
                     }
                 }
             }
@@ -76,6 +78,8 @@ impl ColumnFrame {
 
                         // maintain the current selection
                         self.cursor_position += 1;
+
+                        explorer_action = Some(ExplorerAction::RefreshQuery)
                     }
                 }
             }
@@ -94,6 +98,8 @@ impl ColumnFrame {
                     let idx = self.cursor_position - 1;
                     if let Some(col) = model.current_columns_mut().get_mut(idx) {
                         col.selected = !col.selected;
+
+                        explorer_action = Some(ExplorerAction::RefreshQuery)
                     }
                 }
             }
@@ -223,7 +229,7 @@ impl <'a> ColumnFrameView<'a> {
     }
 }
 
-impl<'a> Widget for ColumnFrameView<'a> {
+impl Widget for ColumnFrameView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.frame.set_area(area);
         let mut lines = Vec::new();
@@ -265,7 +271,7 @@ impl<'a> Widget for ColumnFrameView<'a> {
             lines.push(line);
         }
 
-        let block = Utils::new_frame_block(self.has_focus, "Columns");
+        let block = Utils::new_frame_block_with_title(self.has_focus, "Columns");
 
         Paragraph::new(lines)
             .block(block)
