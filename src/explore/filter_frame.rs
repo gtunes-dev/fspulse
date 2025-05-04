@@ -10,7 +10,7 @@ use ratatui::{
     },
 };
 
-use super::{domain_model::DomainModel, explorer::ExplorerAction, utils::Utils};
+use super::{domain_model::{DomainModel, TypeSelection}, explorer::ExplorerAction, utils::Utils};
 
 pub struct FilterFrame {
     table_state: TableState,
@@ -42,7 +42,7 @@ impl FilterFrame {
         let visible_rows = self.visible_rows();
 
         match key.code {
-            KeyCode::Delete => {
+            KeyCode::Delete | KeyCode::Backspace => {
                 let selected = self.table_state.selected();
                 match selected {
                     Some(selected) => {
@@ -83,6 +83,15 @@ impl FilterFrame {
     fn visible_rows(&self) -> usize {
         self.area.height.saturating_sub(3) as usize
     }
+
+    pub fn frame_title(type_selection: TypeSelection) -> &'static str {
+        match type_selection {
+            TypeSelection::Items => "Items Filters",
+            TypeSelection::Changes => "Changes Filters",
+            TypeSelection::Scans => "Scans Filters",
+            TypeSelection::Roots => "Roots Filters",
+        }
+    }
 }
 
 pub struct FilterFrameView<'a> {
@@ -118,7 +127,8 @@ impl Widget for FilterFrameView<'_> {
 
         let total_rows = rows.len();
 
-        let block = Utils::new_frame_block_with_title(self.has_focus, "Filters");
+        let title = FilterFrame::frame_title(self.model.current_type());
+        let block = Utils::new_frame_block_with_title(self.has_focus, title);
 
         let constraints = vec![
             Constraint::Length(15),
@@ -126,10 +136,15 @@ impl Widget for FilterFrameView<'_> {
             Constraint::Min(10),
         ];
 
+        let mut highlight_style = Style::default();
+        if self.has_focus {
+            highlight_style = highlight_style.fg(Color::Yellow);
+        }
+
         let table = Table::new(rows, constraints)
             .header(header)
             .block(block)
-            .row_highlight_style(Style::default().fg(Color::Yellow))
+            .row_highlight_style(highlight_style)
             .highlight_symbol("» ");
 
         <Table as StatefulWidget>::render(table, area, buf, &mut self.frame.table_state);

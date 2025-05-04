@@ -5,7 +5,7 @@ use crate::query::{
     ColMap,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TypeSelection {
     Items,
     Changes,
@@ -41,12 +41,21 @@ impl TypeSelection {
         }
     }
 
-    pub fn title(&self) -> Line<'static> {
-        match self {
-            TypeSelection::Items => Line::from(" Items (I) "),
-            TypeSelection::Changes => Line::from(" Changes (C) "),
-            TypeSelection::Scans => Line::from(" Scans (S) "),
-            TypeSelection::Roots => Line::from(" Roots (R) "),
+    pub fn title(&self, selected_type: TypeSelection) -> Line<'static> {
+        if *self == selected_type {
+            match self {
+                TypeSelection::Items => Line::from("» Items (I)"),
+                TypeSelection::Changes => Line::from("» Changes (C)"),
+                TypeSelection::Scans => Line::from("» Scans (S)"),
+                TypeSelection::Roots => Line::from("» Roots (R)"),
+            }
+        } else {
+            match self {
+                TypeSelection::Items => Line::from("Items (I)"),
+                TypeSelection::Changes => Line::from("Changes (C)"),
+                TypeSelection::Scans => Line::from("Scans (S)"),
+                TypeSelection::Roots => Line::from("Roots (R)"),
+            }
         }
     }
 }

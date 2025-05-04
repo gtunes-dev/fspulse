@@ -1,22 +1,31 @@
 use ratatui::{
-    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Rect}, style::{Color, Style, Stylize}, text::Line, widgets::{Paragraph, Widget}
+    buffer::Buffer,
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::{Constraint, Rect},
+    style::{Color, Style},
+    widgets::{Row, StatefulWidget, Table, TableState, Widget},
 };
 
 use super::{
-    domain_model::DomainModel, explorer::ExplorerAction, filter_window::FilterWindow, utils::Utils
+    domain_model::{DomainModel, TypeSelection},
+    explorer::ExplorerAction,
+    filter_window::FilterWindow,
+    utils::Utils,
 };
 
 pub struct ColumnFrame {
-    cursor_position: usize,
-    scroll_offset: usize,
+    table_state: TableState,
     area: Rect,
 }
 
 impl ColumnFrame {
     pub fn new() -> Self {
         Self {
-            cursor_position: 0,
-            scroll_offset: 0,
+            table_state: {
+                let mut state = TableState::default();
+                state.select(Some(0));
+                state
+            },
             area: Rect::default(),
         }
     }
@@ -25,93 +34,66 @@ impl ColumnFrame {
         let mut explorer_action = None;
 
         match key.code {
-            KeyCode::Down => {
-                    self.move_down(model);
-            }
-            KeyCode::Up => {
-                
-                    self.move_up();
-            }
             KeyCode::Char('+') => {
-                if self.cursor_position >= 1 {
-                    let idx = self.cursor_position - 1;
-                    if idx > 0 {
+                if let Some(selected) = self.table_state.selected() {
+                    if selected > 0 {
                         let current_cols = model.current_columns_mut();
-                        let item = current_cols.remove(idx);
-                        current_cols.insert(idx - 1, item);
+                        current_cols.swap(selected, selected - 1);
 
                         // maintain the current selection
-                        self.cursor_position -= 1;
+                        self.table_state.select(Some(selected - 1));
 
-                        explorer_action = Some(ExplorerAction::RefreshQuery)
+                        explorer_action = Some(ExplorerAction::RefreshQuery(false))
                     }
                 }
             }
-            KeyCode::Char('-') => {
-                if self.cursor_position >= 1 {
-                    let idx = self.cursor_position - 1;
+            KeyCode::Char('-') | KeyCode::Char('_') => {
+                if let Some(selected) = self.table_state.selected() {
                     let current_cols = model.current_columns_mut();
-                    if idx < current_cols.len() - 1 {
-                        let item = current_cols.remove(idx);
-                        current_cols.insert(idx + 1, item);
+                    if selected < (current_cols.len() - 1) {
+                        current_cols.swap(selected, selected + 1);
 
                         // maintain the current selection
-                        self.cursor_position += 1;
+                        self.table_state.select(Some(selected + 1));
 
-                        explorer_action = Some(ExplorerAction::RefreshQuery)
+                        explorer_action = Some(ExplorerAction::RefreshQuery(false))
                     }
                 }
             }
             KeyCode::Char(' ') | KeyCode::Enter => {
-                   let idx = self.cursor_position - 1;
-                    if let Some(col) = model.current_columns_mut().get_mut(idx) {
+                if let Some(selected) = self.table_state.selected() {
+                    if let Some(col) = model.current_columns_mut().get_mut(selected) {
                         col.selected = !col.selected;
 
-                        explorer_action = Some(ExplorerAction::RefreshQuery)
+                        explorer_action = Some(ExplorerAction::RefreshQuery(false))
                     }
+                }
             }
             KeyCode::Char('f') | KeyCode::Char('F') => {
-                if let Some(col_option) = model
-                    .current_columns()
-                    .get(self.cursor_position.saturating_sub(1))
-                {
-                    explorer_action = Some(ExplorerAction::ShowAddFilter(
-                        FilterWindow::new_add_filter_window(col_option.name, col_option.col_info.col_type.info()),
-                    ));
-                };
+                if let Some(selected) = self.table_state.selected() {
+                    if let Some(col_option) = model.current_columns().get(selected) {
+                        explorer_action = Some(ExplorerAction::ShowAddFilter(
+                            FilterWindow::new_add_filter_window(
+                                col_option.name,
+                                col_option.col_info.col_type.info(),
+                            ),
+                        ));
+                    };
+                }
             }
-            _ => {}
+            _ => {
+                let total_rows = model.current_columns().len();
+                let visible_rows = self.visible_rows();
+                Utils::handle_table_state_keys(
+                    &mut self.table_state,
+                    total_rows,
+                    visible_rows,
+                    key,
+                );
+            }
         }
 
         explorer_action
-    }
-
-    pub fn move_up(&mut self) {
-        if self.cursor_position > 0 {
-            self.cursor_position -= 1;
-
-            if self.cursor_position >= 1 {
-                let column_idx = self.cursor_position - 1;
-                if column_idx < self.scroll_offset {
-                    self.scroll_offset = self.scroll_offset.saturating_sub(1);
-                }
-            }
-        }
-    }
-
-    pub fn move_down(&mut self, model: &DomainModel) {
-        if self.cursor_position < model.current_columns().len() {
-            self.cursor_position += 1;
-
-            if self.cursor_position >= 1 {
-                let column_idx = self.cursor_position - 1;
-                let visible_rows = self.visible_rows();
-
-                if column_idx >= self.scroll_offset + visible_rows {
-                    self.scroll_offset += 1;
-                }
-            }
-        }
     }
 
     fn visible_rows(&self) -> usize {
@@ -119,35 +101,15 @@ impl ColumnFrame {
     }
 
     pub fn set_area(&mut self, new_area: Rect) {
-        if self.area.height == new_area.height {
-            self.area = new_area;
-        } else {
-            let old_area = self.area;
-
-            self.area = new_area;
-            let new_visible_rows = self.visible_rows();
-
-            if old_area.height != new_area.height {
-                self.correct_scroll_for_resize(new_visible_rows);
-            }
-        }
+        self.area = new_area;
     }
 
-    fn correct_scroll_for_resize(&mut self, new_visible_rows: usize) {
-        if self.cursor_position >= 1 {
-            let column_idx = self.cursor_position - 1;
-
-            if column_idx < self.scroll_offset {
-                self.scroll_offset = column_idx;
-            } else if column_idx >= self.scroll_offset + new_visible_rows {
-                self.scroll_offset = column_idx.saturating_sub(new_visible_rows.saturating_sub(1));
-            } else {
-                let max_scroll_offset =
-                    column_idx.saturating_sub(new_visible_rows.saturating_sub(1));
-                if self.scroll_offset > max_scroll_offset {
-                    self.scroll_offset = max_scroll_offset;
-                }
-            }
+    pub fn frame_title(type_selection: TypeSelection) -> &'static str {
+        match type_selection {
+            TypeSelection::Items => "Items Columns",
+            TypeSelection::Changes => "Changes Columns",
+            TypeSelection::Scans => "Scans Columns",
+            TypeSelection::Roots => "Roots Columns",
         }
     }
 }
@@ -158,44 +120,54 @@ pub struct ColumnFrameView<'a> {
     has_focus: bool,
 }
 
-impl <'a> ColumnFrameView<'a> {
+impl<'a> ColumnFrameView<'a> {
     pub fn new(frame: &'a mut ColumnFrame, model: &'a DomainModel, has_focus: bool) -> Self {
-        Self { frame, model, has_focus }
+        Self {
+            frame,
+            model,
+            has_focus,
+        }
     }
 }
 
 impl Widget for ColumnFrameView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.frame.set_area(area);
-        let mut lines = Vec::new();
+        let mut rows = Vec::new();
 
-        let visible_rows = self.frame.visible_rows();
-        for (i, col) in self.model
-            .current_columns()
-            .iter()
-            .enumerate()
-            .skip(self.frame.scroll_offset)
-            .take(visible_rows)
-        {
+        for col in self.model.current_columns() {
             let checked = if col.selected { "[x]" } else { "[ ]" };
-
             let text = format!("{checked} {:<20}", col.name);
 
-            let mut line = Line::from(text);
+            let row = Row::new(vec![text]);
 
+            //let line = Line::from(text);
+            /*
             if self.frame.cursor_position == i + 1 && self.has_focus {
                 line = line.style(Style::default().fg(Color::Yellow).bold());
             }
+            */
 
-            lines.push(line);
+            rows.push(row);
         }
 
-        let block = Utils::new_frame_block_with_title(self.has_focus, "Columns");
+        let block = Utils::new_frame_block_with_title(
+            self.has_focus,
+            ColumnFrame::frame_title(self.model.current_type()),
+        );
 
-        Paragraph::new(lines)
+        let widths = [Constraint::Percentage(100)];
+
+        let mut highlight_style = Style::default();
+        if self.has_focus {
+            highlight_style = highlight_style.fg(Color::Yellow);
+        }
+
+        let table = Table::new(rows, widths)
             .block(block)
-            .alignment(Alignment::Left)
-            .render(area, buf);
+            .row_highlight_style(highlight_style)
+            .highlight_symbol("» ");
+        <Table as StatefulWidget>::render(table, area, buf, &mut self.frame.table_state);
 
         //f.render_widget(paragraph, area);
     }

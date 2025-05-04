@@ -6,7 +6,7 @@ use ratatui::{
 
 use crate::query::columns::ColType;
 
-use super::{domain_model::ColInfo, explorer::ExplorerAction, utils::Utils};
+use super::{domain_model::{ColInfo, DomainModel, TypeSelection}, explorer::ExplorerAction, utils::Utils};
 
 pub struct GridFrame {
     pub columns: Vec<String>,
@@ -35,6 +35,7 @@ impl GridFrame {
 
     pub fn set_data(
         &mut self,
+        reset_selection: bool,
         columns: Vec<String>,
         col_infos: Vec<ColInfo>,
         raw_rows: Vec<Vec<String>>,
@@ -78,11 +79,13 @@ impl GridFrame {
             .collect();
 
         // Reset selection
-        self.table_state = {
-            let mut state = TableState::default();
-            state.select(Some(0));
-            state
-        };
+        if reset_selection {
+            self.table_state = {
+                let mut state = TableState::default();
+                state.select(Some(0));
+                state
+            };
+        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
@@ -96,17 +99,28 @@ impl GridFrame {
     pub fn visible_rows(&self) -> usize {
         self.area.height.saturating_sub(3) as usize
     }
+
+    pub fn frame_title(type_selection: TypeSelection) -> &'static str {
+        match type_selection {
+            TypeSelection::Items => "Items Data",
+            TypeSelection::Changes => "Changes Data",
+            TypeSelection::Scans => "Scans Data",
+            TypeSelection::Roots => "Roots Data",
+        }
+    }
 }
 
 pub struct GridFrameView<'a> {
     frame: &'a mut GridFrame,
+    model: &'a DomainModel,
     has_focus: bool,
 }
 
 impl<'a> GridFrameView<'a> {
-    pub fn new(frame: &'a mut GridFrame, has_focus: bool) -> Self {
+    pub fn new(frame: &'a mut GridFrame, model: &'a DomainModel, has_focus: bool) -> Self {
         Self {
             frame,
+            model,
             has_focus,
         }
     }
@@ -123,12 +137,18 @@ impl Widget for GridFrameView<'_> {
         let header = Row::new(self.frame.columns.iter().map(|h| Span::raw(h.clone())))
             .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
 
-        let block = Utils::new_frame_block_with_title(self.has_focus, "Data Grid");
+        let frame_title = GridFrame::frame_title(self.model.current_type());
+        let block = Utils::new_frame_block_with_title(self.has_focus, frame_title);
+
+        let mut highlight_style = Style::default();
+        if self.has_focus {
+            highlight_style = highlight_style.fg(Color::Yellow);
+        }
 
         let table = Table::new(self.frame.rows.clone(), self.frame.column_constraints.clone())
             .header(header)
             .block(block)
-            .row_highlight_style(Style::default().fg(Color::Yellow))
+            .row_highlight_style(highlight_style)
             .highlight_symbol("» ");
 
         <Table as StatefulWidget>::render(table, area, buf, &mut self.frame.table_state);

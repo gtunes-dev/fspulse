@@ -41,7 +41,7 @@ enum Focus {
 
 pub enum ExplorerAction {
     Dismiss,
-    RefreshQuery,
+    RefreshQuery(bool),
     ShowAddFilter(FilterWindow),
     ShowMessage(MessageBox),
     AddFilter(Filter),
@@ -56,6 +56,7 @@ pub struct Explorer {
     model: DomainModel,
     focus: Focus,
     needs_query_refresh: bool,
+    query_resets_selection: bool,
     column_frame: ColumnFrame,
     grid_frame: GridFrame,
     filter_frame: FilterFrame,
@@ -70,6 +71,7 @@ impl Explorer {
             model: DomainModel::new(),
             focus: Focus::Filters,
             needs_query_refresh: true,
+            query_resets_selection: true,
             column_frame: ColumnFrame::new(),
             grid_frame: GridFrame::new(),
             filter_frame: FilterFrame::new(),
@@ -102,11 +104,15 @@ impl Explorer {
             let main_chunk = vertical_chunks[2];
             let help_chunk = vertical_chunks[3];
 
-            let titles = TypeSelection::all_types().iter().map(|t| t.title());
+            let current_type = self.model.current_type();
+
+            let titles = TypeSelection::all_types()
+                .iter()
+                .map(|t| t.title(current_type));
 
             let mut tabs_width: u16 = TypeSelection::all_types()
                 .iter()
-                .map(|l| l.title().width() as u16) // Line::width() is in ratatui >=0.25
+                .map(|l| l.title(current_type).width() as u16) // Line::width() is in ratatui >=0.25
                 .sum::<u16>()
                 + ((titles.len().saturating_sub(1)) as u16);
 
@@ -122,7 +128,7 @@ impl Explorer {
                 Focus::Tabs => Style::default().bg(Color::Gray).fg(Color::Black),
                 _ => Style::default()
                     .fg(Color::Gray)
-                    .add_modifier(Modifier::UNDERLINED),
+                    .add_modifier(Modifier::BOLD | Modifier::REVERSED), // .add_modifier(Modifier::UNDERLINED),
             };
 
             let tabs = Tabs::new(titles)
@@ -157,7 +163,10 @@ impl Explorer {
                 .constraints([Constraint::Length(3), Constraint::Fill(1)])
                 .split(left_chunk);
 
-            let limit_widget = LimitWidget::new(self.model.current_limit(), matches!(self.focus, Focus::Limit));
+            let limit_widget = LimitWidget::new(
+                self.model.current_limit(),
+                matches!(self.focus, Focus::Limit),
+            );
             f.render_widget(limit_widget, left_layout[0]);
 
             let column_frame_view = ColumnFrameView::new(
@@ -168,8 +177,11 @@ impl Explorer {
             f.render_widget(column_frame_view, left_layout[1]);
 
             // Draw right (data grid)
-            let grid_frame_view =
-                GridFrameView::new(&mut self.grid_frame, matches!(self.focus, Focus::DataGrid));
+            let grid_frame_view = GridFrameView::new(
+                &mut self.grid_frame,
+                &self.model,
+                matches!(self.focus, Focus::DataGrid),
+            );
             f.render_widget(grid_frame_view, right_chunk);
 
             // Draw bottom (help/status)
@@ -229,10 +241,18 @@ impl Explorer {
 
                     match key.code {
                         // Switch Type
-                        KeyCode::Char('i') | KeyCode::Char('I') => self.set_current_type(TypeSelection::Items),
-                        KeyCode::Char('c') | KeyCode::Char('C') => self.set_current_type(TypeSelection::Changes),
-                        KeyCode::Char('s') | KeyCode::Char('S') => self.set_current_type(TypeSelection::Scans),
-                        KeyCode::Char('r') | KeyCode::Char('R') => self.set_current_type(TypeSelection::Roots),
+                        KeyCode::Char('i') | KeyCode::Char('I') => {
+                            self.set_current_type(TypeSelection::Items)
+                        }
+                        KeyCode::Char('c') | KeyCode::Char('C') => {
+                            self.set_current_type(TypeSelection::Changes)
+                        }
+                        KeyCode::Char('s') | KeyCode::Char('S') => {
+                            self.set_current_type(TypeSelection::Scans)
+                        }
+                        KeyCode::Char('r') | KeyCode::Char('R') => {
+                            self.set_current_type(TypeSelection::Roots)
+                        }
 
                         // Show Limit Input
                         KeyCode::Char('l') | KeyCode::Char('L') => {
@@ -292,15 +312,19 @@ impl Explorer {
                             .set_selected(self.model.current_filters().len());
 
                         self.needs_query_refresh = true;
+                        self.query_resets_selection = true;
                     }
                     ExplorerAction::UpdateFilter(filter_index, new_filter_text) => {
                         if let Some(filter) = self.model.current_filters_mut().get_mut(filter_index)
                         {
-                            filter.filter_text = new_filter_text;
+                            if filter.filter_text != new_filter_text {
+                                filter.filter_text = new_filter_text;
+                                self.needs_query_refresh = true;
+                                self.query_resets_selection = true;
+                            }
                         }
-                        self.filter_window = None;
 
-                        self.needs_query_refresh = true;
+                        self.filter_window = None;
                     }
                     _ => {}
                 }
@@ -319,6 +343,7 @@ impl Explorer {
                         self.input_box = None;
 
                         self.needs_query_refresh = true;
+                        self.query_resets_selection = false;
                     }
                     _ => {}
                 }
@@ -341,7 +366,10 @@ impl Explorer {
 
         if let Some(action) = action {
             match action {
-                ExplorerAction::RefreshQuery => self.needs_query_refresh = true,
+                ExplorerAction::RefreshQuery(reset_selection) => {
+                    self.needs_query_refresh = true;
+                    self.query_resets_selection = reset_selection;
+                }
                 ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
                 ExplorerAction::ShowLimit => self.show_limit_input(),
                 ExplorerAction::ShowAddFilter(filter_window) => {
@@ -354,6 +382,7 @@ impl Explorer {
                     }
 
                     self.needs_query_refresh = true;
+                    self.query_resets_selection = true;
                 }
                 ExplorerAction::ShowEditFilter(filter_index) => {
                     if let Some(filter) = self.model.current_filters().get(filter_index) {
@@ -481,6 +510,7 @@ impl Explorer {
         }
 
         self.needs_query_refresh = false;
+        self.query_resets_selection = false;
     }
 
     fn refresh_query_impl(&mut self, db: &Database) -> Result<(), FsPulseError> {
@@ -488,7 +518,7 @@ impl Explorer {
 
         match QueryProcessor::execute_query(db, &query_str) {
             Ok(rows) => {
-                self.grid_frame.set_data(columns, col_types, rows);
+                self.grid_frame.set_data(self.query_resets_selection, columns, col_types, rows);
                 //self.error_message = None;
                 Ok(())
             }
@@ -508,10 +538,9 @@ impl Explorer {
                     TypeSelection::Roots => TypeSelection::Scans,
                 };
                 self.set_current_type(new_type);
-
             }
             KeyCode::Right => {
-                let new_type= match self.model.current_type() {
+                let new_type = match self.model.current_type() {
                     TypeSelection::Items => TypeSelection::Changes,
                     TypeSelection::Changes => TypeSelection::Scans,
                     TypeSelection::Scans => TypeSelection::Roots,
@@ -532,9 +561,9 @@ impl Explorer {
         ));
     }
 
-    fn set_current_type(&mut self, new_type: TypeSelection)
-    {
+    fn set_current_type(&mut self, new_type: TypeSelection) {
         self.model.set_current_type(new_type);
         self.needs_query_refresh = true;
+        self.query_resets_selection = false;
     }
 }
