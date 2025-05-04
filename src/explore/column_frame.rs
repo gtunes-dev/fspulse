@@ -1,17 +1,13 @@
 use ratatui::{
-    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Rect}, style::{Color, Modifier, Style, Stylize}, text::Line, widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Widget}, Frame
+    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::{Alignment, Rect}, style::{Color, Style, Stylize}, text::Line, widgets::{Paragraph, Widget}
 };
 
 use super::{
-    domain_model::{DomainModel, TypeSelection},
-    explorer::ExplorerAction,
-    filter_window::FilterWindow, utils::Utils,
+    domain_model::DomainModel, explorer::ExplorerAction, filter_window::FilterWindow, utils::Utils
 };
 
 pub struct ColumnFrame {
     cursor_position: usize,
-    dropdown_open: bool,
-    dropdown_cursor: usize,
     scroll_offset: usize,
     area: Rect,
 }
@@ -20,15 +16,9 @@ impl ColumnFrame {
     pub fn new() -> Self {
         Self {
             cursor_position: 0,
-            dropdown_open: false,
-            dropdown_cursor: 0,
             scroll_offset: 0,
             area: Rect::default(),
         }
-    }
-
-    pub fn is_dropdown_open(&self) -> bool {
-        self.dropdown_open
     }
 
     pub fn handle_key(&mut self, model: &mut DomainModel, key: KeyEvent) -> Option<ExplorerAction> {
@@ -36,25 +26,14 @@ impl ColumnFrame {
 
         match key.code {
             KeyCode::Down => {
-                if self.dropdown_open {
-                    if self.dropdown_cursor + 1 < TypeSelection::all_types().len() {
-                        self.dropdown_cursor += 1;
-                    }
-                } else {
                     self.move_down(model);
-                }
             }
             KeyCode::Up => {
-                if self.dropdown_open {
-                    if self.dropdown_cursor > 0 {
-                        self.dropdown_cursor -= 1;
-                    }
-                } else {
+                
                     self.move_up();
-                }
             }
             KeyCode::Char('+') => {
-                if !self.dropdown_open && self.cursor_position >= 1 {
+                if self.cursor_position >= 1 {
                     let idx = self.cursor_position - 1;
                     if idx > 0 {
                         let current_cols = model.current_columns_mut();
@@ -69,7 +48,7 @@ impl ColumnFrame {
                 }
             }
             KeyCode::Char('-') => {
-                if !self.dropdown_open && self.cursor_position >= 1 {
+                if self.cursor_position >= 1 {
                     let idx = self.cursor_position - 1;
                     let current_cols = model.current_columns_mut();
                     if idx < current_cols.len() - 1 {
@@ -84,24 +63,12 @@ impl ColumnFrame {
                 }
             }
             KeyCode::Char(' ') | KeyCode::Enter => {
-                if self.dropdown_open {
-                    // Select the highlighted type
-                    let current_type = TypeSelection::all_types()[self.dropdown_cursor];
-                    model.set_current_type(current_type);
-                    self.dropdown_open = false;
-                    self.cursor_position = 0; // return cursor to Type line
-                } else if self.cursor_position == 0 {
-                    // Open dropdown if cursor is on Type
-                    self.dropdown_open = true;
-                    self.dropdown_cursor = model.current_type().index();
-                } else {
-                    let idx = self.cursor_position - 1;
+                   let idx = self.cursor_position - 1;
                     if let Some(col) = model.current_columns_mut().get_mut(idx) {
                         col.selected = !col.selected;
 
                         explorer_action = Some(ExplorerAction::RefreshQuery)
                     }
-                }
             }
             KeyCode::Char('f') | KeyCode::Char('F') => {
                 if let Some(col_option) = model
@@ -112,12 +79,6 @@ impl ColumnFrame {
                         FilterWindow::new_add_filter_window(col_option.name, col_option.col_info.col_type.info()),
                     ));
                 };
-            }
-            KeyCode::Esc => {
-                if self.dropdown_open {
-                    // Cancel dropdown
-                    self.dropdown_open = false;
-                }
             }
             _ => {}
         }
@@ -153,34 +114,8 @@ impl ColumnFrame {
         }
     }
 
-    pub fn draw_dropdown(&self, f: &mut Frame, area: Rect) {
-        let items: Vec<ListItem> = TypeSelection::all_types()
-            .iter()
-            .map(|ty| ListItem::new(ty.name()))
-            .collect();
-
-        let mut state = ListState::default();
-        state.select(Some(self.dropdown_cursor));
-
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .title("Select Type")
-                    .borders(Borders::ALL)
-                    .border_type(ratatui::widgets::BorderType::Double),
-            )
-            .highlight_style(
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(Color::Yellow),
-            )
-            .highlight_symbol(">> ");
-
-        f.render_stateful_widget(list, area, &mut state);
-    }
-
     fn visible_rows(&self) -> usize {
-        self.area.height.saturating_sub(4) as usize
+        self.area.height.saturating_sub(2) as usize
     }
 
     pub fn set_area(&mut self, new_area: Rect) {
@@ -234,22 +169,6 @@ impl Widget for ColumnFrameView<'_> {
         self.frame.set_area(area);
         let mut lines = Vec::new();
 
-        // Always draw the collapsed Type selector line
-        let type_display = format!(" {} ▼ ", self.model.current_type().name()); // Add spaces around name
-        let mut type_line = Line::from(vec![
-            "Type: ".into(),
-            type_display.clone().bg(Color::Blue).fg(Color::White),
-        ]);
-
-        if self.frame.cursor_position == 0 && self.has_focus && !self.frame.dropdown_open {
-            type_line = type_line.style(Style::default().fg(Color::Yellow).bold());
-        }
-
-        lines.push(type_line);
-
-        // Spacer
-        lines.push(Line::from(" "));
-
         let visible_rows = self.frame.visible_rows();
         for (i, col) in self.model
             .current_columns()
@@ -264,7 +183,7 @@ impl Widget for ColumnFrameView<'_> {
 
             let mut line = Line::from(text);
 
-            if self.frame.cursor_position == i + 1 && self.has_focus && !self.frame.dropdown_open {
+            if self.frame.cursor_position == i + 1 && self.has_focus {
                 line = line.style(Style::default().fg(Color::Yellow).bold());
             }
 

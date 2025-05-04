@@ -182,14 +182,6 @@ impl Explorer {
                 .block(help_block);
             f.render_widget(help_paragraph, help_chunk);
 
-            // Draw the type selector if it's open
-            if self.column_frame.is_dropdown_open() {
-                let popup_area = Utils::centered_rect(20, 30, f.area());
-                // Clear the popup area before drawing into it
-                f.render_widget(Clear, popup_area);
-                self.column_frame.draw_dropdown(f, popup_area);
-            }
-
             if let Some(ref mut filter_window) = self.filter_window {
                 let is_top_window = self.message_box.is_none();
                 filter_window.draw(f, is_top_window);
