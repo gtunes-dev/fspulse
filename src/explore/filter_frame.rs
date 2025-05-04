@@ -42,7 +42,7 @@ impl FilterFrame {
         let visible_rows = self.visible_rows();
 
         match key.code {
-            KeyCode::Char('x') => {
+            KeyCode::Delete => {
                 let selected = self.table_state.selected();
                 match selected {
                     Some(selected) => {
@@ -55,7 +55,7 @@ impl FilterFrame {
                     None => None,
                 }
             }
-            KeyCode::Char('e') => {
+            KeyCode::Char(' ') | KeyCode::Enter => {
                 let selected = self.table_state.selected();
                 match selected {
                     Some(selected) => {

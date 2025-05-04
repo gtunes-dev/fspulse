@@ -157,7 +157,7 @@ impl Explorer {
                 .constraints([Constraint::Length(3), Constraint::Fill(1)])
                 .split(left_chunk);
 
-            let limit_widget = LimitWidget::new(self.model.current_limit(), true);
+            let limit_widget = LimitWidget::new(self.model.current_limit(), matches!(self.focus, Focus::Limit));
             f.render_widget(limit_widget, left_layout[0]);
 
             let column_frame_view = ColumnFrameView::new(
@@ -236,14 +236,20 @@ impl Explorer {
                     }
 
                     match key.code {
-                        KeyCode::Char('L') => {
+                        // Switch Type
+                        KeyCode::Char('i') | KeyCode::Char('I') => self.set_current_type(TypeSelection::Items),
+                        KeyCode::Char('c') | KeyCode::Char('C') => self.set_current_type(TypeSelection::Changes),
+                        KeyCode::Char('s') | KeyCode::Char('S') => self.set_current_type(TypeSelection::Scans),
+                        KeyCode::Char('r') | KeyCode::Char('R') => self.set_current_type(TypeSelection::Roots),
+
+                        // Show Limit Input
+                        KeyCode::Char('l') | KeyCode::Char('L') => {
                             self.show_limit_input();
                         }
-                        KeyCode::Char('q') => {
+
+                        // Quit
+                        KeyCode::Char('q') | KeyCode::Char('Q') => {
                             break;
-                        }
-                        KeyCode::Char('r') => {
-                            self.needs_query_refresh = true;
                         }
                         KeyCode::Tab => {
                             self.focus = self.next_focus();
@@ -345,6 +351,7 @@ impl Explorer {
             match action {
                 ExplorerAction::RefreshQuery => self.needs_query_refresh = true,
                 ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
+                ExplorerAction::ShowLimit => self.show_limit_input(),
                 ExplorerAction::ShowAddFilter(filter_window) => {
                     self.filter_window = Some(filter_window)
                 }
@@ -498,7 +505,7 @@ impl Explorer {
     }
 
     fn handle_tab_section_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
-        let mut action = None;
+        let action = None;
 
         match key.code {
             KeyCode::Left => {
@@ -508,8 +515,7 @@ impl Explorer {
                     TypeSelection::Scans => TypeSelection::Changes,
                     TypeSelection::Roots => TypeSelection::Scans,
                 };
-                self.model.set_current_type(new_type);
-                action = Some(ExplorerAction::RefreshQuery)
+                self.set_current_type(new_type);
 
             }
             KeyCode::Right => {
@@ -519,8 +525,7 @@ impl Explorer {
                     TypeSelection::Scans => TypeSelection::Roots,
                     TypeSelection::Roots => TypeSelection::Items,
                 };
-                self.model.set_current_type(new_type);
-                action = Some(ExplorerAction::RefreshQuery)
+                self.set_current_type(new_type);
             }
             _ => {}
         }
@@ -533,5 +538,11 @@ impl Explorer {
             "Choose a new limit".into(),
             Some(self.model.current_limit()),
         ));
+    }
+
+    fn set_current_type(&mut self, new_type: TypeSelection)
+    {
+        self.model.set_current_type(new_type);
+        self.needs_query_refresh = true;
     }
 }

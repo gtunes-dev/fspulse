@@ -103,7 +103,7 @@ impl ColumnFrame {
                     }
                 }
             }
-            KeyCode::Char('f') => {
+            KeyCode::Char('f') | KeyCode::Char('F') => {
                 if let Some(col_option) = model
                     .current_columns()
                     .get(self.cursor_position.saturating_sub(1))
