@@ -8,6 +8,7 @@ use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
+use ratatui::style::Modifier;
 use ratatui::symbols;
 use ratatui::widgets::{Block, Clear, Tabs};
 use ratatui::{
@@ -31,9 +32,11 @@ use super::utils::Utils;
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 enum Focus {
+    Tabs,
     Filters,
-    ColumnSelector,
     DataGrid,
+    ColumnSelector,
+    Limit,
 }
 
 pub enum ExplorerAction {
@@ -45,6 +48,7 @@ pub enum ExplorerAction {
     ShowEditFilter(usize),
     DeleteFilter(usize),
     UpdateFilter(usize, String),
+    ShowLimit,
     SetLimit(String),
 }
 
@@ -114,10 +118,17 @@ impl Explorer {
                 Constraint::Length(1),
             );
 
+            let tabs_highlight = match self.focus {
+                Focus::Tabs => Style::default().bg(Color::Gray).fg(Color::Black),
+                _ => Style::default()
+                    .fg(Color::Gray)
+                    .add_modifier(Modifier::UNDERLINED),
+            };
+
             let tabs = Tabs::new(titles)
-                .highlight_style(Style::default().bg(Color::Gray).fg(Color::Black))
+                .highlight_style(tabs_highlight)
                 .divider(symbols::DOT)
-                .select(0);
+                .select(self.model.current_type().index());
 
             f.render_widget(tabs, tabs_rect);
 
@@ -226,10 +237,7 @@ impl Explorer {
 
                     match key.code {
                         KeyCode::Char('L') => {
-                            self.input_box = Some(InputBox::new(
-                                "Choose a new limit".into(),
-                                Some(self.model.current_limit()),
-                            ));
+                            self.show_limit_input();
                         }
                         KeyCode::Char('q') => {
                             break;
@@ -326,6 +334,8 @@ impl Explorer {
 
     fn dispatch_key_to_active_frame(&mut self, key: KeyEvent) {
         let action = match self.focus {
+            Focus::Tabs => self.handle_tab_section_key(key),
+            Focus::Limit => LimitWidget::handle_key(key),
             Focus::ColumnSelector => self.column_frame.handle_key(&mut self.model, key),
             Focus::DataGrid => self.grid_frame.handle_key(key),
             Focus::Filters => self.filter_frame.handle_key(&self.model, key),
@@ -364,26 +374,47 @@ impl Explorer {
 
     fn next_focus(&self) -> Focus {
         match self.focus {
-            Focus::Filters => Focus::ColumnSelector,
-            Focus::ColumnSelector => Focus::DataGrid,
-            Focus::DataGrid => Focus::Filters,
+            Focus::Tabs => Focus::Filters,
+            Focus::Filters => Focus::DataGrid,
+            Focus::DataGrid => Focus::ColumnSelector,
+            Focus::ColumnSelector => Focus::Limit,
+            Focus::Limit => Focus::Tabs,
         }
     }
 
     fn prev_focus(&self) -> Focus {
         match self.focus {
-            Focus::Filters => Focus::DataGrid,
-            Focus::ColumnSelector => Focus::Filters,
-            Focus::DataGrid => Focus::ColumnSelector,
+            Focus::Tabs => Focus::Limit,
+            Focus::Limit => Focus::ColumnSelector,
+            Focus::ColumnSelector => Focus::DataGrid,
+            Focus::DataGrid => Focus::Filters,
+            Focus::Filters => Focus::Tabs,
         }
     }
 
-    /// Returns help text depending on which frame is focused
+    // Help String Pattern (for all sections):
+    //
+    // - Each section’s help string uses the same structure and order of keybindings.
+    // - The pattern is:
+    //
+    //   [Section-specific keys]  |  Tab: Next Section  |  [Global shortcuts]  |  Q: Quit
+    //
+    // - Section-specific keys:
+    //     - Navigation (e.g., ↑↓, ←→, PgUp/PgDn, Home/End)
+    //     - Actions (e.g., Enter, Space, Del, +/-)
+    // - Global shortcuts:
+    //     - Typed letters that invoke app-wide actions (e.g., I/C/S/R to change type, L to edit limit)
+    //
+    // - All keys use uppercase letters (e.g., Q, L) for consistency.
+    // - Delimit sections with " | ".
+    // - Avoid including the name of the focused frame unless necessary (focus is indicated visually).
     fn help_text(&self) -> &'static str {
         match self.focus {
-            Focus::Filters => "Tab: Next Section  |  r: Refresh  |  q: Quit  |  Focus: Filters",
-            Focus::ColumnSelector => "Tab: Next Section  |  Space/Enter: Toggle  |  +/-: Reorder  |  r: Refresh  |  q: Quit  |  Focus: Type & Columns",
-            Focus::DataGrid => "↑↓: Scroll  |  PgUp/PgDn: Page  |  Home/End: Top/Bottom  |  Tab: Next Section  |  r: Refresh  |  q: Quit  |  Focus: Data Grid",
+            Focus::Tabs => "← →: Switch Type  |  Tab: Next Section  |  I/C/S/R: Switch to Items/Changes/Scans/Roots  |  q: Quit",
+            Focus::Limit => "Space/Enter: Edit Limit  |  Tab: Next Section  |  L: Edit Limit  |  q: Quit",
+            Focus::Filters => "↑↓: Navigate  |  Space/Enter: Edit  |  Del: Delete  |  Tab: Next Section  |  Q: Quit",
+            Focus::ColumnSelector => "↑↓: Navigate  |  Space/Enter: Toggle  |  + / -: Reorder  |  F: Add Filter  |  Tab: Next Section  |  Q: Quit",
+            Focus::DataGrid => "↑↓: Scroll  |  PgUp/PgDn: Page  |  Home/End: Top/Bottom  |  Tab: Next Section  |  Q: Quit",
         }
     }
 
@@ -464,5 +495,43 @@ impl Explorer {
             }
             Err(err) => Err(err),
         }
+    }
+
+    fn handle_tab_section_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
+        let mut action = None;
+
+        match key.code {
+            KeyCode::Left => {
+                let new_type = match self.model.current_type() {
+                    TypeSelection::Items => TypeSelection::Roots,
+                    TypeSelection::Changes => TypeSelection::Items,
+                    TypeSelection::Scans => TypeSelection::Changes,
+                    TypeSelection::Roots => TypeSelection::Scans,
+                };
+                self.model.set_current_type(new_type);
+                action = Some(ExplorerAction::RefreshQuery)
+
+            }
+            KeyCode::Right => {
+                let new_type= match self.model.current_type() {
+                    TypeSelection::Items => TypeSelection::Changes,
+                    TypeSelection::Changes => TypeSelection::Scans,
+                    TypeSelection::Scans => TypeSelection::Roots,
+                    TypeSelection::Roots => TypeSelection::Items,
+                };
+                self.model.set_current_type(new_type);
+                action = Some(ExplorerAction::RefreshQuery)
+            }
+            _ => {}
+        }
+
+        action
+    }
+
+    fn show_limit_input(&mut self) {
+        self.input_box = Some(InputBox::new(
+            "Choose a new limit".into(),
+            Some(self.model.current_limit()),
+        ));
     }
 }

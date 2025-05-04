@@ -1,12 +1,8 @@
 use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::{Color, Style},
-    text::{Line, Span},
-    widgets::{Paragraph, Widget},
+    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::Rect, style::{Color, Style}, text::{Line, Span}, widgets::{Paragraph, Widget}
 };
 
-use super::utils::Utils;
+use super::{explorer::ExplorerAction, utils::Utils};
 
 pub struct LimitWidget {
     limit: String,
@@ -25,6 +21,19 @@ impl LimitWidget {
             // normal look
             Style::default()
         }
+    }
+
+    pub fn handle_key(key: KeyEvent) -> Option<ExplorerAction> {
+        let mut action = None;
+
+        match key.code {
+            KeyCode::Char(' ') | KeyCode::Enter => {
+                action = Some(ExplorerAction::ShowLimit);
+            }
+            _ => {}
+        }
+
+        action
     }
 }
 

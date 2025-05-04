@@ -7,46 +7,46 @@ use crate::query::{
 
 #[derive(Debug, Clone, Copy)]
 pub enum TypeSelection {
-    Roots,
-    Scans,
     Items,
     Changes,
+    Scans,
+    Roots,
 }
 
 impl TypeSelection {
     pub fn all_types() -> &'static [TypeSelection] {
         &[
-            TypeSelection::Roots,
-            TypeSelection::Scans,
             TypeSelection::Items,
             TypeSelection::Changes,
+            TypeSelection::Scans,
+            TypeSelection::Roots,
         ]
     }
 
     pub fn name(&self) -> &'static str {
         match self {
-            TypeSelection::Roots => "Roots",
-            TypeSelection::Scans => "Scans",
             TypeSelection::Items => "Items",
             TypeSelection::Changes => "Changes",
+            TypeSelection::Scans => "Scans",
+            TypeSelection::Roots => "Roots",
         }
     }
 
     pub fn index(&self) -> usize {
         match self {
-            TypeSelection::Roots => 0,
-            TypeSelection::Scans => 1,
-            TypeSelection::Items => 2,
-            TypeSelection::Changes => 3,
+            TypeSelection::Items => 0,
+            TypeSelection::Changes => 1,
+            TypeSelection::Scans => 2,
+            TypeSelection::Roots => 3,
         }
     }
 
     pub fn title(&self) -> Line<'static> {
         match self {
-            TypeSelection::Roots => Line::from(" Roots (R) "),
-            TypeSelection::Scans => Line::from(" Scans (S) "),
             TypeSelection::Items => Line::from(" Items (I) "),
             TypeSelection::Changes => Line::from(" Changes (C) "),
+            TypeSelection::Scans => Line::from(" Scans (S) "),
+            TypeSelection::Roots => Line::from(" Roots (R) "),
         }
     }
 }
