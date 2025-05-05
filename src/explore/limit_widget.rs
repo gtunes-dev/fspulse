@@ -1,8 +1,8 @@
 use ratatui::{
-    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::Rect, style::{Color, Style}, text::{Line, Span}, widgets::{Paragraph, Widget}
+    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::Rect, style::{Color, Style}, text::{Line, Span}, widgets::{Block, Borders, Paragraph, Widget}
 };
 
-use super::{explorer::ExplorerAction, utils::Utils};
+use super::explorer::ExplorerAction;
 
 pub struct LimitWidget {
     limit: String,
@@ -40,9 +40,14 @@ impl LimitWidget {
 impl Widget for LimitWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let styled_limit = Span::styled(self.limit.to_string(), self.limit_style());
-        let line = Line::from(vec![Span::raw("Row Limit: "), styled_limit]);
+        //let line = Line::from(vec![Span::raw("Row Limit: "), styled_limit]);
+        let line = Line::from(styled_limit);
 
-        let block = Utils::new_frame_block(self.has_focus);
+        let block = Block::new()
+        .borders(Borders::ALL)
+        .title("Row Limit");
+
+        //let block = Utils::new_frame_block(self.has_focus);
         Paragraph::new(line)
         .block(block)
         .render(area, buf);

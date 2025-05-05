@@ -1,12 +1,22 @@
 use ratatui::{
-    buffer::Buffer, crossterm::event::KeyEvent, layout::{Constraint, Rect}, style::{Color, Style, Stylize}, text::{Span, Text}, widgets::{
-        Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState, Widget
+    buffer::Buffer,
+    crossterm::event::KeyEvent,
+    layout::{Constraint, Layout, Rect},
+    style::{Color, Style, Stylize},
+    text::{Span, Text},
+    widgets::{
+        Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table,
+        TableState, Widget,
     },
 };
 
 use crate::query::columns::ColType;
 
-use super::{domain_model::{ColInfo, DomainModel, TypeSelection}, explorer::ExplorerAction, utils::Utils};
+use super::{
+    domain_model::{ColInfo, DomainModel, TypeSelection},
+    explorer::ExplorerAction,
+    utils::Utils,
+};
 
 pub struct GridFrame {
     pub columns: Vec<String>,
@@ -14,7 +24,7 @@ pub struct GridFrame {
     pub rows: Vec<Row<'static>>,
     pub column_constraints: Vec<Constraint>,
     pub table_state: TableState,
-    pub area: Rect,
+    pub table_area: Rect,
 }
 
 impl GridFrame {
@@ -29,7 +39,7 @@ impl GridFrame {
                 state.select(Some(0));
                 state
             },
-            area: Rect::default(),
+            table_area: Rect::default(),
         }
     }
 
@@ -70,7 +80,9 @@ impl GridFrame {
             .map(|(col_name, col_info)| match col_info.col_type {
                 ColType::Id => Constraint::Length(col_size(col_name, 9) as u16),
                 ColType::Int => Constraint::Length(col_size(col_name, 8) as u16),
-                ColType::Val | ColType::ItemType | ColType::ChangeType => Constraint::Length(col_size(col_name, 1) as u16),
+                ColType::Val | ColType::ItemType | ColType::ChangeType => {
+                    Constraint::Length(col_size(col_name, 1) as u16)
+                }
                 ColType::Bool => Constraint::Length(col_size(col_name, 1) as u16),
                 ColType::Date => Constraint::Length(col_size(col_name, 10) as u16),
                 ColType::Path => Constraint::Min(30),
@@ -97,7 +109,7 @@ impl GridFrame {
     }
 
     pub fn visible_rows(&self) -> usize {
-        self.area.height.saturating_sub(3) as usize
+        self.table_area.height.saturating_sub(1) as usize // subtract the header row
     }
 
     pub fn frame_title(type_selection: TypeSelection) -> &'static str {
@@ -128,44 +140,61 @@ impl<'a> GridFrameView<'a> {
 
 impl Widget for GridFrameView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        self.frame.area = area;
-
-        // Set up for drawing
-        let total_rows = self.frame.rows.len();
-        let visible_rows = self.frame.visible_rows();
-
-        let header = Row::new(self.frame.columns.iter().map(|h| Span::raw(h.clone())))
-            .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
-
+        // ---- 1. Draw the outer frame ---------------------------------------------------------
         let frame_title = GridFrame::frame_title(self.model.current_type());
         let block = Utils::new_frame_block_with_title(self.has_focus, frame_title);
 
-        let mut highlight_style = Style::default();
-        if self.has_focus {
-            highlight_style = highlight_style.fg(Color::Yellow);
+        // Work only inside the borders
+        let inner = block.inner(area);
+        if inner.width < 2 || inner.height < 1 {
+            return; // not enough space
         }
 
-        let table = Table::new(self.frame.rows.clone(), self.frame.column_constraints.clone())
-            .header(header)
-            .block(block)
-            .row_highlight_style(highlight_style)
-            .highlight_symbol("» ");
+        block.render(area, buf);
 
-        <Table as StatefulWidget>::render(table, area, buf, &mut self.frame.table_state);
+        // ---- 2. Split inner area: [table | 1‑col scrollbar] ----------------------------------
+        let [table_area, bar_area] = Layout::horizontal([
+            Constraint::Min(0),    // table takes remaining width
+            Constraint::Length(1), // 1 char for scrollbar
+        ])
+        .areas(inner);
 
-        // Draw scrollbar
-        if total_rows > visible_rows {
+        self.frame.table_area = table_area;
+
+        // ---- 3. Stateful table ---------------------------------------------------------------
+        let header = Row::new(self.frame.columns.iter().map(|h| Span::raw(h.clone())))
+            .style(Style::default().bg(Color::DarkGray).bold());
+
+        let highlight_style = if self.has_focus {
+            Style::default().fg(Color::Black).bg(Color::Cyan)
+        } else {
+            Style::default()
+        };
+
+        let table = Table::new(
+            self.frame.rows.clone(),
+            self.frame.column_constraints.clone(),
+        )
+        .header(header)
+        .highlight_symbol("» ")
+        .row_highlight_style(highlight_style);
+
+        StatefulWidget::render(table, table_area, buf, &mut self.frame.table_state);
+        // ---- 4. Vertical scrollbar -----------------------------------------------------------
+        let total_rows = self.frame.rows.len();
+        let viewport_rows = table_area.height as usize;
+
+        if total_rows > viewport_rows {
             if let Some(selected) = self.frame.table_state.selected() {
-                let mut scrollbar_state = ScrollbarState::new(total_rows)
-                    .viewport_content_length(visible_rows)
+                let mut sb_state = ScrollbarState::new(total_rows)
+                    .viewport_content_length(viewport_rows)
                     .position(selected);
 
                 Scrollbar::new(ScrollbarOrientation::VerticalRight)
                     .thumb_symbol("▐")
                     .track_symbol(Some(" "))
-                    .render(area, buf, &mut scrollbar_state);
+                    .render(bar_area, buf, &mut sb_state);
             }
         }
     }
-
 }

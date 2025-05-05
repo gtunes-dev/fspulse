@@ -1,5 +1,7 @@
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Direction, Flex, Layout, Rect}, style::Color, widgets::{Block, BorderType, Borders, TableState}
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::{Constraint, Direction, Flex, Layout, Rect},
+    widgets::{Block, BorderType, Borders, TableState},
 };
 
 pub struct Utils;
@@ -74,7 +76,7 @@ impl Utils {
             }
             KeyCode::Up => {
                 if let Some(selected) = table_state.selected() {
-                   table_state.select(Some(selected.saturating_sub(1)));
+                    table_state.select(Some(selected.saturating_sub(1)));
                 }
             }
             KeyCode::Down => {
@@ -96,12 +98,13 @@ impl Utils {
                     table_state.select(Some(new_selected));
                 }
             }
-            _ => handled = false
+            _ => handled = false,
         }
 
         handled
     }
 
+    /* 
     pub fn new_frame_block(is_focused: bool) -> Block<'static> {
         let block = if is_focused {
             Block::default()
@@ -115,17 +118,21 @@ impl Utils {
 
         block
     }
+    */
 
     pub fn new_frame_block_with_title(is_focused: bool, title_str: &'static str) -> Block<'static> {
         let block = if is_focused {
             Block::default()
                 .borders(Borders::ALL)
-                .border_type(BorderType::Double)
-                .border_style(Color::LightCyan)
-                .title_style(Color::White)
+                .border_type(BorderType::Plain)
+                //.border_style(Color::LightCyan)
+                //.title_style(Color::White)
                 .title(title_str)
         } else {
-            Block::default().borders(Borders::ALL).title(title_str)
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Plain)
+                .title(title_str)
         };
 
         block
