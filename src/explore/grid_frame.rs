@@ -13,7 +13,7 @@ use ratatui::{
 use crate::query::columns::ColType;
 
 use super::{
-    domain_model::{ColInfo, DomainModel, TypeSelection},
+    domain_model::{ColInfo, TypeSelection},
     explorer::ExplorerAction,
     utils::{StylePalette, Utils},
 };
@@ -124,15 +124,13 @@ impl GridFrame {
 
 pub struct GridFrameView<'a> {
     frame: &'a mut GridFrame,
-    model: &'a DomainModel,
     has_focus: bool,
 }
 
 impl<'a> GridFrameView<'a> {
-    pub fn new(frame: &'a mut GridFrame, model: &'a DomainModel, has_focus: bool) -> Self {
+    pub fn new(frame: &'a mut GridFrame, has_focus: bool) -> Self {
         Self {
             frame,
-            model,
             has_focus,
         }
     }
@@ -140,24 +138,13 @@ impl<'a> GridFrameView<'a> {
 
 impl Widget for GridFrameView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // ---- 1. Draw the outer frame ---------------------------------------------------------
-        let frame_title = GridFrame::frame_title(self.model.current_type());
-        let block = Utils::new_frame_block_with_title(frame_title);
-
-        // Work only inside the borders
-        let inner = block.inner(area);
-        if inner.width < 2 || inner.height < 1 {
-            return; // not enough space
-        }
-
-        block.render(area, buf);
-
+ 
         // ---- 2. Split inner area: [table | 1‑col scrollbar] ----------------------------------
         let [table_area, bar_area] = Layout::horizontal([
             Constraint::Min(0),    // table takes remaining width
             Constraint::Length(1), // 1 char for scrollbar
         ])
-        .areas(inner);
+        .areas(area);
 
         self.frame.table_area = table_area;
 

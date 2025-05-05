@@ -129,8 +129,9 @@ impl Widget for FilterFrameView<'_> {
 
         let total_rows = rows.len();
 
-        let title = FilterFrame::frame_title(self.model.current_type());
-        let block = Utils::new_frame_block_with_title(title);
+
+        //let title = FilterFrame::frame_title(self.model.current_type());
+        //let block = Utils::new_frame_block_with_title(title);
 
         let constraints = vec![
             Constraint::Length(15),
@@ -146,7 +147,7 @@ impl Widget for FilterFrameView<'_> {
 
         let table = Table::new(rows, constraints)
             .header(header)
-            .block(block)
+          //  .block(block)
             .row_highlight_style(highlight_style)
             .highlight_symbol("» ");
 

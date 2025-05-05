@@ -8,8 +8,7 @@ use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use ratatui::symbols;
-use ratatui::widgets::{Block, Clear, Tabs};
+use ratatui::widgets::{Block, BorderType, Clear, Tabs};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
@@ -17,6 +16,7 @@ use ratatui::{
     widgets::{Borders, Paragraph},
     Terminal,
 };
+use ratatui::{border, symbols};
 use std::io;
 
 use super::column_frame::ColumnFrameView;
@@ -87,25 +87,89 @@ impl Explorer {
         terminal.draw(|f| {
             let full_area = f.area(); // updated here
 
-            // Split vertically: Filters / Main / Help
-            let vertical_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
+            // Create layouts and area rects
+            let [tabs, filters, center, help] = Layout::new(
+                Direction::Vertical,
+                [
                     Constraint::Length(3), // Tabs
                     Constraint::Length(8), // Filters
                     Constraint::Min(0),    // Main content
                     Constraint::Length(2), // Help/status
-                ])
-                .split(full_area);
+                ],
+            )
+            .areas(full_area);
 
-            let tab_chunk = vertical_chunks[0];
-            let top_chunk = vertical_chunks[1];
-            let main_chunk = vertical_chunks[2];
-            let help_chunk = vertical_chunks[3];
+            let [left, data] = Layout::new(
+                Direction::Horizontal,
+                [
+                    Constraint::Length(30), // Left (Type + Columns)
+                    Constraint::Min(0),     // Right (Data Grid)
+                ],
+            )
+            .areas(center);
 
-            let titles = TypeSelection::all_types()
-                .iter()
-                .map(|t| t.title());
+            // layout the left chunk
+            let [limit, columns] = Layout::new(
+                Direction::Vertical,
+                [Constraint::Length(2), Constraint::Fill(1)],
+            )
+            .areas(left);
+
+            // -- Borders
+            // Filter
+            let filter_block_set = symbols::border::Set {
+                bottom_left: symbols::line::NORMAL.bottom_left,
+                bottom_right: symbols::line::NORMAL.bottom_right,
+                ..symbols::border::PLAIN
+            };
+            let filter_block = Block::default()
+                .border_set(filter_block_set)
+                .borders(border!(TOP, LEFT, RIGHT))
+            //    .border_type(BorderType::Plain)
+                .title(FilterFrame::frame_title(self.model.current_type()));
+            f.render_widget(&filter_block, filters);
+
+            // Limit
+            let limit_block_set = symbols::border::Set {
+                top_left: symbols::line::NORMAL.vertical_right,
+                top_right: symbols::line::NORMAL.horizontal_down,
+                bottom_left: symbols::line::NORMAL.vertical_right,
+                ..symbols::border::PLAIN
+            };
+            let limit_block = Block::default()
+                .border_set(limit_block_set)
+                .borders(border!(TOP, LEFT))
+                .title("Row Limit");
+
+            f.render_widget(&limit_block, limit);
+
+            // Columns
+            let columns_block_set = symbols::border::Set {
+                top_left: symbols::line::NORMAL.vertical_right,
+                top_right:  symbols::line::NORMAL.vertical_left,
+                ..symbols::border::PLAIN
+            };
+            let columns_block = Block::default()
+                .border_set(columns_block_set)
+                .borders(border!(TOP, LEFT, BOTTOM))
+                .title(ColumnFrame::frame_title(self.model.current_type()));
+            f.render_widget(&columns_block, columns);
+
+            // Data
+            let data_border_set = symbols::border::Set {
+                top_left: symbols::line::NORMAL.horizontal_down,
+                top_right: symbols::line::NORMAL.vertical_left,
+                ..symbols::border::PLAIN
+            };
+            let data_block = Block::default()
+                .border_set(data_border_set)
+                .borders(border!(ALL))
+         //       .border_type(BorderType::Plain)
+                .title(GridFrame::frame_title(self.model.current_type()));
+
+            f.render_widget(&data_block, data);
+
+            let titles = TypeSelection::all_types().iter().map(|t| t.title());
 
             let mut tabs_width: u16 = TypeSelection::all_types()
                 .iter()
@@ -115,11 +179,8 @@ impl Explorer {
 
             tabs_width += 3 * 3; // " * " in between each tab
 
-            let tabs_rect = Utils::center(
-                tab_chunk,
-                Constraint::Length(tabs_width),
-                Constraint::Length(1),
-            );
+            let tabs_rect =
+                Utils::center(tabs, Constraint::Length(tabs_width), Constraint::Length(1));
 
             let tabs_highlight = match self.focus {
                 Focus::Tabs => StylePalette::TabHighlight.style(),
@@ -130,54 +191,32 @@ impl Explorer {
                 .highlight_style(tabs_highlight)
                 .divider(symbols::DOT)
                 .select(self.model.current_type().index());
-
             f.render_widget(tabs, tabs_rect);
-
-            // Inside the main content, split horizontally
-            let main_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Length(30), // Left (Type + Columns)
-                    Constraint::Min(0),     // Right (Data Grid)
-                ])
-                .split(main_chunk);
-
-            let left_chunk = main_chunks[0];
-            let right_chunk = main_chunks[1];
 
             let filter_frame_view = FilterFrameView::new(
                 &mut self.filter_frame,
                 &self.model,
                 matches!(self.focus, Focus::Filters),
             );
-            f.render_widget(filter_frame_view, top_chunk);
-
-            // render the left chunk
-            let left_layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Length(3), Constraint::Fill(1)])
-                .split(left_chunk);
+            f.render_widget(filter_frame_view, filter_block.inner(filters));
 
             let limit_widget = LimitWidget::new(
                 self.model.current_limit(),
                 matches!(self.focus, Focus::Limit),
             );
-            f.render_widget(limit_widget, left_layout[0]);
+            f.render_widget(limit_widget, limit_block.inner(limit));
 
             let column_frame_view = ColumnFrameView::new(
                 &mut self.column_frame,
                 &self.model,
                 matches!(self.focus, Focus::ColumnSelector),
             );
-            f.render_widget(column_frame_view, left_layout[1]);
+            f.render_widget(column_frame_view, columns_block.inner(columns));
 
             // Draw right (data grid)
-            let grid_frame_view = GridFrameView::new(
-                &mut self.grid_frame,
-                &self.model,
-                matches!(self.focus, Focus::DataGrid),
-            );
-            f.render_widget(grid_frame_view, right_chunk);
+            let grid_frame_view =
+                GridFrameView::new(&mut self.grid_frame, matches!(self.focus, Focus::DataGrid));
+            f.render_widget(grid_frame_view, data_block.inner(data));
 
             // Draw bottom (help/status)
             let help_block = Block::default()
@@ -187,7 +226,7 @@ impl Explorer {
             let help_paragraph = Paragraph::new(self.help_text())
                 .style(Style::default().bg(Color::Blue).fg(Color::White))
                 .block(help_block);
-            f.render_widget(help_paragraph, help_chunk);
+            f.render_widget(help_paragraph, help);
 
             if let Some(ref mut filter_window) = self.filter_window {
                 let is_top_window = self.message_box.is_none();
@@ -513,7 +552,8 @@ impl Explorer {
 
         match QueryProcessor::execute_query(db, &query_str) {
             Ok(rows) => {
-                self.grid_frame.set_data(self.query_resets_selection, columns, col_types, rows);
+                self.grid_frame
+                    .set_data(self.query_resets_selection, columns, col_types, rows);
                 //self.error_message = None;
                 Ok(())
             }

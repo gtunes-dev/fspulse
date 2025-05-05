@@ -144,9 +144,6 @@ impl Widget for ColumnFrameView<'_> {
             rows.push(row);
         }
 
-        let block =
-            Utils::new_frame_block_with_title(ColumnFrame::frame_title(self.model.current_type()));
-
         let widths = [Constraint::Percentage(100)];
 
         let highlight_style = if self.has_focus {
@@ -156,7 +153,6 @@ impl Widget for ColumnFrameView<'_> {
         };
 
         let table = Table::new(rows, widths)
-            .block(block)
             .row_highlight_style(highlight_style)
             .highlight_symbol("» ");
         <Table as StatefulWidget>::render(table, area, buf, &mut self.frame.table_state);

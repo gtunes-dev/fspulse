@@ -120,9 +120,9 @@ impl Utils {
         handled
     }
 
-    pub fn new_frame_block_with_title(title_str: &'static str) -> Block<'static> {
+    pub fn new_frame_block(title_str: &'static str, borders: Borders) -> Block<'static> {
         Block::default()
-            .borders(Borders::ALL)
+            .borders(borders)
             .border_type(BorderType::Plain)
             .title(title_str)
     }
