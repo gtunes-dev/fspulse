@@ -8,7 +8,7 @@ use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use ratatui::widgets::{Block, BorderType, Clear, Tabs};
+use ratatui::widgets::{Block, Clear, Tabs};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
@@ -125,7 +125,7 @@ impl Explorer {
             let filter_block = Block::default()
                 .border_set(filter_block_set)
                 .borders(border!(TOP, LEFT, RIGHT))
-            //    .border_type(BorderType::Plain)
+                //    .border_type(BorderType::Plain)
                 .title(FilterFrame::frame_title(self.model.current_type()));
             f.render_widget(&filter_block, filters);
 
@@ -146,7 +146,7 @@ impl Explorer {
             // Columns
             let columns_block_set = symbols::border::Set {
                 top_left: symbols::line::NORMAL.vertical_right,
-                top_right:  symbols::line::NORMAL.vertical_left,
+                top_right: symbols::line::NORMAL.vertical_left,
                 ..symbols::border::PLAIN
             };
             let columns_block = Block::default()
@@ -164,7 +164,7 @@ impl Explorer {
             let data_block = Block::default()
                 .border_set(data_border_set)
                 .borders(border!(ALL))
-         //       .border_type(BorderType::Plain)
+                //       .border_type(BorderType::Plain)
                 .title(GridFrame::frame_title(self.model.current_type()));
 
             f.render_widget(&data_block, data);
@@ -215,7 +215,7 @@ impl Explorer {
 
             // Draw right (data grid)
             let grid_frame_view =
-                GridFrameView::new(&mut self.grid_frame, matches!(self.focus, Focus::DataGrid));
+                GridFrameView::new(&mut self.grid_frame, &self.model, matches!(self.focus, Focus::DataGrid));
             f.render_widget(grid_frame_view, data_block.inner(data));
 
             // Draw bottom (help/status)
@@ -505,22 +505,23 @@ impl Explorer {
         }
 
         // Build the "show" clause and cols vector
-        query.push_str(" show ");
+        // It's by design that we allow a query with no visible columns
+        // We'll display an empty result with an explanatory message
+        // in the data grid
         let mut first_col = true;
         for col in self.model.current_columns() {
             if col.selected {
                 match first_col {
-                    true => first_col = false,
+                    true => {
+                        query.push_str(" show ");
+                        first_col = false
+                    }
                     false => query.push_str(", "),
                 }
                 cols.push(col.name.to_owned());
                 col_infos.push(col.col_info);
                 query.push_str(col.name);
             }
-        }
-
-        if first_col {
-            return Err(FsPulseError::Error("No columns selected".into()));
         }
 
         // TODO: Build the "order by" clause once we have UI for that

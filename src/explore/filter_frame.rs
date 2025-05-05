@@ -1,16 +1,20 @@
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
-    layout::{Constraint, Rect},
+    layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::Style,
-    text::Span,
+    text::{Line, Span},
     widgets::{
-        Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState,
-        Widget,
+        Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table,
+        TableState, Widget,
     },
 };
 
-use super::{domain_model::{DomainModel, TypeSelection}, explorer::ExplorerAction, utils::{StylePalette, Utils}};
+use super::{
+    domain_model::{DomainModel, TypeSelection},
+    explorer::ExplorerAction,
+    utils::{StylePalette, Utils},
+};
 
 pub struct FilterFrame {
     table_state: TableState,
@@ -110,14 +114,37 @@ impl<'a> FilterFrameView<'a> {
     }
 }
 
-impl Widget for FilterFrameView<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        self.frame.set_area(area);
+impl<'a> FilterFrameView<'a> {
+    fn render_empty(&self, area: Rect, buf: &mut Buffer) {
+        let [_, para_area, _] = Layout::vertical([
+            Constraint::Min(0),
+            Constraint::Length(2),
+            Constraint::Min(0),
+        ])
+        .flex(Flex::Center) // even distribution above & below
+        .areas(area);
 
+        let style = if self.has_focus {
+            StylePalette::style(&StylePalette::TextFocus)
+        } else {
+            Style::default()
+        };
+
+        let text = vec![
+            Line::from(
+                Span::from("No Filters").style(style)),
+            Line::from("(select a column and press 'f' to add a filter)"),
+        ];
+
+        Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .render(para_area, buf);
+    }
+
+    fn render_filters(&mut self, area: Rect, buf: &mut Buffer) {
         let header_style = StylePalette::TableHeader.style();
 
-        let header = Row::new(vec!["Column", "Type", "Filter"])
-            .style(header_style);
+        let header = Row::new(vec!["Column", "Type", "Filter"]).style(header_style);
 
         let rows = self.model.current_filters().iter().map(|f| {
             Row::new(vec![
@@ -128,10 +155,6 @@ impl Widget for FilterFrameView<'_> {
         });
 
         let total_rows = rows.len();
-
-
-        //let title = FilterFrame::frame_title(self.model.current_type());
-        //let block = Utils::new_frame_block_with_title(title);
 
         let constraints = vec![
             Constraint::Length(15),
@@ -147,7 +170,7 @@ impl Widget for FilterFrameView<'_> {
 
         let table = Table::new(rows, constraints)
             .header(header)
-          //  .block(block)
+            //  .block(block)
             .row_highlight_style(highlight_style)
             .highlight_symbol("» ");
 
@@ -166,6 +189,18 @@ impl Widget for FilterFrameView<'_> {
                     .track_symbol(Some(" "))
                     .render(area, buf, &mut scrollbar_state);
             }
+        }
+    }
+}
+
+impl Widget for FilterFrameView<'_> {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
+        self.frame.set_area(area);
+
+        if self.model.current_filters().is_empty() {
+            self.render_empty(area, buf);
+        } else {
+            self.render_filters(area, buf);
         }
     }
 }

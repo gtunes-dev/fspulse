@@ -1,19 +1,18 @@
 use ratatui::{
     buffer::Buffer,
     crossterm::event::KeyEvent,
-    layout::{Constraint, Layout, Rect},
+    layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::Style,
-    text::{Span, Text},
+    text::{Line, Span, Text},
     widgets::{
-        Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table,
-        TableState, Widget,
+        Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState, Widget
     },
 };
 
 use crate::query::columns::ColType;
 
 use super::{
-    domain_model::{ColInfo, TypeSelection},
+    domain_model::{ColInfo, DomainModel, TypeSelection},
     explorer::ExplorerAction,
     utils::{StylePalette, Utils},
 };
@@ -124,21 +123,50 @@ impl GridFrame {
 
 pub struct GridFrameView<'a> {
     frame: &'a mut GridFrame,
+    model: &'a DomainModel,
     has_focus: bool,
 }
 
 impl<'a> GridFrameView<'a> {
-    pub fn new(frame: &'a mut GridFrame, has_focus: bool) -> Self {
-        Self {
-            frame,
-            has_focus,
-        }
+    pub fn new(frame: &'a mut GridFrame, model: &'a DomainModel, has_focus: bool) -> Self {
+        Self { frame, model, has_focus }
     }
 }
 
-impl Widget for GridFrameView<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
- 
+impl<'a> GridFrameView<'a> {
+    fn render_empty(&self, area: Rect, buf: &mut Buffer) {
+        let [_, para_area, _] = Layout::vertical([
+            Constraint::Min(0),
+            Constraint::Length(2),
+            Constraint::Min(0),
+        ])
+        .flex(Flex::Center) // even distribution above & below
+        .areas(area);
+
+        let style = if self.has_focus {
+            StylePalette::style(&StylePalette::TextFocus)
+        } else {
+            Style::default()
+        };
+
+        let reason = if self.frame.columns.is_empty() {
+            Line::from("(all columns are hidden)")
+        } else {
+            Line::from(format!("(no {} found)", self.model.current_type().name()))
+        };
+
+        let text = vec![
+            Line::from(
+                Span::from("No Data to Display").style(style)),
+            reason,
+        ];
+
+        Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .render(para_area, buf);
+    }
+
+    fn render_table(&mut self, area: Rect, buf: &mut Buffer) {
         // ---- 2. Split inner area: [table | 1‑col scrollbar] ----------------------------------
         let [table_area, bar_area] = Layout::horizontal([
             Constraint::Min(0),    // table takes remaining width
@@ -182,6 +210,16 @@ impl Widget for GridFrameView<'_> {
                     .track_symbol(Some(" "))
                     .render(bar_area, buf, &mut sb_state);
             }
+        }
+    }
+}
+
+impl Widget for GridFrameView<'_> {
+    fn render(mut self, area: Rect, buf: &mut Buffer) {
+        if self.frame.columns.is_empty() || self.frame.rows.is_empty() {
+            self.render_empty(area, buf);
+        } else {
+            self.render_table(area, buf);
         }
     }
 }

@@ -1,5 +1,8 @@
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Direction, Flex, Layout, Rect}, style::{Color, Modifier, Style, Stylize}, widgets::{Block, BorderType, Borders, TableState},
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::{Constraint, Direction, Flex, Layout, Rect},
+    style::{Color, Modifier, Style, Stylize},
+    widgets::TableState,
 };
 
 pub struct Utils;
@@ -8,7 +11,8 @@ pub enum StylePalette {
     TableHeader,
     TableRowHighlight,
     Tab,
-    TabHighlight
+    TabHighlight,
+    TextFocus,
 }
 
 impl StylePalette {
@@ -16,8 +20,14 @@ impl StylePalette {
         match self {
             StylePalette::TableHeader => Style::default().bg(Color::DarkGray).bold(),
             StylePalette::TableRowHighlight => Style::default().fg(Color::Black).bg(Color::Cyan),
-            StylePalette::Tab => Style::default().fg(Color::Gray).add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
-            StylePalette::TabHighlight => Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
+            StylePalette::Tab => Style::default()
+                .fg(Color::Gray)
+                .add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
+            StylePalette::TabHighlight => Style::default()
+                .fg(Color::Black)
+                .bg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+            StylePalette::TextFocus => Style::default().fg(Color::Black).bg(Color::Cyan),
         }
     }
 }
@@ -118,12 +128,5 @@ impl Utils {
         }
 
         handled
-    }
-
-    pub fn new_frame_block(title_str: &'static str, borders: Borders) -> Block<'static> {
-        Block::default()
-            .borders(borders)
-            .border_type(BorderType::Plain)
-            .title(title_str)
     }
 }
