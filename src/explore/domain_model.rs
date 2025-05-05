@@ -41,21 +41,12 @@ impl TypeSelection {
         }
     }
 
-    pub fn title(&self, selected_type: TypeSelection) -> Line<'static> {
-        if *self == selected_type {
-            match self {
-                TypeSelection::Items => Line::from("» Items (I)"),
-                TypeSelection::Changes => Line::from("» Changes (C)"),
-                TypeSelection::Scans => Line::from("» Scans (S)"),
-                TypeSelection::Roots => Line::from("» Roots (R)"),
-            }
-        } else {
-            match self {
-                TypeSelection::Items => Line::from("Items (I)"),
-                TypeSelection::Changes => Line::from("Changes (C)"),
-                TypeSelection::Scans => Line::from("Scans (S)"),
-                TypeSelection::Roots => Line::from("Roots (R)"),
-            }
+    pub fn title(&self) -> Line<'static> {
+        match self {
+            TypeSelection::Items => Line::from("Items (I)"),
+            TypeSelection::Changes => Line::from("Changes (C)"),
+            TypeSelection::Scans => Line::from("Scans (S)"),
+            TypeSelection::Roots => Line::from("Roots (R)"),
         }
     }
 }
@@ -81,7 +72,12 @@ pub struct Filter {
 }
 
 impl Filter {
-    pub fn new(col_name: &'static str, type_name: &'static str, col_type_info: ColTypeInfo, filter_text: String) -> Self {
+    pub fn new(
+        col_name: &'static str,
+        type_name: &'static str,
+        col_type_info: ColTypeInfo,
+        filter_text: String,
+    ) -> Self {
         Filter {
             col_name,
             type_name,

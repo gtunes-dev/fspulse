@@ -1,10 +1,26 @@
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent},
-    layout::{Constraint, Direction, Flex, Layout, Rect},
-    widgets::{Block, BorderType, Borders, TableState},
+    crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Direction, Flex, Layout, Rect}, style::{Color, Modifier, Style, Stylize}, widgets::{Block, BorderType, Borders, TableState},
 };
 
 pub struct Utils;
+
+pub enum StylePalette {
+    TableHeader,
+    TableRowHighlight,
+    Tab,
+    TabHighlight
+}
+
+impl StylePalette {
+    pub fn style(&self) -> Style {
+        match self {
+            StylePalette::TableHeader => Style::default().bg(Color::DarkGray).bold(),
+            StylePalette::TableRowHighlight => Style::default().fg(Color::Black).bg(Color::Cyan),
+            StylePalette::Tab => Style::default().fg(Color::Gray).add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
+            StylePalette::TabHighlight => Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
+        }
+    }
+}
 
 impl Utils {
     pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -104,37 +120,10 @@ impl Utils {
         handled
     }
 
-    /* 
-    pub fn new_frame_block(is_focused: bool) -> Block<'static> {
-        let block = if is_focused {
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Double)
-                .border_style(Color::LightCyan)
-                .title_style(Color::White)
-        } else {
-            Block::default().borders(Borders::ALL)
-        };
-
-        block
-    }
-    */
-
-    pub fn new_frame_block_with_title(is_focused: bool, title_str: &'static str) -> Block<'static> {
-        let block = if is_focused {
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Plain)
-                //.border_style(Color::LightCyan)
-                //.title_style(Color::White)
-                .title(title_str)
-        } else {
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Plain)
-                .title(title_str)
-        };
-
-        block
+    pub fn new_frame_block_with_title(title_str: &'static str) -> Block<'static> {
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Plain)
+            .title(title_str)
     }
 }

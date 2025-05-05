@@ -2,7 +2,7 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::KeyEvent,
     layout::{Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
+    style::Style,
     text::{Span, Text},
     widgets::{
         Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table,
@@ -15,7 +15,7 @@ use crate::query::columns::ColType;
 use super::{
     domain_model::{ColInfo, DomainModel, TypeSelection},
     explorer::ExplorerAction,
-    utils::Utils,
+    utils::{StylePalette, Utils},
 };
 
 pub struct GridFrame {
@@ -142,7 +142,7 @@ impl Widget for GridFrameView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         // ---- 1. Draw the outer frame ---------------------------------------------------------
         let frame_title = GridFrame::frame_title(self.model.current_type());
-        let block = Utils::new_frame_block_with_title(self.has_focus, frame_title);
+        let block = Utils::new_frame_block_with_title(frame_title);
 
         // Work only inside the borders
         let inner = block.inner(area);
@@ -163,10 +163,10 @@ impl Widget for GridFrameView<'_> {
 
         // ---- 3. Stateful table ---------------------------------------------------------------
         let header = Row::new(self.frame.columns.iter().map(|h| Span::raw(h.clone())))
-            .style(Style::default().bg(Color::DarkGray).bold());
+            .style(StylePalette::TableHeader.style());
 
         let highlight_style = if self.has_focus {
-            Style::default().fg(Color::Black).bg(Color::Cyan)
+            StylePalette::TableRowHighlight.style()
         } else {
             Style::default()
         };

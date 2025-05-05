@@ -2,7 +2,7 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Rect},
-    style::{Color, Style},
+    style::Style,
     widgets::{Row, StatefulWidget, Table, TableState, Widget},
 };
 
@@ -10,7 +10,7 @@ use super::{
     domain_model::{DomainModel, TypeSelection},
     explorer::ExplorerAction,
     filter_window::FilterWindow,
-    utils::Utils,
+    utils::{StylePalette, Utils},
 };
 
 pub struct ColumnFrame {
@@ -141,27 +141,19 @@ impl Widget for ColumnFrameView<'_> {
 
             let row = Row::new(vec![text]);
 
-            //let line = Line::from(text);
-            /*
-            if self.frame.cursor_position == i + 1 && self.has_focus {
-                line = line.style(Style::default().fg(Color::Yellow).bold());
-            }
-            */
-
             rows.push(row);
         }
 
-        let block = Utils::new_frame_block_with_title(
-            self.has_focus,
-            ColumnFrame::frame_title(self.model.current_type()),
-        );
+        let block =
+            Utils::new_frame_block_with_title(ColumnFrame::frame_title(self.model.current_type()));
 
         let widths = [Constraint::Percentage(100)];
 
-        let mut highlight_style = Style::default();
-        if self.has_focus {
-            highlight_style = highlight_style.fg(Color::Yellow);
-        }
+        let highlight_style = if self.has_focus {
+            StylePalette::TableRowHighlight.style()
+        } else {
+            Style::default()
+        };
 
         let table = Table::new(rows, widths)
             .block(block)

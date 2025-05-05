@@ -8,7 +8,6 @@ use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use ratatui::style::Modifier;
 use ratatui::symbols;
 use ratatui::widgets::{Block, Clear, Tabs};
 use ratatui::{
@@ -28,7 +27,7 @@ use super::grid_frame::GridFrameView;
 use super::input_box::{InputBox, InputBoxState};
 use super::limit_widget::LimitWidget;
 use super::message_box::{MessageBox, MessageBoxType};
-use super::utils::Utils;
+use super::utils::{StylePalette, Utils};
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 enum Focus {
@@ -69,7 +68,7 @@ impl Explorer {
     pub fn new() -> Self {
         Self {
             model: DomainModel::new(),
-            focus: Focus::Filters,
+            focus: Focus::DataGrid,
             needs_query_refresh: true,
             query_resets_selection: true,
             column_frame: ColumnFrame::new(),
@@ -104,15 +103,13 @@ impl Explorer {
             let main_chunk = vertical_chunks[2];
             let help_chunk = vertical_chunks[3];
 
-            let current_type = self.model.current_type();
-
             let titles = TypeSelection::all_types()
                 .iter()
-                .map(|t| t.title(current_type));
+                .map(|t| t.title());
 
             let mut tabs_width: u16 = TypeSelection::all_types()
                 .iter()
-                .map(|l| l.title(current_type).width() as u16) // Line::width() is in ratatui >=0.25
+                .map(|l| l.title().width() as u16) // Line::width() is in ratatui >=0.25
                 .sum::<u16>()
                 + ((titles.len().saturating_sub(1)) as u16);
 
@@ -125,10 +122,8 @@ impl Explorer {
             );
 
             let tabs_highlight = match self.focus {
-                Focus::Tabs => Style::default().bg(Color::Gray).fg(Color::Black),
-                _ => Style::default()
-                    .fg(Color::Gray)
-                    .add_modifier(Modifier::BOLD | Modifier::REVERSED), // .add_modifier(Modifier::UNDERLINED),
+                Focus::Tabs => StylePalette::TabHighlight.style(),
+                _ => StylePalette::Tab.style(), // .add_modifier(Modifier::UNDERLINED),
             };
 
             let tabs = Tabs::new(titles)

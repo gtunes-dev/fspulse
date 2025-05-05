@@ -1,8 +1,8 @@
 use ratatui::{
-    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::Rect, style::{Color, Style}, text::{Line, Span}, widgets::{Block, Borders, Paragraph, Widget}
+    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::Rect, style::Style, text::{Line, Span}, widgets::{Block, Borders, Paragraph, Widget}
 };
 
-use super::explorer::ExplorerAction;
+use super::{explorer::ExplorerAction, utils::StylePalette};
 
 pub struct LimitWidget {
     limit: String,
@@ -16,7 +16,7 @@ impl LimitWidget {
 
     fn limit_style(&self) -> Style {
         if self.has_focus {
-            Style::new().bg(Color::Blue).fg(Color::White) // .add_modifier(Modifier::BOLD)
+            StylePalette::TableRowHighlight.style()
         } else {
             // normal look
             Style::default()

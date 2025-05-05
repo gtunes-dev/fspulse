@@ -105,7 +105,7 @@ impl ColSpec {
 
 pub const ROOTS_QUERY_COLS: ColMap = phf_ordered_map! {
     "root_id" => ColSpec::new("root_id", true, true, ColType::Id, ColAlign::Right),
-    "root_path" => ColSpec::new( "root_path", true, true, ColType::Path, ColAlign::Right),
+    "root_path" => ColSpec::new( "root_path", true, true, ColType::Path, ColAlign::Left),
 };
 
 pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {

@@ -2,7 +2,7 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Rect},
-    style::{Color, Style, Stylize},
+    style::Style,
     text::Span,
     widgets::{
         Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Table, TableState,
@@ -10,7 +10,7 @@ use ratatui::{
     },
 };
 
-use super::{domain_model::{DomainModel, TypeSelection}, explorer::ExplorerAction, utils::Utils};
+use super::{domain_model::{DomainModel, TypeSelection}, explorer::ExplorerAction, utils::{StylePalette, Utils}};
 
 pub struct FilterFrame {
     table_state: TableState,
@@ -114,8 +114,10 @@ impl Widget for FilterFrameView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.frame.set_area(area);
 
+        let header_style = StylePalette::TableHeader.style();
+
         let header = Row::new(vec!["Column", "Type", "Filter"])
-            .style(Style::default().fg(Color::Black).bg(Color::Gray).bold());
+            .style(header_style);
 
         let rows = self.model.current_filters().iter().map(|f| {
             Row::new(vec![
@@ -128,7 +130,7 @@ impl Widget for FilterFrameView<'_> {
         let total_rows = rows.len();
 
         let title = FilterFrame::frame_title(self.model.current_type());
-        let block = Utils::new_frame_block_with_title(self.has_focus, title);
+        let block = Utils::new_frame_block_with_title(title);
 
         let constraints = vec![
             Constraint::Length(15),
@@ -136,10 +138,11 @@ impl Widget for FilterFrameView<'_> {
             Constraint::Min(10),
         ];
 
-        let mut highlight_style = Style::default();
-        if self.has_focus {
-            highlight_style = highlight_style.fg(Color::Yellow);
-        }
+        let highlight_style = if self.has_focus {
+            StylePalette::TableRowHighlight.style()
+        } else {
+            Style::default()
+        };
 
         let table = Table::new(rows, constraints)
             .header(header)
