@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.12] - Not Yet Released
+
+### Fixed
+
+- Corrected "not_null" to "not null" in Explorer filter tips
+- In Explorer, date filter values are validated before the filter is saved.
+  Previously, dates were parsed but not actually validated so values such as
+  "2025-01-32" would slip past the parser and into the query
+
+### Changed
+
+- Cleaned up StringFilter - enum types have had their own filter type for
+  a while but StringFilter still had legacy enum validation logic
+
 ## [v0.0.11] - 2025-05-05
 
 ### Added

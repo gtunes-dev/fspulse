@@ -741,10 +741,26 @@ impl QueryProcessor {
 
         Ok(())
     }
+    
+    pub fn validate_parsed_filter(rule: Rule, pairs: &mut Pairs<Rule>) -> Option<String>{
+        if rule == Rule::date_filter_EOI {
+            match DateFilter::validate_values(pairs) {
+                Ok(_) => return None,
+                Err(e) => return Some(e.to_string())
+            }
+        };
+        None
+    }
 
     pub fn validate_filter(rule: Rule, filter: &str) -> Option<String> {
-        match QueryParser::parse(rule, filter) {
-            Ok(_) => None,
+        match QueryParser::parse(rule, filter).as_mut() {
+
+            // In cases such as "dates", input valiation happens during
+            // query building, not parsing, since the parser doesn't understand
+            // date validity. For these cases, we need to explicitly validate
+            Ok(parsed_query) => {
+                QueryProcessor::validate_parsed_filter(rule, parsed_query)
+            },
             Err(e) => Some(e.to_string()),
         }
     }

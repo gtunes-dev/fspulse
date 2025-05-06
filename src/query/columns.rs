@@ -66,27 +66,27 @@ impl ColType {
             ColType::Id => ColTypeInfo::new(
                 Rule::id_filter_EOI,
                 "Id",
-                "Comma-separated ids or ranges e.g. 3, 5..10\n(null and not_null also ok)",
+                "Comma-separated ids or ranges e.g. 3, 5..10\n(null and not null also ok)",
             ),
             ColType::Int => ColTypeInfo::new(
                 Rule::int_filter_EOI,
                 "Int",
-                "Single comparator inside () e.g. > 1024  or  < 10\n(null and not_null also ok)",
+                "Single comparator e.g. > 1024  or  < 10",
             ),
             ColType::Date => ColTypeInfo::new(
                 Rule::date_filter_EOI,
                 "Date",
-                "ISO dates or ranges e.g. 2025-01-01, 2025-02-01..2025-02-14\n(null and not_null also ok)",
+                "ISO dates or ranges e.g. 2025-01-01, 2025-02-01..2025-02-14\n(null and not null also ok)",
             ),
             ColType::Bool => ColTypeInfo::new(
                 Rule::bool_filter_EOI,
                 "Boolean",
-                "true or false (null and not_null also ok)",
+                "true or false (null and not null also ok)",
             ),
             ColType::String => ColTypeInfo::new(
                 Rule::string_filter_EOI,
                 "String",
-                "Single-quoted substring(s) e.g. 'disk', 'error'\nComma-separate values (null and not_null also ok)",
+                "Single-quoted substring(s) e.g. 'disk', 'error'\nComma-separate values (null and not null also ok)",
             ),
             ColType::Path => ColTypeInfo::new(
                 Rule::path_filter_EOI,

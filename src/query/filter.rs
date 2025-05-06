@@ -1,5 +1,5 @@
 use crate::{error::FsPulseError, utils::Utils};
-use pest::iterators::Pair;
+use pest::iterators::{Pair, Pairs};
 use phf_macros::phf_ordered_map;
 use rusqlite::ToSql;
 use std::fmt::Debug;
@@ -186,6 +186,32 @@ impl DateFilter {
         }
     }
 
+    pub fn validate_values(pair: &mut Pairs<Rule>) -> Result<(), FsPulseError> {
+      let inner_pairs = pair.next().unwrap().into_inner();
+
+       for date_spec in inner_pairs {
+            match date_spec.as_rule() {
+                Rule::date => {
+                    let date_start_str = date_spec.as_str();
+                    Utils::single_date_bounds(date_start_str)?;
+                }
+                Rule::date_range => {
+                    let mut range_inner = date_spec.into_inner();
+                    let date_start_str = range_inner.next().unwrap().as_str();
+                    let date_end_str = range_inner.next().unwrap().as_str();
+                    Utils::range_date_bounds(date_start_str, date_end_str)?;
+                }
+                Rule::null => {}
+                Rule::not_null => {}
+                Rule::date_filter_EOI => {},
+                Rule::EOI => {},
+                _ => unreachable!(),
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn add_to_query(
         date_filter_pair: Pair<Rule>,
         query: &mut dyn Query,
@@ -242,7 +268,6 @@ pub struct StringFilter {
     str_col_db: &'static str,
     match_null: bool,
     match_not_null: bool,
-    equality_match: bool,
     str_values: Vec<String>,
 }
 
@@ -282,17 +307,9 @@ impl Filter for StringFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            match self.equality_match {
-                true => {
-                    pred_str.push_str(&format!("({} = ?)", &self.str_col_db));
-                    pred_vec.push(Box::new(str_val.to_owned()));
-                }
-                false => {
-                    pred_str.push_str(&format!("({} LIKE ?)", &self.str_col_db));
-                    let like_param = format!("%{str_val}%");
-                    pred_vec.push(Box::new(like_param));
-                }
-            }
+            pred_str.push_str(&format!("({} LIKE ?)", &self.str_col_db));
+            let like_param = format!("%{str_val}%");
+            pred_vec.push(Box::new(like_param));
         }
 
         if pred_count > 1 {
@@ -304,31 +321,25 @@ impl Filter for StringFilter {
 }
 
 impl StringFilter {
-    fn new(str_col_db: &'static str, equality_match: bool) -> Self {
+    fn new(str_col_db: &'static str) -> Self {
         StringFilter {
             str_col_db,
             match_null: false,
             match_not_null: false,
-            equality_match,
             str_values: Vec::new(),
         }
     }
 
-    fn add_opt_str_filter_to_query(
+    pub fn add_string_filter_to_query(
         string_filter_pair: Pair<Rule>,
-        opt_str_map: Option<OrderedStrMap>,
         query: &mut dyn Query,
     ) -> Result<(), FsPulseError> {
         let mut iter = string_filter_pair.into_inner();
         let str_col_pair = iter.next().unwrap();
         let str_col = str_col_pair.as_str().to_owned();
 
-        // If a str_map is provided, then the filter will generate equality predicates
-        // If no str_map is provided, the filter will generate LIKE predicates
-        let equality_match = opt_str_map.is_some();
-
         let mut str_filter = match query.col_set().col_name_to_db(&str_col) {
-            Some(str_col_db) => Self::new(str_col_db, equality_match),
+            Some(str_col_db) => Self::new(str_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
                     "Column not found: '{}'",
@@ -343,36 +354,13 @@ impl StringFilter {
                 Rule::not_null => str_filter.match_not_null = true,
                 _ => {
                     let query_val_str = str_val_pair.as_str();
-                    let val_str = match opt_str_map {
-                        None => query_val_str.to_owned(),
-                        Some(ref str_map) => {
-                            let val_str_upper = query_val_str.to_ascii_uppercase();
-                            let mapped_str = str_map.get(&val_str_upper).copied();
-                            match mapped_str {
-                                Some(s) => s.to_owned(),
-                                None => {
-                                    return Err(FsPulseError::CustomParsingError(format!(
-                                        "Invalid filter value: '{}'",
-                                        query_val_str
-                                    )));
-                                }
-                            }
-                        }
-                    };
-                    str_filter.str_values.push(val_str);
+                    str_filter.str_values.push(query_val_str.to_owned());
                 }
             }
         }
         query.add_filter(Box::new(str_filter));
 
         Ok(())
-    }
-
-    pub fn add_string_filter_to_query(
-        string_filter_pair: Pair<Rule>,
-        query: &mut dyn Query,
-    ) -> Result<(), FsPulseError> {
-        Self::add_opt_str_filter_to_query(string_filter_pair, None, query)
     }
 }
 
@@ -642,12 +630,12 @@ impl IntFilter {
         let comparator = match iter.next().unwrap().as_rule() {
             Rule::GT => Comparator::GreaterThan,
             Rule::LT => Comparator::LessThan,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         let int_value: i64 = iter.next().unwrap().as_str().parse().unwrap();
         let int_filter = IntFilter::new(int_col_db, comparator, int_value);
-        
+
         query.add_filter(Box::new(int_filter));
 
         Ok(())
