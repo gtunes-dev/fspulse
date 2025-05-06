@@ -114,7 +114,7 @@ impl<'a> FilterFrameView<'a> {
     }
 }
 
-impl<'a> FilterFrameView<'a> {
+impl FilterFrameView<'_> {
     fn render_empty(&self, area: Rect, buf: &mut Buffer) {
         let [_, para_area, _] = Layout::vertical([
             Constraint::Min(0),

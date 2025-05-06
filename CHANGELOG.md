@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.11] - 2025-05-05
+
+### Added
+
+- New feature: Explore. This is a complete terminal-UI experience for exploring
+  FsPulse data. View Items, Changes, Scans, Roots. Create and modify query filters.
+  Show and hide columns. Implemented with Ratatui. More coming soon!
+
 ## [v0.0.10] - 2025-04-26
 
 No code changes in this release - just pushing out a couple of changes to address

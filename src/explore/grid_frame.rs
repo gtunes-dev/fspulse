@@ -133,7 +133,7 @@ impl<'a> GridFrameView<'a> {
     }
 }
 
-impl<'a> GridFrameView<'a> {
+impl GridFrameView<'_> {
     fn render_empty(&self, area: Rect, buf: &mut Buffer) {
         let [_, para_area, _] = Layout::vertical([
             Constraint::Min(0),
