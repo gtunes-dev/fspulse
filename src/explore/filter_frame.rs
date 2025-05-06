@@ -142,6 +142,13 @@ impl FilterFrameView<'_> {
     }
 
     fn render_filters(&mut self, area: Rect, buf: &mut Buffer) {
+        // Split the area vertically for the table and scrollbar
+        let [table_area, bar_area] = Layout::horizontal([
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ]).areas(area);
+
+
         let header_style = StylePalette::TableHeader.style();
 
         let header = Row::new(vec!["Column", "Type", "Filter"]).style(header_style);
@@ -174,7 +181,7 @@ impl FilterFrameView<'_> {
             .row_highlight_style(highlight_style)
             .highlight_symbol("» ");
 
-        <Table as StatefulWidget>::render(table, area, buf, &mut self.frame.table_state);
+        <Table as StatefulWidget>::render(table, table_area, buf, &mut self.frame.table_state);
 
         // Draw scrollbar
         let visible_rows = self.frame.visible_rows();
@@ -187,7 +194,7 @@ impl FilterFrameView<'_> {
                 Scrollbar::new(ScrollbarOrientation::VerticalRight)
                     .thumb_symbol("▐")
                     .track_symbol(Some(" "))
-                    .render(area, buf, &mut scrollbar_state);
+                    .render(bar_area, buf, &mut scrollbar_state);
             }
         }
     }

@@ -29,7 +29,7 @@ impl StylePalette {
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
             StylePalette::TextFocus => Style::default().fg(Color::Black).bg(Color::Cyan),
-            StylePalette::PopUp => Style::default().bg(Color::DarkGray).fg(Color::White),
+            StylePalette::PopUp => Style::default().bg(Color::White).fg(Color::Black),
         }
     }
 }

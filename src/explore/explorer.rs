@@ -437,19 +437,19 @@ impl Explorer {
     fn next_focus(&self) -> Focus {
         match self.focus {
             Focus::Tabs => Focus::Filters,
-            Focus::Filters => Focus::DataGrid,
-            Focus::DataGrid => Focus::ColumnSelector,
-            Focus::ColumnSelector => Focus::Limit,
-            Focus::Limit => Focus::Tabs,
+            Focus::Filters => Focus::Limit,
+            Focus::Limit => Focus::ColumnSelector,
+            Focus::ColumnSelector => Focus::DataGrid,
+            Focus::DataGrid => Focus::Tabs,
         }
     }
 
     fn prev_focus(&self) -> Focus {
         match self.focus {
-            Focus::Tabs => Focus::Limit,
-            Focus::Limit => Focus::ColumnSelector,
-            Focus::ColumnSelector => Focus::DataGrid,
-            Focus::DataGrid => Focus::Filters,
+            Focus::Tabs => Focus::DataGrid,
+            Focus::DataGrid => Focus::ColumnSelector,
+            Focus::ColumnSelector => Focus::Limit,
+            Focus::Limit => Focus::Filters,
             Focus::Filters => Focus::Tabs,
         }
     }
