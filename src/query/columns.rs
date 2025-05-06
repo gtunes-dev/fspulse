@@ -63,15 +63,51 @@ pub enum ColType {
 impl ColType {
     pub fn info(&self) -> ColTypeInfo {
         match self {
-            ColType::Id => ColTypeInfo::new(Rule::id_filter_EOI, "Id", "Tip: Enter one or more ids or ranges 3, 4..6"),
-            ColType::Date => ColTypeInfo::new(Rule::date_filter_EOI, "Date", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
-            ColType::Bool => ColTypeInfo::new(Rule::bool_filter_EOI, "Boolean", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
-            ColType::String => ColTypeInfo::new(Rule::string_filter_EOI, "String", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
-            ColType::Path => ColTypeInfo::new(Rule::path_filter_EOI, "Path", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
-            ColType::Val => ColTypeInfo::new(Rule::val_filter_EOI, "Val", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
-            ColType::ItemType => ColTypeInfo::new(Rule::item_type_filter_EOI, "Item Type", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
-            ColType::ChangeType => ColTypeInfo::new(Rule::change_type_filter_EOI, "Change Type", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
-            ColType::Int => ColTypeInfo::new(Rule::int_filter_EOI, "Int", "Enter one or more dates or ranges 2025-01-01, 2025-02-01..2025-02-14"),
+            ColType::Id => ColTypeInfo::new(
+                Rule::id_filter_EOI,
+                "Id",
+                "Comma-separated ids or ranges e.g. 3, 5..10\n(null and not_null also ok)",
+            ),
+            ColType::Int => ColTypeInfo::new(
+                Rule::int_filter_EOI,
+                "Int",
+                "Single comparator inside () e.g. > 1024  or  < 10\n(null and not_null also ok)",
+            ),
+            ColType::Date => ColTypeInfo::new(
+                Rule::date_filter_EOI,
+                "Date",
+                "ISO dates or ranges e.g. 2025-01-01, 2025-02-01..2025-02-14\n(null and not_null also ok)",
+            ),
+            ColType::Bool => ColTypeInfo::new(
+                Rule::bool_filter_EOI,
+                "Boolean",
+                "true or false (null and not_null also ok)",
+            ),
+            ColType::String => ColTypeInfo::new(
+                Rule::string_filter_EOI,
+                "String",
+                "Single-quoted substring(s) e.g. 'disk', 'error'\nComma-separate values (null and not_null also ok)",
+            ),
+            ColType::Path => ColTypeInfo::new(
+                Rule::path_filter_EOI,
+                "Path",
+                "Single-quoted substring(s) e.g. '/var/log', 'docs/report.pdf'",
+            ),
+            ColType::Val => ColTypeInfo::new(
+                Rule::val_filter_EOI,
+                "Val",
+                "Validity codes: V (valid), I (invalid), N (no validator), U (unknown)\nComma-separate codes (null and not_null also ok)",
+            ),
+            ColType::ItemType => ColTypeInfo::new(
+                Rule::item_type_filter_EOI,
+                "Item Type",
+                "F (file), D (directory), S (symlink)\nComma-separated values",
+            ),
+            ColType::ChangeType => ColTypeInfo::new(
+                Rule::change_type_filter_EOI,
+                "Change Type",
+                "Change types: A (add), M (modify), D (delete)\nComma-separated values",
+            )
         }
     }
 }

@@ -13,6 +13,7 @@ pub enum StylePalette {
     Tab,
     TabHighlight,
     TextFocus,
+    PopUp,
 }
 
 impl StylePalette {
@@ -28,6 +29,7 @@ impl StylePalette {
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
             StylePalette::TextFocus => Style::default().fg(Color::Black).bg(Color::Cyan),
+            StylePalette::PopUp => Style::default().bg(Color::DarkGray).fg(Color::White),
         }
     }
 }

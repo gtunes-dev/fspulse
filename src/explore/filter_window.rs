@@ -1,8 +1,7 @@
 use ratatui::{
     crossterm::event::{Event, KeyCode, KeyEvent},
-    layout::{Alignment, Constraint, Direction, Layout, Position, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, Clear, Paragraph},
+    layout::{Alignment, Constraint, Layout, Position, Rect},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 use tui_input::{backend::crossterm::EventHandler, Input};
@@ -12,7 +11,7 @@ use crate::query::{columns::ColTypeInfo, QueryProcessor};
 use super::{
     domain_model::Filter,
     explorer::ExplorerAction,
-    message_box::{MessageBox, MessageBoxType},
+    message_box::{MessageBox, MessageBoxType}, utils::StylePalette,
 };
 
 enum FilterWindowType {
@@ -53,20 +52,20 @@ impl FilterWindow {
         col_type_info: ColTypeInfo,
         filter_text: String,
     ) -> Self {
-        FilterWindow{
-                filter_window_type: FilterWindowType::Edit,
-                col_name,
-                filter_index: Some(filter_index),
-                col_type_info,
-                input: Input::default().with_value(filter_text),
-            }
+        FilterWindow {
+            filter_window_type: FilterWindowType::Edit,
+            col_name,
+            filter_index: Some(filter_index),
+            col_type_info,
+            input: Input::default().with_value(filter_text),
+        }
     }
 
     pub fn draw(&mut self, f: &mut Frame, is_top_window: bool) {
         let screen = f.area();
 
         let popup_width = screen.width.min(80);
-        let popup_height = 11;
+        let popup_height = 12;
 
         let popup_x = screen.x + (screen.width.saturating_sub(popup_width)) / 2;
         let popup_y = screen.y + (screen.height.saturating_sub(popup_height)) / 2;
@@ -80,87 +79,62 @@ impl FilterWindow {
 
         f.render_widget(Clear, popup_area);
 
-        let outer_block = Block::default().borders(Borders::ALL);
-        f.render_widget(outer_block, popup_area);
+        let popup_style = StylePalette::PopUp.style();
 
-        let inner_area = Rect {
-            x: popup_area.x + 2,
-            y: popup_area.y + 1,
-            width: popup_area.width.saturating_sub(4),
-            height: popup_area.height.saturating_sub(2),
-        };
+        let outer_block = Block::default().borders(Borders::ALL).style(popup_style);
+        f.render_widget(&outer_block, popup_area);
 
-        // Split top portion (label + spacer + input + spacer)
-        let top_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1), // Label
-                Constraint::Length(1), // Spacer
-                Constraint::Length(3), // Input box
-                Constraint::Length(1), // Spacer
-            ])
-            .split(inner_area);
+        let [label, _, input, tip, _, divider, help] =
+            Layout::vertical([
+                Constraint::Length(1),  // label
+                Constraint::Length(1),  // spacer
+                Constraint::Length(3),  // input
+                Constraint::Length(2), // tip
+                Constraint::Length(1), // spacer
+                Constraint::Length(1), // divider
+                Constraint::Length(1), // help
+            ]).areas(outer_block.inner(popup_area));
 
         // Label
         let label_text = format!("Add {} filter:", self.col_name);
-        let label_paragraph = Paragraph::new(label_text).alignment(Alignment::Left);
-        f.render_widget(label_paragraph, top_layout[0]);
-
-        // Spacer
-        f.render_widget(Paragraph::new(" "), top_layout[1]);
+        let label_paragraph = Paragraph::new(label_text).alignment(Alignment::Left).style(popup_style);
+        f.render_widget(label_paragraph, label);
 
         // Input
-        let scroll = self.input.visual_scroll((top_layout[2].width - 2) as usize);
+        let scroll = self.input.visual_scroll((input.width - 2) as usize);
         let input_block = Block::default().title("Filter").borders(Borders::ALL);
         let input_paragraph = Paragraph::new(self.input.value())
             .block(input_block)
-            .scroll((0, scroll as u16));
-        f.render_widget(input_paragraph, top_layout[2]);
+            .scroll((0, scroll as u16))
+            .style(popup_style);
+        f.render_widget(input_paragraph, input);
 
         // Cursor positioning
         if is_top_window {
             let x = self.input.visual_cursor().saturating_sub(scroll) as u16;
-            f.set_cursor_position(Position::new(top_layout[2].x + 1 + x, top_layout[2].y + 1));
+            f.set_cursor_position(Position::new(input.x + 1 + x, input.y + 1));
         }
 
-        // Spacer
-        f.render_widget(Paragraph::new(" "), top_layout[3]);
-
-        // Full-width footer layout: Tip, Divider, Help
-        let footer_area = Rect {
-            x: popup_area.x + 1,
-            y: top_layout[3].y + 1,
-            width: popup_area.width.saturating_sub(2),
-            height: 3,
-        };
-
-        let footer_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1), // Tip
-                Constraint::Length(1), // Divider
-                Constraint::Length(1), // Help
-            ])
-            .split(footer_area);
-
         // Tip
-        let tip_paragraph =
-            Paragraph::new(self.col_type_info.tip).style(Style::default().fg(Color::Gray));
-        f.render_widget(tip_paragraph, footer_layout[0]);
+        let tip_paragraph = Paragraph::new(self.col_type_info.tip)
+            .style(popup_style)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true });
+        f.render_widget(tip_paragraph, tip);
 
         // Divider
-        let divider = Block::default()
+        let divider_block = Block::default()
             .borders(Borders::TOP)
             .title("Help")
             .title_alignment(Alignment::Center)
-            .style(Style::default().bg(Color::Blue).fg(Color::White));
-        f.render_widget(divider, footer_layout[1]);
+            .style(popup_style);
+        f.render_widget(divider_block, divider);
 
         // Help text
         let help_text = "Esc: Cancel  |  Enter: Save";
         let help_paragraph =
-            Paragraph::new(help_text).style(Style::default().bg(Color::Blue).fg(Color::White));
-        f.render_widget(help_paragraph, footer_layout[2]);
+            Paragraph::new(help_text).style(popup_style);
+        f.render_widget(help_paragraph, help);
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
@@ -180,7 +154,7 @@ impl FilterWindow {
                     }
                     None => {
                         input_val = input_val.trim();
-                        
+
                         match self.filter_window_type {
                             FilterWindowType::Add => {
                                 let filter = Filter::new(
@@ -189,11 +163,14 @@ impl FilterWindow {
                                     self.col_type_info,
                                     input_val.to_owned(),
                                 );
-                                return Some(ExplorerAction::AddFilter(filter))
+                                return Some(ExplorerAction::AddFilter(filter));
                             }
                             FilterWindowType::Edit => {
                                 if let Some(filter_index) = self.filter_index {
-                                    return Some(ExplorerAction::UpdateFilter(filter_index, input_val.to_owned()))
+                                    return Some(ExplorerAction::UpdateFilter(
+                                        filter_index,
+                                        input_val.to_owned(),
+                                    ));
                                 }
                             }
                         }
