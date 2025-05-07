@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::{DomainModel, TypeSelection},
+    domain_model::{DomainModel, OrderDirection, TypeSelection},
     explorer::ExplorerAction,
     filter_window::FilterWindow,
     utils::{StylePalette, Utils},
@@ -57,6 +57,33 @@ impl ColumnFrame {
                         self.table_state.select(Some(selected + 1));
 
                         explorer_action = Some(ExplorerAction::RefreshQuery(false))
+                    }
+                }
+            }
+            KeyCode::Char('a') | KeyCode::Char('A') => {
+                if let Some(selected) = self.table_state.selected() {
+                    if let Some(col) = model.current_columns_mut().get_mut(selected) {
+                        col.order_direction = OrderDirection::Ascend;
+
+                        explorer_action = Some(ExplorerAction::RefreshQuery(true))
+                    }
+                }
+            }
+            KeyCode::Char('d') | KeyCode::Char('D') => {
+                if let Some(selected) = self.table_state.selected() {
+                    if let Some(col) = model.current_columns_mut().get_mut(selected) {
+                        col.order_direction = OrderDirection::Descend;
+
+                        explorer_action = Some(ExplorerAction::RefreshQuery(true))
+                    }
+                }
+            }
+            KeyCode::Delete | KeyCode::Backspace => {
+                if let Some(selected) = self.table_state.selected() {
+                    if let Some(col) = model.current_columns_mut().get_mut(selected) {
+                        col.order_direction = OrderDirection::None;
+
+                        explorer_action = Some(ExplorerAction::RefreshQuery(true))
                     }
                 }
             }
@@ -139,12 +166,20 @@ impl Widget for ColumnFrameView<'_> {
             let checked = if col.selected { "[x]" } else { "[ ]" };
             let text = format!("{checked} {:<20}", col.name_db);
 
-            let row = Row::new(vec![text]);
+            let row = Row::new(vec![
+                text, 
+                col.order_direction.to_display().to_owned(),
+                String::default()
+            ]);
 
             rows.push(row);
         }
 
-        let widths = [Constraint::Percentage(100)];
+        let widths = [
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ];
 
         let highlight_style = if self.has_focus {
             StylePalette::TableRowHighlight.style()

@@ -12,13 +12,13 @@ use ratatui::{
 use crate::query::columns::ColType;
 
 use super::{
-    domain_model::{ColumnOption, DomainModel, TypeSelection},
+    domain_model::{ColumnInfo, DomainModel, TypeSelection},
     explorer::ExplorerAction,
     utils::{StylePalette, Utils},
 };
 
 pub struct GridFrame {
-    pub columns: Vec<ColumnOption>,
+    pub columns: Vec<ColumnInfo>,
     pub rows: Vec<Row<'static>>,
     pub column_constraints: Vec<Constraint>,
     pub table_state: TableState,
@@ -43,7 +43,7 @@ impl GridFrame {
     pub fn set_data(
         &mut self,
         reset_selection: bool,
-        columns: Vec<ColumnOption>,
+        columns: Vec<ColumnInfo>,
         raw_rows: Vec<Vec<String>>,
     ) {
         self.columns = columns;

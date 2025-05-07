@@ -20,7 +20,7 @@ use ratatui::{border, symbols};
 use std::io;
 
 use super::column_frame::ColumnFrameView;
-use super::domain_model::{ColumnOption, DomainModel, Filter, TypeSelection};
+use super::domain_model::{ColumnInfo, DomainModel, Filter, OrderDirection, TypeSelection};
 use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_window::FilterWindow;
 use super::grid_frame::GridFrameView;
@@ -482,7 +482,7 @@ impl Explorer {
 
     fn build_query_and_columns(
         &mut self,
-    ) -> Result<(String, Vec<ColumnOption>), FsPulseError> {
+    ) -> Result<(String, Vec<ColumnInfo>), FsPulseError> {
         let mut cols = Vec::new();
 
         // Build the new query
@@ -523,6 +523,19 @@ impl Explorer {
         }
 
         // TODO: Build the "order by" clause once we have UI for that
+        first_col = true;
+        for col in self.model.current_columns() {
+            if col.selected && col.order_direction != OrderDirection::None {
+                match first_col {
+                    true => {
+                        query.push_str(" order by ");
+                        first_col = false;
+                    }
+                    false => query.push_str(", "),
+                }
+                query.push_str(&format!("{} {}", col.name_db, col.order_direction.to_query_term()));
+            }
+        }
 
         // Build the Limit clause
         let limit = self.model.current_limit();

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v0.0.12] - Not Yet Released
 
 ### Added
+
 - Some schematized fields weren't available for query in CLI or Explore. All fields
   are now available. New fields include is_undelete, last_hash_scan_old
   hash_old, hash_new, last_val_scan_old
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Corrected "not_null" to "not null" in Explorer filter tips
+
 - In Explorer, date filter values are validated before the filter is saved.
   Previously, dates were parsed but not actually validated so values such as
   "2025-01-32" would slip past the parser and into the query
