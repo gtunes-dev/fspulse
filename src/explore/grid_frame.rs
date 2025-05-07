@@ -12,14 +12,13 @@ use ratatui::{
 use crate::query::columns::ColType;
 
 use super::{
-    domain_model::{ColInfo, DomainModel, TypeSelection},
+    domain_model::{ColumnOption, DomainModel, TypeSelection},
     explorer::ExplorerAction,
     utils::{StylePalette, Utils},
 };
 
 pub struct GridFrame {
-    pub columns: Vec<String>,
-    pub col_infos: Vec<ColInfo>,
+    pub columns: Vec<ColumnOption>,
     pub rows: Vec<Row<'static>>,
     pub column_constraints: Vec<Constraint>,
     pub table_state: TableState,
@@ -30,7 +29,6 @@ impl GridFrame {
     pub fn new() -> Self {
         Self {
             columns: Vec::new(),
-            col_infos: Vec::new(),
             rows: Vec::new(),
             column_constraints: Vec::new(),
             table_state: {
@@ -45,12 +43,10 @@ impl GridFrame {
     pub fn set_data(
         &mut self,
         reset_selection: bool,
-        columns: Vec<String>,
-        col_infos: Vec<ColInfo>,
+        columns: Vec<ColumnOption>,
         raw_rows: Vec<Vec<String>>,
     ) {
         self.columns = columns;
-        self.col_infos = col_infos;
 
         // Build aligned Rows once, store as static (owned Strings are fine)
         self.rows = raw_rows
@@ -58,7 +54,7 @@ impl GridFrame {
             .map(|row| {
                 let cells = row
                     .into_iter()
-                    .zip(&self.col_infos)
+                    .zip(&self.columns)
                     .map(|(value, col_info)| {
                         let text = Text::from(value).alignment(col_info.col_align);
                         Cell::from(text)
@@ -75,15 +71,14 @@ impl GridFrame {
         self.column_constraints = self
             .columns
             .iter()
-            .zip(&self.col_infos)
-            .map(|(col_name, col_info)| match col_info.col_type {
-                ColType::Id => Constraint::Length(col_size(col_name, 9) as u16),
-                ColType::Int => Constraint::Length(col_size(col_name, 8) as u16),
+            .map(| col | match col.col_type {
+                ColType::Id => Constraint::Length(col_size(col.name_display, 9) as u16),
+                ColType::Int => Constraint::Length(col_size(col.name_display, 8) as u16),
                 ColType::Val | ColType::ItemType | ColType::ChangeType => {
-                    Constraint::Length(col_size(col_name, 1) as u16)
+                    Constraint::Length(col_size(col.name_display, 4) as u16)
                 }
-                ColType::Bool => Constraint::Length(col_size(col_name, 1) as u16),
-                ColType::Date => Constraint::Length(col_size(col_name, 10) as u16),
+                ColType::Bool => Constraint::Length(col_size(col.name_display, 1) as u16),
+                ColType::Date => Constraint::Length(col_size(col.name_display, 10) as u16),
                 ColType::Path => Constraint::Min(30),
                 ColType::String => Constraint::Min(15),
             })
@@ -177,7 +172,7 @@ impl GridFrameView<'_> {
         self.frame.table_area = table_area;
 
         // ---- 3. Stateful table ---------------------------------------------------------------
-        let header = Row::new(self.frame.columns.iter().map(|h| Span::raw(h.clone())))
+        let header = Row::new(self.frame.columns.iter().map(|col| Span::raw(col.name_display)))
             .style(StylePalette::TableHeader.style());
 
         let highlight_style = if self.has_focus {

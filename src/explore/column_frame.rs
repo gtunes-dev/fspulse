@@ -74,8 +74,8 @@ impl ColumnFrame {
                     if let Some(col_option) = model.current_columns().get(selected) {
                         explorer_action = Some(ExplorerAction::ShowAddFilter(
                             FilterWindow::new_add_filter_window(
-                                col_option.name,
-                                col_option.col_info.col_type.info(),
+                                col_option.name_db,
+                                col_option.col_type.info(),
                             ),
                         ));
                     };
@@ -137,7 +137,7 @@ impl Widget for ColumnFrameView<'_> {
 
         for col in self.model.current_columns() {
             let checked = if col.selected { "[x]" } else { "[ ]" };
-            let text = format!("{checked} {:<20}", col.name);
+            let text = format!("{checked} {:<20}", col.name_db);
 
             let row = Row::new(vec![text]);
 

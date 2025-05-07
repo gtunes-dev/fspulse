@@ -52,15 +52,12 @@ impl TypeSelection {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct ColInfo {
+pub struct ColumnOption {
+    pub name_db: &'static str,
+    pub name_display: &'static str,
     pub col_align: Alignment,
     pub col_type: ColType,
-}
-
-pub struct ColumnOption {
-    pub name: &'static str,
     pub selected: bool,
-    pub col_info: ColInfo,
 }
 
 #[derive(Debug, Clone)]
@@ -184,12 +181,11 @@ impl DomainModel {
         col_map
             .entries()
             .map(|(col_name, col_spec)| ColumnOption {
-                name: col_name,
+                name_db: col_name,
+                name_display: col_spec.name_display,
                 selected: col_spec.is_default,
-                col_info: ColInfo {
                     col_align: col_spec.col_align.to_ratatui(),
                     col_type: col_spec.col_type,
-                },
             })
             .collect()
     }

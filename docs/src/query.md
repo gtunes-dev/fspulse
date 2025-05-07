@@ -46,19 +46,21 @@ All queries that retrieve scan information begin with the keyword `scans`:
 scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 ```
 
-| Property     | Type     |
-|--------------|----------|
-| `scan_id`    | Integer  |
-| `root_id`    | Integer  |
-| `root_path`  | Path     |
-| `scan_time`  | Date     |
-| `is_hash`    | Boolean  |
-| `hash_all`   | Boolean  |
-| `is_val`     | Boolean  |
-| `val_all`    | Boolean  |
-| `adds`       | Integer  |
-| `modifies`   | Integer  |
-| `deletes`    | Integer  |
+| Property       | Type     |
+|----------------|----------|
+| `scan_id`      | Integer  |
+| `root_id`      | Integer  |
+| `state`        | Integer  |
+| `is_hash`      | Boolean  |
+| `hash_all`     | Boolean  |
+| `is_val`       | Boolean  |
+| `val_all`      | Boolean  |
+| `scan_time`    | Date     |
+| `file_count`   | Integer  |
+| `folder_count` | Integer  |
+| `adds`         | Integer  |
+| `modifies`     | Integer  |
+| `deletes`      | Integer  |
 
 ---
 
@@ -70,19 +72,22 @@ All queries that retrieve item information begin with the keyword `items`:
 items [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 ```
 
-| Property       | Type                |
-|----------------|---------------------|
-| `item_id`      | Integer             |
-| `scan_id`      | Integer             |
-| `root_id`      | Integer             |
-| `item_path`    | Path                |
-| `root_path`    | Path                |
-| `file_size`    | Integer             |
-| `file_hash`    | String              |
-| `val`          | Validation Status   |
-| `val_error`    | String              |
-| `mod_date`     | Date                |
-| `item_type`    | Item Type Enum      |
+| Property         | Type                |
+|------------------|---------------------|
+| `item_id`        | Integer             |
+| `scan_id`        | Integer             |
+| `root_id`        | Integer             |
+| `item_path`      | Path                |
+| `item_type`      | Item Type Enum      |
+| `last_scan`      | Integer             |
+| `is_ts`          | Boolean             |
+| `mod_date`       | Date                |
+| `file_size`      | Integer             |
+| `last_hash_scan` | Integer             |
+| `file_hash`      | String              |
+| `last_val_scan`  | Integer             |
+| `val`            | Validation Status   |
+| `val_error`      | String              |
 
 ---
 
@@ -94,25 +99,28 @@ All queries that retrieve change history begin with the keyword `changes`:
 changes [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 ```
 
-| Property            | Type                |
-|---------------------|---------------------|
-| `change_id`         | Integer             |
-| `scan_id`           | Integer             |
-| `item_id`           | Integer             |
-| `root_id`           | Integer             |
-| `item_path`         | Path                |
-| `root_path`         | Path                |
-| `file_size`         | Integer             |
-| `file_hash`         | String              |
-| `val_old`           | Validation Status   |
-| `val_new`           | Validation Status   |
-| `val_error_old`     | String              |
-| `val_error_new`     | String              |
-| `mod_date_old`      | Date                |
-| `mod_date_new`      | Date                |
-| `item_type`         | Item Type Enum      |
-| `change_type`       | Change Type Enum    |
-| `meta_change`       | Boolean             |
+| Property             | Type                |
+|----------------------|---------------------|
+| `change_id`          | Integer             |
+| `root_id`            | Integer             |
+| `scan_id`            | Integer             |
+| `item_id`            | Integer             |
+| `item_path`          | Path                |
+| `change_type`        | Change Type Enum    |
+| `is_undelete`        | Boolean             |
+| `meta_change`        | Boolean             |
+| `mod_date_old`       | Date                |
+| `mod_date_new`       | Date                |
+| `hash_change`        | Boolean             |
+| `last_hash_scan_old` | Integer             |
+| `hash_old`           | String              |
+| `hash_new`           | String              |
+| `val_change`         | Boolean             |
+| `last_val_scan_old`  | Integer             |
+| `val_old`            | Validation Status   |
+| `val_new`            | Validation Status   |
+| `val_error_old`      | String              |
+| `val_error_new`      | String              |
 
 ---
 

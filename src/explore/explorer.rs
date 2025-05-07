@@ -20,7 +20,7 @@ use ratatui::{border, symbols};
 use std::io;
 
 use super::column_frame::ColumnFrameView;
-use super::domain_model::{ColInfo, DomainModel, Filter, TypeSelection};
+use super::domain_model::{ColumnOption, DomainModel, Filter, TypeSelection};
 use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_window::FilterWindow;
 use super::grid_frame::GridFrameView;
@@ -482,9 +482,8 @@ impl Explorer {
 
     fn build_query_and_columns(
         &mut self,
-    ) -> Result<(String, Vec<String>, Vec<ColInfo>), FsPulseError> {
+    ) -> Result<(String, Vec<ColumnOption>), FsPulseError> {
         let mut cols = Vec::new();
-        let mut col_infos = Vec::new();
 
         // Build the new query
         let mut query = self.model.current_type().name().to_ascii_lowercase();
@@ -518,9 +517,8 @@ impl Explorer {
                     }
                     false => query.push_str(", "),
                 }
-                cols.push(col.name.to_owned());
-                col_infos.push(col.col_info);
-                query.push_str(col.name);
+                cols.push(* col);
+                query.push_str(col.name_db);
             }
         }
 
@@ -533,7 +531,7 @@ impl Explorer {
             query.push_str(&limit);
         }
 
-        Ok((query, cols, col_infos))
+        Ok((query, cols))
     }
 
     fn refresh_query(&mut self, db: &Database) {
@@ -549,12 +547,12 @@ impl Explorer {
     }
 
     fn refresh_query_impl(&mut self, db: &Database) -> Result<(), FsPulseError> {
-        let (query_str, columns, col_types) = self.build_query_and_columns()?;
+        let (query_str, columns) = self.build_query_and_columns()?;
 
         match QueryProcessor::execute_query(db, &query_str) {
             Ok(rows) => {
                 self.grid_frame
-                    .set_data(self.query_resets_selection, columns, col_types, rows);
+                    .set_data(self.query_resets_selection, columns, rows);
                 //self.error_message = None;
                 Ok(())
             }
