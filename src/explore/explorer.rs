@@ -11,7 +11,7 @@ use ratatui::crossterm::terminal::{
 use ratatui::widgets::{Block, Clear, Tabs};
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     widgets::{Borders, Paragraph},
     Terminal,
@@ -94,7 +94,7 @@ impl Explorer {
                     Constraint::Length(3), // Tabs
                     Constraint::Length(8), // Filters
                     Constraint::Min(0),    // Main content
-                    Constraint::Length(2), // Help/status
+                    Constraint::Length(1), // Help/status
                 ],
             )
             .areas(full_area);
@@ -219,13 +219,13 @@ impl Explorer {
             f.render_widget(grid_frame_view, data_block.inner(data));
 
             // Draw bottom (help/status)
-            let help_block = Block::default()
-                .borders(Borders::TOP)
-                .title("Help")
-                .title_alignment(Alignment::Center);
+            //let help_block = Block::default()
+                //.borders(Borders::TOP)
+                //.title("Help")
+                //.title_alignment(Alignment::Center);
             let help_paragraph = Paragraph::new(self.help_text())
-                .style(Style::default().bg(Color::Blue).fg(Color::White))
-                .block(help_block);
+                .style(Style::default().bg(Color::Blue).fg(Color::White));
+                //.block(help_block);
             f.render_widget(help_paragraph, help);
 
             if let Some(ref mut filter_window) = self.filter_window {

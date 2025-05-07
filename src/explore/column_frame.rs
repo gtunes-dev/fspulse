@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::{DomainModel, OrderDirection, TypeSelection},
+    domain_model::{ColumnInfo, DomainModel, OrderDirection, TypeSelection},
     explorer::ExplorerAction,
     filter_window::FilterWindow,
     utils::{StylePalette, Utils},
@@ -61,23 +61,15 @@ impl ColumnFrame {
                 }
             }
             KeyCode::Char('a') | KeyCode::Char('A') => {
-                if let Some(selected) = self.table_state.selected() {
-                    if let Some(col) = model.current_columns_mut().get_mut(selected) {
-                        col.order_direction = OrderDirection::Ascend;
-
-                        explorer_action = Some(ExplorerAction::RefreshQuery(true))
-                    }
-                }
+                explorer_action = self.set_order_direction(model, OrderDirection::Ascend)
             }
             KeyCode::Char('d') | KeyCode::Char('D') => {
-                if let Some(selected) = self.table_state.selected() {
-                    if let Some(col) = model.current_columns_mut().get_mut(selected) {
-                        col.order_direction = OrderDirection::Descend;
-
-                        explorer_action = Some(ExplorerAction::RefreshQuery(true))
-                    }
-                }
+                explorer_action = self.set_order_direction(model, OrderDirection::Descend)
             }
+            KeyCode::Right => {
+                explorer_action = self.next_order_direction(model);
+            }
+            KeyCode::Left => explorer_action = self.prev_order_direction(model),
             KeyCode::Delete | KeyCode::Backspace => {
                 if let Some(selected) = self.table_state.selected() {
                     if let Some(col) = model.current_columns_mut().get_mut(selected) {
@@ -121,6 +113,67 @@ impl ColumnFrame {
         }
 
         explorer_action
+    }
+
+    fn selected_column<'a>(&self, model: &'a mut DomainModel) -> Option<&'a mut ColumnInfo> {
+        if let Some(selected) = self.table_state.selected() {
+            return model.current_columns_mut().get_mut(selected);
+        }
+        None
+    }
+
+    fn set_order_direction(
+        &mut self,
+        model: &mut DomainModel,
+        order_direction: OrderDirection,
+    ) -> Option<ExplorerAction> {
+        let mut action = None;
+
+        if let Some(col) = self.selected_column(model) {
+            if col.selected && col.order_direction != order_direction {
+                col.order_direction = order_direction;
+
+                action = Some(ExplorerAction::RefreshQuery(true))
+            }
+        };
+
+        action
+    }
+
+    fn next_order_direction(&mut self, model: &mut DomainModel) -> Option<ExplorerAction> {
+        let mut action = None;
+
+        if let Some(col) = self.selected_column(model) {
+            if col.selected {
+                let new_order_direction = match col.order_direction {
+                    OrderDirection::Ascend => OrderDirection::Descend,
+                    OrderDirection::Descend => OrderDirection::None,
+                    OrderDirection::None => OrderDirection::Ascend,
+                };
+
+                action = self.set_order_direction(model, new_order_direction)
+            }
+        }
+
+        action
+    }
+
+    fn prev_order_direction(&mut self, model: &mut DomainModel) -> Option<ExplorerAction> {
+        let mut action = None;
+
+        if let Some(col) = self.selected_column(model) {
+            if col.selected {
+                let new_order_direction = match col.order_direction {
+                    OrderDirection::Ascend => OrderDirection::None,
+                    OrderDirection::Descend => OrderDirection::Ascend,
+                    OrderDirection::None => OrderDirection::Descend,
+                };
+
+                action = self.set_order_direction(model, new_order_direction)
+            }
+        }
+
+        action
     }
 
     fn visible_rows(&self) -> usize {
@@ -167,9 +220,9 @@ impl Widget for ColumnFrameView<'_> {
             let text = format!("{checked} {:<20}", col.name_db);
 
             let row = Row::new(vec![
-                text, 
+                text,
                 col.order_direction.to_display().to_owned(),
-                String::default()
+                String::default(),
             ]);
 
             rows.push(row);

@@ -164,7 +164,7 @@ impl FilterFrameView<'_> {
         let total_rows = rows.len();
 
         let constraints = vec![
-            Constraint::Length(15),
+            Constraint::Length(19),
             Constraint::Length(10),
             Constraint::Min(10),
         ];
