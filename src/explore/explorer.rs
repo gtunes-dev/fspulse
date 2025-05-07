@@ -522,7 +522,13 @@ impl Explorer {
             }
         }
 
-        // TODO: Build the "order by" clause once we have UI for that
+        // Implement Order By.
+        // TODO - there's a caveat to this implemenation which is that the user
+        // can put an order-by directive on a hidden column. Since SQL requires
+        // order by to only be on columns in the select list, we current just skip
+        // hidden columns in this traversal. Consider doing something smarter like
+        // including the hidden columns in the query but not displaying them in the
+        // UI. Not sure this is worth it, though
         first_col = true;
         for col in self.model.current_columns() {
             if col.selected && col.order_direction != OrderDirection::None {

@@ -59,7 +59,7 @@ pub enum OrderDirection {
 }
 
 impl OrderDirection {
-    pub fn to_display(&self) -> &'static str {
+    pub fn to_display(self) -> &'static str {
         match self {
             OrderDirection::Ascend => "↑",
             OrderDirection::Descend => "↓",
@@ -67,7 +67,7 @@ impl OrderDirection {
         }
     }
 
-    pub fn to_query_term(&self) -> &'static str {
+    pub fn to_query_term(self) -> &'static str {
         match self {
             OrderDirection::Ascend => "ASC",
             OrderDirection::Descend => "DESC",
