@@ -478,12 +478,14 @@ hash = "sha2"
 <div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th></tr></thead><tbody>
 <tr><td><code>scan_id</code></td><td>Integer</td></tr>
 <tr><td><code>root_id</code></td><td>Integer</td></tr>
-<tr><td><code>root_path</code></td><td>Path</td></tr>
-<tr><td><code>scan_time</code></td><td>Date</td></tr>
+<tr><td><code>state</code></td><td>Integer</td></tr>
 <tr><td><code>is_hash</code></td><td>Boolean</td></tr>
 <tr><td><code>hash_all</code></td><td>Boolean</td></tr>
 <tr><td><code>is_val</code></td><td>Boolean</td></tr>
 <tr><td><code>val_all</code></td><td>Boolean</td></tr>
+<tr><td><code>scan_time</code></td><td>Date</td></tr>
+<tr><td><code>file_count</code></td><td>Integer</td></tr>
+<tr><td><code>folder_count</code></td><td>Integer</td></tr>
 <tr><td><code>adds</code></td><td>Integer</td></tr>
 <tr><td><code>modifies</code></td><td>Integer</td></tr>
 <tr><td><code>deletes</code></td><td>Integer</td></tr>
@@ -499,13 +501,16 @@ hash = "sha2"
 <tr><td><code>scan_id</code></td><td>Integer</td></tr>
 <tr><td><code>root_id</code></td><td>Integer</td></tr>
 <tr><td><code>item_path</code></td><td>Path</td></tr>
-<tr><td><code>root_path</code></td><td>Path</td></tr>
+<tr><td><code>item_type</code></td><td>Item Type Enum</td></tr>
+<tr><td><code>last_scan</code></td><td>Integer</td></tr>
+<tr><td><code>is_ts</code></td><td>Boolean</td></tr>
+<tr><td><code>mod_date</code></td><td>Date</td></tr>
 <tr><td><code>file_size</code></td><td>Integer</td></tr>
+<tr><td><code>last_hash_scan</code></td><td>Integer</td></tr>
 <tr><td><code>file_hash</code></td><td>String</td></tr>
+<tr><td><code>last_val_scan</code></td><td>Integer</td></tr>
 <tr><td><code>val</code></td><td>Validation Status</td></tr>
 <tr><td><code>val_error</code></td><td>String</td></tr>
-<tr><td><code>mod_date</code></td><td>Date</td></tr>
-<tr><td><code>item_type</code></td><td>Item Type Enum</td></tr>
 </tbody></table>
 </div>
 <hr />
@@ -515,22 +520,25 @@ hash = "sha2"
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th></tr></thead><tbody>
 <tr><td><code>change_id</code></td><td>Integer</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td></tr>
 <tr><td><code>scan_id</code></td><td>Integer</td></tr>
 <tr><td><code>item_id</code></td><td>Integer</td></tr>
-<tr><td><code>root_id</code></td><td>Integer</td></tr>
 <tr><td><code>item_path</code></td><td>Path</td></tr>
-<tr><td><code>root_path</code></td><td>Path</td></tr>
-<tr><td><code>file_size</code></td><td>Integer</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td></tr>
+<tr><td><code>change_type</code></td><td>Change Type Enum</td></tr>
+<tr><td><code>is_undelete</code></td><td>Boolean</td></tr>
+<tr><td><code>meta_change</code></td><td>Boolean</td></tr>
+<tr><td><code>mod_date_old</code></td><td>Date</td></tr>
+<tr><td><code>mod_date_new</code></td><td>Date</td></tr>
+<tr><td><code>hash_change</code></td><td>Boolean</td></tr>
+<tr><td><code>last_hash_scan_old</code></td><td>Integer</td></tr>
+<tr><td><code>hash_old</code></td><td>String</td></tr>
+<tr><td><code>hash_new</code></td><td>String</td></tr>
+<tr><td><code>val_change</code></td><td>Boolean</td></tr>
+<tr><td><code>last_val_scan_old</code></td><td>Integer</td></tr>
 <tr><td><code>val_old</code></td><td>Validation Status</td></tr>
 <tr><td><code>val_new</code></td><td>Validation Status</td></tr>
 <tr><td><code>val_error_old</code></td><td>String</td></tr>
 <tr><td><code>val_error_new</code></td><td>String</td></tr>
-<tr><td><code>mod_date_old</code></td><td>Date</td></tr>
-<tr><td><code>mod_date_new</code></td><td>Date</td></tr>
-<tr><td><code>item_type</code></td><td>Item Type Enum</td></tr>
-<tr><td><code>change_type</code></td><td>Change Type Enum</td></tr>
-<tr><td><code>meta_change</code></td><td>Boolean</td></tr>
 </tbody></table>
 </div>
 <hr />
