@@ -42,7 +42,7 @@ change_type_filter_EOI = { WS* ~ change_type_filter_values ~ WS* ~ EOI }
 int_filter_EOI         = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan" | "last_val_scan" }
+id_col = { "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" }
 
 id_show = { id_col }
 
@@ -68,7 +68,7 @@ date_range         =  { date ~ WS* ~ DOTDOT ~ date }
 date               =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
-bool_col = { "is_hash" | "hash_all" | "is_val" | "val_all" | "hash_change" | "meta_change" | "val_change" | "is_ts" }
+bool_col = { "is_undelete" | "is_hash" | "hash_all" | "is_val" | "val_all" | "hash_change" | "meta_change" | "val_change" | "is_ts" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }
@@ -81,7 +81,7 @@ bool               = _{ null | not_null | bool_true | bool_false }
 bool_true          =  { "TRUE" | "true" | "True" | ^"T" }
 bool_false         =  { "FALSE" | "false" | "False" | ^"F" }
 
-string_col = { "file_hash" | "val_error_old" | "val_error_new" | "val_error" }
+string_col = { "file_hash" | "val_error_old" | "val_error_new" | "val_error" | "hash_old" | "hash_new" }
 
 string_show = { string_col }
 
@@ -157,7 +157,7 @@ int_show = { int_col }
 int_filter      =  { int_col ~ int_filter_body }
 int_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ int_comparator ~ WS* ~ RPAREN }
 int_comparator  = _{ (GT | LT) ~ int_val }
-int_val			= { WS* ~ ASCII_DIGIT* }
+int_val         =  { WS* ~ ASCII_DIGIT* }
 
 null     = { "-" | "NULL" | "null" }
 not_null = { "not null" | "NOT NULL" }
@@ -178,5 +178,5 @@ COMMA  = _{ "," }
 DOTDOT = _{ ".." }
 LPAREN = _{ "(" }
 RPAREN = _{ ")" }
-GT     = { ">" }
-LT     = { "<" }
+GT     =  { ">" }
+LT     =  { "<" }

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.0.12] - Not Yet Released
 
+### Added
+- Some schematized fields weren't available for query in CLI or Explore. All fields
+  are now available. New fields include is_undelete, last_hash_scan_old
+  hash_old, hash_new, last_val_scan_old
+
+- Explore columns now use shortened display names which are acronyms in the case
+  of very long field names. For example, last_val_scan_old is LVSO
+
+- Documentation update to include all available schema fields in the "book"
+
 ### Fixed
 
 - Corrected "not_null" to "not null" in Explorer filter tips
@@ -18,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Cleaned up StringFilter - enum types have had their own filter type for
   a while but StringFilter still had legacy enum validation logic
+
+- Internal cleanup of Explore's "column" data structures. Collapsed
+  ColumnOption and ColumnInfo
 
 ## [v0.0.11] - 2025-05-05
 

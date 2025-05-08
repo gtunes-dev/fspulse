@@ -31,11 +31,11 @@ Note: Some validation "errors" surfaced by the underlying libraries may not indi
 
 FsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.
 
-| File Types                              | Crate     | Link                                           |
-|-----------------------------------------|-----------|------------------------------------------------|
-| FLAC audio (`.flac`)                    | `claxon`  | [claxon on GitHub](https://github.com/ruuda/claxon) |
-| Images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.tiff`, `.bmp`) | `image`    | [image on GitHub](https://github.com/image-rs/image) |
-| PDF documents (`.pdf`)                  | `lopdf`   | [lopdf on GitHub](https://github.com/J-F-Liu/lopdf) |
+| File Types                                                | Crate     | Link                                                 |
+|-----------------------------------------------------------|-----------|------------------------------------------------------|
+| FLAC audio (`.flac`)                                      | `claxon`  | [claxon on GitHub](https://github.com/ruuda/claxon)  |
+| Images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.tiff`, `.bmp`) | `image`   | [image on GitHub](https://github.com/image-rs/image) |
+| PDF documents (`.pdf`)                                    | `lopdf`   | [lopdf on GitHub](https://github.com/J-F-Liu/lopdf)  |
 
 Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.
 

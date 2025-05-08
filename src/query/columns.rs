@@ -115,6 +115,7 @@ impl ColType {
 #[derive(Debug)]
 pub struct ColSpec {
     pub name_db: &'static str,
+    pub name_display: &'static str,
     pub is_default: bool,
     pub in_select_list: bool,
     pub col_type: ColType,
@@ -131,11 +132,30 @@ impl ColSpec {
     ) -> Self {
         ColSpec {
             name_db,
+            name_display: name_db,
             is_default,
             in_select_list,
             col_type,
             col_align: alignment,
         }
+    }
+
+    const fn new_with_display(
+        name_db: &'static str,
+        name_display: &'static str,
+        is_default: bool,
+        in_select_list: bool,
+        col_type: ColType,
+        alignment: ColAlign,
+    ) -> Self {
+        ColSpec {
+            name_db,
+            name_display,
+            is_default,
+            in_select_list,
+            col_type,
+            col_align: alignment,
+        }        
     }
 }
 
@@ -145,7 +165,7 @@ pub const ROOTS_QUERY_COLS: ColMap = phf_ordered_map! {
 };
 
 pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {
-    "scan_id"  => ColSpec::new("scans.scan_id", true, true, ColType::Id, ColAlign::Right),
+    "scan_id"  => ColSpec::new_with_display("scans.scan_id", "scan_id", true, true, ColType::Id, ColAlign::Right),
     "root_id" => ColSpec::new("root_id", true, true, ColType::Id, ColAlign::Right),
     "state" => ColSpec::new("state", false, true, ColType::Int, ColAlign::Center),
     "is_hash" => ColSpec::new("is_hash", true, true, ColType::Bool, ColAlign::Center),
@@ -169,27 +189,32 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "is_ts" => ColSpec::new("is_ts", true, true, ColType::Bool, ColAlign::Center),
     "mod_date" => ColSpec::new("mod_date", true, true, ColType::Date, ColAlign::Center),
     "file_size" => ColSpec::new("file_size", false, true, ColType::Int, ColAlign::Right),
-    "last_hash_scan" => ColSpec::new("last_hash_scan", false, true, ColType::Id, ColAlign::Right),
+    "last_hash_scan" => ColSpec::new_with_display("last_hash_scan", "LHS", false, true, ColType::Id, ColAlign::Right),
     "file_hash" => ColSpec::new("file_hash", false, true, ColType::String, ColAlign::Left),
-    "last_val_scan" => ColSpec::new("last_val_scan", false, true, ColType::Id, ColAlign::Right),
+    "last_val_scan" => ColSpec::new_with_display("last_val_scan", "LVS", false, true, ColType::Id, ColAlign::Right),
     "val" => ColSpec::new("val", false, true, ColType::Val, ColAlign::Center),
     "val_error" => ColSpec::new("val_error", false, true, ColType::String, ColAlign::Left),
 };
 
 pub const CHANGES_QUERY_COLS: ColMap = phf_ordered_map! {
-    "change_id" => ColSpec::new("changes.change_id", true, true, ColType::Id, ColAlign::Right),
-    "root_id" => ColSpec::new("items.root_id", true, true, ColType::Id, ColAlign::Right),
-    "scan_id"  => ColSpec::new("changes.scan_id", true, true, ColType::Id, ColAlign::Right),
-    "item_id" => ColSpec::new("changes.item_id", true, true, ColType::Id, ColAlign::Right),
-    "item_path" => ColSpec::new("items.item_path", false, true, ColType::Path, ColAlign::Left),
-    "change_type" => ColSpec::new("change_type", true, true, ColType::ChangeType, ColAlign::Center),
-    "meta_change" => ColSpec::new("meta_change", false, true, ColType::Bool, ColAlign::Center),
+    "change_id" => ColSpec::new_with_display("changes.change_id", "change_id", true, true, ColType::Id, ColAlign::Right),
+    "root_id" => ColSpec::new_with_display("items.root_id", "root_id", true, true, ColType::Id, ColAlign::Right),
+    "scan_id"  => ColSpec::new_with_display("changes.scan_id", "scan_id", true, true, ColType::Id, ColAlign::Right),
+    "item_id" => ColSpec::new_with_display("changes.item_id", "item_id", true, true, ColType::Id, ColAlign::Right),
+    "item_path" => ColSpec::new_with_display("items.item_path", "item_path", false, true, ColType::Path, ColAlign::Left),
+    "change_type" => ColSpec::new_with_display("change_type", "CT", true, true, ColType::ChangeType, ColAlign::Center),
+    "is_undelete" => ColSpec::new_with_display("is_undelete", "IU", false, true, ColType::Bool, ColAlign::Center),
+    "meta_change" => ColSpec::new_with_display("meta_change", "MC", false, true, ColType::Bool, ColAlign::Center),
     "mod_date_old" => ColSpec::new("mod_date_old", false, true, ColType::Date, ColAlign::Center),
     "mod_date_new" => ColSpec::new("mod_date_new", false, true, ColType::Date, ColAlign::Center),
-    "hash_change" => ColSpec::new("hash_change", false, true, ColType::Bool, ColAlign::Center),
-    "val_change" => ColSpec::new("val_change", false, true, ColType::Bool, ColAlign::Center),
-    "val_old" => ColSpec::new("val_old", false, true, ColType::Val, ColAlign::Center),
-    "val_new" => ColSpec::new("val_new", false, true, ColType::Val, ColAlign::Center),
+    "hash_change" => ColSpec::new_with_display("hash_change", "HC", false, true, ColType::Bool, ColAlign::Center),
+    "last_hash_scan_old" => ColSpec::new_with_display("last_hash_scan_old", "LHSO", false, true, ColType::Id, ColAlign::Right),
+    "hash_old" => ColSpec::new("hash_old", false, true, ColType::String, ColAlign::Left),
+    "hash_new" => ColSpec::new("hash_new", false, true, ColType::String, ColAlign::Left),
+    "val_change" => ColSpec::new_with_display("val_change", "VC", false, true, ColType::Bool, ColAlign::Center),
+    "last_val_scan_old" => ColSpec::new_with_display("last_val_scan_old", "LVSO", false, true, ColType::Id, ColAlign::Right),
+    "val_old" => ColSpec::new_with_display("val_old", "VO", false, true, ColType::Val, ColAlign::Center),
+    "val_new" => ColSpec::new_with_display("val_new", "VN", false, true, ColType::Val, ColAlign::Center),
     "val_error_old" => ColSpec::new("val_error_old", false, true, ColType::String, ColAlign::Left),
     "val_error_new" => ColSpec::new("val_error_new", false, true, ColType::String, ColAlign::Left),
 };
