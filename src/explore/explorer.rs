@@ -11,7 +11,7 @@ use ratatui::crossterm::terminal::{
 use ratatui::widgets::{Block, Clear, Tabs};
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     widgets::{Borders, Paragraph},
     Terminal,
@@ -20,7 +20,7 @@ use ratatui::{border, symbols};
 use std::io;
 
 use super::column_frame::ColumnFrameView;
-use super::domain_model::{ColumnOption, DomainModel, Filter, TypeSelection};
+use super::domain_model::{ColumnInfo, DomainModel, Filter, OrderDirection, TypeSelection};
 use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_window::FilterWindow;
 use super::grid_frame::GridFrameView;
@@ -94,7 +94,7 @@ impl Explorer {
                     Constraint::Length(3), // Tabs
                     Constraint::Length(8), // Filters
                     Constraint::Min(0),    // Main content
-                    Constraint::Length(2), // Help/status
+                    Constraint::Length(1), // Help/status
                 ],
             )
             .areas(full_area);
@@ -219,13 +219,13 @@ impl Explorer {
             f.render_widget(grid_frame_view, data_block.inner(data));
 
             // Draw bottom (help/status)
-            let help_block = Block::default()
-                .borders(Borders::TOP)
-                .title("Help")
-                .title_alignment(Alignment::Center);
+            //let help_block = Block::default()
+                //.borders(Borders::TOP)
+                //.title("Help")
+                //.title_alignment(Alignment::Center);
             let help_paragraph = Paragraph::new(self.help_text())
-                .style(Style::default().bg(Color::Blue).fg(Color::White))
-                .block(help_block);
+                .style(Style::default().bg(Color::Blue).fg(Color::White));
+                //.block(help_block);
             f.render_widget(help_paragraph, help);
 
             if let Some(ref mut filter_window) = self.filter_window {
@@ -482,7 +482,7 @@ impl Explorer {
 
     fn build_query_and_columns(
         &mut self,
-    ) -> Result<(String, Vec<ColumnOption>), FsPulseError> {
+    ) -> Result<(String, Vec<ColumnInfo>), FsPulseError> {
         let mut cols = Vec::new();
 
         // Build the new query
@@ -522,7 +522,26 @@ impl Explorer {
             }
         }
 
-        // TODO: Build the "order by" clause once we have UI for that
+        // Implement Order By.
+        // TODO - there's a caveat to this implemenation which is that the user
+        // can put an order-by directive on a hidden column. Since SQL requires
+        // order by to only be on columns in the select list, we current just skip
+        // hidden columns in this traversal. Consider doing something smarter like
+        // including the hidden columns in the query but not displaying them in the
+        // UI. Not sure this is worth it, though
+        first_col = true;
+        for col in self.model.current_columns() {
+            if col.selected && col.order_direction != OrderDirection::None {
+                match first_col {
+                    true => {
+                        query.push_str(" order by ");
+                        first_col = false;
+                    }
+                    false => query.push_str(", "),
+                }
+                query.push_str(&format!("{} {}", col.name_db, col.order_direction.to_query_term()));
+            }
+        }
 
         // Build the Limit clause
         let limit = self.model.current_limit();

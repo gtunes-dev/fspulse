@@ -5,9 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.0.12] - Not Yet Released
+## [v0.0.12] - 2025-05-07
 
 ### Added
+
+- Explicit ordering in Explorer! The column view now supports pressing 'a' for
+  "ascending" and 'd' for "descending. It also supports left and right arrow for
+  cycling through the options. If you want to order on multiple columns, 
+  those columns must be displayed in the order that you want the directives 
+  applied. Use '+' and '-' to re-order columns. If order is specified on a 
+  hidden column, that order is ignored. 
+
 - Some schematized fields weren't available for query in CLI or Explore. All fields
   are now available. New fields include is_undelete, last_hash_scan_old
   hash_old, hash_new, last_val_scan_old
@@ -20,9 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Corrected "not_null" to "not null" in Explorer filter tips
+
 - In Explorer, date filter values are validated before the filter is saved.
   Previously, dates were parsed but not actually validated so values such as
   "2025-01-32" would slip past the parser and into the query
+
+- Fixed panic occurring when the window width was too small to display the
+  vertical scrollbar in the grid
 
 ### Changed
 
@@ -31,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Internal cleanup of Explore's "column" data structures. Collapsed
   ColumnOption and ColumnInfo
+
+- Grid rows are no longer cloned prior to drawing the table. The rows
+  are re-created (no way to avoid this while using table state) but the
+  String contents are no longer cloned
 
 ## [v0.0.11] - 2025-05-05
 

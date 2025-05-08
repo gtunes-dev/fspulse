@@ -51,13 +51,39 @@ impl TypeSelection {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OrderDirection {
+    Ascend,
+    Descend,
+    None
+}
+
+impl OrderDirection {
+    pub fn to_display(self) -> &'static str {
+        match self {
+            OrderDirection::Ascend => "↑",
+            OrderDirection::Descend => "↓",
+            OrderDirection::None => " ",
+        }
+    }
+
+    pub fn to_query_term(self) -> &'static str {
+        match self {
+            OrderDirection::Ascend => "ASC",
+            OrderDirection::Descend => "DESC",
+            _ => unreachable!()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
-pub struct ColumnOption {
+pub struct ColumnInfo {
     pub name_db: &'static str,
     pub name_display: &'static str,
     pub col_align: Alignment,
     pub col_type: ColType,
     pub selected: bool,
+    pub order_direction: OrderDirection,
 }
 
 #[derive(Debug, Clone)]
@@ -85,13 +111,13 @@ impl Filter {
 }
 
 struct DomainState {
-    pub columns: Vec<ColumnOption>,
+    pub columns: Vec<ColumnInfo>,
     pub filters: Vec<Filter>,
     pub limit: String,
 }
 
 impl DomainState {
-    fn new(columns: Vec<ColumnOption>) -> Self {
+    fn new(columns: Vec<ColumnInfo>) -> Self {
         DomainState {
             columns,
             filters: Vec::new(),
@@ -153,11 +179,11 @@ impl DomainModel {
         self.current_type = current_type;
     }
 
-    pub fn current_columns(&self) -> &Vec<ColumnOption> {
+    pub fn current_columns(&self) -> &Vec<ColumnInfo> {
         &self.current_state().columns
     }
 
-    pub fn current_columns_mut(&mut self) -> &mut Vec<ColumnOption> {
+    pub fn current_columns_mut(&mut self) -> &mut Vec<ColumnInfo> {
         self.current_state_mut().columns.as_mut()
     }
 
@@ -177,15 +203,16 @@ impl DomainModel {
         self.current_state_mut().limit = new_limit;
     }
 
-    fn column_options_from_map(col_map: &ColMap) -> Vec<ColumnOption> {
+    fn column_options_from_map(col_map: &ColMap) -> Vec<ColumnInfo> {
         col_map
             .entries()
-            .map(|(col_name, col_spec)| ColumnOption {
+            .map(|(col_name, col_spec)| ColumnInfo {
                 name_db: col_name,
                 name_display: col_spec.name_display,
                 selected: col_spec.is_default,
-                    col_align: col_spec.col_align.to_ratatui(),
-                    col_type: col_spec.col_type,
+                col_align: col_spec.col_align.to_ratatui(),
+                col_type: col_spec.col_type,
+                order_direction: OrderDirection::None,
             })
             .collect()
     }
