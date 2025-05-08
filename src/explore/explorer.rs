@@ -2,7 +2,7 @@ use crate::query::QueryProcessor;
 use crate::{database::Database, error::FsPulseError};
 
 use ratatui::crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -269,6 +269,9 @@ impl Explorer {
             // Handle input
             if event::poll(std::time::Duration::from_millis(250))? {
                 if let Event::Key(key) = event::read()? {
+                    if key.kind == KeyEventKind::Release {
+                        continue;
+                    }
                     if self.modal_input_handled(key) {
                         continue;
                     }
