@@ -8,5 +8,6 @@ mod input_box;
 mod limit_widget;
 mod message_box;
 mod utils;
+mod view;
 
 pub use explorer::Explorer;
