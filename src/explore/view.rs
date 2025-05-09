@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::TypeSelection,
+    domain_model::{OrderDirection, TypeSelection},
     explorer::ExplorerAction,
     utils::StylePalette,
 };
@@ -18,6 +18,12 @@ pub const SAVED_VIEWS: &[SavedView] = &[INVALID_ITEMS, CHANGED_TO_INVALID];
 pub struct FilterSpec {
     pub col_name: &'static str,
     pub filter_text: &'static str,
+}
+
+pub struct ColumnSpec {
+    pub col_name: &'static str,
+    pub show_col: bool,
+    pub order_direction: OrderDirection,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -33,6 +39,14 @@ const fn f(col_name: &'static str, filter_text: &'static str) -> FilterSpec {
     FilterSpec {
         col_name,
         filter_text,
+    }
+}
+
+const fn c(col_name: &'static str, show_col: bool, order_direction: OrderDirection) -> ColumnSpec {
+    ColumnSpec {
+        col_name,
+        show_col,
+        order_direction,
     }
 }
 

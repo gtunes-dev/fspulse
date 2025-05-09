@@ -55,7 +55,7 @@ impl TypeSelection {
 pub enum OrderDirection {
     Ascend,
     Descend,
-    None
+    None,
 }
 
 impl OrderDirection {
@@ -71,7 +71,7 @@ impl OrderDirection {
         match self {
             OrderDirection::Ascend => "ASC",
             OrderDirection::Descend => "DESC",
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }
@@ -138,18 +138,10 @@ impl DomainModel {
     pub fn new() -> Self {
         DomainModel {
             current_type: TypeSelection::Items,
-            roots_state: DomainState::new(Self::column_options_from_map(
-                &columns::ROOTS_QUERY_COLS,
-            )),
-            scans_state: DomainState::new(Self::column_options_from_map(
-                &columns::SCANS_QUERY_COLS,
-            )),
-            items_state: DomainState::new(Self::column_options_from_map(
-                &columns::ITEMS_QUERY_COLS,
-            )),
-            changes_state: DomainState::new(Self::column_options_from_map(
-                &columns::CHANGES_QUERY_COLS,
-            )),
+            roots_state: DomainState::new(Self::column_options_from_map(TypeSelection::Roots)),
+            scans_state: DomainState::new(Self::column_options_from_map(TypeSelection::Scans)),
+            items_state: DomainState::new(Self::column_options_from_map(TypeSelection::Items)),
+            changes_state: DomainState::new(Self::column_options_from_map(TypeSelection::Changes)),
         }
     }
 
@@ -203,7 +195,23 @@ impl DomainModel {
         self.current_state_mut().limit = new_limit;
     }
 
-    fn column_options_from_map(col_map: &ColMap) -> Vec<ColumnInfo> {
+    pub fn reset_current_columns(&mut self) {
+        match self.current_type {
+            TypeSelection::Roots => self.roots_state.columns = Self::column_options_from_map(TypeSelection::Roots),
+            TypeSelection::Scans => self.scans_state.columns = Self::column_options_from_map(TypeSelection::Scans),
+            TypeSelection::Items => self.items_state.columns = Self::column_options_from_map(TypeSelection::Items),
+            TypeSelection::Changes => self.changes_state.columns = Self::column_options_from_map(TypeSelection::Changes),
+        }
+    }
+
+    fn column_options_from_map(type_selection: TypeSelection) -> Vec<ColumnInfo> {
+        let col_map = match type_selection {
+            TypeSelection::Roots => &columns::ROOTS_QUERY_COLS,
+            TypeSelection::Scans => &columns::SCANS_QUERY_COLS,
+            TypeSelection::Items => &columns::ITEMS_QUERY_COLS,
+            TypeSelection::Changes => &columns::CHANGES_QUERY_COLS,
+        };
+
         col_map
             .entries()
             .map(|(col_name, col_spec)| ColumnInfo {
