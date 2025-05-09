@@ -2,14 +2,15 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Layout, Rect},
-    style::Stylize,
+    style::{Style, Stylize},
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 
 use super::{
     domain_model::{OrderDirection, TypeSelection},
     explorer::ExplorerAction,
-    utils::StylePalette,
+    utils::{StylePalette, Utils},
 };
 
 pub const SAVED_VIEWS: &[SavedView] = &[INVALID_ITEMS, CHANGED_TO_INVALID];
@@ -30,6 +31,7 @@ pub struct ColumnSpec {
 #[derive(Clone, Copy, Debug)]
 pub struct SavedView {
     pub name: &'static str,
+    pub description: &'static str,
     pub type_selection: TypeSelection,
     pub filters: &'static [FilterSpec],
     pub columns: &'static [ColumnSpec],
@@ -54,21 +56,37 @@ const fn c(col_name: &'static str, show_col: bool, order_direction: OrderDirecti
 
 const fn sv(
     name: &'static str,
+    description: &'static str,
     type_selection: TypeSelection,
     filters: &'static [FilterSpec],
     columns: &'static [ColumnSpec],
 ) -> SavedView {
     SavedView {
         name,
+        description,
         type_selection,
         filters,
         columns,
     }
 }
 
-// Invalid Items Filter
-const INVALID_ITEMS_FILTERS: &[FilterSpec] = &[f("val", "I"), f("is_ts", "false")];
-const INVALID_ITEMS_COLUMNS: &[ColumnSpec] = &[
+const INVALID_ITEMS: SavedView = sv(
+    "Invalid Items",
+    "Items with a validity state of 'Invalid'",
+    TypeSelection::Items,
+    INVALID_ITEMS_F,
+    INVALID_ITEMS_C,
+);
+const CHANGED_TO_INVALID: SavedView = sv(
+    "Changed to Invalid",
+    "Changes in which the item's state transitioned to 'Invalid'",
+    TypeSelection::Changes,
+    CHANGED_TO_INVALID_F,
+    CHANGE_TO_INVALID_C,
+);
+
+const INVALID_ITEMS_F: &[FilterSpec] = &[f("val", "I"), f("is_ts", "false")];
+const INVALID_ITEMS_C: &[ColumnSpec] = &[
     c("root_id", false, OrderDirection::None),
     c("item_path", true, OrderDirection::Ascend),
     c("last_scan", false, OrderDirection::None),
@@ -77,39 +95,25 @@ const INVALID_ITEMS_COLUMNS: &[ColumnSpec] = &[
     c("val_error", true, OrderDirection::None),
 ];
 
-const INVALID_ITEMS: SavedView = sv(
-    "Invalid Items",
-    TypeSelection::Items,
-    INVALID_ITEMS_FILTERS,
-    INVALID_ITEMS_COLUMNS,
-);
-
-const CHANGED_TO_INVALID_FILTERS: &[FilterSpec] = &[
+const CHANGED_TO_INVALID_F: &[FilterSpec] = &[
     f("val_change", "T"),
     f("val_old", "I, N, U"),
     f("val_new", "I"),
 ];
-
-const CHANGE_TO_INVALID_COLUMNS: &[ColumnSpec] = &[
+const CHANGE_TO_INVALID_C: &[ColumnSpec] = &[
     c("item_path", true, OrderDirection::Ascend),
     c("val_error", true, OrderDirection::None),
 ];
-const CHANGED_TO_INVALID: SavedView = sv(
-    "Changed to Invalid",
-    TypeSelection::Changes,
-    CHANGED_TO_INVALID_FILTERS,
-    CHANGE_TO_INVALID_COLUMNS,
-);
 
-pub struct ViewsState {
+pub struct ViewsListState {
     pub list_state: ListState,
 }
 
 #[derive(Debug)]
-pub struct ViewsWidget;
+pub struct ViewsListWidget;
 
-impl StatefulWidget for ViewsWidget {
-    type State = ViewsState;
+impl StatefulWidget for ViewsListWidget {
+    type State = ViewsListState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let list_block = Block::default()
@@ -117,8 +121,13 @@ impl StatefulWidget for ViewsWidget {
             .style(StylePalette::PopUp.style());
         let inner_area = list_block.inner(area);
 
-        let [header_area, list_area] =
-            Layout::vertical([Constraint::Length(2), Constraint::Min(5)]).areas(inner_area);
+        let [header_area, list_area, _, help_area] = Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Min(5),
+            Constraint::Fill(1),
+            Constraint::Length(2),
+        ])
+        .areas(inner_area);
 
         list_block.render(area, buf);
 
@@ -126,7 +135,13 @@ impl StatefulWidget for ViewsWidget {
 
         let list_items = SAVED_VIEWS
             .iter()
-            .map(|view| ListItem::from(view.name))
+            .map(|view| {
+                ListItem::new(Line::from(vec![
+                    Span::styled(view.name, Style::default().bold()),
+                    Span::raw(": "),
+                    Span::raw(view.description),
+                ]))
+            })
             .collect::<Vec<ListItem>>();
 
         let list = List::new(list_items)
@@ -134,18 +149,20 @@ impl StatefulWidget for ViewsWidget {
             .highlight_symbol("» ");
 
         StatefulWidget::render(list, list_area, buf, &mut state.list_state);
+
+        Utils::render_popup_help("Esc: Cancel  |  Enter: Set Filter", help_area, buf);
     }
 }
 
-impl ViewsWidget {
+impl ViewsListWidget {
     fn render_header(&self, area: Rect, buf: &mut Buffer) {
         Paragraph::new("Views").bold().centered().render(area, buf);
     }
 }
 
-impl ViewsState {
+impl ViewsListState {
     pub fn new() -> Self {
-        ViewsState {
+        ViewsListState {
             list_state: {
                 let mut list_state = ListState::default();
                 list_state.select(Some(0));

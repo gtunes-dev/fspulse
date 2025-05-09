@@ -939,6 +939,7 @@ dependencies = [
  "tico",
  "toml",
  "tui-input",
+ "tui-textarea",
 ]
 
 [[package]]
@@ -2740,6 +2741,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e938a92d777c92c19bbad0900f7887696d82673269aceadf056055f1e6cd764e"
 dependencies = [
  "ratatui 0.30.0-alpha.2",
+ "unicode-width 0.2.0",
+]
+
+[[package]]
+name = "tui-textarea"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a5318dd619ed73c52a9417ad19046724effc1287fb75cdcc4eca1d6ac1acbae"
+dependencies = [
+ "crossterm 0.28.1",
+ "ratatui 0.29.0",
  "unicode-width 0.2.0",
 ]
 

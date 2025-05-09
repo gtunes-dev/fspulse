@@ -22,13 +22,13 @@ use std::io;
 use super::column_frame::ColumnFrameView;
 use super::domain_model::{ColumnInfo, DomainModel, Filter, OrderDirection, TypeSelection};
 use super::filter_frame::{FilterFrame, FilterFrameView};
-use super::filter_popup::FilterPopup;
+use super::filter_popup::{FilterPopupState, FilterPopupWidget};
 use super::grid_frame::GridFrameView;
 use super::input_box::{InputBox, InputBoxState};
 use super::limit_widget::LimitWidget;
 use super::message_box::{MessageBox, MessageBoxType};
 use super::utils::{StylePalette, Utils};
-use super::view::{SavedView, ViewsState, ViewsWidget};
+use super::view::{SavedView, ViewsListState, ViewsListWidget};
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 enum Focus {
@@ -42,7 +42,7 @@ enum Focus {
 pub enum ExplorerAction {
     Dismiss,
     RefreshQuery(bool),
-    ShowAddFilter(FilterPopup),
+    ShowAddFilter(FilterPopupState),
     ShowMessage(MessageBox),
     AddFilter(Filter),
     ShowEditFilter(usize),
@@ -61,10 +61,10 @@ pub struct Explorer {
     column_frame: ColumnFrame,
     grid_frame: GridFrame,
     filter_frame: FilterFrame,
-    filter_popup: Option<FilterPopup>,
+    filter_popup_state: Option<FilterPopupState>,
     message_box: Option<MessageBox>,
     input_box: Option<InputBox>,
-    views_state: Option<ViewsState>,
+    views_state: Option<ViewsListState>,
 }
 
 impl Explorer {
@@ -77,7 +77,7 @@ impl Explorer {
             column_frame: ColumnFrame::new(),
             grid_frame: GridFrame::new(),
             filter_frame: FilterFrame::new(),
-            filter_popup: None,
+            filter_popup_state: None,
             message_box: None,
             input_box: None,
             views_state: None,
@@ -230,9 +230,15 @@ impl Explorer {
             //.block(help_block);
             f.render_widget(help_paragraph, help);
 
-            if let Some(ref mut filter_popup) = self.filter_popup {
-                let is_top_window = self.message_box.is_none();
-                filter_popup.draw(f, is_top_window);
+            if let Some(filter_popup_state) = self.filter_popup_state.as_mut(){
+                
+                // Inform the popup if it is on top - it uses this to determine
+                // whether or not to draw the cursor in the input
+                let filter_popup_rect = Utils::center(f.area(), Constraint::Max(80), Constraint::Length(12));
+                f.render_widget(Clear, filter_popup_rect);
+
+                let filter_widget = FilterPopupWidget;
+                f.render_stateful_widget(filter_widget, filter_popup_rect, filter_popup_state);
             }
 
             if let Some(views_state) = self.views_state.as_mut() {
@@ -240,16 +246,8 @@ impl Explorer {
                     Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
                 f.render_widget(Clear, views_rect);
 
-                let views_popup = ViewsWidget;
+                let views_popup = ViewsListWidget;
                 f.render_stateful_widget(views_popup, views_rect, views_state);
-            }
-
-            // Draw the message box if needed
-            if let Some(ref message_box) = self.message_box {
-                message_box.draw(f);
-                let input_rect =
-                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
-                f.render_widget(Clear, input_rect);
             }
 
             if let Some(ref input_box) = self.input_box {
@@ -261,6 +259,14 @@ impl Explorer {
                 if let Some((x, y)) = input_state.cursor_pos {
                     f.set_cursor_position((x, y));
                 }
+            }
+
+            // Draw the message box if needed
+            if let Some(ref message_box) = self.message_box {
+                let input_rect =
+                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
+                f.render_widget(Clear, input_rect);
+                message_box.draw(f);
             }
         })?;
 
@@ -367,17 +373,17 @@ impl Explorer {
             return true;
         }
 
-        if let Some(ref mut filter_popup) = self.filter_popup {
-            let action = filter_popup.handle_key(key);
+        if let Some(ref mut filter_popup_state) = self.filter_popup_state {
+            let action = filter_popup_state.handle_key(key);
             if let Some(action) = action {
                 match action {
-                    ExplorerAction::Dismiss => self.filter_popup = None,
+                    ExplorerAction::Dismiss => self.filter_popup_state = None,
                     ExplorerAction::ShowMessage(message_box) => {
                         self.message_box = Some(message_box)
                     }
                     ExplorerAction::AddFilter(filter) => {
                         self.model.current_filters_mut().push(filter);
-                        self.filter_popup = None;
+                        self.filter_popup_state = None;
                         self.filter_frame
                             .set_selected(self.model.current_filters().len());
 
@@ -394,7 +400,7 @@ impl Explorer {
                             }
                         }
 
-                        self.filter_popup = None;
+                        self.filter_popup_state = None;
                     }
                     _ => {}
                 }
@@ -443,7 +449,7 @@ impl Explorer {
                 ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
                 ExplorerAction::ShowLimit => self.show_limit_input(),
                 ExplorerAction::ShowAddFilter(filter_popup) => {
-                    self.filter_popup = Some(filter_popup)
+                    self.filter_popup_state = Some(filter_popup)
                 }
                 ExplorerAction::DeleteFilter(filter_index) => {
                     self.model.current_filters_mut().remove(filter_index);
@@ -456,13 +462,13 @@ impl Explorer {
                 }
                 ExplorerAction::ShowEditFilter(filter_index) => {
                     if let Some(filter) = self.model.current_filters().get(filter_index) {
-                        let edit_filter_popup = FilterPopup::new_edit_filter_popup(
+                        let edit_filter_popup = FilterPopupState::new_edit_filter_popup(
                             filter.col_name,
                             filter_index,
                             filter.col_type_info,
                             filter.filter_text.to_owned(),
                         );
-                        self.filter_popup = Some(edit_filter_popup);
+                        self.filter_popup_state = Some(edit_filter_popup);
                     }
                 }
                 _ => unreachable!(),
@@ -653,7 +659,7 @@ impl Explorer {
     }
 
     fn show_views(&mut self) {
-        self.views_state = Some(ViewsState::new());
+        self.views_state = Some(ViewsListState::new());
     }
 
     fn set_current_type(&mut self, new_type: TypeSelection) {
@@ -692,9 +698,10 @@ impl Explorer {
                 .model
                 .current_columns_mut()
                 .iter_mut()
-                .find(| col_info| col_info.name_db == column_spec.col_name) {
-                    col_info.selected = column_spec.show_col; 
-                    col_info.order_direction = column_spec.order_direction;
+                .find(|col_info| col_info.name_db == column_spec.col_name)
+            {
+                col_info.selected = column_spec.show_col;
+                col_info.order_direction = column_spec.order_direction;
             }
         }
 

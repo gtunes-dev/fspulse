@@ -1,8 +1,9 @@
 use ratatui::{
+    buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
-    layout::{Constraint, Direction, Flex, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Flex, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
-    widgets::TableState,
+    widgets::{Block, Borders, Paragraph, TableState, Widget},
 };
 
 pub struct Utils;
@@ -130,5 +131,24 @@ impl Utils {
         }
 
         handled
+    }
+
+    pub fn render_popup_help(help_text: &str, area: Rect, buf: &mut Buffer) {
+        // only render if height is exactly 2 - this enforces correctness and avoids panics
+        if area.height == 2 {
+            let [divider_area, help_text_area] =
+                Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(area);
+
+            let style = StylePalette::PopUp.style();
+            
+            Block::default()
+                .borders(Borders::TOP)
+                .title("Help")
+                .title_alignment(Alignment::Center)
+                .style(style)
+                .render(divider_area, buf);
+
+            Paragraph::new(help_text).style(style).render(help_text_area, buf);
+        }
     }
 }

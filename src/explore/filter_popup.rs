@@ -1,44 +1,109 @@
 use ratatui::{
-    crossterm::event::{Event, KeyCode, KeyEvent},
-    layout::{Alignment, Constraint, Layout, Position, Rect},
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
-    Frame,
+    buffer::Buffer,
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::{Alignment, Constraint, Layout, Rect},
+    style::Style,
+    widgets::{Block, Borders, Paragraph, StatefulWidget, Widget, Wrap},
 };
-use tui_input::{backend::crossterm::EventHandler, Input};
+use tui_textarea::TextArea;
 
 use crate::query::{columns::ColTypeInfo, QueryProcessor};
 
 use super::{
     domain_model::Filter,
     explorer::ExplorerAction,
-    message_box::{MessageBox, MessageBoxType}, utils::StylePalette,
+    message_box::{MessageBox, MessageBoxType},
+    utils::{StylePalette, Utils},
 };
 
+#[derive(Debug, Copy, Clone)]
 enum FilterPopupType {
     Add,
     Edit,
 }
-pub struct FilterPopup {
+
+impl FilterPopupType {
+    fn to_str(&self) -> &'static str {
+        match self {
+            FilterPopupType::Add => "Add",
+            FilterPopupType::Edit => "Edit",
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FilterPopupState {
     filter_popup_type: FilterPopupType,
     col_name: &'static str,
     filter_index: Option<usize>,
     col_type_info: ColTypeInfo,
-    input: Input,
+    text_area: TextArea<'static>,
 }
 
-impl FilterPopup {
+pub struct FilterPopupWidget;
+
+impl StatefulWidget for FilterPopupWidget {
+    type State = FilterPopupState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let popup_style = StylePalette::PopUp.style();
+
+        let outer_block = Block::default().borders(Borders::ALL).style(popup_style);
+
+        let [label_area, _, input_area, tip_area, _, help_area] = Layout::vertical([
+            Constraint::Length(1), // label
+            Constraint::Length(1), // spacer
+            Constraint::Length(3), // input
+            Constraint::Length(2), // tip
+            Constraint::Length(1), // spacer
+            Constraint::Length(2), // help
+        ])
+        .areas(outer_block.inner(area));
+
+        outer_block.render(area, buf);
+
+        // Label
+        let label_text = format!(
+            "{} Filter ({}):",
+            state.filter_popup_type.to_str(),
+            state.col_name
+        );
+        Paragraph::new(label_text)
+            .alignment(Alignment::Left)
+            .style(popup_style)
+            .render(label_area, buf);
+
+        state.text_area.set_style(StylePalette::PopUp.style());
+        state.text_area.set_cursor_line_style(Style::default());
+        state
+            .text_area
+            .set_block(Block::default().borders(Borders::ALL));
+        state.text_area.render(input_area, buf);
+
+        // Tip
+        Paragraph::new(state.col_type_info.tip)
+            .style(popup_style)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true })
+            .render(tip_area, buf);
+
+        Utils::render_popup_help("Esc: Cancel  |  Enter: Save", help_area, buf);
+    }
+}
+
+impl FilterPopupState {
     fn new(
         filter_popup_type: FilterPopupType,
         col_name: &'static str,
         filter_index: Option<usize>,
         col_type_info: ColTypeInfo,
     ) -> Self {
-        FilterPopup {
+        FilterPopupState {
             filter_popup_type,
             col_name,
             filter_index,
             col_type_info,
-            input: Input::default(),
+            text_area: TextArea::default(),
         }
     }
 
@@ -52,89 +117,16 @@ impl FilterPopup {
         col_type_info: ColTypeInfo,
         filter_text: String,
     ) -> Self {
-        FilterPopup {
+        FilterPopupState {
             filter_popup_type: FilterPopupType::Edit,
             col_name,
             filter_index: Some(filter_index),
             col_type_info,
-            input: Input::default().with_value(filter_text),
+            text_area: {
+                let lines = vec![filter_text];
+                TextArea::new(lines)
+            },
         }
-    }
-
-    pub fn draw(&mut self, f: &mut Frame, is_top_window: bool) {
-        let screen = f.area();
-
-        let popup_width = screen.width.min(80);
-        let popup_height = 12;
-
-        let popup_x = screen.x + (screen.width.saturating_sub(popup_width)) / 2;
-        let popup_y = screen.y + (screen.height.saturating_sub(popup_height)) / 2;
-
-        let popup_area = Rect {
-            x: popup_x,
-            y: popup_y,
-            width: popup_width,
-            height: popup_height,
-        };
-
-        f.render_widget(Clear, popup_area);
-
-        let popup_style = StylePalette::PopUp.style();
-
-        let outer_block = Block::default().borders(Borders::ALL).style(popup_style);
-        f.render_widget(&outer_block, popup_area);
-
-        let [label, _, input, tip, _, divider, help] =
-            Layout::vertical([
-                Constraint::Length(1),  // label
-                Constraint::Length(1),  // spacer
-                Constraint::Length(3),  // input
-                Constraint::Length(2), // tip
-                Constraint::Length(1), // spacer
-                Constraint::Length(1), // divider
-                Constraint::Length(1), // help
-            ]).areas(outer_block.inner(popup_area));
-
-        // Label
-        let label_text = format!("Add {} filter:", self.col_name);
-        let label_paragraph = Paragraph::new(label_text).alignment(Alignment::Left).style(popup_style);
-        f.render_widget(label_paragraph, label);
-
-        // Input
-        let scroll = self.input.visual_scroll((input.width - 2) as usize);
-        let input_block = Block::default().title("Filter").borders(Borders::ALL);
-        let input_paragraph = Paragraph::new(self.input.value())
-            .block(input_block)
-            .scroll((0, scroll as u16))
-            .style(popup_style);
-        f.render_widget(input_paragraph, input);
-
-        // Cursor positioning
-        if is_top_window {
-            let x = self.input.visual_cursor().saturating_sub(scroll) as u16;
-            f.set_cursor_position(Position::new(input.x + 1 + x, input.y + 1));
-        }
-
-        // Tip
-        let tip_paragraph = Paragraph::new(self.col_type_info.tip)
-            .style(popup_style)
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true });
-        f.render_widget(tip_paragraph, tip);
-
-        // Divider
-        let divider_block = Block::default()
-            .borders(Borders::TOP)
-            .title("Help")
-            .title_alignment(Alignment::Center)
-            .style(popup_style);
-        f.render_widget(divider_block, divider);
-
-        // Help text
-        let help_text = "Esc: Cancel  |  Enter: Save";
-        let help_paragraph =
-            Paragraph::new(help_text).style(popup_style);
-        f.render_widget(help_paragraph, help);
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
@@ -143,7 +135,7 @@ impl FilterPopup {
                 return Some(ExplorerAction::Dismiss);
             }
             KeyCode::Enter => {
-                let mut input_val = self.input.value();
+                let mut input_val = self.text_area.lines()[0].as_str();
                 let err_str = QueryProcessor::validate_filter(self.col_type_info.rule, input_val);
                 match err_str {
                     Some(err_str) => {
@@ -178,10 +170,9 @@ impl FilterPopup {
                 }
             }
             _ => {
-                self.input.handle_event(&Event::Key(key));
+                self.text_area.input(key);
             }
         }
-
         None
     }
 }

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::{ColumnInfo, DomainModel, OrderDirection, TypeSelection}, explorer::ExplorerAction, filter_popup::FilterPopup, utils::{StylePalette, Utils}
+    domain_model::{ColumnInfo, DomainModel, OrderDirection, TypeSelection}, explorer::ExplorerAction, filter_popup::FilterPopupState, utils::{StylePalette, Utils}
 };
 
 pub struct ColumnFrame {
@@ -89,7 +89,7 @@ impl ColumnFrame {
                 if let Some(selected) = self.table_state.selected() {
                     if let Some(col_option) = model.current_columns().get(selected) {
                         explorer_action = Some(ExplorerAction::ShowAddFilter(
-                            FilterPopup::new_add_filter_popup(
+                            FilterPopupState::new_add_filter_popup(
                                 col_option.name_db,
                                 col_option.col_type.info(),
                             ),
