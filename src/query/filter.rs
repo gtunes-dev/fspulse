@@ -488,7 +488,7 @@ impl EnumFilter {
         // val values
         "val_valid" => "V",
         "val_invalid" => "I",
-        "val_not_validated" => "N",
+        "val_no_validator" => "N",
         "val_unknown" => "U",
 
         // change type values

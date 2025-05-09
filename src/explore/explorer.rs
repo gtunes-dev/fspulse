@@ -2,7 +2,7 @@ use crate::query::QueryProcessor;
 use crate::{database::Database, error::FsPulseError};
 
 use ratatui::crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -22,12 +22,13 @@ use std::io;
 use super::column_frame::ColumnFrameView;
 use super::domain_model::{ColumnInfo, DomainModel, Filter, OrderDirection, TypeSelection};
 use super::filter_frame::{FilterFrame, FilterFrameView};
-use super::filter_window::FilterWindow;
+use super::filter_popup::FilterPopup;
 use super::grid_frame::GridFrameView;
 use super::input_box::{InputBox, InputBoxState};
 use super::limit_widget::LimitWidget;
 use super::message_box::{MessageBox, MessageBoxType};
 use super::utils::{StylePalette, Utils};
+use super::view::{SavedView, ViewsState, ViewsWidget};
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 enum Focus {
@@ -41,7 +42,7 @@ enum Focus {
 pub enum ExplorerAction {
     Dismiss,
     RefreshQuery(bool),
-    ShowAddFilter(FilterWindow),
+    ShowAddFilter(FilterPopup),
     ShowMessage(MessageBox),
     AddFilter(Filter),
     ShowEditFilter(usize),
@@ -49,6 +50,7 @@ pub enum ExplorerAction {
     UpdateFilter(usize, String),
     ShowLimit,
     SetLimit(String),
+    ApplyView(SavedView),
 }
 
 pub struct Explorer {
@@ -59,9 +61,10 @@ pub struct Explorer {
     column_frame: ColumnFrame,
     grid_frame: GridFrame,
     filter_frame: FilterFrame,
-    filter_window: Option<FilterWindow>,
+    filter_popup: Option<FilterPopup>,
     message_box: Option<MessageBox>,
     input_box: Option<InputBox>,
+    views_state: Option<ViewsState>,
 }
 
 impl Explorer {
@@ -74,9 +77,10 @@ impl Explorer {
             column_frame: ColumnFrame::new(),
             grid_frame: GridFrame::new(),
             filter_frame: FilterFrame::new(),
-            filter_window: None,
+            filter_popup: None,
             message_box: None,
             input_box: None,
+            views_state: None,
         }
     }
 
@@ -214,28 +218,38 @@ impl Explorer {
             f.render_widget(column_frame_view, columns_block.inner(columns));
 
             // Draw right (data grid)
-            let grid_frame_view =
-                GridFrameView::new(&mut self.grid_frame, &self.model, matches!(self.focus, Focus::DataGrid));
+            let grid_frame_view = GridFrameView::new(
+                &mut self.grid_frame,
+                &self.model,
+                matches!(self.focus, Focus::DataGrid),
+            );
             f.render_widget(grid_frame_view, data_block.inner(data));
 
-            // Draw bottom (help/status)
-            //let help_block = Block::default()
-                //.borders(Borders::TOP)
-                //.title("Help")
-                //.title_alignment(Alignment::Center);
             let help_paragraph = Paragraph::new(self.help_text())
                 .style(Style::default().bg(Color::Blue).fg(Color::White));
-                //.block(help_block);
+            //.block(help_block);
             f.render_widget(help_paragraph, help);
 
-            if let Some(ref mut filter_window) = self.filter_window {
+            if let Some(ref mut filter_popup) = self.filter_popup {
                 let is_top_window = self.message_box.is_none();
-                filter_window.draw(f, is_top_window);
+                filter_popup.draw(f, is_top_window);
+            }
+
+            if let Some(views_state) = self.views_state.as_mut() {
+                let views_rect =
+                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
+                f.render_widget(Clear, views_rect);
+
+                let views_popup = ViewsWidget;
+                f.render_stateful_widget(views_popup, views_rect, views_state);
             }
 
             // Draw the message box if needed
             if let Some(ref message_box) = self.message_box {
                 message_box.draw(f);
+                let input_rect =
+                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
+                f.render_widget(Clear, input_rect);
             }
 
             if let Some(ref input_box) = self.input_box {
@@ -290,6 +304,9 @@ impl Explorer {
                         KeyCode::Char('r') | KeyCode::Char('R') => {
                             self.set_current_type(TypeSelection::Roots)
                         }
+                        KeyCode::Char('v') | KeyCode::Char('V') => {
+                            self.show_views();
+                        }
 
                         // Show Limit Input
                         KeyCode::Char('l') | KeyCode::Char('L') => {
@@ -334,17 +351,33 @@ impl Explorer {
             return true;
         }
 
-        if let Some(ref mut filter_window) = self.filter_window {
-            let action = filter_window.handle_key(key);
+        if let Some(views_state) = self.views_state.as_mut() {
+            let action = views_state.handle_key(key);
             if let Some(action) = action {
                 match action {
-                    ExplorerAction::Dismiss => self.filter_window = None,
+                    ExplorerAction::Dismiss => self.views_state = None,
+                    ExplorerAction::ApplyView(saved_view) => {
+                        self.views_state = None;
+                        self.apply_view(&saved_view);
+                    }
+                    _ => {}
+                }
+            }
+
+            return true;
+        }
+
+        if let Some(ref mut filter_popup) = self.filter_popup {
+            let action = filter_popup.handle_key(key);
+            if let Some(action) = action {
+                match action {
+                    ExplorerAction::Dismiss => self.filter_popup = None,
                     ExplorerAction::ShowMessage(message_box) => {
                         self.message_box = Some(message_box)
                     }
                     ExplorerAction::AddFilter(filter) => {
                         self.model.current_filters_mut().push(filter);
-                        self.filter_window = None;
+                        self.filter_popup = None;
                         self.filter_frame
                             .set_selected(self.model.current_filters().len());
 
@@ -361,7 +394,7 @@ impl Explorer {
                             }
                         }
 
-                        self.filter_window = None;
+                        self.filter_popup = None;
                     }
                     _ => {}
                 }
@@ -409,8 +442,8 @@ impl Explorer {
                 }
                 ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
                 ExplorerAction::ShowLimit => self.show_limit_input(),
-                ExplorerAction::ShowAddFilter(filter_window) => {
-                    self.filter_window = Some(filter_window)
+                ExplorerAction::ShowAddFilter(filter_popup) => {
+                    self.filter_popup = Some(filter_popup)
                 }
                 ExplorerAction::DeleteFilter(filter_index) => {
                     self.model.current_filters_mut().remove(filter_index);
@@ -423,13 +456,13 @@ impl Explorer {
                 }
                 ExplorerAction::ShowEditFilter(filter_index) => {
                     if let Some(filter) = self.model.current_filters().get(filter_index) {
-                        let edit_filter_window = FilterWindow::new_edit_filter_window(
+                        let edit_filter_popup = FilterPopup::new_edit_filter_popup(
                             filter.col_name,
                             filter_index,
                             filter.col_type_info,
                             filter.filter_text.to_owned(),
                         );
-                        self.filter_window = Some(edit_filter_window);
+                        self.filter_popup = Some(edit_filter_popup);
                     }
                 }
                 _ => unreachable!(),
@@ -483,9 +516,7 @@ impl Explorer {
         }
     }
 
-    fn build_query_and_columns(
-        &mut self,
-    ) -> Result<(String, Vec<ColumnInfo>), FsPulseError> {
+    fn build_query_and_columns(&mut self) -> Result<(String, Vec<ColumnInfo>), FsPulseError> {
         let mut cols = Vec::new();
 
         // Build the new query
@@ -520,7 +551,7 @@ impl Explorer {
                     }
                     false => query.push_str(", "),
                 }
-                cols.push(* col);
+                cols.push(*col);
                 query.push_str(col.name_db);
             }
         }
@@ -542,7 +573,11 @@ impl Explorer {
                     }
                     false => query.push_str(", "),
                 }
-                query.push_str(&format!("{} {}", col.name_db, col.order_direction.to_query_term()));
+                query.push_str(&format!(
+                    "{} {}",
+                    col.name_db,
+                    col.order_direction.to_query_term()
+                ));
             }
         }
 
@@ -617,9 +652,39 @@ impl Explorer {
         ));
     }
 
+    fn show_views(&mut self) {
+        self.views_state = Some(ViewsState::new());
+    }
+
     fn set_current_type(&mut self, new_type: TypeSelection) {
         self.model.set_current_type(new_type);
         self.needs_query_refresh = true;
         self.query_resets_selection = false;
+    }
+
+    fn apply_view(&mut self, saved_view: &SavedView) {
+        self.model.set_current_type(saved_view.type_selection);
+
+        // Setting a view replaces existing filters
+        self.model.current_filters_mut().clear();
+
+        for filter_spec in saved_view.filters {
+            let col_info = self
+                .model
+                .current_columns()
+                .iter()
+                .find(|col| col.name_db == filter_spec.col_name);
+            if let Some(col_info) = col_info {
+                let filter = Filter::new(
+                    filter_spec.col_name,
+                    col_info.col_type.info().type_name,
+                    col_info.col_type.info(),
+                    filter_spec.filter_text.to_owned(),
+                );
+                self.model.current_filters_mut().push(filter);
+            }
+        }
+        self.needs_query_refresh = true;
+        self.query_resets_selection = true;
     }
 }

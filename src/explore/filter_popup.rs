@@ -14,27 +14,27 @@ use super::{
     message_box::{MessageBox, MessageBoxType}, utils::StylePalette,
 };
 
-enum FilterWindowType {
+enum FilterPopupType {
     Add,
     Edit,
 }
-pub struct FilterWindow {
-    filter_window_type: FilterWindowType,
+pub struct FilterPopup {
+    filter_popup_type: FilterPopupType,
     col_name: &'static str,
     filter_index: Option<usize>,
     col_type_info: ColTypeInfo,
     input: Input,
 }
 
-impl FilterWindow {
+impl FilterPopup {
     fn new(
-        filter_window_type: FilterWindowType,
+        filter_popup_type: FilterPopupType,
         col_name: &'static str,
         filter_index: Option<usize>,
         col_type_info: ColTypeInfo,
     ) -> Self {
-        FilterWindow {
-            filter_window_type,
+        FilterPopup {
+            filter_popup_type,
             col_name,
             filter_index,
             col_type_info,
@@ -42,18 +42,18 @@ impl FilterWindow {
         }
     }
 
-    pub fn new_add_filter_window(col_name: &'static str, col_type_info: ColTypeInfo) -> Self {
-        Self::new(FilterWindowType::Add, col_name, None, col_type_info)
+    pub fn new_add_filter_popup(col_name: &'static str, col_type_info: ColTypeInfo) -> Self {
+        Self::new(FilterPopupType::Add, col_name, None, col_type_info)
     }
 
-    pub fn new_edit_filter_window(
+    pub fn new_edit_filter_popup(
         col_name: &'static str,
         filter_index: usize,
         col_type_info: ColTypeInfo,
         filter_text: String,
     ) -> Self {
-        FilterWindow {
-            filter_window_type: FilterWindowType::Edit,
+        FilterPopup {
+            filter_popup_type: FilterPopupType::Edit,
             col_name,
             filter_index: Some(filter_index),
             col_type_info,
@@ -155,8 +155,8 @@ impl FilterWindow {
                     None => {
                         input_val = input_val.trim();
 
-                        match self.filter_window_type {
-                            FilterWindowType::Add => {
+                        match self.filter_popup_type {
+                            FilterPopupType::Add => {
                                 let filter = Filter::new(
                                     self.col_name,
                                     self.col_type_info.type_name,
@@ -165,7 +165,7 @@ impl FilterWindow {
                                 );
                                 return Some(ExplorerAction::AddFilter(filter));
                             }
-                            FilterWindowType::Edit => {
+                            FilterPopupType::Edit => {
                                 if let Some(filter_index) = self.filter_index {
                                     return Some(ExplorerAction::UpdateFilter(
                                         filter_index,
