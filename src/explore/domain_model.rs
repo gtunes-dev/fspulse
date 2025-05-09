@@ -1,9 +1,6 @@
 use ratatui::{layout::Alignment, text::Line};
 
-use crate::query::{
-    columns::{self, ColType, ColTypeInfo},
-    ColMap,
-};
+use crate::query::columns::{self, ColType, ColTypeInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TypeSelection {
@@ -197,10 +194,18 @@ impl DomainModel {
 
     pub fn reset_current_columns(&mut self) {
         match self.current_type {
-            TypeSelection::Roots => self.roots_state.columns = Self::column_options_from_map(TypeSelection::Roots),
-            TypeSelection::Scans => self.scans_state.columns = Self::column_options_from_map(TypeSelection::Scans),
-            TypeSelection::Items => self.items_state.columns = Self::column_options_from_map(TypeSelection::Items),
-            TypeSelection::Changes => self.changes_state.columns = Self::column_options_from_map(TypeSelection::Changes),
+            TypeSelection::Roots => {
+                self.roots_state.columns = Self::column_options_from_map(TypeSelection::Roots)
+            }
+            TypeSelection::Scans => {
+                self.scans_state.columns = Self::column_options_from_map(TypeSelection::Scans)
+            }
+            TypeSelection::Items => {
+                self.items_state.columns = Self::column_options_from_map(TypeSelection::Items)
+            }
+            TypeSelection::Changes => {
+                self.changes_state.columns = Self::column_options_from_map(TypeSelection::Changes)
+            }
         }
     }
 

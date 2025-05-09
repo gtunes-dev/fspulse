@@ -7,7 +7,6 @@ mod process;
 mod show;
 
 pub use process::QueryProcessor;
-pub use columns::ColMap;
 
 #[derive(Parser)]
 #[grammar = "query/query.pest"]

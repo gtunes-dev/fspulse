@@ -20,6 +20,7 @@ pub struct FilterSpec {
     pub filter_text: &'static str,
 }
 
+#[derive(Debug)]
 pub struct ColumnSpec {
     pub col_name: &'static str,
     pub show_col: bool,
@@ -31,6 +32,7 @@ pub struct SavedView {
     pub name: &'static str,
     pub type_selection: TypeSelection,
     pub filters: &'static [FilterSpec],
+    pub columns: &'static [ColumnSpec],
 }
 
 // Helpers
@@ -54,27 +56,49 @@ const fn sv(
     name: &'static str,
     type_selection: TypeSelection,
     filters: &'static [FilterSpec],
+    columns: &'static [ColumnSpec],
 ) -> SavedView {
     SavedView {
         name,
         type_selection,
         filters,
+        columns,
     }
 }
 
 // Invalid Items Filter
 const INVALID_ITEMS_FILTERS: &[FilterSpec] = &[f("val", "I"), f("is_ts", "false")];
-const INVALID_ITEMS: SavedView = sv("Invalid Items", TypeSelection::Items, INVALID_ITEMS_FILTERS);
+const INVALID_ITEMS_COLUMNS: &[ColumnSpec] = &[
+    c("root_id", false, OrderDirection::None),
+    c("item_path", true, OrderDirection::Ascend),
+    c("last_scan", false, OrderDirection::None),
+    c("item_type", false, OrderDirection::None),
+    c("is_ts", false, OrderDirection::None),
+    c("val_error", true, OrderDirection::None),
+];
+
+const INVALID_ITEMS: SavedView = sv(
+    "Invalid Items",
+    TypeSelection::Items,
+    INVALID_ITEMS_FILTERS,
+    INVALID_ITEMS_COLUMNS,
+);
 
 const CHANGED_TO_INVALID_FILTERS: &[FilterSpec] = &[
     f("val_change", "T"),
     f("val_old", "I, N, U"),
     f("val_new", "I"),
 ];
+
+const CHANGE_TO_INVALID_COLUMNS: &[ColumnSpec] = &[
+    c("item_path", true, OrderDirection::Ascend),
+    c("val_error", true, OrderDirection::None),
+];
 const CHANGED_TO_INVALID: SavedView = sv(
     "Changed to Invalid",
     TypeSelection::Changes,
     CHANGED_TO_INVALID_FILTERS,
+    CHANGE_TO_INVALID_COLUMNS,
 );
 
 pub struct ViewsState {

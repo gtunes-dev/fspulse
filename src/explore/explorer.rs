@@ -684,6 +684,20 @@ impl Explorer {
                 self.model.current_filters_mut().push(filter);
             }
         }
+
+        self.model.reset_current_columns();
+
+        for column_spec in saved_view.columns {
+            if let Some(col_info) = self
+                .model
+                .current_columns_mut()
+                .iter_mut()
+                .find(| col_info| col_info.name_db == column_spec.col_name) {
+                    col_info.selected = column_spec.show_col; 
+                    col_info.order_direction = column_spec.order_direction;
+            }
+        }
+
         self.needs_query_refresh = true;
         self.query_resets_selection = true;
     }
