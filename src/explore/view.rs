@@ -31,7 +31,8 @@ pub struct ColumnSpec {
 #[derive(Clone, Copy, Debug)]
 pub struct SavedView {
     pub name: &'static str,
-    pub description: &'static str,
+    pub desc: &'static str,
+    pub desc_long: &'static str,
     pub type_selection: TypeSelection,
     pub filters: &'static [FilterSpec],
     pub columns: &'static [ColumnSpec],
@@ -56,14 +57,16 @@ const fn c(col_name: &'static str, show_col: bool, order_direction: OrderDirecti
 
 const fn sv(
     name: &'static str,
-    description: &'static str,
+    desc: &'static str,
+    desc_long: &'static str,
     type_selection: TypeSelection,
     filters: &'static [FilterSpec],
     columns: &'static [ColumnSpec],
 ) -> SavedView {
     SavedView {
         name,
-        description,
+        desc,
+        desc_long,
         type_selection,
         filters,
         columns,
@@ -73,6 +76,7 @@ const fn sv(
 const INVALID_ITEMS: SavedView = sv(
     "Invalid Items",
     "Items with a validity state of 'Invalid'",
+    "blah blah",
     TypeSelection::Items,
     INVALID_ITEMS_F,
     INVALID_ITEMS_C,
@@ -80,6 +84,7 @@ const INVALID_ITEMS: SavedView = sv(
 const CHANGED_TO_INVALID: SavedView = sv(
     "Changed to Invalid",
     "Changes in which the item's state transitioned to 'Invalid'",
+    "blah blah",
     TypeSelection::Changes,
     CHANGED_TO_INVALID_F,
     CHANGE_TO_INVALID_C,
@@ -139,7 +144,7 @@ impl StatefulWidget for ViewsListWidget {
                 ListItem::new(Line::from(vec![
                     Span::styled(view.name, Style::default().bold()),
                     Span::raw(": "),
-                    Span::raw(view.description),
+                    Span::raw(view.desc),
                 ]))
             })
             .collect::<Vec<ListItem>>();
