@@ -24,7 +24,7 @@ use super::domain_model::{ColumnInfo, DomainModel, Filter, OrderDirection, TypeS
 use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_popup::{FilterPopupState, FilterPopupWidget};
 use super::grid_frame::GridFrameView;
-use super::input_box::{InputBox, InputBoxState};
+use super::input_box::{InputBoxWidget, InputBoxState};
 use super::limit_widget::LimitWidget;
 use super::message_box::{MessageBox, MessageBoxType};
 use super::utils::{StylePalette, Utils};
@@ -63,7 +63,7 @@ pub struct Explorer {
     filter_frame: FilterFrame,
     filter_popup_state: Option<FilterPopupState>,
     message_box: Option<MessageBox>,
-    input_box: Option<InputBox>,
+    input_box_state: Option<InputBoxState>,
     views_state: Option<ViewsListState>,
 }
 
@@ -79,7 +79,7 @@ impl Explorer {
             filter_frame: FilterFrame::new(),
             filter_popup_state: None,
             message_box: None,
-            input_box: None,
+            input_box_state: None,
             views_state: None,
         }
     }
@@ -250,15 +250,12 @@ impl Explorer {
                 f.render_stateful_widget(views_popup, views_rect, views_state);
             }
 
-            if let Some(ref input_box) = self.input_box {
+            if let Some(input_box_state) = self.input_box_state.as_mut() {
                 let input_rect =
                     Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
                 f.render_widget(Clear, input_rect);
-                let mut input_state = InputBoxState::new();
-                f.render_stateful_widget(input_box.clone(), input_rect, &mut input_state);
-                if let Some((x, y)) = input_state.cursor_pos {
-                    f.set_cursor_position((x, y));
-                }
+                let input_box_widget = InputBoxWidget;
+                f.render_stateful_widget(input_box_widget, input_rect, input_box_state);
             }
 
             // Draw the message box if needed
@@ -409,14 +406,14 @@ impl Explorer {
             return true;
         }
 
-        if let Some(ref mut input_box) = self.input_box {
-            let action = input_box.handle_key(key);
+        if let Some(input_box_state) = self.input_box_state.as_mut() {
+            let action = input_box_state.handle_key(key);
             if let Some(action) = action {
                 match action {
-                    ExplorerAction::Dismiss => self.input_box = None,
+                    ExplorerAction::Dismiss => self.input_box_state = None,
                     ExplorerAction::SetLimit(new_limit) => {
                         self.model.set_current_limit(new_limit);
-                        self.input_box = None;
+                        self.input_box_state = None;
 
                         self.needs_query_refresh = true;
                         self.query_resets_selection = false;
@@ -652,7 +649,7 @@ impl Explorer {
     }
 
     fn show_limit_input(&mut self) {
-        self.input_box = Some(InputBox::new(
+        self.input_box_state = Some(InputBoxState::new(
             "Choose a new limit".into(),
             Some(self.model.current_limit()),
         ));
