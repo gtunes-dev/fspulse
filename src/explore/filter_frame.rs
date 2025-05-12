@@ -11,7 +11,7 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::{DomainModel, TypeSelection},
+    domain_model::{DomainModel, DomainType},
     explorer::ExplorerAction,
     utils::{StylePalette, Utils},
 };
@@ -88,12 +88,14 @@ impl FilterFrame {
         self.area.height.saturating_sub(3) as usize
     }
 
-    pub fn frame_title(type_selection: TypeSelection) -> &'static str {
+    pub fn frame_title(type_selection: DomainType) -> &'static str {
+        // TODO: This used to return type-specific titles such as "Item Filters"
+        // If we're committed to just "Filters", this function can be deleted
         match type_selection {
-            TypeSelection::Items => "Items Filters",
-            TypeSelection::Changes => "Changes Filters",
-            TypeSelection::Scans => "Scans Filters",
-            TypeSelection::Roots => "Roots Filters",
+            DomainType::Items => "Filters",
+            DomainType::Changes => "Filters",
+            DomainType::Scans => "Filters",
+            DomainType::Roots => "Filters",
         }
     }
 }

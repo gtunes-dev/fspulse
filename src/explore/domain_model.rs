@@ -2,48 +2,50 @@ use ratatui::{layout::Alignment, text::Line};
 
 use crate::query::columns::{self, ColType, ColTypeInfo};
 
+use super::view::SavedView;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TypeSelection {
+pub enum DomainType {
     Items,
     Changes,
     Scans,
     Roots,
 }
 
-impl TypeSelection {
-    pub fn all_types() -> &'static [TypeSelection] {
+impl DomainType {
+    pub fn all_types() -> &'static [DomainType] {
         &[
-            TypeSelection::Items,
-            TypeSelection::Changes,
-            TypeSelection::Scans,
-            TypeSelection::Roots,
+            DomainType::Items,
+            DomainType::Changes,
+            DomainType::Scans,
+            DomainType::Roots,
         ]
     }
 
-    pub fn name(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
-            TypeSelection::Items => "Items",
-            TypeSelection::Changes => "Changes",
-            TypeSelection::Scans => "Scans",
-            TypeSelection::Roots => "Roots",
+            DomainType::Items => "Items",
+            DomainType::Changes => "Changes",
+            DomainType::Scans => "Scans",
+            DomainType::Roots => "Roots",
         }
     }
 
     pub fn index(&self) -> usize {
         match self {
-            TypeSelection::Items => 0,
-            TypeSelection::Changes => 1,
-            TypeSelection::Scans => 2,
-            TypeSelection::Roots => 3,
+            DomainType::Items => 0,
+            DomainType::Changes => 1,
+            DomainType::Scans => 2,
+            DomainType::Roots => 3,
         }
     }
 
-    pub fn title(&self) -> Line<'static> {
+    pub fn as_title(&self) -> Line<'static> {
         match self {
-            TypeSelection::Items => Line::from("Items (I)"),
-            TypeSelection::Changes => Line::from("Changes (C)"),
-            TypeSelection::Scans => Line::from("Scans (S)"),
-            TypeSelection::Roots => Line::from("Roots (R)"),
+            DomainType::Items => Line::from("Items (I)"),
+            DomainType::Changes => Line::from("Changes (C)"),
+            DomainType::Scans => Line::from("Scans (S)"),
+            DomainType::Roots => Line::from("Roots (R)"),
         }
     }
 }
@@ -108,6 +110,7 @@ impl Filter {
 }
 
 struct DomainState {
+    pub view: Option<&'static SavedView>,
     pub columns: Vec<ColumnInfo>,
     pub filters: Vec<Filter>,
     pub limit: String,
@@ -116,6 +119,7 @@ struct DomainState {
 impl DomainState {
     fn new(columns: Vec<ColumnInfo>) -> Self {
         DomainState {
+            view: None,
             columns,
             filters: Vec::new(),
             limit: "100".to_owned(),
@@ -124,7 +128,7 @@ impl DomainState {
 }
 
 pub struct DomainModel {
-    current_type: TypeSelection,
+    current_type: DomainType,
     roots_state: DomainState,
     scans_state: DomainState,
     items_state: DomainState,
@@ -134,38 +138,46 @@ pub struct DomainModel {
 impl DomainModel {
     pub fn new() -> Self {
         DomainModel {
-            current_type: TypeSelection::Items,
-            roots_state: DomainState::new(Self::column_options_from_map(TypeSelection::Roots)),
-            scans_state: DomainState::new(Self::column_options_from_map(TypeSelection::Scans)),
-            items_state: DomainState::new(Self::column_options_from_map(TypeSelection::Items)),
-            changes_state: DomainState::new(Self::column_options_from_map(TypeSelection::Changes)),
+            current_type: DomainType::Items,
+            roots_state: DomainState::new(Self::column_options_from_map(DomainType::Roots)),
+            scans_state: DomainState::new(Self::column_options_from_map(DomainType::Scans)),
+            items_state: DomainState::new(Self::column_options_from_map(DomainType::Items)),
+            changes_state: DomainState::new(Self::column_options_from_map(DomainType::Changes)),
         }
     }
 
     fn current_state(&self) -> &DomainState {
         match self.current_type {
-            TypeSelection::Roots => &self.roots_state,
-            TypeSelection::Scans => &self.scans_state,
-            TypeSelection::Items => &self.items_state,
-            TypeSelection::Changes => &self.changes_state,
+            DomainType::Roots => &self.roots_state,
+            DomainType::Scans => &self.scans_state,
+            DomainType::Items => &self.items_state,
+            DomainType::Changes => &self.changes_state,
         }
     }
 
     fn current_state_mut(&mut self) -> &mut DomainState {
         match self.current_type {
-            TypeSelection::Roots => &mut self.roots_state,
-            TypeSelection::Scans => &mut self.scans_state,
-            TypeSelection::Items => &mut self.items_state,
-            TypeSelection::Changes => &mut self.changes_state,
+            DomainType::Roots => &mut self.roots_state,
+            DomainType::Scans => &mut self.scans_state,
+            DomainType::Items => &mut self.items_state,
+            DomainType::Changes => &mut self.changes_state,
         }
     }
 
-    pub fn current_type(&self) -> TypeSelection {
+    pub fn current_type(&self) -> DomainType {
         self.current_type
     }
 
-    pub fn set_current_type(&mut self, current_type: TypeSelection) {
+    pub fn set_current_type(&mut self, current_type: DomainType) {
         self.current_type = current_type;
+    }
+
+    pub fn current_view(&self) -> &Option<&SavedView> {
+        &self.current_state().view
+    }
+
+    pub fn set_current_view(&mut self, view: Option<&'static SavedView>) {
+        self.current_state_mut().view = view
     }
 
     pub fn current_columns(&self) -> &Vec<ColumnInfo> {
@@ -194,27 +206,27 @@ impl DomainModel {
 
     pub fn reset_current_columns(&mut self) {
         match self.current_type {
-            TypeSelection::Roots => {
-                self.roots_state.columns = Self::column_options_from_map(TypeSelection::Roots)
+            DomainType::Roots => {
+                self.roots_state.columns = Self::column_options_from_map(DomainType::Roots)
             }
-            TypeSelection::Scans => {
-                self.scans_state.columns = Self::column_options_from_map(TypeSelection::Scans)
+            DomainType::Scans => {
+                self.scans_state.columns = Self::column_options_from_map(DomainType::Scans)
             }
-            TypeSelection::Items => {
-                self.items_state.columns = Self::column_options_from_map(TypeSelection::Items)
+            DomainType::Items => {
+                self.items_state.columns = Self::column_options_from_map(DomainType::Items)
             }
-            TypeSelection::Changes => {
-                self.changes_state.columns = Self::column_options_from_map(TypeSelection::Changes)
+            DomainType::Changes => {
+                self.changes_state.columns = Self::column_options_from_map(DomainType::Changes)
             }
         }
     }
 
-    fn column_options_from_map(type_selection: TypeSelection) -> Vec<ColumnInfo> {
+    fn column_options_from_map(type_selection: DomainType) -> Vec<ColumnInfo> {
         let col_map = match type_selection {
-            TypeSelection::Roots => &columns::ROOTS_QUERY_COLS,
-            TypeSelection::Scans => &columns::SCANS_QUERY_COLS,
-            TypeSelection::Items => &columns::ITEMS_QUERY_COLS,
-            TypeSelection::Changes => &columns::CHANGES_QUERY_COLS,
+            DomainType::Roots => &columns::ROOTS_QUERY_COLS,
+            DomainType::Scans => &columns::SCANS_QUERY_COLS,
+            DomainType::Items => &columns::ITEMS_QUERY_COLS,
+            DomainType::Changes => &columns::CHANGES_QUERY_COLS,
         };
 
         col_map

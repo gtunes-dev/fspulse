@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::{ColumnInfo, DomainModel, OrderDirection, TypeSelection}, explorer::ExplorerAction, filter_popup::FilterPopupState, utils::{StylePalette, Utils}
+    domain_model::{ColumnInfo, DomainModel, OrderDirection, DomainType}, explorer::ExplorerAction, filter_popup::FilterPopupState, utils::{StylePalette, Utils}
 };
 
 pub struct ColumnFrame {
@@ -181,12 +181,12 @@ impl ColumnFrame {
         self.area = new_area;
     }
 
-    pub fn frame_title(type_selection: TypeSelection) -> &'static str {
+    pub fn frame_title(type_selection: DomainType) -> &'static str {
         match type_selection {
-            TypeSelection::Items => "Items Columns",
-            TypeSelection::Changes => "Changes Columns",
-            TypeSelection::Scans => "Scans Columns",
-            TypeSelection::Roots => "Roots Columns",
+            DomainType::Items => "Items Columns",
+            DomainType::Changes => "Changes Columns",
+            DomainType::Scans => "Scans Columns",
+            DomainType::Roots => "Roots Columns",
         }
     }
 }

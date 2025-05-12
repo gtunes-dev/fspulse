@@ -1,20 +1,29 @@
-use ratatui::{crossterm::event::{KeyCode, KeyEvent}, layout::Alignment, style::{Color, Style, Stylize}, text::{Line, Text}, widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap}, Frame};
 use super::utils::Utils;
+use ratatui::{
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::Alignment,
+    style::{Color, Style, Stylize},
+    text::{Line, Text},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
+    Frame,
+};
 
+#[derive(Debug)]
 pub enum MessageBoxType {
     Info,
-    Error
+    Error,
 }
 
 impl MessageBoxType {
     fn as_title(&self) -> &'static str {
         match self {
             MessageBoxType::Info => "Info:",
-            MessageBoxType::Error => "Error:"
+            MessageBoxType::Error => "Error:",
         }
     }
 }
 
+#[derive(Debug)]
 pub struct MessageBox {
     message_box_type: MessageBoxType,
     message: String,
@@ -22,7 +31,10 @@ pub struct MessageBox {
 
 impl MessageBox {
     pub fn new(message_box_type: MessageBoxType, message: String) -> Self {
-        MessageBox { message_box_type, message }
+        MessageBox {
+            message_box_type,
+            message,
+        }
     }
 
     pub fn is_dismiss_event(&self, key: KeyEvent) -> bool {
@@ -39,12 +51,15 @@ impl MessageBox {
             .borders(Borders::ALL)
             .border_type(BorderType::Double);
 
-            let mut lines = Vec::new();
+        let mut lines = Vec::new();
 
         for message_line in self.message.split('\n') {
             lines.push(Line::styled(
                 message_line.to_owned(),
-                Style::default().fg(self.fg_color()).bg(self.bg_color()).bold(),
+                Style::default()
+                    .fg(self.fg_color())
+                    .bg(self.bg_color())
+                    .bold(),
             ));
         }
 

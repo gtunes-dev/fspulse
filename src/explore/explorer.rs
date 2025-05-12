@@ -3,11 +3,13 @@ use crate::{database::Database, error::FsPulseError};
 
 use ratatui::crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    KeyModifiers,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
+use ratatui::layout::{Alignment, Rect};
 use ratatui::widgets::{Block, Clear, Tabs};
 use ratatui::{
     backend::CrosstermBackend,
@@ -16,21 +18,22 @@ use ratatui::{
     widgets::{Borders, Paragraph},
     Terminal,
 };
-use ratatui::{border, symbols};
+use ratatui::{border, symbols, Frame};
 use std::io;
 
 use super::column_frame::ColumnFrameView;
-use super::domain_model::{ColumnInfo, DomainModel, Filter, OrderDirection, TypeSelection};
+use super::domain_model::{ColumnInfo, DomainModel, DomainType, Filter, OrderDirection};
 use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_popup::{FilterPopupState, FilterPopupWidget};
 use super::grid_frame::GridFrameView;
-use super::input_box::{InputBoxWidget, InputBoxState};
+use super::input_box::{InputBoxState, InputBoxWidget};
 use super::limit_widget::LimitWidget;
 use super::message_box::{MessageBox, MessageBoxType};
 use super::utils::{StylePalette, Utils};
 use super::view::{SavedView, ViewsListState, ViewsListWidget};
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Focus {
     Tabs,
     Filters,
@@ -39,6 +42,7 @@ enum Focus {
     Limit,
 }
 
+#[derive(Debug)]
 pub enum ExplorerAction {
     Dismiss,
     RefreshQuery(bool),
@@ -50,7 +54,7 @@ pub enum ExplorerAction {
     UpdateFilter(usize, String),
     ShowLimit,
     SetLimit(String),
-    ApplyView(SavedView),
+    ApplyView(&'static SavedView),
 }
 
 pub struct Explorer {
@@ -61,6 +65,7 @@ pub struct Explorer {
     column_frame: ColumnFrame,
     grid_frame: GridFrame,
     filter_frame: FilterFrame,
+    filter_frame_collapsed: bool,
     filter_popup_state: Option<FilterPopupState>,
     message_box: Option<MessageBox>,
     input_box_state: Option<InputBoxState>,
@@ -77,6 +82,7 @@ impl Explorer {
             column_frame: ColumnFrame::new(),
             grid_frame: GridFrame::new(),
             filter_frame: FilterFrame::new(),
+            filter_frame_collapsed: false,
             filter_popup_state: None,
             message_box: None,
             input_box_state: None,
@@ -92,13 +98,16 @@ impl Explorer {
             let full_area = f.area(); // updated here
 
             // Create layouts and area rects
-            let [tabs, filters, center, help] = Layout::new(
+            let [_, tabs_area, _, view_area, filters_area, center_area, help_area] = Layout::new(
                 Direction::Vertical,
                 [
-                    Constraint::Length(3), // Tabs
-                    Constraint::Length(8), // Filters
-                    Constraint::Min(0),    // Main content
-                    Constraint::Length(1), // Help/status
+                    Constraint::Length(1),                          // Spacer
+                    Constraint::Length(1),                          // Tabs
+                    Constraint::Length(1),                          // Spacer
+                    Constraint::Length(self.view_frame_height()),   // View
+                    Constraint::Length(self.filter_frame_height()), // Filters
+                    Constraint::Min(0),                             // Main content
+                    Constraint::Length(1),                          // Help/status
                 ],
             )
             .areas(full_area);
@@ -110,7 +119,7 @@ impl Explorer {
                     Constraint::Min(0),     // Right (Data Grid)
                 ],
             )
-            .areas(center);
+            .areas(center_area);
 
             // layout the left chunk
             let [limit, columns] = Layout::new(
@@ -120,8 +129,23 @@ impl Explorer {
             .areas(left);
 
             // -- Borders
+            // View
+            
+            let view_block_set = symbols::border::Set {
+                bottom_left: symbols::line::NORMAL.bottom_left,
+                bottom_right: symbols::line::NORMAL.bottom_right,
+                ..symbols::border::PLAIN
+            };
+            let view_block = Block::default()
+                .border_set(view_block_set)
+                .borders(border!(TOP, LEFT, RIGHT))
+                .title("View");
+            f.render_widget(&view_block, view_area);
+            
             // Filter
             let filter_block_set = symbols::border::Set {
+                top_left: symbols::line::NORMAL.vertical_right,
+                top_right: symbols::line::NORMAL.vertical_left,
                 bottom_left: symbols::line::NORMAL.bottom_left,
                 bottom_right: symbols::line::NORMAL.bottom_right,
                 ..symbols::border::PLAIN
@@ -129,9 +153,8 @@ impl Explorer {
             let filter_block = Block::default()
                 .border_set(filter_block_set)
                 .borders(border!(TOP, LEFT, RIGHT))
-                //    .border_type(BorderType::Plain)
                 .title(FilterFrame::frame_title(self.model.current_type()));
-            f.render_widget(&filter_block, filters);
+            f.render_widget(&filter_block, filters_area);
 
             // Limit
             let limit_block_set = symbols::border::Set {
@@ -173,36 +196,39 @@ impl Explorer {
 
             f.render_widget(&data_block, data);
 
-            let titles = TypeSelection::all_types().iter().map(|t| t.title());
+            let titles = DomainType::all_types().iter().map(|t| t.as_title());
 
-            let mut tabs_width: u16 = TypeSelection::all_types()
+            let mut tabs_width: u16 = DomainType::all_types()
                 .iter()
-                .map(|l| l.title().width() as u16) // Line::width() is in ratatui >=0.25
+                .map(|l| l.as_title().width() as u16) // Line::width() is in ratatui >=0.25
                 .sum::<u16>()
                 + ((titles.len().saturating_sub(1)) as u16);
 
             tabs_width += 3 * 3; // " * " in between each tab
 
-            let tabs_rect =
-                Utils::center(tabs, Constraint::Length(tabs_width), Constraint::Length(1));
+            let tabs_rect: Rect = Utils::center(
+                tabs_area,
+                Constraint::Length(tabs_width),
+                Constraint::Length(tabs_area.height),
+            );
 
             let tabs_highlight = match self.focus {
                 Focus::Tabs => StylePalette::TabHighlight.style(),
-                _ => StylePalette::Tab.style(), // .add_modifier(Modifier::UNDERLINED),
+                _ => StylePalette::Tab.style(),
             };
 
+            let tabs_block = Block::default();
+
             let tabs = Tabs::new(titles)
+                .block(tabs_block)
                 .highlight_style(tabs_highlight)
                 .divider(symbols::DOT)
                 .select(self.model.current_type().index());
             f.render_widget(tabs, tabs_rect);
 
-            let filter_frame_view = FilterFrameView::new(
-                &mut self.filter_frame,
-                &self.model,
-                matches!(self.focus, Focus::Filters),
-            );
-            f.render_widget(filter_frame_view, filter_block.inner(filters));
+            self.render_view_frame(view_block.inner(view_area), f);
+
+            self.render_filter_frame(filter_block.inner(filters_area), f);
 
             let limit_widget = LimitWidget::new(
                 self.model.current_limit(),
@@ -228,13 +254,13 @@ impl Explorer {
             let help_paragraph = Paragraph::new(self.help_text())
                 .style(Style::default().bg(Color::Blue).fg(Color::White));
             //.block(help_block);
-            f.render_widget(help_paragraph, help);
+            f.render_widget(help_paragraph, help_area);
 
-            if let Some(filter_popup_state) = self.filter_popup_state.as_mut(){
-                
+            if let Some(filter_popup_state) = self.filter_popup_state.as_mut() {
                 // Inform the popup if it is on top - it uses this to determine
                 // whether or not to draw the cursor in the input
-                let filter_popup_rect = Utils::center(f.area(), Constraint::Max(80), Constraint::Length(12));
+                let filter_popup_rect =
+                    Utils::center(f.area(), Constraint::Max(80), Constraint::Length(12));
                 f.render_widget(Clear, filter_popup_rect);
 
                 let filter_widget = FilterPopupWidget;
@@ -243,7 +269,7 @@ impl Explorer {
 
             if let Some(views_state) = self.views_state.as_mut() {
                 let views_rect =
-                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
+                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(12));
                 f.render_widget(Clear, views_rect);
 
                 let views_popup = ViewsListWidget;
@@ -270,6 +296,51 @@ impl Explorer {
         Ok(())
     }
 
+    pub fn view_frame_height(&self) -> u16 {
+        return 2;
+    }
+
+    pub fn filter_frame_height(&self) -> u16 {
+        match self.filter_frame_collapsed {
+            true => 2,
+            false => 8,
+        }
+    }
+
+    pub fn render_view_frame(&mut self, area: Rect, f: &mut Frame) {
+        let desc = if let Some(view) = self.model.current_view() {
+            view.desc
+        } else {
+            "No Current View"
+        };
+
+        let view_desc = format!("View (V): {}", desc);
+
+        let p = Paragraph::new(view_desc).alignment(Alignment::Center);
+        f.render_widget(p, area);
+    }
+
+    pub fn render_filter_frame(&mut self, area: Rect, f: &mut Frame) {
+        if self.filter_frame_collapsed {
+            let count_str = if self.model.current_filters().is_empty() {
+                "No Filters".to_owned()
+            } else {
+                format!("{} Hidden", self.model.current_filters().len())
+            };
+
+            let p =
+                Paragraph::new(format!("Filters - {} (ctrl-f to expand)", count_str)).centered();
+            f.render_widget(p, area);
+        } else {
+            let filter_frame_view = FilterFrameView::new(
+                &mut self.filter_frame,
+                &self.model,
+                matches!(self.focus, Focus::Filters),
+            );
+            f.render_widget(filter_frame_view, area);
+        }
+    }
+
     pub fn explore(&mut self, db: &Database) -> Result<(), FsPulseError> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
@@ -293,38 +364,43 @@ impl Explorer {
                         continue;
                     }
 
-                    match key.code {
-                        // Switch Type
-                        KeyCode::Char('i') | KeyCode::Char('I') => {
-                            self.set_current_type(TypeSelection::Items)
+                    match (key.code, key.modifiers) {
+                        (KeyCode::Char('i'), _) | (KeyCode::Char('I'), _) => {
+                            self.set_current_type(DomainType::Items)
                         }
-                        KeyCode::Char('c') | KeyCode::Char('C') => {
-                            self.set_current_type(TypeSelection::Changes)
+                        (KeyCode::Char('c'), _) | (KeyCode::Char('C'), _) => {
+                            self.set_current_type(DomainType::Changes)
                         }
-                        KeyCode::Char('s') | KeyCode::Char('S') => {
-                            self.set_current_type(TypeSelection::Scans)
+                        (KeyCode::Char('s'), _) | (KeyCode::Char('S'), _) => {
+                            self.set_current_type(DomainType::Scans)
                         }
-                        KeyCode::Char('r') | KeyCode::Char('R') => {
-                            self.set_current_type(TypeSelection::Roots)
+                        (KeyCode::Char('r'), _) | (KeyCode::Char('R'), _) => {
+                            self.set_current_type(DomainType::Roots)
                         }
-                        KeyCode::Char('v') | KeyCode::Char('V') => {
+                        (KeyCode::Char('v'), _) | (KeyCode::Char('V'), _) => {
                             self.show_views();
+                        }
+                        (KeyCode::Char('f'), KeyModifiers::CONTROL) => {
+                            self.filter_frame_collapsed = !self.filter_frame_collapsed;
+                            if self.focus == Focus::Filters {
+                                self.focus = self.next_focus(self.focus)
+                            }
                         }
 
                         // Show Limit Input
-                        KeyCode::Char('l') | KeyCode::Char('L') => {
+                        (KeyCode::Char('l'), _) | (KeyCode::Char('L'), _) => {
                             self.show_limit_input();
                         }
 
                         // Quit
-                        KeyCode::Char('q') | KeyCode::Char('Q') => {
+                        (KeyCode::Char('q'), _) | (KeyCode::Char('Q'), _) => {
                             break;
                         }
-                        KeyCode::Tab => {
-                            self.focus = self.next_focus();
+                        (KeyCode::Tab, _) => {
+                            self.focus = self.next_focus(self.focus);
                         }
-                        KeyCode::BackTab => {
-                            self.focus = self.prev_focus();
+                        (KeyCode::BackTab, _) => {
+                            self.focus = self.prev_focus(self.focus);
                         }
                         _ => {
                             self.dispatch_key_to_active_frame(key);
@@ -361,7 +437,7 @@ impl Explorer {
                     ExplorerAction::Dismiss => self.views_state = None,
                     ExplorerAction::ApplyView(saved_view) => {
                         self.views_state = None;
-                        self.apply_view(&saved_view);
+                        self.apply_view(saved_view);
                     }
                     _ => {}
                 }
@@ -473,24 +549,38 @@ impl Explorer {
         }
     }
 
-    fn next_focus(&self) -> Focus {
-        match self.focus {
+    fn next_focus(&self, current_focus: Focus) -> Focus {
+        let mut next = match current_focus {
             Focus::Tabs => Focus::Filters,
             Focus::Filters => Focus::Limit,
             Focus::Limit => Focus::ColumnSelector,
             Focus::ColumnSelector => Focus::DataGrid,
             Focus::DataGrid => Focus::Tabs,
+        };
+
+        // if necessary, recurse until we find a focusable frame
+        if next == Focus::Filters && self.filter_frame_collapsed {
+            next = self.next_focus(next);
         }
+
+        return next;
     }
 
-    fn prev_focus(&self) -> Focus {
-        match self.focus {
+    fn prev_focus(&self, current_focus: Focus) -> Focus {
+        let mut prev = match current_focus {
             Focus::Tabs => Focus::DataGrid,
             Focus::DataGrid => Focus::ColumnSelector,
             Focus::ColumnSelector => Focus::Limit,
             Focus::Limit => Focus::Filters,
             Focus::Filters => Focus::Tabs,
+        };
+
+        // if necessary, recurse until we find a focusable frame
+        if prev == Focus::Filters && self.filter_frame_collapsed {
+            prev = self.prev_focus(prev)
         }
+
+        return prev;
     }
 
     // Help String Pattern (for all sections):
@@ -523,7 +613,7 @@ impl Explorer {
         let mut cols = Vec::new();
 
         // Build the new query
-        let mut query = self.model.current_type().name().to_ascii_lowercase();
+        let mut query = self.model.current_type().as_str().to_ascii_lowercase();
 
         // Build the where clause
         let mut first_filter = true;
@@ -626,19 +716,19 @@ impl Explorer {
         match key.code {
             KeyCode::Left => {
                 let new_type = match self.model.current_type() {
-                    TypeSelection::Items => TypeSelection::Roots,
-                    TypeSelection::Changes => TypeSelection::Items,
-                    TypeSelection::Scans => TypeSelection::Changes,
-                    TypeSelection::Roots => TypeSelection::Scans,
+                    DomainType::Items => DomainType::Roots,
+                    DomainType::Changes => DomainType::Items,
+                    DomainType::Scans => DomainType::Changes,
+                    DomainType::Roots => DomainType::Scans,
                 };
                 self.set_current_type(new_type);
             }
             KeyCode::Right => {
                 let new_type = match self.model.current_type() {
-                    TypeSelection::Items => TypeSelection::Changes,
-                    TypeSelection::Changes => TypeSelection::Scans,
-                    TypeSelection::Scans => TypeSelection::Roots,
-                    TypeSelection::Roots => TypeSelection::Items,
+                    DomainType::Items => DomainType::Changes,
+                    DomainType::Changes => DomainType::Scans,
+                    DomainType::Scans => DomainType::Roots,
+                    DomainType::Roots => DomainType::Items,
                 };
                 self.set_current_type(new_type);
             }
@@ -659,14 +749,15 @@ impl Explorer {
         self.views_state = Some(ViewsListState::new());
     }
 
-    fn set_current_type(&mut self, new_type: TypeSelection) {
+    fn set_current_type(&mut self, new_type: DomainType) {
         self.model.set_current_type(new_type);
         self.needs_query_refresh = true;
         self.query_resets_selection = false;
     }
 
-    fn apply_view(&mut self, saved_view: &SavedView) {
+    fn apply_view(&mut self, saved_view: &'static SavedView) {
         self.model.set_current_type(saved_view.type_selection);
+        self.model.set_current_view(Some(saved_view));
 
         // Setting a view replaces existing filters
         self.model.current_filters_mut().clear();

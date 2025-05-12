@@ -1,3 +1,4 @@
+
 use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
@@ -8,7 +9,7 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::{OrderDirection, TypeSelection},
+    domain_model::{OrderDirection, DomainType},
     explorer::ExplorerAction,
     utils::{StylePalette, Utils},
 };
@@ -32,8 +33,7 @@ pub struct ColumnSpec {
 pub struct SavedView {
     pub name: &'static str,
     pub desc: &'static str,
-    pub desc_long: &'static str,
-    pub type_selection: TypeSelection,
+    pub type_selection: DomainType,
     pub filters: &'static [FilterSpec],
     pub columns: &'static [ColumnSpec],
 }
@@ -58,15 +58,13 @@ const fn c(col_name: &'static str, show_col: bool, order_direction: OrderDirecti
 const fn sv(
     name: &'static str,
     desc: &'static str,
-    desc_long: &'static str,
-    type_selection: TypeSelection,
+    type_selection: DomainType,
     filters: &'static [FilterSpec],
     columns: &'static [ColumnSpec],
 ) -> SavedView {
     SavedView {
         name,
         desc,
-        desc_long,
         type_selection,
         filters,
         columns,
@@ -76,16 +74,14 @@ const fn sv(
 const INVALID_ITEMS: SavedView = sv(
     "Invalid Items",
     "Items with a validity state of 'Invalid'",
-    "blah blah",
-    TypeSelection::Items,
+    DomainType::Items,
     INVALID_ITEMS_F,
     INVALID_ITEMS_C,
 );
 const CHANGED_TO_INVALID: SavedView = sv(
     "Changed to Invalid",
     "Changes in which the item's state transitioned to 'Invalid'",
-    "blah blah",
-    TypeSelection::Changes,
+    DomainType::Changes,
     CHANGED_TO_INVALID_F,
     CHANGE_TO_INVALID_C,
 );
@@ -111,6 +107,7 @@ const CHANGE_TO_INVALID_C: &[ColumnSpec] = &[
 ];
 
 pub struct ViewsListState {
+    pub name_len: usize,
     pub list_state: ListState,
 }
 
@@ -141,9 +138,10 @@ impl StatefulWidget for ViewsListWidget {
         let list_items = SAVED_VIEWS
             .iter()
             .map(|view| {
+                let pad = format!("{:<width$}", ":", width = (state.name_len + 2) - view.name.len());
                 ListItem::new(Line::from(vec![
                     Span::styled(view.name, Style::default().bold()),
-                    Span::raw(": "),
+                    Span::raw(pad),
                     Span::raw(view.desc),
                 ]))
             })
@@ -167,7 +165,10 @@ impl ViewsListWidget {
 
 impl ViewsListState {
     pub fn new() -> Self {
+        let longest = SAVED_VIEWS.iter().map(|v| v.name.len()).max().unwrap_or(0);
+
         ViewsListState {
+            name_len: longest,
             list_state: {
                 let mut list_state = ListState::default();
                 list_state.select(Some(0));
@@ -191,7 +192,7 @@ impl ViewsListState {
                 .list_state
                 .selected()
                 .and_then(|index| SAVED_VIEWS.get(index))
-                .map(|saved_view| ExplorerAction::ApplyView(*saved_view)),
+                .map(|saved_view| ExplorerAction::ApplyView(saved_view)),
             _ => None,
         }
     }

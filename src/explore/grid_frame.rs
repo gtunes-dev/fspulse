@@ -13,7 +13,7 @@ use ratatui::{
 use crate::query::columns::ColType;
 
 use super::{
-    domain_model::{ColumnInfo, DomainModel, TypeSelection},
+    domain_model::{ColumnInfo, DomainModel, DomainType},
     explorer::ExplorerAction,
     utils::{StylePalette, Utils},
 };
@@ -93,12 +93,12 @@ impl GridFrame {
         self.table_area.height.saturating_sub(1) as usize // subtract the header row
     }
 
-    pub fn frame_title(type_selection: TypeSelection) -> &'static str {
+    pub fn frame_title(type_selection: DomainType) -> &'static str {
         match type_selection {
-            TypeSelection::Items => "Items Data",
-            TypeSelection::Changes => "Changes Data",
-            TypeSelection::Scans => "Scans Data",
-            TypeSelection::Roots => "Roots Data",
+            DomainType::Items => "Items Data",
+            DomainType::Changes => "Changes Data",
+            DomainType::Scans => "Scans Data",
+            DomainType::Roots => "Roots Data",
         }
     }
 }
@@ -138,7 +138,7 @@ impl GridFrameView<'_> {
         let reason = if self.frame.columns.is_empty() {
             Line::from("(all columns are hidden)")
         } else {
-            Line::from(format!("(no {} found)", self.model.current_type().name()))
+            Line::from(format!("(no {} found)", self.model.current_type().as_str()))
         };
 
         let text = vec![
