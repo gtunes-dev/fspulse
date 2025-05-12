@@ -1,51 +1,42 @@
 use ratatui::{
-    buffer::Buffer,
-    crossterm::event::{Event, KeyCode, KeyEvent},
-    layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
-    text::Line,
-    widgets::{Block, Borders, Paragraph, StatefulWidget, Widget},
+    buffer::Buffer, crossterm::event::{KeyCode, KeyEvent}, layout::{Constraint, Direction, Layout, Rect}, style::Style, text::Line, widgets::{Block, Borders, StatefulWidget, Widget}
 };
-use tui_input::{backend::crossterm::EventHandler, Input};
+use tui_textarea::TextArea;
 
-use super::explorer::ExplorerAction;
+use super::{explorer::ExplorerAction, utils::{StylePalette, Utils}};
 
+#[derive(Debug)]
 pub struct InputBoxState {
-    pub cursor_pos: Option<(u16, u16)>,
+    pub prompt: String,
+    pub text_area: TextArea<'static>,
 }
 
 impl InputBoxState {
-    pub fn new() -> Self {
-        InputBoxState { cursor_pos: None }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct InputBox {
-    pub prompt: String,
-    pub input: Input,
-}
-
-impl InputBox {
     pub fn new(prompt: String, input_value: Option<String>) -> Self {
-        let input = match input_value {
-            Some(input_value) => Input::default().with_value(input_value),
-            None => Input::default(),
+        let text_area = match input_value {
+            Some(input_value) => {
+                TextArea::new(vec![input_value])
+            }
+            None => TextArea::default()
         };
 
-        InputBox { prompt, input }
+        InputBoxState { prompt, text_area }
     }
 
+}
+
+impl InputBoxState {
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
         match key.code {
             KeyCode::Esc => {
                 return Some(ExplorerAction::Dismiss);
             }
             KeyCode::Enter => {
-                return Some(ExplorerAction::SetLimit(self.input.value().trim().to_owned()));
+                let text_val = self.text_area.lines()[0].trim().to_owned();
+                return Some(ExplorerAction::SetLimit(text_val));
             }
             KeyCode::Char(c) if c.is_ascii_digit() && key.modifiers.is_empty() => {
-                let _ = self.input.handle_event(&Event::Key(key));
+                self.text_area.input(key);
             }
             KeyCode::Left
             | KeyCode::Right
@@ -53,7 +44,7 @@ impl InputBox {
             | KeyCode::End
             | KeyCode::Backspace
             | KeyCode::Delete => {
-                self.input.handle_event(&Event::Key(key));
+                self.text_area.input(key);
             }
             _ => { /* ignore */ }
         }
@@ -62,11 +53,14 @@ impl InputBox {
     }
 }
 
-impl StatefulWidget for InputBox {
+pub struct InputBoxWidget;
+
+impl StatefulWidget for InputBoxWidget {
     type State = InputBoxState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let outer_block = Block::default().borders(Borders::ALL);
+        let outer_block = Block::default().borders(Borders::ALL)
+        .style(StylePalette::PopUp.style());
         let inner_block = outer_block.inner(area);
 
         // Total vertical height is the border plus all of the sections below:
@@ -77,29 +71,20 @@ impl StatefulWidget for InputBox {
             .constraints([
                 Constraint::Length(1), // 0 - Spacer
                 Constraint::Length(1), // 1 - Prompt
-                Constraint::Length(3), // 2 - Input box
+                Constraint::Length(3), // 2 - TextArea
                 Constraint::Length(1), // 3 - Spacer
-                Constraint::Length(1), // 4 - Divider
-                Constraint::Length(1), // 5 - Help
+                Constraint::Length(2), // 4 - Help
             ])
             .split(inner_block);
 
         outer_block.render(area, buf);
-        Line::from(self.prompt).render(inner_layout[0], buf);
+        Line::from(state.prompt.to_owned()).render(inner_layout[0], buf);
 
-        // keep 2 width for border and 1 for cursor
-        let input_area = inner_layout[2];
-        let width = input_area.width.max(3) - 3;
-        let scroll = self.input.visual_scroll(width as usize);
-        Paragraph::new(self.input.value())
-            .style(Style::default())
-            .scroll((0, scroll as u16))
-            .block(Block::bordered())
-            .render(input_area, buf);
+        state.text_area.set_style(StylePalette::PopUp.style());
+        state.text_area.set_cursor_line_style(Style::default());
+        state.text_area.set_block(Block::default().borders(Borders::ALL));
+        state.text_area.render(inner_layout[2], buf);
 
-        // Ratatui hides the cursor unless it's explicitly set. Position the  cursor past the
-        // end of the input text and one line down from the border to the input line
-        let x = self.input.visual_cursor().max(scroll) - scroll + 1;
-        state.cursor_pos = Some((input_area.x + x as u16, input_area.y + 1));
+        Utils::render_popup_help( "Esc: Cancel  |  Enter: Save", inner_layout[4], buf);
     }
 }
