@@ -3,7 +3,7 @@ use crate::{database::Database, error::FsPulseError};
 
 use ratatui::crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
-    KeyModifiers, KeyEventKind,
+    KeyModifiers,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -130,7 +130,7 @@ impl Explorer {
 
             // -- Borders
             // View
-            
+
             let view_block_set = symbols::border::Set {
                 bottom_left: symbols::line::NORMAL.bottom_left,
                 bottom_right: symbols::line::NORMAL.bottom_right,
@@ -141,7 +141,7 @@ impl Explorer {
                 .borders(border!(TOP, LEFT, RIGHT))
                 .title("View");
             f.render_widget(&view_block, view_area);
-            
+
             // Filter
             let filter_block_set = symbols::border::Set {
                 top_left: symbols::line::NORMAL.vertical_right,

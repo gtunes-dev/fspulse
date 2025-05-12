@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.15] - Unreleased
+
+### Added
+
+- The filter frame in Explorer is now collapsible. Use ctrl-f to expand and collapse.
+
+- New "Views" block in Explorer. Press 'V' at any time to bring up a list of selectable
+  pre-configured views. Each top-level type will show, at the top of the window, what
+  the last selected view was. Selecting a view applies that view's filters and column
+  characteristics to the window
+
+### Changed
+
+- Moved all input boxes from tui-input to tui-text area. This helps with cursor
+  display in editable fields and also provides more stand text box behaviors
+
 ## [v0.0.14] - 2025-05-07
 
 ### Fixed
