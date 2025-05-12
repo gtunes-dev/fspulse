@@ -192,7 +192,7 @@ impl ViewsListState {
                 .list_state
                 .selected()
                 .and_then(|index| SAVED_VIEWS.get(index))
-                .map(|saved_view| ExplorerAction::ApplyView(saved_view)),
+                .map(ExplorerAction::ApplyView),
             _ => None,
         }
     }

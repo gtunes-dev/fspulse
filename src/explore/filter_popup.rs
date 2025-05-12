@@ -23,7 +23,7 @@ enum FilterPopupType {
 }
 
 impl FilterPopupType {
-    fn to_str(&self) -> &'static str {
+    fn to_str(self) -> &'static str {
         match self {
             FilterPopupType::Add => "Add",
             FilterPopupType::Edit => "Edit",

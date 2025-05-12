@@ -104,7 +104,7 @@ impl Explorer {
                     Constraint::Length(1),                          // Spacer
                     Constraint::Length(1),                          // Tabs
                     Constraint::Length(1),                          // Spacer
-                    Constraint::Length(self.view_frame_height()),   // View
+                    Constraint::Length(2),                          // View
                     Constraint::Length(self.filter_frame_height()), // Filters
                     Constraint::Min(0),                             // Main content
                     Constraint::Length(1),                          // Help/status
@@ -294,10 +294,6 @@ impl Explorer {
         })?;
 
         Ok(())
-    }
-
-    pub fn view_frame_height(&self) -> u16 {
-        return 2;
     }
 
     pub fn filter_frame_height(&self) -> u16 {
@@ -563,7 +559,7 @@ impl Explorer {
             next = self.next_focus(next);
         }
 
-        return next;
+        next
     }
 
     fn prev_focus(&self, current_focus: Focus) -> Focus {
@@ -580,7 +576,7 @@ impl Explorer {
             prev = self.prev_focus(prev)
         }
 
-        return prev;
+        prev
     }
 
     // Help String Pattern (for all sections):
