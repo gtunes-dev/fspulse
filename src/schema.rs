@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS roots (
 CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (root_path);
 
 -- Scans table tracks individual scan sessions
--- Scans table tracks individual scan sessions
 CREATE TABLE IF NOT EXISTS scans (
     scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,          -- Links scan to a root path
@@ -49,12 +48,12 @@ CREATE TABLE IF NOT EXISTS items (
 
     -- Hash Property Group
     last_hash_scan INTEGER,                  -- Id of last scan during which a hash was computed
-    file_hash TEXT,                             -- Hash of file contents (NULL for directories and if not computed)
+    file_hash TEXT,                          -- Hash of file contents (NULL for directories and if not computed)
 
     -- Validation Property Group
     last_val_scan INTEGER,                  -- Id of last scan during which file was validated
     val CHAR(1) NOT NULL,                   -- Validation state of file
-    val_error TEXT,                          -- Description of invalid state
+    val_error TEXT,                         -- Description of invalid state
 
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (last_scan) REFERENCES scans(scan_id),
@@ -86,7 +85,7 @@ CREATE TABLE IF NOT EXISTS changes (
 
     -- Hash Properties (Add, Modify)
     hash_change BOOLEAN DEFAULT NULL,          -- Not Null if "A" or "M". True if hash changed
-    last_hash_scan_old INTEGER DEFAULT NULL, -- Id of last scan during which a hash was computed
+    last_hash_scan_old INTEGER DEFAULT NULL,   -- Id of last scan during which a hash was computed
     hash_old TEXT DEFAULT NULL,                 -- Stores the previous hash value (if changed)
     hash_new TEXT DEFAULT NULL,                 -- Stores the new hash (if changed)
 
@@ -105,6 +104,84 @@ CREATE TABLE IF NOT EXISTS changes (
 
 -- Indexes to optimize queries
 CREATE INDEX IF NOT EXISTS idx_changes_scan_type ON changes (scan_id, change_type);
+CREATE INDEX IF NOT EXISTS idx_changes_item_scan      ON changes(item_id, scan_id);
+CREATE INDEX IF NOT EXISTS idx_changes_hashchange     ON changes(scan_id, hash_change);
+CREATE INDEX IF NOT EXISTS idx_changes_item_meta      ON changes(item_id, scan_id, meta_change);
+
+
+CREATE TABLE IF NOT EXISTS alerts (
+  alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scan_id INTEGER NOT NULL,
+  item_id INTEGER NOT NULL,
+  change_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER DEFAULT NULL,
+  alert_type CHAR(1) NOT NULL,
+  alert_status CHAR(1) NOT NULL,
+
+  -- suspicious hash
+  prev_hash_scan INTEGER DEFAULT NULL,
+  hash_new TEXT DEFAULT NULL,
+  hash_prev TEXT DEFAULT NULL,
+
+  -- invalid file
+  val_error TEXT DEFAULT NULL
+);
+
+
+COMMIT;
+"#;
+
+pub const UPGRADE_3_TO_4_SQL: &str = r#"
+--
+-- Schema Upgrade: Version 3 → 4
+--
+-- This migration creates the alerts table to support the new alerts feature
+BEGIN TRANSACTION;
+
+-- Verify schema version is exactly 2
+SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '3' THEN 1 ELSE 0 END);
+
+-- This update introduces the new "Alerting" phase to scanning. Some existing state values
+-- are changing. 
+
+-- Completed (old = 4)  → Completed (new = 100)
+UPDATE scans
+SET    state = 100
+WHERE  state = 4;
+
+-- Stopped   (old = 5)  → Stopped   (new = 50)
+UPDATE scans
+SET    state = 50
+WHERE  state = 5;
+
+-- Add additional changes indexes
+CREATE INDEX IF NOT EXISTS idx_changes_item_scan      ON changes(item_id, scan_id);
+CREATE INDEX IF NOT EXISTS idx_changes_hashchange     ON changes(scan_id, hash_change);
+CREATE INDEX IF NOT EXISTS idx_changes_item_meta      ON changes(item_id, scan_id, meta_change);
+
+-- Create the alerts table
+CREATE TABLE alerts (
+  alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scan_id INTEGER NOT NULL,
+  item_id INTEGER NOT NULL,
+  change_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER DEFAULT NULL,
+  alert_type CHAR(1) NOT NULL,
+  alert_status CHAR(1) NOT NULL,
+
+  -- suspicious hash
+  prev_hash_scan INTEGER DEFAULT NULL,
+  hash_new TEXT DEFAULT NULL,
+  hash_prev TEXT DEFAULT NULL,
+
+  -- invalid file
+  val_error TEXT DEFAULT NULL
+);
+
+-- Update schema version
+UPDATE meta SET value = '4' WHERE key = 'schema_version';
 
 COMMIT;
 "#;

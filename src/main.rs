@@ -1,3 +1,4 @@
+mod alerts;
 mod changes;
 mod cli;
 mod config;

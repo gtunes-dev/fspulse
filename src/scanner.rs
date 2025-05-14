@@ -35,6 +35,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use dialoguer::{MultiSelect, Select};
 use log::{error, info};
+use rusqlite::named_params;
 use threadpool::ThreadPool;
 
 use std::collections::VecDeque;
@@ -284,6 +285,15 @@ impl Scanner {
                     analysis_result?;
 
                     Utils::finish_section_bar(&bar, "✔ Analyzing");
+                    loop_state = ScanState::Alerting;
+                }
+                ScanState::Alerting => {
+                    let bar = Utils::add_section_bar(multi_prog, 4, "Alerting...");
+                    // ScanState should always be alerting - this is defensive
+                    if scan.state() == ScanState::Alerting {
+                        Scanner::do_state_alerting(db, scan)?;
+                    }
+                    Utils::finish_section_bar(&bar, "✔ Alerting");
                     loop_state = ScanState::Completed;
                 }
                 unexpected => {
@@ -603,6 +613,106 @@ impl Scanner {
         //analysis_prog.finish_with_message("✔ Analyzing");
         analysis_prog.finish_and_clear();
         scan.set_state_completed(&mut db.lock().unwrap())
+    }
+
+    fn do_state_alerting(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> {
+        let tx = db.conn_mut().transaction()?;
+
+        let suspicious_hash_sql = r#"
+            WITH suspicious AS (
+                SELECT
+                    c.change_id,
+                    c.item_id,
+                    c.last_hash_scan_old  AS prev_hash_scan,
+                    c.hash_new,
+                    c.hash_old            AS hash_prev
+                FROM   changes c
+                WHERE  c.scan_id     = :scan_id                -- current scan
+                AND  c.hash_change = 1
+                AND  c.hash_old    IS NOT NULL
+                AND  c.meta_change = 0                       -- size / mtime same
+                /* previous-hash row still present */
+                AND  EXISTS (
+                        SELECT 1
+                        FROM   changes c_prev
+                        WHERE  c_prev.item_id = c.item_id
+                        AND  c_prev.scan_id = c.last_hash_scan_old
+                    )
+                /* no meta_change between last-hash scan and now */
+                AND  NOT EXISTS (
+                        SELECT 1
+                        FROM   changes c_mid
+                        WHERE  c_mid.item_id    = c.item_id
+                        AND  c_mid.scan_id   > c.last_hash_scan_old
+                        AND  c_mid.scan_id   < :scan_id
+                        AND  c_mid.meta_change = 1
+                    )
+            )
+            INSERT INTO alerts (
+                scan_id,
+                item_id,
+                change_id,
+                created_at,
+                alert_type,     -- 'H' = SuspiciousHash
+                alert_status,   -- 'O' = Open
+                prev_hash_scan,
+                hash_new,
+                hash_prev
+            )
+            SELECT
+                :scan_id,
+                s.item_id,
+                s.change_id,
+                strftime('%s','now'),
+                'H',
+                'O',
+                s.prev_hash_scan,
+                s.hash_new,
+                s.hash_prev
+            FROM   suspicious s
+            ON     CONFLICT (scan_id, item_id, alert_type) DO NOTHING;
+        "#;
+
+        // Execute and return the number of rows inserted
+        tx.execute(
+            suspicious_hash_sql,
+            named_params! { ":scan_id": scan.scan_id() },
+        )?;
+
+        let invalid_items_sql = r#"
+            WITH invalid AS (
+                SELECT
+                    c.change_id,
+                    c.item_id,
+                    c.val_error_new AS val_error
+                FROM   changes c
+                WHERE  c.scan_id    = :scan_id
+                AND  c.val_change = 1         -- validation state changed
+                AND  c.val_new    = 'I'       -- now Invalid
+            )
+            INSERT INTO alerts (
+                scan_id,
+                item_id,
+                change_id,
+                created_at,
+                alert_type,     -- 'I' = InvalidItem
+                alert_status,   -- 'O' = Open
+                val_error
+            )
+            SELECT
+                :scan_id,
+                i.item_id,
+                i.change_id,
+                strftime('%s','now'),
+                'I',
+                'O',
+                i.val_error
+            FROM   invalid i
+            ON     CONFLICT (scan_id, item_id, alert_type) DO NOTHING;
+        "#;
+
+        tx.execute(invalid_items_sql, named_params! { ":scan_id": scan.scan_id() })?;
+        scan.set_state_alerting(tx)
     }
 
     fn process_item_async(

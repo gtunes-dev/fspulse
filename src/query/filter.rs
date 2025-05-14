@@ -500,6 +500,10 @@ impl EnumFilter {
         "item_file" => "F",
         "item_directory" => "D",
         "item_symlink" => "S",
+
+        // alert_type values
+        "alert_suspicious_hash" => "H",
+        "alert_invalid_file" => "I",
     };
 }
 

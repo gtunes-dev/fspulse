@@ -1,11 +1,14 @@
- use crate::{error::FsPulseError, schema::CREATE_SCHEMA_SQL, schema::UPGRADE_2_TO_3_SQL};
+use crate::{
+    error::FsPulseError,
+    schema::{CREATE_SCHEMA_SQL, UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL},
+};
 use directories::BaseDirs;
 use log::info;
 use rusqlite::{Connection, OptionalExtension, Result};
 use std::path::PathBuf;
 
 const DB_FILENAME: &str = "fspulse.db";
-const SCHEMA_VERSION: &str = "3";
+const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Default)]
 pub struct Database {
@@ -69,42 +72,68 @@ impl Database {
             .unwrap_or(false);
 
         if !table_exists {
-            return self.create_schema();
+            self.create_schema()?;
+        } else {
+            // Get the stored schema version
+            let db_version_str: Option<String> = self
+                .conn()
+                .query_row(
+                    "SELECT value FROM meta WHERE key = 'schema_version'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+
+            let db_version_str = match db_version_str {
+                Some(s) => s,
+                None => return Err(FsPulseError::Error("Schema version missing".to_string())),
+            };
+
+            let mut db_version: u32 = match db_version_str.parse() {
+                Ok(num) => num,
+                Err(_) => return Err(FsPulseError::Error("Schema version mismatch".to_string())),
+            };
+
+            loop {
+                db_version = match db_version {
+                    CURRENT_SCHEMA_VERSION => break,
+                    2 => self.upgrade_schema(db_version, UPGRADE_2_TO_3_SQL)?,
+                    3 => self.upgrade_schema(db_version, UPGRADE_3_TO_4_SQL)?,
+                    _ => {
+                        return Err(FsPulseError::Error(
+                            "No valid database update available".to_string(),
+                        ))
+                    }
+                }
+            }
         }
 
-        // Get the stored schema version
-        let stored_version: Option<String> = self
-            .conn()
-            .query_row(
-                "SELECT value FROM meta WHERE key = 'schema_version'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
-
-        match stored_version.as_deref() {
-            Some(SCHEMA_VERSION) => Ok(()), // Schema is up to date
-            Some("2") => self.upgrade_2_to_3(),
-            Some(_) => Err(FsPulseError::Error("Schema version mismatch".to_string())),
-            None => Err(FsPulseError::Error("Schema version missing".to_string())),
-        }
+        Ok(())
     }
 
     fn create_schema(&self) -> Result<(), FsPulseError> {
         info!(
             "Database is uninitialized - creating schema at version {}",
-            SCHEMA_VERSION
+            CURRENT_SCHEMA_VERSION
         );
         self.conn().execute_batch(CREATE_SCHEMA_SQL)?;
         info!("Database successfully initialized");
         Ok(())
     }
 
-    fn upgrade_2_to_3(&self) -> Result<(), FsPulseError> {
-        info!("Upgrading database schema 2 => 3");
-        self.conn().execute_batch(UPGRADE_2_TO_3_SQL)?;
+    fn upgrade_schema(
+        &self,
+        current_version: u32,
+        batch: &'static str,
+    ) -> Result<u32, FsPulseError> {
+        info!(
+            "Upgrading database schema {} => {}",
+            current_version,
+            current_version + 1
+        );
+        self.conn().execute_batch(batch)?;
         info!("Database successfully upgraded");
 
-        Ok(())
+        Ok(current_version + 1)
     }
 }

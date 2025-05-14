@@ -61,7 +61,7 @@ impl GridFrame {
             .map(|col| match col.col_type {
                 ColType::Id => Constraint::Length(col_size(col.name_display, 9) as u16),
                 ColType::Int => Constraint::Length(col_size(col.name_display, 8) as u16),
-                ColType::Val | ColType::ItemType | ColType::ChangeType => {
+                ColType::Val | ColType::ItemType | ColType::ChangeType | ColType::AlertType => {
                     Constraint::Length(col_size(col.name_display, 4) as u16)
                 }
                 ColType::Bool => Constraint::Length(col_size(col.name_display, 1) as u16),

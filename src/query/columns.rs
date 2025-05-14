@@ -57,6 +57,7 @@ pub enum ColType {
     Val,
     ItemType,
     ChangeType,
+    AlertType,
     Int,
 }
 
@@ -107,7 +108,12 @@ impl ColType {
                 Rule::change_type_filter_EOI,
                 "Change Type",
                 "Change types: A (add), M (modify), D (delete)\nComma-separated values",
-            )
+            ),
+            ColType::AlertType => ColTypeInfo::new(
+                Rule::alert_type_filter_EOI,
+                "Alert Type",
+                "Alert types: H (suspicious hash), I (invalid item)\nComma-separated values",
+            ),
         }
     }
 }
@@ -155,7 +161,7 @@ impl ColSpec {
             in_select_list,
             col_type,
             col_align: alignment,
-        }        
+        }
     }
 }
 
@@ -217,6 +223,20 @@ pub const CHANGES_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_new" => ColSpec::new_with_display("val_new", "VN", false, true, ColType::Val, ColAlign::Center),
     "val_error_old" => ColSpec::new("val_error_old", false, true, ColType::String, ColAlign::Left),
     "val_error_new" => ColSpec::new("val_error_new", false, true, ColType::String, ColAlign::Left),
+};
+
+pub const ALERTS_QUERY_COLS: ColMap = phf_ordered_map! {
+    "alert_id" => ColSpec::new("alert_id", true, true, ColType::Id, ColAlign::Right),
+    "scan_id" => ColSpec::new("scan_id", true, true, ColType::Id, ColAlign::Right),
+    "item_id" => ColSpec::new_with_display("alerts.item_id", "item_id", true, true, ColType::Id, ColAlign::Right),
+    "item_path" => ColSpec::new_with_display("items.item_path", "item_path", true, true, ColType::Path, ColAlign::Left),
+    "change_id" => ColSpec::new("change_id", false, true, ColType::Id, ColAlign::Right),
+    "created_at" => ColSpec::new("created_at", true, true, ColType::Date, ColAlign::Center),
+    "updated_at" => ColSpec::new("created_at", true, true, ColType::Date, ColAlign::Center),
+    "prev_hash_scan" => ColSpec::new("prev_hash_scan", false, true, ColType::Id, ColAlign::Right),
+    "hash_new" => ColSpec::new("hash_new", false, true, ColType::String, ColAlign::Left),
+    "hash_prev" => ColSpec::new("hash_prev", false, true, ColType::String, ColAlign::Left),
+    "val_error" => ColSpec::new("val_error", true, true, ColType::String, ColAlign::Left),
 };
 
 #[derive(Debug, Copy, Clone)]

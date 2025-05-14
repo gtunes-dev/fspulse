@@ -2,7 +2,7 @@ use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 
-use rusqlite::{params, OptionalExtension, Result};
+use rusqlite::{params, OptionalExtension, Result, Transaction};
 
 use std::fmt;
 
@@ -72,8 +72,9 @@ pub enum ScanState {
     Scanning = 1,
     Sweeping = 2,
     Analyzing = 3,
-    Completed = 4,
-    Stopped = 5,
+    Alerting = 4,
+    Stopped = 50,
+    Completed = 100,
     Unknown = -1,
 }
 
@@ -83,8 +84,9 @@ impl ScanState {
             1 => ScanState::Scanning,
             2 => ScanState::Sweeping,
             3 => ScanState::Analyzing,
-            4 => ScanState::Completed,
-            5 => ScanState::Stopped,
+            4 => ScanState::Alerting,
+            50 => ScanState::Stopped,
+            100 => ScanState::Completed,
             _ => ScanState::Unknown, // Handle unknown states
         }
     }
@@ -101,6 +103,7 @@ impl fmt::Display for ScanState {
             ScanState::Scanning => "Scanning",
             ScanState::Sweeping => "Sweeping",
             ScanState::Analyzing => "Analyzing",
+            ScanState::Alerting => "Alerting",
             ScanState::Completed => "Completed",
             ScanState::Stopped => "Stopped",
             ScanState::Unknown => "Unknown",
@@ -287,9 +290,21 @@ impl Scan {
         Ok(())
     }
 
+   pub fn set_state_alerting(&mut self, tx: Transaction) -> Result<(), FsPulseError> {
+        match self.state() {
+            ScanState::Analyzing => self.set_state_and_commit_with_tx(tx, ScanState::Alerting),
+            _ => Err(FsPulseError::Error(format!(
+                "Can't set Scan Id {} to state alerting from state {}",
+                self.scan_id(),
+                self.state().as_i64()
+            ))),
+        }
+    }
+
+
     pub fn set_state_completed(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::Analyzing => self.set_state(db, ScanState::Completed),
+            ScanState::Alerting => self.set_state(db, ScanState::Completed),
             _ => Err(FsPulseError::Error(format!(
                 "Can't set Scan Id {} to state completed from state {}",
                 self.scan_id(),
@@ -312,10 +327,8 @@ impl Scan {
         }
     }
 
-    fn set_state(&mut self, db: &mut Database, new_state: ScanState) -> Result<(), FsPulseError> {
-        let conn = &mut db.conn_mut();
-
-        let rows_updated = conn.execute(
+    fn set_state_and_commit_with_tx(&mut self, tx: Transaction, new_state: ScanState) -> Result<(), FsPulseError> {
+        let rows_updated = tx.execute(
             "UPDATE scans SET state = ? WHERE scan_id = ?",
             [new_state.as_i64(), self.scan_id],
         )?;
@@ -328,9 +341,17 @@ impl Scan {
             )));
         }
 
+        tx.commit()?;
+
         self.state = new_state.as_i64();
 
         Ok(())
+    }
+
+    fn set_state(&mut self, db: &mut Database, new_state: ScanState) -> Result<(), FsPulseError> {
+        let tx = db.conn_mut().transaction()?;
+
+        self.set_state_and_commit_with_tx(tx, new_state)
     }
 
     pub fn stop_scan(db: &mut Database, scan: &Scan) -> Result<(), FsPulseError> {

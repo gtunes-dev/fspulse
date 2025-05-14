@@ -226,6 +226,38 @@ fn make_query(query_type: &str) -> Box<dyn Query> {
     }
 }
 
+struct AlertsQuery {
+    imp: QueryImpl,
+}
+
+impl Query for AlertsQuery {
+    fn query_impl(&self) -> &QueryImpl {
+        &self.imp
+    }
+
+    fn query_impl_mut(&mut self) -> &mut QueryImpl {
+        &mut self.imp
+    }
+
+    fn build_query_result(
+        &mut self,
+        sql_statement: &mut Statement,
+        sql_params: &[&dyn ToSql],
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let rows = sql_statement.query_map(sql_params, AlertsQueryRow::from_row)?;
+
+        query_result.prepare(&mut self.query_impl_mut().show);
+
+        for row in rows {
+            let roots_query_row: RootsQueryRow = row?;
+            self.append_roots_row(&roots_query_row, query_result)?;
+        }
+
+        Ok(())
+    }
+}
+
 impl Query for RootsQuery {
     fn query_impl(&self) -> &QueryImpl {
         &self.imp
@@ -535,6 +567,14 @@ impl QueryImpl {
         FROM changes
         JOIN items
             ON changes.item_id = items.item_id
+        {where_clause}
+        {order_clause}
+        {limit_clause}";
+
+    const ALERTS_SQL_QUERY: &str = "SELECT {select_list}
+        FROM alerts
+        JOIN items
+          ON alerts.item_id = items.item_id
         {where_clause}
         {order_clause}
         {limit_clause}";
