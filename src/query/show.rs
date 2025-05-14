@@ -1,3 +1,4 @@
+use crate::alerts::{AlertStatus, AlertType};
 use crate::validate::validator::ValidationState;
 use crate::{changes::ChangeType, error::FsPulseError, items::ItemType, utils::Utils};
 
@@ -128,6 +129,36 @@ impl Format {
     pub fn format_opt_val(val: Option<&str>, format: Format) -> Result<String, FsPulseError> {
         match val {
             Some(val) => Self::format_val(val, format),
+            None => Ok("-".into()),
+        }
+    }
+
+    pub fn format_alert_type(alert_type: &str, format: Format) -> Result<String, FsPulseError> {
+        match format {
+            Format::Full => Ok(AlertType::short_str_to_full(alert_type)?.to_owned()),
+            Format::Short | Format::None => Ok(alert_type.to_owned()),
+            _ => Err(FsPulseError::Error(
+                "Invalid alert type state format".into(),
+            )),
+        }
+    }
+
+    pub fn format_alert_status(alert_status: &str, format: Format) -> Result<String, FsPulseError> {
+        match format {
+            Format::Full => Ok(AlertStatus::short_str_to_full(alert_status)?.to_owned()),
+            Format::Short | Format::None => Ok(alert_status.to_owned()),
+            _ => Err(FsPulseError::Error(
+                "Invalid alert type state format".into(),
+            )),
+        }
+    }
+
+    pub fn format_opt_alert_status(
+        alert_status: Option<&str>,
+        format: Format,
+    ) -> Result<String, FsPulseError> {
+        match alert_status {
+            Some(alert_status) => Self::format_alert_status(alert_status, format),
             None => Ok("-".into()),
         }
     }

@@ -58,6 +58,7 @@ pub enum ColType {
     ItemType,
     ChangeType,
     AlertType,
+    AlertStatus,
     Int,
 }
 
@@ -113,6 +114,11 @@ impl ColType {
                 Rule::alert_type_filter_EOI,
                 "Alert Type",
                 "Alert types: H (suspicious hash), I (invalid item)\nComma-separated values",
+            ),
+            ColType::AlertStatus => ColTypeInfo::new(
+                Rule::alert_status_filter_EOI,
+                "Alert Status",
+                "Alert status types: O (open)\nComma-separated values",
             ),
         }
     }
@@ -233,10 +239,12 @@ pub const ALERTS_QUERY_COLS: ColMap = phf_ordered_map! {
     "change_id" => ColSpec::new("change_id", false, true, ColType::Id, ColAlign::Right),
     "created_at" => ColSpec::new("created_at", true, true, ColType::Date, ColAlign::Center),
     "updated_at" => ColSpec::new("created_at", true, true, ColType::Date, ColAlign::Center),
+    "alert_type" => ColSpec::new("alert_type", true, true, ColType::AlertType, ColAlign::Center),
+    "alert_status" => ColSpec::new("alert_status", true, true, ColType::AlertStatus, ColAlign::Center),
     "prev_hash_scan" => ColSpec::new("prev_hash_scan", false, true, ColType::Id, ColAlign::Right),
     "hash_new" => ColSpec::new("hash_new", false, true, ColType::String, ColAlign::Left),
     "hash_prev" => ColSpec::new("hash_prev", false, true, ColType::String, ColAlign::Left),
-    "val_error" => ColSpec::new("val_error", true, true, ColType::String, ColAlign::Left),
+    "val_error" => ColSpec::new_with_display("alerts.val_error", "val_error", true, true, ColType::String, ColAlign::Left),
 };
 
 #[derive(Debug, Copy, Clone)]

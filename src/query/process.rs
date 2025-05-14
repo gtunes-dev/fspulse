@@ -8,7 +8,10 @@ use tabled::{
 };
 
 use super::{
-    columns::{ColSet, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS},
+    columns::{
+        ColSet, ALERTS_QUERY_COLS, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS,
+        SCANS_QUERY_COLS,
+    },
     filter::{EnumFilter, IntFilter},
     show::{Format, Show},
 };
@@ -222,6 +225,9 @@ fn make_query(query_type: &str) -> Box<dyn Query> {
                 ColSet::new(&CHANGES_QUERY_COLS),
             ),
         }),
+        "alerts" => Box::new(AlertsQuery {
+            imp: QueryImpl::new(QueryImpl::ALERTS_SQL_QUERY, ColSet::new(&ALERTS_QUERY_COLS)),
+        }),
         _ => unreachable!(),
     }
 }
@@ -250,9 +256,45 @@ impl Query for AlertsQuery {
         query_result.prepare(&mut self.query_impl_mut().show);
 
         for row in rows {
-            let roots_query_row: RootsQueryRow = row?;
-            self.append_roots_row(&roots_query_row, query_result)?;
+            let alerts_query_row: AlertsQueryRow = row?;
+            self.append_alerts_row(&alerts_query_row, query_result)?;
         }
+
+        Ok(())
+    }
+}
+
+impl AlertsQuery {
+    pub fn append_alerts_row(
+        &self,
+        alert: &AlertsQueryRow,
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let mut row: Vec<String> = Vec::new();
+
+        for col in &self.show().display_cols {
+            let col_string = match col.display_col {
+                "alert_id" => Format::format_i64(alert.alert_id),
+                "scan_id" => Format::format_i64(alert.scan_id),
+                "item_id" => Format::format_i64(alert.item_id),
+                "change_id" => Format::format_i64(alert.change_id),
+                "created_at" => Format::format_date(alert.created_at, col.format)?,
+                "update_at" => Format::format_opt_date(alert.update_at, col.format)?,
+                "alert_type" => Format::format_alert_type(&alert.alert_type, col.format)?,
+                "alert_status" => Format::format_alert_status(&alert.alert_status, col.format)?,
+                "prev_hash_scan" => Format::format_opt_i64(alert.prev_hash_scan),
+                "hash_new" => Format::format_opt_string(&alert.hash_new),
+                "hash_prev" => Format::format_opt_string(&alert.hash_prev),
+                "val_error" => Format::format_opt_string(&alert.val_error),
+                _ => {
+                    return Err(FsPulseError::Error("Invalid column".into()));
+                }
+            };
+
+            row.push(col_string);
+        }
+
+        query_result.add_row(row);
 
         Ok(())
     }
@@ -729,6 +771,40 @@ impl ScansQueryRow {
     }
 }
 
+pub struct AlertsQueryRow {
+    alert_id: i64,
+    scan_id: i64,
+    item_id: i64,
+    change_id: i64,
+    created_at: i64,
+    update_at: Option<i64>,
+    alert_type: String,
+    alert_status: String,
+    prev_hash_scan: Option<i64>,
+    hash_new: Option<String>,
+    hash_prev: Option<String>,
+    val_error: Option<String>,
+}
+
+impl AlertsQueryRow {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(AlertsQueryRow {
+            alert_id: row.get(0)?,
+            scan_id: row.get(1)?,
+            item_id: row.get(2)?,
+            change_id: row.get(3)?,
+            created_at: row.get(4)?,
+            update_at: row.get(5)?,
+            alert_type: row.get(6)?,
+            alert_status: row.get(7)?,
+            prev_hash_scan: row.get(8)?,
+            hash_new: row.get(9)?,
+            hash_prev: row.get(10)?,
+            val_error: row.get(11)?,
+        })
+    }
+}
+
 impl QueryProcessor {
     pub fn execute_query(db: &Database, query_str: &str) -> Result<Vec<Vec<String>>, FsPulseError> {
         let mut qrv = QueryResultVector::new();
@@ -796,12 +872,12 @@ impl QueryProcessor {
 
         Ok(())
     }
-    
-    pub fn validate_parsed_filter(rule: Rule, pairs: &mut Pairs<Rule>) -> Option<String>{
+
+    pub fn validate_parsed_filter(rule: Rule, pairs: &mut Pairs<Rule>) -> Option<String> {
         if rule == Rule::date_filter_EOI {
             match DateFilter::validate_values(pairs) {
                 Ok(_) => return None,
-                Err(e) => return Some(e.to_string())
+                Err(e) => return Some(e.to_string()),
             }
         };
         None
@@ -809,13 +885,10 @@ impl QueryProcessor {
 
     pub fn validate_filter(rule: Rule, filter: &str) -> Option<String> {
         match QueryParser::parse(rule, filter).as_mut() {
-
             // In cases such as "dates", input valiation happens during
             // query building, not parsing, since the parser doesn't understand
             // date validity. For these cases, we need to explicitly validate
-            Ok(parsed_query) => {
-                QueryProcessor::validate_parsed_filter(rule, parsed_query)
-            },
+            Ok(parsed_query) => QueryProcessor::validate_parsed_filter(rule, parsed_query),
             Err(e) => Some(e.to_string()),
         }
     }

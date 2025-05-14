@@ -5,24 +5,24 @@
 
 query = { SOI ~ WS* ~ query_type ~ where_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ WS* ~ EOI }
 
-query_type = { "roots" | "scans" | "items" | "changes" | "alerts"}
+query_type = { "roots" | "scans" | "items" | "changes" | "alerts" }
 
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
 // TODO: Add int filter
-filter = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter | alert_type_filter | int_filter }
+filter = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter | alert_type_filter | alert_status_filter | int_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | change_type_show | alert_type_show| int_show }
+show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | change_type_show | alert_type_show | alert_status_show | int_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { id_col | date_col | bool_col | string_col | path_col | val_col | item_type_col | change_type_col | alert_type_col | int_col }
+order_column =  { id_col | date_col | bool_col | string_col | path_col | val_col | item_type_col | change_type_col | alert_type_col | alert_status_col | int_col }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause
@@ -31,16 +31,17 @@ limit_text   = _{ ^"limit" }
 limit_val    =  { ASCII_DIGIT+ }
 
 // Filter verifiers used discretely within code
-id_filter_EOI          = { WS* ~ id_filter_values ~ WS* ~ EOI } 
-date_filter_EOI        = { WS* ~ date_filter_values ~ WS* ~ EOI }
-bool_filter_EOI        = { bool_filter_values ~ WS* ~ EOI }
-string_filter_EOI      = { string_filter_values ~ WS* ~ EOI }
-path_filter_EOI        = { WS* ~ path_filter_values ~ WS* ~ EOI }
-val_filter_EOI         = { WS* ~ val_filter_values ~ WS* ~ EOI }
-item_type_filter_EOI   = { WS* ~ item_type_filter_values ~ WS* ~ EOI }
-change_type_filter_EOI = { WS* ~ change_type_filter_values ~ WS* ~ EOI }
-alert_type_filter_EOI = { WS* ~ alert_type_filter_values ~ WS* ~ EOI }
-int_filter_EOI         = { WS* ~ int_comparator ~ WS* ~ EOI }
+id_filter_EOI           = { WS* ~ id_filter_values ~ WS* ~ EOI }
+date_filter_EOI         = { WS* ~ date_filter_values ~ WS* ~ EOI }
+bool_filter_EOI         = { bool_filter_values ~ WS* ~ EOI }
+string_filter_EOI       = { string_filter_values ~ WS* ~ EOI }
+path_filter_EOI         = { WS* ~ path_filter_values ~ WS* ~ EOI }
+val_filter_EOI          = { WS* ~ val_filter_values ~ WS* ~ EOI }
+item_type_filter_EOI    = { WS* ~ item_type_filter_values ~ WS* ~ EOI }
+change_type_filter_EOI  = { WS* ~ change_type_filter_values ~ WS* ~ EOI }
+alert_type_filter_EOI   = { WS* ~ alert_type_filter_values ~ WS* ~ EOI }
+alert_status_filter_EOI = { WS* ~ alert_status_filter_values ~ WS* ~ EOI }
+int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
 id_col = { "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" }
@@ -159,10 +160,22 @@ alert_type_display_mode =  { full | short }
 
 alert_type_filter        =  { alert_type_col ~ alert_type_filter_body }
 alert_type_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ alert_type_filter_values ~ WS* ~ RPAREN }
-alert_type_filter_values = _{ alert ~ (WS* ~ COMMA ~ WS* ~ alert)* }
-alert                    = _{ alert_suspicious_hash | alert_invalid_file }
+alert_type_filter_values = _{ alert_type ~ (WS* ~ COMMA ~ WS* ~ alert_type)* }
+alert_type               = _{ alert_suspicious_hash | alert_invalid_file }
 alert_suspicious_hash    =  { ^"H" }
 alert_invalid_file       =  { ^"I" }
+
+alert_status_col = { "alert_status" }
+
+alert_status_show         =  { alert_status_col ~ alert_status_modifier? }
+alert_status_modifier     = _{ WS* ~ "@" ~ WS* ~ alert_status_display_mode }
+alert_status_display_mode =  { full | short }
+
+alert_status_filter        =  { alert_status_col ~ alert_status_filter_body }
+alert_status_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ alert_status_filter_values ~ WS* ~ RPAREN }
+alert_status_filter_values = _{ alert_status ~ (WS* ~ COMMA ~ WS* ~ alert_status)* }
+alert_status               = _{ alert_status_open }
+alert_status_open          =  { ^"O" }
 
 // Integer columns
 int_col  = { "file_size" | "file_count" | "folder_count" | "adds" | "modifies" | "deletes" | "state" }
