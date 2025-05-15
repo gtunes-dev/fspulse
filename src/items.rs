@@ -14,6 +14,7 @@ pub struct AnalysisItem {
     last_val_scan: Option<i64>,
     val: String,
     val_error: Option<String>,
+    meta_change: Option<bool>,
     needs_hash: bool,
     needs_val: bool,
 }
@@ -46,6 +47,10 @@ impl AnalysisItem {
         self.val_error.as_deref()
     }
 
+    pub fn meta_change(&self) -> Option<bool> {
+        self.meta_change
+    }
+
     pub fn needs_hash(&self) -> bool {
         self.needs_hash
     }
@@ -63,8 +68,9 @@ impl AnalysisItem {
             last_val_scan: row.get(4)?,
             val: row.get(5)?,
             val_error: row.get(6)?,
-            needs_hash: row.get(7)?,
-            needs_val: row.get(8)?,
+            meta_change: row.get(7)?,
+            needs_hash: row.get(8)?,
+            needs_val: row.get(9)?,
         })
     }
 }
@@ -335,6 +341,7 @@ impl Item {
                 i.last_val_scan,
                 i.val,
                 i.val_error,
+                c.meta_change,
             CASE
                 WHEN $1 = 0 THEN 0  -- hash disabled
                 WHEN $2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan < $3) THEN 1  -- hash_all
@@ -350,7 +357,7 @@ impl Item {
                 WHEN c.change_type = 'A' THEN 1
                 WHEN c.change_type = 'M' AND c.meta_change = 1 THEN 1
                 ELSE 0
-        END AS needs_val
+            END AS needs_val
         FROM items i
         LEFT JOIN changes c
             ON c.item_id = i.item_id AND c.scan_id = $3

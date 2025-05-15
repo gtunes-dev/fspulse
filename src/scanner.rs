@@ -17,6 +17,7 @@
 // 4. Completed
 // 5. Stopped
 
+use crate::alerts::Alerts;
 use crate::changes::ChangeType;
 use crate::config::{HashFunc, CONFIG};
 use crate::hash::Hash;
@@ -35,7 +36,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use dialoguer::{MultiSelect, Select};
 use log::{error, info};
-use rusqlite::named_params;
 use threadpool::ThreadPool;
 
 use std::collections::VecDeque;
@@ -285,15 +285,6 @@ impl Scanner {
                     analysis_result?;
 
                     Utils::finish_section_bar(&bar, "✔ Analyzing");
-                    loop_state = ScanState::Alerting;
-                }
-                ScanState::Alerting => {
-                    let bar = Utils::add_section_bar(multi_prog, 4, "Alerting...");
-                    // ScanState should always be alerting - this is defensive
-                    if scan.state() == ScanState::Alerting {
-                        Scanner::do_state_alerting(db, scan)?;
-                    }
-                    Utils::finish_section_bar(&bar, "✔ Alerting");
                     loop_state = ScanState::Completed;
                 }
                 unexpected => {
@@ -615,106 +606,6 @@ impl Scanner {
         scan.set_state_completed(&mut db.lock().unwrap())
     }
 
-    fn do_state_alerting(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> {
-        let tx = db.conn_mut().transaction()?;
-
-        let suspicious_hash_sql = r#"
-            WITH suspicious AS (
-                SELECT
-                    c.change_id,
-                    c.item_id,
-                    c.last_hash_scan_old  AS prev_hash_scan,
-                    c.hash_new,
-                    c.hash_old            AS hash_prev
-                FROM   changes c
-                WHERE  c.scan_id     = :scan_id                -- current scan
-                AND  c.hash_change = 1
-                AND  c.hash_old    IS NOT NULL
-                AND  c.meta_change = 0                       -- size / mtime same
-                /* previous-hash row still present */
-                AND  EXISTS (
-                        SELECT 1
-                        FROM   changes c_prev
-                        WHERE  c_prev.item_id = c.item_id
-                        AND  c_prev.scan_id = c.last_hash_scan_old
-                    )
-                /* no meta_change between last-hash scan and now */
-                AND  NOT EXISTS (
-                        SELECT 1
-                        FROM   changes c_mid
-                        WHERE  c_mid.item_id    = c.item_id
-                        AND  c_mid.scan_id   > c.last_hash_scan_old
-                        AND  c_mid.scan_id   < :scan_id
-                        AND  c_mid.meta_change = 1
-                    )
-            )
-            INSERT INTO alerts (
-                scan_id,
-                item_id,
-                change_id,
-                created_at,
-                alert_type,     -- 'H' = SuspiciousHash
-                alert_status,   -- 'O' = Open
-                prev_hash_scan,
-                hash_new,
-                hash_prev
-            )
-            SELECT
-                :scan_id,
-                s.item_id,
-                s.change_id,
-                strftime('%s','now'),
-                'H',
-                'O',
-                s.prev_hash_scan,
-                s.hash_new,
-                s.hash_prev
-            FROM   suspicious s
-            ON     CONFLICT (scan_id, item_id, alert_type) DO NOTHING;
-        "#;
-
-        // Execute and return the number of rows inserted
-        tx.execute(
-            suspicious_hash_sql,
-            named_params! { ":scan_id": scan.scan_id() },
-        )?;
-
-        let invalid_items_sql = r#"
-            WITH invalid AS (
-                SELECT
-                    c.change_id,
-                    c.item_id,
-                    c.val_error_new AS val_error
-                FROM   changes c
-                WHERE  c.scan_id    = :scan_id
-                AND  c.val_change = 1         -- validation state changed
-                AND  c.val_new    = 'I'       -- now Invalid
-            )
-            INSERT INTO alerts (
-                scan_id,
-                item_id,
-                change_id,
-                created_at,
-                alert_type,     -- 'I' = InvalidItem
-                alert_status,   -- 'O' = Open
-                val_error
-            )
-            SELECT
-                :scan_id,
-                i.item_id,
-                i.change_id,
-                strftime('%s','now'),
-                'I',
-                'O',
-                i.val_error
-            FROM   invalid i
-            ON     CONFLICT (scan_id, item_id, alert_type) DO NOTHING;
-        "#;
-
-        tx.execute(invalid_items_sql, named_params! { ":scan_id": scan.scan_id() })?;
-        scan.set_state_alerting(tx)
-    }
-
     fn process_item_async(
         db: &Arc<Mutex<Database>>,
         scan: Scan,
@@ -1017,6 +908,9 @@ impl Scanner {
         let mut i_last_hash_scan = analysis_item.last_hash_scan();
         let mut i_last_val_scan = analysis_item.last_val_scan();
 
+        let mut alert_possible_hash = false;
+        let mut alert_invalid_item = false;
+
         if analysis_item.needs_hash() {
             if analysis_item.file_hash() != new_hash.as_deref() {
                 // if either the hash or validation state changes, we update changes
@@ -1027,6 +921,15 @@ impl Scanner {
                 c_hash_new = new_hash.as_deref();
 
                 i_hash = new_hash.as_deref();
+
+                // The hash changed. Assess whether it's suspicious or not
+                // It's only suspicious if metadata (file size and mod date)
+                // didn't change in this update or any update since that last
+                // hash scan
+                alert_possible_hash = match analysis_item.meta_change() {
+                    Some(true) => false,
+                    Some(false) | None => true,
+                }
             }
 
             // Update the last scan id whether or not anything changed
@@ -1037,6 +940,14 @@ impl Scanner {
             if (analysis_item.val() != new_val)
                 || (analysis_item.val_error() != new_val_error.as_deref())
             {
+                if new_val == ValidationState::Invalid {
+                    // if we're here, then either the previous validation
+                    // state wasn't Invalid or it was invalid but the
+                    // error message changed. In both fo these cases,
+                    // we should alert
+                    alert_invalid_item = true;
+                }
+
                 // if either the hash or validation state changes, we update changes
                 update_changes = true;
                 c_val_change = Some(true);
@@ -1059,6 +970,30 @@ impl Scanner {
         let conn = db_guard.conn_mut();
 
         let tx = conn.transaction()?; // Start transaction
+
+        if alert_possible_hash {
+            if let Some(last_hash_scan) = analysis_item.last_hash_scan() {
+                if !Alerts::meta_changed_between(
+                    &tx,
+                    analysis_item.item_id(),
+                    last_hash_scan,
+                    scan.scan_id(),
+                )? {
+                    Alerts::add_suspicious_hash_alert(
+                        &tx,
+                        scan.scan_id(),
+                        analysis_item.item_id(),
+                        analysis_item.last_hash_scan(),
+                        analysis_item.file_hash(),
+                        c_hash_new.unwrap(),
+                    )?;
+                }
+            }
+        }
+
+        if alert_invalid_item {
+            Alerts::add_invalid_item_alert(&tx, scan.scan_id(), analysis_item.item_id(), c_val_error_new.unwrap())?;
+        }
 
         // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
         if update_changes {

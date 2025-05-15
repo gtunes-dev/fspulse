@@ -153,16 +153,6 @@ impl Format {
         }
     }
 
-    pub fn format_opt_alert_status(
-        alert_status: Option<&str>,
-        format: Format,
-    ) -> Result<String, FsPulseError> {
-        match alert_status {
-            Some(alert_status) => Self::format_alert_status(alert_status, format),
-            None => Ok("-".into()),
-        }
-    }
-
     pub fn format_string(val: &str) -> String {
         val.to_owned()
     }

@@ -275,16 +275,16 @@ impl AlertsQuery {
         for col in &self.show().display_cols {
             let col_string = match col.display_col {
                 "alert_id" => Format::format_i64(alert.alert_id),
-                "scan_id" => Format::format_i64(alert.scan_id),
-                "item_id" => Format::format_i64(alert.item_id),
-                "change_id" => Format::format_i64(alert.change_id),
-                "created_at" => Format::format_date(alert.created_at, col.format)?,
-                "update_at" => Format::format_opt_date(alert.update_at, col.format)?,
                 "alert_type" => Format::format_alert_type(&alert.alert_type, col.format)?,
                 "alert_status" => Format::format_alert_status(&alert.alert_status, col.format)?,
+                "scan_id" => Format::format_i64(alert.scan_id),
+                "item_id" => Format::format_i64(alert.item_id),
+                "item_path" => Format::format_string(&alert.item_path),
+                "created_at" => Format::format_date(alert.created_at, col.format)?,
+                "updated_at" => Format::format_opt_date(alert.updated_at, col.format)?,
                 "prev_hash_scan" => Format::format_opt_i64(alert.prev_hash_scan),
+                "hash_old" => Format::format_opt_string(&alert.hash_old),
                 "hash_new" => Format::format_opt_string(&alert.hash_new),
-                "hash_prev" => Format::format_opt_string(&alert.hash_prev),
                 "val_error" => Format::format_opt_string(&alert.val_error),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
@@ -773,16 +773,16 @@ impl ScansQueryRow {
 
 pub struct AlertsQueryRow {
     alert_id: i64,
-    scan_id: i64,
-    item_id: i64,
-    change_id: i64,
-    created_at: i64,
-    update_at: Option<i64>,
     alert_type: String,
     alert_status: String,
+    scan_id: i64,
+    item_id: i64,
+    item_path: String,
+    created_at: i64,
+    updated_at: Option<i64>,
     prev_hash_scan: Option<i64>,
+    hash_old: Option<String>,
     hash_new: Option<String>,
-    hash_prev: Option<String>,
     val_error: Option<String>,
 }
 
@@ -790,16 +790,16 @@ impl AlertsQueryRow {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(AlertsQueryRow {
             alert_id: row.get(0)?,
-            scan_id: row.get(1)?,
-            item_id: row.get(2)?,
-            change_id: row.get(3)?,
-            created_at: row.get(4)?,
-            update_at: row.get(5)?,
-            alert_type: row.get(6)?,
-            alert_status: row.get(7)?,
+            alert_type: row.get(1)?,
+            alert_status: row.get(2)?,
+            scan_id: row.get(3)?,
+            item_id: row.get(4)?,
+            item_path: row.get(5)?,
+            created_at: row.get(6)?,
+            updated_at: row.get(7)?,
             prev_hash_scan: row.get(8)?,
-            hash_new: row.get(9)?,
-            hash_prev: row.get(10)?,
+            hash_old: row.get(9)?,
+            hash_new: row.get(10)?,
             val_error: row.get(11)?,
         })
     }

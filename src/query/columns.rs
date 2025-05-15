@@ -233,17 +233,16 @@ pub const CHANGES_QUERY_COLS: ColMap = phf_ordered_map! {
 
 pub const ALERTS_QUERY_COLS: ColMap = phf_ordered_map! {
     "alert_id" => ColSpec::new("alert_id", true, true, ColType::Id, ColAlign::Right),
+    "alert_type" => ColSpec::new("alert_type", true, true, ColType::AlertType, ColAlign::Center),
+    "alert_status" => ColSpec::new("alert_status", true, true, ColType::AlertStatus, ColAlign::Center),
     "scan_id" => ColSpec::new("scan_id", true, true, ColType::Id, ColAlign::Right),
     "item_id" => ColSpec::new_with_display("alerts.item_id", "item_id", true, true, ColType::Id, ColAlign::Right),
     "item_path" => ColSpec::new_with_display("items.item_path", "item_path", true, true, ColType::Path, ColAlign::Left),
-    "change_id" => ColSpec::new("change_id", false, true, ColType::Id, ColAlign::Right),
     "created_at" => ColSpec::new("created_at", true, true, ColType::Date, ColAlign::Center),
-    "updated_at" => ColSpec::new("created_at", true, true, ColType::Date, ColAlign::Center),
-    "alert_type" => ColSpec::new("alert_type", true, true, ColType::AlertType, ColAlign::Center),
-    "alert_status" => ColSpec::new("alert_status", true, true, ColType::AlertStatus, ColAlign::Center),
+    "updated_at" => ColSpec::new("updated_at", true, true, ColType::Date, ColAlign::Center),
     "prev_hash_scan" => ColSpec::new("prev_hash_scan", false, true, ColType::Id, ColAlign::Right),
+    "hash_old" => ColSpec::new("hash_old", false, true, ColType::String, ColAlign::Left),
     "hash_new" => ColSpec::new("hash_new", false, true, ColType::String, ColAlign::Left),
-    "hash_prev" => ColSpec::new("hash_prev", false, true, ColType::String, ColAlign::Left),
     "val_error" => ColSpec::new_with_display("alerts.val_error", "val_error", true, true, ColType::String, ColAlign::Left),
 };
 
