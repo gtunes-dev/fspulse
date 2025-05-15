@@ -239,7 +239,9 @@ impl Show {
                 | Rule::path_show
                 | Rule::val_show
                 | Rule::item_type_show
-                | Rule::change_type_show => {
+                | Rule::change_type_show
+                | Rule::alert_type_show
+                | Rule::alert_status_show => {
                     let mut path_show_parts = element.into_inner();
                     let display_col = path_show_parts.next().unwrap().as_str();
 

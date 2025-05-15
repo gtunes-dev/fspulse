@@ -361,6 +361,9 @@ impl Explorer {
                     }
 
                     match (key.code, key.modifiers) {
+                        (KeyCode::Char('a'), _) | (KeyCode::Char('A'), _) => {
+                            self.set_current_type(DomainType::Alerts)
+                        }
                         (KeyCode::Char('i'), _) | (KeyCode::Char('I'), _) => {
                             self.set_current_type(DomainType::Items)
                         }
