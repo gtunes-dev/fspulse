@@ -6,6 +6,7 @@ use super::view::SavedView;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DomainType {
+    Alerts,
     Items,
     Changes,
     Scans,
@@ -15,6 +16,7 @@ pub enum DomainType {
 impl DomainType {
     pub fn all_types() -> &'static [DomainType] {
         &[
+            DomainType::Alerts,
             DomainType::Items,
             DomainType::Changes,
             DomainType::Scans,
@@ -24,6 +26,7 @@ impl DomainType {
 
     pub fn as_str(&self) -> &'static str {
         match self {
+            DomainType::Alerts => "Alerts",
             DomainType::Items => "Items",
             DomainType::Changes => "Changes",
             DomainType::Scans => "Scans",
@@ -33,15 +36,17 @@ impl DomainType {
 
     pub fn index(&self) -> usize {
         match self {
-            DomainType::Items => 0,
-            DomainType::Changes => 1,
-            DomainType::Scans => 2,
-            DomainType::Roots => 3,
+            DomainType::Alerts => 0,
+            DomainType::Items => 1,
+            DomainType::Changes => 2,
+            DomainType::Scans => 3,
+            DomainType::Roots => 4,
         }
     }
 
     pub fn as_title(&self) -> Line<'static> {
         match self {
+            DomainType::Alerts => Line::from("Alerts (A)"),
             DomainType::Items => Line::from("Items (I)"),
             DomainType::Changes => Line::from("Changes (C)"),
             DomainType::Scans => Line::from("Scans (S)"),
@@ -129,6 +134,7 @@ impl DomainState {
 
 pub struct DomainModel {
     current_type: DomainType,
+    alerts_state: DomainState,
     roots_state: DomainState,
     scans_state: DomainState,
     items_state: DomainState,
@@ -138,7 +144,8 @@ pub struct DomainModel {
 impl DomainModel {
     pub fn new() -> Self {
         DomainModel {
-            current_type: DomainType::Items,
+            current_type: DomainType::Alerts,
+            alerts_state: DomainState::new(Self::column_options_from_map(DomainType::Alerts)),
             roots_state: DomainState::new(Self::column_options_from_map(DomainType::Roots)),
             scans_state: DomainState::new(Self::column_options_from_map(DomainType::Scans)),
             items_state: DomainState::new(Self::column_options_from_map(DomainType::Items)),
@@ -148,6 +155,7 @@ impl DomainModel {
 
     fn current_state(&self) -> &DomainState {
         match self.current_type {
+            DomainType::Alerts => &self.alerts_state,
             DomainType::Roots => &self.roots_state,
             DomainType::Scans => &self.scans_state,
             DomainType::Items => &self.items_state,
@@ -157,6 +165,7 @@ impl DomainModel {
 
     fn current_state_mut(&mut self) -> &mut DomainState {
         match self.current_type {
+            DomainType::Alerts => &mut self.alerts_state,
             DomainType::Roots => &mut self.roots_state,
             DomainType::Scans => &mut self.scans_state,
             DomainType::Items => &mut self.items_state,
@@ -206,6 +215,9 @@ impl DomainModel {
 
     pub fn reset_current_columns(&mut self) {
         match self.current_type {
+            DomainType::Alerts => {
+                self.alerts_state.columns = Self::column_options_from_map(DomainType::Alerts)
+            }
             DomainType::Roots => {
                 self.roots_state.columns = Self::column_options_from_map(DomainType::Roots)
             }
@@ -223,6 +235,7 @@ impl DomainModel {
 
     fn column_options_from_map(type_selection: DomainType) -> Vec<ColumnInfo> {
         let col_map = match type_selection {
+            DomainType::Alerts => &columns::ALERTS_QUERY_COLS,
             DomainType::Roots => &columns::ROOTS_QUERY_COLS,
             DomainType::Scans => &columns::SCANS_QUERY_COLS,
             DomainType::Items => &columns::ITEMS_QUERY_COLS,

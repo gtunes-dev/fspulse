@@ -92,6 +92,7 @@ impl FilterFrame {
         // TODO: This used to return type-specific titles such as "Item Filters"
         // If we're committed to just "Filters", this function can be deleted
         match type_selection {
+            DomainType::Alerts => "Filters",
             DomainType::Items => "Filters",
             DomainType::Changes => "Filters",
             DomainType::Scans => "Filters",

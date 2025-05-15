@@ -95,6 +95,7 @@ impl GridFrame {
 
     pub fn frame_title(type_selection: DomainType) -> &'static str {
         match type_selection {
+            DomainType::Alerts => "Alerts Data",
             DomainType::Items => "Items Data",
             DomainType::Changes => "Changes Data",
             DomainType::Scans => "Scans Data",

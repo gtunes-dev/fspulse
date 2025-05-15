@@ -183,6 +183,7 @@ impl ColumnFrame {
 
     pub fn frame_title(type_selection: DomainType) -> &'static str {
         match type_selection {
+            DomainType::Alerts => "Alerts Columns",
             DomainType::Items => "Items Columns",
             DomainType::Changes => "Changes Columns",
             DomainType::Scans => "Scans Columns",

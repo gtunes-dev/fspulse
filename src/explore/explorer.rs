@@ -712,7 +712,8 @@ impl Explorer {
         match key.code {
             KeyCode::Left => {
                 let new_type = match self.model.current_type() {
-                    DomainType::Items => DomainType::Roots,
+                    DomainType::Alerts => DomainType::Roots,
+                    DomainType::Items => DomainType::Alerts,
                     DomainType::Changes => DomainType::Items,
                     DomainType::Scans => DomainType::Changes,
                     DomainType::Roots => DomainType::Scans,
@@ -721,10 +722,11 @@ impl Explorer {
             }
             KeyCode::Right => {
                 let new_type = match self.model.current_type() {
+                    DomainType::Alerts => DomainType::Items,
                     DomainType::Items => DomainType::Changes,
                     DomainType::Changes => DomainType::Scans,
                     DomainType::Scans => DomainType::Roots,
-                    DomainType::Roots => DomainType::Items,
+                    DomainType::Roots => DomainType::Alerts,
                 };
                 self.set_current_type(new_type);
             }

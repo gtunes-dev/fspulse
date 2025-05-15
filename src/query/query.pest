@@ -44,7 +44,7 @@ alert_status_filter_EOI = { WS* ~ alert_status_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" }
+id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" }
 
 id_show = { id_col }
 
@@ -56,7 +56,7 @@ id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
 id               =  { WS* ~ ASCII_DIGIT+ }
 
 // Date Columns
-date_col = { "scan_time" | "mod_date_old" | "mod_date_new" | "mod_date" }
+date_col = { "scan_time" | "mod_date_old" | "mod_date_new" | "mod_date" | "created_at" | "updated_at" }
 
 date_show             =  { date_col ~ date_display_modifier? }
 date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }
