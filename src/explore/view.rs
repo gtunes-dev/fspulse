@@ -14,7 +14,7 @@ use super::{
     utils::{StylePalette, Utils},
 };
 
-pub const SAVED_VIEWS: &[SavedView] = &[INVALID_ITEMS, CHANGED_TO_INVALID];
+pub const SAVED_VIEWS: &[SavedView] = &[RECENT_ALERTS, INVALID_ITEMS, CHANGED_TO_INVALID];
 
 #[derive(Debug)]
 pub struct FilterSpec {
@@ -71,6 +71,14 @@ const fn sv(
     }
 }
 
+pub const RECENT_ALERTS: SavedView = sv (
+    "Recent Alerts",
+    "Alerts (open) ordered by recency",
+    DomainType::Alerts,
+    RECENT_ALERTS_F,
+    RECENT_ALERTS_C,
+);
+
 const INVALID_ITEMS: SavedView = sv(
     "Invalid Items",
     "Items with a validity state of 'Invalid'",
@@ -85,6 +93,11 @@ const CHANGED_TO_INVALID: SavedView = sv(
     CHANGED_TO_INVALID_F,
     CHANGE_TO_INVALID_C,
 );
+
+const RECENT_ALERTS_F: &[FilterSpec] = &[f("alert_status", "O")];
+const RECENT_ALERTS_C: &[ColumnSpec] = &[
+    c("created_at", true, OrderDirection::Descend),
+];
 
 const INVALID_ITEMS_F: &[FilterSpec] = &[f("val", "I"), f("is_ts", "false")];
 const INVALID_ITEMS_C: &[ColumnSpec] = &[

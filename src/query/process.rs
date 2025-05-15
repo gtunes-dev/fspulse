@@ -906,7 +906,9 @@ impl QueryProcessor {
                 Rule::bool_filter
                 | Rule::val_filter
                 | Rule::item_type_filter
-                | Rule::change_type_filter => {
+                | Rule::change_type_filter
+                | Rule::alert_type_filter
+                | Rule::alert_status_filter => {
                     EnumFilter::add_enum_filter_to_query(token, query)?;
                 }
                 Rule::path_filter => {

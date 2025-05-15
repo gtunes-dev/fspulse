@@ -504,6 +504,8 @@ impl EnumFilter {
         // alert_type values
         "alert_suspicious_hash" => "H",
         "alert_invalid_file" => "I",
+
+        "alert_status_open" => "O",
     };
 }
 

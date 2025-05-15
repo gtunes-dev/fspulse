@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Alerts! This is a new top-level data type. "Alerts" are created as part
+  of the analysis phase. 
+
+- Alerts are exposed in the query model as a top-level type "alerts"
+
+- Alerts are exposed in the Explore view - they're the new default and the
+  "Recent Alerts" filter is automatically applied at launch
+
 - The filter frame in Explorer is now collapsible. Use ctrl-f to expand and collapse.
 
 - New "Views" block in Explorer. Press 'V' at any time to bring up a list of selectable

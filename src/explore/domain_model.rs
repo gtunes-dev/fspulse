@@ -46,7 +46,7 @@ impl DomainType {
 
     pub fn as_title(&self) -> Line<'static> {
         match self {
-            DomainType::Alerts => Line::from("Alerts (A)"),
+            DomainType::Alerts => Line::from("🔔 Alerts (A)"),
             DomainType::Items => Line::from("Items (I)"),
             DomainType::Changes => Line::from("Changes (C)"),
             DomainType::Scans => Line::from("Scans (S)"),

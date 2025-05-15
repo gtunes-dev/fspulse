@@ -13,6 +13,7 @@ pub enum StylePalette {
     TableRowHighlight,
     Tab,
     TabHighlight,
+    TabFocusHighlight,
     TextFocus,
     PopUp,
 }
@@ -24,8 +25,13 @@ impl StylePalette {
             StylePalette::TableRowHighlight => Style::default().fg(Color::Black).bg(Color::Cyan),
             StylePalette::Tab => Style::default()
                 .fg(Color::Gray)
-                .add_modifier(Modifier::UNDERLINED | Modifier::BOLD),
+                .bg(Color::Black)
+                .add_modifier( Modifier::BOLD),
             StylePalette::TabHighlight => Style::default()
+                .fg(Color::Black)
+                .bg(Color::Gray)
+                .add_modifier(Modifier::BOLD),
+            StylePalette::TabFocusHighlight => Style::default()
                 .fg(Color::Black)
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
