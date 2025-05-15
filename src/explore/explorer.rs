@@ -30,7 +30,7 @@ use super::input_box::{InputBoxState, InputBoxWidget};
 use super::limit_widget::LimitWidget;
 use super::message_box::{MessageBox, MessageBoxType};
 use super::utils::{StylePalette, Utils};
-use super::view::{SavedView, ViewsListState, ViewsListWidget, RECENT_ALERTS, SAVED_VIEWS};
+use super::view::{SavedView, ViewsListState, ViewsListWidget, RECENT_ALERTS};
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
