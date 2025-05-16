@@ -25,7 +25,7 @@ impl DomainType {
     }
 
     pub fn as_str(&self) -> &'static str {
-        match self { 
+        match self {
             DomainType::Alerts => "Alerts",
             DomainType::Items => "Items",
             DomainType::Changes => "Changes",
@@ -84,7 +84,7 @@ impl OrderDirection {
 pub enum ColSelect {
     ForceSelect,
     Selected,
-    NotSelected
+    NotSelected,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -150,23 +150,14 @@ pub struct DomainModel {
 
 impl DomainModel {
     pub fn new() -> Self {
-        let mut model = DomainModel {
+        DomainModel {
             current_type: DomainType::Alerts,
             alerts_state: DomainState::new(Self::column_options_from_map(DomainType::Alerts)),
             roots_state: DomainState::new(Self::column_options_from_map(DomainType::Roots)),
             scans_state: DomainState::new(Self::column_options_from_map(DomainType::Scans)),
             items_state: DomainState::new(Self::column_options_from_map(DomainType::Items)),
             changes_state: DomainState::new(Self::column_options_from_map(DomainType::Changes)),
-        };
-
-        // set required columns
-        
-        let alert_col = model.alerts_state.columns.iter_mut().find(|col_info| col_info.name_db == "alert_id");
-        if let Some(col_info) = alert_col {
-                col_info.selected = ColSelect::ForceSelect;
         }
-
-        model
     }
 
     fn current_state(&self) -> &DomainState {
@@ -232,7 +223,16 @@ impl DomainModel {
     pub fn reset_current_columns(&mut self) {
         match self.current_type {
             DomainType::Alerts => {
-                self.alerts_state.columns = Self::column_options_from_map(DomainType::Alerts)
+                self.alerts_state.columns = Self::column_options_from_map(DomainType::Alerts);
+
+                let alert_col = self
+                    .alerts_state
+                    .columns
+                    .iter_mut()
+                    .find(|col_info| col_info.name_db == "alert_id");
+                if let Some(col_info) = alert_col {
+                    col_info.selected = ColSelect::ForceSelect;
+                }
             }
             DomainType::Roots => {
                 self.roots_state.columns = Self::column_options_from_map(DomainType::Roots)

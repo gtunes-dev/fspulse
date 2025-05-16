@@ -44,7 +44,7 @@ alert_status_filter_EOI = { WS* ~ alert_status_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" }
+id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" | "prev_hash_scan" }
 
 id_show = { id_col }
 
@@ -174,7 +174,9 @@ alert_status_display_mode =  { full | short }
 alert_status_filter        =  { alert_status_col ~ alert_status_filter_body }
 alert_status_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ alert_status_filter_values ~ WS* ~ RPAREN }
 alert_status_filter_values = _{ alert_status ~ (WS* ~ COMMA ~ WS* ~ alert_status)* }
-alert_status               = _{ alert_status_open }
+alert_status               = _{ alert_status_flagged | alert_status_dismissed | alert_status_open }
+alert_status_dismissed     =  { ^"D" }
+alert_status_flagged       =  { ^"F" }
 alert_status_open          =  { ^"O" }
 
 // Integer columns

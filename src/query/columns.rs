@@ -118,7 +118,7 @@ impl ColType {
             ColType::AlertStatus => ColTypeInfo::new(
                 Rule::alert_status_filter_EOI,
                 "Alert Status",
-                "Alert status types: O (open)\nComma-separated values",
+                "Alert status types: D (dismissed), F (flagged), O (open)\nComma-separated values",
             ),
         }
     }
