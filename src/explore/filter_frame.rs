@@ -168,7 +168,7 @@ impl FilterFrameView<'_> {
 
         let constraints = vec![
             Constraint::Length(19),
-            Constraint::Length(10),
+            Constraint::Length(13),
             Constraint::Min(10),
         ];
 
