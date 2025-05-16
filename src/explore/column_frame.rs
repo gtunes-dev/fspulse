@@ -7,7 +7,9 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::{ColSelect, ColumnInfo, DomainModel, DomainType, OrderDirection}, explorer::ExplorerAction, filter_popup::FilterPopupState, utils::{StylePalette, Utils}
+    domain_model::{ColSelect, ColumnInfo, DomainModel, DomainType, OrderDirection},
+    explorer::ExplorerAction,
+     utils::{StylePalette, Utils},
 };
 
 pub struct ColumnFrame {
@@ -84,7 +86,7 @@ impl ColumnFrame {
                             ColSelect::Selected => ColSelect::NotSelected,
                             ColSelect::ForceSelect => ColSelect::ForceSelect,
                         };
-                        
+
                         if col.selected != ColSelect::ForceSelect {
                             explorer_action = Some(ExplorerAction::RefreshQuery(false))
                         }
@@ -95,12 +97,10 @@ impl ColumnFrame {
                 if let Some(selected) = self.table_state.selected() {
                     if let Some(col_option) = model.current_columns().get(selected) {
                         explorer_action = Some(ExplorerAction::ShowAddFilter(
-                            FilterPopupState::new_add_filter_popup(
-                                col_option.name_db,
-                                col_option.col_type.info(),
-                            ),
+                            col_option.name_db,
+                            col_option.col_type.info(),
                         ));
-                    };
+                    }
                 }
             }
             _ => {

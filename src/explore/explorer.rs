@@ -1,4 +1,5 @@
 use crate::alerts::{AlertStatus, Alerts};
+use crate::query::columns::ColTypeInfo;
 use crate::query::QueryProcessor;
 use crate::{database::Database, error::FsPulseError};
 
@@ -47,7 +48,7 @@ enum Focus {
 pub enum ExplorerAction {
     Dismiss,
     RefreshQuery(bool),
-    ShowAddFilter(FilterPopupState),
+    ShowAddFilter(&'static str, ColTypeInfo),
     ShowMessage(MessageBox),
     AddFilter(Filter),
     ShowEditFilter(usize),
@@ -525,7 +526,10 @@ impl Explorer {
                 }
                 ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
                 ExplorerAction::ShowLimit => self.show_limit_input(),
-                ExplorerAction::ShowAddFilter(filter_popup) => {
+                ExplorerAction::ShowAddFilter(name_db, col_type_info) => {
+                    let filter_popup =
+                        FilterPopupState::new_add_filter_popup(name_db, col_type_info);
+
                     self.filter_popup_state = Some(filter_popup)
                 }
                 ExplorerAction::DeleteFilter(filter_index) => {
@@ -665,7 +669,9 @@ impl Explorer {
         // UI. Not sure this is worth it, though
         first_col = true;
         for col in self.model.current_columns() {
-            if (col.selected == ColSelect::Selected || col.selected == ColSelect::ForceSelect) && col.order_direction != OrderDirection::None {
+            if (col.selected == ColSelect::Selected || col.selected == ColSelect::ForceSelect)
+                && col.order_direction != OrderDirection::None
+            {
                 match first_col {
                     true => {
                         query.push_str(" order by ");
@@ -846,7 +852,9 @@ impl Explorer {
 
         match Alerts::set_alert_status(db, alert_id, new_status) {
             Ok(()) => row[status_col] = new_status.as_str().to_owned(),
-            Err(err) => self.message_box = Some(MessageBox::new(MessageBoxType::Error, err.to_string()))
+            Err(err) => {
+                self.message_box = Some(MessageBox::new(MessageBoxType::Error, err.to_string()))
+            }
         }
     }
 }
