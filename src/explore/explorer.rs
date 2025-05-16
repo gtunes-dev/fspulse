@@ -23,7 +23,7 @@ use ratatui::{border, symbols, Frame};
 use std::io;
 
 use super::column_frame::ColumnFrameView;
-use super::domain_model::{ColumnInfo, DomainModel, DomainType, Filter, OrderDirection};
+use super::domain_model::{ColSelect, ColumnInfo, DomainModel, DomainType, Filter, OrderDirection};
 use super::filter_frame::{FilterFrame, FilterFrameView};
 use super::filter_popup::{FilterPopupState, FilterPopupWidget};
 use super::grid_frame::GridFrameView;
@@ -56,7 +56,7 @@ pub enum ExplorerAction {
     ShowLimit,
     SetLimit(String),
     ApplyView(&'static SavedView),
-    SetAlertStatus(i64, AlertStatus),
+    SetAlertStatus(AlertStatus),
 }
 
 pub struct Explorer {
@@ -548,10 +548,8 @@ impl Explorer {
                         self.filter_popup_state = Some(edit_filter_popup);
                     }
                 }
-                ExplorerAction::SetAlertStatus(alert_id, new_status) => {
-                    Alerts::set_alert_status(db, alert_id, new_status);
-                    self.needs_query_refresh = true;
-                    self.query_resets_selection = true;
+                ExplorerAction::SetAlertStatus(new_status) => {
+                    self.set_alert_status(db, new_status);
                 }
                 _ => unreachable!(),
             }
@@ -645,7 +643,7 @@ impl Explorer {
         // in the data grid
         let mut first_col = true;
         for col in self.model.current_columns() {
-            if col.selected {
+            if col.selected == ColSelect::Selected || col.selected == ColSelect::ForceSelect {
                 match first_col {
                     true => {
                         query.push_str(" show ");
@@ -667,7 +665,7 @@ impl Explorer {
         // UI. Not sure this is worth it, though
         first_col = true;
         for col in self.model.current_columns() {
-            if col.selected && col.order_direction != OrderDirection::None {
+            if (col.selected == ColSelect::Selected || col.selected == ColSelect::ForceSelect) && col.order_direction != OrderDirection::None {
                 match first_col {
                     true => {
                         query.push_str(" order by ");
@@ -799,12 +797,56 @@ impl Explorer {
                 .iter_mut()
                 .find(|col_info| col_info.name_db == column_spec.col_name)
             {
-                col_info.selected = column_spec.show_col;
+                col_info.selected = match column_spec.show_col {
+                    true => ColSelect::Selected,
+                    false => ColSelect::NotSelected,
+                };
                 col_info.order_direction = column_spec.order_direction;
             }
         }
 
         self.needs_query_refresh = true;
         self.query_resets_selection = true;
+    }
+
+    fn set_alert_status(&mut self, db: &Database, new_status: AlertStatus) {
+        let Some(alert_index) = self.grid_frame.table_state.selected() else {
+            return;
+        };
+
+        let Some(row) = self.grid_frame.raw_rows.get_mut(alert_index) else {
+            return;
+        };
+
+        let Some(alert_id_col) = self
+            .grid_frame
+            .columns
+            .iter()
+            .position(|col| col.name_db == "alert_id")
+        else {
+            return;
+        };
+
+        let Some(status_col) = self
+            .grid_frame
+            .columns
+            .iter()
+            .position(|col| col.name_db == "alert_status")
+        else {
+            return;
+        };
+
+        let Some(alert_id_str) = row.get(alert_id_col) else {
+            return;
+        };
+
+        let Ok(alert_id) = alert_id_str.parse::<i64>() else {
+            return;
+        };
+
+        match Alerts::set_alert_status(db, alert_id, new_status) {
+            Ok(()) => row[status_col] = new_status.as_str().to_owned(),
+            Err(err) => self.message_box = Some(MessageBox::new(MessageBoxType::Error, err.to_string()))
+        }
     }
 }

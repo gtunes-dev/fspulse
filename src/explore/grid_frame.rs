@@ -86,22 +86,13 @@ impl GridFrame {
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
         match key.code {
             KeyCode::Char('o') | KeyCode::Char('O') => {
-                match self.selected_alert_id() {
-                    Some(alert_id) => Some(ExplorerAction::SetAlertStatus(alert_id, AlertStatus::Open)),
-                    None => None
-                }
+                Some(ExplorerAction::SetAlertStatus(AlertStatus::Open))
             }
             KeyCode::Char('f') | KeyCode::Char('F') => {
-               match self.selected_alert_id() {
-                    Some(alert_id) => Some(ExplorerAction::SetAlertStatus(alert_id, AlertStatus::Flagged)),
-                    None => None
-                }
+                Some(ExplorerAction::SetAlertStatus(AlertStatus::Flagged))
             }
             KeyCode::Char('d') | KeyCode::Char('D') => {
-                match self.selected_alert_id() {
-                    Some(alert_id) => Some(ExplorerAction::SetAlertStatus(alert_id, AlertStatus::Dismissed)),
-                    None => None
-                }
+                Some(ExplorerAction::SetAlertStatus(AlertStatus::Dismissed))
             }
             _ => {
                 let total_rows = self.raw_rows.len();
@@ -130,20 +121,6 @@ impl GridFrame {
             DomainType::Scans => "Scans Data",
             DomainType::Roots => "Roots Data",
         }
-    }
-
-    fn selected_alert_id(&self) -> Option<i64> {
-        // Traverse: selected row → get row → find alert_id column → get cell → parse to i64
-        self.table_state
-            .selected()
-            .and_then(|alert_index| self.raw_rows.get(alert_index))
-            .and_then(|row| {
-                self.columns
-                    .iter()
-                    .position(|col_info| col_info.name_db == "alert_id")
-                    .and_then(|col_index| row.get(col_index))
-            })
-            .and_then(|alert_id_str| alert_id_str.parse::<i64>().ok())
     }
 }
 

@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use super::{
-    domain_model::{ColumnInfo, DomainModel, OrderDirection, DomainType}, explorer::ExplorerAction, filter_popup::FilterPopupState, utils::{StylePalette, Utils}
+    domain_model::{ColSelect, ColumnInfo, DomainModel, DomainType, OrderDirection}, explorer::ExplorerAction, filter_popup::FilterPopupState, utils::{StylePalette, Utils}
 };
 
 pub struct ColumnFrame {
@@ -79,9 +79,15 @@ impl ColumnFrame {
             KeyCode::Char(' ') | KeyCode::Enter => {
                 if let Some(selected) = self.table_state.selected() {
                     if let Some(col) = model.current_columns_mut().get_mut(selected) {
-                        col.selected = !col.selected;
-
-                        explorer_action = Some(ExplorerAction::RefreshQuery(false))
+                        col.selected = match col.selected {
+                            ColSelect::NotSelected => ColSelect::Selected,
+                            ColSelect::Selected => ColSelect::NotSelected,
+                            ColSelect::ForceSelect => ColSelect::ForceSelect,
+                        };
+                        
+                        if col.selected != ColSelect::ForceSelect {
+                            explorer_action = Some(ExplorerAction::RefreshQuery(false))
+                        }
                     }
                 }
             }
@@ -127,7 +133,7 @@ impl ColumnFrame {
         let mut action = None;
 
         if let Some(col) = self.selected_column(model) {
-            if col.selected && col.order_direction != order_direction {
+            if col.selected == ColSelect::Selected && col.order_direction != order_direction {
                 col.order_direction = order_direction;
 
                 action = Some(ExplorerAction::RefreshQuery(true))
@@ -141,7 +147,7 @@ impl ColumnFrame {
         let mut action = None;
 
         if let Some(col) = self.selected_column(model) {
-            if col.selected {
+            if col.selected == ColSelect::Selected {
                 let new_order_direction = match col.order_direction {
                     OrderDirection::Ascend => OrderDirection::Descend,
                     OrderDirection::Descend => OrderDirection::None,
@@ -159,7 +165,7 @@ impl ColumnFrame {
         let mut action = None;
 
         if let Some(col) = self.selected_column(model) {
-            if col.selected {
+            if col.selected == ColSelect::Selected {
                 let new_order_direction = match col.order_direction {
                     OrderDirection::Ascend => OrderDirection::None,
                     OrderDirection::Descend => OrderDirection::Ascend,
@@ -214,7 +220,12 @@ impl Widget for ColumnFrameView<'_> {
         let mut rows = Vec::new();
 
         for col in self.model.current_columns() {
-            let checked = if col.selected { "[x]" } else { "[ ]" };
+            let checked = match col.selected {
+                ColSelect::ForceSelect => "[+]",
+                ColSelect::NotSelected => "[ ]",
+                ColSelect::Selected => "[✓]",
+            };
+
             let text = format!("{checked} {:<20}", col.name_db);
 
             let row = Row::new(vec![

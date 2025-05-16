@@ -172,10 +172,24 @@ impl Alerts {
         Ok(())
     }
 
-    pub fn set_alert_status(db: &Database, alert_id: i64, new_status: AlertStatus) {
+    pub fn set_alert_status(
+        db: &Database,
+        alert_id: i64,
+        new_status: AlertStatus,
+    ) -> Result<(), FsPulseError> {
+        let sql = r#"
+            UPDATE alerts 
+            set alert_status = :alert_status 
+            where alert_id = :alert_id"#;
 
+        db.conn().execute(
+            sql,
+            named_params! {
+                ":alert_status":    new_status.as_str(),
+                ":alert_id":        alert_id,
+            },
+        )?;
 
+        Ok(())
     }
-
-
 }

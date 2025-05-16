@@ -25,7 +25,7 @@ impl DomainType {
     }
 
     pub fn as_str(&self) -> &'static str {
-        match self {
+        match self { 
             DomainType::Alerts => "Alerts",
             DomainType::Items => "Items",
             DomainType::Changes => "Changes",
@@ -80,13 +80,20 @@ impl OrderDirection {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ColSelect {
+    ForceSelect,
+    Selected,
+    NotSelected
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ColumnInfo {
     pub name_db: &'static str,
     pub name_display: &'static str,
     pub col_align: Alignment,
     pub col_type: ColType,
-    pub selected: bool,
+    pub selected: ColSelect,
     pub order_direction: OrderDirection,
 }
 
@@ -143,14 +150,23 @@ pub struct DomainModel {
 
 impl DomainModel {
     pub fn new() -> Self {
-        DomainModel {
+        let mut model = DomainModel {
             current_type: DomainType::Alerts,
             alerts_state: DomainState::new(Self::column_options_from_map(DomainType::Alerts)),
             roots_state: DomainState::new(Self::column_options_from_map(DomainType::Roots)),
             scans_state: DomainState::new(Self::column_options_from_map(DomainType::Scans)),
             items_state: DomainState::new(Self::column_options_from_map(DomainType::Items)),
             changes_state: DomainState::new(Self::column_options_from_map(DomainType::Changes)),
+        };
+
+        // set required columns
+        
+        let alert_col = model.alerts_state.columns.iter_mut().find(|col_info| col_info.name_db == "alert_id");
+        if let Some(col_info) = alert_col {
+                col_info.selected = ColSelect::ForceSelect;
         }
+
+        model
     }
 
     fn current_state(&self) -> &DomainState {
@@ -247,7 +263,10 @@ impl DomainModel {
             .map(|(col_name, col_spec)| ColumnInfo {
                 name_db: col_name,
                 name_display: col_spec.name_display,
-                selected: col_spec.is_default,
+                selected: match col_spec.is_default {
+                    true => ColSelect::Selected,
+                    false => ColSelect::NotSelected,
+                },
                 col_align: col_spec.col_align.to_ratatui(),
                 col_type: col_spec.col_type,
                 order_direction: OrderDirection::None,
