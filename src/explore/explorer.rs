@@ -1,3 +1,4 @@
+use crate::alerts::{AlertStatus, Alerts};
 use crate::query::QueryProcessor;
 use crate::{database::Database, error::FsPulseError};
 
@@ -55,6 +56,7 @@ pub enum ExplorerAction {
     ShowLimit,
     SetLimit(String),
     ApplyView(&'static SavedView),
+    SetAlertStatus(i64, AlertStatus),
 }
 
 pub struct Explorer {
@@ -390,12 +392,10 @@ impl Explorer {
                                 self.focus = self.next_focus(self.focus)
                             }
                         }
-
                         // Show Limit Input
                         (KeyCode::Char('l'), _) | (KeyCode::Char('L'), _) => {
                             self.show_limit_input();
                         }
-
                         // Quit
                         (KeyCode::Char('q'), _) | (KeyCode::Char('Q'), _) => {
                             break;
@@ -407,7 +407,7 @@ impl Explorer {
                             self.focus = self.prev_focus(self.focus);
                         }
                         _ => {
-                            self.dispatch_key_to_active_frame(key);
+                            self.dispatch_key_to_active_frame(db, key);
                         }
                     }
                 }
@@ -508,7 +508,7 @@ impl Explorer {
         false
     }
 
-    fn dispatch_key_to_active_frame(&mut self, key: KeyEvent) {
+    fn dispatch_key_to_active_frame(&mut self, db: &Database, key: KeyEvent) {
         let action = match self.focus {
             Focus::Tabs => self.handle_tab_section_key(key),
             Focus::Limit => LimitWidget::handle_key(key),
@@ -547,6 +547,11 @@ impl Explorer {
                         );
                         self.filter_popup_state = Some(edit_filter_popup);
                     }
+                }
+                ExplorerAction::SetAlertStatus(alert_id, new_status) => {
+                    Alerts::set_alert_status(db, alert_id, new_status);
+                    self.needs_query_refresh = true;
+                    self.query_resets_selection = true;
                 }
                 _ => unreachable!(),
             }

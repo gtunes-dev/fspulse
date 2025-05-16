@@ -1,6 +1,6 @@
 use ratatui::{
     buffer::Buffer,
-    crossterm::event::KeyEvent,
+    crossterm::event::{KeyCode, KeyEvent},
     layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::Style,
     text::{Line, Span, Text},
@@ -10,7 +10,7 @@ use ratatui::{
     },
 };
 
-use crate::query::columns::ColType;
+use crate::{alerts::AlertStatus, query::columns::ColType};
 
 use super::{
     domain_model::{ColumnInfo, DomainModel, DomainType},
@@ -61,9 +61,11 @@ impl GridFrame {
             .map(|col| match col.col_type {
                 ColType::Id => Constraint::Length(col_size(col.name_display, 9) as u16),
                 ColType::Int => Constraint::Length(col_size(col.name_display, 8) as u16),
-                ColType::Val | ColType::ItemType | ColType::ChangeType | ColType::AlertType | ColType::AlertStatus => {
-                    Constraint::Length(col_size(col.name_display, 4) as u16)
-                }
+                ColType::Val
+                | ColType::ItemType
+                | ColType::ChangeType
+                | ColType::AlertType
+                | ColType::AlertStatus => Constraint::Length(col_size(col.name_display, 4) as u16),
                 ColType::Bool => Constraint::Length(col_size(col.name_display, 1) as u16),
                 ColType::Date => Constraint::Length(col_size(col.name_display, 10) as u16),
                 ColType::Path => Constraint::Min(30),
@@ -82,11 +84,38 @@ impl GridFrame {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
-        let total_rows = self.raw_rows.len();
-        let visible_rows = self.visible_rows();
-        Utils::handle_table_state_keys(&mut self.table_state, total_rows, visible_rows, key);
+        match key.code {
+            KeyCode::Char('o') | KeyCode::Char('O') => {
+                match self.selected_alert_id() {
+                    Some(alert_id) => Some(ExplorerAction::SetAlertStatus(alert_id, AlertStatus::Open)),
+                    None => None
+                }
+            }
+            KeyCode::Char('f') | KeyCode::Char('F') => {
+               match self.selected_alert_id() {
+                    Some(alert_id) => Some(ExplorerAction::SetAlertStatus(alert_id, AlertStatus::Flagged)),
+                    None => None
+                }
+            }
+            KeyCode::Char('d') | KeyCode::Char('D') => {
+                match self.selected_alert_id() {
+                    Some(alert_id) => Some(ExplorerAction::SetAlertStatus(alert_id, AlertStatus::Dismissed)),
+                    None => None
+                }
+            }
+            _ => {
+                let total_rows = self.raw_rows.len();
+                let visible_rows = self.visible_rows();
+                Utils::handle_table_state_keys(
+                    &mut self.table_state,
+                    total_rows,
+                    visible_rows,
+                    key,
+                );
 
-        None
+                None
+            }
+        }
     }
 
     pub fn visible_rows(&self) -> usize {
@@ -101,6 +130,20 @@ impl GridFrame {
             DomainType::Scans => "Scans Data",
             DomainType::Roots => "Roots Data",
         }
+    }
+
+    fn selected_alert_id(&self) -> Option<i64> {
+        // Traverse: selected row → get row → find alert_id column → get cell → parse to i64
+        self.table_state
+            .selected()
+            .and_then(|alert_index| self.raw_rows.get(alert_index))
+            .and_then(|row| {
+                self.columns
+                    .iter()
+                    .position(|col_info| col_info.name_db == "alert_id")
+                    .and_then(|col_index| row.get(col_index))
+            })
+            .and_then(|alert_id_str| alert_id_str.parse::<i64>().ok())
     }
 }
 

@@ -1,16 +1,18 @@
 use rusqlite::{named_params, Transaction};
 
-use crate::error::FsPulseError;
+use crate::{database::Database, error::FsPulseError};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(i64)] // Ensures explicit numeric representation
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AlertType {
     SuspiciousHash,
     InvalidItem,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AlertStatus {
     Open,
+    Flagged,
+    Dismissed,
 }
 
 impl AlertType {
@@ -34,12 +36,16 @@ impl AlertStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             AlertStatus::Open => "O",
+            AlertStatus::Flagged => "F",
+            AlertStatus::Dismissed => "D",
         }
     }
 
     pub fn short_str_to_full(s: &str) -> Result<&str, FsPulseError> {
         match s {
             "O" => Ok("Open"),
+            "F" => Ok("Flagged"),
+            "D" => Ok("Dismissed"),
             _ => Err(FsPulseError::Error(format!(
                 "Invalid alert status: '{}'",
                 s
@@ -165,4 +171,11 @@ impl Alerts {
 
         Ok(())
     }
+
+    pub fn set_alert_status(db: &Database, alert_id: i64, new_status: AlertStatus) {
+
+
+    }
+
+
 }
