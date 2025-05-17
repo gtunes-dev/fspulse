@@ -17,37 +17,58 @@ const SQL_LATEST_FOR_ROOT: &str =
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
 
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum HashMode {
+    None,
+    New,
+    All
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ValidateMode {
+    None,
+    New,
+    All
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct AnalysisSpec {
-    is_hash: bool,
-    hash_all: bool,
-    is_val: bool,
-    val_all: bool,
+    hash_mode: HashMode,
+    val_mode: ValidateMode,
 }
 
 impl AnalysisSpec {
-    pub fn new(is_hash: bool, hash_all: bool, is_val: bool, val_all: bool) -> Self {
+    pub fn new(no_hash: bool, hash_new: bool, no_val: bool, val_all: bool) -> Self {
         AnalysisSpec {
-            is_hash,
-            hash_all,
-            is_val,
-            val_all,
+            hash_mode: match (no_hash, hash_new) {
+                (true, false) => HashMode::None,
+                (false, true) => HashMode::New,
+                _ => HashMode::All,
+            },
+            val_mode: match (no_val, val_all) {
+                (true, false) => ValidateMode::None,
+                (false, true) => ValidateMode::All,
+                _ => ValidateMode::New,
+            },
         }
     }
+
+
     pub fn is_hash(&self) -> bool {
-        self.is_hash
+        self.hash_mode != HashMode::None
     }
 
     pub fn hash_all(&self) -> bool {
-        self.hash_all
+        self.hash_mode == HashMode::All
     }
 
     pub fn is_val(&self) -> bool {
-        self.is_val
+        self.val_mode != ValidateMode::None
     }
 
     pub fn val_all(&self) -> bool {
-        self.val_all
+        self.val_mode == ValidateMode::All
     }
 }
 
@@ -142,10 +163,10 @@ impl Scan {
             [
                 root.root_id(),
                 ScanState::Scanning.as_i64(),
-                analysis_spec.is_hash as i64,
-                analysis_spec.hash_all as i64,
-                analysis_spec.is_val as i64,
-                analysis_spec.val_all as i64,
+                analysis_spec.is_hash() as i64,
+                analysis_spec.hash_all() as i64,
+                analysis_spec.is_val() as i64,
+                analysis_spec.val_all() as i64,
             ],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
@@ -191,15 +212,30 @@ impl Scan {
         // load the specified scan
         let scan_row: Option<Scan> = conn
             .query_row(query, params![query_param], |row| {
+                let is_hash = row.get(3)?;
+                let hash_all = row.get(4)?;
+                let hash_mode = match (is_hash, hash_all) {
+                    (false, _) => HashMode::None,
+                    (_, true) => HashMode::All,
+                    _ => HashMode::New,
+                };
+
+                let is_val = row.get(5)?;
+                let val_all = row.get(6)?;
+
+                let val_mode = match (is_val, val_all) {
+                    (false, _) => ValidateMode::None,
+                    (_, true) => ValidateMode::All,
+                    _ => ValidateMode::New,
+                };
+
                 Ok(Scan {
                     scan_id: row.get(0)?,
                     root_id: row.get(1)?,
                     state: row.get(2)?,
                     analysis_spec: AnalysisSpec {
-                        is_hash: row.get(3)?,
-                        hash_all: row.get(4)?,
-                        is_val: row.get(5)?,
-                        val_all: row.get(6)?,
+                        hash_mode,
+                        val_mode,
                     },
                     scan_time: row.get(7)?,
                     file_count: row.get(8)?,
@@ -528,15 +564,31 @@ impl Scan {
         )?;
 
         let rows = stmt.query_map([last], |row| {
+            let is_hash = row.get::<_, bool>(3)?;
+            let hash_all = row.get::<_, bool>(4)?; // Hash or re-hash everything
+
+            let hash_mode = match (is_hash, hash_all) {
+                (_, true) => HashMode::All,
+                (false, false) => HashMode::None,
+                _ => HashMode::New
+            };
+
+            let is_val = row.get::<_, bool>(5)?;   // val new or changed;
+            let val_all = row.get::<_, bool>(6)?;  // Val or  re-val everything
+            let val_mode = match (is_val, val_all) {
+                (_, true) => ValidateMode::All,
+                (false, false) => ValidateMode::None,
+                _ => ValidateMode::New,
+            };
+
             Ok(Scan {
+                
                 scan_id: row.get::<_, i64>(0)?, // scan id
                 root_id: row.get::<_, i64>(1)?, // root id
                 state: row.get::<_, i64>(2)?,   // root id
                 analysis_spec: AnalysisSpec {
-                    is_hash: row.get::<_, bool>(3)?,  // hash new or changed
-                    hash_all: row.get::<_, bool>(4)?, // Hash or re-hash everything
-                    is_val: row.get::<_, bool>(5)?,   // val new or changed
-                    val_all: row.get::<_, bool>(6)?,  // Val or  re-val everything
+                    hash_mode,
+                    val_mode,
                 },
                 scan_time: row.get::<_, i64>(7)?, // time of scan
                 file_count: row.get::<_, Option<i64>>(8)?, // file count

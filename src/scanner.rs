@@ -90,52 +90,52 @@ impl Scanner {
 
     fn initiate_scan_interactive(db: &mut Database, root: &Root) -> Result<Scan, FsPulseError> {
         let flags = vec![
-            "Hash",
-            "Hash All (requires Hash)",
-            "Validate",
-            "Validate All (requires Validate)",
+            "No Hash",
+            "Hash All",
+            "No Validate",
+            "Validate All",
         ];
 
         let analysis_spec = loop {
             let selection = MultiSelect::new()
-                .with_prompt("Hash or Validate (space to select, enter to continue)")
+                .with_prompt("Scan options (by default, all files are hashed and new/changed files are validated):")
                 .items(&flags)
                 .interact()
                 .unwrap();
 
-            let mut hash = false;
-            let mut hash_all = false;
-            let mut validate = false;
+            let mut no_hash = false;
+            let mut hash_new = false;
+            let mut no_validate = false;
             let mut validate_all = false;
 
             for selected_flag in selection.iter() {
                 match selected_flag {
-                    0 => hash = true,
-                    1 => hash_all = true,
-                    2 => validate = true,
+                    0 => no_hash = true,
+                    1 => hash_new = true,
+                    2 => no_validate = true,
                     3 => validate_all = true,
                     _ => (),
                 }
             }
 
-            if !hash && hash_all {
+            if no_hash && hash_new {
                 println!(
                     "{}",
-                    style("Invalid: Selecting 'Hash All' requires selecting 'Hash'").yellow()
+                    style("Conflicting selections: 'No Hash' and 'Hash New'").yellow()
                 );
                 continue;
             }
 
-            if !validate && validate_all {
+            if no_validate && validate_all {
                 println!(
                     "{}",
-                    style("Invalid: Selecting 'Validate All' requires selecting 'Validate'")
+                    style("Conflicting selections: 'No Validate' and 'Validate All'")
                         .yellow()
                 );
                 continue;
             }
 
-            break AnalysisSpec::new(hash, hash_all, validate, validate_all);
+            break AnalysisSpec::new(no_hash, hash_new, no_validate, validate_all);
         };
 
         Scanner::initiate_scan(db, root, &analysis_spec)

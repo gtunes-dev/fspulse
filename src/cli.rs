@@ -55,8 +55,14 @@ If the root has been scanned before, it can be referenced by its root-id.
 Alternatively, use a root path. If the specified path matches an existing
 root, it will be reused; otherwise, a new root will be created.
 
-Scans can optionally compute hashes and validate files, based on modification
-timestamps and file size."#
+By default, scans will compute hashes for all files and will 
+'validate' files that have not been previously validated or have changed
+since the last validation. . Hashes are computed using SHA2. Validation
+is performed with type-specific logic using open source packages.
+Files are considered changed if their file size or modification
+date has changed since the last scan. Hashing behavior can be modified 
+with --no-hash or --hash-new. Validation behavior can be modified 
+with --no_validate or --validate-all."#
     )]
     Scan {
         #[arg(
@@ -78,28 +84,26 @@ The database file will always be named 'fspulse.db'."#
 
         #[arg(
             long,
-            help = r#"Hash files using SHA2 and compare to previous values.
-Files will be hashed if no hash exists, or if their size or modification date has changed."#
+            help = r#"Disable hashing for all files"#
         )]
-        hash: bool,
+        no_hash: bool,
 
         #[arg(
             long,
-            requires = "hash",
-            help = "Hash all files, even if unchanged since last scan"
+            conflicts_with = "hash",
+            help = "Hash only files whose file size or modification date has changed"
         )]
-        hash_all: bool,
+        hash_new: bool,
 
         #[arg(
             long,
-            help = r#"Validate file contents for known file types.
-Files will be validated if they are missing validation data, or if their size or modification date has changed."#
+            help = r#"Disable validation for all files"#
         )]
-        validate: bool,
+        no_validate: bool,
 
         #[arg(
             long,
-            requires = "validate",
+            conflicts_with = "no_validate",
             help = "Validate all files, even if unchanged since last scan"
         )]
         validate_all: bool,
@@ -281,18 +285,18 @@ impl Cli {
                 root_id,
                 root_path,
                 last,
-                hash,
-                hash_all,
-                validate,
+                no_hash,
+                hash_new,
+                no_validate,
                 validate_all,
             } => {
                 info!(
-                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, hash: {}, hash_all: {}, validate: {}, validate_all: {}",
-                    db_path, root_id, root_path, last, hash, hash_all, validate, validate_all
+                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, no_hash: {}, hash_new: {}, no_validate: {}, validate_all: {}",
+                    db_path, root_id, root_path, last, no_hash, hash_new, no_validate, validate_all
                 );
 
                 let mut db = Database::new(db_path)?;
-                let analysis_spec = AnalysisSpec::new(hash, hash_all, validate, validate_all);
+                let analysis_spec = AnalysisSpec::new(no_hash, hash_new, no_validate, validate_all);
                 Scanner::do_scan_command(
                     &mut db,
                     root_id,

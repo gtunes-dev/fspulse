@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Scan parameters and default modes changed. The hash default is now equivalent to
+  "hash all" and all items will be hashed. Override options are now no-hash and
+  hash-new. Validate new or changed is now the default. Override options are
+  no-validate and validate-all.
+
 - Moved all input boxes from tui-input to tui-text area. This helps with cursor
   display in editable fields and also provides more stand text box behaviors
 
