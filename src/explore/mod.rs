@@ -7,6 +7,7 @@ mod grid_frame;
 mod input_box;
 mod limit_widget;
 mod message_box;
+mod path_popup;
 mod utils;
 mod view;
 

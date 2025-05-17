@@ -31,6 +31,7 @@ use super::grid_frame::GridFrameView;
 use super::input_box::{InputBoxState, InputBoxWidget};
 use super::limit_widget::LimitWidget;
 use super::message_box::{MessageBox, MessageBoxType};
+use super::path_popup::{PathPopupState, PathPopupWidget};
 use super::utils::{StylePalette, Utils};
 use super::view::{SavedView, ViewsListState, ViewsListWidget, RECENT_ALERTS};
 use super::{column_frame::ColumnFrame, grid_frame::GridFrame};
@@ -58,6 +59,7 @@ pub enum ExplorerAction {
     SetLimit(String),
     ApplyView(&'static SavedView),
     SetAlertStatus(AlertStatus),
+    AddRoot(String),
 }
 
 pub struct Explorer {
@@ -72,6 +74,7 @@ pub struct Explorer {
     filter_popup_state: Option<FilterPopupState>,
     message_box: Option<MessageBox>,
     input_box_state: Option<InputBoxState>,
+    path_popup_state: Option<PathPopupState>,
     views_state: Option<ViewsListState>,
 }
 
@@ -89,6 +92,7 @@ impl Explorer {
             filter_popup_state: None,
             message_box: None,
             input_box_state: None,
+            path_popup_state: None,
             views_state: None,
         };
 
@@ -292,6 +296,14 @@ impl Explorer {
                 f.render_stateful_widget(input_box_widget, input_rect, input_box_state);
             }
 
+            if let Some(path_pop_state) = self.path_popup_state.as_mut() {
+                let input_rect =
+                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
+                f.render_widget(Clear, input_rect);
+                let path_popup_widget = PathPopupWidget;
+                f.render_stateful_widget(path_popup_widget, input_rect, path_pop_state);
+            }
+
             // Draw the message box if needed
             if let Some(ref message_box) = self.message_box {
                 let input_rect =
@@ -369,6 +381,10 @@ impl Explorer {
                     }
 
                     match (key.code, key.modifiers) {
+                        (KeyCode::Char('!'), _) => {
+                            self.path_popup_state =
+                                Some(PathPopupState::new("Choose a path:".into(), None));
+                        }
                         (KeyCode::Char('a'), _) | (KeyCode::Char('A'), _) => {
                             self.set_current_type(DomainType::Alerts)
                         }
@@ -499,6 +515,19 @@ impl Explorer {
                         self.needs_query_refresh = true;
                         self.query_resets_selection = false;
                     }
+                    _ => {}
+                }
+            }
+
+            return true;
+        }
+
+        if let Some(path_popup_state) = self.path_popup_state.as_mut() {
+            let action = path_popup_state.handle_key(key);
+            if let Some(action) = action {
+                match action {
+                    ExplorerAction::Dismiss => self.path_popup_state = None,
+                    ExplorerAction::AddRoot(_path) => {}
                     _ => {}
                 }
             }
