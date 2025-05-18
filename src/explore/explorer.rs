@@ -12,7 +12,7 @@ use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::layout::{Alignment, Rect};
-use ratatui::widgets::{Block, Clear, Tabs};
+use ratatui::widgets::{Block, Clear, StatefulWidget, Tabs};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
@@ -62,6 +62,13 @@ pub enum ExplorerAction {
     AddRoot(String),
 }
 
+enum ActivePopup {
+    Filter(FilterPopupState),
+    InputBox(InputBoxState),
+    Path(PathPopupState),
+    ViewsList(ViewsListState),
+}
+
 pub struct Explorer {
     model: DomainModel,
     focus: Focus,
@@ -71,11 +78,8 @@ pub struct Explorer {
     grid_frame: GridFrame,
     filter_frame: FilterFrame,
     filter_frame_collapsed: bool,
-    filter_popup_state: Option<FilterPopupState>,
+    active_popup: Option<ActivePopup>,
     message_box: Option<MessageBox>,
-    input_box_state: Option<InputBoxState>,
-    path_popup_state: Option<PathPopupState>,
-    views_state: Option<ViewsListState>,
 }
 
 impl Explorer {
@@ -89,11 +93,8 @@ impl Explorer {
             grid_frame: GridFrame::new(),
             filter_frame: FilterFrame::new(),
             filter_frame_collapsed: false,
-            filter_popup_state: None,
+            active_popup: None,
             message_box: None,
-            input_box_state: None,
-            path_popup_state: None,
-            views_state: None,
         };
 
         explorer.apply_view(&RECENT_ALERTS);
@@ -217,7 +218,7 @@ impl Explorer {
 
             tabs_width += 3 * 3; // " * " in between each tab
 
-            let tabs_rect: Rect = Utils::center(
+            let tabs_rect: Rect = Utils::center_rect(
                 tabs_area,
                 Constraint::Length(tabs_width),
                 Constraint::Length(tabs_area.height),
@@ -268,52 +269,40 @@ impl Explorer {
             //.block(help_block);
             f.render_widget(help_paragraph, help_area);
 
-            if let Some(filter_popup_state) = self.filter_popup_state.as_mut() {
-                // Inform the popup if it is on top - it uses this to determine
-                // whether or not to draw the cursor in the input
-                let filter_popup_rect =
-                    Utils::center(f.area(), Constraint::Max(80), Constraint::Length(12));
-                f.render_widget(Clear, filter_popup_rect);
-
-                let filter_widget = FilterPopupWidget;
-                f.render_stateful_widget(filter_widget, filter_popup_rect, filter_popup_state);
-            }
-
-            if let Some(views_state) = self.views_state.as_mut() {
-                let views_rect =
-                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(12));
-                f.render_widget(Clear, views_rect);
-
-                let views_popup = ViewsListWidget;
-                f.render_stateful_widget(views_popup, views_rect, views_state);
-            }
-
-            if let Some(input_box_state) = self.input_box_state.as_mut() {
-                let input_rect =
-                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
-                f.render_widget(Clear, input_rect);
-                let input_box_widget = InputBoxWidget;
-                f.render_stateful_widget(input_box_widget, input_rect, input_box_state);
-            }
-
-            if let Some(path_pop_state) = self.path_popup_state.as_mut() {
-                let input_rect =
-                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
-                f.render_widget(Clear, input_rect);
-                let path_popup_widget = PathPopupWidget;
-                f.render_stateful_widget(path_popup_widget, input_rect, path_pop_state);
+            if let Some(popup) = self.active_popup.as_mut() {
+                Self::render_popup(f, popup);
             }
 
             // Draw the message box if needed
             if let Some(ref message_box) = self.message_box {
-                let input_rect =
-                    Utils::center(f.area(), Constraint::Percentage(60), Constraint::Length(10));
+                let input_rect = Utils::center_rect(
+                    f.area(),
+                    Constraint::Percentage(60),
+                    Constraint::Length(10),
+                );
                 f.render_widget(Clear, input_rect);
                 message_box.draw(f);
             }
         })?;
 
         Ok(())
+    }
+
+    fn render_popup(f: &mut Frame, active_popup: &mut ActivePopup) {
+        match active_popup {
+            ActivePopup::Filter(ref mut state) => {
+                render_centered_popup(f, FilterPopupWidget, state, 80, 12);
+            }
+            ActivePopup::InputBox(ref mut state) => {
+                render_centered_popup(f, InputBoxWidget, state, 80, 10);
+            }
+            ActivePopup::Path(ref mut state) => {
+                render_centered_popup(f, PathPopupWidget, state, 80, 10);
+            }
+            ActivePopup::ViewsList(ref mut state) => {
+                render_centered_popup(f, ViewsListWidget, state, 80, 12);
+            }
+        }
     }
 
     pub fn filter_frame_height(&self) -> u16 {
@@ -382,8 +371,10 @@ impl Explorer {
 
                     match (key.code, key.modifiers) {
                         (KeyCode::Char('!'), _) => {
-                            self.path_popup_state =
-                                Some(PathPopupState::new("Choose a path:".into(), None));
+                            self.active_popup = Some(ActivePopup::Path(PathPopupState::new(
+                                "Choose a path:".into(),
+                                None,
+                            )))
                         }
                         (KeyCode::Char('a'), _) | (KeyCode::Char('A'), _) => {
                             self.set_current_type(DomainType::Alerts)
@@ -442,6 +433,55 @@ impl Explorer {
         Ok(())
     }
 
+    fn popup_handle_key(&mut self, key: KeyEvent) {
+        let action = match self.active_popup.as_mut() {
+            Some(ActivePopup::Filter(state)) => state.handle_key(key),
+            Some(ActivePopup::InputBox(state)) => state.handle_key(key),
+            Some(ActivePopup::Path(state)) => state.handle_key(key),
+            Some(ActivePopup::ViewsList(state)) => state.handle_key(key),
+            None => None,
+        };
+
+        match action {
+            Some(ExplorerAction::Dismiss) => self.active_popup = None,
+            Some(ExplorerAction::ShowMessage(message_box)) => self.message_box = Some(message_box),
+            Some(ExplorerAction::AddFilter(filter)) => {
+                self.model.current_filters_mut().push(filter);
+                self.active_popup = None;
+                self.filter_frame
+                    .set_selected(self.model.current_filters().len());
+
+                self.needs_query_refresh = true;
+                self.query_resets_selection = true;
+            }
+            Some(ExplorerAction::UpdateFilter(filter_index, new_filter_text)) => {
+                if let Some(filter) = self.model.current_filters_mut().get_mut(filter_index) {
+                    if filter.filter_text != new_filter_text {
+                        filter.filter_text = new_filter_text;
+                        self.needs_query_refresh = true;
+                        self.query_resets_selection = true;
+                    }
+                }
+
+                self.active_popup = None;
+            }
+            Some(ExplorerAction::SetLimit(new_limit)) => {
+                self.model.set_current_limit(new_limit);
+                self.active_popup = None;
+
+                self.needs_query_refresh = true;
+                self.query_resets_selection = false;
+            }
+            Some(ExplorerAction::ApplyView(saved_view)) => {
+                self.active_popup = None;
+                self.apply_view(saved_view);
+            }
+            Some(ExplorerAction::AddRoot(_path)) => {}
+
+            _ => {}
+        }
+    }
+
     fn modal_input_handled(&mut self, key: KeyEvent) -> bool {
         if let Some(ref message_box) = self.message_box {
             if message_box.is_dismiss_event(key) {
@@ -451,87 +491,8 @@ impl Explorer {
             return true;
         }
 
-        if let Some(views_state) = self.views_state.as_mut() {
-            let action = views_state.handle_key(key);
-            if let Some(action) = action {
-                match action {
-                    ExplorerAction::Dismiss => self.views_state = None,
-                    ExplorerAction::ApplyView(saved_view) => {
-                        self.views_state = None;
-                        self.apply_view(saved_view);
-                    }
-                    _ => {}
-                }
-            }
-
-            return true;
-        }
-
-        if let Some(ref mut filter_popup_state) = self.filter_popup_state {
-            let action = filter_popup_state.handle_key(key);
-            if let Some(action) = action {
-                match action {
-                    ExplorerAction::Dismiss => self.filter_popup_state = None,
-                    ExplorerAction::ShowMessage(message_box) => {
-                        self.message_box = Some(message_box)
-                    }
-                    ExplorerAction::AddFilter(filter) => {
-                        self.model.current_filters_mut().push(filter);
-                        self.filter_popup_state = None;
-                        self.filter_frame
-                            .set_selected(self.model.current_filters().len());
-
-                        self.needs_query_refresh = true;
-                        self.query_resets_selection = true;
-                    }
-                    ExplorerAction::UpdateFilter(filter_index, new_filter_text) => {
-                        if let Some(filter) = self.model.current_filters_mut().get_mut(filter_index)
-                        {
-                            if filter.filter_text != new_filter_text {
-                                filter.filter_text = new_filter_text;
-                                self.needs_query_refresh = true;
-                                self.query_resets_selection = true;
-                            }
-                        }
-
-                        self.filter_popup_state = None;
-                    }
-                    _ => {}
-                }
-            }
-
-            return true;
-        }
-
-        if let Some(input_box_state) = self.input_box_state.as_mut() {
-            let action = input_box_state.handle_key(key);
-            if let Some(action) = action {
-                match action {
-                    ExplorerAction::Dismiss => self.input_box_state = None,
-                    ExplorerAction::SetLimit(new_limit) => {
-                        self.model.set_current_limit(new_limit);
-                        self.input_box_state = None;
-
-                        self.needs_query_refresh = true;
-                        self.query_resets_selection = false;
-                    }
-                    _ => {}
-                }
-            }
-
-            return true;
-        }
-
-        if let Some(path_popup_state) = self.path_popup_state.as_mut() {
-            let action = path_popup_state.handle_key(key);
-            if let Some(action) = action {
-                match action {
-                    ExplorerAction::Dismiss => self.path_popup_state = None,
-                    ExplorerAction::AddRoot(_path) => {}
-                    _ => {}
-                }
-            }
-
+        if self.active_popup.is_some() {
+            self.popup_handle_key(key);
             return true;
         }
 
@@ -559,7 +520,7 @@ impl Explorer {
                     let filter_popup =
                         FilterPopupState::new_add_filter_popup(name_db, col_type_info);
 
-                    self.filter_popup_state = Some(filter_popup)
+                    self.active_popup = Some(ActivePopup::Filter(filter_popup));
                 }
                 ExplorerAction::DeleteFilter(filter_index) => {
                     self.model.current_filters_mut().remove(filter_index);
@@ -578,7 +539,7 @@ impl Explorer {
                             filter.col_type_info,
                             filter.filter_text.to_owned(),
                         );
-                        self.filter_popup_state = Some(edit_filter_popup);
+                        self.active_popup = Some(ActivePopup::Filter(edit_filter_popup));
                     }
                 }
                 ExplorerAction::SetAlertStatus(new_status) => {
@@ -783,14 +744,14 @@ impl Explorer {
     }
 
     fn show_limit_input(&mut self) {
-        self.input_box_state = Some(InputBoxState::new(
+        self.active_popup = Some(ActivePopup::InputBox(InputBoxState::new(
             "Choose a new limit".into(),
             Some(self.model.current_limit()),
-        ));
+        )));
     }
 
     fn show_views(&mut self) {
-        self.views_state = Some(ViewsListState::new());
+        self.active_popup = Some(ActivePopup::ViewsList(ViewsListState::new()));
     }
 
     fn set_current_type(&mut self, new_type: DomainType) {
@@ -886,4 +847,16 @@ impl Explorer {
             }
         }
     }
+}
+
+fn render_centered_popup<W: StatefulWidget>(
+    f: &mut Frame,
+    widget: W,
+    state: &mut W::State,
+    width: u16,
+    height: u16,
+) {
+    let rect = Utils::center(f.area(), width, height);
+    f.render_widget(Clear, rect);
+    f.render_stateful_widget(widget, rect, state);
 }

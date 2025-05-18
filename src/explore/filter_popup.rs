@@ -92,43 +92,6 @@ impl StatefulWidget for FilterPopupWidget {
 }
 
 impl FilterPopupState {
-    fn new(
-        filter_popup_type: FilterPopupType,
-        col_name: &'static str,
-        filter_index: Option<usize>,
-        col_type_info: ColTypeInfo,
-    ) -> Self {
-        FilterPopupState {
-            filter_popup_type,
-            col_name,
-            filter_index,
-            col_type_info,
-            text_area: TextArea::default(),
-        }
-    }
-
-    pub fn new_add_filter_popup(col_name: &'static str, col_type_info: ColTypeInfo) -> Self {
-        Self::new(FilterPopupType::Add, col_name, None, col_type_info)
-    }
-
-    pub fn new_edit_filter_popup(
-        col_name: &'static str,
-        filter_index: usize,
-        col_type_info: ColTypeInfo,
-        filter_text: String,
-    ) -> Self {
-        FilterPopupState {
-            filter_popup_type: FilterPopupType::Edit,
-            col_name,
-            filter_index: Some(filter_index),
-            col_type_info,
-            text_area: {
-                let lines = vec![filter_text];
-                TextArea::new(lines)
-            },
-        }
-    }
-
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
         match key.code {
             KeyCode::Esc => {
@@ -174,5 +137,42 @@ impl FilterPopupState {
             }
         }
         None
+    }
+
+    fn new(
+        filter_popup_type: FilterPopupType,
+        col_name: &'static str,
+        filter_index: Option<usize>,
+        col_type_info: ColTypeInfo,
+    ) -> Self {
+        FilterPopupState {
+            filter_popup_type,
+            col_name,
+            filter_index,
+            col_type_info,
+            text_area: TextArea::default(),
+        }
+    }
+
+    pub fn new_add_filter_popup(col_name: &'static str, col_type_info: ColTypeInfo) -> Self {
+        Self::new(FilterPopupType::Add, col_name, None, col_type_info)
+    }
+
+    pub fn new_edit_filter_popup(
+        col_name: &'static str,
+        filter_index: usize,
+        col_type_info: ColTypeInfo,
+        filter_text: String,
+    ) -> Self {
+        FilterPopupState {
+            filter_popup_type: FilterPopupType::Edit,
+            col_name,
+            filter_index: Some(filter_index),
+            col_type_info,
+            text_area: {
+                let lines = vec![filter_text];
+                TextArea::new(lines)
+            },
+        }
     }
 }
