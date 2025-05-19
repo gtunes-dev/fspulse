@@ -192,9 +192,9 @@ impl GridFrameView<'_> {
         .style(StylePalette::TableHeader.style());
 
         let highlight_style = if self.has_focus {
-            StylePalette::TableRowHighlight.style()
+            StylePalette::TableRowFocusHighlight.style()
         } else {
-            Style::default()
+            StylePalette::TableRowHighlight.style()
         };
 
         let rows = self.frame.raw_rows.iter().map(|row| {

@@ -1,3 +1,5 @@
+use crate::explore::{explorer::ExplorerAction};
+
 use super::utils::Utils;
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
@@ -24,21 +26,24 @@ impl MessageBoxType {
 }
 
 #[derive(Debug)]
-pub struct MessageBox {
+pub struct MessageBoxState {
     message_box_type: MessageBoxType,
     message: String,
 }
 
-impl MessageBox {
+impl MessageBoxState {
     pub fn new(message_box_type: MessageBoxType, message: String) -> Self {
-        MessageBox {
+        MessageBoxState {
             message_box_type,
             message,
         }
     }
 
-    pub fn is_dismiss_event(&self, key: KeyEvent) -> bool {
-        key.code == KeyCode::Esc || key.code == KeyCode::Enter
+    pub fn handle_key(&mut self, key: KeyEvent) -> Option<ExplorerAction> {
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter => Some(ExplorerAction::Dismiss),
+            _ => None,
+        }
     }
 
     pub fn draw(&self, f: &mut Frame) {

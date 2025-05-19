@@ -30,7 +30,7 @@ use super::filter_popup::{FilterPopupState, FilterPopupWidget};
 use super::grid_frame::GridFrameView;
 use super::input_box::{InputBoxState, InputBoxWidget};
 use super::limit_widget::LimitWidget;
-use super::message_box::{MessageBox, MessageBoxType};
+use super::message_box::{MessageBoxState, MessageBoxType};
 use super::path_popup::{PathPopupState, PathPopupWidget};
 use super::utils::{StylePalette, Utils};
 use super::view::{SavedView, ViewsListState, ViewsListWidget, RECENT_ALERTS};
@@ -50,7 +50,7 @@ pub enum ExplorerAction {
     Dismiss,
     RefreshQuery(bool),
     ShowAddFilter(&'static str, ColTypeInfo),
-    ShowMessage(MessageBox),
+    ShowMessage(MessageBoxState),
     AddFilter(Filter),
     ShowEditFilter(usize),
     DeleteFilter(usize),
@@ -65,6 +65,7 @@ pub enum ExplorerAction {
 enum ActivePopup {
     Filter(FilterPopupState),
     InputBox(InputBoxState),
+    MessageBox(MessageBoxState),
     Path(PathPopupState),
     ViewsList(ViewsListState),
 }
@@ -78,8 +79,7 @@ pub struct Explorer {
     grid_frame: GridFrame,
     filter_frame: FilterFrame,
     filter_frame_collapsed: bool,
-    active_popup: Option<ActivePopup>,
-    message_box: Option<MessageBox>,
+    active_popups: Vec<ActivePopup>,
 }
 
 impl Explorer {
@@ -93,8 +93,7 @@ impl Explorer {
             grid_frame: GridFrame::new(),
             filter_frame: FilterFrame::new(),
             filter_frame_collapsed: false,
-            active_popup: None,
-            message_box: None,
+            active_popups: Vec::new(),
         };
 
         explorer.apply_view(&RECENT_ALERTS);
@@ -269,23 +268,16 @@ impl Explorer {
             //.block(help_block);
             f.render_widget(help_paragraph, help_area);
 
-            if let Some(popup) = self.active_popup.as_mut() {
-                Self::render_popup(f, popup);
-            }
-
-            // Draw the message box if needed
-            if let Some(ref message_box) = self.message_box {
-                let input_rect = Utils::center_rect(
-                    f.area(),
-                    Constraint::Percentage(60),
-                    Constraint::Length(10),
-                );
-                f.render_widget(Clear, input_rect);
-                message_box.draw(f);
-            }
+            self.render_popups(f);
         })?;
 
         Ok(())
+    }
+
+    fn render_popups(&mut self, f: &mut Frame) {
+        for popup in self.active_popups.iter_mut() {
+            Self::render_popup(f, popup);
+        }
     }
 
     fn render_popup(f: &mut Frame, active_popup: &mut ActivePopup) {
@@ -295,6 +287,15 @@ impl Explorer {
             }
             ActivePopup::InputBox(ref mut state) => {
                 render_centered_popup(f, InputBoxWidget, state, 80, 10);
+            }
+            ActivePopup::MessageBox(ref mut state) => {
+                let input_rect = Utils::center_rect(
+                    f.area(),
+                    Constraint::Percentage(60),
+                    Constraint::Length(10),
+                );
+                f.render_widget(Clear, input_rect);
+                state.draw(f);
             }
             ActivePopup::Path(ref mut state) => {
                 render_centered_popup(f, PathPopupWidget, state, 80, 10);
@@ -365,16 +366,17 @@ impl Explorer {
                     if key.kind == KeyEventKind::Release {
                         continue;
                     }
-                    if self.modal_input_handled(key) {
+                    if self.popup_handle_key(key) {
                         continue;
                     }
 
                     match (key.code, key.modifiers) {
                         (KeyCode::Char('!'), _) => {
-                            self.active_popup = Some(ActivePopup::Path(PathPopupState::new(
-                                "Choose a path:".into(),
-                                None,
-                            )))
+                            self.active_popups
+                                .push(ActivePopup::Path(PathPopupState::new(
+                                    "Choose a path:".into(),
+                                    None,
+                                )))
                         }
                         (KeyCode::Char('a'), _) | (KeyCode::Char('A'), _) => {
                             self.set_current_type(DomainType::Alerts)
@@ -433,21 +435,30 @@ impl Explorer {
         Ok(())
     }
 
-    fn popup_handle_key(&mut self, key: KeyEvent) {
-        let action = match self.active_popup.as_mut() {
+    fn popup_handle_key(&mut self, key: KeyEvent) -> bool {
+        let mut handled = true;
+
+        let action = match self.popups_last_mut() {
             Some(ActivePopup::Filter(state)) => state.handle_key(key),
             Some(ActivePopup::InputBox(state)) => state.handle_key(key),
+            Some(ActivePopup::MessageBox(state)) => state.handle_key(key),
             Some(ActivePopup::Path(state)) => state.handle_key(key),
             Some(ActivePopup::ViewsList(state)) => state.handle_key(key),
-            None => None,
+            None => {
+                handled = false;
+                None
+            }
         };
 
         match action {
-            Some(ExplorerAction::Dismiss) => self.active_popup = None,
-            Some(ExplorerAction::ShowMessage(message_box)) => self.message_box = Some(message_box),
+            Some(ExplorerAction::Dismiss) => self.popups_pop(),
+            Some(ExplorerAction::ShowMessage(message_box)) => {
+                self.active_popups
+                    .push(ActivePopup::MessageBox(message_box));
+            }
             Some(ExplorerAction::AddFilter(filter)) => {
                 self.model.current_filters_mut().push(filter);
-                self.active_popup = None;
+                self.popups_pop();
                 self.filter_frame
                     .set_selected(self.model.current_filters().len());
 
@@ -462,41 +473,25 @@ impl Explorer {
                         self.query_resets_selection = true;
                     }
                 }
-
-                self.active_popup = None;
+                self.popups_pop();
             }
             Some(ExplorerAction::SetLimit(new_limit)) => {
                 self.model.set_current_limit(new_limit);
-                self.active_popup = None;
+                self.popups_pop();
 
                 self.needs_query_refresh = true;
                 self.query_resets_selection = false;
             }
             Some(ExplorerAction::ApplyView(saved_view)) => {
-                self.active_popup = None;
+                self.popups_pop();
                 self.apply_view(saved_view);
             }
             Some(ExplorerAction::AddRoot(_path)) => {}
 
             _ => {}
-        }
-    }
+        };
 
-    fn modal_input_handled(&mut self, key: KeyEvent) -> bool {
-        if let Some(ref message_box) = self.message_box {
-            if message_box.is_dismiss_event(key) {
-                self.message_box = None;
-            }
-            // skip all handling below
-            return true;
-        }
-
-        if self.active_popup.is_some() {
-            self.popup_handle_key(key);
-            return true;
-        }
-
-        false
+        return handled;
     }
 
     fn dispatch_key_to_active_frame(&mut self, db: &Database, key: KeyEvent) {
@@ -514,13 +509,15 @@ impl Explorer {
                     self.needs_query_refresh = true;
                     self.query_resets_selection = reset_selection;
                 }
-                ExplorerAction::ShowMessage(message_box) => self.message_box = Some(message_box),
+                ExplorerAction::ShowMessage(message_box) => {
+                    self.popups_push(ActivePopup::MessageBox(message_box));
+                }
                 ExplorerAction::ShowLimit => self.show_limit_input(),
                 ExplorerAction::ShowAddFilter(name_db, col_type_info) => {
                     let filter_popup =
                         FilterPopupState::new_add_filter_popup(name_db, col_type_info);
 
-                    self.active_popup = Some(ActivePopup::Filter(filter_popup));
+                    self.popups_push(ActivePopup::Filter(filter_popup));
                 }
                 ExplorerAction::DeleteFilter(filter_index) => {
                     self.model.current_filters_mut().remove(filter_index);
@@ -539,7 +536,7 @@ impl Explorer {
                             filter.col_type_info,
                             filter.filter_text.to_owned(),
                         );
-                        self.active_popup = Some(ActivePopup::Filter(edit_filter_popup));
+                        self.popups_push(ActivePopup::Filter(edit_filter_popup));
                     }
                 }
                 ExplorerAction::SetAlertStatus(new_status) => {
@@ -691,7 +688,10 @@ impl Explorer {
         match self.refresh_query_impl(db) {
             Ok(()) => {}
             Err(err) => {
-                self.message_box = Some(MessageBox::new(MessageBoxType::Error, err.to_string()))
+                self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
+                    MessageBoxType::Error,
+                    err.to_string(),
+                )))
             }
         }
 
@@ -744,14 +744,14 @@ impl Explorer {
     }
 
     fn show_limit_input(&mut self) {
-        self.active_popup = Some(ActivePopup::InputBox(InputBoxState::new(
+        self.popups_push(ActivePopup::InputBox(InputBoxState::new(
             "Choose a new limit".into(),
             Some(self.model.current_limit()),
         )));
     }
 
     fn show_views(&mut self) {
-        self.active_popup = Some(ActivePopup::ViewsList(ViewsListState::new()));
+        self.popups_push(ActivePopup::ViewsList(ViewsListState::new()));
     }
 
     fn set_current_type(&mut self, new_type: DomainType) {
@@ -843,9 +843,24 @@ impl Explorer {
         match Alerts::set_alert_status(db, alert_id, new_status) {
             Ok(()) => row[status_col] = new_status.as_str().to_owned(),
             Err(err) => {
-                self.message_box = Some(MessageBox::new(MessageBoxType::Error, err.to_string()))
+                self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
+                    MessageBoxType::Error,
+                    err.to_string(),
+                )))
             }
         }
+    }
+
+    fn popups_last_mut(&mut self) -> Option<&mut ActivePopup> {
+        self.active_popups.last_mut()
+    }
+
+    fn popups_push(&mut self, popup: ActivePopup) {
+        self.active_popups.push(popup);
+    }
+
+    fn popups_pop(&mut self) {
+        self.active_popups.pop();
     }
 }
 

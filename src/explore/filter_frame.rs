@@ -173,9 +173,9 @@ impl FilterFrameView<'_> {
         ];
 
         let highlight_style = if self.has_focus {
-            StylePalette::TableRowHighlight.style()
+            StylePalette::TableRowFocusHighlight.style()
         } else {
-            Style::default()
+            StylePalette::TableRowHighlight.style()
         };
 
         let table = Table::new(rows, constraints)

@@ -2,7 +2,6 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Rect},
-    style::Style,
     widgets::{Row, StatefulWidget, Table, TableState, Widget},
 };
 
@@ -244,9 +243,9 @@ impl Widget for ColumnFrameView<'_> {
         ];
 
         let highlight_style = if self.has_focus {
-            StylePalette::TableRowHighlight.style()
+            StylePalette::TableRowFocusHighlight.style()
         } else {
-            Style::default()
+            StylePalette::TableRowHighlight.style()
         };
 
         let table = Table::new(rows, widths)

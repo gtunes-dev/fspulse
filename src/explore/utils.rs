@@ -11,6 +11,7 @@ pub struct Utils;
 pub enum StylePalette {
     TableHeader,
     TableRowHighlight,
+    TableRowFocusHighlight,
     Tab,
     TabHighlight,
     TabFocusHighlight,
@@ -22,7 +23,8 @@ impl StylePalette {
     pub fn style(&self) -> Style {
         match self {
             StylePalette::TableHeader => Style::default().bg(Color::DarkGray).bold(),
-            StylePalette::TableRowHighlight => Style::default().fg(Color::Black).bg(Color::Cyan),
+            StylePalette::TableRowHighlight => Style::default().fg(Color::Black).bg(Color::Gray),
+            StylePalette::TableRowFocusHighlight => Style::default().fg(Color::Black).bg(Color::Cyan),
             StylePalette::Tab => Style::default()
                 .fg(Color::Gray)
                 .bg(Color::Black)

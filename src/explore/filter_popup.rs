@@ -12,7 +12,7 @@ use crate::query::{columns::ColTypeInfo, QueryProcessor};
 use super::{
     domain_model::Filter,
     explorer::ExplorerAction,
-    message_box::{MessageBox, MessageBoxType},
+    message_box::{MessageBoxState, MessageBoxType},
     utils::{StylePalette, Utils},
 };
 
@@ -102,7 +102,7 @@ impl FilterPopupState {
                 let err_str = QueryProcessor::validate_filter(self.col_type_info.rule, input_val);
                 match err_str {
                     Some(err_str) => {
-                        return Some(ExplorerAction::ShowMessage(MessageBox::new(
+                        return Some(ExplorerAction::ShowMessage(MessageBoxState::new(
                             MessageBoxType::Info,
                             err_str,
                         )));
