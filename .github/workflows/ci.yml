@@ -8,7 +8,7 @@ on:
       - 'v*'
     paths-ignore:
       - 'assets/**'
-      - 'docs/**'      
+      - 'docs/**'
       - 'scripts/**'
       - 'CHANGELOG.md'
       - '.github/workflows/**'
@@ -19,7 +19,7 @@ on:
       - 'docs/**'
       - 'CHANGELOG.md'
       - '.github/workflows/**'
-      
+
 jobs:
   build-matrix:
     runs-on: ${{ matrix.os }}
@@ -67,21 +67,46 @@ jobs:
         run: |
           mkdir dist
           bin_name=fspulse
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            bin_name=fspulse.exe
-          fi
+          lib_name=""
+
+          case "${{ matrix.os }}" in
+            "windows-latest")
+              bin_name=fspulse.exe
+              lib_name=fspulse.dll
+              ;;
+            "macos-latest")
+              lib_name=libfspulse.dylib
+              ;;
+            "ubuntu-latest")
+              lib_name=libfspulse.so
+              ;;
+          esac
+
+          # Strip debug symbols (where supported)
+          strip target/${{ matrix.target }}/release/$bin_name || true
+          strip target/${{ matrix.target }}/release/$lib_name || true
+
+          # Copy binary and shared lib into dist/
           cp target/${{ matrix.target }}/release/$bin_name dist/$bin_name
+          if [[ -n "$lib_name" ]]; then
+            cp target/${{ matrix.target }}/release/$lib_name dist/$lib_name
+          fi
+
+          echo "Contents of dist:"
+          ls -lh dist/
+
           cd dist
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             version="${GITHUB_REF#refs/tags/v}"
           else
             version="dev"
           fi
+
           archive_name=fspulse-v$version-${{ matrix.target }}.${{ matrix.ext }}
           if [[ "${{ matrix.ext }}" == "zip" ]]; then
-            7z a ../$archive_name $bin_name > /dev/null
+            7z a ../$archive_name * > /dev/null
           else
-            tar -czf ../$archive_name $bin_name
+            tar -czf ../$archive_name *
           fi
           cd ..
 

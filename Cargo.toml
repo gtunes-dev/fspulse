@@ -11,11 +11,14 @@ keywords = ["filesystem", "scanner", "tracking", "integrity", "cli"]
 categories = ["command-line-utilities"]
 readme = "README.md"
 documentation = "https://gtunes-dev.github.io/fspulse/"
-
 exclude = [
   ".github",
   ".gitignore"
 ]
+
+[lib]
+name = "fspulse"
+crate-type = ["cdylib"]
 
 [[bin]]
 name = "fspulse"
