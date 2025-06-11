@@ -1,5 +1,5 @@
 use crate::alerts::{AlertStatus, Alerts};
-use crate::query::columns::ColTypeInfo;
+use crate::query::columns::{ColType, ColTypeInfo};
 use crate::query::QueryProcessor;
 use crate::{database::Database, error::FsPulseError};
 
@@ -491,7 +491,7 @@ impl Explorer {
             _ => {}
         };
 
-        return handled;
+        handled
     }
 
     fn dispatch_key_to_active_frame(&mut self, db: &Database, key: KeyEvent) {
@@ -642,8 +642,15 @@ impl Explorer {
                     }
                     false => query.push_str(", "),
                 }
+
                 cols.push(*col);
+
                 query.push_str(col.name_db);
+                // append format specifiers
+                match col.col_type {
+                    ColType::AlertStatus | ColType::AlertType => query.push_str("@full"),
+                    _ => {}
+                }
             }
         }
 
@@ -687,12 +694,10 @@ impl Explorer {
     fn refresh_query(&mut self, db: &Database) {
         match self.refresh_query_impl(db) {
             Ok(()) => {}
-            Err(err) => {
-                self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
-                    MessageBoxType::Error,
-                    err.to_string(),
-                )))
-            }
+            Err(err) => self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
+                MessageBoxType::Error,
+                err.to_string(),
+            ))),
         }
 
         self.needs_query_refresh = false;
@@ -842,12 +847,10 @@ impl Explorer {
 
         match Alerts::set_alert_status(db, alert_id, new_status) {
             Ok(()) => row[status_col] = new_status.as_str().to_owned(),
-            Err(err) => {
-                self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
-                    MessageBoxType::Error,
-                    err.to_string(),
-                )))
-            }
+            Err(err) => self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
+                MessageBoxType::Error,
+                err.to_string(),
+            ))),
         }
     }
 

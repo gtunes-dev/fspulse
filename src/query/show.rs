@@ -109,8 +109,10 @@ impl Format {
     }
 
     pub fn format_change_type(val: &str, format: Format) -> Result<String, FsPulseError> {
+        let change_type: ChangeType = val.parse()?;
+
         match format {
-            Format::Full => Ok(ChangeType::short_str_to_full(val)?.to_owned()),
+            Format::Full => Ok(change_type.long_name().to_owned()),
             Format::Short | Format::None => Ok(val.to_owned()),
             _ => Err(FsPulseError::Error("Invalid change_type format".into())),
         }

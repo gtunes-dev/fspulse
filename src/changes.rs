@@ -1,6 +1,5 @@
-use std::str::FromStr;
-
 use rusqlite::params;
+use strum_macros::{AsRefStr, Display, EnumIter, EnumString};
 
 use crate::database::Database;
 use crate::error::FsPulseError;
@@ -61,40 +60,38 @@ pub struct ValidationTransitions {
     pub no_validator_to_invalid: i32,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(AsRefStr, EnumIter, EnumString, Debug, Display, PartialEq, Eq, Copy, Clone)]
 pub enum ChangeType {
+    #[strum(serialize = "A")]
     Add,
+    #[strum(serialize = "D")]
     Delete,
+    #[strum(serialize = "M")]
     Modify,
+    #[strum(serialize = "N")]
     NoChange,
 }
 
 impl ChangeType {
-    pub fn as_str(&self) -> &'static str {
+    pub fn long_name(&self) -> &'static str {
         match self {
-            Self::Add => "A",
-            Self::Delete => "D",
-            Self::Modify => "M",
-            Self::NoChange => "N",
-        }
-    }
-
-    pub fn short_str_to_full(s: &str) -> Result<&str, FsPulseError> {
-        match s {
-            "A" => Ok("Add"),
-            "D" => Ok("Delete"),
-            "M" => Ok("Modify"),
-            "N" => Ok("No Change"),
-            _ => Err(FsPulseError::Error(format!("Invalid change type: '{}'", s))),
+            ChangeType::Add => "Add",
+            ChangeType::Delete => "Delete",
+            ChangeType::Modify => "Modify",
+            ChangeType::NoChange => "No Change",
         }
     }
 }
 
+/* 
 impl std::fmt::Display for ChangeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
     }
 }
+    */
+
+/* 
 
 impl FromStr for ChangeType {
     type Err = FsPulseError;
@@ -109,6 +106,7 @@ impl FromStr for ChangeType {
         }
     }
 }
+    */
 
 impl Change {
     // TODO: Implement accessors for other fields
@@ -204,7 +202,7 @@ impl ChangeCounts {
             let change_type: String = row.get(0)?;
             let count: i64 = row.get(1)?;
 
-            let change_type = ChangeType::from_str(&change_type)?;
+            let change_type = change_type.parse()?;
 
             match change_type {
                 ChangeType::Add => change_counts.set_count_of(ChangeType::Add, count),

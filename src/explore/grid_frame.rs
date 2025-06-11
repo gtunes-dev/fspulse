@@ -10,7 +10,9 @@ use ratatui::{
     },
 };
 
-use crate::{alerts::AlertStatus, query::columns::ColType};
+use strum::IntoEnumIterator;
+
+use crate::{alerts::AlertStatus, changes::ChangeType, query::columns::ColType};
 
 use super::{
     domain_model::{ColumnInfo, DomainModel, DomainType},
@@ -61,11 +63,13 @@ impl GridFrame {
             .map(|col| match col.col_type {
                 ColType::Id => Constraint::Length(col_size(col.name_display, 9) as u16),
                 ColType::Int => Constraint::Length(col_size(col.name_display, 8) as u16),
-                ColType::Val
-                | ColType::ItemType
-                | ColType::ChangeType
-                | ColType::AlertType
-                | ColType::AlertStatus => Constraint::Length(col_size(col.name_display, 4) as u16),
+                ColType::ChangeType => Constraint::Length(ChangeType::iter()
+                    .map(|v| v.long_name().len())
+                    .max()
+                    .unwrap_or(0) as u16),
+                ColType::Val | ColType::ItemType | ColType::AlertType | ColType::AlertStatus => {
+                    Constraint::Length(col_size(col.name_display, 4) as u16)
+                }
                 ColType::Bool => Constraint::Length(col_size(col.name_display, 1) as u16),
                 ColType::Date => Constraint::Length(col_size(col.name_display, 10) as u16),
                 ColType::Path => Constraint::Min(30),

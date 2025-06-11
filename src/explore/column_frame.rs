@@ -225,7 +225,7 @@ impl Widget for ColumnFrameView<'_> {
                 ColSelect::Selected => "[✓]",
             };
 
-            let text = format!("{checked} {:<20}", col.name_db);
+            let text = format!("{checked} {:<20}", col.name_display);
 
             let row = Row::new(vec![
                 text,

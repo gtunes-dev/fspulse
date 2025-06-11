@@ -10,13 +10,16 @@ pub enum FsPulseError {
     Error(String),
 
     #[error("I/O error: {0}")]
-    IoError(#[from] io::Error), // Converts io::Error into FsPulseError automatically
+    IoError(#[from] io::Error), 
 
     #[error("Database error: {0}")]
-    DatabaseError(#[from] RusqliteError), // Converts rusqlite::Error automatically
+    DatabaseError(#[from] RusqliteError),
 
     #[error("Query parsing error: {0}")]
     ParsingError(#[from] Box<pest::error::Error<Rule>>),
+
+    #[error("Invalid value error: {0}")]
+    InvalidValueError(#[from] strum::ParseError),
 
     #[error("Query parsing error: {0}")]
     CustomParsingError(String),

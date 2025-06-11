@@ -440,7 +440,7 @@ impl Scanner {
                 WHERE root_id = ? AND is_ts = 0 AND last_scan < ?",
             (
                 scan.scan_id(),
-                ChangeType::Delete.as_str(),
+                ChangeType::Delete.to_string(),
                 scan.root_id(),
                 scan.scan_id(),
             ),
@@ -795,7 +795,7 @@ impl Scanner {
                     (
                         scan.scan_id(),
                         existing_item.item_id(),
-                        ChangeType::Add.as_str(),
+                        ChangeType::Add.to_string(),
                         existing_item.mod_date(),
                         mod_date,
                         existing_item.file_size(),
@@ -839,7 +839,7 @@ impl Scanner {
                     (
                         scan.scan_id(),
                         existing_item.item_id(),
-                        ChangeType::Modify.as_str(),
+                        ChangeType::Modify.to_string(),
                         meta_change.then_some(existing_item.mod_date()),
                         meta_change.then_some(mod_date),
                         meta_change.then_some(existing_item.file_size()),
@@ -872,7 +872,7 @@ impl Scanner {
             let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
             tx.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, file_size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
-                (scan.scan_id(), item_id, ChangeType::Add.as_str(), mod_date, file_size))?;
+                (scan.scan_id(), item_id, ChangeType::Add.to_string(), mod_date, file_size))?;
             tx.commit()?;
         }
 
