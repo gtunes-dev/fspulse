@@ -34,16 +34,14 @@ impl Order {
             .col_name_to_db(col_display_name)
             .ok_or_else(|| {
                 FsPulseError::CustomParsingError(format!(
-                    "Invalid column '{}' in order clause",
-                    col_display_name
+                    "Invalid column '{col_display_name}' in order clause"
                 ))
             })?;
 
         for order_spec in &self.order_specs {
             if order_spec.column == db_col_name {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Column '{}' was already specified in order clause",
-                    col_display_name
+                    "Column '{col_display_name}' was already specified in order clause"
                 )));
             }
         }

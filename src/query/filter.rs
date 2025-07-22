@@ -87,8 +87,7 @@ impl IdFilter {
             Some(id_col_db) => Self::new(id_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Column not found: '{}'",
-                    id_col
+                    "Column not found: '{id_col}'"
                 )))
             }
         };
@@ -224,8 +223,7 @@ impl DateFilter {
             Some(date_col_db) => Self::new(date_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Column not found: '{}'",
-                    date_col
+                    "Column not found: '{date_col}'"
                 )))
             }
         };
@@ -342,8 +340,7 @@ impl StringFilter {
             Some(str_col_db) => Self::new(str_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Column not found: '{}'",
-                    str_col
+                    "Column not found: '{str_col}'"
                 )))
             }
         };
@@ -443,8 +440,7 @@ impl EnumFilter {
             Some(enum_col_db) => Self::new(enum_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Column not found: '{}'",
-                    enum_col
+                    "Column not found: '{enum_col}'"
                 )))
             }
         };
@@ -454,7 +450,7 @@ impl EnumFilter {
                 Rule::null => enum_filter.match_null = true,
                 Rule::not_null => enum_filter.match_not_null = true,
                 rule => {
-                    let rule_str = format!("{:?}", rule);
+                    let rule_str = format!("{rule:?}");
                     let val_opt = Self::ENUM_RULES.get(&rule_str).copied();
                     match val_opt {
                         Some(val) => enum_filter.enum_vals.push(val.to_owned()),
@@ -560,8 +556,7 @@ impl PathFilter {
             Some(path_col_db) => Self::new(path_col_db),
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Column not found: '{}'",
-                    path_col
+                    "Column not found: '{path_col}'"
                 )))
             }
         };
@@ -629,8 +624,7 @@ impl IntFilter {
             Some(int_col_db) => int_col_db,
             None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Column not found: '{}'",
-                    int_col
+                    "Column not found: '{int_col}'"
                 )))
             }
         };

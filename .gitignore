@@ -1,4 +1,5 @@
 /target
+.claude
 .vscode/
 .DS_Store
 /docs/book/

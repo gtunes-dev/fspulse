@@ -113,8 +113,7 @@ impl Database {
 
     fn create_schema(&self) -> Result<(), FsPulseError> {
         info!(
-            "Database is uninitialized - creating schema at version {}",
-            CURRENT_SCHEMA_VERSION
+            "Database is uninitialized - creating schema at version {CURRENT_SCHEMA_VERSION}"
         );
         self.conn().execute_batch(CREATE_SCHEMA_SQL)?;
         info!("Database successfully initialized");

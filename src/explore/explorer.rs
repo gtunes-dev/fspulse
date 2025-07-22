@@ -320,7 +320,7 @@ impl Explorer {
             "No Current View"
         };
 
-        let view_desc = format!("View (V): {}", desc);
+        let view_desc = format!("View (V): {desc}");
 
         let p = Paragraph::new(view_desc).alignment(Alignment::Center);
         f.render_widget(p, area);
@@ -335,7 +335,7 @@ impl Explorer {
             };
 
             let p =
-                Paragraph::new(format!("Filters - {} (ctrl-f to expand)", count_str)).centered();
+                Paragraph::new(format!("Filters - {count_str} (ctrl-f to expand)")).centered();
             f.render_widget(p, area);
         } else {
             let filter_frame_view = FilterFrameView::new(

@@ -153,7 +153,7 @@ impl Scanner {
         let (root, mut existing_scan) = match (root_id, root_path, last) {
             (Some(root_id), _, _) => {
                 let root = Root::get_by_id(db, root_id.into())?
-                    .ok_or_else(|| FsPulseError::Error(format!("Root id {} not found", root_id)))?;
+                    .ok_or_else(|| FsPulseError::Error(format!("Root id {root_id} not found")))?;
                 // Look for an outstanding scan on the root
                 let scan = Scan::get_latest_for_root(db, root.root_id())?.filter(|s: &Scan| {
                     s.state() != ScanState::Completed && s.state() != ScanState::Stopped
@@ -289,8 +289,7 @@ impl Scanner {
                 }
                 unexpected => {
                     return Err(FsPulseError::Error(format!(
-                        "Unexpected incomplete scan state: {}",
-                        unexpected
+                        "Unexpected incomplete scan state: {unexpected}"
                     )));
                 }
             };
@@ -619,7 +618,7 @@ impl Scanner {
 
         let path = Path::new(analysis_item.item_path());
 
-        info!("Beginning analysis of: {:?}", path);
+        info!("Beginning analysis of: {path:?}");
 
         let display_path = path
             .file_name()
@@ -703,7 +702,7 @@ impl Scanner {
 
         analysis_prog.inc(1);
 
-        info!("Done analyzing: {:?}", path);
+        info!("Done analyzing: {path:?}");
     }
 
     fn handle_scan_item(

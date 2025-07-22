@@ -126,7 +126,7 @@ impl fmt::Display for ScanState {
             ScanState::Stopped => "Stopped",
             ScanState::Unknown => "Unknown",
         };
-        write!(f, "{}", name)
+        write!(f, "{name}")
     }
 }
 

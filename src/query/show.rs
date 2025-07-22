@@ -261,8 +261,7 @@ impl Show {
                         }
                         None => {
                             return Err(FsPulseError::CustomParsingError(format!(
-                                "Invalid column in show clause: '{}'",
-                                display_col
+                                "Invalid column in show clause: '{display_col}'"
                             )));
                         }
                     }

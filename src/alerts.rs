@@ -27,7 +27,7 @@ impl AlertType {
         match s {
             "H" => Ok("Suspicious Hash"),
             "I" => Ok("Invalid Item"),
-            _ => Err(FsPulseError::Error(format!("Invalid alert type: '{}'", s))),
+            _ => Err(FsPulseError::Error(format!("Invalid alert type: '{s}'"))),
         }
     }
 }
@@ -47,8 +47,7 @@ impl AlertStatus {
             "F" => Ok("Flagged"),
             "D" => Ok("Dismissed"),
             _ => Err(FsPulseError::Error(format!(
-                "Invalid alert status: '{}'",
-                s
+                "Invalid alert status: '{s}'"
             ))),
         }
     }

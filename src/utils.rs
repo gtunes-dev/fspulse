@@ -62,20 +62,18 @@ impl Utils {
     /// - end of day (23:59:59)
     fn parse_date_bounds(date_str: &str) -> Result<(NaiveDateTime, NaiveDateTime), FsPulseError> {
         let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|_| {
-            FsPulseError::CustomParsingError(format!("Invalid date: '{}'", date_str))
+            FsPulseError::CustomParsingError(format!("Invalid date: '{date_str}'"))
         })?;
 
         let start_dt = date.and_hms_opt(0, 0, 0).ok_or_else(|| {
             FsPulseError::CustomParsingError(format!(
-                "Unable to create start time for '{}'",
-                date_str
+                "Unable to create start time for '{date_str}'"
             ))
         })?;
 
         let end_dt = date.and_hms_opt(23, 59, 59).ok_or_else(|| {
             FsPulseError::CustomParsingError(format!(
-                "Unable to create end time for '{}'",
-                date_str
+                "Unable to create end time for '{date_str}'"
             ))
         })?;
         Ok((start_dt, end_dt))
@@ -95,8 +93,7 @@ impl Utils {
                 // For missing times, you might decide to move forward a minute until a valid time is found.
                 // Here we simply return an error, but you could adjust to your needs.
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Invalid time '{}')",
-                    date_str
+                    "Invalid time '{date_str}')"
                 )));
             }
         };
@@ -107,8 +104,7 @@ impl Utils {
             LocalResult::Ambiguous(_earliest, latest) => latest,
             LocalResult::None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Invalid time '{}')",
-                    date_str
+                    "Invalid time '{date_str}')"
                 )));
             }
         };
@@ -131,8 +127,7 @@ impl Utils {
             LocalResult::Ambiguous(earliest, _) => earliest,
             LocalResult::None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Invalid start time '{}')",
-                    start_date_str
+                    "Invalid start time '{start_date_str}')"
                 )));
             }
         };
@@ -142,16 +137,14 @@ impl Utils {
             LocalResult::Ambiguous(_, latest) => latest,
             LocalResult::None => {
                 return Err(FsPulseError::CustomParsingError(format!(
-                    "Invalid end time '{}')",
-                    end_date_str
+                    "Invalid end time '{end_date_str}')"
                 )));
             }
         };
 
         if local_start > local_end {
             return Err(FsPulseError::CustomParsingError(format!(
-                "Start date '{}' is after end date '{}'",
-                start_date_str, end_date_str
+                "Start date '{start_date_str}' is after end date '{end_date_str}'"
             )));
         }
 
@@ -176,7 +169,7 @@ impl Utils {
         stage_index: i32,
         msg: impl Into<String>,
     ) -> ProgressBar {
-        Utils::add_spinner_bar(multi_prog, format!("[{}/3]", stage_index), msg, true)
+        Utils::add_spinner_bar(multi_prog, format!("[{stage_index}/3]"), msg, true)
     }
 
     pub fn finish_section_bar(section_bar: &ProgressBar, msg: impl Into<String>) {

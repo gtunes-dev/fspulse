@@ -47,8 +47,7 @@ impl ValidationState {
             "I" => Ok("Invalid"),
             "N" => Ok("No Validator"),
             _ => Err(FsPulseError::Error(format!(
-                "Invalid validation state: '{}'",
-                s
+                "Invalid validation state: '{s}'"
             ))),
         }
     }

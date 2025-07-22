@@ -99,7 +99,7 @@ impl ItemType {
             "D" => Ok("Directory"),
             "S" => Ok("Symlink"),
             "O" => Ok("Other"),
-            _ => Err(FsPulseError::Error(format!("Invalid item type: '{}'", s))),
+            _ => Err(FsPulseError::Error(format!("Invalid item type: '{s}'"))),
         }
     }
 }
@@ -381,8 +381,7 @@ impl Item {
                 ))
             )
         ORDER BY i.item_id ASC
-        LIMIT {}",
-            limit
+        LIMIT {limit}"
         );
 
         let mut stmt = db.conn().prepare(&query)?;

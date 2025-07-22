@@ -49,12 +49,12 @@ fn main() {
 
     match result {
         Ok(()) => {
-            info!("fspulse completed successfully in {:.2?}", duration);
+            info!("fspulse completed successfully in {duration:.2?}");
         }
         Err(err) => {
-            error!("fspulse exited with error in {:.2?}", duration);
-            error!("{:?}", err);
-            eprint!("{}", err);
+            error!("fspulse exited with error in {duration:.2?}");
+            error!("{err:?}");
+            eprint!("{err}");
             std::process::exit(1);
         }
     }

@@ -41,8 +41,8 @@ impl Reports {
         last: u32,
     ) -> Result<(), FsPulseError> {
         let query = match scan_id {
-            Some(scan_id) => &format!("scans where scan_id:({})", scan_id),
-            None => &format!("scans order by scan_id desc limit {}", last),
+            Some(scan_id) => &format!("scans where scan_id:({scan_id})"),
+            None => &format!("scans order by scan_id desc limit {last}"),
         };
 
         //println!(">> Generated query: {}", query);
@@ -56,8 +56,8 @@ impl Reports {
     ) -> Result<(), FsPulseError> {
         let query = match (root_id, root_path) {
             (None, None) => "roots order by root_id asc",
-            (Some(root_id), _) => &format!("roots where root_id:({})", root_id),
-            (_, Some(root_path)) => &format!("roots where root_path:('{}')", root_path),
+            (Some(root_id), _) => &format!("roots where root_id:({root_id})"),
+            (_, Some(root_path)) => &format!("roots where root_path:('{root_path}')"),
         };
 
         //println!("Query: {query}");
@@ -76,12 +76,12 @@ impl Reports {
     ) -> Result<(), FsPulseError> {
         if format == ReportFormat::Table {
             let query = match (item_id, item_path, root_id) {
-                (Some(item_id), _, _,) =>  &format!("items where item_id:({})", item_id),
-                (_, Some(item_path), _) => &format!("items where item_path:({}) order by item_path asc", item_path),
+                (Some(item_id), _, _,) =>  &format!("items where item_id:({item_id})"),
+                (_, Some(item_path), _) => &format!("items where item_path:({item_path}) order by item_path asc"),
                 (_, _, Some(root_id)) => {
                     match invalid {
-                        false => &format!("items where root_id:({}), is_ts:(F) order by item_path asc", root_id),
-                        true => &format!("items where root_id:({}), val:(I), is_ts:(F) show default, val, val_error order by item_path asc", root_id)
+                        false => &format!("items where root_id:({root_id}), is_ts:(F) order by item_path asc"),
+                        true => &format!("items where root_id:({root_id}), val:(I), is_ts:(F) show default, val, val_error order by item_path asc")
                     }
                 }
                 _ => return Err(FsPulseError::Error("Item reports require additional parameters".into()))
@@ -91,10 +91,10 @@ impl Reports {
         } else if let Some(root_id) = root_id {
             // TODO: Does this even make sense???
             let root = Root::get_by_id(db, root_id.into())?
-                .ok_or_else(|| FsPulseError::Error(format!("Root Id {} not found", root_id)))?;
+                .ok_or_else(|| FsPulseError::Error(format!("Root Id {root_id} not found")))?;
 
             let scan = Scan::get_latest_for_root(db, root.root_id())?.ok_or_else(|| {
-                FsPulseError::Error(format!("No latest scan found for Root Id {}", root_id))
+                FsPulseError::Error(format!("No latest scan found for Root Id {root_id}"))
             })?;
 
             Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?;
@@ -110,13 +110,12 @@ impl Reports {
         scan_id: Option<u32>,
     ) -> Result<(), FsPulseError> {
         let query = match (change_id, item_id, scan_id) {
-            (Some(change_id), None, None) => format!("changes where change_id:({})", change_id),
+            (Some(change_id), None, None) => format!("changes where change_id:({change_id})"),
             (None, Some(item_id), None) => format!(
-                "changes where item_id:({}) show default, item_path order by change_id desc",
-                item_id
+                "changes where item_id:({item_id}) show default, item_path order by change_id desc"
             ),
             (None, None, Some(scan_id)) => {
-                format!("changes where scan_id:({}) order_by change_id asc", scan_id)
+                format!("changes where scan_id:({scan_id}) order_by change_id asc")
             }
             _ => return Err(FsPulseError::Error("Change reports require additional parameters".into()))
         };

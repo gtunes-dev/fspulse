@@ -184,7 +184,7 @@ pub trait Query {
         };
 
         let limit_clause = match &self.query_impl().limit {
-            Some(limit) => format!("\nLIMIT {}", limit),
+            Some(limit) => format!("\nLIMIT {limit}"),
             None => String::new(),
         };
 
@@ -821,13 +821,13 @@ impl QueryProcessor {
             Ok(()) => {}
             Err(err) => match err {
                 FsPulseError::ParsingError(inner) => {
-                    error!("Query parsing error: {}", inner);
-                    println!("{}", inner);
+                    error!("Query parsing error: {inner}");
+                    println!("{inner}");
                     return Ok(());
                 }
                 FsPulseError::CustomParsingError(msg) => {
-                    info!("Query parsing error: {}", msg);
-                    println!("{}", msg);
+                    info!("Query parsing error: {msg}");
+                    println!("{msg}");
                     return Ok(());
                 }
                 _ => {
@@ -851,12 +851,12 @@ impl QueryProcessor {
         query_str: &str,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
-        info!("Parsing query: {}", query_str);
+        info!("Parsing query: {query_str}");
 
         let mut parsed_query = QueryParser::parse(Rule::query, query_str)
             .map_err(|err| FsPulseError::ParsingError(Box::new(err)))?;
 
-        info!("Parsed query: {}", parsed_query);
+        info!("Parsed query: {parsed_query}");
 
         let query_pair = parsed_query.next().unwrap();
         let mut query_iter = query_pair.into_inner();

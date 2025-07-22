@@ -55,7 +55,7 @@ impl LopdfValidator {
                     match stream.decompressed_content() {
                         Ok(_) => {}
                         Err(lopdf::Error::Unimplemented(reason)) => {
-                            warn!("Lopdf unimplemented feature: {}", reason);
+                            warn!("Lopdf unimplemented feature: {reason}");
                         }
                         Err(err) => {
                             return Err(err);

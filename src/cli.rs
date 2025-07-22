@@ -275,7 +275,7 @@ impl Cli {
 
         match args.command {
             Command::Interact { db_path } => {
-                info!("Running interact with db_path: {:?}", db_path);
+                info!("Running interact with db_path: {db_path:?}");
                 let mut db = Database::new(db_path)?;
 
                 Cli::handle_interact(&mut db, multi_prog)
@@ -291,8 +291,7 @@ impl Cli {
                 validate_all,
             } => {
                 info!(
-                    "Running scan with db_path: {:?}, root_id: {:?}, root_path: {:?}, last: {}, no_hash: {}, hash_new: {}, no_validate: {}, validate_all: {}",
-                    db_path, root_id, root_path, last, no_hash, hash_new, no_validate, validate_all
+                    "Running scan with db_path: {db_path:?}, root_id: {root_id:?}, root_path: {root_path:?}, last: {last}, no_hash: {no_hash}, hash_new: {hash_new}, no_validate: {no_validate}, validate_all: {validate_all}"
                 );
 
                 let mut db = Database::new(db_path)?;
@@ -323,8 +322,7 @@ impl Cli {
                     root_path,
                 } => {
                     info!(
-                        "Generating roots report with db_path: {:?}, root_id: {:?}, root_path: {:?}",
-                        db_path, root_id, root_path,
+                        "Generating roots report with db_path: {db_path:?}, root_id: {root_id:?}, root_path: {root_path:?}",
                     );
                     let db = Database::new(db_path)?;
 
@@ -336,8 +334,7 @@ impl Cli {
                     last,
                 } => {
                     info!(
-                        "Generating scans report with db_path: {:?}, scan_id: {:?}, last: {}",
-                        db_path, scan_id, last,
+                        "Generating scans report with db_path: {db_path:?}, scan_id: {scan_id:?}, last: {last}",
                     );
                     let db = Database::new(db_path)?;
 
@@ -352,8 +349,7 @@ impl Cli {
                     format,
                 } => {
                     info!(
-                        "Generating items report with db_path: {:?}, item_id: {:?}, item_path: {:?}, root_id: {:?}, format: {}",
-                        db_path, item_id, item_path, root_id, format
+                        "Generating items report with db_path: {db_path:?}, item_id: {item_id:?}, item_path: {item_path:?}, root_id: {root_id:?}, format: {format}"
                     );
                     let db = Database::new(db_path)?;
                     let format: ReportFormat = format.parse()?;
@@ -367,8 +363,7 @@ impl Cli {
                     scan_id,
                 } => {
                     info!(
-                        "Generating changes report with db_path: {:?}, change_id: {:?}, item_id: {:?}, scan_id: {:?}",
-                        db_path, change_id, item_id, scan_id,
+                        "Generating changes report with db_path: {db_path:?}, change_id: {change_id:?}, item_id: {item_id:?}, scan_id: {scan_id:?}",
                     );
                     let db = Database::new(db_path)?;
 
@@ -376,7 +371,7 @@ impl Cli {
                 }
             },
             Command::Query { db_path, query } => {
-                info!("Processing query with db_path: {:?}, '{}'", db_path, query);
+                info!("Processing query with db_path: {db_path:?}, '{query}'");
                 let db = Database::new(db_path)?;
                 QueryProcessor::execute_query_and_print(&db, &query)
             }
