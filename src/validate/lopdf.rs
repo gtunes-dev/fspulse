@@ -82,3 +82,125 @@ impl LopdfValidator {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use indicatif::ProgressBar;
+    use std::path::Path;
+
+    #[test]
+    fn test_lopdf_validator_new() {
+        let validator = LopdfValidator::new();
+        assert!(validator.wants_steady_tick());
+    }
+
+    #[test]
+    fn test_lopdf_validator_wants_steady_tick() {
+        let validator = LopdfValidator::new();
+        assert!(validator.wants_steady_tick());
+    }
+
+    #[test]
+    fn test_lopdf_validator_nonexistent_file() {
+        let validator = LopdfValidator::new();
+        let progress_bar = ProgressBar::hidden();
+        let nonexistent_path = Path::new("/this/path/does/not/exist.pdf");
+        
+        let result = validator.validate(nonexistent_path, &progress_bar);
+        assert!(result.is_ok());
+        
+        let (state, error_msg) = result.unwrap();
+        assert_eq!(state, ValidationState::Invalid);
+        assert!(error_msg.is_some());
+        let msg = error_msg.unwrap();
+        assert!(msg.contains("No such file or directory") || 
+                msg.contains("cannot find the file") ||
+                msg.contains("system cannot find the file"));
+    }
+
+    #[test]
+    fn test_lopdf_validator_invalid_file() {
+        let validator = LopdfValidator::new();
+        let progress_bar = ProgressBar::hidden();
+        
+        // Create a temporary file with invalid PDF content
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+        
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        temp_file.write_all(b"not a pdf file").expect("Failed to write temp file");
+        
+        let result = validator.validate(temp_file.path(), &progress_bar);
+        assert!(result.is_ok());
+        
+        let (state, error_msg) = result.unwrap();
+        assert_eq!(state, ValidationState::Invalid);
+        assert!(error_msg.is_some());
+    }
+
+    #[test]
+    fn test_lopdf_validator_empty_file() {
+        let validator = LopdfValidator::new();
+        let progress_bar = ProgressBar::hidden();
+        
+        // Create a temporary empty file
+        use tempfile::NamedTempFile;
+        
+        let temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        
+        let result = validator.validate(temp_file.path(), &progress_bar);
+        assert!(result.is_ok());
+        
+        let (state, error_msg) = result.unwrap();
+        assert_eq!(state, ValidationState::Invalid);
+        assert!(error_msg.is_some());
+    }
+
+    #[test]
+    fn test_validate_object_primitive_types() {
+        use lopdf::Object;
+        
+        // Test primitive object types that should always be valid
+        assert!(LopdfValidator::validate_object(&Object::Null).is_ok());
+        assert!(LopdfValidator::validate_object(&Object::Boolean(true)).is_ok());
+        assert!(LopdfValidator::validate_object(&Object::Boolean(false)).is_ok());
+        assert!(LopdfValidator::validate_object(&Object::Integer(42)).is_ok());
+        assert!(LopdfValidator::validate_object(&Object::Real(42.5)).is_ok());
+        assert!(LopdfValidator::validate_object(&Object::String(b"test".to_vec(), lopdf::StringFormat::Literal)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_object_array() {
+        use lopdf::Object;
+        
+        // Test valid array
+        let valid_array = Object::Array(vec![
+            Object::Integer(1),
+            Object::String(b"test".to_vec(), lopdf::StringFormat::Literal),
+            Object::Boolean(true),
+        ]);
+        assert!(LopdfValidator::validate_object(&valid_array).is_ok());
+        
+        // Test empty array
+        let empty_array = Object::Array(vec![]);
+        assert!(LopdfValidator::validate_object(&empty_array).is_ok());
+    }
+
+    #[test]
+    fn test_validate_object_dictionary() {
+        use lopdf::{Object, Dictionary};
+        
+        // Test valid dictionary
+        let mut dict = Dictionary::new();
+        dict.set("key1", Object::Integer(42));
+        dict.set("key2", Object::String(b"value".to_vec(), lopdf::StringFormat::Literal));
+        
+        let dict_object = Object::Dictionary(dict);
+        assert!(LopdfValidator::validate_object(&dict_object).is_ok());
+        
+        // Test empty dictionary
+        let empty_dict = Object::Dictionary(Dictionary::new());
+        assert!(LopdfValidator::validate_object(&empty_dict).is_ok());
+    }
+}

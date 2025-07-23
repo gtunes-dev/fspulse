@@ -199,3 +199,65 @@ impl Utils {
         spinner
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_opt_i64_some() {
+        assert_eq!(Utils::display_opt_i64(&Some(42)), "42");
+        assert_eq!(Utils::display_opt_i64(&Some(-1)), "-1");
+        assert_eq!(Utils::display_opt_i64(&Some(0)), "0");
+    }
+
+    #[test]
+    fn test_display_opt_i64_none() {
+        assert_eq!(Utils::display_opt_i64(&None), "-");
+    }
+
+    #[test]
+    fn test_dir_sep_or_empty() {
+        assert_eq!(Utils::dir_sep_or_empty(true), std::path::MAIN_SEPARATOR_STR);
+        assert_eq!(Utils::dir_sep_or_empty(false), "");
+    }
+
+    #[test]
+    fn test_single_date_bounds_valid() {
+        let result = Utils::single_date_bounds("2023-12-25");
+        assert!(result.is_ok());
+        let (start, end) = result.unwrap();
+        assert!(start <= end);
+        assert!(end - start <= 86400); // Should be within 24 hours
+    }
+
+    #[test]
+    fn test_single_date_bounds_invalid() {
+        assert!(Utils::single_date_bounds("invalid-date").is_err());
+        assert!(Utils::single_date_bounds("2023-13-25").is_err());
+        assert!(Utils::single_date_bounds("").is_err());
+    }
+
+    #[test]
+    fn test_range_date_bounds_valid() {
+        let result = Utils::range_date_bounds("2023-12-24", "2023-12-25");
+        assert!(result.is_ok());
+        let (start, end) = result.unwrap();
+        assert!(start <= end);
+    }
+
+    #[test]
+    fn test_range_date_bounds_reversed() {
+        let result = Utils::range_date_bounds("2023-12-25", "2023-12-24");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_display_short_path() {
+        let short_path = Utils::display_short_path("/very/long/path/to/file.txt");
+        assert!(!short_path.is_empty());
+        
+        let normal_path = Utils::display_short_path("short.txt");
+        assert_eq!(normal_path, "short.txt");
+    }
+}

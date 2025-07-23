@@ -60,5 +60,10 @@ tico = "2.0"
 toml = "0.8"
 tui-textarea = "0.7"
 
+[dev-dependencies]
+tempfile = "3.8"
+proptest = "1.4"
+pretty_assertions = "1.4"
+
 [build-dependencies]
 static_vcruntime = "2.0"

@@ -57,3 +57,65 @@ impl Validator for ClaxonValidator {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use indicatif::ProgressBar;
+    use std::path::Path;
+
+    #[test]
+    fn test_claxon_validator_new() {
+        let validator = ClaxonValidator::new();
+        assert!(!validator.wants_steady_tick());
+    }
+
+    #[test]
+    fn test_claxon_validator_wants_steady_tick() {
+        let validator = ClaxonValidator::new();
+        assert!(!validator.wants_steady_tick());
+    }
+
+    #[test]
+    fn test_claxon_validator_blocks_per_tick_constant() {
+        assert_eq!(ClaxonValidator::BLOCKS_PER_TICK, 500);
+    }
+
+    #[test]
+    fn test_claxon_validator_nonexistent_file() {
+        let validator = ClaxonValidator::new();
+        let progress_bar = ProgressBar::hidden();
+        let nonexistent_path = Path::new("/this/path/does/not/exist.flac");
+        
+        let result = validator.validate(nonexistent_path, &progress_bar);
+        assert!(result.is_ok());
+        
+        let (state, error_msg) = result.unwrap();
+        assert_eq!(state, ValidationState::Invalid);
+        assert!(error_msg.is_some());
+        let msg = error_msg.unwrap();
+        assert!(msg.contains("No such file or directory") || 
+                msg.contains("cannot find the file") ||
+                msg.contains("system cannot find the file"));
+    }
+
+    #[test]
+    fn test_claxon_validator_invalid_file() {
+        let validator = ClaxonValidator::new();
+        let progress_bar = ProgressBar::hidden();
+        
+        // Create a temporary file with invalid FLAC content
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+        
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        temp_file.write_all(b"not a flac file").expect("Failed to write temp file");
+        
+        let result = validator.validate(temp_file.path(), &progress_bar);
+        assert!(result.is_ok());
+        
+        let (state, error_msg) = result.unwrap();
+        assert_eq!(state, ValidationState::Invalid);
+        assert!(error_msg.is_some());
+    }
+}

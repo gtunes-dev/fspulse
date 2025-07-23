@@ -112,3 +112,94 @@ pub trait Validator {
 
     fn wants_steady_tick(&self) -> bool;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_validation_state_as_str() {
+        assert_eq!(ValidationState::Unknown.as_str(), "U");
+        assert_eq!(ValidationState::Valid.as_str(), "V");
+        assert_eq!(ValidationState::Invalid.as_str(), "I");
+        assert_eq!(ValidationState::NoValidator.as_str(), "N");
+    }
+
+    #[test]
+    fn test_validation_state_from_char() {
+        assert_eq!(ValidationState::from_char('U'), ValidationState::Unknown);
+        assert_eq!(ValidationState::from_char('V'), ValidationState::Valid);
+        assert_eq!(ValidationState::from_char('I'), ValidationState::Invalid);
+        assert_eq!(ValidationState::from_char('N'), ValidationState::NoValidator);
+        assert_eq!(ValidationState::from_char('X'), ValidationState::Unknown); // Default for invalid
+    }
+
+    #[test]
+    fn test_validation_state_from_string() {
+        assert_eq!(ValidationState::from_string("U"), ValidationState::Unknown);
+        assert_eq!(ValidationState::from_string("V"), ValidationState::Valid);
+        assert_eq!(ValidationState::from_string("I"), ValidationState::Invalid);
+        assert_eq!(ValidationState::from_string("N"), ValidationState::NoValidator);
+        assert_eq!(ValidationState::from_string(""), ValidationState::Unknown); // Default for empty
+        assert_eq!(ValidationState::from_string("Invalid"), ValidationState::Invalid); // First char
+    }
+
+    #[test]
+    fn test_validation_state_display() {
+        assert_eq!(format!("{}", ValidationState::Unknown), "U");
+        assert_eq!(format!("{}", ValidationState::Valid), "V");
+        assert_eq!(format!("{}", ValidationState::Invalid), "I");
+        assert_eq!(format!("{}", ValidationState::NoValidator), "N");
+    }
+
+    #[test]
+    fn test_validation_state_short_str_to_full() {
+        assert_eq!(ValidationState::short_str_to_full("U").unwrap(), "Unknown");
+        assert_eq!(ValidationState::short_str_to_full("V").unwrap(), "Valid");
+        assert_eq!(ValidationState::short_str_to_full("I").unwrap(), "Invalid");
+        assert_eq!(ValidationState::short_str_to_full("N").unwrap(), "No Validator");
+        assert!(ValidationState::short_str_to_full("X").is_err());
+    }
+
+    #[test]
+    fn test_validation_state_default() {
+        assert_eq!(ValidationState::default(), ValidationState::Unknown);
+    }
+
+    #[test]
+    fn test_from_extension() {
+        assert!(from_extension("flac").is_some());
+        assert!(from_extension("jpg").is_some());
+        assert!(from_extension("jpeg").is_some());
+        assert!(from_extension("png").is_some());
+        assert!(from_extension("gif").is_some());
+        assert!(from_extension("tiff").is_some());
+        assert!(from_extension("bmp").is_some());
+        assert!(from_extension("pdf").is_some());
+        assert!(from_extension("txt").is_none());
+        assert!(from_extension("unknown").is_none());
+    }
+
+    #[test]
+    fn test_from_extension_case_insensitive() {
+        assert!(from_extension("FLAC").is_some());
+        assert!(from_extension("JPG").is_some());
+        assert!(from_extension("PDF").is_some());
+    }
+
+    #[test]
+    fn test_from_path() {
+        assert!(from_path(Path::new("test.flac")).is_some());
+        assert!(from_path(Path::new("image.jpg")).is_some());
+        assert!(from_path(Path::new("document.pdf")).is_some());
+        assert!(from_path(Path::new("readme.txt")).is_none());
+        assert!(from_path(Path::new("no_extension")).is_none());
+    }
+
+    #[test]
+    fn test_from_path_with_directory() {
+        assert!(from_path(Path::new("/path/to/audio.flac")).is_some());
+        assert!(from_path(Path::new("./relative/path/photo.png")).is_some());
+    }
+}

@@ -183,3 +183,157 @@ impl Config {
         self.analysis.ensure_valid();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_hash_func_enum() {
+        let config = AnalysisConfig {
+            threads: 4,
+            hash: "md5".to_string(),
+        };
+        assert!(matches!(config.hash_func(), HashFunc::MD5));
+
+        let config = AnalysisConfig {
+            threads: 4,
+            hash: "sha2".to_string(),
+        };
+        assert!(matches!(config.hash_func(), HashFunc::SHA2));
+
+        // Default to SHA2 for unknown values
+        let config = AnalysisConfig {
+            threads: 4,
+            hash: "unknown".to_string(),
+        };
+        assert!(matches!(config.hash_func(), HashFunc::SHA2));
+    }
+
+    #[test]
+    fn test_analysis_config_default() {
+        let config = AnalysisConfig::default();
+        assert_eq!(config.threads(), 8);
+        assert!(matches!(config.hash_func(), HashFunc::SHA2));
+    }
+
+    #[test]
+    fn test_logging_config_default() {
+        let config = LoggingConfig::default();
+        assert_eq!(config.fspulse, "info");
+        assert_eq!(config.lopdf, "error");
+    }
+
+    #[test]
+    fn test_logging_config_ensure_valid() {
+        let mut config = LoggingConfig {
+            fspulse: "  INFO  ".to_string(),
+            lopdf: "WARN".to_string(),
+        };
+        config.ensure_valid();
+        assert_eq!(config.fspulse, "info");
+        assert_eq!(config.lopdf, "warn");
+    }
+
+    #[test]
+    fn test_logging_config_invalid_level() {
+        let mut config = LoggingConfig {
+            fspulse: "invalid_level".to_string(),
+            lopdf: "also_invalid".to_string(),
+        };
+        config.ensure_valid();
+        assert_eq!(config.fspulse, "info"); // Should default to FSPULSE_LEVEL
+        assert_eq!(config.lopdf, "error"); // Should default to LOPDF_LEVEL
+    }
+
+    #[test]
+    fn test_analysis_config_ensure_valid() {
+        let mut config = AnalysisConfig {
+            threads: 4,
+            hash: "  SHA2  ".to_string(),
+        };
+        config.ensure_valid();
+        assert_eq!(config.hash, "sha2");
+    }
+
+    #[test]
+    fn test_analysis_config_invalid_hash() {
+        let mut config = AnalysisConfig {
+            threads: 4,
+            hash: "invalid_hash".to_string(),
+        };
+        config.ensure_valid();
+        assert_eq!(config.hash, "sha2"); // Should default to HASH_SHA2
+    }
+
+    #[test]
+    fn test_config_serialization() {
+        let config = Config {
+            logging: LoggingConfig {
+                fspulse: "debug".to_string(),
+                lopdf: "warn".to_string(),
+            },
+            analysis: AnalysisConfig {
+                threads: 16,
+                hash: "md5".to_string(),
+            },
+        };
+
+        let toml_str = toml::to_string(&config).expect("Failed to serialize config");
+        assert!(toml_str.contains("fspulse = \"debug\""));
+        assert!(toml_str.contains("lopdf = \"warn\""));
+        assert!(toml_str.contains("threads = 16"));
+        assert!(toml_str.contains("hash = \"md5\""));
+    }
+
+    #[test]
+    fn test_config_deserialization() {
+        let toml_str = r#"
+[logging]
+fspulse = "trace"
+lopdf = "info"
+
+[analysis]
+threads = 12
+hash = "sha2"
+"#;
+
+        let config: Config = toml::from_str(toml_str).expect("Failed to deserialize config");
+        assert_eq!(config.logging.fspulse, "trace");
+        assert_eq!(config.logging.lopdf, "info");
+        assert_eq!(config.analysis.threads, 12);
+        assert_eq!(config.analysis.hash, "sha2");
+    }
+
+    #[test]
+    fn test_load_config_with_temp_file() {
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
+        let _temp_dir = temp_file.path().parent().unwrap().to_path_buf();
+
+        let toml_content = r#"
+[logging]
+fspulse = "debug"
+lopdf = "warn"
+
+[analysis]
+threads = 6
+hash = "md5"
+"#;
+        temp_file.write_all(toml_content.as_bytes()).expect("Failed to write temp file");
+
+        // Create a mock ProjectDirs pointing to our temp directory
+        let project_dirs = directories::ProjectDirs::from("test", "test", "fspulse")
+            .expect("Failed to create project dirs");
+
+        // Test default config creation (when file doesn't exist at expected location)
+        let config = Config::load_config(&project_dirs);
+        
+        // Should get defaults since the temp file isn't at the expected config location
+        assert_eq!(config.logging.fspulse, "info");
+        assert_eq!(config.logging.lopdf, "error");
+        assert_eq!(config.analysis.threads, 8);
+        assert!(matches!(config.analysis.hash_func(), HashFunc::SHA2));
+    }
+}
