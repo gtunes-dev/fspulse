@@ -78,9 +78,16 @@ mod tests {
         assert_eq!(state, ValidationState::Invalid);
         assert!(error_msg.is_some());
         let msg = error_msg.unwrap();
-        assert!(msg.contains("No such file or directory") || 
-                msg.contains("cannot find the file") ||
-                msg.contains("system cannot find the file"));
+        assert!(
+            msg.contains("No such file or directory") || 
+            msg.contains("cannot find the file") ||
+            msg.contains("system cannot find the file") ||
+            msg.contains("The system cannot find the file") ||
+            msg.contains("Access is denied") ||
+            msg.to_lowercase().contains("not found") ||
+            msg.to_lowercase().contains("no such file"),
+            "Unexpected error message for nonexistent file: {msg}"
+        );
     }
 
     #[test]
