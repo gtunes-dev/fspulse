@@ -119,6 +119,7 @@ mod tests {
             msg.contains("cannot find the file") ||
             msg.contains("system cannot find the file") ||
             msg.contains("The system cannot find the file") ||
+            msg.contains("The system cannot find the path specified") ||
             msg.contains("Access is denied") ||
             msg.to_lowercase().contains("not found") ||
             msg.to_lowercase().contains("no such file"),
