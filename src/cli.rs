@@ -90,7 +90,7 @@ The database file will always be named 'fspulse.db'."#
 
         #[arg(
             long,
-            conflicts_with = "hash",
+            conflicts_with = "no_hash",
             help = "Hash only files whose file size or modification date has changed"
         )]
         hash_new: bool,
@@ -491,5 +491,294 @@ impl Cli {
             }
             _ => Ok(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+    
+    #[test]
+    fn test_command_choice_copy_clone() {
+        let choice = CommandChoice::Scan;
+        let choice_copy = choice;
+        let choice_clone = choice;
+        
+        // All should be equal (testing Copy trait)
+        assert!(matches!(choice, CommandChoice::Scan));
+        assert!(matches!(choice_copy, CommandChoice::Scan));
+        assert!(matches!(choice_clone, CommandChoice::Scan));
+    }
+    
+    #[test]
+    fn test_report_choice_copy_clone() {
+        let choice = ReportChoice::Items;
+        let choice_copy = choice;
+        let choice_clone = choice;
+        
+        // All should be equal (testing Copy trait)
+        assert!(matches!(choice, ReportChoice::Items));
+        assert!(matches!(choice_copy, ReportChoice::Items));
+        assert!(matches!(choice_clone, ReportChoice::Items));
+    }
+    
+    #[test]
+    fn test_item_report_choice_copy_clone() {
+        let choice = ItemReportChoice::InvalidItems;
+        let choice_copy = choice;
+        let choice_clone = choice;
+        
+        // All should be equal (testing Copy trait)
+        assert!(matches!(choice, ItemReportChoice::InvalidItems));
+        assert!(matches!(choice_copy, ItemReportChoice::InvalidItems));
+        assert!(matches!(choice_clone, ItemReportChoice::InvalidItems));
+    }
+    
+    #[test]
+    fn test_command_choices_completeness() {
+        // Verify all enum variants are represented in the static array
+        assert_eq!(COMMAND_CHOICES.len(), 5);
+        
+        // Verify each choice has a label
+        let choices: Vec<CommandChoice> = COMMAND_CHOICES.iter().map(|(choice, _)| *choice).collect();
+        assert!(choices.iter().any(|c| matches!(c, CommandChoice::Scan)));
+        assert!(choices.iter().any(|c| matches!(c, CommandChoice::QuerySimple)));
+        assert!(choices.iter().any(|c| matches!(c, CommandChoice::Explore)));
+        assert!(choices.iter().any(|c| matches!(c, CommandChoice::Report)));
+        assert!(choices.iter().any(|c| matches!(c, CommandChoice::Exit)));
+        
+        // Verify labels are not empty
+        for (_, label) in COMMAND_CHOICES {
+            assert!(!label.is_empty(), "Command choice label should not be empty");
+        }
+    }
+    
+    #[test]
+    fn test_report_choices_completeness() {
+        // Verify all enum variants are represented in the static array
+        assert_eq!(REPORT_CHOICES.len(), 5);
+        
+        // Verify each choice has a label
+        let choices: Vec<ReportChoice> = REPORT_CHOICES.iter().map(|(choice, _)| *choice).collect();
+        assert!(choices.iter().any(|c| matches!(c, ReportChoice::Roots)));
+        assert!(choices.iter().any(|c| matches!(c, ReportChoice::Scans)));
+        assert!(choices.iter().any(|c| matches!(c, ReportChoice::Items)));
+        assert!(choices.iter().any(|c| matches!(c, ReportChoice::Changes)));
+        assert!(choices.iter().any(|c| matches!(c, ReportChoice::Exit)));
+        
+        // Verify labels are not empty
+        for (_, label) in REPORT_CHOICES {
+            assert!(!label.is_empty(), "Report choice label should not be empty");
+        }
+    }
+    
+    #[test]
+    fn test_item_report_choices_completeness() {
+        // Verify all enum variants are represented in the static array
+        assert_eq!(ITEM_REPORT_CHOICES.len(), 2);
+        
+        // Verify each choice has a label
+        let choices: Vec<ItemReportChoice> = ITEM_REPORT_CHOICES.iter().map(|(choice, _)| *choice).collect();
+        assert!(choices.iter().any(|c| matches!(c, ItemReportChoice::InvalidItems)));
+        assert!(choices.iter().any(|c| matches!(c, ItemReportChoice::Exit)));
+        
+        // Verify labels are not empty
+        for (_, label) in ITEM_REPORT_CHOICES {
+            assert!(!label.is_empty(), "Item report choice label should not be empty");
+        }
+    }
+    
+    #[test]
+    fn test_command_choices_labels() {
+        // Test specific label mappings
+        let scan_label = COMMAND_CHOICES.iter()
+            .find(|(choice, _)| matches!(choice, CommandChoice::Scan))
+            .map(|(_, label)| *label);
+        assert_eq!(scan_label, Some("Scan"));
+        
+        let query_label = COMMAND_CHOICES.iter()
+            .find(|(choice, _)| matches!(choice, CommandChoice::QuerySimple))
+            .map(|(_, label)| *label);
+        assert_eq!(query_label, Some("Query"));
+        
+        let explore_label = COMMAND_CHOICES.iter()
+            .find(|(choice, _)| matches!(choice, CommandChoice::Explore))
+            .map(|(_, label)| *label);
+        assert_eq!(explore_label, Some("Explore"));
+        
+        let report_label = COMMAND_CHOICES.iter()
+            .find(|(choice, _)| matches!(choice, CommandChoice::Report))
+            .map(|(_, label)| *label);
+        assert_eq!(report_label, Some("Report"));
+        
+        let exit_label = COMMAND_CHOICES.iter()
+            .find(|(choice, _)| matches!(choice, CommandChoice::Exit))
+            .map(|(_, label)| *label);
+        assert_eq!(exit_label, Some("Exit"));
+    }
+    
+    #[test]
+    fn test_cli_scan_parsing_with_root_id() {
+        let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "123"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Scan { root_id, root_path, last, .. } = cli.command {
+            assert_eq!(root_id, Some(123));
+            assert_eq!(root_path, None);
+            assert!(!last);
+        } else {
+            panic!("Expected Scan command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_scan_parsing_with_root_path() {
+        let result = Cli::try_parse_from(["fspulse", "scan", "--root-path", "/test/path"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Scan { root_id, root_path, last, .. } = cli.command {
+            assert_eq!(root_id, None);
+            assert_eq!(root_path, Some("/test/path".to_string()));
+            assert!(!last);
+        } else {
+            panic!("Expected Scan command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_scan_parsing_with_last() {
+        let result = Cli::try_parse_from(["fspulse", "scan", "--last"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Scan { root_id, root_path, last, .. } = cli.command {
+            assert_eq!(root_id, None);
+            assert_eq!(root_path, None);
+            assert!(last);
+        } else {
+            panic!("Expected Scan command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_scan_parsing_with_hash_options() {
+        let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "1", "--no-hash", "--validate-all"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Scan { no_hash, hash_new, no_validate, validate_all, .. } = cli.command {
+            assert!(no_hash);
+            assert!(!hash_new);
+            assert!(!no_validate);
+            assert!(validate_all);
+        } else {
+            panic!("Expected Scan command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_interact_parsing() {
+        let result = Cli::try_parse_from(["fspulse", "interact"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Interact { db_path } = cli.command {
+            assert_eq!(db_path, None);
+        } else {
+            panic!("Expected Interact command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_interact_parsing_with_db_path() {
+        let result = Cli::try_parse_from(["fspulse", "interact", "--db-path", "/custom/db/path"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Interact { db_path } = cli.command {
+            assert_eq!(db_path, Some(PathBuf::from("/custom/db/path")));
+        } else {
+            panic!("Expected Interact command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_query_parsing() {
+        let result = Cli::try_parse_from(["fspulse", "query", "items where scan:(5)"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Query { query, db_path } = cli.command {
+            assert_eq!(query, "items where scan:(5)");
+            assert_eq!(db_path, None);
+        } else {
+            panic!("Expected Query command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_report_roots_parsing() {
+        let result = Cli::try_parse_from(["fspulse", "report", "roots", "--root-id", "42"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Report { report_type } = cli.command {
+            if let ReportType::Roots { root_id, root_path, .. } = report_type {
+                assert_eq!(root_id, Some(42));
+                assert_eq!(root_path, None);
+            } else {
+                panic!("Expected Roots report type");
+            }
+        } else {
+            panic!("Expected Report command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_report_items_parsing() {
+        let result = Cli::try_parse_from(["fspulse", "report", "items", "--root-id", "1", "--invalid", "--format", "tree"]);
+        assert!(result.is_ok());
+        
+        let cli = result.unwrap();
+        if let Command::Report { report_type } = cli.command {
+            if let ReportType::Items { root_id, invalid, format, .. } = report_type {
+                assert_eq!(root_id, Some(1));
+                assert!(invalid);
+                assert_eq!(format, "tree");
+            } else {
+                panic!("Expected Items report type");
+            }
+        } else {
+            panic!("Expected Report command");
+        }
+    }
+    
+    #[test]
+    fn test_cli_parsing_conflicts() {
+        // Test that conflicting arguments are properly rejected
+        let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "1", "--root-path", "/test"]);
+        assert!(result.is_err(), "Should reject conflicting root-id and root-path");
+        
+        let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "1", "--last"]);
+        assert!(result.is_err(), "Should reject conflicting root-id and last");
+        
+        let result = Cli::try_parse_from(["fspulse", "report", "roots", "--root-id", "1", "--root-path", "/test"]);
+        assert!(result.is_err(), "Should reject conflicting root-id and root-path in reports");
+    }
+    
+    #[test]
+    fn test_cli_parsing_invalid_arguments() {
+        // Test various invalid argument combinations
+        let result = Cli::try_parse_from(["fspulse", "nonexistent-command"]);
+        assert!(result.is_err(), "Should reject unknown commands");
+        
+        let result = Cli::try_parse_from(["fspulse", "scan", "--invalid-flag"]);
+        assert!(result.is_err(), "Should reject unknown flags");
+        
+        let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "not-a-number"]);
+        assert!(result.is_err(), "Should reject non-numeric root ID");
     }
 }

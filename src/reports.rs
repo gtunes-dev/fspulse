@@ -522,3 +522,229 @@ impl Reports {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    
+    #[test]
+    fn test_report_format_from_str_valid_cases() {
+        assert_eq!("tree".parse::<ReportFormat>().unwrap(), ReportFormat::Tree);
+        assert_eq!("table".parse::<ReportFormat>().unwrap(), ReportFormat::Table);
+    }
+    
+    #[test]
+    fn test_report_format_from_str_case_insensitive() {
+        assert_eq!("TREE".parse::<ReportFormat>().unwrap(), ReportFormat::Tree);
+        assert_eq!("Tree".parse::<ReportFormat>().unwrap(), ReportFormat::Tree);
+        assert_eq!("tReE".parse::<ReportFormat>().unwrap(), ReportFormat::Tree);
+        
+        assert_eq!("TABLE".parse::<ReportFormat>().unwrap(), ReportFormat::Table);
+        assert_eq!("Table".parse::<ReportFormat>().unwrap(), ReportFormat::Table);
+        assert_eq!("tAbLe".parse::<ReportFormat>().unwrap(), ReportFormat::Table);
+    }
+    
+    #[test]
+    fn test_report_format_from_str_invalid_cases() {
+        assert!("invalid".parse::<ReportFormat>().is_err());
+        assert!("".parse::<ReportFormat>().is_err());
+        assert!("json".parse::<ReportFormat>().is_err());
+        assert!("xml".parse::<ReportFormat>().is_err());
+        assert!("Tree ".parse::<ReportFormat>().is_err()); // trailing space should fail
+        assert!(" tree".parse::<ReportFormat>().is_err()); // leading space should fail
+    }
+    
+    #[test]
+    fn test_report_format_from_str_error_message() {
+        let result = "invalid".parse::<ReportFormat>();
+        assert!(result.is_err());
+        if let Err(FsPulseError::Error(msg)) = result {
+            assert_eq!(msg, "Invalid format specified.");
+        } else {
+            panic!("Expected FsPulseError::Error");
+        }
+    }
+    
+    #[test]
+    fn test_report_format_traits() {
+        let tree = ReportFormat::Tree;
+        let table = ReportFormat::Table;
+        
+        // Test PartialEq
+        assert_eq!(tree, ReportFormat::Tree);
+        assert_eq!(table, ReportFormat::Table);
+        assert_ne!(tree, table);
+        
+        // Test Copy
+        let tree_copy = tree;
+        assert_eq!(tree, tree_copy);
+        
+        // Test Clone
+        let table_clone = table;
+        assert_eq!(table, table_clone);
+        
+        // Test Debug (just ensure it doesn't panic)
+        let debug_str = format!("{tree:?}");
+        assert!(debug_str.contains("Tree"));
+    }
+    
+    #[test]
+    fn test_get_tree_path_root_level_file() {
+        let mut path_stack = Vec::new();
+        let root_path = Path::new("/test/root");
+        let path = "/test/root/file.txt";
+        
+        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
+        
+        assert_eq!(indent_level, 0);
+        assert_eq!(processed_path, PathBuf::from("file.txt"));
+        assert!(path_stack.is_empty()); // Files don't get pushed to stack
+    }
+    
+    #[test]
+    fn test_get_tree_path_root_level_directory() {
+        let mut path_stack = Vec::new();
+        let root_path = Path::new("/test/root");
+        let path = "/test/root/subdir";
+        
+        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, true);
+        
+        assert_eq!(indent_level, 0);
+        assert_eq!(processed_path, PathBuf::from("subdir"));
+        assert_eq!(path_stack.len(), 1); // Directory gets pushed to stack
+        assert_eq!(path_stack[0], PathBuf::from("subdir"));
+    }
+    
+    #[test]
+    fn test_get_tree_path_nested_file_in_directory() {
+        let mut path_stack = vec![PathBuf::from("subdir")];
+        let root_path = Path::new("/test/root");
+        let path = "/test/root/subdir/file.txt";
+        
+        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
+        
+        assert_eq!(indent_level, 1);
+        assert_eq!(processed_path, PathBuf::from("file.txt"));
+        assert_eq!(path_stack.len(), 1); // Stack unchanged for files
+    }
+    
+    #[test]
+    fn test_get_tree_path_nested_directory_structure() {
+        let mut path_stack = Vec::new();
+        let root_path = Path::new("/test/root");
+        
+        // Add first level directory
+        let path1 = "/test/root/level1";
+        let (indent1, processed1) = Reports::get_tree_path(&mut path_stack, root_path, path1, true);
+        assert_eq!(indent1, 0);
+        assert_eq!(processed1, PathBuf::from("level1"));
+        assert_eq!(path_stack.len(), 1);
+        
+        // Add second level directory
+        let path2 = "/test/root/level1/level2";
+        let (indent2, processed2) = Reports::get_tree_path(&mut path_stack, root_path, path2, true);
+        assert_eq!(indent2, 1);
+        assert_eq!(processed2, PathBuf::from("level2"));
+        assert_eq!(path_stack.len(), 2);
+    }
+    
+    #[test]
+    fn test_get_tree_path_stack_pruning() {
+        let mut path_stack = vec![
+            PathBuf::from("dir1"),
+            PathBuf::from("dir1/subdir1"),
+            PathBuf::from("dir1/subdir1/deep"),
+        ];
+        let root_path = Path::new("/test/root");
+        
+        // Access a file in dir1/subdir2 (sibling of subdir1)
+        // This should prune the stack back to dir1 level
+        let path = "/test/root/dir1/subdir2/file.txt";
+        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
+        
+        assert_eq!(indent_level, 2); // After adding subdir2 to stack
+        assert_eq!(processed_path, PathBuf::from("file.txt"));
+        assert_eq!(path_stack.len(), 2); // Should have pruned to [dir1, dir1/subdir2]
+    }
+    
+    #[test]
+    fn test_get_tree_path_complex_nested_file() {
+        let mut path_stack = Vec::new();
+        let root_path = Path::new("/test/root");
+        
+        // Test a file deeply nested in directory structure
+        let path = "/test/root/level1/level2/level3/file.txt";
+        let (_indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
+        
+        // Should create directory structure and return file
+        assert_eq!(processed_path, PathBuf::from("file.txt"));
+        // Should have added the parent directory path to stack
+        assert_eq!(path_stack.len(), 1);
+        assert_eq!(path_stack[0], PathBuf::from("level1/level2/level3"));
+    }
+    
+    #[test] 
+    fn test_get_tree_path_empty_stack_behavior() {
+        let mut path_stack = Vec::new();
+        let root_path = Path::new("/root");
+        
+        // Test with completely empty stack
+        let path = "/root/file.txt";
+        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
+        
+        assert_eq!(indent_level, 0);
+        assert_eq!(processed_path, PathBuf::from("file.txt"));
+        assert!(path_stack.is_empty());
+    }
+    
+    #[test]
+    fn test_hr_functionality() {
+        // This test verifies hr() doesn't panic - actual output testing would require capturing stdout
+        Reports::hr(10);
+        Reports::hr(0);
+        Reports::hr(100);
+        // If we get here without panicking, the test passes
+    }
+    
+    #[test]
+    fn test_print_center_functionality() {
+        // This test verifies print_center() doesn't panic - actual output testing would require capturing stdout
+        Reports::print_center(20, "test");
+        Reports::print_center(10, "hello");
+        Reports::print_center(5, "");
+        Reports::print_center(0, "");
+        // If we get here without panicking, the test passes
+    }
+    
+    #[test]
+    fn test_print_center_padding_logic() {
+        // We can't easily test the actual output, but we can test the padding calculation logic
+        // by recreating it in the test
+        let width = 20;
+        let value = "test";
+        let padding = width - value.len();
+        let lpad = padding / 2;
+        let rpad = lpad + (padding % 2);
+        
+        assert_eq!(padding, 16); // 20 - 4 = 16
+        assert_eq!(lpad, 8);      // 16 / 2 = 8
+        assert_eq!(rpad, 8);      // 8 + (16 % 2) = 8 + 0 = 8
+        assert_eq!(lpad + value.len() + rpad, width); // Total should equal width
+    }
+    
+    #[test]
+    fn test_print_center_odd_padding() {
+        // Test with odd padding to ensure rpad gets the extra character
+        let width = 21;
+        let value = "test";
+        let padding = width - value.len();
+        let lpad = padding / 2;
+        let rpad = lpad + (padding % 2);
+        
+        assert_eq!(padding, 17); // 21 - 4 = 17
+        assert_eq!(lpad, 8);      // 17 / 2 = 8
+        assert_eq!(rpad, 9);      // 8 + (17 % 2) = 8 + 1 = 9
+        assert_eq!(lpad + value.len() + rpad, width); // Total should equal width
+    }
+}

@@ -225,3 +225,202 @@ impl ChangeCounts {
         *target = count;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use strum::IntoEnumIterator;
+    
+    #[test]
+    fn test_change_type_as_ref_str() {
+        assert_eq!(ChangeType::Add.as_ref(), "A");
+        assert_eq!(ChangeType::Delete.as_ref(), "D");
+        assert_eq!(ChangeType::Modify.as_ref(), "M");
+        assert_eq!(ChangeType::NoChange.as_ref(), "N");
+    }
+    
+    #[test]
+    fn test_change_type_display() {
+        assert_eq!(ChangeType::Add.to_string(), "A");
+        assert_eq!(ChangeType::Delete.to_string(), "D");
+        assert_eq!(ChangeType::Modify.to_string(), "M");
+        assert_eq!(ChangeType::NoChange.to_string(), "N");
+    }
+    
+    #[test]
+    fn test_change_type_from_str() {
+        assert_eq!("A".parse::<ChangeType>().unwrap(), ChangeType::Add);
+        assert_eq!("D".parse::<ChangeType>().unwrap(), ChangeType::Delete);
+        assert_eq!("M".parse::<ChangeType>().unwrap(), ChangeType::Modify);
+        assert_eq!("N".parse::<ChangeType>().unwrap(), ChangeType::NoChange);
+        
+        // Test invalid parse
+        assert!("X".parse::<ChangeType>().is_err());
+        assert!("".parse::<ChangeType>().is_err());
+        assert!("Add".parse::<ChangeType>().is_err()); // Should be "A", not "Add"
+    }
+    
+    #[test]
+    fn test_change_type_long_name() {
+        assert_eq!(ChangeType::Add.long_name(), "Add");
+        assert_eq!(ChangeType::Delete.long_name(), "Delete");
+        assert_eq!(ChangeType::Modify.long_name(), "Modify");
+        assert_eq!(ChangeType::NoChange.long_name(), "No Change");
+    }
+    
+    #[test]
+    fn test_change_type_enum_iter() {
+        let all_types: Vec<ChangeType> = ChangeType::iter().collect();
+        assert_eq!(all_types.len(), 4);
+        assert!(all_types.contains(&ChangeType::Add));
+        assert!(all_types.contains(&ChangeType::Delete));
+        assert!(all_types.contains(&ChangeType::Modify));
+        assert!(all_types.contains(&ChangeType::NoChange));
+    }
+    
+    #[test]
+    fn test_change_type_round_trip() {
+        let types = [ChangeType::Add, ChangeType::Delete, ChangeType::Modify, ChangeType::NoChange];
+        
+        for change_type in types {
+            let str_val = change_type.as_ref();
+            let parsed_back = str_val.parse::<ChangeType>().unwrap();
+            assert_eq!(change_type, parsed_back, "Round trip failed for {change_type:?}");
+        }
+    }
+    
+    #[test]
+    fn test_change_default() {
+        let change = Change::default();
+        
+        assert_eq!(change.change_id, 0);
+        assert_eq!(change.scan_id, 0);
+        assert_eq!(change.item_id, 0);
+        assert_eq!(change.change_type, "");
+        assert_eq!(change.is_undelete, None);
+        assert_eq!(change.meta_change, None);
+        assert_eq!(change.mod_date_old, None);
+        assert_eq!(change.mod_date_new, None);
+        assert_eq!(change.file_size_old, None);
+        assert_eq!(change.file_size_new, None);
+        assert_eq!(change.hash_change, None);
+        assert_eq!(change.hash_old, None);
+        assert_eq!(change.val_change, None);
+        assert_eq!(change.val_old, None);
+        assert_eq!(change.item_type, "");
+        assert_eq!(change.item_path, "");
+    }
+    
+    #[test]
+    fn test_change_accessor_methods() {
+        let mut change = Change::default();
+        
+        // Test None values
+        assert_eq!(change.hash_old(), None);
+        assert_eq!(change.val_old(), None);
+        assert_eq!(change.val_new(), None);
+        
+        // Test Some values
+        change.hash_old = Some("abc123".to_string());
+        change.val_old = Some("V".to_string());
+        change.val_new = Some("I".to_string());
+        
+        assert_eq!(change.hash_old(), Some("abc123"));
+        assert_eq!(change.val_old(), Some("V"));
+        assert_eq!(change.val_new(), Some("I"));
+    }
+    
+    #[test]
+    fn test_change_counts_default() {
+        let counts = ChangeCounts::default();
+        
+        assert_eq!(counts.add_count, 0);
+        assert_eq!(counts.modify_count, 0);
+        assert_eq!(counts.delete_count, 0);
+        assert_eq!(counts.no_change_count, 0);
+    }
+    
+    #[test]
+    fn test_change_counts_set_count_of() {
+        let mut counts = ChangeCounts::default();
+        
+        // Test setting each count type
+        counts.set_count_of(ChangeType::Add, 10);
+        assert_eq!(counts.add_count, 10);
+        assert_eq!(counts.modify_count, 0); // Others unchanged
+        
+        counts.set_count_of(ChangeType::Delete, 5);
+        assert_eq!(counts.delete_count, 5);
+        assert_eq!(counts.add_count, 10); // Previous value preserved
+        
+        counts.set_count_of(ChangeType::Modify, 20);
+        assert_eq!(counts.modify_count, 20);
+        
+        counts.set_count_of(ChangeType::NoChange, 100);
+        assert_eq!(counts.no_change_count, 100);
+        
+        // Test overwriting existing values
+        counts.set_count_of(ChangeType::Add, 99);
+        assert_eq!(counts.add_count, 99);
+    }
+    
+    #[test]
+    fn test_validation_transitions_default() {
+        let transitions = ValidationTransitions::default();
+        
+        assert_eq!(transitions.unknown_to_valid, 0);
+        assert_eq!(transitions.unknown_to_invalid, 0);
+        assert_eq!(transitions.unknown_to_no_validator, 0);
+        assert_eq!(transitions.valid_to_invalid, 0);
+        assert_eq!(transitions.valid_to_no_validator, 0);
+        assert_eq!(transitions.no_validator_to_valid, 0);
+        assert_eq!(transitions.no_validator_to_invalid, 0);
+    }
+    
+    #[test]
+    fn test_change_type_copy_clone() {
+        let change_type = ChangeType::Add;
+        let change_type_copy = change_type;
+        let change_type_clone = change_type;
+        
+        // All should be equal
+        assert_eq!(change_type, change_type_copy);
+        assert_eq!(change_type, change_type_clone);
+        assert_eq!(change_type_copy, change_type_clone);
+    }
+    
+    #[test]
+    fn test_change_counts_copy_clone() {
+        let counts = ChangeCounts {
+            add_count: 5,
+            modify_count: 10,
+            ..ChangeCounts::default()
+        };
+        
+        let counts_copy = counts;
+        let counts_clone = counts;
+        
+        // All should have the same values
+        assert_eq!(counts.add_count, counts_copy.add_count);
+        assert_eq!(counts.modify_count, counts_clone.modify_count);
+        assert_eq!(counts_copy.add_count, counts_clone.add_count);
+    }
+    
+    #[test]
+    fn test_change_clone() {
+        let change = Change {
+            change_id: 123,
+            scan_id: 456,
+            hash_old: Some("test_hash".to_string()),
+            item_path: "/test/path".to_string(),
+            ..Change::default()
+        };
+        
+        let change_clone = change.clone();
+        
+        assert_eq!(change.change_id, change_clone.change_id);
+        assert_eq!(change.scan_id, change_clone.scan_id);
+        assert_eq!(change.hash_old(), change_clone.hash_old());
+        assert_eq!(change.item_path, change_clone.item_path);
+    }
+}
