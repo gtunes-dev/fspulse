@@ -101,6 +101,7 @@ pub enum ScanState {
 impl ScanState {
     pub fn from_i64(value: i64) -> Self {
         match value {
+            0 => ScanState::Pending,
             1 => ScanState::Scanning,
             2 => ScanState::Sweeping,
             3 => ScanState::Analyzing,
@@ -602,5 +603,193 @@ impl Scan {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scan_state_as_i64() {
+        assert_eq!(ScanState::Pending.as_i64(), 0);
+        assert_eq!(ScanState::Scanning.as_i64(), 1);
+        assert_eq!(ScanState::Sweeping.as_i64(), 2);
+        assert_eq!(ScanState::Analyzing.as_i64(), 3);
+        assert_eq!(ScanState::Completed.as_i64(), 4);
+        assert_eq!(ScanState::Stopped.as_i64(), 5);
+        assert_eq!(ScanState::Unknown.as_i64(), -1);
+    }
+
+    #[test]
+    fn test_scan_state_from_i64() {
+        assert_eq!(ScanState::from_i64(0), ScanState::Pending);
+        assert_eq!(ScanState::from_i64(1), ScanState::Scanning);
+        assert_eq!(ScanState::from_i64(2), ScanState::Sweeping);
+        assert_eq!(ScanState::from_i64(3), ScanState::Analyzing);
+        assert_eq!(ScanState::from_i64(4), ScanState::Completed);
+        assert_eq!(ScanState::from_i64(5), ScanState::Stopped);
+        
+        // Test invalid values default to Unknown
+        assert_eq!(ScanState::from_i64(-5), ScanState::Unknown);
+        assert_eq!(ScanState::from_i64(99), ScanState::Unknown);
+        assert_eq!(ScanState::from_i64(100), ScanState::Unknown);
+    }
+
+    #[test]
+    fn test_scan_state_round_trip() {
+        let states = [
+            ScanState::Pending,
+            ScanState::Scanning,
+            ScanState::Sweeping,
+            ScanState::Analyzing,
+            ScanState::Completed,
+            ScanState::Stopped,
+            ScanState::Unknown,
+        ];
+
+        for state in states {
+            let i64_val = state.as_i64();
+            let converted_back = ScanState::from_i64(i64_val);
+            assert_eq!(state, converted_back, "Round trip failed for {state:?}");
+        }
+    }
+
+    #[test]
+    fn test_scan_state_display() {
+        assert_eq!(ScanState::Pending.to_string(), "Pending");
+        assert_eq!(ScanState::Scanning.to_string(), "Scanning");
+        assert_eq!(ScanState::Sweeping.to_string(), "Sweeping");
+        assert_eq!(ScanState::Analyzing.to_string(), "Analyzing");
+        assert_eq!(ScanState::Completed.to_string(), "Completed");
+        assert_eq!(ScanState::Stopped.to_string(), "Stopped");
+        assert_eq!(ScanState::Unknown.to_string(), "Unknown");
+    }
+
+    #[test]
+    fn test_scan_state_default() {
+        assert_eq!(ScanState::default(), ScanState::Pending);
+    }
+
+    #[test]
+    fn test_scan_state_ordering() {
+        // Test that enum ordering works as expected
+        assert!(ScanState::Pending < ScanState::Scanning);
+        assert!(ScanState::Scanning < ScanState::Sweeping);
+        assert!(ScanState::Sweeping < ScanState::Analyzing);
+        assert!(ScanState::Analyzing < ScanState::Completed);
+        assert!(ScanState::Completed < ScanState::Stopped);
+        assert!(ScanState::Unknown < ScanState::Pending); // -1 < 0
+    }
+
+    #[test]
+    fn test_analysis_spec_new_no_hash_no_val() {
+        let spec = AnalysisSpec::new(true, false, true, false);
+        assert!(!spec.is_hash());
+        assert!(!spec.hash_all());
+        assert!(!spec.is_val());
+        assert!(!spec.val_all());
+    }
+
+    #[test]
+    fn test_analysis_spec_new_hash_new() {
+        let spec = AnalysisSpec::new(false, true, false, false);
+        assert!(spec.is_hash());
+        assert!(!spec.hash_all());
+        assert!(spec.is_val()); // defaults to new when not disabled
+        assert!(!spec.val_all());
+    }
+
+    #[test]
+    fn test_analysis_spec_new_hash_all() {
+        let spec = AnalysisSpec::new(false, false, false, false);
+        assert!(spec.is_hash()); // defaults to all when not disabled or new
+        assert!(spec.hash_all());
+        assert!(spec.is_val()); // defaults to new when not disabled
+        assert!(!spec.val_all());
+    }
+
+    #[test]
+    fn test_analysis_spec_new_val_all() {
+        let spec = AnalysisSpec::new(false, false, false, true);
+        assert!(spec.is_hash()); // defaults to all
+        assert!(spec.hash_all());
+        assert!(spec.is_val());
+        assert!(spec.val_all());
+    }
+
+    #[test]
+    fn test_analysis_spec_all_combinations() {
+        // Test all 16 possible combinations of the 4 boolean flags
+        let test_cases = [
+            // (no_hash, hash_new, no_val, val_all) -> (expected is_hash, hash_all, is_val, val_all)
+            ((true, false, true, false), (false, false, false, false)),   // 0000
+            ((true, false, true, true), (false, false, true, false)),     // 0001 - no_val=true, val_all=true -> ValidateMode::New  
+            ((true, false, false, false), (false, false, true, false)),   // 0010
+            ((true, false, false, true), (false, false, true, true)),     // 0011
+            ((true, true, true, false), (true, true, false, false)),      // 0100 - (true,true) -> HashMode::All
+            ((true, true, true, true), (true, true, true, false)),        // 0101 - (true,true) -> HashMode::All, no_val=true, val_all=true -> ValidateMode::New
+            ((true, true, false, false), (true, true, true, false)),      // 0110 - (true,true) -> HashMode::All
+            ((true, true, false, true), (true, true, true, true)),        // 0111 - (true,true) -> HashMode::All
+            ((false, false, true, false), (true, true, false, false)),    // 1000
+            ((false, false, true, true), (true, true, true, false)),      // 1001 - no_val=true, val_all=true -> ValidateMode::New
+            ((false, false, false, false), (true, true, true, false)),    // 1010
+            ((false, false, false, true), (true, true, true, true)),      // 1011
+            ((false, true, true, false), (true, false, false, false)),    // 1100
+            ((false, true, true, true), (true, false, true, false)),      // 1101 - no_val=true, val_all=true -> ValidateMode::New
+            ((false, true, false, false), (true, false, true, false)),    // 1110
+            ((false, true, false, true), (true, false, true, true)),      // 1111
+        ];
+
+        for ((no_hash, hash_new, no_val, val_all), (exp_is_hash, exp_hash_all, exp_is_val, exp_val_all)) in test_cases {
+            let spec = AnalysisSpec::new(no_hash, hash_new, no_val, val_all);
+            assert_eq!(spec.is_hash(), exp_is_hash, 
+                "is_hash failed for ({no_hash}, {hash_new}, {no_val}, {val_all})");
+            assert_eq!(spec.hash_all(), exp_hash_all,
+                "hash_all failed for ({no_hash}, {hash_new}, {no_val}, {val_all})");
+            assert_eq!(spec.is_val(), exp_is_val,
+                "is_val failed for ({no_hash}, {hash_new}, {no_val}, {val_all})");
+            assert_eq!(spec.val_all(), exp_val_all,
+                "val_all failed for ({no_hash}, {hash_new}, {no_val}, {val_all})");
+        }
+    }
+
+    #[test]
+    fn test_hash_mode_enum() {
+        // Test that HashMode enum has expected variants
+        let _none = HashMode::None;
+        let _new = HashMode::New;
+        let _all = HashMode::All;
+        
+        // Test PartialEq
+        assert_eq!(HashMode::None, HashMode::None);
+        assert_ne!(HashMode::None, HashMode::New);
+        assert_ne!(HashMode::New, HashMode::All);
+    }
+
+    #[test]
+    fn test_validate_mode_enum() {
+        // Test that ValidateMode enum has expected variants
+        let _none = ValidateMode::None;
+        let _new = ValidateMode::New;
+        let _all = ValidateMode::All;
+        
+        // Test PartialEq
+        assert_eq!(ValidateMode::None, ValidateMode::None);
+        assert_ne!(ValidateMode::None, ValidateMode::New);
+        assert_ne!(ValidateMode::New, ValidateMode::All);
+    }
+
+    #[test]
+    fn test_analysis_spec_copy_clone() {
+        let spec = AnalysisSpec::new(false, true, false, false);
+        let spec_copy = spec;
+        let spec_clone = spec;
+        
+        // All should have the same behavior
+        assert_eq!(spec.is_hash(), spec_copy.is_hash());
+        assert_eq!(spec.is_hash(), spec_clone.is_hash());
+        assert_eq!(spec.hash_all(), spec_copy.hash_all());
+        assert_eq!(spec.hash_all(), spec_clone.hash_all());
     }
 }

@@ -460,3 +460,178 @@ impl Item {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_item_type_as_str() {
+        assert_eq!(ItemType::File.as_str(), "F");
+        assert_eq!(ItemType::Directory.as_str(), "D");
+        assert_eq!(ItemType::Symlink.as_str(), "S");
+        assert_eq!(ItemType::Other.as_str(), "O");
+    }
+
+    #[test]
+    fn test_item_type_short_str_to_full() {
+        assert_eq!(ItemType::short_str_to_full("F").unwrap(), "File");
+        assert_eq!(ItemType::short_str_to_full("D").unwrap(), "Directory");
+        assert_eq!(ItemType::short_str_to_full("S").unwrap(), "Symlink");
+        assert_eq!(ItemType::short_str_to_full("O").unwrap(), "Other");
+        
+        // Test invalid type
+        let result = ItemType::short_str_to_full("X");
+        assert!(result.is_err());
+        if let Err(FsPulseError::Error(msg)) = result {
+            assert!(msg.contains("Invalid item type: 'X'"));
+        } else {
+            panic!("Expected FsPulseError::Error");
+        }
+    }
+
+    #[test]
+    fn test_analysis_item_getters() {
+        let analysis_item = AnalysisItem {
+            item_id: 123,
+            item_path: "/test/path".to_string(),
+            last_hash_scan: Some(456),
+            file_hash: Some("abc123".to_string()),
+            last_val_scan: Some(789),
+            val: "Valid".to_string(),
+            val_error: Some("test error".to_string()),
+            meta_change: Some(true),
+            needs_hash: true,
+            needs_val: false,
+        };
+
+        assert_eq!(analysis_item.item_id(), 123);
+        assert_eq!(analysis_item.item_path(), "/test/path");
+        assert_eq!(analysis_item.last_hash_scan(), Some(456));
+        assert_eq!(analysis_item.file_hash(), Some("abc123"));
+        assert_eq!(analysis_item.last_val_scan(), Some(789));
+        assert_eq!(analysis_item.val_error(), Some("test error"));
+        assert_eq!(analysis_item.meta_change(), Some(true));
+        assert!(analysis_item.needs_hash());
+        assert!(!analysis_item.needs_val());
+    }
+
+    #[test]
+    fn test_analysis_item_default() {
+        let analysis_item = AnalysisItem::default();
+        
+        assert_eq!(analysis_item.item_id(), 0);
+        assert_eq!(analysis_item.item_path(), "");
+        assert_eq!(analysis_item.last_hash_scan(), None);
+        assert_eq!(analysis_item.file_hash(), None);
+        assert_eq!(analysis_item.last_val_scan(), None);
+        assert_eq!(analysis_item.val_error(), None);
+        assert_eq!(analysis_item.meta_change(), None);
+        assert!(!analysis_item.needs_hash());
+        assert!(!analysis_item.needs_val());
+    }
+
+    #[test]
+    fn test_item_getters() {
+        let item = Item {
+            item_id: 456,
+            root_id: 1,
+            item_path: "/another/path".to_string(),
+            item_type: "F".to_string(),
+            last_scan: 123456789,
+            is_ts: true,
+            mod_date: Some(987654321),
+            file_size: Some(1024),
+            last_hash_scan: Some(111),
+            file_hash: Some("def456".to_string()),
+            last_val_scan: Some(222),
+            val: "Invalid".to_string(),
+            val_error: Some("validation failed".to_string()),
+        };
+
+        assert_eq!(item.item_id(), 456);
+        assert_eq!(item.root_id(), 1);
+        assert_eq!(item.item_path(), "/another/path");
+        assert_eq!(item.item_type(), "F");
+        assert_eq!(item.last_scan(), 123456789);
+        assert!(item.is_ts());
+        assert_eq!(item.mod_date(), Some(987654321));
+        assert_eq!(item.file_size(), Some(1024));
+        assert_eq!(item.last_hash_scan(), Some(111));
+        assert_eq!(item.file_hash(), Some("def456"));
+        assert_eq!(item.last_val_scan(), Some(222));
+        assert_eq!(item.validity_state_as_str(), "Invalid");
+        assert_eq!(item.val_error(), Some("validation failed"));
+    }
+
+    #[test]
+    fn test_item_default() {
+        let item = Item::default();
+        
+        assert_eq!(item.item_id(), 0);
+        assert_eq!(item.root_id(), 0);
+        assert_eq!(item.item_path(), "");
+        assert_eq!(item.item_type(), "");
+        assert_eq!(item.last_scan(), 0);
+        assert!(!item.is_ts());
+        assert_eq!(item.mod_date(), None);
+        assert_eq!(item.file_size(), None);
+        assert_eq!(item.last_hash_scan(), None);
+        assert_eq!(item.file_hash(), None);
+        assert_eq!(item.last_val_scan(), None);
+        assert_eq!(item.validity_state_as_str(), "");
+        assert_eq!(item.val_error(), None);
+    }
+
+    #[test]
+    fn test_item_type_enum_all_variants() {
+        // Test that all enum variants work correctly
+        let types = [ItemType::File, ItemType::Directory, ItemType::Symlink, ItemType::Other];
+        let expected = ["F", "D", "S", "O"];
+        
+        for (i, item_type) in types.iter().enumerate() {
+            assert_eq!(item_type.as_str(), expected[i]);
+        }
+    }
+
+    #[test]
+    fn test_analysis_item_optional_fields() {
+        let mut analysis_item = AnalysisItem::default();
+        
+        // Test None values
+        assert_eq!(analysis_item.file_hash(), None);
+        assert_eq!(analysis_item.last_hash_scan(), None);
+        assert_eq!(analysis_item.val_error(), None);
+        
+        // Test Some values
+        analysis_item.file_hash = Some("test_hash".to_string());
+        analysis_item.last_hash_scan = Some(123);
+        analysis_item.val_error = Some("error_msg".to_string());
+        
+        assert_eq!(analysis_item.file_hash(), Some("test_hash"));
+        assert_eq!(analysis_item.last_hash_scan(), Some(123));
+        assert_eq!(analysis_item.val_error(), Some("error_msg"));
+    }
+
+    #[test]
+    fn test_item_optional_fields() {
+        let mut item = Item::default();
+        
+        // Test None values
+        assert_eq!(item.file_hash(), None);
+        assert_eq!(item.mod_date(), None);
+        assert_eq!(item.file_size(), None);
+        assert_eq!(item.val_error(), None);
+        
+        // Test Some values
+        item.file_hash = Some("test_hash".to_string());
+        item.mod_date = Some(1234567890);
+        item.file_size = Some(2048);
+        item.val_error = Some("validation_error".to_string());
+        
+        assert_eq!(item.file_hash(), Some("test_hash"));
+        assert_eq!(item.mod_date(), Some(1234567890));
+        assert_eq!(item.file_size(), Some(2048));
+        assert_eq!(item.val_error(), Some("validation_error"));
+    }
+}

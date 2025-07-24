@@ -168,3 +168,168 @@ impl Root {
         Ok(canonical_path)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::fs;
+
+    #[test]
+    fn test_root_getters() {
+        let root = Root {
+            root_id: 123,
+            root_path: "/test/path".to_string(),
+        };
+
+        assert_eq!(root.root_id(), 123);
+        assert_eq!(root.root_path(), "/test/path");
+    }
+
+    #[test]
+    fn test_root_default() {
+        let root = Root::default();
+        
+        assert_eq!(root.root_id(), 0);
+        assert_eq!(root.root_path(), "");
+    }
+
+    #[test]
+    fn test_validate_and_canonicalize_path_empty() {
+        let result = Root::validate_and_canonicalize_path("");
+        assert!(result.is_err());
+        if let Err(FsPulseError::Error(msg)) = result {
+            assert!(msg.contains("Provided path is empty"));
+        } else {
+            panic!("Expected FsPulseError::Error");
+        }
+    }
+
+    #[test]
+    fn test_validate_and_canonicalize_path_whitespace_only() {
+        let result = Root::validate_and_canonicalize_path("   \t\n  ");
+        assert!(result.is_err());
+        if let Err(FsPulseError::Error(msg)) = result {
+            assert!(msg.contains("Provided path is empty"));
+        } else {
+            panic!("Expected FsPulseError::Error");
+        }
+    }
+
+    #[test]
+    fn test_validate_and_canonicalize_path_nonexistent() {
+        let result = Root::validate_and_canonicalize_path("/this/path/does/not/exist/anywhere");
+        assert!(result.is_err());
+        if let Err(FsPulseError::Error(msg)) = result {
+            assert!(msg.contains("does not exist"));
+        } else {
+            panic!("Expected FsPulseError::Error");
+        }
+    }
+
+    #[test]
+    fn test_validate_and_canonicalize_path_valid_temp_dir() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let temp_path = temp_dir.path().to_str().unwrap();
+        
+        let result = Root::validate_and_canonicalize_path(temp_path);
+        assert!(result.is_ok());
+        
+        let canonical_path = result.unwrap();
+        assert!(canonical_path.exists());
+        assert!(canonical_path.is_dir());
+    }
+
+    #[test]
+    fn test_validate_and_canonicalize_path_file_not_directory() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let file_path = temp_dir.path().join("test_file.txt");
+        fs::write(&file_path, "test content").expect("Failed to write test file");
+        
+        let result = Root::validate_and_canonicalize_path(file_path.to_str().unwrap());
+        assert!(result.is_err());
+        if let Err(FsPulseError::Error(msg)) = result {
+            assert!(msg.contains("is not a directory"));
+        } else {
+            panic!("Expected FsPulseError::Error");
+        }
+    }
+
+    #[test]
+    fn test_validate_and_canonicalize_path_relative_path() {
+        // Use current directory as a relative path (should work)
+        let result = Root::validate_and_canonicalize_path(".");
+        assert!(result.is_ok());
+        
+        let canonical_path = result.unwrap();
+        assert!(canonical_path.exists());
+        assert!(canonical_path.is_dir());
+        assert!(canonical_path.is_absolute());
+    }
+
+    #[test]
+    fn test_validate_and_canonicalize_path_with_whitespace() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let temp_path = temp_dir.path().to_str().unwrap();
+        let path_with_whitespace = format!("  {temp_path}  ");
+        
+        let result = Root::validate_and_canonicalize_path(&path_with_whitespace);
+        assert!(result.is_ok());
+        
+        let canonical_path = result.unwrap();
+        assert!(canonical_path.exists());
+        assert!(canonical_path.is_dir());
+    }
+
+    #[test]
+    fn test_validate_edge_cases() {
+        // Test paths with special characters (those that are valid directory names)
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let special_dir = temp_dir.path().join("test-dir_with.special.chars");
+        fs::create_dir(&special_dir).expect("Failed to create special dir");
+        
+        let result = Root::validate_and_canonicalize_path(special_dir.to_str().unwrap());
+        assert!(result.is_ok());
+        
+        let canonical_path = result.unwrap();
+        assert!(canonical_path.exists());
+        assert!(canonical_path.is_dir());
+    }
+
+    #[test]
+    fn test_validate_absolute_vs_relative() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let temp_path = temp_dir.path();
+        
+        // Test absolute path
+        let result_abs = Root::validate_and_canonicalize_path(temp_path.to_str().unwrap());
+        assert!(result_abs.is_ok());
+        
+        // Both should result in the same canonical path
+        let canonical_abs = result_abs.unwrap();
+        assert!(canonical_abs.is_absolute());
+        assert!(canonical_abs.exists());
+    }
+
+    #[test]
+    fn test_path_canonicalization() {
+        // Test that paths are properly canonicalized (removing . and .. components)
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let subdir = temp_dir.path().join("subdir");
+        fs::create_dir(&subdir).expect("Failed to create subdir");
+        
+        // Create a path with .. components
+        let complex_path = format!("{}/subdir/../subdir", temp_dir.path().display());
+        
+        let result = Root::validate_and_canonicalize_path(&complex_path);
+        assert!(result.is_ok());
+        
+        let canonical_path = result.unwrap();
+        assert!(canonical_path.exists());
+        assert!(canonical_path.is_dir());
+        
+        // The canonical path should not contain .. components
+        let path_str = canonical_path.to_string_lossy();
+        assert!(!path_str.contains(".."));
+    }
+}
