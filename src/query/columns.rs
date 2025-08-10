@@ -243,11 +243,11 @@ impl ColSet {
         self.col_map
     }
 
-    pub fn values(&self) -> Values<&str, ColSpec> {
+    pub fn values(&self) -> Values<'_, &str, ColSpec> {
         self.col_map.values()
     }
 
-    pub fn entries(&self) -> Entries<&'static str, ColSpec> {
+    pub fn entries(&self) -> Entries<'_, &'static str, ColSpec> {
         self.col_map.entries()
     }
 
