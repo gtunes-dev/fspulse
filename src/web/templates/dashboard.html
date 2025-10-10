@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FsPulse Dashboard - Dev Mode</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .hamburger {
+            display: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+
+        .container {
+            display: flex;
+            min-height: calc(100vh - 80px);
+        }
+
+        .sidebar {
+            width: 250px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            padding: 1rem 0;
+        }
+
+        .nav-item {
+            padding: 0.75rem 2rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-size: 0.95rem;
+            transition: background-color 0.2s;
+        }
+
+        .nav-item:hover {
+            background: #f0f0f0;
+        }
+
+        .nav-item.active {
+            background: #e3f2fd;
+            border-right: 3px solid #2196f3;
+        }
+
+        .nav-divider {
+            margin: 1rem 0;
+            border-top: 1px solid #e0e0e0;
+            position: relative;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+        }
+
+        .overview-modules {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: left;
+        }
+
+        .card h3 {
+            margin-bottom: 1rem;
+            color: #333;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .module-link {
+            color: #2196f3;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: normal;
+        }
+
+        .module-link:hover {
+            text-decoration: underline;
+        }
+
+        /* List Components */
+        .list-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            gap: 1rem;
+        }
+
+        .search-filter {
+            flex: 1;
+            max-width: 300px;
+        }
+
+        .search-filter input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .sortable-header {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 20px;
+        }
+
+        .sortable-header:hover {
+            background: #e8f4fd;
+        }
+
+        .sort-indicator {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.7rem;
+            color: #666;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .sortable-header:hover .sort-indicator {
+            opacity: 0.5;
+        }
+
+        .sortable-header.active .sort-indicator {
+            opacity: 1;
+            color: #2196f3;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .data-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .status-inactive {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1rem;
+        }
+
+        .pagination-info {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .pagination-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .pagination-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background: #f0f0f0;
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .alert-item {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .alert-item:last-child {
+            border-bottom: none;
+        }
+
+        .alert-severity {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-right: 0.5rem;
+        }
+
+        .severity-high {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .severity-medium {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .severity-low {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .hamburger {
+                display: block;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: 80px;
+                height: calc(100vh - 80px);
+                z-index: 1000;
+                transition: left 0.3s ease;
+            }
+
+            .sidebar.open {
+                left: 0;
+            }
+
+            .main-content {
+                padding: 1rem;
+            }
+
+            .overview-modules {
+                gap: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div style="display: flex; align-items: center;">
+            <span class="hamburger" onclick="toggleSidebar()">≡</span>
+            <h1 style="margin-left: 1rem;">FsPulse</h1>
+        </div>
+        <div>⚙️</div>
+    </header>
+
+    <div class="container">
+        <nav class="sidebar" id="sidebar">
+            <!-- Insights Section -->
+            <button class="nav-item active" onclick="showSection('overview')">🏠 Overview</button>
+            <button class="nav-item" onclick="showSection('alerts')">🚨 Alerts</button>
+            <button class="nav-item" onclick="showSection('activity')">📊 Activity</button>
+
+            <div class="nav-divider"></div>
+
+            <!-- Data Management Section -->
+            <button class="nav-item" onclick="showSection('roots')">🗂️ Roots</button>
+            <button class="nav-item" onclick="showSection('scans')">🔍 Scans</button>
+            <button class="nav-item" onclick="showSection('items')">📄 Items</button>
+            <button class="nav-item" onclick="showSection('changes')">🔄 Changes</button>
+
+            <div class="nav-divider"></div>
+
+            <!-- Configuration Section -->
+            <button class="nav-item" onclick="showSection('settings')">⚙️ Settings</button>
+        </nav>
+
+        <main class="main-content">
+            <div id="overview-section">
+                <h2 style="margin-bottom: 1.5rem;">Overview</h2>
+
+                <div class="overview-modules">
+                    <div class="card">
+                        <h3>
+                            📈 System Status
+                        </h3>
+                        <div id="status-summary" class="loading">Loading status...</div>
+                    </div>
+
+                    <div class="card">
+                        <h3>
+                            🚨 Active Alerts
+                            <a href="#" class="module-link" onclick="showSection('alerts')">View All →</a>
+                        </h3>
+                        <div id="alerts-summary" class="loading">Loading alerts...</div>
+                    </div>
+
+                    <div class="card">
+                        <h3>
+                            📊 Current Activity
+                            <a href="#" class="module-link" onclick="showSection('activity')">View All →</a>
+                        </h3>
+                        <div id="activity-summary" class="loading">Loading activity...</div>
+                    </div>
+
+                    <div class="card">
+                        <h3>
+                            📋 Recent Activity
+                            <a href="#" class="module-link" onclick="showSection('activity')">View All →</a>
+                        </h3>
+                        <div id="recent-activity" class="loading">Loading recent activity...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insights Sections -->
+            <div id="alerts-section" style="display: none;">
+                <h2>Active Alerts</h2>
+                <p>Detailed alerts management coming soon...</p>
+            </div>
+
+            <div id="activity-section" style="display: none;">
+                <h2>Activity Monitor</h2>
+                <p>Detailed activity monitoring coming soon...</p>
+            </div>
+
+            <!-- Data Management Sections -->
+            <div id="roots-section" style="display: none;">
+                <h2>Scan Roots</h2>
+
+                <div class="list-controls">
+                    <div class="search-filter">
+                        <input type="text" id="roots-filter" placeholder="Filter roots..." onkeyup="filterRoots()">
+                    </div>
+                </div>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable-header active" onclick="sortRootsByColumn('path')" data-column="path">
+                                Path
+                                <span class="sort-indicator">▲</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="roots-table-body">
+                        <tr><td class="loading">Loading roots...</td></tr>
+                    </tbody>
+                </table>
+
+                <div class="pagination" id="roots-pagination" style="display: none;">
+                    <div class="pagination-info" id="roots-pagination-info"></div>
+                    <div class="pagination-controls">
+                        <button class="pagination-btn" id="roots-prev-btn" onclick="changeRootsPage(-1)">Previous</button>
+                        <button class="pagination-btn" id="roots-next-btn" onclick="changeRootsPage(1)">Next</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="scans-section" style="display: none;">
+                <h2>Scan History</h2>
+
+                <div class="list-controls">
+                    <div class="search-filter">
+                        <input type="text" id="scans-filter" placeholder="Filter scans..." onkeyup="filterScans()">
+                    </div>
+                </div>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable-header" onclick="sortScansByColumn('id')" data-column="id">
+                                ID
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th class="sortable-header" onclick="sortScansByColumn('root_path')" data-column="root_path">
+                                Root Path
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th class="sortable-header" onclick="sortScansByColumn('state')" data-column="state">
+                                State
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th class="sortable-header active" onclick="sortScansByColumn('scan_time')" data-column="scan_time">
+                                Scan Time
+                                <span class="sort-indicator">▼</span>
+                            </th>
+                            <th class="sortable-header" onclick="sortScansByColumn('file_count')" data-column="file_count">
+                                Files
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th class="sortable-header" onclick="sortScansByColumn('folder_count')" data-column="folder_count">
+                                Folders
+                                <span class="sort-indicator"></span>
+                            </th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scans-table-body">
+                        <tr><td colspan="7">Loading...</td></tr>
+                    </tbody>
+                </table>
+
+                <div class="pagination">
+                    <div class="pagination-info" id="scans-pagination-info">
+                        Showing 0 - 0 of 0 scans
+                    </div>
+                    <div class="pagination-controls">
+                        <button class="pagination-btn" id="scans-prev-btn" onclick="changeScansPage(-1)">Previous</button>
+                        <button class="pagination-btn" id="scans-next-btn" onclick="changeScansPage(1)">Next</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="items-section" style="display: none;">
+                <h2>Filesystem Items</h2>
+                <p>Browse and search filesystem items...</p>
+            </div>
+
+            <div id="changes-section" style="display: none;">
+                <h2>Change History</h2>
+                <p>Examine filesystem changes over time...</p>
+            </div>
+
+            <!-- Configuration Section -->
+            <div id="settings-section" style="display: none;">
+                <h2>Settings</h2>
+                <p>System configuration and preferences...</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Navigation
+        function showSection(sectionName) {
+            // Hide all sections
+            document.querySelectorAll('[id$="-section"]').forEach(section => {
+                section.style.display = 'none';
+            });
+
+            // Show selected section
+            document.getElementById(sectionName + '-section').style.display = 'block';
+
+            // Update nav active state
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Close sidebar on mobile
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+            }
+        }
+
+        // Mobile sidebar toggle
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        // Load dashboard data
+        async function loadDashboardData() {
+            try {
+                // Load status
+                const statusResponse = await fetch('/api/status');
+                const statusData = await statusResponse.json();
+                document.getElementById('status-summary').innerHTML = `
+                    <div>Server: <strong>${statusData.server}</strong></div>
+                    <div>Database: <strong>${statusData.database}</strong></div>
+                    <div>Active Scans: <strong>${statusData.active_scans}</strong></div>
+                `;
+
+                // Load alerts
+                const alertsResponse = await fetch('/api/alerts');
+                const alertsData = await alertsResponse.json();
+                const alertsHtml = alertsData.alerts.slice(0, 3).map(alert => `
+                    <div class="alert-item">
+                        <span class="alert-severity severity-${alert.severity}">${alert.severity}</span>
+                        <div>${alert.message}</div>
+                        <small style="color: #666;">${new Date(alert.timestamp).toLocaleString()}</small>
+                    </div>
+                `).join('');
+                document.getElementById('alerts-summary').innerHTML = alertsHtml || '<div>No active alerts</div>';
+
+                // Load activity
+                const activityResponse = await fetch('/api/activity');
+                const activityData = await activityResponse.json();
+                const currentScans = activityData.current_scans;
+                const activityHtml = currentScans.length > 0 ?
+                    currentScans.map(scan => `
+                        <div>Scanning: <strong>${scan.root_path}</strong></div>
+                        <div>Progress: <strong>${scan.progress}%</strong> (${scan.files_scanned}/${scan.files_total} files)</div>
+                    `).join('') :
+                    '<div>No active scans</div>';
+                document.getElementById('activity-summary').innerHTML = activityHtml;
+
+                // Load recent activity
+                const recentHtml = [
+                    ...activityData.recent_scans.slice(0, 3).map(scan => `
+                        <div class="alert-item">
+                            <div>Completed scan: <strong>${scan.root_path}</strong></div>
+                            <small style="color: #666;">
+                                ${scan.files_scanned} files scanned in ${scan.duration_seconds}s
+                                • ${new Date(scan.completed).toLocaleString()}
+                            </small>
+                        </div>
+                    `),
+                    ...activityData.recent_changes.slice(0, 2).map(change => `
+                        <div class="alert-item">
+                            <div>File ${change.change_type}: <strong>${change.file_path}</strong></div>
+                            <small style="color: #666;">${new Date(change.timestamp).toLocaleString()}</small>
+                        </div>
+                    `)
+                ].join('');
+                document.getElementById('recent-activity').innerHTML = recentHtml || '<div>No recent activity</div>';
+
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+                document.querySelectorAll('.loading').forEach(el => {
+                    el.innerHTML = '<div style="color: #f44336;">Failed to load data</div>';
+                });
+            }
+        }
+
+        // Roots functionality
+        let currentRootsPage = 1;
+        let currentRootsSort = 'path';
+        let currentRootsSortDirection = 'asc';
+        let currentRootsFilter = '';
+
+        async function loadRoots() {
+            try {
+                const sortParam = currentRootsSortDirection === 'desc' ?
+                    currentRootsSort + '_desc' : currentRootsSort;
+
+                const params = new URLSearchParams({
+                    page: currentRootsPage,
+                    limit: 25,
+                    sort: sortParam,
+                    filter: currentRootsFilter
+                });
+
+                const response = await fetch(`/api/roots?${params}`);
+                const data = await response.json();
+
+                const tbody = document.getElementById('roots-table-body');
+                if (data.items.length === 0) {
+                    tbody.innerHTML = '<tr><td>No roots found</td></tr>';
+                } else {
+                    tbody.innerHTML = data.items.map(root => `
+                        <tr>
+                            <td><strong>${root.path}</strong></td>
+                        </tr>
+                    `).join('');
+                }
+
+                // Update pagination
+                const pagination = document.getElementById('roots-pagination');
+                const paginationInfo = document.getElementById('roots-pagination-info');
+                const prevBtn = document.getElementById('roots-prev-btn');
+                const nextBtn = document.getElementById('roots-next-btn');
+
+                if (data.total > 0) {
+                    pagination.style.display = 'flex';
+                    const start = ((data.page - 1) * data.limit) + 1;
+                    const end = Math.min(data.page * data.limit, data.total);
+                    paginationInfo.textContent = `Showing ${start}-${end} of ${data.total} roots`;
+
+                    prevBtn.disabled = !data.has_prev;
+                    nextBtn.disabled = !data.has_next;
+                } else {
+                    pagination.style.display = 'none';
+                }
+
+                // Update sort indicators
+                updateRootsSortIndicators();
+
+            } catch (error) {
+                console.error('Failed to load roots:', error);
+                document.getElementById('roots-table-body').innerHTML =
+                    '<tr><td style="color: #f44336;">Failed to load roots</td></tr>';
+            }
+        }
+
+        function filterRoots() {
+            currentRootsFilter = document.getElementById('roots-filter').value;
+            currentRootsPage = 1;
+            loadRoots();
+        }
+
+        function sortRootsByColumn(column) {
+            if (currentRootsSort === column) {
+                // Toggle direction if clicking the same column
+                currentRootsSortDirection = currentRootsSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                // New column, start with ascending
+                currentRootsSort = column;
+                currentRootsSortDirection = 'asc';
+            }
+            currentRootsPage = 1;
+            loadRoots();
+        }
+
+        function updateRootsSortIndicators() {
+            // Remove active class from all headers
+            document.querySelectorAll('#roots-section .sortable-header').forEach(header => {
+                header.classList.remove('active');
+            });
+
+            // Find and update the active header
+            const activeHeader = document.querySelector(`#roots-section [data-column="${currentRootsSort}"]`);
+            if (activeHeader) {
+                activeHeader.classList.add('active');
+                const indicator = activeHeader.querySelector('.sort-indicator');
+                indicator.textContent = currentRootsSortDirection === 'asc' ? '▲' : '▼';
+            }
+        }
+
+        function changeRootsPage(delta) {
+            currentRootsPage += delta;
+            loadRoots();
+        }
+
+        // Scans functionality
+        let currentScansPage = 1;
+        let currentScansSort = 'scan_time';
+        let currentScansSortDirection = 'desc';
+        let currentScansFilter = '';
+
+        async function loadScans() {
+            try {
+                const params = new URLSearchParams({
+                    page: currentScansPage,
+                    limit: 25
+                });
+
+                if (currentScansSort) {
+                    const sortParam = currentScansSortDirection === 'desc' ? currentScansSort + '_desc' : currentScansSort;
+                    params.append('sort', sortParam);
+                }
+
+                if (currentScansFilter) {
+                    params.append('filter', currentScansFilter);
+                }
+
+                const response = await fetch(`/api/scans?${params}`);
+                const data = await response.json();
+
+                const tbody = document.getElementById('scans-table-body');
+                tbody.innerHTML = '';
+
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(scan => {
+                        const row = document.createElement('tr');
+
+                        // Format duration
+                        const duration = scan.duration_seconds ?
+                            `${scan.duration_seconds}s` :
+                            (scan.state === 'scanning' ? 'In progress...' : '-');
+
+                        // Format state with color
+                        const stateClass = scan.state === 'completed' ? 'status-active' :
+                                         scan.state === 'scanning' ? 'status-inactive' :
+                                         'status-inactive';
+
+                        row.innerHTML = `
+                            <td>${scan.id}</td>
+                            <td title="${scan.root_path || 'Unknown'}">${scan.root_path || 'Unknown'}</td>
+                            <td><span class="${stateClass}">${scan.state}</span></td>
+                            <td>${new Date(scan.scan_time).toLocaleString()}</td>
+                            <td>${scan.file_count || '-'}</td>
+                            <td>${scan.folder_count || '-'}</td>
+                            <td>${duration}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No scans found</td></tr>';
+                }
+
+                // Update pagination info
+                const start = data.items.length > 0 ? (data.page - 1) * data.limit + 1 : 0;
+                const end = Math.min(start + data.items.length - 1, data.total);
+                document.getElementById('scans-pagination-info').textContent =
+                    `Showing ${start} - ${end} of ${data.total} scans`;
+
+                // Update pagination buttons
+                document.getElementById('scans-prev-btn').disabled = !data.has_prev;
+                document.getElementById('scans-next-btn').disabled = !data.has_next;
+
+                // Update sort indicators
+                updateScansSortIndicators();
+            } catch (error) {
+                console.error('Failed to load scans:', error);
+                document.getElementById('scans-table-body').innerHTML =
+                    '<tr><td colspan="7" style="color: #f44336;">Failed to load scans</td></tr>';
+            }
+        }
+
+        function filterScans() {
+            currentScansFilter = document.getElementById('scans-filter').value;
+            currentScansPage = 1;
+            loadScans();
+        }
+
+        function sortScansByColumn(column) {
+            if (currentScansSort === column) {
+                // Toggle direction if clicking the same column
+                currentScansSortDirection = currentScansSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                // New column, start with ascending
+                currentScansSort = column;
+                currentScansSortDirection = 'asc';
+            }
+            currentScansPage = 1;
+            loadScans();
+        }
+
+        function updateScansSortIndicators() {
+            // Remove active class from all headers
+            document.querySelectorAll('#scans-section .sortable-header').forEach(header => {
+                header.classList.remove('active');
+            });
+
+            // Find and update the active header
+            const activeHeader = document.querySelector(`#scans-section [data-column="${currentScansSort}"]`);
+            if (activeHeader) {
+                activeHeader.classList.add('active');
+                const indicator = activeHeader.querySelector('.sort-indicator');
+                indicator.textContent = currentScansSortDirection === 'asc' ? '▲' : '▼';
+            }
+        }
+
+        function changeScansPage(delta) {
+            currentScansPage += delta;
+            loadScans();
+        }
+
+        // Enhanced showSection to load data when needed
+        function showSection(sectionName, updateHash = true) {
+            // Update URL hash if requested
+            if (updateHash) {
+                window.location.hash = '#/' + sectionName;
+            }
+
+            // Hide all sections
+            document.querySelectorAll('[id$="-section"]').forEach(section => {
+                section.style.display = 'none';
+            });
+
+            // Show selected section
+            document.getElementById(sectionName + '-section').style.display = 'block';
+
+            // Update nav active state
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            // Find and activate the correct nav item
+            const activeNavItem = Array.from(document.querySelectorAll('.nav-item')).find(item => {
+                return item.textContent.toLowerCase().includes(sectionName.toLowerCase());
+            });
+            if (activeNavItem) {
+                activeNavItem.classList.add('active');
+            }
+
+            // Load data for specific sections
+            if (sectionName === 'roots') {
+                loadRoots();
+            }
+            if (sectionName === 'scans') {
+                loadScans();
+            }
+
+            // Close sidebar on mobile
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+            }
+        }
+
+        // Handle hash-based routing
+        function handleRouteChange() {
+            const hash = window.location.hash;
+            let sectionName = 'overview'; // default
+
+            if (hash.startsWith('#/')) {
+                sectionName = hash.substring(2); // Remove '#/'
+            }
+
+            // Validate section exists
+            const sectionElement = document.getElementById(sectionName + '-section');
+            if (!sectionElement) {
+                sectionName = 'overview';
+            }
+
+            showSection(sectionName, false); // Don't update hash to avoid loop
+        }
+
+        // Listen for hash changes (back/forward buttons)
+        window.addEventListener('hashchange', handleRouteChange);
+
+        // Handle initial load based on URL hash
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboardData();
+            handleRouteChange(); // Load the correct section based on URL hash
+        });
+    </script>
+</body>
+</html>

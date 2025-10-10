@@ -117,9 +117,42 @@ impl AnalysisConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WebConfig {
+    pub use_mock_data: bool,
+    pub port: u16,
+    pub host: String,
+}
+
+impl WebConfig {
+    fn default() -> Self {
+        WebConfig {
+            use_mock_data: false,
+            port: 8080,
+            host: "127.0.0.1".to_string(),
+        }
+    }
+
+    fn ensure_valid(&mut self) {
+        // Trim and validate host
+        self.host = self.host.trim().to_string();
+        if self.host.is_empty() {
+            eprintln!("Config error: web host cannot be empty - using default '127.0.0.1'");
+            self.host = "127.0.0.1".to_string();
+        }
+
+        // Validate port range
+        if self.port == 0 {
+            eprintln!("Config error: web port cannot be 0 - using default 8080");
+            self.port = 8080;
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     pub logging: LoggingConfig,
     pub analysis: AnalysisConfig,
+    pub web: WebConfig,
 }
 
 impl Config {
@@ -129,10 +162,11 @@ impl Config {
     pub fn load_config(project_dirs: &ProjectDirs) -> Self {
         let config_path = project_dirs.data_local_dir().join("config.toml");
 
-        // Define default logging levels
+        // Define default config
         let default_config = Config {
             logging: LoggingConfig::default(),
             analysis: AnalysisConfig::default(),
+            web: WebConfig::default(),
         };
 
         // If the config file doesn't exist, write the default configuration to disk.
@@ -181,6 +215,7 @@ impl Config {
     fn ensure_valid(&mut self) {
         self.logging.ensure_valid();
         self.analysis.ensure_valid();
+        self.web.ensure_valid();
     }
 }
 
@@ -308,6 +343,64 @@ hash = "sha2"
     }
 
     #[test]
+    fn test_web_config_default() {
+        let config = WebConfig::default();
+        assert_eq!(config.use_mock_data, false);
+        assert_eq!(config.port, 8080);
+        assert_eq!(config.host, "127.0.0.1");
+    }
+
+    #[test]
+    fn test_web_config_ensure_valid() {
+        let mut config = WebConfig {
+            use_mock_data: true,
+            port: 3000,
+            host: "  localhost  ".to_string(),
+        };
+        config.ensure_valid();
+        assert_eq!(config.host, "localhost");
+        assert_eq!(config.port, 3000);
+        assert_eq!(config.use_mock_data, true);
+    }
+
+    #[test]
+    fn test_web_config_invalid_values() {
+        let mut config = WebConfig {
+            use_mock_data: false,
+            port: 0,
+            host: "".to_string(),
+        };
+        config.ensure_valid();
+        assert_eq!(config.host, "127.0.0.1"); // Should default
+        assert_eq!(config.port, 8080); // Should default
+    }
+
+    #[test]
+    fn test_config_with_web_section() {
+        let toml_str = r#"
+[logging]
+fspulse = "debug"
+lopdf = "warn"
+
+[analysis]
+threads = 12
+hash = "sha2"
+
+[web]
+use_mock_data = true
+port = 3000
+host = "0.0.0.0"
+"#;
+
+        let config: Config = toml::from_str(toml_str).expect("Failed to deserialize config");
+        assert_eq!(config.logging.fspulse, "debug");
+        assert_eq!(config.analysis.threads, 12);
+        assert_eq!(config.web.use_mock_data, true);
+        assert_eq!(config.web.port, 3000);
+        assert_eq!(config.web.host, "0.0.0.0");
+    }
+
+    #[test]
     fn test_load_config_with_temp_file() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
         let _temp_dir = temp_file.path().parent().unwrap().to_path_buf();
@@ -320,6 +413,11 @@ lopdf = "warn"
 [analysis]
 threads = 6
 hash = "md5"
+
+[web]
+use_mock_data = true
+port = 9000
+host = "localhost"
 "#;
         temp_file.write_all(toml_content.as_bytes()).expect("Failed to write temp file");
 
@@ -329,11 +427,14 @@ hash = "md5"
 
         // Test default config creation (when file doesn't exist at expected location)
         let config = Config::load_config(&project_dirs);
-        
+
         // Should get defaults since the temp file isn't at the expected config location
         assert_eq!(config.logging.fspulse, "info");
         assert_eq!(config.logging.lopdf, "error");
         assert_eq!(config.analysis.threads, 8);
         assert!(matches!(config.analysis.hash_func(), HashFunc::SHA2));
+        assert_eq!(config.web.use_mock_data, false);
+        assert_eq!(config.web.port, 8080);
+        assert_eq!(config.web.host, "127.0.0.1");
     }
 }

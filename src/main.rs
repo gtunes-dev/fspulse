@@ -15,6 +15,7 @@ mod scans;
 mod schema;
 mod utils;
 mod validate;
+mod web;
 
 use std::time::Instant;
 

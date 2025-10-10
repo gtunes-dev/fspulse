@@ -5,6 +5,7 @@ use log::info;
 
 use std::path::PathBuf;
 
+use crate::config::CONFIG;
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::explore::Explorer;
@@ -147,6 +148,20 @@ The database file will always be named 'fspulse.db'."#
 
         #[arg(help = "The query string (e.g., \"items where scan:(5)\")")]
         query: String,
+    },
+
+    #[command(
+        about = "Start web server",
+        long_about = "Start the FsPulse web server to provide browser-based access to filesystem scanning and reporting."
+    )]
+    WebServer {
+        #[arg(
+            long,
+            help = r#"Specifies the directory where the database is stored.
+Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
+The database file will always be named 'fspulse.db'."#
+        )]
+        db_path: Option<PathBuf>,
     },
 }
 
@@ -374,6 +389,23 @@ impl Cli {
                 info!("Processing query with db_path: {db_path:?}, '{query}'");
                 let db = Database::new(db_path)?;
                 QueryProcessor::execute_query_and_print(&db, &query)
+            }
+            Command::WebServer { db_path } => {
+                let config = CONFIG.get().expect("Config not initialized");
+
+                let host = config.web.host.clone();
+                let port = config.web.port;
+
+                info!("Starting web server on {host}:{port} with db_path: {db_path:?}");
+
+                // Start the async runtime for the web server
+                let rt = tokio::runtime::Runtime::new()
+                    .map_err(|e| FsPulseError::Error(format!("Failed to create runtime: {}", e)))?;
+
+                rt.block_on(async {
+                    let web_server = crate::web::WebServer::new(host, port);
+                    web_server.start(db_path).await
+                })
             }
         }
     }
