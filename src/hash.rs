@@ -2,34 +2,39 @@ use std::{
     fs::File,
     io::{BufReader, Read},
     path::Path,
+    sync::Arc,
 };
 
 use hex::encode;
-use indicatif::ProgressBar;
 use md5::{Digest, Md5};
 use sha2::Sha256;
 
-use crate::{config::HashFunc, error::FsPulseError};
+use crate::{config::HashFunc, error::FsPulseError, progress::{ProgressId, ProgressReporter}};
 
 pub struct Hash;
 
 impl Hash {
-    pub fn compute_hash(path: &Path, hash_prog: &ProgressBar, hash_func: HashFunc) -> Result<String, FsPulseError> {
+    pub fn compute_hash(
+        path: &Path,
+        prog_id: ProgressId,
+        reporter: &Arc<dyn ProgressReporter>,
+        hash_func: HashFunc,
+    ) -> Result<String, FsPulseError> {
         match hash_func {
-            HashFunc::MD5 => Self::compute_md5_hash(path, hash_prog),
-            HashFunc::SHA2 => Self::compute_sha2_256_hash(path, hash_prog),
+            HashFunc::MD5 => Self::compute_md5_hash(path, prog_id, reporter),
+            HashFunc::SHA2 => Self::compute_sha2_256_hash(path, prog_id, reporter),
         }
     }
 
     pub fn compute_sha2_256_hash(
         path: &Path,
-        hash_prog: &ProgressBar,
+        prog_id: ProgressId,
+        reporter: &Arc<dyn ProgressReporter>,
     ) -> Result<String, FsPulseError> {
         let f = File::open(path)?;
         let len = f.metadata()?.len();
-        
 
-        hash_prog.set_length(len);
+        reporter.set_length(prog_id, len);
 
         let mut hasher = Sha256::new();
 
@@ -42,21 +47,24 @@ impl Hash {
                 break;
             }
             hasher.update(&buffer[..bytes_read]);
-            hash_prog.inc(bytes_read.try_into().unwrap());
+            reporter.inc(prog_id, bytes_read.try_into().unwrap());
         }
         let hash = hasher.finalize();
 
         Ok(encode(hash))
-        
     }
 
-    pub fn compute_md5_hash(path: &Path, hash_prog: &ProgressBar) -> Result<String, FsPulseError> {
+    pub fn compute_md5_hash(
+        path: &Path,
+        prog_id: ProgressId,
+        reporter: &Arc<dyn ProgressReporter>,
+    ) -> Result<String, FsPulseError> {
         let f = File::open(path)?;
         let len = f.metadata()?.len();
 
         // The progress bar is mostly set up by our caller. We just need to set the
         // length and go
-        hash_prog.set_length(len);
+        reporter.set_length(prog_id, len);
 
         let mut reader = BufReader::new(f);
         let mut hasher = Md5::new();
@@ -68,7 +76,7 @@ impl Hash {
                 break;
             }
             hasher.update(&buffer[..bytes_read]);
-            hash_prog.inc(bytes_read.try_into().unwrap());
+            reporter.inc(prog_id, bytes_read.try_into().unwrap());
         }
 
         let hash = hasher.finalize();
@@ -89,22 +97,74 @@ impl Hash {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indicatif::ProgressBar;
+    use crate::progress::{ProgressConfig, ProgressReporter, ProgressStyle};
     use std::io::Write;
+    use std::sync::{Arc, Mutex};
+    use std::collections::HashMap;
     use tempfile::NamedTempFile;
 
-    fn create_test_progress_bar() -> ProgressBar {
-        ProgressBar::hidden()
+    /// Simple mock reporter for testing that does nothing
+    struct MockReporter {
+        _state: Arc<Mutex<HashMap<ProgressId, u64>>>,
+    }
+
+    impl MockReporter {
+        fn new() -> Self {
+            Self {
+                _state: Arc::new(Mutex::new(HashMap::new())),
+            }
+        }
+    }
+
+    impl ProgressReporter for MockReporter {
+        fn section_start(&self, _stage_index: u32, _message: &str) -> ProgressId {
+            ProgressId::new()
+        }
+
+        fn section_finish(&self, _id: ProgressId, _message: &str) {}
+
+        fn create(&self, _config: ProgressConfig) -> ProgressId {
+            ProgressId::new()
+        }
+
+        fn set_message(&self, _id: ProgressId, _message: String) {}
+
+        fn set_position(&self, _id: ProgressId, _position: u64) {}
+
+        fn set_length(&self, _id: ProgressId, _length: u64) {}
+
+        fn inc(&self, _id: ProgressId, _delta: u64) {}
+
+        fn enable_steady_tick(&self, _id: ProgressId, _interval: std::time::Duration) {}
+
+        fn disable_steady_tick(&self, _id: ProgressId) {}
+
+        fn finish_and_clear(&self, _id: ProgressId) {}
+
+        fn println(&self, _message: &str) -> Result<(), Box<dyn std::error::Error>> {
+            Ok(())
+        }
+
+        fn clone_reporter(&self) -> Arc<dyn ProgressReporter> {
+            Arc::new(Self::new())
+        }
+    }
+
+    fn create_test_reporter() -> Arc<dyn ProgressReporter> {
+        Arc::new(MockReporter::new())
     }
 
     #[test]
     fn test_compute_md5_hash_empty_file() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file.write_all(b"").expect("Failed to write to temp file");
-        
-        let progress_bar = create_test_progress_bar();
-        let result = Hash::compute_md5_hash(temp_file.path(), &progress_bar);
-        
+        temp_file
+            .write_all(b"")
+            .expect("Failed to write to temp file");
+
+        let reporter = create_test_reporter();
+        let prog_id = ProgressId::new();
+        let result = Hash::compute_md5_hash(temp_file.path(), prog_id, &reporter);
+
         assert!(result.is_ok());
         let hash = result.unwrap();
         // MD5 of empty string is d41d8cd98f00b204e9800998ecf8427e
@@ -114,25 +174,34 @@ mod tests {
     #[test]
     fn test_compute_sha2_256_hash_empty_file() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file.write_all(b"").expect("Failed to write to temp file");
-        
-        let progress_bar = create_test_progress_bar();
-        let result = Hash::compute_sha2_256_hash(temp_file.path(), &progress_bar);
-        
+        temp_file
+            .write_all(b"")
+            .expect("Failed to write to temp file");
+
+        let reporter = create_test_reporter();
+        let prog_id = ProgressId::new();
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), prog_id, &reporter);
+
         assert!(result.is_ok());
         let hash = result.unwrap();
         // SHA256 of empty string is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-        assert_eq!(hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(
+            hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
     }
 
     #[test]
     fn test_compute_md5_hash_known_content() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file.write_all(b"hello world").expect("Failed to write to temp file");
-        
-        let progress_bar = create_test_progress_bar();
-        let result = Hash::compute_md5_hash(temp_file.path(), &progress_bar);
-        
+        temp_file
+            .write_all(b"hello world")
+            .expect("Failed to write to temp file");
+
+        let reporter = create_test_reporter();
+        let prog_id = ProgressId::new();
+        let result = Hash::compute_md5_hash(temp_file.path(), prog_id, &reporter);
+
         assert!(result.is_ok());
         let hash = result.unwrap();
         // MD5 of "hello world" is 5eb63bbbe01eeed093cb22bb8f5acdc3
@@ -142,25 +211,34 @@ mod tests {
     #[test]
     fn test_compute_sha2_256_hash_known_content() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file.write_all(b"hello world").expect("Failed to write to temp file");
-        
-        let progress_bar = create_test_progress_bar();
-        let result = Hash::compute_sha2_256_hash(temp_file.path(), &progress_bar);
-        
+        temp_file
+            .write_all(b"hello world")
+            .expect("Failed to write to temp file");
+
+        let reporter = create_test_reporter();
+        let prog_id = ProgressId::new();
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), prog_id, &reporter);
+
         assert!(result.is_ok());
         let hash = result.unwrap();
         // SHA256 of "hello world" is b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
-        assert_eq!(hash, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
+        assert_eq!(
+            hash,
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
     }
 
     #[test]
     fn test_compute_hash_with_md5_func() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file.write_all(b"test").expect("Failed to write to temp file");
-        
-        let progress_bar = create_test_progress_bar();
-        let result = Hash::compute_hash(temp_file.path(), &progress_bar, HashFunc::MD5);
-        
+        temp_file
+            .write_all(b"test")
+            .expect("Failed to write to temp file");
+
+        let reporter = create_test_reporter();
+        let prog_id = ProgressId::new();
+        let result = Hash::compute_hash(temp_file.path(), prog_id, &reporter, HashFunc::MD5);
+
         assert!(result.is_ok());
         let hash = result.unwrap();
         // MD5 of "test" is 098f6bcd4621d373cade4e832627b4f6
@@ -170,23 +248,35 @@ mod tests {
     #[test]
     fn test_compute_hash_with_sha2_func() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file.write_all(b"test").expect("Failed to write to temp file");
-        
-        let progress_bar = create_test_progress_bar();
-        let result = Hash::compute_hash(temp_file.path(), &progress_bar, HashFunc::SHA2);
-        
+        temp_file
+            .write_all(b"test")
+            .expect("Failed to write to temp file");
+
+        let reporter = create_test_reporter();
+        let prog_id = ProgressId::new();
+        let result = Hash::compute_hash(temp_file.path(), prog_id, &reporter, HashFunc::SHA2);
+
         assert!(result.is_ok());
         let hash = result.unwrap();
         // SHA256 of "test" is 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
-        assert_eq!(hash, "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
+        assert_eq!(
+            hash,
+            "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        );
     }
 
     #[test]
     fn test_compute_hash_nonexistent_file() {
         let nonexistent_path = std::path::Path::new("/this/path/does/not/exist.txt");
-        let progress_bar = create_test_progress_bar();
-        
-        let result = Hash::compute_hash(nonexistent_path, &progress_bar, HashFunc::MD5);
+        let reporter = create_test_reporter();
+        let prog_id = ProgressId::new();
+
+        let result = Hash::compute_hash(
+            nonexistent_path,
+            prog_id,
+            &reporter,
+            HashFunc::MD5,
+        );
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), FsPulseError::IoError(_)));
     }

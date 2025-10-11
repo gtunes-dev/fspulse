@@ -1,9 +1,5 @@
 use chrono::{offset::LocalResult, DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::{
-    path::{Path, MAIN_SEPARATOR_STR},
-    time::Duration,
-};
+use std::path::{Path, MAIN_SEPARATOR_STR};
 use tico::tico;
 
 use crate::error::FsPulseError;
@@ -162,41 +158,6 @@ impl Utils {
             let available_len = max_len - prefix.len();
             format!("{}{}", prefix, &path_str[path_str.len() - available_len..])
         }
-    }
-
-    pub fn add_section_bar(
-        multi_prog: &mut MultiProgress,
-        stage_index: i32,
-        msg: impl Into<String>,
-    ) -> ProgressBar {
-        Utils::add_spinner_bar(multi_prog, format!("[{stage_index}/3]"), msg, true)
-    }
-
-    pub fn finish_section_bar(section_bar: &ProgressBar, msg: impl Into<String>) {
-        section_bar.finish_with_message(msg.into());
-    }
-
-    pub fn add_spinner_bar(
-        multi_prog: &mut MultiProgress,
-        prefix: impl Into<String>,
-        msg: impl Into<String>,
-        tick: bool,
-    ) -> ProgressBar {
-        let spinner = multi_prog.add(
-            ProgressBar::new_spinner()
-                .with_style(
-                    ProgressStyle::default_spinner()
-                        .template("{prefix}{spinner} {msg}")
-                        .unwrap(),
-                )
-                .with_prefix(prefix.into())
-                .with_message(msg.into()),
-        );
-        if tick {
-            spinner.enable_steady_tick(Duration::from_millis(250));
-        }
-
-        spinner
     }
 }
 

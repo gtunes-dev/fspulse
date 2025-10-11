@@ -4,11 +4,13 @@ use indicatif::MultiProgress;
 use log::info;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::config::CONFIG;
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::explore::Explorer;
+use crate::progress::cli::CliProgressReporter;
 use crate::query::QueryProcessor;
 use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
@@ -311,13 +313,17 @@ impl Cli {
 
                 let mut db = Database::new(db_path)?;
                 let analysis_spec = AnalysisSpec::new(no_hash, hash_new, no_validate, validate_all);
+
+                // Create CliProgressReporter from MultiProgress
+                let reporter = Arc::new(CliProgressReporter::new(std::mem::take(multi_prog)));
+
                 Scanner::do_scan_command(
                     &mut db,
                     root_id,
                     root_path,
                     last,
                     &analysis_spec,
-                    multi_prog,
+                    reporter,
                 )
             }
             Command::Explore { db_path } => {
@@ -419,7 +425,11 @@ impl Cli {
 
         // Process the command.
         match command {
-            CommandChoice::Scan => Scanner::do_interactive_scan(db, multi_prog)?,
+            CommandChoice::Scan => {
+                // Create CliProgressReporter from MultiProgress
+                let reporter = Arc::new(CliProgressReporter::new(std::mem::take(multi_prog)));
+                Scanner::do_interactive_scan(db, reporter)?
+            }
             CommandChoice::QuerySimple => Cli::do_interactive_query(db, command)?,
             CommandChoice::Explore => Cli::do_interactive_explore(db)?,
             CommandChoice::Report => Cli::do_interactive_report(db)?,

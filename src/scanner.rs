@@ -22,18 +22,16 @@ use crate::changes::ChangeType;
 use crate::config::{HashFunc, CONFIG};
 use crate::hash::Hash;
 use crate::items::{AnalysisItem, Item, ItemType};
+use crate::progress::{ProgressConfig, ProgressId, ProgressReporter, ProgressStyle};
 use crate::reports::Reports;
 use crate::roots::Root;
 use crate::scans::{AnalysisSpec, ScanState};
-use crate::utils::Utils;
 use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
 use console::style;
 use crossbeam_channel::bounded;
 use dialoguer::theme::ColorfulTheme;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-
 use dialoguer::{MultiSelect, Select};
 use log::{error, info};
 use threadpool::ThreadPool;
@@ -62,7 +60,7 @@ enum ScanDecision {
 impl Scanner {
     pub fn do_interactive_scan(
         db: &mut Database,
-        multi_prog: &mut MultiProgress,
+        reporter: Arc<dyn ProgressReporter>,
     ) -> Result<(), FsPulseError> {
         let root = match Root::interact_choose_root(db, "Scan which root?")? {
             Some(root) => root,
@@ -85,7 +83,7 @@ impl Scanner {
             None => Scanner::initiate_scan_interactive(db, &root)?,
         };
 
-        Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)
+        Scanner::do_scan_machine(db, &mut scan, &root, reporter)
     }
 
     fn initiate_scan_interactive(db: &mut Database, root: &Root) -> Result<Scan, FsPulseError> {
@@ -147,7 +145,7 @@ impl Scanner {
         root_path: Option<String>,
         last: bool,
         analysis_spec: &AnalysisSpec,
-        multi_prog: &mut MultiProgress,
+        reporter: Arc<dyn ProgressReporter>,
     ) -> Result<(), FsPulseError> {
         // If an incomplete scan exists, find it.
         let (root, mut existing_scan) = match (root_id, root_path, last) {
@@ -211,7 +209,8 @@ impl Scanner {
                 match Scanner::stop_or_resume_scan(db, &root, existing_scan, false)? {
                     ScanDecision::NewScan => Scanner::initiate_scan(db, &root, analysis_spec)?,
                     ScanDecision::ContinueExisting => {
-                        multi_prog.println("Resuming scan")?;
+                        reporter.println("Resuming scan")
+                            .map_err(|e| FsPulseError::Error(e.to_string()))?;
                         *existing_scan
                     }
                     ScanDecision::Exit => return Ok(()),
@@ -220,7 +219,7 @@ impl Scanner {
             None => Scanner::initiate_scan(db, &root, analysis_spec)?,
         };
 
-        Scanner::do_scan_machine(db, &mut scan, &root, multi_prog)?;
+        Scanner::do_scan_machine(db, &mut scan, &root, reporter)?;
 
         Reports::report_scan(db, &scan)
     }
@@ -229,9 +228,10 @@ impl Scanner {
         db: &mut Database,
         scan: &mut Scan,
         root: &Root,
-        multi_prog: &mut MultiProgress,
+        reporter: Arc<dyn ProgressReporter>,
     ) -> Result<(), FsPulseError> {
-        multi_prog.println("-- FsPulse Scan --")?;
+        reporter.println("-- FsPulse Scan --")
+            .map_err(|e| FsPulseError::Error(e.to_string()))?;
 
         // Loop through all states, even if resuming, to allow progress updates
         let mut loop_state = ScanState::Scanning;
@@ -244,25 +244,25 @@ impl Scanner {
 
             match loop_state {
                 ScanState::Scanning => {
-                    let bar = Utils::add_section_bar(multi_prog, 1, "Quick scanning...");
+                    let section_id = reporter.section_start(1, "Quick scanning...");
                     if scan.state() == ScanState::Scanning {
-                        Scanner::do_state_scanning(db, root, scan, multi_prog)?;
+                        Scanner::do_state_scanning(db, root, scan, reporter.clone())?;
                     }
-                    Utils::finish_section_bar(&bar, "✔ Quick scanning");
+                    reporter.section_finish(section_id, "✔ Quick scanning");
                     loop_state = ScanState::Sweeping;
                 }
                 ScanState::Sweeping => {
-                    let bar = Utils::add_section_bar(multi_prog, 2, "Tombstoning deletes...");
+                    let section_id = reporter.section_start(2, "Tombstoning deletes...");
                     if scan.state() == ScanState::Sweeping {
                         Scanner::do_state_sweeping(db, scan)?;
                     }
-                    Utils::finish_section_bar(&bar, "✔ Tombstoning deletes");
+                    reporter.section_finish(section_id, "✔ Tombstoning deletes");
                     loop_state = ScanState::Analyzing;
                 }
                 ScanState::Analyzing => {
                     // Should never get here in a situation in which scan.state() isn't Analyzing
                     // but we protect against it just in case
-                    let bar = Utils::add_section_bar(multi_prog, 3, "Analyzing...");
+                    let section_id = reporter.section_start(3, "Analyzing...");
                     let mut analysis_result = Ok(());
                     if scan.state() == ScanState::Analyzing {
                         // This is a boundary - we'll take ownership of the database and progress
@@ -271,7 +271,7 @@ impl Scanner {
                         let db_arc = Arc::new(Mutex::new(owned_db));
 
                         analysis_result =
-                            Scanner::do_state_analyzing(db_arc.clone(), scan, multi_prog);
+                            Scanner::do_state_analyzing(db_arc.clone(), scan, reporter.clone());
 
                         // recover the database from the Arc
                         let recovered_db = Arc::try_unwrap(db_arc)
@@ -284,7 +284,7 @@ impl Scanner {
 
                     analysis_result?;
 
-                    Utils::finish_section_bar(&bar, "✔ Analyzing");
+                    reporter.section_finish(section_id, "✔ Analyzing");
                     loop_state = ScanState::Completed;
                 }
                 unexpected => {
@@ -364,16 +364,26 @@ impl Scanner {
         db: &mut Database,
         root: &Root,
         scan: &mut Scan,
-        multi_prog: &mut MultiProgress,
+        reporter: Arc<dyn ProgressReporter>,
     ) -> Result<(), FsPulseError> {
         let root_path_buf = PathBuf::from(root.root_path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
 
         let mut q = VecDeque::new();
 
-        let dir_prog = Utils::add_spinner_bar(multi_prog, "   ", "Directory:", true);
+        let dir_prog = reporter.create(ProgressConfig {
+            style: ProgressStyle::Spinner,
+            prefix: "   ".to_string(),
+            message: "Directory:".to_string(),
+            steady_tick: Some(Duration::from_millis(250)),
+        });
 
-        let item_prog = Utils::add_spinner_bar(multi_prog, "   ", "File:", true);
+        let item_prog = reporter.create(ProgressConfig {
+            style: ProgressStyle::Spinner,
+            prefix: "   ".to_string(),
+            message: "File:".to_string(),
+            steady_tick: Some(Duration::from_millis(250)),
+        });
 
         q.push_back(QueueEntry {
             path: root_path_buf.clone(),
@@ -381,7 +391,7 @@ impl Scanner {
         });
 
         while let Some(q_entry) = q.pop_front() {
-            dir_prog.set_message(format!("Directory: '{}'", q_entry.path.to_string_lossy()));
+            reporter.set_message(dir_prog, format!("Directory: '{}'", q_entry.path.to_string_lossy()));
 
             // Handle the directory itself before iterating its contents. The root dir
             // was previously pushed into the queue - if this is that entry, we skip it
@@ -401,7 +411,7 @@ impl Scanner {
                 let item = item?;
 
                 let metadata = fs::symlink_metadata(item.path())?; // Use symlink_metadata to check for symlinks
-                item_prog.set_message(format!("Item: '{}'", item.file_name().to_string_lossy()));
+                reporter.set_message(item_prog, format!("Item: '{}'", item.file_name().to_string_lossy()));
 
                 if metadata.is_dir() {
                     q.push_back(QueueEntry {
@@ -422,8 +432,8 @@ impl Scanner {
             }
         }
 
-        item_prog.finish_and_clear();
-        dir_prog.finish_and_clear();
+        reporter.finish_and_clear(item_prog);
+        reporter.finish_and_clear(dir_prog);
 
         scan.set_state_sweeping(db)
     }
@@ -462,7 +472,7 @@ impl Scanner {
     fn do_state_analyzing(
         db: Arc<Mutex<Database>>,
         scan: &mut Scan,
-        multi_prog: &MultiProgress,
+        reporter: Arc<dyn ProgressReporter>,
     ) -> Result<(), FsPulseError> {
         let is_hash = scan.analysis_spec().is_hash();
         let is_val = scan.analysis_spec().is_val();
@@ -481,19 +491,14 @@ impl Scanner {
         //let analyzed_items =
         //    Item::count_analyzed_items(&db.lock().unwrap(), scan.scan_id())?.max(0) as u64; // may be resuming the scan
 
-        let analysis_prog = multi_prog.add(
-            ProgressBar::new(analyze_total)
-                .with_style(
-                    ProgressStyle::default_bar()
-                        .template("{prefix}{msg} [{bar:80}] {pos}/{len} (Remaining: {eta})")
-                        .unwrap()
-                        .progress_chars("#>-"),
-                )
-                .with_prefix("   ")
-                .with_message("Files"),
-        );
+        let analysis_prog = reporter.create(ProgressConfig {
+            style: ProgressStyle::Bar { total: analyze_total },
+            prefix: "   ".to_string(),
+            message: "Files".to_string(),
+            steady_tick: None,
+        });
 
-        analysis_prog.inc(analyze_done);
+        reporter.set_position(analysis_prog, analyze_done);
 
         // Create a bounded channel to limit the number of queued tasks (e.g., max 100 tasks)
         let (sender, receiver) = bounded::<AnalysisItem>(100);
@@ -518,26 +523,24 @@ impl Scanner {
             // Clone shared resources for each worker thread.
             let receiver = receiver.clone();
             let db = Arc::clone(&db);
-            let analysis_prog_clone = analysis_prog.clone();
             let scan_copy = *scan;
-            //let scan_id = scan.id();
+            let reporter_clone = reporter.clone_reporter();
 
-            // Create a reusable progress bar for this thread
-            let thread_prog = multi_prog.add(ProgressBar::new(0));
-            thread_prog.set_style(
-                ProgressStyle::default_spinner()
-                    .template("{prefix} {spinner} {msg}")
-                    .unwrap(),
-            );
             // Format thread label like [01/20], [02/20], ..., [20/20]
-            let thread_prog_label = format!(
+            let thread_prog_prefix = format!(
                 "   [{:0width$}/{}]",
                 thread_index + 1,
                 num_threads,
                 width = if num_threads >= 10 { 2 } else { 1 }
             );
-            thread_prog.set_prefix(thread_prog_label.clone());
-            thread_prog.set_message("Waiting...".to_string());
+
+            // Create a reusable progress indicator for this thread
+            let thread_prog = reporter.create(ProgressConfig {
+                style: ProgressStyle::Spinner,
+                prefix: thread_prog_prefix,
+                message: "Waiting...".to_string(),
+                steady_tick: None,
+            });
 
             // Worker thread: continuously receive and process tasks.
             pool.execute(move || {
@@ -546,18 +549,13 @@ impl Scanner {
                         &db,
                         scan_copy,
                         analysis_item,
-                        &analysis_prog_clone,
-                        &thread_prog,
+                        analysis_prog,
+                        thread_prog,
+                        &reporter_clone,
                         hash_func,
                     );
                 }
-                thread_prog.set_style(
-                    ProgressStyle::default_spinner()
-                        .template("{prefix} {msg}")
-                        .unwrap(),
-                );
-                thread_prog.finish_and_clear();
-                //thread_prog.finish_with_message(format!("✔ Done"));
+                reporter_clone.finish_and_clear(thread_prog);
             });
         }
 
@@ -595,13 +593,7 @@ impl Scanner {
 
         // Wait for all tasks to complete.
         pool.join();
-        analysis_prog.set_style(
-            ProgressStyle::default_spinner()
-                .template("{prefix} ✔ Analyzing ({pos} files)")
-                .unwrap(),
-        );
-        //analysis_prog.finish_with_message("✔ Analyzing");
-        analysis_prog.finish_and_clear();
+        reporter.finish_and_clear(analysis_prog);
         scan.set_state_completed(&mut db.lock().unwrap())
     }
 
@@ -609,8 +601,9 @@ impl Scanner {
         db: &Arc<Mutex<Database>>,
         scan: Scan,
         analysis_item: AnalysisItem,
-        analysis_prog: &ProgressBar,
-        thread_prog: &ProgressBar,
+        analysis_prog_id: ProgressId,
+        thread_prog_id: ProgressId,
+        reporter: &Arc<dyn ProgressReporter>,
         hash_func: HashFunc,
     ) {
         // TODO: Improve the error handling for all analysis. Need to differentiate
@@ -628,18 +621,11 @@ impl Scanner {
         let mut new_hash = None;
 
         if analysis_item.needs_hash() {
-            thread_prog.set_style(
-                ProgressStyle::default_bar()
-                    .template("{prefix} {msg} [{bar:40}] {bytes}/{total_bytes}")
-                    .unwrap()
-                    .progress_chars("=> "),
-            );
+            reporter.set_message(thread_prog_id, format!("Hashing: '{}'", &display_path));
+            reporter.set_position(thread_prog_id, 0); // reset in case left from previous
+            reporter.set_length(thread_prog_id, 0);
 
-            thread_prog.set_message(format!("Hashing: '{}'", &display_path));
-            thread_prog.set_position(0); // reset in case left from previous
-            thread_prog.set_length(0);
-
-            new_hash = match Hash::compute_hash(path, thread_prog, hash_func) {
+            new_hash = match Hash::compute_hash(path, thread_prog_id, reporter, hash_func) {
                 Ok(hash_s) => Some(hash_s),
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
@@ -655,18 +641,13 @@ impl Scanner {
             let validator = from_path(path);
             match validator {
                 Some(v) => {
-                    thread_prog.set_style(
-                        ProgressStyle::default_spinner()
-                            .template("{prefix} {spinner} {msg}")
-                            .unwrap(),
-                    );
-                    thread_prog.set_message(format!("Validating: '{}'", &display_path));
+                    reporter.set_message(thread_prog_id, format!("Validating: '{}'", &display_path));
                     let steady_tick = v.wants_steady_tick();
 
                     if steady_tick {
-                        thread_prog.enable_steady_tick(Duration::from_millis(250));
+                        reporter.enable_steady_tick(thread_prog_id, Duration::from_millis(250));
                     }
-                    match v.validate(path, thread_prog) {
+                    match v.validate(path, thread_prog_id, reporter) {
                         Ok((res_validity_state, res_validation_error)) => {
                             new_val = res_validity_state;
                             new_val_error = res_validation_error;
@@ -678,7 +659,7 @@ impl Scanner {
                         }
                     }
                     if steady_tick {
-                        thread_prog.disable_steady_tick();
+                        reporter.disable_steady_tick(thread_prog_id);
                     }
                 }
                 None => new_val = ValidationState::NoValidator,
@@ -700,7 +681,7 @@ impl Scanner {
             );
         }
 
-        analysis_prog.inc(1);
+        reporter.inc(analysis_prog_id, 1);
 
         info!("Done analyzing: {path:?}");
     }

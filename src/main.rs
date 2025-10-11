@@ -7,6 +7,7 @@ mod error;
 mod explore;
 mod hash;
 mod items;
+mod progress;
 mod query;
 mod reports;
 mod roots;

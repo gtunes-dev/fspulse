@@ -1,10 +1,9 @@
-use std::path::Path;
-
-use indicatif::ProgressBar;
+use std::{path::Path, sync::Arc};
 
 use image::ImageReader;
 
 use crate::error::FsPulseError;
+use crate::progress::{ProgressId, ProgressReporter};
 
 use super::validator::{ValidationState, Validator};
 
@@ -22,7 +21,8 @@ impl Validator for ImageValidator {
     fn validate(
         &self,
         path: &Path,
-        _validation_pb: &ProgressBar,
+        _prog_id: ProgressId,
+        _reporter: &Arc<dyn ProgressReporter>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let open_result = ImageReader::open(path);
         let reader = match open_result {
@@ -50,8 +50,36 @@ impl Validator for ImageValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use indicatif::ProgressBar;
+    use crate::progress::{ProgressConfig, ProgressReporter, ProgressStyle};
+    use std::collections::HashMap;
     use std::path::Path;
+    use std::sync::{Arc, Mutex};
+
+    /// Simple mock reporter for testing
+    struct MockReporter;
+
+    impl ProgressReporter for MockReporter {
+        fn section_start(&self, _stage_index: u32, _message: &str) -> ProgressId {
+            ProgressId::new()
+        }
+        fn section_finish(&self, _id: ProgressId, _message: &str) {}
+        fn create(&self, _config: ProgressConfig) -> ProgressId {
+            ProgressId::new()
+        }
+        fn set_message(&self, _id: ProgressId, _message: String) {}
+        fn set_position(&self, _id: ProgressId, _position: u64) {}
+        fn set_length(&self, _id: ProgressId, _length: u64) {}
+        fn inc(&self, _id: ProgressId, _delta: u64) {}
+        fn enable_steady_tick(&self, _id: ProgressId, _interval: std::time::Duration) {}
+        fn disable_steady_tick(&self, _id: ProgressId) {}
+        fn finish_and_clear(&self, _id: ProgressId) {}
+        fn println(&self, _message: &str) -> Result<(), Box<dyn std::error::Error>> {
+            Ok(())
+        }
+        fn clone_reporter(&self) -> Arc<dyn ProgressReporter> {
+            Arc::new(MockReporter)
+        }
+    }
 
     #[test]
     fn test_image_validator_new() {
@@ -68,10 +96,11 @@ mod tests {
     #[test]
     fn test_image_validator_nonexistent_file() {
         let validator = ImageValidator::new();
-        let progress_bar = ProgressBar::hidden();
+        let reporter: Arc<dyn ProgressReporter> = Arc::new(MockReporter);
+        let prog_id = ProgressId::new();
         let nonexistent_path = Path::new("/this/path/does/not/exist.jpg");
-        
-        let result = validator.validate(nonexistent_path, &progress_bar);
+
+        let result = validator.validate(nonexistent_path, prog_id, &reporter);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
@@ -94,16 +123,17 @@ mod tests {
     #[test]
     fn test_image_validator_invalid_file() {
         let validator = ImageValidator::new();
-        let progress_bar = ProgressBar::hidden();
-        
+        let reporter: Arc<dyn ProgressReporter> = Arc::new(MockReporter);
+        let prog_id = ProgressId::new();
+
         // Create a temporary file with invalid image content
         use std::io::Write;
         use tempfile::NamedTempFile;
-        
+
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
         temp_file.write_all(b"not an image file").expect("Failed to write temp file");
-        
-        let result = validator.validate(temp_file.path(), &progress_bar);
+
+        let result = validator.validate(temp_file.path(), prog_id, &reporter);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
@@ -114,14 +144,15 @@ mod tests {
     #[test]
     fn test_image_validator_empty_file() {
         let validator = ImageValidator::new();
-        let progress_bar = ProgressBar::hidden();
-        
+        let reporter: Arc<dyn ProgressReporter> = Arc::new(MockReporter);
+        let prog_id = ProgressId::new();
+
         // Create a temporary empty file
         use tempfile::NamedTempFile;
-        
+
         let temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        
-        let result = validator.validate(temp_file.path(), &progress_bar);
+
+        let result = validator.validate(temp_file.path(), prog_id, &reporter);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
