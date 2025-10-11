@@ -246,24 +246,27 @@ pub trait Query {
     }
 }
 
-fn make_query(query_type: &str) -> Box<dyn Query> {
-    match query_type {
-        "roots" => Box::new(RootsQuery {
+fn make_query(query_type: &str, count_only: bool) -> Box<dyn Query> {
+    match (query_type, count_only) {
+        ("roots", _) => Box::new(RootsQuery {
             imp: QueryImpl::new(QueryImpl::ROOTS_SQL_QUERY, ColSet::new(&ROOTS_QUERY_COLS)),
         }),
-        "scans" => Box::new(ScansQuery {
+        ("scans", false) => Box::new(ScansQuery {
             imp: QueryImpl::new(QueryImpl::SCANS_SQL_QUERY, ColSet::new(&SCANS_QUERY_COLS)),
+        }),        
+        ("scans", true) => Box::new(ScansQuery {
+            imp: QueryImpl::new(QueryImpl::SCANS_SQL_QUERY_COUNT, ColSet::new(&SCANS_QUERY_COLS)),
         }),
-        "items" => Box::new(ItemsQuery {
+        ("items", _) => Box::new(ItemsQuery {
             imp: QueryImpl::new(QueryImpl::ITEMS_SQL_QUERY, ColSet::new(&ITEMS_QUERY_COLS)),
         }),
-        "changes" => Box::new(ChangesQuery {
+        ("changes", _) => Box::new(ChangesQuery {
             imp: QueryImpl::new(
                 QueryImpl::CHANGES_SQL_QUERY,
                 ColSet::new(&CHANGES_QUERY_COLS),
             ),
         }),
-        "alerts" => Box::new(AlertsQuery {
+        ("alerts", _) => Box::new(AlertsQuery {
             imp: QueryImpl::new(QueryImpl::ALERTS_SQL_QUERY, ColSet::new(&ALERTS_QUERY_COLS)),
         }),
         _ => unreachable!(),
@@ -640,6 +643,13 @@ impl QueryImpl {
         {limit_clause}
         {offset_clause}";
 
+    const SCANS_SQL_QUERY_COUNT: &str = "SELECT {select_list}
+        FROM scans
+        {where_clause}
+        {order_clause}
+        {limit_clause}
+        {offset_clause}";
+
     const ITEMS_SQL_QUERY: &str = "SELECT {select_list}
         FROM items
         {where_clause}
@@ -851,9 +861,9 @@ impl AlertsQueryRow {
 }
 
 impl QueryProcessor {
-    pub fn execute_query(db: &Database, query_str: &str) -> Result<Vec<Vec<String>>, FsPulseError> {
+    pub fn execute_query(db: &Database, query_str: &str, count_only: bool) -> Result<Vec<Vec<String>>, FsPulseError> {
         let mut qrv = QueryResultVector::new();
-        Self::process_query(db, query_str, &mut qrv)?;
+        Self::process_query(db, query_str, count_only, &mut qrv)?;
         Ok(qrv.row_vec)
     }
 
@@ -864,7 +874,7 @@ impl QueryProcessor {
     pub fn execute_query_and_print(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
         let mut qrb = QueryResultBuilder::new();
 
-        match Self::process_query(db, query_str, &mut qrb) {
+        match Self::process_query(db, query_str, false, &mut qrb) {
             Ok(()) => {}
             Err(err) => match err {
                 FsPulseError::ParsingError(inner) => {
@@ -896,6 +906,7 @@ impl QueryProcessor {
     fn process_query(
         db: &Database,
         query_str: &str,
+        count_only: bool,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
         info!("Parsing query: {query_str}");
@@ -910,7 +921,7 @@ impl QueryProcessor {
 
         let query_type_pair = query_iter.next().unwrap();
 
-        let mut query = make_query(query_type_pair.as_str());
+        let mut query = make_query(query_type_pair.as_str(), count_only);
 
         QueryProcessor::build(&mut *query, &mut query_iter)?;
 
@@ -936,7 +947,7 @@ impl QueryProcessor {
 
         let query_type_pair = query_iter.next().unwrap();
 
-        let mut query = make_query(query_type_pair.as_str());
+        let mut query = make_query(query_type_pair.as_str(), true);
 
         QueryProcessor::build(&mut *query, &mut query_iter)?;
 

@@ -118,7 +118,6 @@ impl AnalysisConfig {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WebConfig {
-    pub use_mock_data: bool,
     pub port: u16,
     pub host: String,
 }
@@ -126,7 +125,6 @@ pub struct WebConfig {
 impl WebConfig {
     fn default() -> Self {
         WebConfig {
-            use_mock_data: false,
             port: 8080,
             host: "127.0.0.1".to_string(),
         }
@@ -315,7 +313,6 @@ mod tests {
                 hash: "md5".to_string(),
             },
             web: WebConfig {
-                use_mock_data: false,
                 port: 8080,
                 host: "127.0.0.1".to_string(),
             },
@@ -340,7 +337,6 @@ threads = 12
 hash = "sha2"
 
 [web]
-use_mock_data = false
 port = 8080
 host = "127.0.0.1"
 "#;
@@ -355,7 +351,6 @@ host = "127.0.0.1"
     #[test]
     fn test_web_config_default() {
         let config = WebConfig::default();
-        assert_eq!(config.use_mock_data, false);
         assert_eq!(config.port, 8080);
         assert_eq!(config.host, "127.0.0.1");
     }
@@ -363,20 +358,17 @@ host = "127.0.0.1"
     #[test]
     fn test_web_config_ensure_valid() {
         let mut config = WebConfig {
-            use_mock_data: true,
             port: 3000,
             host: "  localhost  ".to_string(),
         };
         config.ensure_valid();
         assert_eq!(config.host, "localhost");
         assert_eq!(config.port, 3000);
-        assert_eq!(config.use_mock_data, true);
     }
 
     #[test]
     fn test_web_config_invalid_values() {
         let mut config = WebConfig {
-            use_mock_data: false,
             port: 0,
             host: "".to_string(),
         };
@@ -397,7 +389,6 @@ threads = 12
 hash = "sha2"
 
 [web]
-use_mock_data = true
 port = 3000
 host = "0.0.0.0"
 "#;
@@ -405,7 +396,6 @@ host = "0.0.0.0"
         let config: Config = toml::from_str(toml_str).expect("Failed to deserialize config");
         assert_eq!(config.logging.fspulse, "debug");
         assert_eq!(config.analysis.threads, 12);
-        assert_eq!(config.web.use_mock_data, true);
         assert_eq!(config.web.port, 3000);
         assert_eq!(config.web.host, "0.0.0.0");
     }
@@ -425,7 +415,6 @@ threads = 6
 hash = "md5"
 
 [web]
-use_mock_data = true
 port = 9000
 host = "localhost"
 "#;
@@ -443,7 +432,6 @@ host = "localhost"
         assert_eq!(config.logging.lopdf, "error");
         assert_eq!(config.analysis.threads, 8);
         assert!(matches!(config.analysis.hash_func(), HashFunc::SHA2));
-        assert_eq!(config.web.use_mock_data, false);
         assert_eq!(config.web.port, 8080);
         assert_eq!(config.web.host, "127.0.0.1");
     }

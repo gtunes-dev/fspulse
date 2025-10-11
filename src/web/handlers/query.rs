@@ -80,7 +80,7 @@ pub async fn execute_query(
     };
 
     // Execute the main query with LIMIT/OFFSET to get page data
-    match QueryProcessor::execute_query(&db, &query_str) {
+    match QueryProcessor::execute_query(&db, &query_str, false) {
         Ok(rows) => {
             // Extract column names from first row if available
             let columns = if !rows.is_empty() {

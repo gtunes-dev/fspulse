@@ -4,7 +4,7 @@ use std::{env, fs};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 
-use crate::database::{Database, ListQuery, ListResult};
+use crate::database::Database;
 use crate::error::FsPulseError;
 use rusqlite::OptionalExtension;
 use serde::Serialize;
@@ -18,10 +18,6 @@ pub struct Root {
 }
 
 impl Root {
-    pub fn new(root_id: i64, root_path: String) -> Self {
-        Root { root_id, root_path }
-    }
-
     pub fn interact_choose_root(db: &Database, prompt: &str) -> Result<Option<Root>, FsPulseError> {
         let mut roots = Root::roots_as_vec(db)?;
         if roots.is_empty() {
@@ -130,76 +126,6 @@ impl Root {
         }
 
         Ok(())
-    }
-
-    pub fn list_paginated(
-        db: &Database,
-        query: &ListQuery,
-    ) -> Result<ListResult<Root>, FsPulseError> {
-        // First get the total count for pagination
-        let count_sql = if let Some(filter) = &query.filter {
-            format!(
-                "SELECT COUNT(*) FROM roots WHERE root_path LIKE '%{}%'",
-                filter.replace("'", "''") // Basic SQL injection protection
-            )
-        } else {
-            "SELECT COUNT(*) FROM roots".to_string()
-        };
-
-        let total: u32 = db.conn()
-            .query_row(&count_sql, [], |row| {
-                let count: i64 = row.get(0)?;
-                Ok(count as u32)
-            })?;
-
-        // Build the main query with sorting and pagination
-        let order_clause = match query.sort.as_deref() {
-            Some("path") => "ORDER BY root_path ASC, root_id ASC",
-            Some("path_desc") => "ORDER BY root_path DESC, root_id DESC",
-            Some("id") => "ORDER BY root_id ASC",
-            Some("id_desc") => "ORDER BY root_id DESC",
-            _ => "ORDER BY root_id ASC", // Default: by ID
-        };
-
-        let where_clause = if let Some(filter) = &query.filter {
-            format!(
-                "WHERE root_path LIKE '%{}%'",
-                filter.replace("'", "''")
-            )
-        } else {
-            String::new()
-        };
-
-        let offset = (query.page - 1) * query.limit;
-        let main_sql = format!(
-            "SELECT root_id, root_path FROM roots {} {} LIMIT {} OFFSET {}",
-            where_clause, order_clause, query.limit, offset
-        );
-
-        let mut stmt = db.conn().prepare(&main_sql)?;
-        let root_iter = stmt.query_map([], |row| {
-            Ok(Root {
-                root_id: row.get(0)?,
-                root_path: row.get(1)?,
-            })
-        })?;
-
-        let mut items = Vec::new();
-        for root in root_iter {
-            items.push(root?);
-        }
-
-        let has_next = offset + query.limit < total;
-        let has_prev = query.page > 1;
-
-        Ok(ListResult {
-            items,
-            total,
-            page: query.page,
-            limit: query.limit,
-            has_next,
-            has_prev,
-        })
     }
 
     pub fn validate_and_canonicalize_path(path_arg: &str) -> Result<PathBuf, FsPulseError> {

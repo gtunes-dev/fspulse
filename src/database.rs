@@ -10,25 +10,6 @@ use std::path::PathBuf;
 const DB_FILENAME: &str = "fspulse.db";
 const CURRENT_SCHEMA_VERSION: u32 = 4;
 
-// Shared pagination structures for all entities
-#[derive(Debug)]
-pub struct ListQuery {
-    pub filter: Option<String>,
-    pub sort: Option<String>,
-    pub page: u32,
-    pub limit: u32,
-}
-
-#[derive(Debug)]
-pub struct ListResult<T> {
-    pub items: Vec<T>,
-    pub total: u32,
-    pub page: u32,
-    pub limit: u32,
-    pub has_next: bool,
-    pub has_prev: bool,
-}
-
 #[derive(Debug, Default)]
 pub struct Database {
     conn: Option<Connection>,

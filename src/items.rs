@@ -2,7 +2,7 @@ use rusqlite::{self, params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    database::{Database, ListQuery, ListResult},
+    database::Database,
     error::FsPulseError,
     scans::AnalysisSpec,
     validate::validator::ValidationState,
@@ -250,77 +250,6 @@ impl Item {
 
     pub fn val_error(&self) -> Option<&str> {
         self.val_error.as_deref()
-    }
-
-    pub fn list_paginated(
-        db: &Database,
-        query: &ListQuery,
-    ) -> Result<ListResult<Item>, FsPulseError> {
-        // First get the total count for pagination
-        let count_sql = if let Some(filter) = &query.filter {
-            format!(
-                "SELECT COUNT(*) FROM items WHERE item_path LIKE '%{}%' AND is_ts = 0",
-                filter.replace("'", "''") // Basic SQL injection protection
-            )
-        } else {
-            "SELECT COUNT(*) FROM items WHERE is_ts = 0".to_string()
-        };
-
-        let total: u32 = db.conn()
-            .query_row(&count_sql, [], |row| {
-                let count: i64 = row.get(0)?;
-                Ok(count as u32)
-            })?;
-
-        // Build the main query with sorting and pagination
-        let order_clause = match query.sort.as_deref() {
-            Some("path") => "ORDER BY item_path ASC, item_id ASC",
-            Some("path_desc") => "ORDER BY item_path DESC, item_id DESC",
-            Some("type") => "ORDER BY item_type ASC, item_path ASC",
-            Some("type_desc") => "ORDER BY item_type DESC, item_path DESC",
-            Some("size") => "ORDER BY file_size ASC NULLS FIRST, item_path ASC",
-            Some("size_desc") => "ORDER BY file_size DESC NULLS LAST, item_path DESC",
-            Some("mod_date") => "ORDER BY mod_date ASC NULLS FIRST, item_path ASC",
-            Some("mod_date_desc") => "ORDER BY mod_date DESC NULLS LAST, item_path DESC",
-            Some("id") => "ORDER BY item_id ASC",
-            Some("id_desc") => "ORDER BY item_id DESC",
-            _ => "ORDER BY item_path ASC, item_id ASC", // Default: by path
-        };
-
-        let where_clause = if let Some(filter) = &query.filter {
-            format!(
-                "WHERE item_path LIKE '%{}%' AND is_ts = 0",
-                filter.replace("'", "''")
-            )
-        } else {
-            "WHERE is_ts = 0".to_string()
-        };
-
-        let offset = (query.page - 1) * query.limit;
-        let main_sql = format!(
-            "SELECT {} FROM items {} {} LIMIT {} OFFSET {}",
-            Item::ITEM_COLUMNS, where_clause, order_clause, query.limit, offset
-        );
-
-        let mut stmt = db.conn().prepare(&main_sql)?;
-        let item_iter = stmt.query_map([], Item::from_row)?;
-
-        let mut items = Vec::new();
-        for item in item_iter {
-            items.push(item?);
-        }
-
-        let has_next = offset + query.limit < total;
-        let has_prev = query.page > 1;
-
-        Ok(ListResult {
-            items,
-            total,
-            page: query.page,
-            limit: query.limit,
-            has_next,
-            has_prev,
-        })
     }
 
     pub fn get_analysis_counts(

@@ -707,7 +707,7 @@ impl Explorer {
     fn refresh_query_impl(&mut self, db: &Database) -> Result<(), FsPulseError> {
         let (query_str, columns) = self.build_query_and_columns()?;
 
-        match QueryProcessor::execute_query(db, &query_str) {
+        match QueryProcessor::execute_query(db, &query_str, false) {
             Ok(rows) => {
                 self.grid_frame
                     .set_data(self.query_resets_selection, columns, rows);

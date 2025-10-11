@@ -230,7 +230,7 @@
         }
 
         .data-table {
-            width: 100%;
+            width: auto;
             border-collapse: collapse;
             margin: 0;
         }
@@ -304,6 +304,7 @@
             border-top: 1px solid rgba(0,0,0,0.06);
             background: #fafafa;
             border-radius: 0 0 12px 12px;
+            align-self: stretch;
         }
 
         .pagination-info {
@@ -629,6 +630,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            align-items: flex-start;
         }
 
         /* Filter Modal */
@@ -951,88 +953,101 @@
 
             <!-- Data Management Sections -->
             <div id="roots-section" style="display: none;">
-                <h2>Scan Roots</h2>
-
-                <div class="list-controls">
-                    <div class="search-filter">
-                        <input type="text" id="roots-filter" placeholder="Filter roots..." onkeyup="filterRoots()">
-                    </div>
+                <div class="entity-view-header">
+                    <h1 class="entity-view-title">Roots</h1>
                 </div>
 
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th class="sortable-header active" onclick="sortRootsByColumn('path')" data-column="path">
-                                Path
-                                <span class="sort-indicator">▲</span>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody id="roots-table-body">
-                        <tr><td class="loading">Loading roots...</td></tr>
-                    </tbody>
-                </table>
+                <div class="section-with-sidebar">
+                    <!-- Column List Sidebar -->
+                    <aside class="column-list-sidebar">
+                        <div class="column-list-header">
+                            <div class="column-list-header-labels">
+                                <div class="drag-spacer"></div>
+                                <div class="column-label">Column</div>
+                                <div class="name-spacer"></div>
+                                <div class="sort-label">Sort</div>
+                                <div class="filter-label">Filter</div>
+                            </div>
+                        </div>
+                        <ul class="column-list" id="roots-column-list">
+                            <li style="text-align: center; color: #86868b; padding: 1rem; font-size: 0.875rem;">Loading columns...</li>
+                        </ul>
+                    </aside>
 
-                <div class="pagination" id="roots-pagination" style="display: none;">
-                    <div class="pagination-info" id="roots-pagination-info"></div>
-                    <div class="pagination-controls">
-                        <button class="pagination-btn" id="roots-prev-btn" onclick="changeRootsPage(-1)">Previous</button>
-                        <button class="pagination-btn" id="roots-next-btn" onclick="changeRootsPage(1)">Next</button>
+                    <!-- Main Content Area -->
+                    <div class="section-main-content">
+                        <div class="card">
+                            <table class="data-table">
+                                <thead>
+                                    <tr id="roots-table-header">
+                                        <th colspan="2">Loading...</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="roots-table-body">
+                                    <tr><td colspan="2">Loading...</td></tr>
+                                </tbody>
+                            </table>
+
+                            <div class="pagination">
+                                <div class="pagination-info" id="roots-pagination-info">
+                                    Showing 0 - 0 of 0 roots
+                                </div>
+                                <div class="pagination-controls">
+                                    <button class="pagination-btn" id="roots-prev-btn" onclick="changeRootsPage(-1)">Previous</button>
+                                    <button class="pagination-btn" id="roots-next-btn" onclick="changeRootsPage(1)">Next</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div id="scans-section" style="display: none;">
-                <h2>Scan History</h2>
-
-                <div class="list-controls">
-                    <div class="search-filter">
-                        <input type="text" id="scans-filter" placeholder="Filter scans..." onkeyup="filterScans()">
-                    </div>
+                <div class="entity-view-header">
+                    <h1 class="entity-view-title">Scans</h1>
                 </div>
 
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th class="sortable-header" onclick="sortScansByColumn('id')" data-column="id">
-                                ID
-                                <span class="sort-indicator"></span>
-                            </th>
-                            <th class="sortable-header" onclick="sortScansByColumn('root_path')" data-column="root_path">
-                                Root Path
-                                <span class="sort-indicator"></span>
-                            </th>
-                            <th class="sortable-header" onclick="sortScansByColumn('state')" data-column="state">
-                                State
-                                <span class="sort-indicator"></span>
-                            </th>
-                            <th class="sortable-header active" onclick="sortScansByColumn('scan_time')" data-column="scan_time">
-                                Scan Time
-                                <span class="sort-indicator">▼</span>
-                            </th>
-                            <th class="sortable-header" onclick="sortScansByColumn('file_count')" data-column="file_count">
-                                Files
-                                <span class="sort-indicator"></span>
-                            </th>
-                            <th class="sortable-header" onclick="sortScansByColumn('folder_count')" data-column="folder_count">
-                                Folders
-                                <span class="sort-indicator"></span>
-                            </th>
-                            <th>Duration</th>
-                        </tr>
-                    </thead>
-                    <tbody id="scans-table-body">
-                        <tr><td colspan="7">Loading...</td></tr>
-                    </tbody>
-                </table>
+                <div class="section-with-sidebar">
+                    <!-- Column List Sidebar -->
+                    <aside class="column-list-sidebar">
+                        <div class="column-list-header">
+                            <div class="column-list-header-labels">
+                                <div class="drag-spacer"></div>
+                                <div class="column-label">Column</div>
+                                <div class="name-spacer"></div>
+                                <div class="sort-label">Sort</div>
+                                <div class="filter-label">Filter</div>
+                            </div>
+                        </div>
+                        <ul class="column-list" id="scans-column-list">
+                            <li style="text-align: center; color: #86868b; padding: 1rem; font-size: 0.875rem;">Loading columns...</li>
+                        </ul>
+                    </aside>
 
-                <div class="pagination">
-                    <div class="pagination-info" id="scans-pagination-info">
-                        Showing 0 - 0 of 0 scans
-                    </div>
-                    <div class="pagination-controls">
-                        <button class="pagination-btn" id="scans-prev-btn" onclick="changeScansPage(-1)">Previous</button>
-                        <button class="pagination-btn" id="scans-next-btn" onclick="changeScansPage(1)">Next</button>
+                    <!-- Main Content Area -->
+                    <div class="section-main-content">
+                        <div class="card">
+                            <table class="data-table">
+                                <thead>
+                                    <tr id="scans-table-header">
+                                        <th colspan="9">Loading...</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scans-table-body">
+                                    <tr><td colspan="9">Loading...</td></tr>
+                                </tbody>
+                            </table>
+
+                            <div class="pagination">
+                                <div class="pagination-info" id="scans-pagination-info">
+                                    Showing 0 - 0 of 0 scans
+                                </div>
+                                <div class="pagination-controls">
+                                    <button class="pagination-btn" id="scans-prev-btn" onclick="changeScansPage(-1)">Previous</button>
+                                    <button class="pagination-btn" id="scans-next-btn" onclick="changeScansPage(1)">Next</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1088,8 +1103,53 @@
             </div>
 
             <div id="changes-section" style="display: none;">
-                <h2>Change History</h2>
-                <p>Examine filesystem changes over time...</p>
+                <div class="entity-view-header">
+                    <h1 class="entity-view-title">Changes</h1>
+                </div>
+
+                <div class="section-with-sidebar">
+                    <!-- Column List Sidebar -->
+                    <aside class="column-list-sidebar">
+                        <div class="column-list-header">
+                            <div class="column-list-header-labels">
+                                <div class="drag-spacer"></div>
+                                <div class="column-label">Column</div>
+                                <div class="name-spacer"></div>
+                                <div class="sort-label">Sort</div>
+                                <div class="filter-label">Filter</div>
+                            </div>
+                        </div>
+                        <ul class="column-list" id="changes-column-list">
+                            <li style="text-align: center; color: #86868b; padding: 1rem; font-size: 0.875rem;">Loading columns...</li>
+                        </ul>
+                    </aside>
+
+                    <!-- Main Content Area -->
+                    <div class="section-main-content">
+                        <div class="card">
+                            <table class="data-table">
+                                <thead>
+                                    <tr id="changes-table-header">
+                                        <th colspan="5">Loading...</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="changes-table-body">
+                                    <tr><td colspan="5">Loading...</td></tr>
+                                </tbody>
+                            </table>
+
+                            <div class="pagination">
+                                <div class="pagination-info" id="changes-pagination-info">
+                                    Showing 0 - 0 of 0 changes
+                                </div>
+                                <div class="pagination-controls">
+                                    <button class="pagination-btn" id="changes-prev-btn" onclick="changeChangesPage(-1)">Previous</button>
+                                    <button class="pagination-btn" id="changes-next-btn" onclick="changeChangesPage(1)">Next</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Configuration Section -->
@@ -1100,7 +1160,8 @@
         </main>
     </div>
 
-    <!-- Filter Modal -->
+    <!-- Filter Modals -->
+    <!-- Items Filter Modal -->
     <div class="filter-modal-overlay" id="items-filter-modal-overlay" onclick="closeItemsFilterModal()">
         <div class="filter-modal" onclick="event.stopPropagation()">
             <div class="filter-modal-header">
@@ -1114,6 +1175,60 @@
             <div class="filter-modal-footer">
                 <button class="modal-btn" onclick="closeItemsFilterModal()">Cancel</button>
                 <button class="modal-btn primary" onclick="saveItemsFilter()">Apply Filter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Roots Filter Modal -->
+    <div class="filter-modal-overlay" id="roots-filter-modal-overlay" onclick="closeRootsFilterModal()">
+        <div class="filter-modal" onclick="event.stopPropagation()">
+            <div class="filter-modal-header">
+                <h2 class="filter-modal-title" id="roots-filter-modal-title">Filter Column</h2>
+            </div>
+            <div class="filter-modal-body">
+                <input type="text" class="filter-input" id="roots-filter-input" placeholder="Enter filter value...">
+                <p class="filter-hint" id="roots-filter-hint">Filter syntax hint will appear here</p>
+                <p class="filter-error" id="roots-filter-error">Error message</p>
+            </div>
+            <div class="filter-modal-footer">
+                <button class="modal-btn" onclick="closeRootsFilterModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="saveRootsFilter()">Apply Filter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scans Filter Modal -->
+    <div class="filter-modal-overlay" id="scans-filter-modal-overlay" onclick="closeScansFilterModal()">
+        <div class="filter-modal" onclick="event.stopPropagation()">
+            <div class="filter-modal-header">
+                <h2 class="filter-modal-title" id="scans-filter-modal-title">Filter Column</h2>
+            </div>
+            <div class="filter-modal-body">
+                <input type="text" class="filter-input" id="scans-filter-input" placeholder="Enter filter value...">
+                <p class="filter-hint" id="scans-filter-hint">Filter syntax hint will appear here</p>
+                <p class="filter-error" id="scans-filter-error">Error message</p>
+            </div>
+            <div class="filter-modal-footer">
+                <button class="modal-btn" onclick="closeScansFilterModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="saveScansFilter()">Apply Filter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Changes Filter Modal -->
+    <div class="filter-modal-overlay" id="changes-filter-modal-overlay" onclick="closeChangesFilterModal()">
+        <div class="filter-modal" onclick="event.stopPropagation()">
+            <div class="filter-modal-header">
+                <h2 class="filter-modal-title" id="changes-filter-modal-title">Filter Column</h2>
+            </div>
+            <div class="filter-modal-body">
+                <input type="text" class="filter-input" id="changes-filter-input" placeholder="Enter filter value...">
+                <p class="filter-hint" id="changes-filter-hint">Filter syntax hint will appear here</p>
+                <p class="filter-error" id="changes-filter-error">Error message</p>
+            </div>
+            <div class="filter-modal-footer">
+                <button class="modal-btn" onclick="closeChangesFilterModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="saveChangesFilter()">Apply Filter</button>
             </div>
         </div>
     </div>
@@ -1183,762 +1298,439 @@
             }
         }
 
-        // Roots functionality
-        let currentRootsPage = 1;
-        let currentRootsSort = 'path';
-        let currentRootsSortDirection = 'asc';
-        let currentRootsFilter = '';
+        // =============================================================================
+        // DataTableView - Unified implementation for Roots, Scans, and Items
+        // =============================================================================
+        // Single class handles all table views with column management & filtering
+        // Eliminates ~1000 lines of duplicated code
+        // =============================================================================
 
-        async function loadRoots() {
-            try {
-                const sortParam = currentRootsSortDirection === 'desc' ?
-                    currentRootsSort + '_desc' : currentRootsSort;
+        class DataTableView {
+            constructor(domain, displayName) {
+                this.domain = domain;
+                this.displayName = displayName;
+                this.columnState = [];
+                this.selectedColumnIndex = null;
+                this.activeFilters = [];
+                this.currentFilterColumnIndex = null;
+                this.currentPage = 1;
+                this.draggedColumnIndex = null;
+                this.dropPosition = null;
+            }
 
-                const params = new URLSearchParams({
-                    page: currentRootsPage,
-                    limit: 25,
-                    sort: sortParam,
-                    filter: currentRootsFilter
+            // DOM ID helpers
+            getElementId(suffix) {
+                return `${this.domain}-${suffix}`;
+            }
+
+            getElement(suffix) {
+                return document.getElementById(this.getElementId(suffix));
+            }
+
+            async loadMetadata() {
+                try {
+                    const response = await fetch(`/api/metadata/${this.domain}`);
+                    const data = await response.json();
+
+                    this.columnState = data.columns.map((col, index) => ({
+                        name: col.name,
+                        displayName: col.display_name,
+                        colType: col.col_type,
+                        alignment: col.alignment,
+                        visible: col.is_default,
+                        sortDirection: 'none',
+                        position: index,
+                        filterInfo: col.filter_info
+                    }));
+
+                    this.renderColumnList();
+                    this.loadData();
+                } catch (error) {
+                    console.error(`Failed to load ${this.domain} metadata:`, error);
+                    this.getElement('column-list').innerHTML =
+                        '<li style="color: #f44336; padding: 1rem;">Failed to load columns</li>';
+                }
+            }
+
+            renderColumnList() {
+                const list = this.getElement('column-list');
+                const sortedColumns = [...this.columnState].sort((a, b) => a.position - b.position);
+
+                list.innerHTML = sortedColumns.map((col, displayIndex) => {
+                    const actualIndex = this.columnState.findIndex(c => c.name === col.name);
+                    const sortIcon = col.sortDirection === 'asc' ? '↑' :
+                                    col.sortDirection === 'desc' ? '↓' : '·';
+                    const sortClass = col.sortDirection !== 'none' ? 'active' : '';
+
+                    const activeFilter = this.activeFilters.find(f => f.columnName === col.name);
+                    const filterDisplay = activeFilter
+                        ? `<div class="filter-value-chip" onclick="event.stopPropagation(); views.${this.domain}.openFilterModal(${actualIndex})" title="${activeFilter.filterValue}">
+                             <span class="filter-value-text">${activeFilter.filterValue}</span>
+                             <span class="filter-value-remove" onclick="event.stopPropagation(); views.${this.domain}.removeFilter('${col.name}')">×</span>
+                           </div>`
+                        : `<button class="filter-add-btn" onclick="event.stopPropagation(); views.${this.domain}.openFilterModal(${actualIndex})" title="Add filter">+</button>`;
+
+                    return `
+                        <li class="column-item ${this.selectedColumnIndex === actualIndex ? 'selected' : ''}"
+                            data-column-index="${actualIndex}"
+                            draggable="true"
+                            onclick="views.${this.domain}.selectColumn(${actualIndex})">
+                            <div class="drag-handle" title="Drag to reorder"></div>
+                            <input type="checkbox"
+                                   class="column-checkbox"
+                                   ${col.visible ? 'checked' : ''}
+                                   onclick="event.stopPropagation(); views.${this.domain}.toggleColumnVisibility(${actualIndex})"
+                                   title="Toggle visibility">
+                            <span class="column-name">${col.displayName}</span>
+                            <div class="sort-control ${sortClass}"
+                                 onclick="event.stopPropagation(); views.${this.domain}.cycleColumnSort(${actualIndex})"
+                                 title="Sort direction">
+                                ${sortIcon}
+                            </div>
+                            <div class="filter-display">
+                                ${filterDisplay}
+                            </div>
+                        </li>
+                    `;
+                }).join('');
+            }
+
+            setupDragListeners() {
+                const columnList = this.getElement('column-list');
+
+                columnList.addEventListener('dragstart', (e) => {
+                    const columnItem = e.target.closest('.column-item');
+                    if (columnItem) {
+                        this.draggedColumnIndex = parseInt(columnItem.dataset.columnIndex);
+                        columnItem.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/html', columnItem.innerHTML);
+                    }
                 });
 
-                const response = await fetch(`/api/roots?${params}`);
-                const data = await response.json();
-
-                const tbody = document.getElementById('roots-table-body');
-                if (data.items.length === 0) {
-                    tbody.innerHTML = '<tr><td>No roots found</td></tr>';
-                } else {
-                    tbody.innerHTML = data.items.map(root => `
-                        <tr>
-                            <td><strong>${root.path}</strong></td>
-                        </tr>
-                    `).join('');
-                }
-
-                // Update pagination
-                const pagination = document.getElementById('roots-pagination');
-                const paginationInfo = document.getElementById('roots-pagination-info');
-                const prevBtn = document.getElementById('roots-prev-btn');
-                const nextBtn = document.getElementById('roots-next-btn');
-
-                if (data.total > 0) {
-                    pagination.style.display = 'flex';
-                    const start = ((data.page - 1) * data.limit) + 1;
-                    const end = Math.min(data.page * data.limit, data.total);
-                    paginationInfo.textContent = `Showing ${start}-${end} of ${data.total} roots`;
-
-                    prevBtn.disabled = !data.has_prev;
-                    nextBtn.disabled = !data.has_next;
-                } else {
-                    pagination.style.display = 'none';
-                }
-
-                // Update sort indicators
-                updateRootsSortIndicators();
-
-            } catch (error) {
-                console.error('Failed to load roots:', error);
-                document.getElementById('roots-table-body').innerHTML =
-                    '<tr><td style="color: #f44336;">Failed to load roots</td></tr>';
-            }
-        }
-
-        function filterRoots() {
-            currentRootsFilter = document.getElementById('roots-filter').value;
-            currentRootsPage = 1;
-            loadRoots();
-        }
-
-        function sortRootsByColumn(column) {
-            if (currentRootsSort === column) {
-                // Toggle direction if clicking the same column
-                currentRootsSortDirection = currentRootsSortDirection === 'asc' ? 'desc' : 'asc';
-            } else {
-                // New column, start with ascending
-                currentRootsSort = column;
-                currentRootsSortDirection = 'asc';
-            }
-            currentRootsPage = 1;
-            loadRoots();
-        }
-
-        function updateRootsSortIndicators() {
-            // Remove active class from all headers
-            document.querySelectorAll('#roots-section .sortable-header').forEach(header => {
-                header.classList.remove('active');
-            });
-
-            // Find and update the active header
-            const activeHeader = document.querySelector(`#roots-section [data-column="${currentRootsSort}"]`);
-            if (activeHeader) {
-                activeHeader.classList.add('active');
-                const indicator = activeHeader.querySelector('.sort-indicator');
-                indicator.textContent = currentRootsSortDirection === 'asc' ? '▲' : '▼';
-            }
-        }
-
-        function changeRootsPage(delta) {
-            currentRootsPage += delta;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            loadRoots();
-        }
-
-        // Scans functionality
-        let currentScansPage = 1;
-        let currentScansSort = 'scan_time';
-        let currentScansSortDirection = 'desc';
-        let currentScansFilter = '';
-
-        async function loadScans() {
-            try {
-                const params = new URLSearchParams({
-                    page: currentScansPage,
-                    limit: 25
+                columnList.addEventListener('dragenter', (e) => {
+                    const columnItem = e.target.closest('.column-item');
+                    if (columnItem) {
+                        e.preventDefault();
+                        this.updateDropIndicator(columnItem, e.clientY);
+                    }
                 });
 
-                if (currentScansSort) {
-                    const sortParam = currentScansSortDirection === 'desc' ? currentScansSort + '_desc' : currentScansSort;
-                    params.append('sort', sortParam);
+                columnList.addEventListener('dragover', (e) => {
+                    const columnItem = e.target.closest('.column-item');
+                    if (columnItem) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        this.updateDropIndicator(columnItem, e.clientY);
+                    }
+                });
+
+                columnList.addEventListener('drop', (e) => {
+                    const columnItem = e.target.closest('.column-item');
+                    if (columnItem) {
+                        this.handleColumnDrop(e, columnItem);
+                    }
+                });
+
+                columnList.addEventListener('dragend', (e) => {
+                    const columnItem = e.target.closest('.column-item');
+                    if (columnItem) {
+                        this.handleColumnDragEnd(e);
+                    }
+                });
+            }
+
+            updateDropIndicator(item, mouseY) {
+                const itemIndex = parseInt(item.dataset.columnIndex);
+                if (itemIndex === this.draggedColumnIndex) return;
+
+                document.querySelectorAll(`#${this.getElementId('column-list')} .column-item`).forEach(el => {
+                    el.classList.remove('drag-over-top', 'drag-over-bottom');
+                });
+
+                const rect = item.getBoundingClientRect();
+                const midpoint = rect.top + rect.height / 2;
+
+                if (mouseY < midpoint) {
+                    item.classList.add('drag-over-top');
+                    this.dropPosition = 'before';
+                } else {
+                    item.classList.add('drag-over-bottom');
+                    this.dropPosition = 'after';
+                }
+            }
+
+            handleColumnDrop(e, dropElement) {
+                e.stopPropagation();
+                e.preventDefault();
+
+                const dropIndex = parseInt(dropElement.dataset.columnIndex);
+                if (this.draggedColumnIndex === null || this.draggedColumnIndex === dropIndex) {
+                    return false;
                 }
 
-                if (currentScansFilter) {
-                    params.append('filter', currentScansFilter);
+                const draggedCol = this.columnState[this.draggedColumnIndex];
+                const dropCol = this.columnState[dropIndex];
+                const draggedPos = draggedCol.position;
+                const dropPos = dropCol.position;
+
+                let targetPos = dropPos;
+                if (this.dropPosition === 'after') {
+                    targetPos = dropPos + 1;
                 }
 
-                const response = await fetch(`/api/scans?${params}`);
-                const data = await response.json();
-
-                const tbody = document.getElementById('scans-table-body');
-                tbody.innerHTML = '';
-
-                if (data.items && data.items.length > 0) {
-                    data.items.forEach(scan => {
-                        const row = document.createElement('tr');
-
-                        // Format duration
-                        const duration = scan.duration_seconds ?
-                            `${scan.duration_seconds}s` :
-                            (scan.state === 'scanning' ? 'In progress...' : '-');
-
-                        // Format state with color
-                        const stateClass = scan.state === 'completed' ? 'status-active' :
-                                         scan.state === 'scanning' ? 'status-inactive' :
-                                         'status-inactive';
-
-                        row.innerHTML = `
-                            <td>${scan.id}</td>
-                            <td title="${scan.root_path || 'Unknown'}">${scan.root_path || 'Unknown'}</td>
-                            <td><span class="${stateClass}">${scan.state}</span></td>
-                            <td>${new Date(scan.scan_time).toLocaleString()}</td>
-                            <td>${scan.file_count || '-'}</td>
-                            <td>${scan.folder_count || '-'}</td>
-                            <td>${duration}</td>
-                        `;
-                        tbody.appendChild(row);
+                if (draggedPos < targetPos) {
+                    this.columnState.forEach(col => {
+                        if (col.position > draggedPos && col.position < targetPos) {
+                            col.position--;
+                        }
                     });
-                } else {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No scans found</td></tr>';
+                    draggedCol.position = targetPos - 1;
+                } else if (draggedPos > targetPos) {
+                    this.columnState.forEach(col => {
+                        if (col.position >= targetPos && col.position < draggedPos) {
+                            col.position++;
+                        }
+                    });
+                    draggedCol.position = targetPos;
                 }
 
-                // Update pagination info
-                const start = data.items.length > 0 ? (data.page - 1) * data.limit + 1 : 0;
-                const end = Math.min(start + data.items.length - 1, data.total);
-                document.getElementById('scans-pagination-info').textContent =
-                    `Showing ${start} - ${end} of ${data.total} scans`;
-
-                // Update pagination buttons
-                document.getElementById('scans-prev-btn').disabled = !data.has_prev;
-                document.getElementById('scans-next-btn').disabled = !data.has_next;
-
-                // Update sort indicators
-                updateScansSortIndicators();
-            } catch (error) {
-                console.error('Failed to load scans:', error);
-                document.getElementById('scans-table-body').innerHTML =
-                    '<tr><td colspan="7" style="color: #f44336;">Failed to load scans</td></tr>';
-            }
-        }
-
-        function filterScans() {
-            currentScansFilter = document.getElementById('scans-filter').value;
-            currentScansPage = 1;
-            loadScans();
-        }
-
-        function sortScansByColumn(column) {
-            if (currentScansSort === column) {
-                // Toggle direction if clicking the same column
-                currentScansSortDirection = currentScansSortDirection === 'asc' ? 'desc' : 'asc';
-            } else {
-                // New column, start with ascending
-                currentScansSort = column;
-                currentScansSortDirection = 'asc';
-            }
-            currentScansPage = 1;
-            loadScans();
-        }
-
-        function updateScansSortIndicators() {
-            // Remove active class from all headers
-            document.querySelectorAll('#scans-section .sortable-header').forEach(header => {
-                header.classList.remove('active');
-            });
-
-            // Find and update the active header
-            const activeHeader = document.querySelector(`#scans-section [data-column="${currentScansSort}"]`);
-            if (activeHeader) {
-                activeHeader.classList.add('active');
-                const indicator = activeHeader.querySelector('.sort-indicator');
-                indicator.textContent = currentScansSortDirection === 'asc' ? '▲' : '▼';
-            }
-        }
-
-        function changeScansPage(delta) {
-            currentScansPage += delta;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            loadScans();
-        }
-
-        // =============================================================================
-        // Items Section - Column Management & Filtering
-        // =============================================================================
-        // This section implements a data-driven column list with:
-        // - Drag-and-drop reordering
-        // - Visibility toggles
-        // - Sort direction controls
-        // - Inline filter UI
-        // All metadata comes from /api/metadata/items for consistency with TUI
-        // =============================================================================
-
-        let itemsColumnState = [];      // Array of column config objects
-        let selectedColumnIndex = null; // Currently selected column (for keyboard shortcuts)
-
-        async function loadItemsMetadata() {
-            try {
-                const response = await fetch('/api/metadata/items');
-                const data = await response.json();
-
-                // Initialize column state from metadata
-                itemsColumnState = data.columns.map((col, index) => ({
-                    name: col.name,
-                    displayName: col.display_name,
-                    colType: col.col_type,
-                    alignment: col.alignment,
-                    visible: col.is_default,  // Use is_default to determine initial visibility
-                    sortDirection: 'none',     // none | asc | desc
-                    position: index,
-                    filterInfo: col.filter_info
-                }));
-
-                renderItemsColumnList();
-                loadItems(); // Now load the actual items data
-            } catch (error) {
-                console.error('Failed to load items metadata:', error);
-                document.getElementById('items-column-list').innerHTML =
-                    '<li style="color: #f44336; padding: 1rem;">Failed to load columns</li>';
-            }
-        }
-
-        function renderItemsColumnList() {
-            const list = document.getElementById('items-column-list');
-
-            // Sort by position
-            const sortedColumns = [...itemsColumnState].sort((a, b) => a.position - b.position);
-
-            list.innerHTML = sortedColumns.map((col, displayIndex) => {
-                const actualIndex = itemsColumnState.findIndex(c => c.name === col.name);
-                const sortIcon = col.sortDirection === 'asc' ? '↑' :
-                                col.sortDirection === 'desc' ? '↓' : '·';
-                const sortClass = col.sortDirection !== 'none' ? 'active' : '';
-
-                // Check if there's an active filter for this column
-                const activeFilter = itemsActiveFilters.find(f => f.columnName === col.name);
-                const filterDisplay = activeFilter
-                    ? `<div class="filter-value-chip" onclick="event.stopPropagation(); openItemsFilterModal(${actualIndex})" title="${activeFilter.filterValue}">
-                         <span class="filter-value-text">${activeFilter.filterValue}</span>
-                         <span class="filter-value-remove" onclick="event.stopPropagation(); removeItemsFilter('${col.name}')">×</span>
-                       </div>`
-                    : `<button class="filter-add-btn" onclick="event.stopPropagation(); openItemsFilterModal(${actualIndex})" title="Add filter">+</button>`;
-
-                return `
-                    <li class="column-item ${selectedColumnIndex === actualIndex ? 'selected' : ''}"
-                        data-column-index="${actualIndex}"
-                        draggable="true"
-                        onclick="selectItemsColumn(${actualIndex})">
-                        <div class="drag-handle" title="Drag to reorder"></div>
-                        <input type="checkbox"
-                               class="column-checkbox"
-                               ${col.visible ? 'checked' : ''}
-                               onclick="event.stopPropagation(); toggleItemsColumnVisibility(${actualIndex})"
-                               title="Toggle visibility">
-                        <span class="column-name">${col.displayName}</span>
-                        <div class="sort-control ${sortClass}"
-                             onclick="event.stopPropagation(); cycleItemsColumnSort(${actualIndex})"
-                             title="Sort direction">
-                            ${sortIcon}
-                        </div>
-                        <div class="filter-display">
-                            ${filterDisplay}
-                        </div>
-                    </li>
-                `;
-            }).join('');
-        }
-
-        // Drag and Drop functionality
-        let draggedColumnIndex = null;
-        let dropPosition = null;
-
-        // Use event delegation for drag-and-drop to avoid re-attaching listeners
-        // This is set up once when the page loads (see bottom of script)
-        function setupColumnDragListeners() {
-            const columnList = document.getElementById('items-column-list');
-
-            columnList.addEventListener('dragstart', (e) => {
-                const columnItem = e.target.closest('.column-item');
-                if (columnItem) {
-                    handleColumnDragStart(e);
-                }
-            });
-
-            columnList.addEventListener('dragenter', (e) => {
-                const columnItem = e.target.closest('.column-item');
-                if (columnItem) {
-                    e.preventDefault();
-                    updateDropIndicator(columnItem, e.clientY);
-                }
-            });
-
-            columnList.addEventListener('dragover', (e) => {
-                const columnItem = e.target.closest('.column-item');
-                if (columnItem) {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    updateDropIndicator(columnItem, e.clientY);
-                }
-            });
-
-            columnList.addEventListener('drop', (e) => {
-                const columnItem = e.target.closest('.column-item');
-                if (columnItem) {
-                    handleColumnDrop(e, columnItem);
-                }
-            });
-
-            columnList.addEventListener('dragend', (e) => {
-                const columnItem = e.target.closest('.column-item');
-                if (columnItem) {
-                    handleColumnDragEnd(e);
-                }
-            });
-        }
-
-        function handleColumnDragStart(e) {
-            const columnItem = e.target.closest('.column-item');
-            if (!columnItem) return;
-
-            draggedColumnIndex = parseInt(columnItem.dataset.columnIndex);
-            columnItem.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/html', columnItem.innerHTML);
-        }
-
-        function updateDropIndicator(item, mouseY) {
-            const itemIndex = parseInt(item.dataset.columnIndex);
-
-            // Don't show indicator on the dragged item itself
-            if (itemIndex === draggedColumnIndex) {
-                return;
-            }
-
-            // Clean up all indicators first
-            document.querySelectorAll('#items-column-list .column-item').forEach(el => {
-                el.classList.remove('drag-over-top', 'drag-over-bottom');
-            });
-
-            // Show indicator based on mouse position (top or bottom half)
-            const rect = item.getBoundingClientRect();
-            const midpoint = rect.top + rect.height / 2;
-
-            if (mouseY < midpoint) {
-                item.classList.add('drag-over-top');
-                dropPosition = 'before';
-            } else {
-                item.classList.add('drag-over-bottom');
-                dropPosition = 'after';
-            }
-        }
-
-        function handleColumnDrop(e, dropElement) {
-            e.stopPropagation();
-            e.preventDefault();
-
-            const dropIndex = parseInt(dropElement.dataset.columnIndex);
-            if (draggedColumnIndex === null || draggedColumnIndex === dropIndex) {
+                this.selectedColumnIndex = this.draggedColumnIndex;
+                this.renderColumnList();
+                this.loadData();
                 return false;
             }
 
-            const draggedCol = itemsColumnState[draggedColumnIndex];
-            const dropCol = itemsColumnState[dropIndex];
-            const draggedPos = draggedCol.position;
-            const dropPos = dropCol.position;
-
-            // Calculate target position
-            let targetPos = dropPos;
-            if (dropPosition === 'after') {
-                targetPos = dropPos + 1;
-            }
-
-            // Shift all items between old and new positions
-            if (draggedPos < targetPos) {
-                // Moving down
-                itemsColumnState.forEach(col => {
-                    if (col.position > draggedPos && col.position < targetPos) {
-                        col.position--;
-                    }
-                });
-                draggedCol.position = targetPos - 1;
-            } else if (draggedPos > targetPos) {
-                // Moving up
-                itemsColumnState.forEach(col => {
-                    if (col.position >= targetPos && col.position < draggedPos) {
-                        col.position++;
-                    }
-                });
-                draggedCol.position = targetPos;
-            }
-
-            // Keep the dragged column selected
-            selectedColumnIndex = draggedColumnIndex;
-
-            renderItemsColumnList();
-            loadItems();
-            return false;
-        }
-
-        function handleColumnDragEnd(e) {
-            const columnItem = e.target.closest('.column-item');
-            if (columnItem) {
-                columnItem.classList.remove('dragging');
-            }
-
-            // Clean up all indicators
-            document.querySelectorAll('#items-column-list .column-item').forEach(item => {
-                item.classList.remove('drag-over-top', 'drag-over-bottom');
-            });
-
-            draggedColumnIndex = null;
-            dropPosition = null;
-        }
-
-        function selectItemsColumn(index) {
-            selectedColumnIndex = index;
-            renderItemsColumnList();
-        }
-
-        function toggleItemsColumnVisibility(index) {
-            itemsColumnState[index].visible = !itemsColumnState[index].visible;
-            currentItemsPage = 1; // Reset to first page
-            renderItemsColumnList();
-            loadItems(); // Refresh the table
-        }
-
-        function cycleItemsColumnSort(index) {
-            const current = itemsColumnState[index].sortDirection;
-            const cycle = { 'none': 'asc', 'asc': 'desc', 'desc': 'none' };
-            itemsColumnState[index].sortDirection = cycle[current];
-            currentItemsPage = 1; // Reset to first page
-            renderItemsColumnList();
-            loadItems(); // Refresh the table
-        }
-
-        // Filter Management
-        // Filters are managed per-column and displayed inline in the column list
-        // When saved, they'll be sent to the server in Phase 7 (Query Generation)
-        let itemsActiveFilters = []; // Array of { columnName, displayName, filterValue }
-        let currentFilterColumnIndex = null; // Track which column is being filtered
-
-        function openItemsFilterModal(columnIndex) {
-            currentFilterColumnIndex = columnIndex;
-            const column = itemsColumnState[columnIndex];
-            const modal = document.getElementById('items-filter-modal-overlay');
-            const title = document.getElementById('items-filter-modal-title');
-            const hint = document.getElementById('items-filter-hint');
-            const input = document.getElementById('items-filter-input');
-            const error = document.getElementById('items-filter-error');
-
-            // Set modal title and hint
-            title.textContent = `Filter: ${column.displayName}`;
-            hint.textContent = column.filterInfo.syntax_hint;
-
-            // Check if there's an existing filter for this column
-            const existingFilter = itemsActiveFilters.find(f => f.columnName === column.name);
-            input.value = existingFilter ? existingFilter.filterValue : '';
-
-            // Clear error
-            error.classList.remove('visible');
-
-            // Show modal
-            modal.classList.add('active');
-
-            // Focus input
-            setTimeout(() => input.focus(), 100);
-        }
-
-        function closeItemsFilterModal() {
-            const modal = document.getElementById('items-filter-modal-overlay');
-            modal.classList.remove('active');
-            currentFilterColumnIndex = null;
-        }
-
-        function saveItemsFilter() {
-            if (currentFilterColumnIndex === null) return;
-
-            const column = itemsColumnState[currentFilterColumnIndex];
-            const input = document.getElementById('items-filter-input');
-            const filterValue = input.value.trim();
-            const error = document.getElementById('items-filter-error');
-
-            // Clear previous error
-            error.classList.remove('visible');
-
-            // If empty, remove filter for this column
-            if (filterValue === '') {
-                itemsActiveFilters = itemsActiveFilters.filter(f => f.columnName !== column.name);
-                closeItemsFilterModal();
-                renderItemsColumnList();
-                loadItems();
-                return;
-            }
-
-            // Basic client-side validation (more validation will be done server-side)
-            if (filterValue.length > 500) {
-                error.textContent = 'Filter value is too long (max 500 characters)';
-                error.classList.add('visible');
-                return;
-            }
-
-            // Remove existing filter for this column if any
-            itemsActiveFilters = itemsActiveFilters.filter(f => f.columnName !== column.name);
-
-            // Add new filter
-            itemsActiveFilters.push({
-                columnName: column.name,
-                displayName: column.displayName,
-                filterValue: filterValue
-            });
-
-            closeItemsFilterModal();
-            currentItemsPage = 1; // Reset to first page
-            renderItemsColumnList();
-            loadItems();
-        }
-
-        function removeItemsFilter(columnName) {
-            itemsActiveFilters = itemsActiveFilters.filter(f => f.columnName !== columnName);
-            currentItemsPage = 1; // Reset to first page
-            renderItemsColumnList();
-            loadItems();
-        }
-
-        // Keyboard shortcuts for Items section
-        document.addEventListener('keydown', (e) => {
-            // Only handle shortcuts when Items section is visible
-            const itemsSection = document.getElementById('items-section');
-            if (itemsSection.style.display === 'none') return;
-
-            // 'f' key to open filter modal (when column is selected)
-            if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                // Don't trigger if user is typing in an input field
-                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-                if (selectedColumnIndex !== null) {
-                    e.preventDefault();
-                    openItemsFilterModal(selectedColumnIndex);
+            handleColumnDragEnd(e) {
+                const columnItem = e.target.closest('.column-item');
+                if (columnItem) {
+                    columnItem.classList.remove('dragging');
                 }
+
+                document.querySelectorAll(`#${this.getElementId('column-list')} .column-item`).forEach(item => {
+                    item.classList.remove('drag-over-top', 'drag-over-bottom');
+                });
+
+                this.draggedColumnIndex = null;
+                this.dropPosition = null;
             }
 
-            // Escape key to close modal
-            if (e.key === 'Escape') {
-                const modal = document.getElementById('items-filter-modal-overlay');
-                if (modal.classList.contains('active')) {
-                    e.preventDefault();
-                    closeItemsFilterModal();
-                }
-            }
-        });
-
-        // Items functionality
-        let currentItemsPage = 1;
-
-        async function loadItems() {
-            // Don't load if metadata hasn't been loaded yet
-            if (itemsColumnState.length === 0) {
-                await loadItemsMetadata();
-                return; // loadItemsMetadata will call loadItems again
+            selectColumn(index) {
+                this.selectedColumnIndex = index;
+                this.renderColumnList();
             }
 
-            try {
-                // Get visible columns in position order
-                const visibleColumns = itemsColumnState
-                    .filter(col => col.visible)
-                    .sort((a, b) => a.position - b.position);
+            toggleColumnVisibility(index) {
+                this.columnState[index].visible = !this.columnState[index].visible;
+                this.currentPage = 1;
+                this.renderColumnList();
+                this.loadData();
+            }
 
-                if (visibleColumns.length === 0) {
-                    document.getElementById('items-table-header').innerHTML =
-                        '<th colspan="1" style="text-align: center; color: #f44336;">No columns selected. Please select columns to display.</th>';
-                    document.getElementById('items-table-body').innerHTML =
-                        '<tr><td style="text-align: center; color: #666;">Select columns from the sidebar to display data</td></tr>';
+            cycleColumnSort(index) {
+                const current = this.columnState[index].sortDirection;
+                const cycle = { 'none': 'asc', 'asc': 'desc', 'desc': 'none' };
+                this.columnState[index].sortDirection = cycle[current];
+                this.currentPage = 1;
+                this.renderColumnList();
+                this.loadData();
+            }
+
+            openFilterModal(columnIndex) {
+                this.currentFilterColumnIndex = columnIndex;
+                const column = this.columnState[columnIndex];
+                const modal = this.getElement('filter-modal-overlay');
+                const title = this.getElement('filter-modal-title');
+                const hint = this.getElement('filter-hint');
+                const input = this.getElement('filter-input');
+                const error = this.getElement('filter-error');
+
+                title.textContent = `Filter: ${column.displayName}`;
+                hint.textContent = column.filterInfo.syntax_hint;
+
+                const existingFilter = this.activeFilters.find(f => f.columnName === column.name);
+                input.value = existingFilter ? existingFilter.filterValue : '';
+
+                error.classList.remove('visible');
+                modal.classList.add('active');
+                setTimeout(() => input.focus(), 100);
+            }
+
+            closeFilterModal() {
+                const modal = this.getElement('filter-modal-overlay');
+                modal.classList.remove('active');
+                this.currentFilterColumnIndex = null;
+            }
+
+            saveFilter() {
+                if (this.currentFilterColumnIndex === null) return;
+
+                const column = this.columnState[this.currentFilterColumnIndex];
+                const input = this.getElement('filter-input');
+                const filterValue = input.value.trim();
+                const error = this.getElement('filter-error');
+
+                error.classList.remove('visible');
+
+                if (filterValue === '') {
+                    this.activeFilters = this.activeFilters.filter(f => f.columnName !== column.name);
+                    this.closeFilterModal();
+                    this.renderColumnList();
+                    this.loadData();
                     return;
                 }
 
-                // Build table header dynamically
-                const headerHtml = visibleColumns.map(col => {
-                    const alignStyle = col.alignment === 'Right' ? 'text-align: right' :
-                                      col.alignment === 'Center' ? 'text-align: center' : '';
-                    return `<th style="${alignStyle}">${col.displayName}</th>`;
-                }).join('');
-                document.getElementById('items-table-header').innerHTML = headerHtml;
-
-                // Build query request from column state and filters
-                const itemsPerPage = 25;
-                const offset = (currentItemsPage - 1) * itemsPerPage;
-
-                const queryRequest = {
-                    columns: itemsColumnState.map(col => ({
-                        name: col.name,
-                        visible: col.visible,
-                        sort_direction: col.sortDirection,
-                        position: col.position
-                    })),
-                    filters: itemsActiveFilters.map(f => ({
-                        column: f.columnName,
-                        value: f.filterValue
-                    })),
-                    limit: itemsPerPage,
-                    offset: offset
-                };
-
-                // POST to query endpoint
-                const response = await fetch('/api/query/items', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(queryRequest)
-                });
-                const data = await response.json();
-
-                const tbody = document.getElementById('items-table-body');
-                tbody.innerHTML = '';
-
-                if (data.rows && data.rows.length > 0) {
-                    data.rows.forEach(rowData => {
-                        const row = document.createElement('tr');
-
-                        const cellsHtml = rowData.map((cellValue, index) => {
-                            const col = visibleColumns[index];
-                            const alignStyle = col.alignment === 'Right' ? 'text-align: right' :
-                                              col.alignment === 'Center' ? 'text-align: center' : '';
-                            return `<td style="${alignStyle}">${cellValue}</td>`;
-                        }).join('');
-
-                        row.innerHTML = cellsHtml;
-                        tbody.appendChild(row);
-                    });
-                } else {
-                    tbody.innerHTML = `<tr><td colspan="${visibleColumns.length}" style="text-align: center; color: #666;">No items found</td></tr>`;
+                if (filterValue.length > 500) {
+                    error.textContent = 'Filter value is too long (max 500 characters)';
+                    error.classList.add('visible');
+                    return;
                 }
 
-                // Update pagination info
-                const itemsPerPageDisplay = 25;
-                const showing = data.rows.length;
-                const start = showing > 0 ? ((currentItemsPage - 1) * itemsPerPageDisplay) + 1 : 0;
-                const end = Math.min(start + showing - 1, data.total);
-                document.getElementById('items-pagination-info').textContent =
-                    `Showing ${start} - ${end} of ${data.total} items`;
+                this.activeFilters = this.activeFilters.filter(f => f.columnName !== column.name);
+                this.activeFilters.push({
+                    columnName: column.name,
+                    displayName: column.displayName,
+                    filterValue: filterValue
+                });
 
-                // Update pagination buttons (simple calculation based on total)
-                const hasNext = end < data.total;
-                const hasPrev = currentItemsPage > 1;
-                document.getElementById('items-prev-btn').disabled = !hasPrev;
-                document.getElementById('items-next-btn').disabled = !hasNext;
-
-            } catch (error) {
-                console.error('Failed to load items:', error);
-                const visibleCount = itemsColumnState.filter(c => c.visible).length || 1;
-                document.getElementById('items-table-body').innerHTML =
-                    `<tr><td colspan="${visibleCount}" style="color: #f44336;">Failed to load items</td></tr>`;
-            }
-        }
-
-        // Type-aware column value formatter
-        // Uses column metadata to format values appropriately for display
-        function formatItemColumnValue(item, column) {
-            // Map database column names to API response field names
-            const fieldMap = {
-                'item_id': 'id',
-                'root_id': 'root_id',
-                'item_path': 'path',
-                'item_type': 'type',
-                'last_scan': 'last_scan',
-                'is_ts': 'is_ts',
-                'mod_date': 'mod_date',
-                'file_size': 'file_size',
-                'last_hash_scan': 'last_hash_scan',
-                'file_hash': 'file_hash',
-                'last_val_scan': 'last_val_scan',
-                'val': 'val',
-                'val_error': 'val_error'
-            };
-
-            const field = fieldMap[column.name] || column.name;
-            let value = item[field];
-
-            // Format based on column type
-            if (value === null || value === undefined) {
-                return '-';
+                this.closeFilterModal();
+                this.currentPage = 1;
+                this.renderColumnList();
+                this.loadData();
             }
 
-            switch (column.colType) {
-                case 'ItemType':
-                    const typeMap = { 'F': 'File', 'D': 'Dir', 'S': 'Link', 'O': 'Other' };
-                    return typeMap[value] || value;
+            removeFilter(columnName) {
+                this.activeFilters = this.activeFilters.filter(f => f.columnName !== columnName);
+                this.currentPage = 1;
+                this.renderColumnList();
+                this.loadData();
+            }
 
-                case 'Int':
-                    if (column.name === 'file_size') {
-                        return value === 0 ? '0 B' : formatFileSize(value);
+            async loadData() {
+                if (this.columnState.length === 0) {
+                    await this.loadMetadata();
+                    return;
+                }
+
+                try {
+                    const visibleColumns = this.columnState
+                        .filter(col => col.visible)
+                        .sort((a, b) => a.position - b.position);
+
+                    if (visibleColumns.length === 0) {
+                        this.getElement('table-header').innerHTML =
+                            '<th colspan="1" style="text-align: center; color: #f44336;">No columns selected. Please select columns to display.</th>';
+                        this.getElement('table-body').innerHTML =
+                            '<tr><td style="text-align: center; color: #666;">Select columns from the sidebar to display data</td></tr>';
+                        return;
                     }
-                    return value.toLocaleString();
 
-                case 'Date':
-                    // mod_date comes as unix timestamp
-                    return new Date(value * 1000).toLocaleDateString();
+                    const headerHtml = visibleColumns.map(col => {
+                        const alignStyle = col.alignment === 'Right' ? 'text-align: right' :
+                                          col.alignment === 'Center' ? 'text-align: center' : '';
+                        return `<th style="${alignStyle}">${col.displayName}</th>`;
+                    }).join('');
+                    this.getElement('table-header').innerHTML = headerHtml;
 
-                case 'Bool':
-                    return value ? '✓' : '';
+                    const itemsPerPage = 25;
+                    const offset = (this.currentPage - 1) * itemsPerPage;
 
-                case 'Path':
-                    return `<span title="${value}">${value}</span>`;
+                    const queryRequest = {
+                        columns: this.columnState.map(col => ({
+                            name: col.name,
+                            visible: col.visible,
+                            sort_direction: col.sortDirection,
+                            position: col.position
+                        })),
+                        filters: this.activeFilters.map(f => ({
+                            column: f.columnName,
+                            value: f.filterValue
+                        })),
+                        limit: itemsPerPage,
+                        offset: offset
+                    };
 
-                default:
-                    return value;
+                    const response = await fetch(`/api/query/${this.domain}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(queryRequest)
+                    });
+                    const data = await response.json();
+
+                    const tbody = this.getElement('table-body');
+                    tbody.innerHTML = '';
+
+                    if (data.rows && data.rows.length > 0) {
+                        data.rows.forEach(rowData => {
+                            const row = document.createElement('tr');
+
+                            const cellsHtml = rowData.map((cellValue, index) => {
+                                const col = visibleColumns[index];
+                                const alignStyle = col.alignment === 'Right' ? 'text-align: right' :
+                                                  col.alignment === 'Center' ? 'text-align: center' : '';
+                                return `<td style="${alignStyle}">${cellValue}</td>`;
+                            }).join('');
+
+                            row.innerHTML = cellsHtml;
+                            tbody.appendChild(row);
+                        });
+                    } else {
+                        tbody.innerHTML = `<tr><td colspan="${visibleColumns.length}" style="text-align: center; color: #666;">No ${this.domain} found</td></tr>`;
+                    }
+
+                    const itemsPerPageDisplay = 25;
+                    const showing = data.rows.length;
+                    const start = showing > 0 ? ((this.currentPage - 1) * itemsPerPageDisplay) + 1 : 0;
+                    const end = Math.min(start + showing - 1, data.total);
+                    this.getElement('pagination-info').textContent =
+                        `Showing ${start} - ${end} of ${data.total} ${this.domain}`;
+
+                    const hasNext = end < data.total;
+                    const hasPrev = this.currentPage > 1;
+                    this.getElement('prev-btn').disabled = !hasPrev;
+                    this.getElement('next-btn').disabled = !hasNext;
+
+                } catch (error) {
+                    console.error(`Failed to load ${this.domain}:`, error);
+                    const visibleCount = this.columnState.filter(c => c.visible).length || 1;
+                    this.getElement('table-body').innerHTML =
+                        `<tr><td colspan="${visibleCount}" style="color: #f44336;">Failed to load ${this.domain}</td></tr>`;
+                }
+            }
+
+            changePage(delta) {
+                this.currentPage += delta;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                this.loadData();
             }
         }
 
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-        }
+        // Create instances for each domain
+        const views = {
+            roots: new DataTableView('roots', 'Roots'),
+            scans: new DataTableView('scans', 'Scans'),
+            items: new DataTableView('items', 'Items'),
+            changes: new DataTableView('changes', 'Changes')
+        };
 
-        function changeItemsPage(delta) {
-            currentItemsPage += delta;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            loadItems();
-        }
+        // Global functions for onclick handlers (backwards compatibility)
+        function changeRootsPage(delta) { views.roots.changePage(delta); }
+        function changeScansPage(delta) { views.scans.changePage(delta); }
+        function changeItemsPage(delta) { views.items.changePage(delta); }
+
+        function closeRootsFilterModal() { views.roots.closeFilterModal(); }
+        function closeScansFilterModal() { views.scans.closeFilterModal(); }
+        function closeItemsFilterModal() { views.items.closeFilterModal(); }
+
+        function saveRootsFilter() { views.roots.saveFilter(); }
+        function saveScansFilter() { views.scans.saveFilter(); }
+        function saveItemsFilter() { views.items.saveFilter(); }
+
+        function changeChangesPage(delta) { views.changes.changePage(delta); }
+        function closeChangesFilterModal() { views.changes.closeFilterModal(); }
+        function saveChangesFilter() { views.changes.saveFilter(); }
 
         // Enhanced showSection to load data when needed
         function showSection(sectionName, updateHash = true) {
@@ -1969,15 +1761,8 @@
             }
 
             // Load data for specific sections
-            if (sectionName === 'roots') {
-                loadRoots();
-            }
-            if (sectionName === 'scans') {
-                loadScans();
-            }
-            if (sectionName === 'items') {
-                // loadItems will automatically call loadItemsMetadata if not yet loaded
-                loadItems();
+            if (['roots', 'scans', 'items', 'changes'].includes(sectionName)) {
+                views[sectionName].loadData();
             }
 
             // Close sidebar on mobile
@@ -2010,7 +1795,10 @@
         // Handle initial load based on URL hash
         document.addEventListener('DOMContentLoaded', () => {
             loadDashboardData();
-            setupColumnDragListeners(); // Set up drag-and-drop event delegation
+            views.items.setupDragListeners();
+            views.roots.setupDragListeners();
+            views.scans.setupDragListeners();
+            views.changes.setupDragListeners();
             handleRouteChange(); // Load the correct section based on URL hash
         });
     </script>
