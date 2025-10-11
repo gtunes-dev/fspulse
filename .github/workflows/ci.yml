@@ -67,30 +67,16 @@ jobs:
         run: |
           mkdir dist
           bin_name=fspulse
-          lib_name=""
 
-          case "${{ matrix.os }}" in
-            "windows-latest")
-              bin_name=fspulse.exe
-              lib_name=fspulse.dll
-              ;;
-            "macos-latest")
-              lib_name=libfspulse.dylib
-              ;;
-            "ubuntu-latest")
-              lib_name=libfspulse.so
-              ;;
-          esac
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            bin_name=fspulse.exe
+          fi
 
           # Strip debug symbols (where supported)
           strip target/${{ matrix.target }}/release/$bin_name || true
-          strip target/${{ matrix.target }}/release/$lib_name || true
 
-          # Copy binary and shared lib into dist/
+          # Copy binary into dist/
           cp target/${{ matrix.target }}/release/$bin_name dist/$bin_name
-          if [[ -n "$lib_name" ]]; then
-            cp target/${{ matrix.target }}/release/$lib_name dist/$lib_name
-          fi
 
           echo "Contents of dist:"
           ls -lh dist/

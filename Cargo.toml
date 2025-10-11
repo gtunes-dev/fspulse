@@ -16,10 +16,6 @@ exclude = [
   ".gitignore"
 ]
 
-[lib]
-name = "fspulse"
-crate-type = ["cdylib"]
-
 [[bin]]
 name = "fspulse"
 path = "src/main.rs"
