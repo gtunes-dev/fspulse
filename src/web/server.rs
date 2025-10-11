@@ -1,7 +1,7 @@
 use axum::{
     http::StatusCode,
     response::Html,
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use std::net::SocketAddr;
@@ -54,6 +54,9 @@ impl WebServer {
             .route("/api/activity", get(handlers::activity::recent_activity))
             .route("/api/roots", get(handlers::roots::list_roots))
             .route("/api/scans", get(handlers::scans::list_scans))
+            .route("/api/items", get(handlers::items::list_items))
+            .route("/api/metadata/{domain}", get(handlers::metadata::get_metadata))
+            .route("/api/query/{domain}", post(handlers::query::execute_query))
 
             // Store database path in extension for handlers
             .layer(

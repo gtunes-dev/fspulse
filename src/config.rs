@@ -314,6 +314,11 @@ mod tests {
                 threads: 16,
                 hash: "md5".to_string(),
             },
+            web: WebConfig {
+                use_mock_data: false,
+                port: 8080,
+                host: "127.0.0.1".to_string(),
+            },
         };
 
         let toml_str = toml::to_string(&config).expect("Failed to serialize config");
@@ -333,6 +338,11 @@ lopdf = "info"
 [analysis]
 threads = 12
 hash = "sha2"
+
+[web]
+use_mock_data = false
+port = 8080
+host = "127.0.0.1"
 "#;
 
         let config: Config = toml::from_str(toml_str).expect("Failed to deserialize config");

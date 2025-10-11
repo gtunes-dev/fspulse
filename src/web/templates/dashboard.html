@@ -12,24 +12,33 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+            background: #fafafa;
+            color: #1d1d1f;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .header {
-            background: white;
-            border-bottom: 1px solid #e0e0e0;
-            padding: 1rem 2rem;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            padding: 0;
+            height: 52px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        .header h1 {
-            font-size: 1.5rem;
+        .header-title {
+            font-size: 1.25rem;
             font-weight: 600;
+            letter-spacing: -0.01em;
+            color: #1d1d1f;
+            margin: 0;
+            padding: 0 24px;
         }
 
         .hamburger {
@@ -40,45 +49,81 @@
 
         .container {
             display: flex;
-            min-height: calc(100vh - 80px);
+            min-height: calc(100vh - 52px);
         }
 
         .sidebar {
-            width: 250px;
-            background: white;
-            border-right: 1px solid #e0e0e0;
-            padding: 1rem 0;
+            width: 64px;
+            background: #fafafa;
+            border-right: 1px solid rgba(0,0,0,0.08);
+            padding: 12px 0;
+            transition: width 0.2s ease;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .sidebar:hover {
+            width: 240px;
         }
 
         .nav-item {
-            padding: 0.75rem 2rem;
+            padding: 10px 16px;
+            margin: 0 8px 2px 8px;
             cursor: pointer;
             border: none;
             background: none;
-            width: 100%;
+            width: calc(100% - 16px);
             text-align: left;
-            font-size: 0.95rem;
-            transition: background-color 0.2s;
+            font-size: 0.9375rem;
+            font-weight: 400;
+            color: #1d1d1f;
+            transition: background-color 0.15s ease;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            white-space: nowrap;
         }
 
         .nav-item:hover {
-            background: #f0f0f0;
+            background: rgba(0,0,0,0.04);
         }
 
         .nav-item.active {
-            background: #e3f2fd;
-            border-right: 3px solid #2196f3;
+            background: rgba(0,122,255,0.1);
+            color: #007aff;
+            font-weight: 500;
+        }
+
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            opacity: 0.6;
+        }
+
+        .nav-item.active .nav-icon {
+            opacity: 1;
+        }
+
+        .nav-label {
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .sidebar:hover .nav-label {
+            opacity: 1;
         }
 
         .nav-divider {
-            margin: 1rem 0;
-            border-top: 1px solid #e0e0e0;
-            position: relative;
+            margin: 12px 16px;
+            border-top: 1px solid rgba(0,0,0,0.08);
         }
 
         .main-content {
             flex: 1;
-            padding: 2rem;
+            padding: 32px;
+            background: #fafafa;
         }
 
         .overview-modules {
@@ -121,21 +166,36 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
-            gap: 1rem;
+            padding: 16px 16px 12px 16px;
+            gap: 12px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
         }
 
         .search-filter {
             flex: 1;
-            max-width: 300px;
+            max-width: 320px;
         }
 
         .search-filter input {
             width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 0.9rem;
+            padding: 8px 12px;
+            border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-family: inherit;
+            background: #fafafa;
+            transition: all 0.15s ease;
+        }
+
+        .search-filter input:focus {
+            outline: none;
+            border-color: #007aff;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+        }
+
+        .search-filter input::placeholder {
+            color: #86868b;
         }
 
         .sortable-header {
@@ -172,24 +232,49 @@
         .data-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 1rem;
+            margin: 0;
         }
 
         .data-table th,
         .data-table td {
-            padding: 0.75rem;
+            padding: 12px 16px;
             text-align: left;
-            border-bottom: 1px solid #f0f0f0;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            font-size: 0.9375rem;
+        }
+
+        .data-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
 
         .data-table th {
-            background: #f8f9fa;
+            background: #fafafa;
             font-weight: 600;
-            color: #333;
+            font-size: 0.8125rem;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 16px 16px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+        }
+
+        .data-table td {
+            color: #1d1d1f;
+            line-height: 1.4;
+        }
+
+        .data-table tbody tr {
+            transition: background-color 0.1s ease;
         }
 
         .data-table tbody tr:hover {
-            background: #f8f9fa;
+            background: rgba(0,0,0,0.02);
+        }
+
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
         }
 
         .status-badge {
@@ -215,35 +300,469 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-top: 1rem;
+            padding: 12px 16px;
+            border-top: 1px solid rgba(0,0,0,0.06);
+            background: #fafafa;
+            border-radius: 0 0 12px 12px;
         }
 
         .pagination-info {
-            color: #666;
-            font-size: 0.9rem;
+            color: #86868b;
+            font-size: 0.8125rem;
+            font-weight: 500;
         }
 
         .pagination-controls {
             display: flex;
-            gap: 0.5rem;
+            gap: 8px;
         }
 
         .pagination-btn {
-            padding: 0.5rem 1rem;
-            border: 1px solid #ddd;
-            background: white;
-            border-radius: 4px;
+            padding: 6px 14px;
+            border: 1px solid rgba(0,0,0,0.12);
+            background: #ffffff;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #1d1d1f;
+            font-family: inherit;
+            transition: all 0.15s ease;
         }
 
         .pagination-btn:hover:not(:disabled) {
-            background: #f0f0f0;
+            background: #f5f5f7;
+            border-color: rgba(0,0,0,0.18);
+        }
+
+        .pagination-btn:active:not(:disabled) {
+            transform: scale(0.98);
         }
 
         .pagination-btn:disabled {
-            opacity: 0.5;
+            opacity: 0.4;
             cursor: not-allowed;
+        }
+
+        /* Entity View Layout - Apple-inspired design */
+        .entity-view-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .entity-view-title {
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: #1d1d1f;
+            margin: 0;
+            padding: 0;
+        }
+
+        .section-with-sidebar {
+            display: flex;
+            gap: 20px;
+            min-height: calc(100vh - 200px);
+        }
+
+        .column-list-sidebar {
+            min-width: 280px;
+            width: fit-content;
+            max-width: 400px;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06);
+            align-self: stretch;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .column-list-header {
+            padding: 20px 8px 12px 8px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            display: flex;
+            align-items: center;
+        }
+
+        .column-list-header-labels {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 0 8px;
+        }
+
+        .column-list-header-labels .drag-spacer {
+            width: 28px; /* drag handle 20px + margin 8px */
+            flex-shrink: 0;
+        }
+
+        .column-list-header-labels .column-label {
+            width: 24px; /* checkbox 16px + margin 8px */
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            flex-shrink: 0;
+        }
+
+        .column-list-header-labels .name-spacer {
+            flex: 1;
+        }
+
+        .column-list-header-labels .sort-label {
+            width: 32px;
+            text-align: center;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            flex-shrink: 0;
+        }
+
+        .column-list-header-labels .filter-label {
+            width: 80px;
+            text-align: center;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            flex-shrink: 0;
+            margin-left: 8px;
+        }
+
+        .column-list {
+            list-style: none;
+            padding: 8px 8px 16px 8px;
+            margin: 0;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .column-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 8px;
+            margin-bottom: 0;
+            background: transparent;
+            border: none;
+            transition: all 0.15s ease;
+            cursor: pointer;
+        }
+
+        .column-item:hover {
+            background: rgba(0,0,0,0.04);
+        }
+
+        .column-item.selected {
+            background: rgba(0,122,255,0.1);
+        }
+
+        .column-item.dragging {
+            opacity: 0.4;
+            cursor: grabbing;
+        }
+
+        .column-item.drag-over-top {
+            box-shadow: inset 0 2px 0 0 #007aff;
+        }
+
+        .column-item.drag-over-bottom {
+            box-shadow: inset 0 -2px 0 0 #007aff;
+        }
+
+        .drag-handle {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: grab;
+            margin-right: 8px;
+            color: #86868b;
+            user-select: none;
+            transition: color 0.15s ease;
+        }
+
+        .column-item:hover .drag-handle {
+            color: #1d1d1f;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .drag-handle::before {
+            content: '⋮⋮';
+            font-size: 0.875rem;
+            letter-spacing: -2px;
+            line-height: 1;
+        }
+
+        .column-checkbox {
+            margin: 0 8px 0 0;
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+            accent-color: #007aff;
+        }
+
+        .column-name {
+            flex: 1;
+            font-size: 0.9375rem;
+            font-weight: 400;
+            color: #1d1d1f;
+            cursor: pointer;
+            user-select: none;
+            line-height: 1.4;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .sort-control {
+            width: 32px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 6px;
+            color: #86868b;
+            font-size: 0.875rem;
+            transition: all 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .sort-control:hover {
+            background: rgba(0,0,0,0.06);
+        }
+
+        .sort-control.active {
+            color: #007aff;
+            background: rgba(0,122,255,0.08);
+        }
+
+        .filter-display {
+            width: 80px;
+            margin-left: 8px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .filter-add-btn {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 4px;
+            color: #86868b;
+            font-size: 1rem;
+            transition: all 0.15s ease;
+            border: none;
+            background: transparent;
+            padding: 0;
+        }
+
+        .filter-add-btn:hover {
+            background: rgba(0,0,0,0.06);
+            color: #1d1d1f;
+        }
+
+        .filter-value-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 6px;
+            background: rgba(0,122,255,0.1);
+            border: 1px solid rgba(0,122,255,0.2);
+            border-radius: 4px;
+            font-size: 0.6875rem;
+            color: #007aff;
+            font-family: 'SF Mono', Monaco, monospace;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            max-width: 76px;
+        }
+
+        .filter-value-chip:hover {
+            background: rgba(0,122,255,0.15);
+        }
+
+        .filter-value-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .filter-value-remove {
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.15s ease;
+            font-size: 0.75rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .filter-value-remove:hover {
+            opacity: 1;
+        }
+
+        .section-main-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .section-main-content .card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Filter Modal */
+        .filter-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(8px);
+        }
+
+        .filter-modal-overlay.active {
+            display: flex;
+        }
+
+        .filter-modal {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 480px;
+            padding: 0;
+            animation: modalSlideIn 0.2s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .filter-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+        }
+
+        .filter-modal-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin: 0;
+        }
+
+        .filter-modal-body {
+            padding: 24px;
+        }
+
+        .filter-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            background: #fafafa;
+            transition: all 0.15s ease;
+            margin-bottom: 12px;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: #007aff;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+        }
+
+        .filter-hint {
+            font-size: 0.8125rem;
+            color: #86868b;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            margin: 0;
+        }
+
+        .filter-error {
+            font-size: 0.8125rem;
+            color: #ff3b30;
+            margin-top: 8px;
+            display: none;
+        }
+
+        .filter-error.visible {
+            display: block;
+        }
+
+        .filter-modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid rgba(0,0,0,0.06);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .modal-btn {
+            padding: 8px 16px;
+            border: 1px solid rgba(0,0,0,0.12);
+            background: #ffffff;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            font-family: inherit;
+            transition: all 0.15s ease;
+        }
+
+        .modal-btn:hover {
+            background: #f5f5f7;
+            border-color: rgba(0,0,0,0.18);
+        }
+
+        .modal-btn.primary {
+            background: #007aff;
+            border-color: #007aff;
+            color: #ffffff;
+        }
+
+        .modal-btn.primary:hover {
+            background: #0051d5;
+            border-color: #0051d5;
+        }
+
+        .modal-btn:active {
+            transform: scale(0.97);
         }
 
         .alert-item {
@@ -316,32 +835,69 @@
 </head>
 <body>
     <header class="header">
-        <div style="display: flex; align-items: center;">
-            <span class="hamburger" onclick="toggleSidebar()">≡</span>
-            <h1 style="margin-left: 1rem;">FsPulse</h1>
-        </div>
-        <div>⚙️</div>
+        <h1 class="header-title">FsPulse</h1>
     </header>
 
     <div class="container">
         <nav class="sidebar" id="sidebar">
             <!-- Insights Section -->
-            <button class="nav-item active" onclick="showSection('overview')">🏠 Overview</button>
-            <button class="nav-item" onclick="showSection('alerts')">🚨 Alerts</button>
-            <button class="nav-item" onclick="showSection('activity')">📊 Activity</button>
+            <button class="nav-item active" onclick="showSection('overview')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                </svg>
+                <span class="nav-label">Overview</span>
+            </button>
+            <button class="nav-item" onclick="showSection('alerts')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <span class="nav-label">Alerts</span>
+            </button>
+            <button class="nav-item" onclick="showSection('activity')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+                </svg>
+                <span class="nav-label">Activity</span>
+            </button>
 
             <div class="nav-divider"></div>
 
             <!-- Data Management Section -->
-            <button class="nav-item" onclick="showSection('roots')">🗂️ Roots</button>
-            <button class="nav-item" onclick="showSection('scans')">🔍 Scans</button>
-            <button class="nav-item" onclick="showSection('items')">📄 Items</button>
-            <button class="nav-item" onclick="showSection('changes')">🔄 Changes</button>
+            <button class="nav-item" onclick="showSection('roots')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                </svg>
+                <span class="nav-label">Roots</span>
+            </button>
+            <button class="nav-item" onclick="showSection('scans')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd" />
+                </svg>
+                <span class="nav-label">Scans</span>
+            </button>
+            <button class="nav-item" onclick="showSection('items')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+                </svg>
+                <span class="nav-label">Items</span>
+            </button>
+            <button class="nav-item" onclick="showSection('changes')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                </svg>
+                <span class="nav-label">Changes</span>
+            </button>
 
             <div class="nav-divider"></div>
 
             <!-- Configuration Section -->
-            <button class="nav-item" onclick="showSection('settings')">⚙️ Settings</button>
+            <button class="nav-item" onclick="showSection('settings')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+                </svg>
+                <span class="nav-label">Settings</span>
+            </button>
         </nav>
 
         <main class="main-content">
@@ -482,8 +1038,53 @@
             </div>
 
             <div id="items-section" style="display: none;">
-                <h2>Filesystem Items</h2>
-                <p>Browse and search filesystem items...</p>
+                <div class="entity-view-header">
+                    <h1 class="entity-view-title">Items</h1>
+                </div>
+
+                <div class="section-with-sidebar">
+                    <!-- Column List Sidebar -->
+                    <aside class="column-list-sidebar">
+                        <div class="column-list-header">
+                            <div class="column-list-header-labels">
+                                <div class="drag-spacer"></div>
+                                <div class="column-label">Column</div>
+                                <div class="name-spacer"></div>
+                                <div class="sort-label">Sort</div>
+                                <div class="filter-label">Filter</div>
+                            </div>
+                        </div>
+                        <ul class="column-list" id="items-column-list">
+                            <li style="text-align: center; color: #86868b; padding: 1rem; font-size: 0.875rem;">Loading columns...</li>
+                        </ul>
+                    </aside>
+
+                    <!-- Main Content Area -->
+                    <div class="section-main-content">
+                        <div class="card">
+                            <table class="data-table">
+                                <thead>
+                                    <tr id="items-table-header">
+                                        <th colspan="5">Loading...</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="items-table-body">
+                                    <tr><td colspan="5">Loading...</td></tr>
+                                </tbody>
+                            </table>
+
+                            <div class="pagination">
+                                <div class="pagination-info" id="items-pagination-info">
+                                    Showing 0 - 0 of 0 items
+                                </div>
+                                <div class="pagination-controls">
+                                    <button class="pagination-btn" id="items-prev-btn" onclick="changeItemsPage(-1)">Previous</button>
+                                    <button class="pagination-btn" id="items-next-btn" onclick="changeItemsPage(1)">Next</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div id="changes-section" style="display: none;">
@@ -499,34 +1100,25 @@
         </main>
     </div>
 
+    <!-- Filter Modal -->
+    <div class="filter-modal-overlay" id="items-filter-modal-overlay" onclick="closeItemsFilterModal()">
+        <div class="filter-modal" onclick="event.stopPropagation()">
+            <div class="filter-modal-header">
+                <h2 class="filter-modal-title" id="items-filter-modal-title">Filter Column</h2>
+            </div>
+            <div class="filter-modal-body">
+                <input type="text" class="filter-input" id="items-filter-input" placeholder="Enter filter value...">
+                <p class="filter-hint" id="items-filter-hint">Filter syntax hint will appear here</p>
+                <p class="filter-error" id="items-filter-error">Error message</p>
+            </div>
+            <div class="filter-modal-footer">
+                <button class="modal-btn" onclick="closeItemsFilterModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="saveItemsFilter()">Apply Filter</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // Navigation
-        function showSection(sectionName) {
-            // Hide all sections
-            document.querySelectorAll('[id$="-section"]').forEach(section => {
-                section.style.display = 'none';
-            });
-
-            // Show selected section
-            document.getElementById(sectionName + '-section').style.display = 'block';
-
-            // Update nav active state
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            event.target.classList.add('active');
-
-            // Close sidebar on mobile
-            if (window.innerWidth <= 768) {
-                document.getElementById('sidebar').classList.remove('open');
-            }
-        }
-
-        // Mobile sidebar toggle
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('open');
-        }
-
         // Load dashboard data
         async function loadDashboardData() {
             try {
@@ -687,6 +1279,7 @@
 
         function changeRootsPage(delta) {
             currentRootsPage += delta;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             loadRoots();
         }
 
@@ -802,7 +1395,549 @@
 
         function changeScansPage(delta) {
             currentScansPage += delta;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             loadScans();
+        }
+
+        // =============================================================================
+        // Items Section - Column Management & Filtering
+        // =============================================================================
+        // This section implements a data-driven column list with:
+        // - Drag-and-drop reordering
+        // - Visibility toggles
+        // - Sort direction controls
+        // - Inline filter UI
+        // All metadata comes from /api/metadata/items for consistency with TUI
+        // =============================================================================
+
+        let itemsColumnState = [];      // Array of column config objects
+        let selectedColumnIndex = null; // Currently selected column (for keyboard shortcuts)
+
+        async function loadItemsMetadata() {
+            try {
+                const response = await fetch('/api/metadata/items');
+                const data = await response.json();
+
+                // Initialize column state from metadata
+                itemsColumnState = data.columns.map((col, index) => ({
+                    name: col.name,
+                    displayName: col.display_name,
+                    colType: col.col_type,
+                    alignment: col.alignment,
+                    visible: col.is_default,  // Use is_default to determine initial visibility
+                    sortDirection: 'none',     // none | asc | desc
+                    position: index,
+                    filterInfo: col.filter_info
+                }));
+
+                renderItemsColumnList();
+                loadItems(); // Now load the actual items data
+            } catch (error) {
+                console.error('Failed to load items metadata:', error);
+                document.getElementById('items-column-list').innerHTML =
+                    '<li style="color: #f44336; padding: 1rem;">Failed to load columns</li>';
+            }
+        }
+
+        function renderItemsColumnList() {
+            const list = document.getElementById('items-column-list');
+
+            // Sort by position
+            const sortedColumns = [...itemsColumnState].sort((a, b) => a.position - b.position);
+
+            list.innerHTML = sortedColumns.map((col, displayIndex) => {
+                const actualIndex = itemsColumnState.findIndex(c => c.name === col.name);
+                const sortIcon = col.sortDirection === 'asc' ? '↑' :
+                                col.sortDirection === 'desc' ? '↓' : '·';
+                const sortClass = col.sortDirection !== 'none' ? 'active' : '';
+
+                // Check if there's an active filter for this column
+                const activeFilter = itemsActiveFilters.find(f => f.columnName === col.name);
+                const filterDisplay = activeFilter
+                    ? `<div class="filter-value-chip" onclick="event.stopPropagation(); openItemsFilterModal(${actualIndex})" title="${activeFilter.filterValue}">
+                         <span class="filter-value-text">${activeFilter.filterValue}</span>
+                         <span class="filter-value-remove" onclick="event.stopPropagation(); removeItemsFilter('${col.name}')">×</span>
+                       </div>`
+                    : `<button class="filter-add-btn" onclick="event.stopPropagation(); openItemsFilterModal(${actualIndex})" title="Add filter">+</button>`;
+
+                return `
+                    <li class="column-item ${selectedColumnIndex === actualIndex ? 'selected' : ''}"
+                        data-column-index="${actualIndex}"
+                        draggable="true"
+                        onclick="selectItemsColumn(${actualIndex})">
+                        <div class="drag-handle" title="Drag to reorder"></div>
+                        <input type="checkbox"
+                               class="column-checkbox"
+                               ${col.visible ? 'checked' : ''}
+                               onclick="event.stopPropagation(); toggleItemsColumnVisibility(${actualIndex})"
+                               title="Toggle visibility">
+                        <span class="column-name">${col.displayName}</span>
+                        <div class="sort-control ${sortClass}"
+                             onclick="event.stopPropagation(); cycleItemsColumnSort(${actualIndex})"
+                             title="Sort direction">
+                            ${sortIcon}
+                        </div>
+                        <div class="filter-display">
+                            ${filterDisplay}
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Drag and Drop functionality
+        let draggedColumnIndex = null;
+        let dropPosition = null;
+
+        // Use event delegation for drag-and-drop to avoid re-attaching listeners
+        // This is set up once when the page loads (see bottom of script)
+        function setupColumnDragListeners() {
+            const columnList = document.getElementById('items-column-list');
+
+            columnList.addEventListener('dragstart', (e) => {
+                const columnItem = e.target.closest('.column-item');
+                if (columnItem) {
+                    handleColumnDragStart(e);
+                }
+            });
+
+            columnList.addEventListener('dragenter', (e) => {
+                const columnItem = e.target.closest('.column-item');
+                if (columnItem) {
+                    e.preventDefault();
+                    updateDropIndicator(columnItem, e.clientY);
+                }
+            });
+
+            columnList.addEventListener('dragover', (e) => {
+                const columnItem = e.target.closest('.column-item');
+                if (columnItem) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    updateDropIndicator(columnItem, e.clientY);
+                }
+            });
+
+            columnList.addEventListener('drop', (e) => {
+                const columnItem = e.target.closest('.column-item');
+                if (columnItem) {
+                    handleColumnDrop(e, columnItem);
+                }
+            });
+
+            columnList.addEventListener('dragend', (e) => {
+                const columnItem = e.target.closest('.column-item');
+                if (columnItem) {
+                    handleColumnDragEnd(e);
+                }
+            });
+        }
+
+        function handleColumnDragStart(e) {
+            const columnItem = e.target.closest('.column-item');
+            if (!columnItem) return;
+
+            draggedColumnIndex = parseInt(columnItem.dataset.columnIndex);
+            columnItem.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', columnItem.innerHTML);
+        }
+
+        function updateDropIndicator(item, mouseY) {
+            const itemIndex = parseInt(item.dataset.columnIndex);
+
+            // Don't show indicator on the dragged item itself
+            if (itemIndex === draggedColumnIndex) {
+                return;
+            }
+
+            // Clean up all indicators first
+            document.querySelectorAll('#items-column-list .column-item').forEach(el => {
+                el.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+
+            // Show indicator based on mouse position (top or bottom half)
+            const rect = item.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+
+            if (mouseY < midpoint) {
+                item.classList.add('drag-over-top');
+                dropPosition = 'before';
+            } else {
+                item.classList.add('drag-over-bottom');
+                dropPosition = 'after';
+            }
+        }
+
+        function handleColumnDrop(e, dropElement) {
+            e.stopPropagation();
+            e.preventDefault();
+
+            const dropIndex = parseInt(dropElement.dataset.columnIndex);
+            if (draggedColumnIndex === null || draggedColumnIndex === dropIndex) {
+                return false;
+            }
+
+            const draggedCol = itemsColumnState[draggedColumnIndex];
+            const dropCol = itemsColumnState[dropIndex];
+            const draggedPos = draggedCol.position;
+            const dropPos = dropCol.position;
+
+            // Calculate target position
+            let targetPos = dropPos;
+            if (dropPosition === 'after') {
+                targetPos = dropPos + 1;
+            }
+
+            // Shift all items between old and new positions
+            if (draggedPos < targetPos) {
+                // Moving down
+                itemsColumnState.forEach(col => {
+                    if (col.position > draggedPos && col.position < targetPos) {
+                        col.position--;
+                    }
+                });
+                draggedCol.position = targetPos - 1;
+            } else if (draggedPos > targetPos) {
+                // Moving up
+                itemsColumnState.forEach(col => {
+                    if (col.position >= targetPos && col.position < draggedPos) {
+                        col.position++;
+                    }
+                });
+                draggedCol.position = targetPos;
+            }
+
+            // Keep the dragged column selected
+            selectedColumnIndex = draggedColumnIndex;
+
+            renderItemsColumnList();
+            loadItems();
+            return false;
+        }
+
+        function handleColumnDragEnd(e) {
+            const columnItem = e.target.closest('.column-item');
+            if (columnItem) {
+                columnItem.classList.remove('dragging');
+            }
+
+            // Clean up all indicators
+            document.querySelectorAll('#items-column-list .column-item').forEach(item => {
+                item.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+
+            draggedColumnIndex = null;
+            dropPosition = null;
+        }
+
+        function selectItemsColumn(index) {
+            selectedColumnIndex = index;
+            renderItemsColumnList();
+        }
+
+        function toggleItemsColumnVisibility(index) {
+            itemsColumnState[index].visible = !itemsColumnState[index].visible;
+            currentItemsPage = 1; // Reset to first page
+            renderItemsColumnList();
+            loadItems(); // Refresh the table
+        }
+
+        function cycleItemsColumnSort(index) {
+            const current = itemsColumnState[index].sortDirection;
+            const cycle = { 'none': 'asc', 'asc': 'desc', 'desc': 'none' };
+            itemsColumnState[index].sortDirection = cycle[current];
+            currentItemsPage = 1; // Reset to first page
+            renderItemsColumnList();
+            loadItems(); // Refresh the table
+        }
+
+        // Filter Management
+        // Filters are managed per-column and displayed inline in the column list
+        // When saved, they'll be sent to the server in Phase 7 (Query Generation)
+        let itemsActiveFilters = []; // Array of { columnName, displayName, filterValue }
+        let currentFilterColumnIndex = null; // Track which column is being filtered
+
+        function openItemsFilterModal(columnIndex) {
+            currentFilterColumnIndex = columnIndex;
+            const column = itemsColumnState[columnIndex];
+            const modal = document.getElementById('items-filter-modal-overlay');
+            const title = document.getElementById('items-filter-modal-title');
+            const hint = document.getElementById('items-filter-hint');
+            const input = document.getElementById('items-filter-input');
+            const error = document.getElementById('items-filter-error');
+
+            // Set modal title and hint
+            title.textContent = `Filter: ${column.displayName}`;
+            hint.textContent = column.filterInfo.syntax_hint;
+
+            // Check if there's an existing filter for this column
+            const existingFilter = itemsActiveFilters.find(f => f.columnName === column.name);
+            input.value = existingFilter ? existingFilter.filterValue : '';
+
+            // Clear error
+            error.classList.remove('visible');
+
+            // Show modal
+            modal.classList.add('active');
+
+            // Focus input
+            setTimeout(() => input.focus(), 100);
+        }
+
+        function closeItemsFilterModal() {
+            const modal = document.getElementById('items-filter-modal-overlay');
+            modal.classList.remove('active');
+            currentFilterColumnIndex = null;
+        }
+
+        function saveItemsFilter() {
+            if (currentFilterColumnIndex === null) return;
+
+            const column = itemsColumnState[currentFilterColumnIndex];
+            const input = document.getElementById('items-filter-input');
+            const filterValue = input.value.trim();
+            const error = document.getElementById('items-filter-error');
+
+            // Clear previous error
+            error.classList.remove('visible');
+
+            // If empty, remove filter for this column
+            if (filterValue === '') {
+                itemsActiveFilters = itemsActiveFilters.filter(f => f.columnName !== column.name);
+                closeItemsFilterModal();
+                renderItemsColumnList();
+                loadItems();
+                return;
+            }
+
+            // Basic client-side validation (more validation will be done server-side)
+            if (filterValue.length > 500) {
+                error.textContent = 'Filter value is too long (max 500 characters)';
+                error.classList.add('visible');
+                return;
+            }
+
+            // Remove existing filter for this column if any
+            itemsActiveFilters = itemsActiveFilters.filter(f => f.columnName !== column.name);
+
+            // Add new filter
+            itemsActiveFilters.push({
+                columnName: column.name,
+                displayName: column.displayName,
+                filterValue: filterValue
+            });
+
+            closeItemsFilterModal();
+            currentItemsPage = 1; // Reset to first page
+            renderItemsColumnList();
+            loadItems();
+        }
+
+        function removeItemsFilter(columnName) {
+            itemsActiveFilters = itemsActiveFilters.filter(f => f.columnName !== columnName);
+            currentItemsPage = 1; // Reset to first page
+            renderItemsColumnList();
+            loadItems();
+        }
+
+        // Keyboard shortcuts for Items section
+        document.addEventListener('keydown', (e) => {
+            // Only handle shortcuts when Items section is visible
+            const itemsSection = document.getElementById('items-section');
+            if (itemsSection.style.display === 'none') return;
+
+            // 'f' key to open filter modal (when column is selected)
+            if (e.key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                // Don't trigger if user is typing in an input field
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+                if (selectedColumnIndex !== null) {
+                    e.preventDefault();
+                    openItemsFilterModal(selectedColumnIndex);
+                }
+            }
+
+            // Escape key to close modal
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('items-filter-modal-overlay');
+                if (modal.classList.contains('active')) {
+                    e.preventDefault();
+                    closeItemsFilterModal();
+                }
+            }
+        });
+
+        // Items functionality
+        let currentItemsPage = 1;
+
+        async function loadItems() {
+            // Don't load if metadata hasn't been loaded yet
+            if (itemsColumnState.length === 0) {
+                await loadItemsMetadata();
+                return; // loadItemsMetadata will call loadItems again
+            }
+
+            try {
+                // Get visible columns in position order
+                const visibleColumns = itemsColumnState
+                    .filter(col => col.visible)
+                    .sort((a, b) => a.position - b.position);
+
+                if (visibleColumns.length === 0) {
+                    document.getElementById('items-table-header').innerHTML =
+                        '<th colspan="1" style="text-align: center; color: #f44336;">No columns selected. Please select columns to display.</th>';
+                    document.getElementById('items-table-body').innerHTML =
+                        '<tr><td style="text-align: center; color: #666;">Select columns from the sidebar to display data</td></tr>';
+                    return;
+                }
+
+                // Build table header dynamically
+                const headerHtml = visibleColumns.map(col => {
+                    const alignStyle = col.alignment === 'Right' ? 'text-align: right' :
+                                      col.alignment === 'Center' ? 'text-align: center' : '';
+                    return `<th style="${alignStyle}">${col.displayName}</th>`;
+                }).join('');
+                document.getElementById('items-table-header').innerHTML = headerHtml;
+
+                // Build query request from column state and filters
+                const itemsPerPage = 25;
+                const offset = (currentItemsPage - 1) * itemsPerPage;
+
+                const queryRequest = {
+                    columns: itemsColumnState.map(col => ({
+                        name: col.name,
+                        visible: col.visible,
+                        sort_direction: col.sortDirection,
+                        position: col.position
+                    })),
+                    filters: itemsActiveFilters.map(f => ({
+                        column: f.columnName,
+                        value: f.filterValue
+                    })),
+                    limit: itemsPerPage,
+                    offset: offset
+                };
+
+                // POST to query endpoint
+                const response = await fetch('/api/query/items', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(queryRequest)
+                });
+                const data = await response.json();
+
+                const tbody = document.getElementById('items-table-body');
+                tbody.innerHTML = '';
+
+                if (data.rows && data.rows.length > 0) {
+                    data.rows.forEach(rowData => {
+                        const row = document.createElement('tr');
+
+                        const cellsHtml = rowData.map((cellValue, index) => {
+                            const col = visibleColumns[index];
+                            const alignStyle = col.alignment === 'Right' ? 'text-align: right' :
+                                              col.alignment === 'Center' ? 'text-align: center' : '';
+                            return `<td style="${alignStyle}">${cellValue}</td>`;
+                        }).join('');
+
+                        row.innerHTML = cellsHtml;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="${visibleColumns.length}" style="text-align: center; color: #666;">No items found</td></tr>`;
+                }
+
+                // Update pagination info
+                const itemsPerPageDisplay = 25;
+                const showing = data.rows.length;
+                const start = showing > 0 ? ((currentItemsPage - 1) * itemsPerPageDisplay) + 1 : 0;
+                const end = Math.min(start + showing - 1, data.total);
+                document.getElementById('items-pagination-info').textContent =
+                    `Showing ${start} - ${end} of ${data.total} items`;
+
+                // Update pagination buttons (simple calculation based on total)
+                const hasNext = end < data.total;
+                const hasPrev = currentItemsPage > 1;
+                document.getElementById('items-prev-btn').disabled = !hasPrev;
+                document.getElementById('items-next-btn').disabled = !hasNext;
+
+            } catch (error) {
+                console.error('Failed to load items:', error);
+                const visibleCount = itemsColumnState.filter(c => c.visible).length || 1;
+                document.getElementById('items-table-body').innerHTML =
+                    `<tr><td colspan="${visibleCount}" style="color: #f44336;">Failed to load items</td></tr>`;
+            }
+        }
+
+        // Type-aware column value formatter
+        // Uses column metadata to format values appropriately for display
+        function formatItemColumnValue(item, column) {
+            // Map database column names to API response field names
+            const fieldMap = {
+                'item_id': 'id',
+                'root_id': 'root_id',
+                'item_path': 'path',
+                'item_type': 'type',
+                'last_scan': 'last_scan',
+                'is_ts': 'is_ts',
+                'mod_date': 'mod_date',
+                'file_size': 'file_size',
+                'last_hash_scan': 'last_hash_scan',
+                'file_hash': 'file_hash',
+                'last_val_scan': 'last_val_scan',
+                'val': 'val',
+                'val_error': 'val_error'
+            };
+
+            const field = fieldMap[column.name] || column.name;
+            let value = item[field];
+
+            // Format based on column type
+            if (value === null || value === undefined) {
+                return '-';
+            }
+
+            switch (column.colType) {
+                case 'ItemType':
+                    const typeMap = { 'F': 'File', 'D': 'Dir', 'S': 'Link', 'O': 'Other' };
+                    return typeMap[value] || value;
+
+                case 'Int':
+                    if (column.name === 'file_size') {
+                        return value === 0 ? '0 B' : formatFileSize(value);
+                    }
+                    return value.toLocaleString();
+
+                case 'Date':
+                    // mod_date comes as unix timestamp
+                    return new Date(value * 1000).toLocaleDateString();
+
+                case 'Bool':
+                    return value ? '✓' : '';
+
+                case 'Path':
+                    return `<span title="${value}">${value}</span>`;
+
+                default:
+                    return value;
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function changeItemsPage(delta) {
+            currentItemsPage += delta;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            loadItems();
         }
 
         // Enhanced showSection to load data when needed
@@ -840,6 +1975,10 @@
             if (sectionName === 'scans') {
                 loadScans();
             }
+            if (sectionName === 'items') {
+                // loadItems will automatically call loadItemsMetadata if not yet loaded
+                loadItems();
+            }
 
             // Close sidebar on mobile
             if (window.innerWidth <= 768) {
@@ -871,6 +2010,7 @@
         // Handle initial load based on URL hash
         document.addEventListener('DOMContentLoaded', () => {
             loadDashboardData();
+            setupColumnDragListeners(); // Set up drag-and-drop event delegation
             handleRouteChange(); // Load the correct section based on URL hash
         });
     </script>

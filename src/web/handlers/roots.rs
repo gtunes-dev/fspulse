@@ -4,30 +4,13 @@ use axum::{
     response::Json,
     Extension,
 };
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::config::CONFIG;
 use crate::database::{Database, ListQuery};
 use crate::roots::Root;
 
-#[derive(Deserialize)]
-pub struct ListParams {
-    pub page: Option<u32>,
-    pub limit: Option<u32>,
-    pub sort: Option<String>,
-    pub filter: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct ListResponse<T> {
-    pub items: Vec<T>,
-    pub total: u32,
-    pub page: u32,
-    pub limit: u32,
-    pub has_next: bool,
-    pub has_prev: bool,
-}
+use super::common::{ListParams, ListResponse};
 
 pub async fn list_roots(
     Query(params): Query<ListParams>,

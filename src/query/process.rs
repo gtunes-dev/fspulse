@@ -148,58 +148,96 @@ pub trait Query {
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError>;
 
-    fn prepare_and_execute(
-        &mut self,
-        db: &Database,
-        query_result: &mut dyn QueryResult,
-    ) -> Result<(), FsPulseError> {
-        let select_list = self.cols_as_select_list();
+    /// Executes a count query using COUNT(*) SQL
+    /// This is more efficient than loading all rows and counting them
+    fn prepare_and_execute_count(&self, db: &Database) -> Result<i64, FsPulseError> {
+        let (sql, params_vec) = self.build_sql(true);
+        let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
+        let mut sql_statement = db.conn().prepare(&sql)?;
 
-        // $TODO: Wrap Filters into a struct that can generate the entire WHERE clause
+        let count: i64 = sql_statement.query_row(&sql_params[..], |row| row.get(0))?;
+
+        Ok(count)
+    }
+
+    /// Builds the SQL query string with optional count mode
+    /// When count_only=true, uses COUNT(*) and omits ORDER BY, LIMIT, OFFSET
+    fn build_sql(&self, count_only: bool) -> (String, Vec<Box<dyn ToSql>>) {
+        // Build SELECT clause
+        let select_list = if count_only {
+            "COUNT(*)".to_string()
+        } else {
+            self.cols_as_select_list()
+        };
+
+        // Build WHERE clause and collect parameters
         let mut params_vec: Vec<Box<dyn ToSql>> = Vec::new();
-
         let mut where_clause = String::new();
 
         if !self.query_impl().filters.is_empty() {
             let mut first = true;
             where_clause.push_str("\nWHERE ");
             for filter in &self.query_impl().filters {
-                match first {
-                    true => {
-                        first = false;
-                    }
-                    false => {
-                        where_clause.push_str(" AND ");
-                    }
+                if !first {
+                    where_clause.push_str(" AND ");
                 }
-                let (pred_str, pred_vec) = filter.to_predicate_parts()?;
+                first = false;
+
+                // Note: This unwrap is safe because filters validate during parsing
+                let (pred_str, pred_vec) = filter.to_predicate_parts().unwrap();
                 where_clause.push_str(&pred_str);
                 params_vec.extend(pred_vec);
             }
         }
 
-        let order_clause = match self.order() {
-            Some(order) => order.to_order_clause(),
-            None => String::new(),
+        // Build ORDER BY, LIMIT, OFFSET clauses (omitted for count queries)
+        let order_clause = if count_only {
+            String::new()
+        } else {
+            match self.order() {
+                Some(order) => order.to_order_clause(),
+                None => String::new(),
+            }
         };
 
-        let limit_clause = match &self.query_impl().limit {
-            Some(limit) => format!("\nLIMIT {limit}"),
-            None => String::new(),
+        let limit_clause = if count_only {
+            String::new()
+        } else {
+            match &self.query_impl().limit {
+                Some(limit) => format!("\nLIMIT {limit}"),
+                None => String::new(),
+            }
         };
 
+        let offset_clause = if count_only {
+            String::new()
+        } else {
+            match &self.query_impl().offset {
+                Some(offset) => format!("\nOFFSET {offset}"),
+                None => String::new(),
+            }
+        };
+
+        // Assemble final SQL
         let sql = self
             .query_impl()
             .sql_template
             .replace("{select_list}", &select_list)
             .replace("{where_clause}", &where_clause)
             .replace("{order_clause}", &order_clause)
-            .replace("{limit_clause}", &limit_clause);
+            .replace("{limit_clause}", &limit_clause)
+            .replace("{offset_clause}", &offset_clause);
 
-        // println!("SQL: {sql}");
+        (sql, params_vec)
+    }
 
+    fn prepare_and_execute(
+        &mut self,
+        db: &Database,
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let (sql, params_vec) = self.build_sql(false);
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
-
         let mut sql_statement = db.conn().prepare(&sql)?;
 
         self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
@@ -578,6 +616,7 @@ pub struct QueryImpl {
     show: Show,
     order: Option<Order>,
     limit: Option<i64>,
+    offset: Option<i64>,
 }
 
 impl QueryImpl {
@@ -585,7 +624,8 @@ impl QueryImpl {
         FROM roots
         {where_clause}
         {order_clause}
-        {limit_clause}";
+        {limit_clause}
+        {offset_clause}";
 
     const SCANS_SQL_QUERY: &str = "SELECT {select_list},
             COUNT(*) FILTER (WHERE changes.change_type = 'A') AS adds,
@@ -597,13 +637,15 @@ impl QueryImpl {
         {where_clause}
         GROUP BY scans.scan_id
         {order_clause}
-        {limit_clause}";
+        {limit_clause}
+        {offset_clause}";
 
     const ITEMS_SQL_QUERY: &str = "SELECT {select_list}
         FROM items
         {where_clause}
         {order_clause}
-        {limit_clause}";
+        {limit_clause}
+        {offset_clause}";
 
     const CHANGES_SQL_QUERY: &str = "SELECT {select_list}
         FROM changes
@@ -611,7 +653,8 @@ impl QueryImpl {
             ON changes.item_id = items.item_id
         {where_clause}
         {order_clause}
-        {limit_clause}";
+        {limit_clause}
+        {offset_clause}";
 
     const ALERTS_SQL_QUERY: &str = "SELECT {select_list}
         FROM alerts
@@ -619,7 +662,8 @@ impl QueryImpl {
           ON alerts.item_id = items.item_id
         {where_clause}
         {order_clause}
-        {limit_clause}";
+        {limit_clause}
+        {offset_clause}";
 
     fn new(sql_template: &'static str, col_set: ColSet) -> Self {
         QueryImpl {
@@ -630,6 +674,7 @@ impl QueryImpl {
             show: Show::new(col_set),
             order: None,
             limit: None,
+            offset: None,
         }
     }
 }
@@ -808,10 +853,12 @@ impl AlertsQueryRow {
 impl QueryProcessor {
     pub fn execute_query(db: &Database, query_str: &str) -> Result<Vec<Vec<String>>, FsPulseError> {
         let mut qrv = QueryResultVector::new();
-
         Self::process_query(db, query_str, &mut qrv)?;
-
         Ok(qrv.row_vec)
+    }
+
+    pub fn execute_query_count(db: &Database, query_str: &str) -> Result<i64, FsPulseError> {
+        Self::process_query_count(db, query_str)
     }
 
     pub fn execute_query_and_print(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
@@ -873,6 +920,32 @@ impl QueryProcessor {
         Ok(())
     }
 
+    fn process_query_count(
+        db: &Database,
+        query_str: &str,
+    ) -> Result<i64, FsPulseError> {
+        info!("Parsing count query: {query_str}");
+
+        let mut parsed_query = QueryParser::parse(Rule::query, query_str)
+            .map_err(|err| FsPulseError::ParsingError(Box::new(err)))?;
+
+        info!("Parsed count query: {parsed_query}");
+
+        let query_pair = parsed_query.next().unwrap();
+        let mut query_iter = query_pair.into_inner();
+
+        let query_type_pair = query_iter.next().unwrap();
+
+        let mut query = make_query(query_type_pair.as_str());
+
+        QueryProcessor::build(&mut *query, &mut query_iter)?;
+
+        // Use the count execution path - access directly through dyn Query
+        let count = (*query).prepare_and_execute_count(db)?;
+
+        Ok(count)
+    }
+
     pub fn validate_parsed_filter(rule: Rule, pairs: &mut Pairs<Rule>) -> Option<String> {
         if rule == Rule::date_filter_EOI {
             match DateFilter::validate_values(pairs) {
@@ -929,6 +1002,9 @@ impl QueryProcessor {
                 }
                 Rule::limit_val => {
                     query.query_impl_mut().limit = Some(token.as_str().parse().unwrap());
+                }
+                Rule::offset_val => {
+                    query.query_impl_mut().offset = Some(token.as_str().parse().unwrap());
                 }
                 _ => {}
             }

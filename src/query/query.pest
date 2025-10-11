@@ -3,7 +3,7 @@
 
 // Top-level query: one of the domain-specific queries
 
-query = { SOI ~ WS* ~ query_type ~ where_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ WS* ~ EOI }
+query = { SOI ~ WS* ~ query_type ~ where_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ offset_clause? ~ WS* ~ EOI }
 
 query_type = { "roots" | "scans" | "items" | "changes" | "alerts" }
 
@@ -29,6 +29,11 @@ order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "de
 limit_clause = _{ WS+ ~ limit_text ~ WS+ ~ limit_val }
 limit_text   = _{ ^"limit" }
 limit_val    =  { ASCII_DIGIT+ }
+
+// Optional OFFSET clause
+offset_clause = _{ WS+ ~ offset_text ~ WS+ ~ offset_val }
+offset_text   = _{ ^"offset" }
+offset_val    =  { ASCII_DIGIT+ }
 
 // Filter verifiers used discretely within code
 id_filter_EOI           = { WS* ~ id_filter_values ~ WS* ~ EOI }

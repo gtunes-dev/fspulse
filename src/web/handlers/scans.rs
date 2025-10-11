@@ -11,8 +11,7 @@ use crate::config::CONFIG;
 use crate::database::{Database, ListQuery};
 use crate::scans::ScanRecord;
 
-use super::roots::ListParams;
-use super::roots::ListResponse;
+use super::common::{ListParams, ListResponse};
 
 #[derive(Serialize)]
 pub struct ScanItem {
