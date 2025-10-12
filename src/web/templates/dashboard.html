@@ -1114,10 +1114,6 @@
                 <div class="active-scans-container">
                     <div id="active-scans-content">
                         <!-- Will be populated by JavaScript -->
-                        <div class="no-scans-state">
-                            <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: #333;">No Active Scan</h3>
-                            <button class="start-scan-btn" onclick="showStartScanModal()">+ Start New Scan</button>
-                        </div>
                     </div>
                 </div>
 
@@ -1611,6 +1607,12 @@
                     return;
                 }
 
+                // Remove "No Active Scan" UI if present
+                const noScansState = container.querySelector('.no-scans-state');
+                if (noScansState) {
+                    noScansState.remove();
+                }
+
                 // Check if scan card already exists
                 for (const [scanId, scan] of this.activeScans.entries()) {
                     let scanCard = document.getElementById(`scan-card-${scanId}`);
@@ -1890,7 +1892,7 @@
 
                 // Connect to WebSocket
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${protocol}//${window.location.host}/ws/scans/${scanId}`;
+                const wsUrl = `${protocol}//${window.location.host}/ws/scans/progress`;
 
                 this.ws = new WebSocket(wsUrl);
 
@@ -1899,8 +1901,8 @@
                 };
 
                 this.ws.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    this.handleProgressEvent(data);
+                    const state = JSON.parse(event.data);
+                    this.handleStateUpdate(state);
                 };
 
                 this.ws.onerror = (error) => {
@@ -1916,105 +1918,97 @@
                 };
             }
 
-            handleProgressEvent(event) {
-                const scanData = this.activeScans.get(this.currentScanId);
-                if (!scanData) return;
-
-                switch (event.type) {
-                    case 'scan_started':
-                        break;
-
-                    case 'phase_started':
-                        if (event.phase === 'scanning') {
-                            this.scanPhase = 1;
-                        } else if (event.phase === 'sweeping') {
-                            this.scanPhase = 2;
-                        } else if (event.phase === 'analyzing') {
-                            this.scanPhase = 3;
-                        }
-                        scanData.phase = this.scanPhase;
-                        this.scheduleRender();
-                        break;
-
-                    case 'phase_completed':
-                        // Add breadcrumb for completed phase
-                        if (event.phase === 'scanning') {
-                            this.phaseBreadcrumbs.push(
-                                `Scanned ${this.scanningCounts.files.toLocaleString()} files in ${this.scanningCounts.directories.toLocaleString()} directories`
-                            );
-                        } else if (event.phase === 'sweeping') {
-                            this.phaseBreadcrumbs.push('Tombstoned deleted items');
-                        } else if (event.phase === 'analyzing') {
-                            this.phaseBreadcrumbs.push(
-                                `Analyzed ${scanData.progress.current.toLocaleString()} files`
-                            );
-                        }
-                        this.scheduleRender();
-                        break;
-
-                    case 'directory_scanning':
-                        this.scanningCounts.directories++;
-                        this.scheduleRender();
-                        break;
-
-                    case 'file_scanning':
-                        this.scanningCounts.files++;
-                        this.scheduleRender();
-                        break;
-
-                    case 'analysis_progress':
-                        scanData.progress = {
-                            current: event.completed,
-                            total: event.total,
-                            percentage: event.percentage
-                        };
-                        this.scheduleRender();
-                        break;
-
-                    case 'thread_progress':
-                        // Update thread state
-                        const threadIndex = event.thread_index;
-                        this.threadStates.set(threadIndex, {
-                            operation: event.operation,
-                            file: event.file
-                        });
-
-                        // Convert thread states to array format
-                        scanData.threads = Array.from({ length: event.thread_count }, (_, i) => {
-                            const state = this.threadStates.get(i);
-                            if (!state || state.operation === 'idle') {
-                                return { id: i, status: 'idle', current_file: null };
-                            }
-
-                            let prefix = '';
-                            if (state.operation === 'hashing') {
-                                prefix = 'Hashing:';
-                            } else if (state.operation === 'validating') {
-                                prefix = 'Validating:';
-                            }
-
-                            return {
-                                id: i,
-                                status: 'active',
-                                current_file: prefix ? `${prefix} ${state.file}` : state.file
-                            };
-                        });
-
-                        // requestAnimationFrame batching handles throttling automatically
-                        this.scheduleRender();
-                        break;
-
-                    case 'message':
-                        if (event.text.includes('Scan completed')) {
-                            // Scan is complete
-                        }
-                        break;
-
-                    case 'scan_error':
-                        console.error('Scan error:', event.error);
-                        alert(`Scan error: ${event.error}`);
-                        break;
+            handleStateUpdate(state) {
+                // Handle error state
+                if (state.error) {
+                    console.error('WebSocket error:', state.error);
+                    return;
                 }
+
+                // Update or create scan data from complete state snapshot
+                const scanData = this.activeScans.get(state.scan_id) || {
+                    scan_id: state.scan_id,
+                    root_path: state.root_path,
+                    phase: 1,
+                    progress: { current: 0, total: 1, percentage: 0 },
+                    threads: []
+                };
+
+                // Map phase name to phase number
+                if (state.current_phase) {
+                    if (state.current_phase.name === 'scanning') {
+                        scanData.phase = 1;
+                        this.scanPhase = 1;
+                    } else if (state.current_phase.name === 'sweeping') {
+                        scanData.phase = 2;
+                        this.scanPhase = 2;
+                    } else if (state.current_phase.name === 'analyzing') {
+                        scanData.phase = 3;
+                        this.scanPhase = 3;
+                    }
+                }
+
+                // Update completed phase breadcrumbs
+                this.phaseBreadcrumbs = state.completed_phases || [];
+
+                // Update scanning progress (phase 1)
+                if (state.scanning_progress) {
+                    this.scanningCounts = {
+                        files: state.scanning_progress.files_scanned || 0,
+                        directories: state.scanning_progress.directories_scanned || 0
+                    };
+                }
+
+                // Update overall progress (phase 3)
+                if (state.overall_progress) {
+                    scanData.progress = {
+                        current: state.overall_progress.completed,
+                        total: state.overall_progress.total,
+                        percentage: state.overall_progress.percentage
+                    };
+                }
+
+                // Update thread states
+                if (state.thread_states && state.thread_states.length > 0) {
+                    scanData.threads = state.thread_states.map(thread => {
+                        if (thread.operation.type === 'idle') {
+                            return { id: thread.thread_index, status: 'idle', current_file: null };
+                        }
+
+                        let prefix = '';
+                        let file = '';
+                        if (thread.operation.type === 'hashing') {
+                            prefix = 'Hashing:';
+                            file = thread.operation.file;
+                        } else if (thread.operation.type === 'validating') {
+                            prefix = 'Validating:';
+                            file = thread.operation.file;
+                        }
+
+                        return {
+                            id: thread.thread_index,
+                            status: 'active',
+                            current_file: prefix ? `${prefix} ${file}` : file
+                        };
+                    });
+                }
+
+                // Update the scan in activeScans
+                this.activeScans.set(state.scan_id, scanData);
+
+                // Handle scan completion
+                if (state.status && state.status !== 'running') {
+                    if (state.status === 'completed') {
+                        // Scan completed
+                    } else if (state.status === 'cancelled') {
+                        // Scan cancelled
+                    } else if (state.status.error) {
+                        console.error('Scan error:', state.status.error.message);
+                        alert(`Scan error: ${state.status.error.message}`);
+                    }
+                }
+
+                this.scheduleRender();
             }
 
             // Demo method - adds a mock scan for testing UI
@@ -2042,6 +2036,25 @@
                 this.expandedScans.add('123'); // Expand by default
                 this.scheduleRender();
             }
+
+            async checkForActiveScan() {
+                try {
+                    const response = await fetch('/api/scans/current');
+                    if (!response.ok) return;
+
+                    const data = await response.json();
+
+                    // If there's an active scan, connect to WebSocket for state updates
+                    if (data && data.scan_id) {
+                        console.log('Found active scan:', data);
+                        // Connect to WebSocket - state snapshots will rebuild the UI automatically
+                        this.connectScanWebSocket(data.scan_id, data.root_path);
+                    }
+                } catch (error) {
+                    console.error('Failed to check for active scan:', error);
+                }
+            }
+
         }
 
         // Global scan manager instance
@@ -2693,6 +2706,8 @@
         // Handle initial load based on URL hash
         document.addEventListener('DOMContentLoaded', () => {
             loadDashboardData();
+            scanManager.render(); // Initial render to show "No Active Scan" if needed
+            scanManager.checkForActiveScan(); // Check for active scan and reconnect if found
             views.items.setupDragListeners();
             views.roots.setupDragListeners();
             views.scans.setupDragListeners();

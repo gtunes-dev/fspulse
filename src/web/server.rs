@@ -59,9 +59,11 @@ impl WebServer {
             .route("/api/query/{domain}", post(handlers::query::execute_query))
             .route("/api/scans/status", get(handlers::scans::get_scans_status))
             .route("/api/scans/start", post(handlers::scans::initiate_scan))
+            .route("/api/scans/current", get(handlers::scans::get_current_scan))
+            .route("/api/scans/{scan_id}/cancel", post(handlers::scans::cancel_scan))
 
             // WebSocket routes
-            .route("/ws/scans/{scan_id}", get(handlers::scans::scan_progress_ws))
+            .route("/ws/scans/progress", get(handlers::scans::scan_progress_ws))
 
             // Store database path in extension for legacy handlers
             .layer(

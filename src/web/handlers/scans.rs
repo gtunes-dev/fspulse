@@ -9,17 +9,16 @@ use axum::{
 };
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::database::Database;
-use crate::progress::web::{ProgressEvent, WebProgressReporter};
+use crate::progress::web::WebProgressReporter;
 use crate::progress::ProgressReporter;
 use crate::roots::Root;
 use crate::scanner::Scanner;
 use crate::scans::{AnalysisSpec, HashMode, Scan, ScanState, ValidateMode};
-use crossbeam_channel::Receiver;
+use crate::web::scan_manager::ScanManager;
 
 /// Response structure for scans status endpoint
 #[derive(Debug, Serialize)]
@@ -117,14 +116,14 @@ pub async fn get_scans_status(
 #[derive(Clone)]
 pub struct AppState {
     pub db_path: Option<PathBuf>,
-    pub active_scans: Arc<Mutex<HashMap<i64, Receiver<ProgressEvent>>>>,
+    pub scan_manager: Arc<Mutex<ScanManager>>,
 }
 
 impl AppState {
     pub fn new(db_path: Option<PathBuf>) -> Self {
         Self {
             db_path,
-            active_scans: Arc::new(Mutex::new(HashMap::new())),
+            scan_manager: Arc::new(Mutex::new(ScanManager::new())),
         }
     }
 }
@@ -208,80 +207,151 @@ pub async fn initiate_scan(
     };
 
     let scan_id = scan.scan_id();
-
-    // Create web progress reporter
-    let (reporter, event_receiver) =
-        WebProgressReporter::new(scan_id, root.root_path().to_string());
-    let reporter = Arc::new(reporter);
-
-    // Store event receiver in state for WebSocket streaming
-    state
-        .active_scans
-        .lock()
-        .unwrap()
-        .insert(scan_id, event_receiver);
-
-    // Spawn scan in background using tokio::task::spawn_blocking
-    let db_path = state.db_path.clone();
     let root_id = root.root_id();
+    let root_path = root.root_path().to_string();
+
+    // Create web progress reporter (which creates the broadcaster)
+    let (web_reporter, broadcaster) = WebProgressReporter::new(scan_id, root_path.clone());
+    let web_reporter = Arc::new(web_reporter);
+    let reporter: Arc<dyn ProgressReporter> = web_reporter.clone();
+
+    // Atomically try to start the scan using ScanManager
+    let cancel_token = {
+        let mut manager = state.scan_manager.lock().unwrap();
+        manager
+            .try_start_scan(scan_id, root_id, root_path.clone(), broadcaster)
+            .map_err(|e| {
+                error!("Failed to start scan: {}", e);
+                StatusCode::CONFLICT // 409 Conflict - scan already in progress
+            })?
+    };
+
+    // Clone state for the background task
+    let state_clone = state.clone();
+    let db_path = state.db_path.clone();
     let mut scan_copy = scan;
 
+    // Spawn scan in background task
     tokio::task::spawn_blocking(move || {
         let mut db = Database::new(db_path).expect("Failed to open database");
         let root = Root::get_by_id(&db, root_id)
             .expect("Failed to get root")
             .expect("Root not found");
 
-        if let Err(e) = Scanner::do_scan_machine(&mut db, &mut scan_copy, &root, reporter.clone())
-        {
-            error!("Scan failed: {}", e);
-            let _ = reporter.println(&format!("Scan error: {}", e));
+        // Run the scan with the cancel token
+        let scan_result =
+            Scanner::do_scan_machine(&mut db, &mut scan_copy, &root, reporter.clone(), cancel_token);
+
+        // Handle scan result and update state status
+        match scan_result {
+            Ok(()) => {
+                let _ = reporter.println("Scan completed successfully");
+                web_reporter.mark_completed();
+            }
+            Err(ref e) if matches!(e, crate::error::FsPulseError::ScanCancelled) => {
+                // Scan was cancelled - call set_state_stopped to rollback
+                log::info!("Scan {} was cancelled, rolling back changes", scan_id);
+                let _ = reporter.println("Scan cancelled, rolling back changes...");
+                if let Err(stop_err) = scan_copy.set_state_stopped(&mut db) {
+                    error!("Failed to stop scan {}: {}", scan_id, stop_err);
+                    let _ = reporter.println(&format!("Error stopping scan: {}", stop_err));
+                    web_reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
+                } else {
+                    let _ = reporter.println("Scan cancelled and rolled back");
+                    web_reporter.mark_cancelled();
+                }
+            }
+            Err(e) => {
+                error!("Scan {} failed: {}", scan_id, e);
+                let _ = reporter.println(&format!("Scan error: {}", e));
+                web_reporter.mark_error(format!("Scan error: {}", e));
+            }
         }
 
-        // Emit scan completed event
-        let _ = reporter.println("Scan completed");
+        // Mark scan as complete in ScanManager
+        state_clone.scan_manager.lock().unwrap().mark_complete(scan_id);
     });
 
     Ok(Json(InitiateScanResponse { scan_id }))
 }
 
 /// WebSocket endpoint for streaming scan progress
-/// GET /ws/scans/{scan_id}
+/// GET /ws/scans/progress
 pub async fn scan_progress_ws(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
-    Path(scan_id): Path<i64>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_scan_progress(socket, state, scan_id))
+    ws.on_upgrade(move |socket| handle_scan_progress(socket, state))
 }
 
-async fn handle_scan_progress(mut socket: WebSocket, state: AppState, scan_id: i64) {
-    // Get the event receiver for this scan
-    let receiver = {
-        let mut scans = state.active_scans.lock().unwrap();
-        scans.remove(&scan_id)
+async fn handle_scan_progress(mut socket: WebSocket, state: AppState) {
+    // Subscribe to scan progress state snapshots
+    let receiver_result = {
+        let manager = state.scan_manager.lock().unwrap();
+        manager.subscribe()
     };
 
-    if let Some(receiver) = receiver {
-        // Stream events to the WebSocket
-        loop {
-            match receiver.try_recv() {
-                Ok(event) => {
-                    let json = serde_json::to_string(&event).unwrap();
-                    if socket.send(Message::Text(json.into())).await.is_err() {
+    let mut receiver = match receiver_result {
+        Ok(rx) => rx,
+        Err(e) => {
+            let error_msg = format!(r#"{{"error":"{}"}}"#, e);
+            let _ = socket.send(Message::Text(error_msg.into())).await;
+            return;
+        }
+    };
+
+    // Stream state snapshots
+    loop {
+        tokio::select! {
+            result = receiver.recv() => {
+                match result {
+                    Ok(state_snapshot) => {
+                        if let Ok(json) = serde_json::to_string(&state_snapshot) {
+                            if socket.send(Message::Text(json.into())).await.is_err() {
+                                break; // Client disconnected
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Channel closed - scan completed
                         break;
                     }
                 }
-                Err(crossbeam_channel::TryRecvError::Empty) => {
-                    // No events available, wait a bit
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                }
-                Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                    // Scan is complete, close connection
+            }
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(30)) => {
+                // Send ping to keep connection alive
+                if socket.send(Message::Ping(vec![].into())).await.is_err() {
                     break;
                 }
             }
         }
     }
     // WebSocket will close automatically when dropped
+}
+
+/// POST /api/scans/{scan_id}/cancel
+/// Request cancellation of a running scan
+pub async fn cancel_scan(
+    State(state): State<AppState>,
+    Path(scan_id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    let mut manager = state.scan_manager.lock().unwrap();
+
+    manager.request_cancellation(scan_id).map_err(|e| {
+        error!("Failed to cancel scan {}: {}", scan_id, e);
+        StatusCode::NOT_FOUND
+    })?;
+
+    log::info!("Cancellation requested for scan {}", scan_id);
+    Ok(StatusCode::ACCEPTED) // 202 Accepted - cancellation requested, will complete async
+}
+
+/// GET /api/scans/current
+/// Get information about the currently running scan, if any
+pub async fn get_current_scan(
+    State(state): State<AppState>,
+) -> Result<Json<Option<crate::web::scan_manager::CurrentScanInfo>>, StatusCode> {
+    let manager = state.scan_manager.lock().unwrap();
+    let current = manager.get_current_scan_info();
+    Ok(Json(current))
 }

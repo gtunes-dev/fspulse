@@ -23,6 +23,9 @@ pub enum FsPulseError {
 
     #[error("Query parsing error: {0}")]
     CustomParsingError(String),
+
+    #[error("Scan cancelled")]
+    ScanCancelled,
 }
 
 #[cfg(test)]

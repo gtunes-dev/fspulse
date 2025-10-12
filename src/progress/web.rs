@@ -1,103 +1,103 @@
 use super::*;
-use crossbeam_channel::{unbounded, Receiver, Sender};
-use serde::{Deserialize, Serialize};
+use crate::progress::state::{PhaseInfo, ProgressInfo, ScanProgressState, ScanStatus, ThreadOperation};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 
-/// Progress events that can be sent to web clients
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ProgressEvent {
-    ScanStarted {
-        scan_id: i64,
-        root_path: String,
-    },
-    PhaseStarted {
-        phase: String, // "scanning", "sweeping", "analyzing"
-        stage_index: u32,
-    },
-    PhaseCompleted {
-        phase: String,
-    },
-    DirectoryScanning {
-        path: String,
-    },
-    FileScanning {
-        path: String,
-    },
-    AnalysisProgress {
-        completed: u64,
-        total: u64,
-        percentage: f64,
-    },
-    ThreadProgress {
-        thread_index: usize,
-        thread_count: usize,
-        operation: String, // "hashing", "validating", "scanning", "idle"
-        file: String,
-    },
-    ScanCompleted {
-        scan_id: i64,
-    },
-    ScanError {
-        error: String,
-    },
-    Message {
-        text: String,
-    },
-}
-
-/// State tracking for web reporter
-struct ProgressState {
-    current_phase: Option<String>,
-    analysis_total: u64,
-    analysis_completed: u64,
-}
-
-/// Web implementation of ProgressReporter using event channels
+/// Web implementation of ProgressReporter using state snapshots
 ///
-/// Emits structured events that can be consumed via WebSockets or stored for later retrieval.
-/// Each progress update is converted into a semantic event that the web UI can understand.
+/// Instead of emitting discrete events, this reporter maintains a complete
+/// state snapshot that represents the current progress. A background task
+/// periodically broadcasts this state to all connected WebSocket clients.
+///
+/// This approach provides:
+/// - Single source of truth for progress state
+/// - Accurate thread state even after reconnection
+/// - No event flooding or buffer management complexity
+/// - Simplified frontend (just render the state)
 pub struct WebProgressReporter {
-    sender: Sender<ProgressEvent>,
-    state: Arc<Mutex<ProgressState>>,
-    // Map ProgressId to semantic meaning for event generation
-    progress_map: Arc<Mutex<HashMap<ProgressId, ProgressContext>>>,
+    state: Arc<Mutex<ScanProgressState>>,
+    broadcaster: broadcast::Sender<ScanProgressState>,
+    // Map ProgressId to thread index for thread-specific progress updates
+    thread_map: Arc<Mutex<HashMap<ProgressId, usize>>>,
+    // Map ProgressId to context for detecting scanning/file updates
+    context_map: Arc<Mutex<HashMap<ProgressId, ProgressContext>>>,
 }
 
 #[derive(Debug, Clone)]
 enum ProgressContext {
-    Section { phase: String },
     DirectorySpinner,
     FileSpinner,
     AnalysisBar,
-    ThreadSpinner { thread_index: usize, thread_count: usize },
 }
 
 impl WebProgressReporter {
     /// Create a new web progress reporter
-    /// Returns the reporter and a receiver for consuming events
-    pub fn new(scan_id: i64, root_path: String) -> (Self, Receiver<ProgressEvent>) {
-        let (sender, receiver) = unbounded();
+    ///
+    /// Spawns a background task that broadcasts state snapshots every 250ms
+    pub fn new(
+        scan_id: i64,
+        root_path: String,
+    ) -> (Self, broadcast::Sender<ScanProgressState>) {
+        let state = Arc::new(Mutex::new(ScanProgressState::new(scan_id, root_path)));
+        let (tx, _rx) = broadcast::channel(100);
+
+        // Spawn background task to periodically broadcast state
+        let state_clone = Arc::clone(&state);
+        let tx_clone = tx.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(250));
+            loop {
+                interval.tick().await;
+                let current_state = {
+                    let state_guard = state_clone.lock().unwrap();
+                    state_guard.clone()
+                };
+
+                // Broadcast returns Err only if there are no receivers, which is fine
+                let _ = tx_clone.send(current_state);
+
+                // Stop broadcasting if scan is complete
+                let is_complete = {
+                    let state_guard = state_clone.lock().unwrap();
+                    !matches!(state_guard.status, ScanStatus::Running)
+                };
+                if is_complete {
+                    // Send one final update and exit
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    let final_state = state_clone.lock().unwrap().clone();
+                    let _ = tx_clone.send(final_state);
+                    break;
+                }
+            }
+        });
 
         let reporter = Self {
-            sender: sender.clone(),
-            state: Arc::new(Mutex::new(ProgressState {
-                current_phase: None,
-                analysis_total: 0,
-                analysis_completed: 0,
-            })),
-            progress_map: Arc::new(Mutex::new(HashMap::new())),
+            state: state.clone(),
+            broadcaster: tx.clone(),
+            thread_map: Arc::new(Mutex::new(HashMap::new())),
+            context_map: Arc::new(Mutex::new(HashMap::new())),
         };
 
-        // Send initial event
-        let _ = sender.send(ProgressEvent::ScanStarted { scan_id, root_path });
-
-        (reporter, receiver)
+        (reporter, tx)
     }
 
-    fn emit(&self, event: ProgressEvent) {
-        let _ = self.sender.send(event);
+    /// Mark scan as completed
+    pub fn mark_completed(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.status = ScanStatus::Completed;
+    }
+
+    /// Mark scan as error
+    pub fn mark_error(&self, message: String) {
+        let mut state = self.state.lock().unwrap();
+        state.status = ScanStatus::Error { message };
+    }
+
+    /// Mark scan as cancelled
+    pub fn mark_cancelled(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.status = ScanStatus::Cancelled;
     }
 }
 
@@ -106,7 +106,7 @@ impl ProgressReporter for WebProgressReporter {
         let id = ProgressId::new();
 
         // Parse phase from message
-        let phase = if message.contains("scanning") {
+        let phase_name = if message.contains("scanning") {
             "scanning"
         } else if message.contains("Tombstoning") {
             "sweeping"
@@ -115,170 +115,182 @@ impl ProgressReporter for WebProgressReporter {
         }
         .to_string();
 
-        self.state.lock().unwrap().current_phase = Some(phase.clone());
-        self.progress_map
-            .lock()
-            .unwrap()
-            .insert(id, ProgressContext::Section { phase: phase.clone() });
+        let mut state = self.state.lock().unwrap();
 
-        self.emit(ProgressEvent::PhaseStarted {
-            phase,
+        // If there was a current phase, move it to completed
+        if let Some(current) = state.current_phase.take() {
+            // Create breadcrumb for completed phase
+            let breadcrumb = match current.name.as_str() {
+                "scanning" => {
+                    if let Some(ref scan_progress) = state.scanning_progress {
+                        format!(
+                            "Scanned {} files in {} directories",
+                            scan_progress.files_scanned, scan_progress.directories_scanned
+                        )
+                    } else {
+                        "Scanning complete".to_string()
+                    }
+                }
+                "sweeping" => "Tombstoned deleted items".to_string(),
+                "analyzing" => {
+                    if let Some(ref progress) = state.overall_progress {
+                        format!("Analyzed {} files", progress.completed)
+                    } else {
+                        "Analysis complete".to_string()
+                    }
+                }
+                _ => format!("{} complete", current.name),
+            };
+            state.completed_phases.push(breadcrumb);
+        }
+
+        state.current_phase = Some(PhaseInfo {
+            name: phase_name,
             stage_index,
         });
 
         id
     }
 
-    fn section_finish(&self, id: ProgressId, _message: &str) {
-        if let Some(ProgressContext::Section { phase }) = self.progress_map.lock().unwrap().get(&id) {
-            self.emit(ProgressEvent::PhaseCompleted {
-                phase: phase.clone(),
-            });
-        }
-        self.progress_map.lock().unwrap().remove(&id);
+    fn section_finish(&self, _id: ProgressId, _message: &str) {
+        // Phase completion is handled when the next phase starts
+        // or when scan completes
     }
 
     fn create(&self, config: ProgressConfig) -> ProgressId {
         let id = ProgressId::new();
 
-        // If it's a Bar style, set the total regardless of context
-        if let ProgressStyle::Bar { total } = config.style {
-            self.state.lock().unwrap().analysis_total = total;
+        // Check if this is a thread-specific progress indicator (prefix like "[01/20]")
+        let is_thread_bar = config.prefix.contains('[') && config.prefix.contains('/');
+
+        // Only initialize overall progress for non-thread bars
+        if !is_thread_bar {
+            if let ProgressStyle::Bar { total } = config.style {
+                let mut state = self.state.lock().unwrap();
+                state.overall_progress = Some(ProgressInfo {
+                    completed: 0,
+                    total,
+                    percentage: 0.0,
+                });
+            }
         }
 
-        // Infer context from prefix/message
+        // Detect context from prefix/message
         let context = if config.prefix.contains("Directory") || config.message.contains("Directory") {
-            ProgressContext::DirectorySpinner
+            Some(ProgressContext::DirectorySpinner)
         } else if config.prefix.contains("File")
             || config.prefix.contains("Item")
             || config.message.contains("File")
             || config.message.contains("Item")
         {
-            ProgressContext::FileSpinner
-        } else if let ProgressStyle::Bar { total: _ } = config.style {
-            // Analysis progress bar (total already set above)
-            ProgressContext::AnalysisBar
-        } else if config.prefix.contains('[') {
-            // Thread progress: "[01/20]" format
+            Some(ProgressContext::FileSpinner)
+        } else if let ProgressStyle::Bar { .. } = config.style {
+            Some(ProgressContext::AnalysisBar)
+        } else {
+            None
+        };
+
+        if let Some(ctx) = context {
+            self.context_map.lock().unwrap().insert(id, ctx);
+        }
+
+        // Store thread mapping if it's a thread bar
+        if is_thread_bar {
             let parts: Vec<&str> = config
                 .prefix
-                .trim()  // Remove leading/trailing whitespace first
+                .trim()
                 .trim_matches(|c| c == '[' || c == ']')
                 .split('/')
                 .collect();
             if parts.len() == 2 {
-                if let (Ok(idx), Ok(count)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>())
-                {
-                    ProgressContext::ThreadSpinner {
-                        thread_index: idx - 1, // Convert to 0-indexed
-                        thread_count: count,
-                    }
-                } else {
-                    return id; // Parse failure - return without tracking context
+                if let Ok(thread_index) = parts[0].parse::<usize>() {
+                    // Store mapping from ProgressId to thread index (0-indexed)
+                    self.thread_map.lock().unwrap().insert(id, thread_index - 1);
                 }
-            } else {
-                return id; // Wrong format - return without tracking context
             }
-        } else {
-            return id; // Unknown context, just track ID
-        };
+        }
 
-        self.progress_map.lock().unwrap().insert(id, context);
         id
     }
 
     fn update_work(&self, id: ProgressId, work: WorkUpdate) {
-        // Directly emit structured events based on semantic work updates
-        let context = self.progress_map.lock().unwrap().get(&id).cloned();
+        // Check for scanning updates (files/directories)
+        let context_opt = self.context_map.lock().unwrap().get(&id).cloned();
+        match (&work, context_opt) {
+            (WorkUpdate::Directory { .. }, Some(ProgressContext::DirectorySpinner)) => {
+                let mut state = self.state.lock().unwrap();
+                state.increment_scanning(true);
+                return;
+            }
+            (WorkUpdate::File { .. }, Some(ProgressContext::FileSpinner)) => {
+                let mut state = self.state.lock().unwrap();
+                state.increment_scanning(false);
+                return;
+            }
+            _ => {}
+        }
 
-        match (work, context) {
-            (WorkUpdate::Directory { path }, Some(ProgressContext::DirectorySpinner)) => {
-                self.emit(ProgressEvent::DirectoryScanning { path });
-            }
-            (WorkUpdate::File { path }, Some(ProgressContext::FileSpinner)) => {
-                self.emit(ProgressEvent::FileScanning { path });
-            }
-            (WorkUpdate::Hashing { file }, Some(ProgressContext::ThreadSpinner { thread_index, thread_count })) => {
-                self.emit(ProgressEvent::ThreadProgress {
-                    thread_index,
-                    thread_count,
-                    operation: "hashing".to_string(),
-                    file,
-                });
-            }
-            (WorkUpdate::Validating { file }, Some(ProgressContext::ThreadSpinner { thread_index, thread_count })) => {
-                self.emit(ProgressEvent::ThreadProgress {
-                    thread_index,
-                    thread_count,
-                    operation: "validating".to_string(),
-                    file,
-                });
-            }
-            (WorkUpdate::Idle, Some(ProgressContext::ThreadSpinner { thread_index, thread_count })) => {
-                self.emit(ProgressEvent::ThreadProgress {
-                    thread_index,
-                    thread_count,
-                    operation: "idle".to_string(),
-                    file: "-".to_string(),
-                });
-            }
-            _ => {
-                // No event emission for mismatched context or unknown combinations
-            }
+        // Look up thread index for this ProgressId
+        let thread_index_opt = self.thread_map.lock().unwrap().get(&id).copied();
+
+        if let Some(thread_index) = thread_index_opt {
+            // This is a thread-specific update
+            let mut state = self.state.lock().unwrap();
+            let operation = match work {
+                WorkUpdate::Hashing { file } => ThreadOperation::Hashing { file },
+                WorkUpdate::Validating { file } => ThreadOperation::Validating { file },
+                WorkUpdate::Idle => ThreadOperation::Idle,
+                _ => return, // Not a thread-specific operation
+            };
+            state.update_thread(thread_index, operation);
         }
     }
 
     fn set_position(&self, id: ProgressId, position: u64) {
-        let context = self.progress_map.lock().unwrap().get(&id).cloned();
-        match context {
-            Some(ProgressContext::AnalysisBar) | Some(ProgressContext::FileSpinner) => {
-                let state = self.state.lock().unwrap();
-                let percentage = if state.analysis_total > 0 {
-                    (position as f64 / state.analysis_total as f64) * 100.0
+        // Only update overall progress if this is NOT a thread-specific bar
+        let is_thread_bar = self.thread_map.lock().unwrap().contains_key(&id);
+        if !is_thread_bar {
+            let mut state = self.state.lock().unwrap();
+            if let Some(ref mut progress) = state.overall_progress {
+                progress.completed = position;
+                progress.percentage = if progress.total > 0 {
+                    (position as f64 / progress.total as f64) * 100.0
                 } else {
                     0.0
                 };
-
-                self.emit(ProgressEvent::AnalysisProgress {
-                    completed: position,
-                    total: state.analysis_total,
-                    percentage,
-                });
             }
-            _ => {}
         }
     }
 
     fn set_length(&self, id: ProgressId, length: u64) {
-        let context = self.progress_map.lock().unwrap().get(&id).cloned();
-        match context {
-            Some(ProgressContext::AnalysisBar) | Some(ProgressContext::FileSpinner) => {
-                self.state.lock().unwrap().analysis_total = length;
+        // Only update overall progress if this is NOT a thread-specific bar
+        let is_thread_bar = self.thread_map.lock().unwrap().contains_key(&id);
+        if !is_thread_bar {
+            let mut state = self.state.lock().unwrap();
+            if let Some(ref mut progress) = state.overall_progress {
+                progress.total = length;
+                progress.percentage = if length > 0 {
+                    (progress.completed as f64 / length as f64) * 100.0
+                } else {
+                    0.0
+                };
             }
-            _ => {}
         }
     }
 
     fn inc(&self, id: ProgressId, delta: u64) {
-        let context = self.progress_map.lock().unwrap().get(&id).cloned();
-        match context {
-            Some(ProgressContext::AnalysisBar) | Some(ProgressContext::FileSpinner) => {
-                let mut state = self.state.lock().unwrap();
-                state.analysis_completed += delta;
-
-                let percentage = if state.analysis_total > 0 {
-                    (state.analysis_completed as f64 / state.analysis_total as f64) * 100.0
+        // Only update overall progress if this is NOT a thread-specific bar
+        let is_thread_bar = self.thread_map.lock().unwrap().contains_key(&id);
+        if !is_thread_bar {
+            let mut state = self.state.lock().unwrap();
+            if let Some(ref mut progress) = state.overall_progress {
+                progress.completed += delta;
+                progress.percentage = if progress.total > 0 {
+                    (progress.completed as f64 / progress.total as f64) * 100.0
                 } else {
                     0.0
                 };
-
-                self.emit(ProgressEvent::AnalysisProgress {
-                    completed: state.analysis_completed,
-                    total: state.analysis_total,
-                    percentage,
-                });
             }
-            _ => {}
         }
     }
 
@@ -291,21 +303,23 @@ impl ProgressReporter for WebProgressReporter {
     }
 
     fn finish_and_clear(&self, id: ProgressId) {
-        self.progress_map.lock().unwrap().remove(&id);
+        // Clean up mappings
+        self.thread_map.lock().unwrap().remove(&id);
+        self.context_map.lock().unwrap().remove(&id);
     }
 
     fn println(&self, message: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.emit(ProgressEvent::Message {
-            text: message.to_string(),
-        });
+        let mut state = self.state.lock().unwrap();
+        state.add_message(message.to_string());
         Ok(())
     }
 
     fn clone_reporter(&self) -> Arc<dyn ProgressReporter> {
         Arc::new(Self {
-            sender: self.sender.clone(),
             state: Arc::clone(&self.state),
-            progress_map: Arc::clone(&self.progress_map),
+            broadcaster: self.broadcaster.clone(),
+            thread_map: Arc::clone(&self.thread_map),
+            context_map: Arc::clone(&self.context_map),
         })
     }
 }

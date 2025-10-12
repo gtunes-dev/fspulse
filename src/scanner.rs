@@ -39,6 +39,7 @@ use threadpool::ThreadPool;
 use std::collections::VecDeque;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{cmp, fs};
@@ -83,7 +84,9 @@ impl Scanner {
             None => Scanner::initiate_scan_interactive(db, &root)?,
         };
 
-        Scanner::do_scan_machine(db, &mut scan, &root, reporter)
+        // CLI mode doesn't support cancellation - use a dummy token that's always false
+        let cancel_token = Arc::new(AtomicBool::new(false));
+        Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token)
     }
 
     fn initiate_scan_interactive(db: &mut Database, root: &Root) -> Result<Scan, FsPulseError> {
@@ -219,7 +222,9 @@ impl Scanner {
             None => Scanner::initiate_scan(db, &root, analysis_spec)?,
         };
 
-        Scanner::do_scan_machine(db, &mut scan, &root, reporter)?;
+        // CLI mode doesn't support cancellation - use a dummy token that's always false
+        let cancel_token = Arc::new(AtomicBool::new(false));
+        Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token)?;
 
         Reports::report_scan(db, &scan)
     }
@@ -229,7 +234,24 @@ impl Scanner {
         scan: &mut Scan,
         root: &Root,
         reporter: Arc<dyn ProgressReporter>,
+        cancel_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
+        // NOTE: To check for cancellation at appropriate points in the scanner code, use:
+        //
+        //   if cancel_token.load(Ordering::Relaxed) {
+        //       return Err(FsPulseError::ScanCancelled);
+        //   }
+        //
+        // Place these checks at safe points where the scanner can cleanly exit, such as:
+        // - Between directories in the scanning phase
+        // - Before starting analysis worker threads
+        // - In long-running operations (file hashing, validation)
+        // - In worker thread loops
+        //
+        // After detecting cancellation and returning the error, the calling code will
+        // invoke Scan::set_state_stopped() to atomically rollback all changes.
+
+
         reporter.println("-- FsPulse Scan --")
             .map_err(|e| FsPulseError::Error(e.to_string()))?;
 
