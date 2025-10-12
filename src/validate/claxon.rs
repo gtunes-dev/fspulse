@@ -62,10 +62,9 @@ impl Validator for ClaxonValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::progress::{ProgressConfig, ProgressReporter, ProgressStyle};
-    use std::collections::HashMap;
+    use crate::progress::{ProgressConfig, ProgressReporter, WorkUpdate};
     use std::path::Path;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     /// Simple mock reporter for testing
     struct MockReporter;
@@ -79,6 +78,7 @@ mod tests {
             ProgressId::new()
         }
         fn set_message(&self, _id: ProgressId, _message: String) {}
+        fn update_work(&self, _id: ProgressId, _work: WorkUpdate) {}
         fn set_position(&self, _id: ProgressId, _position: u64) {}
         fn set_length(&self, _id: ProgressId, _length: u64) {}
         fn inc(&self, _id: ProgressId, _delta: u64) {}

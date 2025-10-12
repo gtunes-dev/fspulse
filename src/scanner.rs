@@ -22,7 +22,7 @@ use crate::changes::ChangeType;
 use crate::config::{HashFunc, CONFIG};
 use crate::hash::Hash;
 use crate::items::{AnalysisItem, Item, ItemType};
-use crate::progress::{ProgressConfig, ProgressId, ProgressReporter, ProgressStyle};
+use crate::progress::{ProgressConfig, ProgressId, ProgressReporter, ProgressStyle, WorkUpdate};
 use crate::reports::Reports;
 use crate::roots::Root;
 use crate::scans::{AnalysisSpec, ScanState};
@@ -224,7 +224,7 @@ impl Scanner {
         Reports::report_scan(db, &scan)
     }
 
-    fn do_scan_machine(
+    pub fn do_scan_machine(
         db: &mut Database,
         scan: &mut Scan,
         root: &Root,
@@ -391,7 +391,9 @@ impl Scanner {
         });
 
         while let Some(q_entry) = q.pop_front() {
-            reporter.set_message(dir_prog, format!("Directory: '{}'", q_entry.path.to_string_lossy()));
+            reporter.update_work(dir_prog, WorkUpdate::Directory {
+                path: q_entry.path.to_string_lossy().to_string(),
+            });
 
             // Handle the directory itself before iterating its contents. The root dir
             // was previously pushed into the queue - if this is that entry, we skip it
@@ -411,7 +413,9 @@ impl Scanner {
                 let item = item?;
 
                 let metadata = fs::symlink_metadata(item.path())?; // Use symlink_metadata to check for symlinks
-                reporter.set_message(item_prog, format!("Item: '{}'", item.file_name().to_string_lossy()));
+                reporter.update_work(item_prog, WorkUpdate::File {
+                    path: item.file_name().to_string_lossy().to_string(),
+                });
 
                 if metadata.is_dir() {
                     q.push_back(QueueEntry {
@@ -538,9 +542,12 @@ impl Scanner {
             let thread_prog = reporter.create(ProgressConfig {
                 style: ProgressStyle::Spinner,
                 prefix: thread_prog_prefix,
-                message: "Waiting...".to_string(),
+                message: "".to_string(), // Initial message set via update_work below
                 steady_tick: None,
             });
+
+            // Set initial idle state
+            reporter.update_work(thread_prog, WorkUpdate::Idle);
 
             // Worker thread: continuously receive and process tasks.
             pool.execute(move || {
@@ -621,7 +628,9 @@ impl Scanner {
         let mut new_hash = None;
 
         if analysis_item.needs_hash() {
-            reporter.set_message(thread_prog_id, format!("Hashing: '{}'", &display_path));
+            reporter.update_work(thread_prog_id, WorkUpdate::Hashing {
+                file: display_path.to_string(),
+            });
             reporter.set_position(thread_prog_id, 0); // reset in case left from previous
             reporter.set_length(thread_prog_id, 0);
 
@@ -641,7 +650,9 @@ impl Scanner {
             let validator = from_path(path);
             match validator {
                 Some(v) => {
-                    reporter.set_message(thread_prog_id, format!("Validating: '{}'", &display_path));
+                    reporter.update_work(thread_prog_id, WorkUpdate::Validating {
+                        file: display_path.to_string(),
+                    });
                     let steady_tick = v.wants_steady_tick();
 
                     if steady_tick {
@@ -682,6 +693,9 @@ impl Scanner {
         }
 
         reporter.inc(analysis_prog_id, 1);
+
+        // Set thread back to idle after completing work
+        reporter.update_work(thread_prog_id, WorkUpdate::Idle);
 
         info!("Done analyzing: {path:?}");
     }

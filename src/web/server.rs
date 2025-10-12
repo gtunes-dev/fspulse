@@ -42,6 +42,9 @@ impl WebServer {
     }
 
     fn create_router(&self, db_path: Option<PathBuf>) -> Result<Router, FsPulseError> {
+        // Create shared application state
+        let app_state = handlers::scans::AppState::new(db_path.clone());
+
         // Store database path for handlers to create connections as needed
         let app = Router::new()
             // Static routes
@@ -54,12 +57,19 @@ impl WebServer {
             .route("/api/activity", get(handlers::activity::recent_activity))
             .route("/api/metadata/{domain}", get(handlers::metadata::get_metadata))
             .route("/api/query/{domain}", post(handlers::query::execute_query))
+            .route("/api/scans/status", get(handlers::scans::get_scans_status))
+            .route("/api/scans/start", post(handlers::scans::initiate_scan))
 
-            // Store database path in extension for handlers
+            // WebSocket routes
+            .route("/ws/scans/{scan_id}", get(handlers::scans::scan_progress_ws))
+
+            // Store database path in extension for legacy handlers
             .layer(
                 ServiceBuilder::new()
                     .layer(axum::Extension(db_path))
-            );
+            )
+            // Add state for new handlers
+            .with_state(app_state);
 
         Ok(app)
     }

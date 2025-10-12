@@ -120,6 +120,26 @@
             border-top: 1px solid rgba(0,0,0,0.08);
         }
 
+        .nav-section-header {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #86868b;
+            padding: 12px 16px 8px 16px;
+            margin-top: 8px;
+            white-space: nowrap;
+        }
+
+        .nav-section-header .nav-label {
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .sidebar:hover .nav-section-header .nav-label {
+            opacity: 1;
+        }
+
         .main-content {
             flex: 1;
             padding: 32px;
@@ -806,6 +826,187 @@
             font-style: italic;
         }
 
+        /* Active Scans Section */
+        .active-scans-container {
+            margin-bottom: 1.5rem;
+        }
+
+        .scan-card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06);
+            transition: all 0.15s ease;
+        }
+
+        .scan-card:hover {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.08);
+        }
+
+        .scan-title {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #1d1d1f;
+            font-family: 'SF Mono', Monaco, monospace;
+            margin-bottom: 16px;
+        }
+
+        .scan-progress-section {
+            margin-bottom: 12px;
+        }
+
+        .scan-progress-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+            color: #86868b;
+        }
+
+        .scan-progress-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(0,0,0,0.06);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .scan-progress-bar {
+            height: 100%;
+            background: #007aff;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .scan-stats {
+            font-size: 0.9375rem;
+            color: #1d1d1f;
+            margin-top: 8px;
+        }
+
+        .scan-details-toggle {
+            margin-top: 12px;
+            padding: 6px 12px;
+            border: none;
+            background: none;
+            color: #007aff;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .scan-details-toggle:hover {
+            background: rgba(0,122,255,0.08);
+        }
+
+        .scan-details-toggle .chevron {
+            transition: transform 0.2s ease;
+            font-size: 0.75rem;
+        }
+
+        .scan-details-toggle.expanded .chevron {
+            transform: rotate(180deg);
+        }
+
+        .scan-thread-details {
+            margin-top: 12px;
+            padding: 12px;
+            background: #fafafa;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .scan-thread-details.visible {
+            display: block;
+        }
+
+        .scan-thread-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            font-size: 0.875rem;
+        }
+
+        .scan-thread-item:last-child {
+            border-bottom: none;
+        }
+
+        .scan-thread-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-right: 12px;
+            width: 80px;
+            flex-shrink: 0;
+            text-align: center;
+        }
+
+        .scan-thread-status.scanning,
+        .scan-thread-status.hashing,
+        .scan-thread-status.validating {
+            background: rgba(52,199,89,0.15);
+            color: #34c759;
+        }
+
+        .scan-thread-status.idle {
+            background: rgba(134,134,139,0.15);
+            color: #86868b;
+        }
+
+        .scan-thread-file {
+            flex: 1;
+            color: #1d1d1f;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8125rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .no-scans-state {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06);
+        }
+
+        .no-scans-state h3 {
+            margin-bottom: 16px;
+        }
+
+        .start-scan-btn {
+            padding: 10px 20px;
+            border: none;
+            background: #007aff;
+            color: #ffffff;
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s ease;
+        }
+
+        .start-scan-btn:hover {
+            background: #0051d5;
+        }
+
+        .start-scan-btn:active {
+            transform: scale(0.98);
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             .hamburger {
@@ -864,7 +1065,10 @@
 
             <div class="nav-divider"></div>
 
-            <!-- Data Management Section -->
+            <!-- Data Explorer Section -->
+            <div class="nav-section-header">
+                <span class="nav-label">Data Explorer</span>
+            </div>
             <button class="nav-item" onclick="showSection('roots')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
@@ -905,6 +1109,17 @@
         <main class="main-content">
             <div id="overview-section">
                 <h2 style="margin-bottom: 1.5rem;">Overview</h2>
+
+                <!-- Active Scan Section -->
+                <div class="active-scans-container">
+                    <div id="active-scans-content">
+                        <!-- Will be populated by JavaScript -->
+                        <div class="no-scans-state">
+                            <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: #333;">No Active Scan</h3>
+                            <button class="start-scan-btn" onclick="showStartScanModal()">+ Start New Scan</button>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="overview-modules">
                     <div class="card">
@@ -954,7 +1169,7 @@
             <!-- Data Management Sections -->
             <div id="roots-section" style="display: none;">
                 <div class="entity-view-header">
-                    <h1 class="entity-view-title">Roots</h1>
+                    <h1 class="entity-view-title">Data Explorer - Roots</h1>
                 </div>
 
                 <div class="section-with-sidebar">
@@ -1004,7 +1219,7 @@
 
             <div id="scans-section" style="display: none;">
                 <div class="entity-view-header">
-                    <h1 class="entity-view-title">Scans</h1>
+                    <h1 class="entity-view-title">Data Explorer - Scans</h1>
                 </div>
 
                 <div class="section-with-sidebar">
@@ -1054,7 +1269,7 @@
 
             <div id="items-section" style="display: none;">
                 <div class="entity-view-header">
-                    <h1 class="entity-view-title">Items</h1>
+                    <h1 class="entity-view-title">Data Explorer - Items</h1>
                 </div>
 
                 <div class="section-with-sidebar">
@@ -1104,7 +1319,7 @@
 
             <div id="changes-section" style="display: none;">
                 <div class="entity-view-header">
-                    <h1 class="entity-view-title">Changes</h1>
+                    <h1 class="entity-view-title">Data Explorer - Changes</h1>
                 </div>
 
                 <div class="section-with-sidebar">
@@ -1233,6 +1448,61 @@
         </div>
     </div>
 
+    <!-- Start New Scan Modal -->
+    <div class="filter-modal-overlay" id="start-scan-modal-overlay" onclick="closeStartScanModal()">
+        <div class="filter-modal" onclick="event.stopPropagation()">
+            <div class="filter-modal-header">
+                <h2 class="filter-modal-title">Choose Root to Scan</h2>
+            </div>
+            <div class="filter-modal-body">
+                <select id="scan-root-select" class="filter-input" style="font-family: inherit; margin-bottom: 20px;" onchange="handleRootSelection()">
+                    <option value="">Loading roots...</option>
+                </select>
+
+                <!-- Scan Options (always shown) -->
+                <div id="scan-options">
+                    <div style="margin-bottom: 16px;">
+                        <label style="font-size: 0.875rem; font-weight: 600; color: #1d1d1f; display: block; margin-bottom: 8px;">Hash:</label>
+                        <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
+                            <input type="radio" name="hash-mode" value="None" style="margin-right: 6px;">
+                            <span style="font-size: 0.875rem;">None</span>
+                        </label>
+                        <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
+                            <input type="radio" name="hash-mode" value="New" style="margin-right: 6px;">
+                            <span style="font-size: 0.875rem;">New or Changed</span>
+                        </label>
+                        <label style="display: inline-flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="hash-mode" value="All" checked style="margin-right: 6px;">
+                            <span style="font-size: 0.875rem;">All</span>
+                        </label>
+                    </div>
+
+                    <div>
+                        <label style="font-size: 0.875rem; font-weight: 600; color: #1d1d1f; display: block; margin-bottom: 8px;">Validate:</label>
+                        <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
+                            <input type="radio" name="validate-mode" value="None" style="margin-right: 6px;">
+                            <span style="font-size: 0.875rem;">None</span>
+                        </label>
+                        <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
+                            <input type="radio" name="validate-mode" value="New" checked style="margin-right: 6px;">
+                            <span style="font-size: 0.875rem;">New or Changed</span>
+                        </label>
+                        <label style="display: inline-flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="validate-mode" value="All" style="margin-right: 6px;">
+                            <span style="font-size: 0.875rem;">All</span>
+                        </label>
+                    </div>
+                </div>
+
+                <p class="filter-error" id="scan-error">Error message</p>
+            </div>
+            <div class="filter-modal-footer">
+                <button class="modal-btn" onclick="closeStartScanModal()">Cancel</button>
+                <button class="modal-btn primary" id="scan-action-btn" onclick="startScan()">Start Scan</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Load dashboard data
         async function loadDashboardData() {
@@ -1295,6 +1565,634 @@
                 document.querySelectorAll('.loading').forEach(el => {
                     el.innerHTML = '<div style="color: #f44336;">Failed to load data</div>';
                 });
+            }
+        }
+
+        // =============================================================================
+        // ScanManager - Manages active scans display and WebSocket updates
+        // =============================================================================
+
+        class ScanManager {
+            constructor() {
+                this.activeScans = new Map(); // scanId -> scan data
+                this.ws = null; // Current WebSocket connection
+                this.expandedScans = new Set(); // Track which scan details are expanded
+                this.currentScanId = null;
+                this.scanPhase = 1; // Track current phase (1=scanning, 2=sweeping, 3=analyzing)
+                this.threadStates = new Map(); // Track individual thread states
+                this.scanningCounts = { files: 0, directories: 0 }; // Track scanning progress
+                this.phaseBreadcrumbs = []; // Track completed phases
+                this.renderPending = false; // Track if a render is already scheduled
+            }
+
+            scheduleRender() {
+                // Use requestAnimationFrame to batch renders and sync with browser paint cycle
+                // This prevents render() from interfering with event handling while ensuring
+                // all state updates are displayed accurately
+                if (!this.renderPending) {
+                    this.renderPending = true;
+                    requestAnimationFrame(() => {
+                        this.renderPending = false;
+                        this.render();
+                    });
+                }
+            }
+
+            render() {
+                const container = document.getElementById('active-scans-content');
+
+                if (this.activeScans.size === 0) {
+                    container.innerHTML = `
+                        <div class="no-scans-state">
+                            <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: #333;">No Active Scan</h3>
+                            <button class="start-scan-btn" onclick="showStartScanModal()">+ Start New Scan</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Check if scan card already exists
+                for (const [scanId, scan] of this.activeScans.entries()) {
+                    let scanCard = document.getElementById(`scan-card-${scanId}`);
+
+                    if (!scanCard) {
+                        // Create the scan card structure once
+                        scanCard = this.createScanCard(scanId, scan);
+                        container.appendChild(scanCard);
+                    }
+
+                    // Update only the dynamic content
+                    this.updateScanCard(scanId, scan);
+                }
+            }
+
+            createScanCard(scanId, scan) {
+                // Create the scan card DOM structure once - this stays in the DOM
+                const card = document.createElement('div');
+                card.className = 'scan-card';
+                card.id = `scan-card-${scanId}`;
+
+                card.innerHTML = `
+                    <div class="scan-title">Scanning: ${scan.root_path}</div>
+                    <div id="breadcrumbs-${scanId}"></div>
+                    <div class="scan-progress-section">
+                        <div class="scan-progress-label">
+                            <span id="phase-label-${scanId}"></span>
+                            <span id="percentage-${scanId}"></span>
+                        </div>
+                        <div class="scan-progress-bar-container">
+                            <div id="progress-bar-${scanId}" class="scan-progress-bar" style="width: 0%"></div>
+                        </div>
+                        <div id="stats-${scanId}" class="scan-stats"></div>
+                    </div>
+                    <button id="details-btn-${scanId}" class="scan-details-toggle" data-scan-id="${scanId}" style="display: none;">
+                        <span>Details</span>
+                        <span class="chevron">▼</span>
+                    </button>
+                    <div id="thread-details-${scanId}" class="scan-thread-details"></div>
+                `;
+
+                // Attach click handler directly to the button
+                const button = card.querySelector(`#details-btn-${scanId}`);
+                button.addEventListener('click', () => {
+                    this.toggleDetails(scanId);
+                });
+
+                return card;
+            }
+
+            updateScanCard(scanId, scan) {
+                // Update only the dynamic content - button stays untouched
+                const phaseNames = ['Scanning Files', 'Tombstoning Deletes', 'Analyzing'];
+                const phaseName = phaseNames[scan.phase - 1] || 'Processing';
+
+                // Update breadcrumbs
+                const breadcrumbsContainer = document.getElementById(`breadcrumbs-${scanId}`);
+                if (this.phaseBreadcrumbs.length > 0) {
+                    breadcrumbsContainer.innerHTML = `
+                        <div style="margin-bottom: 12px;">
+                            ${this.phaseBreadcrumbs.map(crumb => `
+                                <div style="font-size: 0.875rem; color: #34c759; margin-bottom: 4px;">
+                                    ✓ ${crumb}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    breadcrumbsContainer.innerHTML = '';
+                }
+
+                // Update phase label and percentage
+                document.getElementById(`phase-label-${scanId}`).textContent = `Phase ${scan.phase} of 3: ${phaseName}`;
+                document.getElementById(`percentage-${scanId}`).textContent = `${scan.progress.percentage.toFixed(1)}%`;
+
+                // Update progress bar
+                document.getElementById(`progress-bar-${scanId}`).style.width = `${scan.progress.percentage}%`;
+
+                // Update stats
+                const statsContainer = document.getElementById(`stats-${scanId}`);
+                if (scan.phase === 3) {
+                    statsContainer.textContent = `${scan.progress.current.toLocaleString()} / ${scan.progress.total.toLocaleString()} files`;
+                    statsContainer.style.color = '';
+                } else if (scan.phase === 1) {
+                    statsContainer.textContent = `Scanned ${this.scanningCounts.files.toLocaleString()} files in ${this.scanningCounts.directories.toLocaleString()} directories...`;
+                    statsContainer.style.color = '#007aff';
+                }
+
+                // Show/hide and update button for phase 3
+                const button = document.getElementById(`details-btn-${scanId}`);
+                const threadDetailsContainer = document.getElementById(`thread-details-${scanId}`);
+
+                if (scan.phase === 3) {
+                    button.style.display = 'flex';
+
+                    // Update button expanded state
+                    const isExpanded = this.expandedScans.has(scanId);
+                    button.className = `scan-details-toggle ${isExpanded ? 'expanded' : ''}`;
+                    threadDetailsContainer.className = `scan-thread-details ${isExpanded ? 'visible' : ''}`;
+
+                    // Update thread details content
+                    if (scan.threads && scan.threads.length > 0) {
+                        const threadsHtml = scan.threads.map(thread => {
+                            let operation = 'idle';
+                            let filePath = thread.current_file || '-';
+
+                            if (thread.current_file) {
+                                if (thread.current_file.startsWith('Hashing:')) {
+                                    operation = 'hashing';
+                                    filePath = thread.current_file.substring(9).trim();
+                                } else if (thread.current_file.startsWith('Validating:')) {
+                                    operation = 'validating';
+                                    filePath = thread.current_file.substring(12).trim();
+                                } else if (thread.status === 'active') {
+                                    operation = 'scanning';
+                                }
+                            }
+
+                            const statusLabels = {
+                                'hashing': 'HASHING',
+                                'validating': 'VALIDATING',
+                                'scanning': 'SCANNING',
+                                'idle': 'IDLE'
+                            };
+
+                            return `
+                                <div class="scan-thread-item">
+                                    <span class="scan-thread-status ${operation}">${statusLabels[operation]}</span>
+                                    <span class="scan-thread-file">${filePath}</span>
+                                </div>
+                            `;
+                        }).join('');
+                        threadDetailsContainer.innerHTML = threadsHtml;
+                    } else {
+                        threadDetailsContainer.innerHTML = '<div style="padding: 12px; color: #86868b; font-style: italic;">Waiting for thread activity...</div>';
+                    }
+                } else {
+                    button.style.display = 'none';
+                    threadDetailsContainer.innerHTML = '';
+                }
+            }
+
+            renderScan(scan) {
+                const isExpanded = this.expandedScans.has(scan.scan_id);
+                const phaseNames = ['Scanning Files', 'Tombstoning Deletes', 'Analyzing'];
+                const phaseName = phaseNames[scan.phase - 1] || 'Processing';
+
+                // Render breadcrumbs for completed phases
+                const breadcrumbsHtml = this.phaseBreadcrumbs.length > 0 ? `
+                    <div style="margin-bottom: 12px;">
+                        ${this.phaseBreadcrumbs.map(crumb => `
+                            <div style="font-size: 0.875rem; color: #34c759; margin-bottom: 4px;">
+                                ✓ ${crumb}
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+
+                // Show scanning activity for phase 1
+                const scanningActivityHtml = scan.phase === 1 ? `
+                    <div class="scan-stats" style="margin-top: 12px; color: #007aff;">
+                        Scanned ${this.scanningCounts.files.toLocaleString()} files in ${this.scanningCounts.directories.toLocaleString()} directories...
+                    </div>
+                ` : '';
+
+                const threadsHtml = scan.threads ? scan.threads.map(thread => {
+                    // Parse thread message to determine operation type
+                    let operation = 'idle';
+                    let filePath = thread.current_file || '-';
+
+                    if (thread.current_file) {
+                        if (thread.current_file.startsWith('Hashing:')) {
+                            operation = 'hashing';
+                            filePath = thread.current_file.substring(9).trim(); // Remove "Hashing: " prefix
+                        } else if (thread.current_file.startsWith('Validating:')) {
+                            operation = 'validating';
+                            filePath = thread.current_file.substring(12).trim(); // Remove "Validating: " prefix
+                        } else if (thread.status === 'active') {
+                            operation = 'scanning';
+                        }
+                    }
+
+                    const statusLabels = {
+                        'hashing': 'HASHING',
+                        'validating': 'VALIDATING',
+                        'scanning': 'SCANNING',
+                        'idle': 'IDLE'
+                    };
+
+                    return `
+                        <div class="scan-thread-item">
+                            <span class="scan-thread-status ${operation}">${statusLabels[operation]}</span>
+                            <span class="scan-thread-file">${filePath}</span>
+                        </div>
+                    `;
+                }).join('') : '';
+
+                return `
+                    <div class="scan-card">
+                        <div class="scan-title">Scanning: ${scan.root_path}</div>
+                        ${breadcrumbsHtml}
+                        <div class="scan-progress-section">
+                            <div class="scan-progress-label">
+                                <span>Phase ${scan.phase} of 3: ${phaseName}</span>
+                                <span>${scan.progress.percentage.toFixed(1)}%</span>
+                            </div>
+                            <div class="scan-progress-bar-container">
+                                <div class="scan-progress-bar" style="width: ${scan.progress.percentage}%"></div>
+                            </div>
+                            ${scan.phase === 3 ? `
+                                <div class="scan-stats">
+                                    ${scan.progress.current.toLocaleString()} / ${scan.progress.total.toLocaleString()} files
+                                </div>
+                            ` : scanningActivityHtml}
+                        </div>
+                        ${scan.phase === 3 ? `
+                            <button class="scan-details-toggle ${isExpanded ? 'expanded' : ''}"
+                                    data-scan-id="${scan.scan_id}">
+                                <span>Details</span>
+                                <span class="chevron">▼</span>
+                            </button>
+                            <div class="scan-thread-details ${isExpanded ? 'visible' : ''}">
+                                ${threadsHtml || '<div style="padding: 12px; color: #86868b; font-style: italic;">Waiting for thread activity...</div>'}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            toggleDetails(scanId) {
+                // Toggle the expanded state
+                if (this.expandedScans.has(scanId)) {
+                    this.expandedScans.delete(scanId);
+                } else {
+                    this.expandedScans.add(scanId);
+                }
+
+                // Directly update the button and details container - no re-render needed
+                const isExpanded = this.expandedScans.has(scanId);
+                const button = document.getElementById(`details-btn-${scanId}`);
+                const threadDetailsContainer = document.getElementById(`thread-details-${scanId}`);
+
+                if (button) {
+                    button.className = `scan-details-toggle ${isExpanded ? 'expanded' : ''}`;
+                }
+                if (threadDetailsContainer) {
+                    threadDetailsContainer.className = `scan-thread-details ${isExpanded ? 'visible' : ''}`;
+                }
+            }
+
+            connectScanWebSocket(scanId, rootPath) {
+                // Close existing connection if any
+                if (this.ws) {
+                    this.ws.close();
+                }
+
+                // Initialize scan state
+                this.currentScanId = scanId;
+                this.scanPhase = 1;
+                this.threadStates.clear();
+                this.scanningCounts = { files: 0, directories: 0 };
+                this.phaseBreadcrumbs = [];
+
+                this.activeScans.set(scanId, {
+                    scan_id: scanId,
+                    root_path: rootPath,
+                    phase: 1,
+                    progress: {
+                        current: 0,
+                        total: 1,
+                        percentage: 0
+                    },
+                    threads: []
+                });
+                this.expandedScans.add(scanId); // Expand by default
+                this.scheduleRender();
+
+                // Connect to WebSocket
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws/scans/${scanId}`;
+
+                this.ws = new WebSocket(wsUrl);
+
+                this.ws.onopen = () => {
+                    // WebSocket connected
+                };
+
+                this.ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    this.handleProgressEvent(data);
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
+
+                this.ws.onclose = () => {
+                    // Remove scan from active list after a delay
+                    setTimeout(() => {
+                        this.activeScans.delete(scanId);
+                        this.scheduleRender();
+                    }, 2000);
+                };
+            }
+
+            handleProgressEvent(event) {
+                const scanData = this.activeScans.get(this.currentScanId);
+                if (!scanData) return;
+
+                switch (event.type) {
+                    case 'scan_started':
+                        break;
+
+                    case 'phase_started':
+                        if (event.phase === 'scanning') {
+                            this.scanPhase = 1;
+                        } else if (event.phase === 'sweeping') {
+                            this.scanPhase = 2;
+                        } else if (event.phase === 'analyzing') {
+                            this.scanPhase = 3;
+                        }
+                        scanData.phase = this.scanPhase;
+                        this.scheduleRender();
+                        break;
+
+                    case 'phase_completed':
+                        // Add breadcrumb for completed phase
+                        if (event.phase === 'scanning') {
+                            this.phaseBreadcrumbs.push(
+                                `Scanned ${this.scanningCounts.files.toLocaleString()} files in ${this.scanningCounts.directories.toLocaleString()} directories`
+                            );
+                        } else if (event.phase === 'sweeping') {
+                            this.phaseBreadcrumbs.push('Tombstoned deleted items');
+                        } else if (event.phase === 'analyzing') {
+                            this.phaseBreadcrumbs.push(
+                                `Analyzed ${scanData.progress.current.toLocaleString()} files`
+                            );
+                        }
+                        this.scheduleRender();
+                        break;
+
+                    case 'directory_scanning':
+                        this.scanningCounts.directories++;
+                        this.scheduleRender();
+                        break;
+
+                    case 'file_scanning':
+                        this.scanningCounts.files++;
+                        this.scheduleRender();
+                        break;
+
+                    case 'analysis_progress':
+                        scanData.progress = {
+                            current: event.completed,
+                            total: event.total,
+                            percentage: event.percentage
+                        };
+                        this.scheduleRender();
+                        break;
+
+                    case 'thread_progress':
+                        // Update thread state
+                        const threadIndex = event.thread_index;
+                        this.threadStates.set(threadIndex, {
+                            operation: event.operation,
+                            file: event.file
+                        });
+
+                        // Convert thread states to array format
+                        scanData.threads = Array.from({ length: event.thread_count }, (_, i) => {
+                            const state = this.threadStates.get(i);
+                            if (!state || state.operation === 'idle') {
+                                return { id: i, status: 'idle', current_file: null };
+                            }
+
+                            let prefix = '';
+                            if (state.operation === 'hashing') {
+                                prefix = 'Hashing:';
+                            } else if (state.operation === 'validating') {
+                                prefix = 'Validating:';
+                            }
+
+                            return {
+                                id: i,
+                                status: 'active',
+                                current_file: prefix ? `${prefix} ${state.file}` : state.file
+                            };
+                        });
+
+                        // requestAnimationFrame batching handles throttling automatically
+                        this.scheduleRender();
+                        break;
+
+                    case 'message':
+                        if (event.text.includes('Scan completed')) {
+                            // Scan is complete
+                        }
+                        break;
+
+                    case 'scan_error':
+                        console.error('Scan error:', event.error);
+                        alert(`Scan error: ${event.error}`);
+                        break;
+                }
+            }
+
+            // Demo method - adds a mock scan for testing UI
+            addMockScan() {
+                const mockScan = {
+                    scan_id: '123',
+                    root_path: '/Users/demo/Documents',
+                    phase: 2,
+                    phase_name: 'Analysis',
+                    total_phases: 3,
+                    progress: {
+                        current: 2450,
+                        total: 5400,
+                        percentage: 45.37
+                    },
+                    threads: [
+                        { id: 1, status: 'active', current_file: 'Hashing: /Users/demo/Documents/video.mp4' },
+                        { id: 2, status: 'active', current_file: 'Validating: /Users/demo/Documents/report.pdf' },
+                        { id: 3, status: 'active', current_file: 'Hashing: /Users/demo/Documents/photo.jpg' },
+                        { id: 4, status: 'idle', current_file: null }
+                    ]
+                };
+
+                this.activeScans.set('123', mockScan);
+                this.expandedScans.add('123'); // Expand by default
+                this.scheduleRender();
+            }
+        }
+
+        // Global scan manager instance
+        const scanManager = new ScanManager();
+
+        // Store scan status data globally
+        let scanStatusData = null;
+
+        // Start New Scan Modal Functions
+        async function showStartScanModal() {
+            const modal = document.getElementById('start-scan-modal-overlay');
+            const select = document.getElementById('scan-root-select');
+            const error = document.getElementById('scan-error');
+
+            error.classList.remove('visible');
+
+            // Load scan status (includes roots and incomplete scan info)
+            try {
+                const response = await fetch('/api/scans/status');
+                scanStatusData = await response.json();
+
+                if (scanStatusData.roots && scanStatusData.roots.length > 0) {
+                    // Populate dropdown with roots (no "Select a root..." option)
+                    select.innerHTML = scanStatusData.roots.map(root => {
+                        const label = root.has_incomplete_scan
+                            ? `${root.root_path} (Resume)`
+                            : root.root_path;
+                        return `<option value="${root.root_id}">${label}</option>`;
+                    }).join('');
+
+                    // Trigger selection handler for first root
+                    handleRootSelection();
+                } else {
+                    select.innerHTML = '<option value="">No roots available</option>';
+                }
+            } catch (err) {
+                console.error('Failed to load scan status:', err);
+                select.innerHTML = '<option value="">Error loading roots</option>';
+            }
+
+            modal.classList.add('active');
+        }
+
+        function handleRootSelection() {
+            const select = document.getElementById('scan-root-select');
+            const rootId = parseInt(select.value);
+
+            if (!rootId || !scanStatusData) return;
+
+            const root = scanStatusData.roots.find(r => r.root_id === rootId);
+            if (!root) return;
+
+            const actionBtn = document.getElementById('scan-action-btn');
+
+            // Get all radio inputs
+            const hashRadios = document.querySelectorAll('input[name="hash-mode"]');
+            const validateRadios = document.querySelectorAll('input[name="validate-mode"]');
+
+            if (root.has_incomplete_scan) {
+                // Resume mode: Set values from existing scan and make read-only
+                actionBtn.textContent = 'Resume Scan';
+
+                // Set radio values to match existing scan
+                hashRadios.forEach(radio => {
+                    radio.checked = radio.value === root.scan_options.hash_mode;
+                    radio.disabled = true;
+                    radio.parentElement.style.opacity = '0.6';
+                    radio.parentElement.style.cursor = 'not-allowed';
+                });
+
+                validateRadios.forEach(radio => {
+                    radio.checked = radio.value === root.scan_options.validate_mode;
+                    radio.disabled = true;
+                    radio.parentElement.style.opacity = '0.6';
+                    radio.parentElement.style.cursor = 'not-allowed';
+                });
+            } else {
+                // New scan mode: Enable editing with defaults
+                actionBtn.textContent = 'Start Scan';
+
+                // Reset to defaults and enable
+                hashRadios.forEach(radio => {
+                    radio.checked = radio.value === 'All'; // Default to All
+                    radio.disabled = false;
+                    radio.parentElement.style.opacity = '1';
+                    radio.parentElement.style.cursor = 'pointer';
+                });
+
+                validateRadios.forEach(radio => {
+                    radio.checked = radio.value === 'New'; // Default to New
+                    radio.disabled = false;
+                    radio.parentElement.style.opacity = '1';
+                    radio.parentElement.style.cursor = 'pointer';
+                });
+            }
+        }
+
+        function closeStartScanModal() {
+            const modal = document.getElementById('start-scan-modal-overlay');
+            modal.classList.remove('active');
+        }
+
+        async function startScan() {
+            const select = document.getElementById('scan-root-select');
+            const rootId = parseInt(select.value);
+            const root = scanStatusData.roots.find(r => r.root_id === rootId);
+            const error = document.getElementById('scan-error');
+
+            error.classList.remove('visible');
+
+            // Determine scan options
+            let hashMode, validateMode;
+            if (root.has_incomplete_scan) {
+                // Use existing scan options
+                hashMode = root.scan_options.hash_mode;
+                validateMode = root.scan_options.validate_mode;
+            } else {
+                // Use user-selected options
+                hashMode = document.querySelector('input[name="hash-mode"]:checked').value;
+                validateMode = document.querySelector('input[name="validate-mode"]:checked').value;
+            }
+
+            try {
+                // Call the API to start/resume the scan
+                const response = await fetch('/api/scans/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        root_id: rootId,
+                        hash_mode: hashMode,
+                        validate_mode: validateMode
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to start scan: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const scanId = data.scan_id;
+
+                // Connect to WebSocket for real-time progress
+                scanManager.connectScanWebSocket(scanId, root.root_path);
+
+                closeStartScanModal();
+            } catch (err) {
+                console.error('Failed to start scan:', err);
+                error.textContent = `Failed to start scan: ${err.message}`;
+                error.classList.add('visible');
             }
         }
 

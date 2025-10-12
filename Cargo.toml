@@ -58,7 +58,7 @@ tokio = { version = "1.47", features = ["full"] }
 toml = "0.8"
 tower = "0.5"
 tui-textarea = "0.7"
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 
 [dev-dependencies]
 tempfile = "3.8"

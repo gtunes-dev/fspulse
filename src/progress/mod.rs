@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod web;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,6 +29,21 @@ pub enum ProgressStyle {
     Bar { total: u64 },
 }
 
+/// Semantic work updates for progress indicators
+#[derive(Debug, Clone)]
+pub enum WorkUpdate {
+    /// Scanning a directory
+    Directory { path: String },
+    /// Scanning a file/item
+    File { path: String },
+    /// Hashing a file
+    Hashing { file: String },
+    /// Validating a file
+    Validating { file: String },
+    /// Thread is idle/waiting
+    Idle,
+}
+
 /// Configuration for creating a progress indicator
 #[derive(Debug, Clone)]
 pub struct ProgressConfig {
@@ -54,8 +70,8 @@ pub trait ProgressReporter: Send + Sync {
     /// Create a new spinner or progress bar
     fn create(&self, config: ProgressConfig) -> ProgressId;
 
-    /// Update spinner/bar message
-    fn set_message(&self, id: ProgressId, message: String);
+    /// Update what work is being performed (semantic work updates)
+    fn update_work(&self, id: ProgressId, work: WorkUpdate);
 
     /// Update progress bar position
     fn set_position(&self, id: ProgressId, position: u64);

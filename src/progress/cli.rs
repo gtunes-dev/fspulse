@@ -83,7 +83,16 @@ impl ProgressReporter for CliProgressReporter {
         id
     }
 
-    fn set_message(&self, id: ProgressId, message: String) {
+    fn update_work(&self, id: ProgressId, work: WorkUpdate) {
+        // Format semantic work update to display string for indicatif
+        let message = match work {
+            WorkUpdate::Directory { path } => format!("Directory: '{}'", path),
+            WorkUpdate::File { path } => format!("Item: '{}'", path),
+            WorkUpdate::Hashing { file } => format!("Hashing: '{}'", file),
+            WorkUpdate::Validating { file } => format!("Validating: '{}'", file),
+            WorkUpdate::Idle => "Waiting...".to_string(),
+        };
+
         if let Some(bar) = self.bars.lock().unwrap().get(&id) {
             bar.set_message(message);
         }

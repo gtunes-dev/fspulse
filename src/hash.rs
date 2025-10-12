@@ -97,7 +97,7 @@ impl Hash {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::progress::{ProgressConfig, ProgressReporter, ProgressStyle};
+    use crate::progress::{ProgressConfig, ProgressReporter};
     use std::io::Write;
     use std::sync::{Arc, Mutex};
     use std::collections::HashMap;
@@ -128,6 +128,8 @@ mod tests {
         }
 
         fn set_message(&self, _id: ProgressId, _message: String) {}
+
+        fn update_work(&self, _id: ProgressId, _work: crate::progress::WorkUpdate) {}
 
         fn set_position(&self, _id: ProgressId, _position: u64) {}
 
