@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{path::Path, sync::Arc};
 
 use log::warn;
@@ -27,10 +28,19 @@ impl Validator for LopdfValidator {
         path: &Path,
         _prog_id: ProgressId,
         _reporter: &Arc<dyn ProgressReporter>,
+        cancel_token: &Arc<AtomicBool>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let doc = try_invalid!(Document::load(path));
+
         // Traverse and validate all objects in the document.
+        let mut object_count = 0;
+
         for object in doc.objects.values() {
+            object_count += 1;
+            if object_count % 256 == 0 && cancel_token.load(Ordering::Relaxed) {
+                return Err(FsPulseError::ScanCancelled);
+            }
+
             if let Err(e) = Self::validate_object(object) {
                 return Ok((ValidationState::Invalid, Some(e.to_string())));
             }
@@ -102,7 +112,6 @@ mod tests {
         fn create(&self, _config: ProgressConfig) -> ProgressId {
             ProgressId::new()
         }
-        fn set_message(&self, _id: ProgressId, _message: String) {}
         fn update_work(&self, _id: ProgressId, _work: WorkUpdate) {}
         fn set_position(&self, _id: ProgressId, _position: u64) {}
         fn set_length(&self, _id: ProgressId, _length: u64) {}
@@ -136,8 +145,9 @@ mod tests {
         let reporter: Arc<dyn ProgressReporter> = Arc::new(MockReporter);
         let prog_id = ProgressId::new();
         let nonexistent_path = Path::new("/this/path/does/not/exist.pdf");
+        let cancel_token = Arc::new(AtomicBool::new(false));
 
-        let result = validator.validate(nonexistent_path, prog_id, &reporter);
+        let result = validator.validate(nonexistent_path, prog_id, &reporter, &cancel_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
@@ -170,7 +180,8 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
         temp_file.write_all(b"not a pdf file").expect("Failed to write temp file");
 
-        let result = validator.validate(temp_file.path(), prog_id, &reporter);
+        let cancel_token = Arc::new(AtomicBool::new(false));
+        let result = validator.validate(temp_file.path(), prog_id, &reporter, &cancel_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
@@ -189,7 +200,8 @@ mod tests {
 
         let temp_file = NamedTempFile::new().expect("Failed to create temp file");
 
-        let result = validator.validate(temp_file.path(), prog_id, &reporter);
+        let cancel_token = Arc::new(AtomicBool::new(false));
+        let result = validator.validate(temp_file.path(), prog_id, &reporter, &cancel_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();

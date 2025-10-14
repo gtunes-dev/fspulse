@@ -39,7 +39,7 @@ use threadpool::ThreadPool;
 use std::collections::VecDeque;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{cmp, fs};
@@ -90,12 +90,7 @@ impl Scanner {
     }
 
     fn initiate_scan_interactive(db: &mut Database, root: &Root) -> Result<Scan, FsPulseError> {
-        let flags = vec![
-            "No Hash",
-            "Hash All",
-            "No Validate",
-            "Validate All",
-        ];
+        let flags = vec!["No Hash", "Hash All", "No Validate", "Validate All"];
 
         let analysis_spec = loop {
             let selection = MultiSelect::new()
@@ -130,8 +125,7 @@ impl Scanner {
             if no_validate && validate_all {
                 println!(
                     "{}",
-                    style("Conflicting selections: 'No Validate' and 'Validate All'")
-                        .yellow()
+                    style("Conflicting selections: 'No Validate' and 'Validate All'").yellow()
                 );
                 continue;
             }
@@ -212,7 +206,8 @@ impl Scanner {
                 match Scanner::stop_or_resume_scan(db, &root, existing_scan, false)? {
                     ScanDecision::NewScan => Scanner::initiate_scan(db, &root, analysis_spec)?,
                     ScanDecision::ContinueExisting => {
-                        reporter.println("Resuming scan")
+                        reporter
+                            .println("Resuming scan")
                             .map_err(|e| FsPulseError::Error(e.to_string()))?;
                         *existing_scan
                     }
@@ -236,39 +231,47 @@ impl Scanner {
         reporter: Arc<dyn ProgressReporter>,
         cancel_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
-        // NOTE: To check for cancellation at appropriate points in the scanner code, use:
+        // NOTE: We check for cancellation at appropriate points in the scanner code with:
         //
         //   if cancel_token.load(Ordering::Relaxed) {
         //       return Err(FsPulseError::ScanCancelled);
         //   }
         //
-        // Place these checks at safe points where the scanner can cleanly exit, such as:
-        // - Between directories in the scanning phase
-        // - Before starting analysis worker threads
-        // - In long-running operations (file hashing, validation)
-        // - In worker thread loops
         //
         // After detecting cancellation and returning the error, the calling code will
         // invoke Scan::set_state_stopped() to atomically rollback all changes.
 
-
-        reporter.println("-- FsPulse Scan --")
+        reporter
+            .println("-- FsPulse Scan --")
             .map_err(|e| FsPulseError::Error(e.to_string()))?;
 
         // Loop through all states, even if resuming, to allow progress updates
         let mut loop_state = ScanState::Scanning;
 
         loop {
-            // When the state is completed, the scan is done
+            // When the state is completed, the scan is done. We check this before checking
+            // for cancellation because a complete scan should not be treated as a successfully
+            // cancelled scan
             if loop_state == ScanState::Completed {
                 break;
+            }
+
+            // Check for cancellation at the top of the loop
+            if cancel_token.load(Ordering::Relaxed) {
+                return Err(FsPulseError::ScanCancelled);
             }
 
             match loop_state {
                 ScanState::Scanning => {
                     let section_id = reporter.section_start(1, "Quick scanning...");
                     if scan.state() == ScanState::Scanning {
-                        Scanner::do_state_scanning(db, root, scan, reporter.clone())?;
+                        Scanner::do_state_scanning(
+                            db,
+                            root,
+                            scan,
+                            reporter.clone(),
+                            &cancel_token,
+                        )?;
                     }
                     reporter.section_finish(section_id, "✔ Quick scanning");
                     loop_state = ScanState::Sweeping;
@@ -282,18 +285,24 @@ impl Scanner {
                     loop_state = ScanState::Analyzing;
                 }
                 ScanState::Analyzing => {
+                    let section_id = reporter.section_start(3, "Analyzing...");
+
+                    let mut analysis_result = Ok(());
                     // Should never get here in a situation in which scan.state() isn't Analyzing
                     // but we protect against it just in case
-                    let section_id = reporter.section_start(3, "Analyzing...");
-                    let mut analysis_result = Ok(());
+
                     if scan.state() == ScanState::Analyzing {
                         // This is a boundary - we'll take ownership of the database and progress
                         // bars here and then restore them when we're done
                         let owned_db = std::mem::take(db);
                         let db_arc = Arc::new(Mutex::new(owned_db));
 
-                        analysis_result =
-                            Scanner::do_state_analyzing(db_arc.clone(), scan, reporter.clone());
+                        analysis_result = Scanner::do_state_analyzing(
+                            db_arc.clone(),
+                            scan,
+                            reporter.clone(),
+                            &cancel_token,
+                        );
 
                         // recover the database from the Arc
                         let recovered_db = Arc::try_unwrap(db_arc)
@@ -387,6 +396,7 @@ impl Scanner {
         root: &Root,
         scan: &mut Scan,
         reporter: Arc<dyn ProgressReporter>,
+        cancel_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let root_path_buf = PathBuf::from(root.root_path());
         let metadata = fs::symlink_metadata(&root_path_buf)?;
@@ -412,10 +422,21 @@ impl Scanner {
             metadata,
         });
 
+        let mut items_processed: i32 = 100;
+
         while let Some(q_entry) = q.pop_front() {
-            reporter.update_work(dir_prog, WorkUpdate::Directory {
-                path: q_entry.path.to_string_lossy().to_string(),
-            });
+            // Check for cancellation every 100 items
+            items_processed += 1;
+            if items_processed % 100 == 0 && cancel_token.load(Ordering::Relaxed) {
+                return Err(FsPulseError::ScanCancelled);
+            }
+
+            reporter.update_work(
+                dir_prog,
+                WorkUpdate::Directory {
+                    path: q_entry.path.to_string_lossy().to_string(),
+                },
+            );
 
             // Handle the directory itself before iterating its contents. The root dir
             // was previously pushed into the queue - if this is that entry, we skip it
@@ -435,9 +456,12 @@ impl Scanner {
                 let item = item?;
 
                 let metadata = fs::symlink_metadata(item.path())?; // Use symlink_metadata to check for symlinks
-                reporter.update_work(item_prog, WorkUpdate::File {
-                    path: item.file_name().to_string_lossy().to_string(),
-                });
+                reporter.update_work(
+                    item_prog,
+                    WorkUpdate::File {
+                        path: item.file_name().to_string_lossy().to_string(),
+                    },
+                );
 
                 if metadata.is_dir() {
                     q.push_back(QueueEntry {
@@ -499,6 +523,7 @@ impl Scanner {
         db: Arc<Mutex<Database>>,
         scan: &mut Scan,
         reporter: Arc<dyn ProgressReporter>,
+        cancel_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let is_hash = scan.analysis_spec().is_hash();
         let is_val = scan.analysis_spec().is_val();
@@ -518,7 +543,9 @@ impl Scanner {
         //    Item::count_analyzed_items(&db.lock().unwrap(), scan.scan_id())?.max(0) as u64; // may be resuming the scan
 
         let analysis_prog = reporter.create(ProgressConfig {
-            style: ProgressStyle::Bar { total: analyze_total },
+            style: ProgressStyle::Bar {
+                total: analyze_total,
+            },
             prefix: "   ".to_string(),
             message: "Files".to_string(),
             steady_tick: None,
@@ -551,6 +578,7 @@ impl Scanner {
             let db = Arc::clone(&db);
             let scan_copy = *scan;
             let reporter_clone = reporter.clone_reporter();
+            let cancel_token_clone = Arc::clone(cancel_token);
 
             // Format thread label like [01/20], [02/20], ..., [20/20]
             let thread_prog_prefix = format!(
@@ -581,6 +609,7 @@ impl Scanner {
                         analysis_prog,
                         thread_prog,
                         &reporter_clone,
+                        &cancel_token_clone,
                         hash_func,
                     );
                 }
@@ -591,6 +620,10 @@ impl Scanner {
         let mut last_item_id = 0;
 
         loop {
+            if cancel_token.load(Ordering::Relaxed) {
+                break;
+            }
+
             let analysis_items = Item::fetch_next_analysis_batch(
                 &db.lock().unwrap(),
                 scan.scan_id(),
@@ -622,10 +655,22 @@ impl Scanner {
 
         // Wait for all tasks to complete.
         pool.join();
+
+        // It is critical that we check for completion and return the cancellation error
+        // without marking the scan completed. Once the scan is marked completed, attempting to
+        // "stop" the scan will be a no-op and the scan will remain in a completed state.
+        // Because we may have detected the cancellation and aborted or never started
+        // some hashing or validation operations, we have to be careful to not allow it to
+        // appear complete
+        if cancel_token.load(Ordering::Relaxed) {
+            return Err(FsPulseError::ScanCancelled);
+        }
+
         reporter.finish_and_clear(analysis_prog);
         scan.set_state_completed(&mut db.lock().unwrap())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn process_item_async(
         db: &Arc<Mutex<Database>>,
         scan: Scan,
@@ -633,10 +678,21 @@ impl Scanner {
         analysis_prog_id: ProgressId,
         thread_prog_id: ProgressId,
         reporter: &Arc<dyn ProgressReporter>,
+        cancel_token: &Arc<AtomicBool>,
         hash_func: HashFunc,
     ) {
         // TODO: Improve the error handling for all analysis. Need to differentiate
         // between file system errors and actual content errors
+
+        // This function is the entry point for each worker thread to process an item.
+        // It performs hashing and/or validation as needed and updates the database.
+        // It does not return errors, but it does need to check for cancellation.
+        // If cancellation is detected, it should exit promptly without updating
+        // the database. The hashing and validation processes exit when detecting
+        // cancellation and may return a cancellation error, but we ignore that here.
+        // The calling code will always check for cancellation and will ensure that
+        // the scan operation is rolled back to the "stoped" stated which means that
+        // it doesn't matter what state is written to the database for this particular item
 
         let path = Path::new(analysis_item.item_path());
 
@@ -650,37 +706,54 @@ impl Scanner {
         let mut new_hash = None;
 
         if analysis_item.needs_hash() {
-            reporter.update_work(thread_prog_id, WorkUpdate::Hashing {
-                file: display_path.to_string(),
-            });
+            reporter.update_work(
+                thread_prog_id,
+                WorkUpdate::Hashing {
+                    file: display_path.to_string(),
+                },
+            );
             reporter.set_position(thread_prog_id, 0); // reset in case left from previous
             reporter.set_length(thread_prog_id, 0);
 
-            new_hash = match Hash::compute_hash(path, thread_prog_id, reporter, hash_func) {
-                Ok(hash_s) => Some(hash_s),
-                Err(error) => {
-                    error!("Error hashing '{}': {}", &display_path, error);
-                    None
-                }
-            };
+            if cancel_token.load(Ordering::Relaxed) {
+                info!("Cancellation detected before hashing: {path:?}");
+                return;
+            }
+
+            new_hash =
+                match Hash::compute_hash(path, thread_prog_id, reporter, hash_func, cancel_token) {
+                    Ok(hash_s) => Some(hash_s),
+                    Err(error) => {
+                        error!("Error hashing '{}': {}", &display_path, error);
+                        None
+                    }
+                };
         }
 
         let mut new_val = ValidationState::Unknown;
         let mut new_val_error = None;
 
         if analysis_item.needs_val() {
+            if cancel_token.load(Ordering::Relaxed) {
+                info!("Cancellation detected before validation: {path:?}");
+                return;
+            }
+
             let validator = from_path(path);
             match validator {
                 Some(v) => {
-                    reporter.update_work(thread_prog_id, WorkUpdate::Validating {
-                        file: display_path.to_string(),
-                    });
+                    reporter.update_work(
+                        thread_prog_id,
+                        WorkUpdate::Validating {
+                            file: display_path.to_string(),
+                        },
+                    );
                     let steady_tick = v.wants_steady_tick();
 
                     if steady_tick {
                         reporter.enable_steady_tick(thread_prog_id, Duration::from_millis(250));
                     }
-                    match v.validate(path, thread_prog_id, reporter) {
+                    match v.validate(path, thread_prog_id, reporter, cancel_token) {
                         Ok((res_validity_state, res_validation_error)) => {
                             new_val = res_validity_state;
                             new_val_error = res_validation_error;
@@ -1008,7 +1081,12 @@ impl Scanner {
         }
 
         if alert_invalid_item {
-            Alerts::add_invalid_item_alert(&tx, scan.scan_id(), analysis_item.item_id(), c_val_error_new.unwrap())?;
+            Alerts::add_invalid_item_alert(
+                &tx,
+                scan.scan_id(),
+                analysis_item.item_id(),
+                c_val_error_new.unwrap(),
+            )?;
         }
 
         // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state

@@ -1,3 +1,4 @@
+use std::sync::atomic::AtomicBool;
 use std::{ffi::OsStr, fmt, path::Path, sync::Arc};
 
 use crate::error::FsPulseError;
@@ -108,6 +109,7 @@ pub trait Validator {
         path: &Path,
         prog_id: ProgressId,
         reporter: &Arc<dyn ProgressReporter>,
+        cancel_token: &Arc<AtomicBool>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError>;
 
     fn wants_steady_tick(&self) -> bool;

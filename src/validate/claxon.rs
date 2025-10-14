@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{path::Path, sync::Arc};
 
 use claxon::{Block, FlacReader};
@@ -25,6 +26,7 @@ impl Validator for ClaxonValidator {
         path: &Path,
         prog_id: ProgressId,
         reporter: &Arc<dyn ProgressReporter>,
+        cancel_token: &Arc<AtomicBool>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let mut reader = match FlacReader::open(path) {
             Ok(reader) => reader,
@@ -40,6 +42,11 @@ impl Validator for ClaxonValidator {
                 Ok(Some(next_block)) => {
                     block = next_block;
                     block_count += 1;
+
+                    // Check for cancellation every 256 blocks
+                    if block_count % 256 == 0 && cancel_token.load(Ordering::Relaxed) {
+                        return Err(FsPulseError::ScanCancelled);
+                    }
 
                     // Update progress every BLOCKS_PER_TICK blocks
                     if block_count % Self::BLOCKS_PER_TICK == 0 {
@@ -77,7 +84,6 @@ mod tests {
         fn create(&self, _config: ProgressConfig) -> ProgressId {
             ProgressId::new()
         }
-        fn set_message(&self, _id: ProgressId, _message: String) {}
         fn update_work(&self, _id: ProgressId, _work: WorkUpdate) {}
         fn set_position(&self, _id: ProgressId, _position: u64) {}
         fn set_length(&self, _id: ProgressId, _length: u64) {}
@@ -116,8 +122,9 @@ mod tests {
         let reporter: Arc<dyn ProgressReporter> = Arc::new(MockReporter);
         let prog_id = ProgressId::new();
         let nonexistent_path = Path::new("/this/path/does/not/exist.flac");
+        let cancel_token = Arc::new(AtomicBool::new(false));
 
-        let result = validator.validate(nonexistent_path, prog_id, &reporter);
+        let result = validator.validate(nonexistent_path, prog_id, &reporter, &cancel_token);
         assert!(result.is_ok());
 
         let (state, error_msg) = result.unwrap();
@@ -152,7 +159,8 @@ mod tests {
             .write_all(b"not a flac file")
             .expect("Failed to write temp file");
 
-        let result = validator.validate(temp_file.path(), prog_id, &reporter);
+        let cancel_token = Arc::new(AtomicBool::new(false));
+        let result = validator.validate(temp_file.path(), prog_id, &reporter, &cancel_token);
         assert!(result.is_ok());
 
         let (state, error_msg) = result.unwrap();

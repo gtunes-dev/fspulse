@@ -246,13 +246,13 @@ mod tests {
     }
 
     #[test]
-    fn test_set_message_on_nonexistent_id() {
+    fn test_update_work_on_nonexistent_id() {
         let multi = MultiProgress::new();
         let reporter = CliProgressReporter::new(multi);
 
         let fake_id = ProgressId::new();
         // Should not panic
-        reporter.set_message(fake_id, "Test".to_string());
+        reporter.update_work(fake_id, WorkUpdate::Idle);
     }
 
     #[test]
@@ -266,7 +266,9 @@ mod tests {
 
         // Cloned reporter should share the same state
         // We can't directly test Arc equality, but we can verify behavior
-        cloned.set_message(id, "Updated message".to_string());
+        cloned.update_work(id, WorkUpdate::Hashing {
+            file: "test.txt".to_string(),
+        });
 
         // Both should reference the same progress bar
         assert!(reporter.bars.lock().unwrap().contains_key(&id));
