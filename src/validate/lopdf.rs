@@ -37,7 +37,7 @@ impl Validator for LopdfValidator {
 
         for object in doc.objects.values() {
             object_count += 1;
-            if object_count % 256 == 0 && cancel_token.load(Ordering::Relaxed) {
+            if object_count % 256 == 0 && cancel_token.load(Ordering::Acquire) {
                 return Err(FsPulseError::ScanCancelled);
             }
 

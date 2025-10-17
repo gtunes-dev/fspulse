@@ -219,7 +219,7 @@ pub async fn initiate_scan(
     let cancel_token = {
         let mut manager = state.scan_manager.lock().unwrap();
         manager
-            .try_start_scan(scan_id, root_id, root_path.clone(), broadcaster)
+            .try_start_scan(scan_id, root_id, root_path.clone(), broadcaster, web_reporter.clone())
             .map_err(|e| {
                 error!("Failed to start scan: {}", e);
                 StatusCode::CONFLICT // 409 Conflict - scan already in progress
@@ -257,8 +257,8 @@ pub async fn initiate_scan(
                     let _ = reporter.println(&format!("Error stopping scan: {}", stop_err));
                     web_reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
                 } else {
-                    let _ = reporter.println("Scan cancelled and rolled back");
-                    web_reporter.mark_cancelled();
+                    let _ = reporter.println("Scan stopped and rolled back");
+                    web_reporter.mark_stopped();
                 }
             }
             Err(e) => {

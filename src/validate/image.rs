@@ -29,7 +29,7 @@ impl Validator for ImageValidator {
 
         // Check for cancellation before starting. Because of how this validator works,
         // this is the only test we can do
-        if cancel_token.load(Ordering::Relaxed) {
+        if cancel_token.load(Ordering::Acquire) {
             return Err(FsPulseError::ScanCancelled);
         }
 

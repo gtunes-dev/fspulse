@@ -77,9 +77,10 @@ impl ScanProgressState {
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum ScanStatus {
     Running,
+    Cancelling,
+    Stopped,
     Completed,
     Error { message: String },
-    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

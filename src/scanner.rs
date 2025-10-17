@@ -257,7 +257,7 @@ impl Scanner {
             }
 
             // Check for cancellation at the top of the loop
-            if cancel_token.load(Ordering::Relaxed) {
+            if cancel_token.load(Ordering::Acquire) {
                 return Err(FsPulseError::ScanCancelled);
             }
 
@@ -427,7 +427,7 @@ impl Scanner {
         while let Some(q_entry) = q.pop_front() {
             // Check for cancellation every 100 items
             items_processed += 1;
-            if items_processed % 100 == 0 && cancel_token.load(Ordering::Relaxed) {
+            if items_processed % 100 == 0 && cancel_token.load(Ordering::Acquire) {
                 return Err(FsPulseError::ScanCancelled);
             }
 
@@ -620,7 +620,7 @@ impl Scanner {
         let mut last_item_id = 0;
 
         loop {
-            if cancel_token.load(Ordering::Relaxed) {
+            if cancel_token.load(Ordering::Acquire) {
                 break;
             }
 
@@ -662,7 +662,7 @@ impl Scanner {
         // Because we may have detected the cancellation and aborted or never started
         // some hashing or validation operations, we have to be careful to not allow it to
         // appear complete
-        if cancel_token.load(Ordering::Relaxed) {
+        if cancel_token.load(Ordering::Acquire) {
             return Err(FsPulseError::ScanCancelled);
         }
 
@@ -715,7 +715,7 @@ impl Scanner {
             reporter.set_position(thread_prog_id, 0); // reset in case left from previous
             reporter.set_length(thread_prog_id, 0);
 
-            if cancel_token.load(Ordering::Relaxed) {
+            if cancel_token.load(Ordering::Acquire) {
                 info!("Cancellation detected before hashing: {path:?}");
                 return;
             }
@@ -734,7 +734,7 @@ impl Scanner {
         let mut new_val_error = None;
 
         if analysis_item.needs_val() {
-            if cancel_token.load(Ordering::Relaxed) {
+            if cancel_token.load(Ordering::Acquire) {
                 info!("Cancellation detected before validation: {path:?}");
                 return;
             }
@@ -762,6 +762,7 @@ impl Scanner {
                             let e_str = e.to_string();
                             error!("Error validating '{}': {}", &display_path, e_str);
                             new_val = ValidationState::Invalid;
+                            new_val_error = Some(e_str);
                         }
                     }
                     if steady_tick {

@@ -844,12 +844,20 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.08);
         }
 
+        .scan-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            gap: 16px;
+        }
+
         .scan-title {
             font-size: 1rem;
             font-weight: 500;
             color: #1d1d1f;
             font-family: 'SF Mono', Monaco, monospace;
-            margin-bottom: 16px;
+            flex: 1;
         }
 
         .scan-progress-section {
@@ -1005,6 +1013,36 @@
 
         .start-scan-btn:active {
             transform: scale(0.98);
+        }
+
+        .scan-stop-btn {
+            padding: 10px 20px;
+            border: none;
+            background: #ff3b30;
+            color: #ffffff;
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s ease;
+        }
+
+        .scan-stop-btn:hover {
+            background: #e32b1f;
+        }
+
+        .scan-stop-btn:active {
+            transform: scale(0.98);
+        }
+
+        .scan-stop-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .scan-stop-btn:disabled:hover {
+            background: #ff3b30;
         }
 
         /* Responsive design */
@@ -1635,7 +1673,10 @@
                 card.id = `scan-card-${scanId}`;
 
                 card.innerHTML = `
-                    <div class="scan-title">Scanning: ${scan.root_path}</div>
+                    <div class="scan-header">
+                        <div class="scan-title">Scanning: ${scan.root_path}</div>
+                        <button id="stop-btn-${scanId}" class="scan-stop-btn" style="display: none;">Stop</button>
+                    </div>
                     <div id="breadcrumbs-${scanId}"></div>
                     <div class="scan-progress-section">
                         <div class="scan-progress-label">
@@ -1654,9 +1695,14 @@
                     <div id="thread-details-${scanId}" class="scan-thread-details"></div>
                 `;
 
-                // Attach click handler directly to the button
-                const button = card.querySelector(`#details-btn-${scanId}`);
-                button.addEventListener('click', () => {
+                // Attach click handlers directly to the buttons
+                const stopButton = card.querySelector(`#stop-btn-${scanId}`);
+                stopButton.addEventListener('click', () => {
+                    this.stopScan(scanId);
+                });
+
+                const detailsButton = card.querySelector(`#details-btn-${scanId}`);
+                detailsButton.addEventListener('click', () => {
                     this.toggleDetails(scanId);
                 });
 
@@ -1699,6 +1745,39 @@
                 } else if (scan.phase === 1) {
                     statsContainer.textContent = `Scanned ${this.scanningCounts.files.toLocaleString()} files in ${this.scanningCounts.directories.toLocaleString()} directories...`;
                     statsContainer.style.color = '#007aff';
+                }
+
+                // Update Stop button visibility and state
+                const stopButton = document.getElementById(`stop-btn-${scanId}`);
+                // Status is an object like {status: "running"}, check the status field
+                const statusValue = scan.status?.status || 'running';
+
+                if (statusValue === 'running') {
+                    stopButton.style.display = 'inline-block';
+                    stopButton.disabled = false;
+                    stopButton.textContent = 'Stop';
+                } else if (statusValue === 'cancelling') {
+                    stopButton.style.display = 'inline-block';
+                    stopButton.disabled = true;
+                    stopButton.textContent = 'Stopping';
+                } else if (statusValue === 'stopped') {
+                    stopButton.style.display = 'inline-block';
+                    stopButton.disabled = true;
+                    stopButton.textContent = 'Stopped';
+                } else if (statusValue === 'completed') {
+                    // Check if we were in the middle of stopping (race condition)
+                    if (stopButton.textContent === 'Stopping') {
+                        // User clicked stop but scan completed anyway
+                        stopButton.style.display = 'inline-block';
+                        stopButton.disabled = true;
+                        stopButton.textContent = 'Completed';
+                    } else {
+                        // Normal completion - hide button
+                        stopButton.style.display = 'none';
+                    }
+                } else {
+                    // error - hide button
+                    stopButton.style.display = 'none';
                 }
 
                 // Show/hide and update button for phase 3
@@ -1863,6 +1942,40 @@
                 }
             }
 
+            async stopScan(scanId) {
+                // Optimistically update button state immediately
+                const stopButton = document.getElementById(`stop-btn-${scanId}`);
+                if (stopButton) {
+                    stopButton.disabled = true;
+                    stopButton.textContent = 'Stopping';
+                }
+
+                try {
+                    const response = await fetch(`/api/scans/${scanId}/cancel`, {
+                        method: 'POST'
+                    });
+
+                    if (!response.ok) {
+                        console.error('Failed to cancel scan:', response.statusText);
+                        alert('Failed to cancel scan. Please try again.');
+                        // Revert button state on error
+                        if (stopButton) {
+                            stopButton.disabled = false;
+                            stopButton.textContent = 'Stop';
+                        }
+                    }
+                    // Backend will set status to "cancelling" which will update the UI via WebSocket
+                } catch (error) {
+                    console.error('Error cancelling scan:', error);
+                    alert('Error cancelling scan. Please check your connection.');
+                    // Revert button state on error
+                    if (stopButton) {
+                        stopButton.disabled = false;
+                        stopButton.textContent = 'Stop';
+                    }
+                }
+            }
+
             connectScanWebSocket(scanId, rootPath) {
                 // Close existing connection if any
                 if (this.ws) {
@@ -1993,19 +2106,41 @@
                     });
                 }
 
+                // Update scan status
+                if (state.status) {
+                    scanData.status = state.status;
+                }
+
                 // Update the scan in activeScans
                 this.activeScans.set(state.scan_id, scanData);
 
                 // Handle scan completion
-                if (state.status && state.status !== 'running') {
-                    if (state.status === 'completed') {
-                        // Scan completed
-                    } else if (state.status === 'cancelled') {
-                        // Scan cancelled
-                    } else if (state.status.error) {
-                        console.error('Scan error:', state.status.error.message);
-                        alert(`Scan error: ${state.status.error.message}`);
+                // Status is an object like {status: "running"}, check the status field
+                if (state.status && state.status.status) {
+                    const statusValue = state.status.status;
+
+                    if (statusValue === 'completed') {
+                        // Scan completed - remove after delay
+                        setTimeout(() => {
+                            this.activeScans.delete(state.scan_id);
+                            this.scheduleRender();
+                        }, 2000);
+                    } else if (statusValue === 'stopped') {
+                        // Scan stopped (cancelled) - remove after delay
+                        setTimeout(() => {
+                            this.activeScans.delete(state.scan_id);
+                            this.scheduleRender();
+                        }, 2000);
+                    } else if (statusValue === 'error') {
+                        console.error('Scan error:', state.status.message);
+                        alert(`Scan error: ${state.status.message}`);
+                        // Remove scan on error after delay
+                        setTimeout(() => {
+                            this.activeScans.delete(state.scan_id);
+                            this.scheduleRender();
+                        }, 3000);
                     }
+                    // For 'running' and 'cancelling' states, keep the scan visible
                 }
 
                 this.scheduleRender();

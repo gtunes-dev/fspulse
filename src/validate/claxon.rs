@@ -44,7 +44,7 @@ impl Validator for ClaxonValidator {
                     block_count += 1;
 
                     // Check for cancellation every 256 blocks
-                    if block_count % 256 == 0 && cancel_token.load(Ordering::Relaxed) {
+                    if block_count % 256 == 0 && cancel_token.load(Ordering::Acquire) {
                         return Err(FsPulseError::ScanCancelled);
                     }
 

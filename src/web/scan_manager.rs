@@ -1,4 +1,5 @@
-use crate::progress::state::ScanProgressState;
+use crate::progress::state::{ScanProgressState, ScanStatus};
+use crate::progress::web::WebProgressReporter;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ struct ActiveScanInfo {
     root_id: i64,
     root_path: String,
     cancel_token: Arc<AtomicBool>,
+    reporter: Arc<WebProgressReporter>,
     #[allow(dead_code)] // Will be used for cancellation in Phase 2
     task_handle: Option<JoinHandle<()>>,
 }
@@ -63,6 +65,7 @@ impl ScanManager {
         root_id: i64,
         root_path: String,
         broadcaster: broadcast::Sender<ScanProgressState>,
+        reporter: Arc<WebProgressReporter>,
     ) -> Result<Arc<AtomicBool>, ScanInProgressError> {
         // Check if scan already running
         if let Some(active) = &self.current_scan {
@@ -80,6 +83,7 @@ impl ScanManager {
             root_id,
             root_path,
             cancel_token: Arc::clone(&cancel_token),
+            reporter,
             task_handle: None,
         });
 
@@ -89,13 +93,39 @@ impl ScanManager {
     }
 
     /// Request cancellation of the current scan
+    ///
+    /// This method ensures atomic state transition: checks that the scan is Running,
+    /// then sets both the cancel token and status to Cancelling together.
     pub fn request_cancellation(&mut self, scan_id: i64) -> Result<(), String> {
         match &self.current_scan {
             Some(active) if active.scan_id == scan_id => {
-                active
-                    .cancel_token
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
-                Ok(())
+                // Check current status - must be Running to transition to Cancelling
+                let current_status = active.reporter.get_status();
+
+                match current_status {
+                    ScanStatus::Running => {
+                        // Atomically: set status first, then release cancel token
+                        // This ordering ensures worker threads that acquire the token
+                        // will see the status update via happens-before relationship
+                        active.reporter.mark_cancelling();
+                        active
+                            .cancel_token
+                            .store(true, std::sync::atomic::Ordering::Release);
+                        Ok(())
+                    }
+                    ScanStatus::Cancelling => {
+                        Err("Scan is already cancelling".to_string())
+                    }
+                    ScanStatus::Stopped => {
+                        Err("Scan has already been stopped".to_string())
+                    }
+                    ScanStatus::Completed => {
+                        Err("Scan has already completed".to_string())
+                    }
+                    ScanStatus::Error { .. } => {
+                        Err("Scan has already errored".to_string())
+                    }
+                }
             }
             Some(active) => Err(format!(
                 "Scan {} is not the current scan (current: {})",
@@ -141,6 +171,11 @@ mod tests {
     use super::*;
     use crate::progress::state::ScanProgressState;
 
+    fn create_test_reporter(scan_id: i64, root_path: String) -> Arc<WebProgressReporter> {
+        let (reporter, _broadcaster) = WebProgressReporter::new(scan_id, root_path);
+        Arc::new(reporter)
+    }
+
     #[test]
     fn test_scan_manager_new() {
         let manager = ScanManager::new();
@@ -148,36 +183,40 @@ mod tests {
         assert!(manager.broadcaster.is_none());
     }
 
-    #[test]
-    fn test_try_start_scan_success() {
+    #[tokio::test]
+    async fn test_try_start_scan_success() {
         let mut manager = ScanManager::new();
         let (tx, _rx) = broadcast::channel::<ScanProgressState>(100);
-        let result = manager.try_start_scan(1, 100, "/test/path".to_string(), tx);
+        let reporter = create_test_reporter(1, "/test/path".to_string());
+        let result = manager.try_start_scan(1, 100, "/test/path".to_string(), tx, reporter);
         assert!(result.is_ok());
         assert!(manager.current_scan.is_some());
         assert!(manager.broadcaster.is_some());
     }
 
-    #[test]
-    fn test_try_start_scan_fails_when_running() {
+    #[tokio::test]
+    async fn test_try_start_scan_fails_when_running() {
         let mut manager = ScanManager::new();
         let (tx1, _rx1) = broadcast::channel::<ScanProgressState>(100);
         let (tx2, _rx2) = broadcast::channel::<ScanProgressState>(100);
+        let reporter1 = create_test_reporter(1, "/test/path".to_string());
+        let reporter2 = create_test_reporter(2, "/test/path2".to_string());
         manager
-            .try_start_scan(1, 100, "/test/path".to_string(), tx1)
+            .try_start_scan(1, 100, "/test/path".to_string(), tx1, reporter1)
             .unwrap();
-        let result = manager.try_start_scan(2, 101, "/test/path2".to_string(), tx2);
+        let result = manager.try_start_scan(2, 101, "/test/path2".to_string(), tx2, reporter2);
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_get_current_scan_info() {
+    #[tokio::test]
+    async fn test_get_current_scan_info() {
         let mut manager = ScanManager::new();
         assert!(manager.get_current_scan_info().is_none());
 
         let (tx, _rx) = broadcast::channel::<ScanProgressState>(100);
+        let reporter = create_test_reporter(1, "/test/path".to_string());
         manager
-            .try_start_scan(1, 100, "/test/path".to_string(), tx)
+            .try_start_scan(1, 100, "/test/path".to_string(), tx, reporter)
             .unwrap();
         let info = manager.get_current_scan_info();
         assert!(info.is_some());
@@ -187,12 +226,13 @@ mod tests {
         assert_eq!(info.root_path, "/test/path");
     }
 
-    #[test]
-    fn test_mark_complete() {
+    #[tokio::test]
+    async fn test_mark_complete() {
         let mut manager = ScanManager::new();
         let (tx, _rx) = broadcast::channel::<ScanProgressState>(100);
+        let reporter = create_test_reporter(1, "/test/path".to_string());
         manager
-            .try_start_scan(1, 100, "/test/path".to_string(), tx)
+            .try_start_scan(1, 100, "/test/path".to_string(), tx, reporter)
             .unwrap();
         assert!(manager.current_scan.is_some());
 
@@ -201,17 +241,18 @@ mod tests {
         assert!(manager.broadcaster.is_none());
     }
 
-    #[test]
-    fn test_request_cancellation() {
+    #[tokio::test]
+    async fn test_request_cancellation() {
         let mut manager = ScanManager::new();
         let (tx, _rx) = broadcast::channel::<ScanProgressState>(100);
+        let reporter = create_test_reporter(1, "/test/path".to_string());
         let cancel_token = manager
-            .try_start_scan(1, 100, "/test/path".to_string(), tx)
+            .try_start_scan(1, 100, "/test/path".to_string(), tx, reporter)
             .unwrap();
 
-        assert!(!cancel_token.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!cancel_token.load(std::sync::atomic::Ordering::Acquire));
         manager.request_cancellation(1).unwrap();
-        assert!(cancel_token.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(cancel_token.load(std::sync::atomic::Ordering::Acquire));
     }
 
     #[test]

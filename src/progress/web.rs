@@ -57,10 +57,14 @@ impl WebProgressReporter {
                 // Broadcast returns Err only if there are no receivers, which is fine
                 let _ = tx_clone.send(current_state);
 
-                // Stop broadcasting if scan is complete
+                // Stop broadcasting only when scan reaches a terminal state
+                // Continue broadcasting during Cancelling to show thread cleanup progress
                 let is_complete = {
                     let state_guard = state_clone.lock().unwrap();
-                    !matches!(state_guard.status, ScanStatus::Running)
+                    matches!(
+                        state_guard.status,
+                        ScanStatus::Stopped | ScanStatus::Completed | ScanStatus::Error { .. }
+                    )
                 };
                 if is_complete {
                     // Send one final update and exit
@@ -94,10 +98,22 @@ impl WebProgressReporter {
         state.status = ScanStatus::Error { message };
     }
 
-    /// Mark scan as cancelled
-    pub fn mark_cancelled(&self) {
+    /// Mark scan as cancelling (user requested stop, scanner hasn't detected yet)
+    pub fn mark_cancelling(&self) {
         let mut state = self.state.lock().unwrap();
-        state.status = ScanStatus::Cancelled;
+        state.status = ScanStatus::Cancelling;
+    }
+
+    /// Mark scan as stopped (scanner detected cancellation and rolled back)
+    pub fn mark_stopped(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.status = ScanStatus::Stopped;
+    }
+
+    /// Get current status (for checking before state transitions)
+    pub fn get_status(&self) -> ScanStatus {
+        let state = self.state.lock().unwrap();
+        state.status.clone()
     }
 }
 
@@ -303,6 +319,12 @@ impl ProgressReporter for WebProgressReporter {
     }
 
     fn finish_and_clear(&self, id: ProgressId) {
+        // Set thread to idle before cleanup if this is a thread-specific progress bar
+        if let Some(thread_index) = self.thread_map.lock().unwrap().get(&id).copied() {
+            let mut state = self.state.lock().unwrap();
+            state.update_thread(thread_index, ThreadOperation::Idle);
+        }
+
         // Clean up mappings
         self.thread_map.lock().unwrap().remove(&id);
         self.context_map.lock().unwrap().remove(&id);

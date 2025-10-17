@@ -55,7 +55,7 @@ impl Hash {
         loop {
             loop_counter += 1;
             // Every 256 loops, check for cancellation
-            if loop_counter % 256 == 0 && cancel_token.load(Ordering::Relaxed) {
+            if loop_counter % 256 == 0 && cancel_token.load(Ordering::Acquire) {
                 return Err(FsPulseError::ScanCancelled);
             }
 
@@ -94,7 +94,7 @@ impl Hash {
         loop {
             loop_counter += 1;
             // Every 256 loops, check for cancellation
-            if loop_counter % 256 == 0 && cancel_token.load(Ordering::Relaxed) {
+            if loop_counter % 256 == 0 && cancel_token.load(Ordering::Acquire) {
                 return Err(FsPulseError::ScanCancelled);
             }
 
