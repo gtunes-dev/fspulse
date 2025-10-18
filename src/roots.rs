@@ -69,6 +69,12 @@ impl Root {
         .map_err(FsPulseError::DatabaseError)
     }
 
+    pub fn try_create(db: &Database, root_path: &str) -> Result<Self, FsPulseError> {
+        let path_buf = Root::validate_and_canonicalize_path(root_path)?;
+        let canon_root_path = path_buf.to_string_lossy().to_string();
+        Root::create(db, &canon_root_path)
+    }
+
     pub fn create(db: &Database, root_path: &str) -> Result<Self, FsPulseError> {
         let conn = db.conn();
 

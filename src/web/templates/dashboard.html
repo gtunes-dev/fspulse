@@ -368,6 +368,9 @@
         /* Entity View Layout - Apple-inspired design */
         .entity-view-header {
             margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .entity-view-title {
@@ -377,6 +380,31 @@
             color: #1d1d1f;
             margin: 0;
             padding: 0;
+        }
+
+        .primary-action-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            background: #007aff;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 1px 3px rgba(0,122,255,0.2);
+        }
+
+        .primary-action-btn:hover {
+            background: #0051d5;
+            box-shadow: 0 2px 8px rgba(0,122,255,0.3);
+        }
+
+        .primary-action-btn:active {
+            transform: scale(0.98);
         }
 
         .section-with-sidebar {
@@ -747,6 +775,196 @@
             display: block;
         }
 
+        /* Add Root Modal */
+        .add-root-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(8px);
+        }
+
+        .add-root-modal-overlay.active {
+            display: flex;
+        }
+
+        .add-root-modal {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 540px;
+            padding: 0;
+            animation: modalSlideIn 0.2s ease;
+        }
+
+        .add-root-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+        }
+
+        .add-root-modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin: 0;
+        }
+
+        .add-root-modal-body {
+            padding: 24px;
+        }
+
+        .add-root-form-group {
+            margin-bottom: 20px;
+        }
+
+        .add-root-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+        }
+
+        .add-root-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', 'Monaco', 'Courier New', monospace;
+            background: #fafafa;
+            transition: all 0.15s ease;
+        }
+
+        .add-root-input:focus {
+            outline: none;
+            border-color: #007aff;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+        }
+
+        .add-root-hint {
+            font-size: 0.8125rem;
+            color: #86868b;
+            margin-top: 8px;
+        }
+
+        .add-root-error {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 12px;
+            background: #fff5f5;
+            border: 1px solid rgba(255,59,48,0.2);
+            border-radius: 8px;
+            margin-top: 12px;
+            display: none;
+        }
+
+        .add-root-error.visible {
+            display: flex;
+        }
+
+        .add-root-error-icon {
+            color: #ff3b30;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .add-root-error-text {
+            font-size: 0.875rem;
+            color: #ff3b30;
+            line-height: 1.4;
+        }
+
+        .add-root-success {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            background: #f0fdf4;
+            border: 1px solid rgba(34,197,94,0.2);
+            border-radius: 8px;
+            margin-top: 12px;
+            display: none;
+        }
+
+        .add-root-success.visible {
+            display: flex;
+        }
+
+        .add-root-success-icon {
+            color: #22c55e;
+            flex-shrink: 0;
+        }
+
+        .add-root-success-text {
+            font-size: 0.875rem;
+            color: #15803d;
+            line-height: 1.4;
+        }
+
+        .add-root-modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid rgba(0,0,0,0.08);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .add-root-btn-cancel {
+            padding: 8px 16px;
+            border: 1px solid rgba(0,0,0,0.12);
+            background: #ffffff;
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            color: #1d1d1f;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .add-root-btn-cancel:hover {
+            background: #f5f5f7;
+            border-color: rgba(0,0,0,0.18);
+        }
+
+        .add-root-btn-submit {
+            padding: 8px 16px;
+            background: #007aff;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 1px 3px rgba(0,122,255,0.2);
+        }
+
+        .add-root-btn-submit:hover:not(:disabled) {
+            background: #0051d5;
+            box-shadow: 0 2px 8px rgba(0,122,255,0.3);
+        }
+
+        .add-root-btn-submit:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        .add-root-btn-submit:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .filter-modal-footer {
             padding: 16px 24px;
             border-top: 1px solid rgba(0,0,0,0.06);
@@ -1100,6 +1318,14 @@
                 </svg>
                 <span class="nav-label">Activity</span>
             </button>
+            <button class="nav-item" onclick="showSection('manage-roots')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                    <path d="M10 9a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
+                    <path d="M10 8a1 1 0 100-2 1 1 0 000 2z" />
+                </svg>
+                <span class="nav-label">Manage Roots</span>
+            </button>
 
             <div class="nav-divider"></div>
 
@@ -1198,6 +1424,41 @@
             <div id="activity-section" style="display: none;">
                 <h2>Activity Monitor</h2>
                 <p>Detailed activity monitoring coming soon...</p>
+            </div>
+
+            <!-- Manage Roots Section -->
+            <div id="manage-roots-section" style="display: none;">
+                <div class="entity-view-header">
+                    <h1 class="entity-view-title">Manage Roots</h1>
+                    <button class="primary-action-btn" onclick="showAddRootModal()">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 6px;">
+                            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                        </svg>
+                        Add Root
+                    </button>
+                </div>
+
+                <div class="card">
+                    <table class="data-table">
+                        <tbody id="manage-roots-table-body">
+                            <tr>
+                                <td style="text-align: center; color: #86868b; padding: 2rem;">
+                                    Loading roots...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="pagination">
+                        <div class="pagination-info" id="manage-roots-pagination-info">
+                            Showing 0 - 0 of 0 roots
+                        </div>
+                        <div class="pagination-controls">
+                            <button class="pagination-btn" id="manage-roots-prev-btn" onclick="changeManageRootsPage(-1)">Previous</button>
+                            <button class="pagination-btn" id="manage-roots-next-btn" onclick="changeManageRootsPage(1)">Next</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Data Management Sections -->
@@ -1533,6 +1794,46 @@
             <div class="filter-modal-footer">
                 <button class="modal-btn" onclick="closeStartScanModal()">Cancel</button>
                 <button class="modal-btn primary" id="scan-action-btn" onclick="startScan()">Start Scan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Root Modal -->
+    <div class="add-root-modal-overlay" id="add-root-modal-overlay" onclick="hideAddRootModal()">
+        <div class="add-root-modal" onclick="event.stopPropagation()">
+            <div class="add-root-modal-header">
+                <h2 class="add-root-modal-title">Add New Root</h2>
+            </div>
+            <div class="add-root-modal-body">
+                <div class="add-root-form-group">
+                    <label class="add-root-label" for="add-root-path-input">Root Path</label>
+                    <input
+                        type="text"
+                        class="add-root-input"
+                        id="add-root-path-input"
+                        placeholder="/absolute/path/to/directory"
+                        autocomplete="off"
+                        spellcheck="false">
+                    <p class="add-root-hint">Enter the absolute path to the directory you want to track</p>
+                </div>
+
+                <div class="add-root-error" id="add-root-error">
+                    <svg class="add-root-error-icon" width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                    <p class="add-root-error-text" id="add-root-error-text">Error message</p>
+                </div>
+
+                <div class="add-root-success" id="add-root-success">
+                    <svg class="add-root-success-icon" width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                    <p class="add-root-success-text" id="add-root-success-text">Root added successfully!</p>
+                </div>
+            </div>
+            <div class="add-root-modal-footer">
+                <button class="add-root-btn-cancel" onclick="hideAddRootModal()">Cancel</button>
+                <button class="add-root-btn-submit" id="add-root-submit-btn" onclick="submitNewRoot()">Add Root</button>
             </div>
         </div>
     </div>
@@ -2809,6 +3110,8 @@
             // Load data for specific sections
             if (['roots', 'scans', 'items', 'changes'].includes(sectionName)) {
                 views[sectionName].loadData();
+            } else if (sectionName === 'manage-roots') {
+                loadManageRootsData();
             }
 
             // Close sidebar on mobile
@@ -2834,6 +3137,206 @@
 
             showSection(sectionName, false); // Don't update hash to avoid loop
         }
+
+        // ========================================
+        // Manage Roots Functionality
+        // ========================================
+
+        let manageRootsCurrentPage = 1;
+        const manageRootsPageSize = 25;
+        let manageRootsTotalCount = 0;
+
+        async function loadManageRootsData() {
+            try {
+                // Use the query API to fetch roots sorted by root_path
+                const response = await fetch('/api/query/roots', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        columns: [
+                            { name: 'root_path', visible: true, sort_direction: 'asc', position: 0 }
+                        ],
+                        filters: [],
+                        limit: manageRootsPageSize,
+                        offset: (manageRootsCurrentPage - 1) * manageRootsPageSize
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+
+                const data = await response.json();
+                manageRootsTotalCount = data.total;
+
+                renderManageRootsTable(data.rows);
+                updateManageRootsPagination();
+            } catch (error) {
+                console.error('Error loading manage roots data:', error);
+                document.getElementById('manage-roots-table-body').innerHTML = `
+                    <tr>
+                        <td style="text-align: center; color: #ff3b30; padding: 2rem;">
+                            Error loading roots: ${error.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function renderManageRootsTable(rows) {
+            const tbody = document.getElementById('manage-roots-table-body');
+
+            if (rows.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td style="text-align: center; color: #86868b; padding: 2rem;">
+                            No roots found. Click "Add Root" to get started.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = rows.map(row => `
+                <tr>
+                    <td style="font-family: 'SF Mono', Monaco, 'Courier New', monospace;">${row[0]}</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateManageRootsPagination() {
+            const startIndex = (manageRootsCurrentPage - 1) * manageRootsPageSize + 1;
+            const endIndex = Math.min(manageRootsCurrentPage * manageRootsPageSize, manageRootsTotalCount);
+
+            document.getElementById('manage-roots-pagination-info').textContent =
+                `Showing ${startIndex} - ${endIndex} of ${manageRootsTotalCount} roots`;
+
+            document.getElementById('manage-roots-prev-btn').disabled = manageRootsCurrentPage === 1;
+            document.getElementById('manage-roots-next-btn').disabled =
+                manageRootsCurrentPage * manageRootsPageSize >= manageRootsTotalCount;
+        }
+
+        function changeManageRootsPage(direction) {
+            const newPage = manageRootsCurrentPage + direction;
+            const maxPage = Math.ceil(manageRootsTotalCount / manageRootsPageSize);
+
+            if (newPage >= 1 && newPage <= maxPage) {
+                manageRootsCurrentPage = newPage;
+                loadManageRootsData();
+            }
+        }
+
+        function showAddRootModal() {
+            const overlay = document.getElementById('add-root-modal-overlay');
+            const input = document.getElementById('add-root-path-input');
+            const errorDiv = document.getElementById('add-root-error');
+            const successDiv = document.getElementById('add-root-success');
+
+            // Reset form
+            input.value = '';
+            errorDiv.classList.remove('visible');
+            successDiv.classList.remove('visible');
+
+            // Show modal
+            overlay.classList.add('active');
+
+            // Focus input after animation
+            setTimeout(() => input.focus(), 100);
+        }
+
+        function hideAddRootModal() {
+            const overlay = document.getElementById('add-root-modal-overlay');
+            overlay.classList.remove('active');
+        }
+
+        async function submitNewRoot() {
+            const input = document.getElementById('add-root-path-input');
+            const errorDiv = document.getElementById('add-root-error');
+            const errorText = document.getElementById('add-root-error-text');
+            const successDiv = document.getElementById('add-root-success');
+            const successText = document.getElementById('add-root-success-text');
+            const submitBtn = document.getElementById('add-root-submit-btn');
+
+            const path = input.value.trim();
+
+            // Reset states
+            errorDiv.classList.remove('visible');
+            successDiv.classList.remove('visible');
+
+            // Validate input
+            if (!path) {
+                errorText.textContent = 'Please enter a path';
+                errorDiv.classList.add('visible');
+                return;
+            }
+
+            // Disable submit button during request
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Adding...';
+
+            try {
+                const response = await fetch('/api/roots', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Success
+                    successText.textContent = `Root added successfully: ${data.root_path}`;
+                    successDiv.classList.add('visible');
+
+                    // Reload the roots list
+                    await loadManageRootsData();
+
+                    // Close modal after delay
+                    setTimeout(() => {
+                        hideAddRootModal();
+                    }, 1500);
+                } else {
+                    // Error from server
+                    errorText.textContent = data.error || 'Failed to add root';
+                    errorDiv.classList.add('visible');
+                }
+            } catch (error) {
+                console.error('Error adding root:', error);
+                errorText.textContent = 'Network error. Please try again.';
+                errorDiv.classList.add('visible');
+            } finally {
+                // Re-enable submit button
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Root';
+            }
+        }
+
+        // Add Enter key support for the modal
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('add-root-path-input');
+            if (input) {
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        submitNewRoot();
+                    }
+                });
+
+                // Add Escape key to close modal
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        const overlay = document.getElementById('add-root-modal-overlay');
+                        if (overlay && overlay.classList.contains('active')) {
+                            hideAddRootModal();
+                        }
+                    }
+                });
+            }
+        });
+
+        // ========================================
+        // End Manage Roots Functionality
+        // ========================================
 
         // Listen for hash changes (back/forward buttons)
         window.addEventListener('hashchange', handleRouteChange);
