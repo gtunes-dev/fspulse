@@ -153,10 +153,10 @@ The database file will always be named 'fspulse.db'."#
     },
 
     #[command(
-        about = "Start web server",
-        long_about = "Start the FsPulse web server to provide browser-based access to filesystem scanning and reporting."
+        about = "Start the server",
+        long_about = "Start the FsPulse server to run as a background service with browser-based access to filesystem scanning and reporting."
     )]
-    WebServer {
+    Serve {
         #[arg(
             long,
             help = r#"Specifies the directory where the database is stored.
@@ -396,13 +396,13 @@ impl Cli {
                 let db = Database::new(db_path)?;
                 QueryProcessor::execute_query_and_print(&db, &query)
             }
-            Command::WebServer { db_path } => {
+            Command::Serve { db_path } => {
                 let config = CONFIG.get().expect("Config not initialized");
 
-                let host = config.web.host.clone();
-                let port = config.web.port;
+                let host = config.server.host.clone();
+                let port = config.server.port;
 
-                info!("Starting web server on {host}:{port} with db_path: {db_path:?}");
+                info!("Starting server on {host}:{port} with db_path: {db_path:?}");
 
                 // Start the async runtime for the web server
                 let rt = tokio::runtime::Runtime::new()

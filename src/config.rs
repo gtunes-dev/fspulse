@@ -117,14 +117,14 @@ impl AnalysisConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct WebConfig {
+pub struct ServerConfig {
     pub port: u16,
     pub host: String,
 }
 
-impl WebConfig {
+impl ServerConfig {
     fn default() -> Self {
-        WebConfig {
+        ServerConfig {
             port: 8080,
             host: "127.0.0.1".to_string(),
         }
@@ -134,13 +134,13 @@ impl WebConfig {
         // Trim and validate host
         self.host = self.host.trim().to_string();
         if self.host.is_empty() {
-            eprintln!("Config error: web host cannot be empty - using default '127.0.0.1'");
+            eprintln!("Config error: server host cannot be empty - using default '127.0.0.1'");
             self.host = "127.0.0.1".to_string();
         }
 
         // Validate port range
         if self.port == 0 {
-            eprintln!("Config error: web port cannot be 0 - using default 8080");
+            eprintln!("Config error: server port cannot be 0 - using default 8080");
             self.port = 8080;
         }
     }
@@ -150,7 +150,7 @@ impl WebConfig {
 pub struct Config {
     pub logging: LoggingConfig,
     pub analysis: AnalysisConfig,
-    pub web: WebConfig,
+    pub server: ServerConfig,
 }
 
 impl Config {
@@ -164,7 +164,7 @@ impl Config {
         let default_config = Config {
             logging: LoggingConfig::default(),
             analysis: AnalysisConfig::default(),
-            web: WebConfig::default(),
+            server: ServerConfig::default(),
         };
 
         // If the config file doesn't exist, write the default configuration to disk.
@@ -213,7 +213,7 @@ impl Config {
     fn ensure_valid(&mut self) {
         self.logging.ensure_valid();
         self.analysis.ensure_valid();
-        self.web.ensure_valid();
+        self.server.ensure_valid();
     }
 }
 
@@ -312,7 +312,7 @@ mod tests {
                 threads: 16,
                 hash: "md5".to_string(),
             },
-            web: WebConfig {
+            server: ServerConfig {
                 port: 8080,
                 host: "127.0.0.1".to_string(),
             },
@@ -336,7 +336,7 @@ lopdf = "info"
 threads = 12
 hash = "sha2"
 
-[web]
+[server]
 port = 8080
 host = "127.0.0.1"
 "#;
@@ -349,15 +349,15 @@ host = "127.0.0.1"
     }
 
     #[test]
-    fn test_web_config_default() {
-        let config = WebConfig::default();
+    fn test_server_config_default() {
+        let config = ServerConfig::default();
         assert_eq!(config.port, 8080);
         assert_eq!(config.host, "127.0.0.1");
     }
 
     #[test]
-    fn test_web_config_ensure_valid() {
-        let mut config = WebConfig {
+    fn test_server_config_ensure_valid() {
+        let mut config = ServerConfig {
             port: 3000,
             host: "  localhost  ".to_string(),
         };
@@ -367,8 +367,8 @@ host = "127.0.0.1"
     }
 
     #[test]
-    fn test_web_config_invalid_values() {
-        let mut config = WebConfig {
+    fn test_server_config_invalid_values() {
+        let mut config = ServerConfig {
             port: 0,
             host: "".to_string(),
         };
@@ -378,7 +378,7 @@ host = "127.0.0.1"
     }
 
     #[test]
-    fn test_config_with_web_section() {
+    fn test_config_with_server_section() {
         let toml_str = r#"
 [logging]
 fspulse = "debug"
@@ -388,7 +388,7 @@ lopdf = "warn"
 threads = 12
 hash = "sha2"
 
-[web]
+[server]
 port = 3000
 host = "0.0.0.0"
 "#;
@@ -396,8 +396,8 @@ host = "0.0.0.0"
         let config: Config = toml::from_str(toml_str).expect("Failed to deserialize config");
         assert_eq!(config.logging.fspulse, "debug");
         assert_eq!(config.analysis.threads, 12);
-        assert_eq!(config.web.port, 3000);
-        assert_eq!(config.web.host, "0.0.0.0");
+        assert_eq!(config.server.port, 3000);
+        assert_eq!(config.server.host, "0.0.0.0");
     }
 
     #[test]
@@ -414,7 +414,7 @@ lopdf = "warn"
 threads = 6
 hash = "md5"
 
-[web]
+[server]
 port = 9000
 host = "localhost"
 "#;
@@ -432,7 +432,7 @@ host = "localhost"
         assert_eq!(config.logging.lopdf, "error");
         assert_eq!(config.analysis.threads, 8);
         assert!(matches!(config.analysis.hash_func(), HashFunc::SHA2));
-        assert_eq!(config.web.port, 8080);
-        assert_eq!(config.web.host, "127.0.0.1");
+        assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.host, "127.0.0.1");
     }
 }

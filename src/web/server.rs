@@ -30,7 +30,7 @@ impl WebServer {
             .parse()
             .map_err(|e| FsPulseError::Error(format!("Invalid address: {}", e)))?;
 
-        println!("🚀 FsPulse web server starting on http://{}", addr);
+        println!("🚀 FsPulse server starting on http://{}", addr);
 
         let listener = TcpListener::bind(addr).await
             .map_err(|e| FsPulseError::Error(format!("Failed to bind to {}: {}", addr, e)))?;
@@ -82,6 +82,6 @@ impl WebServer {
 async fn health_check() -> Result<(StatusCode, Html<String>), StatusCode> {
     Ok((
         StatusCode::OK,
-        Html("<h1>FsPulse Web Server</h1><p>✅ Server is running</p>".to_string()),
+        Html("<h1>FsPulse Server</h1><p>✅ Server is running</p>".to_string()),
     ))
 }
