@@ -272,11 +272,9 @@ impl Scan {
         &self.analysis_spec
     }
 
-    /*
     pub fn scan_time(&self) -> i64 {
         self.scan_time
     }
-    */
 
     pub fn file_count(&self) -> Option<i64> {
         self.file_count

@@ -62,6 +62,7 @@ impl WebServer {
             .route("/api/scans/current", get(handlers::scans::get_current_scan))
             .route("/api/scans/{scan_id}/cancel", post(handlers::scans::cancel_scan))
             .route("/api/roots", post(handlers::roots::create_root))
+            .route("/api/roots/with-scans", get(handlers::roots::get_roots_with_scans))
 
             // WebSocket routes
             .route("/ws/scans/progress", get(handlers::scans::scan_progress_ws))

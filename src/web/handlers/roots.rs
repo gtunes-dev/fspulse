@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
+use crate::scans::Scan;
 
 /// Request structure for creating a new root
 #[derive(Debug, Deserialize)]
@@ -24,6 +25,24 @@ pub struct CreateRootResponse {
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub error: String,
+}
+
+/// Response structure for a root with its last scan information
+#[derive(Debug, Serialize)]
+pub struct RootWithScan {
+    pub root_id: i64,
+    pub root_path: String,
+    pub last_scan: Option<ScanInfo>,
+}
+
+/// Scan information subset for display
+#[derive(Debug, Serialize)]
+pub struct ScanInfo {
+    pub scan_id: i64,
+    pub state: String,
+    pub scan_time: i64,
+    pub file_count: Option<i64>,
+    pub folder_count: Option<i64>,
 }
 
 /// POST /api/roots
@@ -127,6 +146,89 @@ pub async fn create_root(
             Err((status_code, Json(ErrorResponse { error: error_message })))
         }
     }
+}
+
+/// GET /api/roots/with-scans
+/// Fetches all roots with their last scan information
+pub async fn get_roots_with_scans(
+    Extension(db_path): Extension<Option<PathBuf>>,
+) -> Result<Json<Vec<RootWithScan>>, (StatusCode, Json<ErrorResponse>)> {
+    // Open database connection
+    let db = Database::new(db_path).map_err(|e| {
+        error!("Failed to open database: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "Database connection error".to_string(),
+            }),
+        )
+    })?;
+
+    // Query all roots
+    let conn = db.conn();
+    let mut stmt = conn
+        .prepare("SELECT root_id, root_path FROM roots ORDER BY root_path")
+        .map_err(|e| {
+            error!("Failed to prepare query: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Database query error".to_string(),
+                }),
+            )
+        })?;
+
+    let roots_iter = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| {
+            error!("Failed to execute query: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Database query error".to_string(),
+                }),
+            )
+        })?;
+
+    // Build response with scan information
+    let mut results = Vec::new();
+    for root_result in roots_iter {
+        let (root_id, root_path) = root_result.map_err(|e| {
+            error!("Failed to read root row: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Database read error".to_string(),
+                }),
+            )
+        })?;
+
+        // Fetch last scan for this root
+        let last_scan = match Scan::get_latest_for_root(&db, root_id) {
+            Ok(Some(scan)) => Some(ScanInfo {
+                scan_id: scan.scan_id(),
+                state: scan.state().to_string(),
+                scan_time: scan.scan_time(),
+                file_count: scan.file_count(),
+                folder_count: scan.folder_count(),
+            }),
+            Ok(None) => None,
+            Err(e) => {
+                error!("Failed to fetch last scan for root {}: {}", root_id, e);
+                None // Continue with no scan info rather than failing
+            }
+        };
+
+        results.push(RootWithScan {
+            root_id,
+            root_path,
+            last_scan,
+        });
+    }
+
+    Ok(Json(results))
 }
 
 /// Helper function to extract the path from error messages

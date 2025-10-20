@@ -965,6 +965,110 @@
             cursor: not-allowed;
         }
 
+        /* Manage Roots Table - Multi-line entries */
+        .root-entry-row {
+            cursor: default;
+        }
+
+        .root-entry-row:hover {
+            background: rgba(0,0,0,0.02);
+        }
+
+        .root-entry-cell {
+            padding: 16px !important;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .root-entry-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .root-path {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            margin-bottom: 6px;
+            word-break: break-all;
+        }
+
+        .root-scan-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 0.875rem;
+            color: #86868b;
+        }
+
+        .root-scan-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .scan-status-completed {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid rgba(34,197,94,0.2);
+        }
+
+        .scan-status-scanning,
+        .scan-status-sweeping,
+        .scan-status-analyzing {
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid rgba(59,130,246,0.2);
+        }
+
+        .scan-status-pending {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid rgba(245,158,11,0.2);
+        }
+
+        .scan-status-incomplete {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid rgba(245,158,11,0.2);
+        }
+
+        .scan-status-stopped {
+            background: #fff5f5;
+            color: #991b1b;
+            border: 1px solid rgba(255,59,48,0.2);
+        }
+
+        .scan-status-unknown {
+            background: #f5f5f7;
+            color: #86868b;
+            border: 1px solid rgba(0,0,0,0.12);
+        }
+
+        .root-never-scanned {
+            color: #86868b;
+            font-style: italic;
+        }
+
+        .root-scan-meta {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .root-action-placeholder {
+            width: 100px;
+            flex-shrink: 0;
+            /* Reserved for future action button */
+        }
+
         .filter-modal-footer {
             padding: 16px 24px;
             border-top: 1px solid rgba(0,0,0,0.06);
@@ -1918,6 +2022,28 @@
                 this.scanningCounts = { files: 0, directories: 0 }; // Track scanning progress
                 this.phaseBreadcrumbs = []; // Track completed phases
                 this.renderPending = false; // Track if a render is already scheduled
+                this.stateChangeCallbacks = []; // Callbacks to notify when scan state changes
+            }
+
+            // Subscribe to scan state changes
+            onStateChange(callback) {
+                this.stateChangeCallbacks.push(callback);
+            }
+
+            // Notify all subscribers of state change
+            notifyStateChange() {
+                this.stateChangeCallbacks.forEach(callback => {
+                    try {
+                        callback(this.currentScanId, this.activeScans);
+                    } catch (error) {
+                        console.error('Error in state change callback:', error);
+                    }
+                });
+            }
+
+            // Get currently active scan ID
+            getActiveScanId() {
+                return this.currentScanId;
             }
 
             scheduleRender() {
@@ -2303,6 +2429,7 @@
                 });
                 this.expandedScans.add(scanId); // Expand by default
                 this.scheduleRender();
+                this.notifyStateChange(); // Notify subscribers of new scan
 
                 // Connect to WebSocket
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -2327,7 +2454,9 @@
                     // Remove scan from active list after a delay
                     setTimeout(() => {
                         this.activeScans.delete(scanId);
+                        this.currentScanId = null; // Clear active scan ID
                         this.scheduleRender();
+                        this.notifyStateChange(); // Notify subscribers scan ended
                     }, 2000);
                 };
             }
@@ -2414,6 +2543,7 @@
 
                 // Update the scan in activeScans
                 this.activeScans.set(state.scan_id, scanData);
+                this.notifyStateChange(); // Notify subscribers of state update
 
                 // Handle scan completion
                 // Status is an object like {status: "running"}, check the status field
@@ -2424,13 +2554,17 @@
                         // Scan completed - remove after delay
                         setTimeout(() => {
                             this.activeScans.delete(state.scan_id);
+                            this.currentScanId = null; // Clear active scan ID
                             this.scheduleRender();
+                            this.notifyStateChange(); // Notify subscribers scan completed
                         }, 2000);
                     } else if (statusValue === 'stopped') {
                         // Scan stopped (cancelled) - remove after delay
                         setTimeout(() => {
                             this.activeScans.delete(state.scan_id);
+                            this.currentScanId = null; // Clear active scan ID
                             this.scheduleRender();
+                            this.notifyStateChange(); // Notify subscribers scan stopped
                         }, 2000);
                     } else if (statusValue === 'error') {
                         console.error('Scan error:', state.status.message);
@@ -2438,7 +2572,9 @@
                         // Remove scan on error after delay
                         setTimeout(() => {
                             this.activeScans.delete(state.scan_id);
+                            this.currentScanId = null; // Clear active scan ID
                             this.scheduleRender();
+                            this.notifyStateChange(); // Notify subscribers scan errored
                         }, 3000);
                     }
                     // For 'running' and 'cancelling' states, keep the scan visible
@@ -3145,31 +3281,44 @@
         let manageRootsCurrentPage = 1;
         const manageRootsPageSize = 25;
         let manageRootsTotalCount = 0;
+        let manageRootsCachedData = []; // Cache roots data for re-rendering
+        let manageRootsPreviousScanId = null; // Track previous active scan ID
+
+        // Subscribe to scan state changes to update the Manage Roots display
+        scanManager.onStateChange((activeScanId, activeScans) => {
+            // Only update if we're currently on the Manage Roots page and have data
+            const manageRootsSection = document.getElementById('manage-roots-section');
+            if (manageRootsSection && manageRootsSection.style.display !== 'none') {
+                // Detect if a scan just completed (previous scan ID existed, now it's null)
+                const scanJustCompleted = manageRootsPreviousScanId !== null && activeScanId === null;
+
+                if (scanJustCompleted) {
+                    // Reload data from server to get updated scan states
+                    loadManageRootsData();
+                } else if (manageRootsCachedData.length > 0) {
+                    // Just re-render with cached data (scan is still active or just started)
+                    renderManageRootsTable(manageRootsCachedData);
+                }
+
+                // Update previous scan ID for next comparison
+                manageRootsPreviousScanId = activeScanId;
+            }
+        });
 
         async function loadManageRootsData() {
             try {
-                // Use the query API to fetch roots sorted by root_path
-                const response = await fetch('/api/query/roots', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        columns: [
-                            { name: 'root_path', visible: true, sort_direction: 'asc', position: 0 }
-                        ],
-                        filters: [],
-                        limit: manageRootsPageSize,
-                        offset: (manageRootsCurrentPage - 1) * manageRootsPageSize
-                    })
-                });
+                // Fetch roots with their last scan information
+                const response = await fetch('/api/roots/with-scans');
 
                 if (!response.ok) {
                     throw new Error(`HTTP error ${response.status}`);
                 }
 
-                const data = await response.json();
-                manageRootsTotalCount = data.total;
+                const roots = await response.json();
+                manageRootsTotalCount = roots.length;
+                manageRootsCachedData = roots; // Cache for re-rendering on scan state changes
 
-                renderManageRootsTable(data.rows);
+                renderManageRootsTable(roots);
                 updateManageRootsPagination();
             } catch (error) {
                 console.error('Error loading manage roots data:', error);
@@ -3183,10 +3332,26 @@
             }
         }
 
-        function renderManageRootsTable(rows) {
+        function formatTimestamp(unixTimestamp) {
+            const date = new Date(unixTimestamp * 1000);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'just now';
+            if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+            if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+            if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+            return date.toLocaleDateString();
+        }
+
+        function renderManageRootsTable(roots) {
             const tbody = document.getElementById('manage-roots-table-body');
 
-            if (rows.length === 0) {
+            if (roots.length === 0) {
                 tbody.innerHTML = `
                     <tr>
                         <td style="text-align: center; color: #86868b; padding: 2rem;">
@@ -3197,11 +3362,80 @@
                 return;
             }
 
-            tbody.innerHTML = rows.map(row => `
-                <tr>
-                    <td style="font-family: 'SF Mono', Monaco, 'Courier New', monospace;">${row[0]}</td>
-                </tr>
-            `).join('');
+            // Get active scan ID from ScanManager
+            const activeScanId = scanManager.getActiveScanId();
+
+            tbody.innerHTML = roots.map(root => {
+                const scanInfo = root.last_scan;
+                let scanHtml = '';
+
+                if (scanInfo) {
+                    // Determine display state and class
+                    let displayState = scanInfo.state;
+                    let stateClass = `scan-status-${scanInfo.state.toLowerCase()}`;
+
+                    // Non-terminal states are: Pending, Scanning, Sweeping, Analyzing
+                    const nonTerminalStates = ['Pending', 'Scanning', 'Sweeping', 'Analyzing'];
+                    const isNonTerminal = nonTerminalStates.includes(scanInfo.state);
+
+                    if (isNonTerminal) {
+                        // Check if this scan is currently active
+                        if (activeScanId && activeScanId === scanInfo.scan_id) {
+                            displayState = 'Scanning';
+                            stateClass = 'scan-status-scanning';
+                        } else {
+                            displayState = 'Incomplete';
+                            stateClass = 'scan-status-incomplete';
+                        }
+                    }
+
+                    const timestamp = formatTimestamp(scanInfo.scan_time);
+
+                    let counts = '';
+                    if (scanInfo.file_count !== null || scanInfo.folder_count !== null) {
+                        const filePart = scanInfo.file_count !== null ?
+                            `${scanInfo.file_count.toLocaleString()} file${scanInfo.file_count !== 1 ? 's' : ''}` : '';
+                        const folderPart = scanInfo.folder_count !== null ?
+                            `${scanInfo.folder_count.toLocaleString()} folder${scanInfo.folder_count !== 1 ? 's' : ''}` : '';
+
+                        if (filePart && folderPart) {
+                            counts = `<span class="root-scan-meta">${filePart}, ${folderPart}</span>`;
+                        } else if (filePart) {
+                            counts = `<span class="root-scan-meta">${filePart}</span>`;
+                        } else if (folderPart) {
+                            counts = `<span class="root-scan-meta">${folderPart}</span>`;
+                        }
+                    }
+
+                    scanHtml = `
+                        <div class="root-scan-info">
+                            <span class="root-scan-badge ${stateClass}">${displayState}</span>
+                            <span class="root-scan-meta">${timestamp}</span>
+                            ${counts}
+                        </div>
+                    `;
+                } else {
+                    scanHtml = `
+                        <div class="root-scan-info">
+                            <span class="root-never-scanned">Never scanned</span>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <tr class="root-entry-row">
+                        <td class="root-entry-cell">
+                            <div class="root-entry-content">
+                                <div class="root-path">${root.root_path}</div>
+                                ${scanHtml}
+                            </div>
+                            <div class="root-action-placeholder">
+                                <!-- Reserved for future action button -->
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         function updateManageRootsPagination() {
