@@ -407,4 +407,104 @@ mod tests {
         // Count query should ignore columns, sort, limit, and offset
         assert_eq!(query, "items");
     }
+
+    #[test]
+    fn test_build_query_alerts_basic() {
+        let req = QueryRequest {
+            columns: vec![
+                ColumnSpec {
+                    name: "alert_id".to_string(),
+                    visible: true,
+                    sort_direction: "none".to_string(),
+                    position: 0,
+                },
+                ColumnSpec {
+                    name: "alert_type".to_string(),
+                    visible: true,
+                    sort_direction: "asc".to_string(),
+                    position: 1,
+                },
+            ],
+            filters: vec![],
+            limit: 25,
+            offset: None,
+        };
+
+        let query = build_query_string("alerts", &req).unwrap();
+        assert_eq!(query, "alerts show alert_id, alert_type order by alert_type asc limit 25");
+    }
+
+    #[test]
+    fn test_build_query_alerts_with_filters() {
+        let req = QueryRequest {
+            columns: vec![
+                ColumnSpec {
+                    name: "alert_type".to_string(),
+                    visible: true,
+                    sort_direction: "none".to_string(),
+                    position: 0,
+                },
+                ColumnSpec {
+                    name: "item_path".to_string(),
+                    visible: true,
+                    sort_direction: "none".to_string(),
+                    position: 1,
+                },
+            ],
+            filters: vec![
+                FilterSpec {
+                    column: "alert_type".to_string(),
+                    value: "H".to_string(),
+                },
+                FilterSpec {
+                    column: "alert_status".to_string(),
+                    value: "O".to_string(),
+                },
+            ],
+            limit: 10,
+            offset: None,
+        };
+
+        let query = build_query_string("alerts", &req).unwrap();
+        assert_eq!(
+            query,
+            "alerts where alert_type:(H), alert_status:(O) show alert_type, item_path limit 10"
+        );
+    }
+
+    #[test]
+    fn test_build_count_query_alerts_with_filters() {
+        let req = QueryRequest {
+            columns: vec![],
+            filters: vec![
+                FilterSpec {
+                    column: "alert_status".to_string(),
+                    value: "O".to_string(),
+                },
+            ],
+            limit: 25,
+            offset: None,
+        };
+
+        let query = build_count_query_string("alerts", &req).unwrap();
+        assert_eq!(query, "alerts where alert_status:(O)");
+    }
+
+    #[test]
+    fn test_build_query_alerts_with_offset() {
+        let req = QueryRequest {
+            columns: vec![ColumnSpec {
+                name: "alert_id".to_string(),
+                visible: true,
+                sort_direction: "desc".to_string(),
+                position: 0,
+            }],
+            filters: vec![],
+            limit: 25,
+            offset: Some(50),
+        };
+
+        let query = build_query_string("alerts", &req).unwrap();
+        assert_eq!(query, "alerts show alert_id order by alert_id desc limit 25 offset 50");
+    }
 }

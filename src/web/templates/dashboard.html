@@ -1410,12 +1410,6 @@
                 </svg>
                 <span class="nav-label">Overview</span>
             </button>
-            <button class="nav-item" onclick="showSection('alerts')">
-                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                </svg>
-                <span class="nav-label">Alerts</span>
-            </button>
             <button class="nav-item" onclick="showSection('activity')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
@@ -1437,6 +1431,12 @@
             <div class="nav-section-header">
                 <span class="nav-label">Data Explorer</span>
             </div>
+            <button class="nav-item" onclick="showSection('alerts')">
+                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <span class="nav-label">Alerts</span>
+            </button>
             <button class="nav-item" onclick="showSection('roots')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
@@ -1520,11 +1520,6 @@
             </div>
 
             <!-- Insights Sections -->
-            <div id="alerts-section" style="display: none;">
-                <h2>Active Alerts</h2>
-                <p>Detailed alerts management coming soon...</p>
-            </div>
-
             <div id="activity-section" style="display: none;">
                 <h2>Activity Monitor</h2>
                 <p>Detailed activity monitoring coming soon...</p>
@@ -1766,6 +1761,56 @@
                 </div>
             </div>
 
+            <div id="alerts-section" style="display: none;">
+                <div class="entity-view-header">
+                    <h1 class="entity-view-title">Data Explorer - Alerts</h1>
+                </div>
+
+                <div class="section-with-sidebar">
+                    <!-- Column List Sidebar -->
+                    <aside class="column-list-sidebar">
+                        <div class="column-list-header">
+                            <div class="column-list-header-labels">
+                                <div class="drag-spacer"></div>
+                                <div class="column-label">Column</div>
+                                <div class="name-spacer"></div>
+                                <div class="sort-label">Sort</div>
+                                <div class="filter-label">Filter</div>
+                            </div>
+                        </div>
+                        <ul class="column-list" id="alerts-column-list">
+                            <li style="text-align: center; color: #86868b; padding: 1rem; font-size: 0.875rem;">Loading columns...</li>
+                        </ul>
+                    </aside>
+
+                    <!-- Main Content Area -->
+                    <div class="section-main-content">
+                        <div class="card">
+                            <table class="data-table">
+                                <thead>
+                                    <tr id="alerts-table-header">
+                                        <th colspan="5">Loading...</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="alerts-table-body">
+                                    <tr><td colspan="5">Loading...</td></tr>
+                                </tbody>
+                            </table>
+
+                            <div class="pagination">
+                                <div class="pagination-info" id="alerts-pagination-info">
+                                    Showing 0 - 0 of 0 alerts
+                                </div>
+                                <div class="pagination-controls">
+                                    <button class="pagination-btn" id="alerts-prev-btn" onclick="changeAlertsPage(-1)">Previous</button>
+                                    <button class="pagination-btn" id="alerts-next-btn" onclick="changeAlertsPage(1)">Next</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Configuration Section -->
             <div id="settings-section" style="display: none;">
                 <h2>Settings</h2>
@@ -1843,6 +1888,24 @@
             <div class="filter-modal-footer">
                 <button class="modal-btn" onclick="closeChangesFilterModal()">Cancel</button>
                 <button class="modal-btn primary" onclick="saveChangesFilter()">Apply Filter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts Filter Modal -->
+    <div class="filter-modal-overlay" id="alerts-filter-modal-overlay" onclick="closeAlertsFilterModal()">
+        <div class="filter-modal" onclick="event.stopPropagation()">
+            <div class="filter-modal-header">
+                <h2 class="filter-modal-title" id="alerts-filter-modal-title">Filter Column</h2>
+            </div>
+            <div class="filter-modal-body">
+                <input type="text" class="filter-input" id="alerts-filter-input" placeholder="Enter filter value...">
+                <p class="filter-hint" id="alerts-filter-hint">Filter syntax hint will appear here</p>
+                <p class="filter-error" id="alerts-filter-error">Error message</p>
+            </div>
+            <div class="filter-modal-footer">
+                <button class="modal-btn" onclick="closeAlertsFilterModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="saveAlertsFilter()">Apply Filter</button>
             </div>
         </div>
     </div>
@@ -3195,13 +3258,15 @@
             roots: new DataTableView('roots', 'Roots'),
             scans: new DataTableView('scans', 'Scans'),
             items: new DataTableView('items', 'Items'),
-            changes: new DataTableView('changes', 'Changes')
+            changes: new DataTableView('changes', 'Changes'),
+            alerts: new DataTableView('alerts', 'Alerts')
         };
 
         // Global functions for onclick handlers (backwards compatibility)
         function changeRootsPage(delta) { views.roots.changePage(delta); }
         function changeScansPage(delta) { views.scans.changePage(delta); }
         function changeItemsPage(delta) { views.items.changePage(delta); }
+        function changeAlertsPage(delta) { views.alerts.changePage(delta); }
 
         function closeRootsFilterModal() { views.roots.closeFilterModal(); }
         function closeScansFilterModal() { views.scans.closeFilterModal(); }
@@ -3214,6 +3279,9 @@
         function changeChangesPage(delta) { views.changes.changePage(delta); }
         function closeChangesFilterModal() { views.changes.closeFilterModal(); }
         function saveChangesFilter() { views.changes.saveFilter(); }
+
+        function closeAlertsFilterModal() { views.alerts.closeFilterModal(); }
+        function saveAlertsFilter() { views.alerts.saveFilter(); }
 
         // Enhanced showSection to load data when needed
         function showSection(sectionName, updateHash = true) {
@@ -3244,7 +3312,7 @@
             }
 
             // Load data for specific sections
-            if (['roots', 'scans', 'items', 'changes'].includes(sectionName)) {
+            if (['roots', 'scans', 'items', 'changes', 'alerts'].includes(sectionName)) {
                 views[sectionName].loadData();
             } else if (sectionName === 'manage-roots') {
                 loadManageRootsData();
