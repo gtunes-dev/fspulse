@@ -17,6 +17,7 @@ on:
     paths-ignore:
       - 'assets/**'
       - 'docs/**'
+      - 'scripts/**'
       - 'CHANGELOG.md'
       - '.github/workflows/**'
 
