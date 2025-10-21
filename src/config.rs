@@ -30,6 +30,16 @@ impl LoggingConfig {
         }
     }
 
+    fn with_env_overrides(mut self) -> Self {
+        if let Ok(val) = env::var("FSPULSE_LOGGING_FSPULSE") {
+            self.fspulse = val;
+        }
+        if let Ok(val) = env::var("FSPULSE_LOGGING_LOPDF") {
+            self.lopdf = val;
+        }
+        self
+    }
+
     fn ensure_valid(&mut self) {
         // Ensure that specified log levels are valid. If this list grows, we'll make a function to call for each
         // For now:
@@ -104,6 +114,18 @@ impl AnalysisConfig {
         }
     }
 
+    fn with_env_overrides(mut self) -> Self {
+        if let Ok(val) = env::var("FSPULSE_ANALYSIS_THREADS") {
+            if let Ok(threads) = val.parse::<usize>() {
+                self.threads = threads;
+            }
+        }
+        if let Ok(val) = env::var("FSPULSE_ANALYSIS_HASH") {
+            self.hash = val;
+        }
+        self
+    }
+
     fn ensure_valid(&mut self) {
         let str_original = self.hash.clone();
         self.hash = self.hash.trim().to_ascii_lowercase();
@@ -132,6 +154,18 @@ impl ServerConfig {
         }
     }
 
+    fn with_env_overrides(mut self) -> Self {
+        if let Ok(val) = env::var("FSPULSE_SERVER_HOST") {
+            self.host = val;
+        }
+        if let Ok(val) = env::var("FSPULSE_SERVER_PORT") {
+            if let Ok(port) = val.parse::<u16>() {
+                self.port = port;
+            }
+        }
+        self
+    }
+
     fn ensure_valid(&mut self) {
         // Trim and validate host
         self.host = self.host.trim().to_string();
@@ -155,6 +189,13 @@ pub struct DatabaseConfig {
 }
 
 impl DatabaseConfig {
+    fn with_env_overrides(mut self) -> Self {
+        if let Ok(val) = env::var("FSPULSE_DATABASE_PATH") {
+            self.path = Some(val);
+        }
+        self
+    }
+
     fn ensure_valid(&mut self) {
         // Trim path if provided
         if let Some(ref mut path) = self.path {
@@ -243,6 +284,19 @@ impl Config {
             );
             default_config
         });
+
+        // Apply environment variable overrides
+        config.logging = config.logging.with_env_overrides();
+        config.analysis = config.analysis.with_env_overrides();
+        config.server = config.server.with_env_overrides();
+        if let Some(database) = config.database {
+            config.database = Some(database.with_env_overrides());
+        } else {
+            // Check if FSPULSE_DATABASE_PATH is set even if database section doesn't exist
+            if let Ok(val) = env::var("FSPULSE_DATABASE_PATH") {
+                config.database = Some(DatabaseConfig { path: Some(val) });
+            }
+        }
 
         config.ensure_valid();
 
@@ -504,5 +558,159 @@ path = "/custom/db/path"
         let config: Config = toml::from_str(toml_str).expect("Failed to deserialize config");
         assert!(config.database.is_some());
         assert_eq!(config.database.unwrap().get_path(), Some("/custom/db/path"));
+    }
+
+    #[test]
+    fn test_logging_config_env_overrides() {
+        // Set environment variables
+        env::set_var("FSPULSE_LOGGING_FSPULSE", "debug");
+        env::set_var("FSPULSE_LOGGING_LOPDF", "warn");
+
+        let config = LoggingConfig::default().with_env_overrides();
+
+        assert_eq!(config.fspulse, "debug");
+        assert_eq!(config.lopdf, "warn");
+
+        // Clean up
+        env::remove_var("FSPULSE_LOGGING_FSPULSE");
+        env::remove_var("FSPULSE_LOGGING_LOPDF");
+    }
+
+    #[test]
+    fn test_logging_config_no_env_overrides() {
+        // Ensure no env vars are set
+        env::remove_var("FSPULSE_LOGGING_FSPULSE");
+        env::remove_var("FSPULSE_LOGGING_LOPDF");
+
+        let config = LoggingConfig::default().with_env_overrides();
+
+        // Should keep defaults
+        assert_eq!(config.fspulse, "info");
+        assert_eq!(config.lopdf, "error");
+    }
+
+    #[test]
+    fn test_analysis_config_env_overrides() {
+        env::set_var("FSPULSE_ANALYSIS_THREADS", "16");
+        env::set_var("FSPULSE_ANALYSIS_HASH", "md5");
+
+        let config = AnalysisConfig::default().with_env_overrides();
+
+        assert_eq!(config.threads, 16);
+        assert_eq!(config.hash, "md5");
+
+        // Clean up
+        env::remove_var("FSPULSE_ANALYSIS_THREADS");
+        env::remove_var("FSPULSE_ANALYSIS_HASH");
+    }
+
+    #[test]
+    fn test_analysis_config_invalid_threads_env() {
+        env::set_var("FSPULSE_ANALYSIS_THREADS", "not_a_number");
+
+        let config = AnalysisConfig::default().with_env_overrides();
+
+        // Should keep default when parse fails
+        assert_eq!(config.threads, 8);
+
+        // Clean up
+        env::remove_var("FSPULSE_ANALYSIS_THREADS");
+    }
+
+    #[test]
+    fn test_server_config_env_overrides() {
+        env::set_var("FSPULSE_SERVER_HOST", "0.0.0.0");
+        env::set_var("FSPULSE_SERVER_PORT", "9090");
+
+        let config = ServerConfig::default().with_env_overrides();
+
+        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.port, 9090);
+
+        // Clean up
+        env::remove_var("FSPULSE_SERVER_HOST");
+        env::remove_var("FSPULSE_SERVER_PORT");
+    }
+
+    #[test]
+    fn test_server_config_invalid_port_env() {
+        env::set_var("FSPULSE_SERVER_PORT", "invalid");
+
+        let config = ServerConfig::default().with_env_overrides();
+
+        // Should keep default when parse fails
+        assert_eq!(config.port, 8080);
+
+        // Clean up
+        env::remove_var("FSPULSE_SERVER_PORT");
+    }
+
+    #[test]
+    fn test_database_config_env_override() {
+        env::set_var("FSPULSE_DATABASE_PATH", "/custom/path/db");
+
+        let config = DatabaseConfig { path: None }.with_env_overrides();
+
+        assert_eq!(config.path, Some("/custom/path/db".to_string()));
+
+        // Clean up
+        env::remove_var("FSPULSE_DATABASE_PATH");
+    }
+
+    #[test]
+    fn test_database_config_env_override_replaces_existing() {
+        env::set_var("FSPULSE_DATABASE_PATH", "/override/path");
+
+        let config = DatabaseConfig {
+            path: Some("/original/path".to_string()),
+        }
+        .with_env_overrides();
+
+        assert_eq!(config.path, Some("/override/path".to_string()));
+
+        // Clean up
+        env::remove_var("FSPULSE_DATABASE_PATH");
+    }
+
+    #[test]
+    fn test_env_overrides_preserve_non_overridden_values() {
+        env::set_var("FSPULSE_SERVER_HOST", "192.168.1.1");
+        // Don't set PORT - it should keep its original value
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 3000,
+        }
+        .with_env_overrides();
+
+        assert_eq!(config.host, "192.168.1.1"); // Overridden
+        assert_eq!(config.port, 3000); // Preserved
+
+        // Clean up
+        env::remove_var("FSPULSE_SERVER_HOST");
+    }
+
+    #[test]
+    fn test_multiple_env_overrides_together() {
+        // Set multiple env vars across different config sections
+        env::set_var("FSPULSE_LOGGING_FSPULSE", "trace");
+        env::set_var("FSPULSE_ANALYSIS_THREADS", "32");
+        env::set_var("FSPULSE_SERVER_HOST", "0.0.0.0");
+        env::set_var("FSPULSE_SERVER_PORT", "7070");
+
+        let logging = LoggingConfig::default().with_env_overrides();
+        let analysis = AnalysisConfig::default().with_env_overrides();
+        let server = ServerConfig::default().with_env_overrides();
+
+        assert_eq!(logging.fspulse, "trace");
+        assert_eq!(analysis.threads, 32);
+        assert_eq!(server.host, "0.0.0.0");
+        assert_eq!(server.port, 7070);
+
+        // Clean up
+        env::remove_var("FSPULSE_LOGGING_FSPULSE");
+        env::remove_var("FSPULSE_ANALYSIS_THREADS");
+        env::remove_var("FSPULSE_SERVER_HOST");
+        env::remove_var("FSPULSE_SERVER_PORT");
     }
 }
