@@ -316,6 +316,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -500,6 +501,7 @@ host = "0.0.0.0"
     }
 
     #[test]
+    #[serial]
     fn test_load_config_with_temp_file() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
         let _temp_dir = temp_file.path().parent().unwrap().to_path_buf();
@@ -561,6 +563,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_logging_config_env_overrides() {
         // Set environment variables
         env::set_var("FSPULSE_LOGGING_FSPULSE", "debug");
@@ -577,6 +580,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_logging_config_no_env_overrides() {
         // Ensure no env vars are set
         env::remove_var("FSPULSE_LOGGING_FSPULSE");
@@ -590,6 +594,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_analysis_config_env_overrides() {
         env::set_var("FSPULSE_ANALYSIS_THREADS", "16");
         env::set_var("FSPULSE_ANALYSIS_HASH", "md5");
@@ -605,6 +610,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_analysis_config_invalid_threads_env() {
         env::set_var("FSPULSE_ANALYSIS_THREADS", "not_a_number");
 
@@ -618,6 +624,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_server_config_env_overrides() {
         env::set_var("FSPULSE_SERVER_HOST", "0.0.0.0");
         env::set_var("FSPULSE_SERVER_PORT", "9090");
@@ -633,6 +640,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_server_config_invalid_port_env() {
         env::set_var("FSPULSE_SERVER_PORT", "invalid");
 
@@ -646,6 +654,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_database_config_env_override() {
         env::set_var("FSPULSE_DATABASE_PATH", "/custom/path/db");
 
@@ -658,6 +667,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_database_config_env_override_replaces_existing() {
         env::set_var("FSPULSE_DATABASE_PATH", "/override/path");
 
@@ -673,6 +683,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_env_overrides_preserve_non_overridden_values() {
         env::set_var("FSPULSE_SERVER_HOST", "192.168.1.1");
         // Don't set PORT - it should keep its original value
@@ -691,6 +702,7 @@ path = "/custom/db/path"
     }
 
     #[test]
+    #[serial]
     fn test_multiple_env_overrides_together() {
         // Set multiple env vars across different config sections
         env::set_var("FSPULSE_LOGGING_FSPULSE", "trace");

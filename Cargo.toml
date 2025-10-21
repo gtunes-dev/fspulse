@@ -64,6 +64,7 @@ axum = { version = "0.8", features = ["ws"] }
 tempfile = "3.8"
 proptest = "1.4"
 pretty_assertions = "1.4"
+serial_test = "3.2"
 
 [build-dependencies]
 static_vcruntime = "2.0"
