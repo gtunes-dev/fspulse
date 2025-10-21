@@ -36,11 +36,23 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
     </head>
     <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
     <div id="body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
@@ -81,10 +93,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -118,7 +133,7 @@
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
                             <i class="fa fa-search"></i>
                         </button>
                     </div>
@@ -135,7 +150,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -156,20 +176,34 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
-<p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior and analysis settings such as thread usage.</p>
+<p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior, analysis settings, server configuration, and more.</p>
+<blockquote>
+<p><strong>📦 Docker Users</strong>: If you're running FsPulse in Docker, see the <a href="docker.html">Docker Deployment</a> chapter for Docker-specific configuration including environment variable overrides and volume management.</p>
+</blockquote>
 <hr />
 <h2 id="finding-configtoml"><a class="header" href="#finding-configtoml">Finding <code>config.toml</code></a></h2>
-<p>FsPulse uses the <a href="https://docs.rs/directories">directories</a> crate to determine the appropriate location for configuration files and logs based on your operating system. Specifically, FsPulse uses the <strong>local data directory</strong> (<code>ProjectDirs::data_local_dir()</code>), which resolves to platform-specific standard paths:</p>
-<h3 id="where-its-stored"><a class="header" href="#where-its-stored">Where it's stored:</a></h3>
+<p>The location of <code>config.toml</code> depends on how you're running FsPulse:</p>
+<h3 id="docker-deployments"><a class="header" href="#docker-deployments">Docker Deployments</a></h3>
+<p>When running in Docker, the config file is located at <strong><code>/data/config.toml</code></strong> inside the container. FsPulse automatically creates this file with default settings on first run.</p>
+<p>To access it from your host machine:</p>
+<pre><code class="language-bash"># View the config
+docker exec fspulse cat /data/config.toml
+
+# Extract to edit
+docker exec fspulse cat /data/config.toml &gt; config.toml
+</code></pre>
+<p>See the <a href="docker.html#configuration">Docker Deployment</a> chapter for details on editing the config in Docker.</p>
+<h3 id="native-installations"><a class="header" href="#native-installations">Native Installations</a></h3>
+<p>FsPulse uses the <a href="https://docs.rs/directories">directories</a> crate to determine platform-specific locations:</p>
 <div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Location Description</th><th>Example Path</th></tr></thead><tbody>
 <tr><td>Linux</td><td><code>$XDG_DATA_HOME</code></td><td><code>/home/alice/.local/share/fspulse</code></td></tr>
 <tr><td>macOS</td><td>Application Support</td><td><code>/Users/alice/Library/Application Support/fspulse</code></td></tr>
 <tr><td>Windows</td><td>Local AppData</td><td><code>C:\Users\Alice\AppData\Local\fspulse</code></td></tr>
 </tbody></table>
 </div>
-<p>These are all managed internally via the <code>directories</code> crate. On first run, FsPulse will automatically create this directory and write a default <code>config.toml</code> there if one doesn't exist.</p>
+<p>On first run, FsPulse automatically creates this directory and writes a default <code>config.toml</code> if one doesn't exist.</p>
 <blockquote>
-<p>Tip: You can delete <code>config.toml</code> at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.</p>
+<p><strong>Tip</strong>: You can delete <code>config.toml</code> at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.</p>
 </blockquote>
 <hr />
 <h2 id="configuration-settings"><a class="header" href="#configuration-settings">Configuration Settings</a></h2>
@@ -177,6 +211,10 @@
 <pre><code class="language-toml">[logging]
 fspulse = "info"
 lopdf = "error"
+
+[server]
+port = 8080
+host = "127.0.0.1"
 
 [analysis]
 threads = 8
@@ -200,6 +238,19 @@ hash = "sha2"
 <li>FsPulse retains up to <strong>100</strong> log files; older files are automatically deleted</li>
 </ul>
 <hr />
+<h2 id="server-settings"><a class="header" href="#server-settings">Server Settings</a></h2>
+<p>The <code>[server]</code> section controls the web UI server behavior when running <code>fspulse serve</code>.</p>
+<ul>
+<li><code>host</code>: IP address to bind to (default: <code>127.0.0.1</code>)
+<ul>
+<li><code>127.0.0.1</code> - Localhost only (secure, only accessible from same machine)</li>
+<li><code>0.0.0.0</code> - All interfaces (required for Docker, remote access)</li>
+</ul>
+</li>
+<li><code>port</code>: Port number to listen on (default: <code>8080</code>)</li>
+</ul>
+<p><strong>Note</strong>: In Docker deployments, the host should be <code>0.0.0.0</code> to allow access from outside the container. The Docker image sets this automatically via environment variable.</p>
+<hr />
 <h2 id="analysis-settings"><a class="header" href="#analysis-settings">Analysis Settings</a></h2>
 <p>The <code>[analysis]</code> section controls how many threads are used during the <strong>analysis phase</strong> of scanning (for hashing and validation).</p>
 <ul>
@@ -210,6 +261,132 @@ hash = "sha2"
 <li><code>hash</code>: hash function to use when hashing files. Values can be <code>sha2</code> or <code>md5</code> (default: <code>sha2</code>)</li>
 </ul>
 <p>Sha2 is more secure but is slower. It is appropriate for most users.</p>
+<hr />
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
+<p>All configuration settings can be overridden using environment variables. This is particularly useful for:</p>
+<ul>
+<li><strong>Docker deployments</strong> where editing files is inconvenient</li>
+<li><strong>Different environments</strong> (development, staging, production) with different settings</li>
+<li><strong>NAS deployments</strong> (TrueNAS, Unraid) using web-based configuration UIs</li>
+<li><strong>CI/CD pipelines</strong> where configuration is managed externally</li>
+</ul>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>Environment variables follow the pattern: <strong><code>FSPULSE_&lt;SECTION&gt;_&lt;FIELD&gt;</code></strong></p>
+<p>The <code>&lt;SECTION&gt;</code> corresponds to a section in <code>config.toml</code> (like <code>[server]</code>, <code>[logging]</code>, <code>[analysis]</code>), and <code>&lt;FIELD&gt;</code> is the setting name within that section.</p>
+<p><strong>Precedence</strong> (highest to lowest):</p>
+<ol>
+<li><strong>Environment variables</strong> - Override everything</li>
+<li><strong>config.toml</strong> - User-defined settings</li>
+<li><strong>Built-in defaults</strong> - Fallback values</li>
+</ol>
+<p>This allows you to set sensible defaults in <code>config.toml</code> and override them as needed per deployment.</p>
+<h3 id="complete-variable-reference"><a class="header" href="#complete-variable-reference">Complete Variable Reference</a></h3>
+<h4 id="server-settings-1"><a class="header" href="#server-settings-1">Server Settings</a></h4>
+<p>Control the web UI server behavior (when running <code>fspulse serve</code>):</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_SERVER_HOST</code></td><td><code>127.0.0.1</code></td><td>IP address</td><td>Bind address. Use <code>0.0.0.0</code> for Docker/remote access, <code>127.0.0.1</code> for localhost only</td></tr>
+<tr><td><code>FSPULSE_SERVER_PORT</code></td><td><code>8080</code></td><td>1-65535</td><td>Web UI port number</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Native - serve only on localhost
+export FSPULSE_SERVER_HOST=127.0.0.1
+export FSPULSE_SERVER_PORT=8080
+fspulse serve
+
+# Docker - must bind to all interfaces
+docker run -e FSPULSE_SERVER_HOST=0.0.0.0 -e FSPULSE_SERVER_PORT=9090 -p 9090:9090 ...
+</code></pre>
+<h4 id="logging-settings"><a class="header" href="#logging-settings">Logging Settings</a></h4>
+<p>Configure log output verbosity:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_LOGGING_FSPULSE</code></td><td><code>info</code></td><td><code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td><td>FsPulse application log level</td></tr>
+<tr><td><code>FSPULSE_LOGGING_LOPDF</code></td><td><code>error</code></td><td><code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td><td>PDF library (lopdf) log level</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Enable debug logging
+export FSPULSE_LOGGING_FSPULSE=debug
+export FSPULSE_LOGGING_LOPDF=error
+
+# Docker
+docker run -e FSPULSE_LOGGING_FSPULSE=debug ...
+</code></pre>
+<h4 id="analysis-settings-1"><a class="header" href="#analysis-settings-1">Analysis Settings</a></h4>
+<p>Configure scan behavior, hashing, and validation:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-256</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
+<tr><td><code>FSPULSE_ANALYSIS_HASH</code></td><td><code>sha2</code></td><td><code>sha2</code>, <code>md5</code></td><td>Hash algorithm (sha2 is more secure, md5 is faster)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Use 16 threads with MD5 hashing
+export FSPULSE_ANALYSIS_THREADS=16
+export FSPULSE_ANALYSIS_HASH=md5
+
+# Docker
+docker run -e FSPULSE_ANALYSIS_THREADS=16 -e FSPULSE_ANALYSIS_HASH=md5 ...
+</code></pre>
+<h4 id="database-settings"><a class="header" href="#database-settings">Database Settings</a></h4>
+<p>Control database location (advanced):</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_DATA_DIR</code></td><td>Platform-specific</td><td>Directory path</td><td>Override entire data directory location</td></tr>
+<tr><td><code>FSPULSE_DATABASE_PATH</code></td><td><code>&lt;data_dir&gt;</code></td><td>Directory path</td><td>Override database directory (rarely needed)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Note</strong>: Most users should use <code>FSPULSE_DATA_DIR</code> rather than <code>FSPULSE_DATABASE_PATH</code>. In Docker, this defaults to <code>/data</code>.</p>
+<h4 id="docker-specific-variables"><a class="header" href="#docker-specific-variables">Docker-Specific Variables</a></h4>
+<p>These variables are specific to Docker deployments:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>PUID</code></td><td><code>1000</code></td><td>UID number</td><td>User ID to run FsPulse as (for NAS permission matching)</td></tr>
+<tr><td><code>PGID</code></td><td><code>1000</code></td><td>GID number</td><td>Group ID to run FsPulse as (for NAS permission matching)</td></tr>
+<tr><td><code>TZ</code></td><td><code>UTC</code></td><td>Timezone string</td><td>Timezone for log timestamps and UI (e.g., <code>America/New_York</code>)</td></tr>
+</tbody></table>
+</div>
+<p>See <a href="docker.html#nas-deployments-truenas-unraid">Docker Deployment - NAS Deployments</a> for details on PUID/PGID usage.</p>
+<h3 id="usage-examples"><a class="header" href="#usage-examples">Usage Examples</a></h3>
+<p><strong>Native (Linux/macOS/Windows):</strong></p>
+<pre><code class="language-bash"># Set environment variables
+export FSPULSE_SERVER_PORT=9090
+export FSPULSE_LOGGING_FSPULSE=debug
+export FSPULSE_ANALYSIS_THREADS=16
+
+# Run FsPulse (uses env vars)
+fspulse serve
+</code></pre>
+<p><strong>Docker - Command Line:</strong></p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -e FSPULSE_SERVER_PORT=9090 \
+  -e FSPULSE_LOGGING_FSPULSE=debug \
+  -e FSPULSE_ANALYSIS_THREADS=16 \
+  -p 9090:9090 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p><strong>Docker Compose:</strong></p>
+<pre><code class="language-yaml">services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    environment:
+      - FSPULSE_SERVER_PORT=9090
+      - FSPULSE_LOGGING_FSPULSE=debug
+      - FSPULSE_ANALYSIS_THREADS=16
+    ports:
+      - "9090:9090"
+</code></pre>
+<h3 id="verifying-environment-variables"><a class="header" href="#verifying-environment-variables">Verifying Environment Variables</a></h3>
+<p>To see what environment variables FsPulse is using:</p>
+<p><strong>Native:</strong></p>
+<pre><code class="language-bash">env | grep FSPULSE_
+</code></pre>
+<p><strong>Docker:</strong></p>
+<pre><code class="language-bash">docker exec fspulse env | grep FSPULSE_
+</code></pre>
+<hr />
+<h2 id="docker-configuration"><a class="header" href="#docker-configuration">Docker Configuration</a></h2>
+<p>When running FsPulse in Docker, configuration is managed slightly differently. The config file lives at <code>/data/config.toml</code> inside the container, and you have several options for customizing settings.</p>
+<p>For step-by-step instructions on configuring FsPulse in Docker, including editing config files and using environment variables, see the <a href="docker.html#configuration">Docker Deployment - Configuration</a> section.</p>
 <hr />
 <h2 id="new-settings-and-restoring-defaults"><a class="header" href="#new-settings-and-restoring-defaults">New Settings and Restoring Defaults</a></h2>
 <p>FsPulse may expand its configuration options over time. When new settings are introduced, they won't automatically appear in your existing <code>config.toml</code>. To take advantage of new options, either:</p>
@@ -264,6 +441,7 @@ hash = "sha2"
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>

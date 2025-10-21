@@ -36,11 +36,23 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
     </head>
     <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
     <div id="body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
@@ -81,10 +93,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -118,7 +133,7 @@
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
                             <i class="fa fa-search"></i>
                         </button>
                     </div>
@@ -135,7 +150,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -157,14 +177,23 @@
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="FsPulse logo" style="width: 100%; max-width: 600px;">
-<p>FsPulse is a Rust-based command-line tool designed to capture and analyze directory states, detect changes over time, validate file integrity and formats, and query results using a powerful and intuitive query syntax.</p>
+<p>FsPulse is a Rust-based tool designed to capture and analyze directory states, detect changes over time, validate file integrity and formats, and query results using a powerful and intuitive query syntax. It runs as a <strong>web service</strong> with browser-based interface, or as a traditional <strong>command-line tool</strong>.</p>
 <h2 id="key-capabilities"><a class="header" href="#key-capabilities">Key Capabilities</a></h2>
 <ul>
-<li><strong>Directory Scanning</strong> — Track additions, deletions, and modifications of files and directories.</li>
-<li><strong>Content Validation</strong> — Validate file formats such as FLAC, JPEG, GIF, BMP, PNG, TIFF, and PDF.</li>
-<li><strong>SHA2 Hashing</strong> — Optionally detect file content changes beyond metadata.</li>
-<li><strong>Powerful Querying</strong> — Access scan results directly with flexible, SQL-like queries.</li>
-<li><strong>Interactive Mode</strong> — Navigate and explore scan results using a menu-driven shell interface.</li>
+<li><strong>Web UI &amp; Background Service</strong> — Run as a daemon with browser-based access to all features</li>
+<li><strong>Command-Line Interface</strong> — Full CLI with interactive TUI modes for terminal users</li>
+<li><strong>Directory Scanning</strong> — Track additions, deletions, and modifications of files and directories</li>
+<li><strong>Content Validation</strong> — Validate file formats such as FLAC, JPEG, GIF, BMP, PNG, TIFF, and PDF</li>
+<li><strong>SHA2 Hashing</strong> — Optionally detect file content changes beyond metadata</li>
+<li><strong>Powerful Querying</strong> — Access scan results with flexible, SQL-like queries via web UI or CLI</li>
+<li><strong>Docker Deployment</strong> — Official Docker images for easy containerized deployment</li>
+</ul>
+<h2 id="usage-modes"><a class="header" href="#usage-modes">Usage Modes</a></h2>
+<p>FsPulse offers flexibility in how you interact with it:</p>
+<ul>
+<li><strong>Server Mode</strong>: Run <code>fspulse serve</code> to start a web server on port 8080, providing full functionality through your browser</li>
+<li><strong>CLI Mode</strong>: Use <code>fspulse scan</code>, <code>fspulse query</code>, and other commands for scriptable, terminal-based workflows</li>
+<li><strong>Interactive TUI</strong>: Use <code>fspulse interact</code> or <code>fspulse explore</code> for menu-driven exploration in the terminal</li>
 </ul>
 <p>FsPulse is designed to scale across large file systems while maintaining clarity and control for the user.</p>
 
@@ -208,6 +237,7 @@
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>

@@ -1,0 +1,611 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Docker Deployment - FsPulse</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">FsPulse</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="docker-deployment"><a class="header" href="#docker-deployment">Docker Deployment</a></h1>
+<p>The easiest way to run FsPulse is with Docker. The container runs FsPulse as a background service with the web UI accessible on port 8080. You can manage roots, initiate scans, query data, and view results—all from your browser.</p>
+<hr />
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<p>Get FsPulse running in three simple steps:</p>
+<pre><code class="language-bash"># 1. Pull the image
+docker pull gtunesdev/fspulse:latest
+
+# 2. Run the container
+docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+
+# 3. Access the web UI
+open http://localhost:8080
+</code></pre>
+<p>That's it! The web UI is now running.</p>
+<p>This basic setup stores all FsPulse data (database, config, logs) in a Docker volume and uses default settings. <strong>If you need to customize settings</strong> (like running as a specific user for NAS deployments, or changing the port), see the <a href="#configuration">Configuration</a> and <a href="#nas-deployments-truenas-unraid">NAS Deployments</a> sections below.</p>
+<hr />
+<h2 id="scanning-your-files"><a class="header" href="#scanning-your-files">Scanning Your Files</a></h2>
+<p>To scan directories on your host machine, you need to mount them into the container. FsPulse can then scan these mounted paths.</p>
+<h3 id="mounting-directories"><a class="header" href="#mounting-directories">Mounting Directories</a></h3>
+<p>Add <code>-v</code> flags to mount host directories into the container. We recommend mounting them under <code>/roots</code> for clarity:</p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -v fspulse-data:/data \
+  -v ~/Documents:/roots/documents:ro \
+  -v ~/Photos:/roots/photos:ro \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p>The <code>:ro</code> (read-only) flag is recommended for safety—FsPulse only reads files during scans and never modifies them.</p>
+<h3 id="creating-roots-in-the-web-ui"><a class="header" href="#creating-roots-in-the-web-ui">Creating Roots in the Web UI</a></h3>
+<p>After mounting directories:</p>
+<ol>
+<li>Open http://localhost:8080 in your browser</li>
+<li>Navigate to <strong>Manage Roots</strong> in the sidebar</li>
+<li>Click <strong>Add Root</strong></li>
+<li>Enter the <strong>container path</strong>: <code>/roots/documents</code> (not the host path <code>~/Documents</code>)</li>
+<li>Click <strong>Create Root</strong></li>
+</ol>
+<p><strong>Important</strong>: Always use the container path (e.g., <code>/roots/documents</code>), not the host path. The container doesn't know about host paths.</p>
+<p>Once roots are created, you can scan them from the web UI and monitor progress in real-time.</p>
+<hr />
+<h2 id="docker-compose-recommended"><a class="header" href="#docker-compose-recommended">Docker Compose (Recommended)</a></h2>
+<p>For persistent deployments, Docker Compose is cleaner and easier to manage:</p>
+<pre><code class="language-yaml">version: '3.8'
+
+services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    container_name: fspulse
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persistent data storage - REQUIRED
+      # Must map /data to either a Docker volume (shown here) or a host path
+      # Must support read/write access for database, config, and logs
+      - fspulse-data:/data
+
+      # Alternative: use a host path instead
+      # - /path/on/host/fspulse-data:/data
+
+      # Directories to scan (read-only recommended for safety)
+      - ~/Documents:/roots/documents:ro
+      - ~/Photos:/roots/photos:ro
+    environment:
+      # Optional: override any configuration setting
+      # See Configuration section below and https://gtunes-dev.github.io/fspulse/configuration.html
+      - TZ=America/New_York
+
+volumes:
+  fspulse-data:
+</code></pre>
+<p>Save as <code>docker-compose.yml</code> and run:</p>
+<pre><code class="language-bash">docker-compose up -d
+</code></pre>
+<hr />
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>FsPulse creates a default <code>config.toml</code> on first run with sensible defaults. Most users won't need to change anything, but when you do, there are three ways to customize settings.</p>
+<h3 id="option-1-use-environment-variables-easiest"><a class="header" href="#option-1-use-environment-variables-easiest">Option 1: Use Environment Variables (Easiest)</a></h3>
+<p>Override any setting using environment variables. This works with both <code>docker run</code> and Docker Compose.</p>
+<p><strong>Docker Compose example:</strong></p>
+<pre><code class="language-yaml">services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    environment:
+      - FSPULSE_SERVER_PORT=9090      # Change web UI port
+      - FSPULSE_LOGGING_FSPULSE=debug # Enable debug logging
+      - FSPULSE_ANALYSIS_THREADS=16   # Use 16 analysis threads
+    ports:
+      - "9090:9090"
+</code></pre>
+<p><strong>Command line example (equivalent to above):</strong></p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -p 9090:9090 \
+  -e FSPULSE_SERVER_PORT=9090 \
+  -e FSPULSE_LOGGING_FSPULSE=debug \
+  -e FSPULSE_ANALYSIS_THREADS=16 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p>Environment variables follow the pattern <code>FSPULSE_&lt;SECTION&gt;_&lt;FIELD&gt;</code> and override any settings in <code>config.toml</code>. See the <a href="configuration.html#environment-variables">Configuration</a> chapter for a complete list of available variables and their purposes.</p>
+<h3 id="option-2-edit-the-config-file"><a class="header" href="#option-2-edit-the-config-file">Option 2: Edit the Config File</a></h3>
+<p>If you prefer editing the config file directly:</p>
+<ol>
+<li>
+<p>Extract the auto-generated config:</p>
+<pre><code class="language-bash">docker exec fspulse cat /data/config.toml &gt; config.toml
+</code></pre>
+</li>
+<li>
+<p>Edit <code>config.toml</code> with your preferred settings</p>
+</li>
+<li>
+<p>Copy back and restart:</p>
+<pre><code class="language-bash">docker cp config.toml fspulse:/data/config.toml
+docker restart fspulse
+</code></pre>
+</li>
+</ol>
+<h3 id="option-3-pre-mount-your-own-config-advanced"><a class="header" href="#option-3-pre-mount-your-own-config-advanced">Option 3: Pre-Mount Your Own Config (Advanced)</a></h3>
+<p>If you want custom settings before first launch, create your own <code>config.toml</code> and mount it:</p>
+<pre><code class="language-yaml">volumes:
+  - fspulse-data:/data
+  - ./my-config.toml:/data/config.toml:ro
+</code></pre>
+<p>Most users should start with Option 1 (environment variables) or Option 2 (edit after first run).</p>
+<hr />
+<h2 id="nas-deployments-truenas-unraid"><a class="header" href="#nas-deployments-truenas-unraid">NAS Deployments (TrueNAS, Unraid)</a></h2>
+<p>NAS systems often have specific user IDs for file ownership. By default, FsPulse runs as user 1000, but you may need it to match your file ownership.</p>
+<h3 id="setting-user-and-group-ids"><a class="header" href="#setting-user-and-group-ids">Setting User and Group IDs</a></h3>
+<p>Use <code>PUID</code> and <code>PGID</code> environment variables to run FsPulse as a specific user:</p>
+<p><strong>TrueNAS Example</strong> (apps user = UID 34):</p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -e PUID=34 \
+  -e PGID=34 \
+  -e TZ=America/New_York \
+  -v /mnt/pool/fspulse/data:/data \
+  -v /mnt/pool/documents:/roots/docs:ro \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p><strong>Unraid Example</strong> (custom UID 1001):</p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -e PUID=1001 \
+  -e PGID=100 \
+  -v /mnt/user/appdata/fspulse:/data \
+  -v /mnt/user/photos:/roots/photos:ro \
+  gtunesdev/fspulse:latest
+</code></pre>
+<h3 id="why-puidpgid-matters"><a class="header" href="#why-puidpgid-matters">Why PUID/PGID Matters</a></h3>
+<p>Even though you mount directories as read-only (<code>:ro</code>), Linux permissions still apply. If your files are owned by UID 34 and aren't world-readable, FsPulse (running as UID 1000 by default) won't be able to scan them. Setting <code>PUID=34</code> makes FsPulse run as the same user that owns the files.</p>
+<p><strong>When to use PUID/PGID:</strong></p>
+<ul>
+<li>Files have restrictive permissions (not world-readable)</li>
+<li>Using NAS with specific user accounts (TrueNAS, Unraid, Synology)</li>
+<li>You need the <code>/data</code> directory to match specific host ownership</li>
+</ul>
+<hr />
+<h2 id="using-the-cli"><a class="header" href="#using-the-cli">Using the CLI</a></h2>
+<p>While the web UI provides full functionality, you can also use CLI commands via <code>docker exec</code>:</p>
+<pre><code class="language-bash"># Run a query
+docker exec fspulse fspulse query "items where scan:(5)"
+
+# View reports
+docker exec fspulse fspulse report scans --last 10
+
+# Interactive menu (requires -it flags)
+docker exec -it fspulse fspulse interact
+
+# Data explorer TUI (requires -it flags)
+docker exec -it fspulse fspulse explore
+</code></pre>
+<p>The <code>-it</code> flags are required for interactive modes (<code>interact</code> and <code>explore</code>) to properly handle terminal input.</p>
+<p><strong>Helper script</strong> (optional): Create <code>fspulse-docker.sh</code> to simplify CLI access:</p>
+<pre><code class="language-bash">#!/bin/bash
+docker exec fspulse fspulse "$@"
+</code></pre>
+<p>Then use it: <code>./fspulse-docker.sh query "items limit 10"</code></p>
+<hr />
+<h2 id="advanced-topics"><a class="header" href="#advanced-topics">Advanced Topics</a></h2>
+<h3 id="custom-network-settings"><a class="header" href="#custom-network-settings">Custom Network Settings</a></h3>
+<p>If you're using macvlan or host networking, ensure the server binds to all interfaces:</p>
+<pre><code class="language-yaml">services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    network_mode: host
+    environment:
+      - FSPULSE_SERVER_HOST=0.0.0.0  # Required for non-bridge networking
+      - FSPULSE_SERVER_PORT=8080
+</code></pre>
+<p><strong>Note</strong>: The Docker image sets <code>FSPULSE_SERVER_HOST=0.0.0.0</code> by default, so this is only needed if your config.toml overrides it to <code>127.0.0.1</code>.</p>
+<h3 id="reverse-proxy-setup"><a class="header" href="#reverse-proxy-setup">Reverse Proxy Setup</a></h3>
+<p>For public access with authentication, use a reverse proxy like nginx:</p>
+<pre><code class="language-nginx">server {
+    listen 80;
+    server_name fspulse.example.com;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+
+        # WebSocket support for scan progress
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+</code></pre>
+<h3 id="using-bind-mounts-instead-of-volumes"><a class="header" href="#using-bind-mounts-instead-of-volumes">Using Bind Mounts Instead of Volumes</a></h3>
+<p>By default, we use Docker volumes (<code>-v fspulse-data:/data</code>) which Docker manages automatically. For NAS deployments, you might prefer bind mounts to integrate with your existing backup schemes:</p>
+<pre><code class="language-bash"># Create directory on host
+mkdir -p /mnt/pool/fspulse/data
+
+# Use bind mount
+docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -v /mnt/pool/fspulse/data:/data \  # Bind mount to host path
+  gtunesdev/fspulse:latest
+</code></pre>
+<p><strong>Benefits of bind mounts for NAS:</strong></p>
+<ul>
+<li>Included in your NAS snapshot schedule</li>
+<li>Backed up with your existing backup system</li>
+<li>Directly accessible for manual inspection</li>
+</ul>
+<p><strong>Trade-off</strong>: You need to manage permissions yourself (use PUID/PGID if needed).</p>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="cannot-access-web-ui"><a class="header" href="#cannot-access-web-ui">Cannot Access Web UI</a></h3>
+<p><strong>Problem</strong>: http://localhost:8080 doesn't respond</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>
+<p>Check the container is running:</p>
+<pre><code class="language-bash">docker ps | grep fspulse
+</code></pre>
+</li>
+<li>
+<p>Check logs for errors:</p>
+<pre><code class="language-bash">docker logs fspulse
+</code></pre>
+<p>Look for "Server started" message.</p>
+</li>
+<li>
+<p>Verify port mapping:</p>
+<pre><code class="language-bash">docker port fspulse
+</code></pre>
+<p>Should show <code>8080/tcp -&gt; 0.0.0.0:8080</code></p>
+</li>
+</ol>
+<h3 id="permission-denied-errors"><a class="header" href="#permission-denied-errors">Permission Denied Errors</a></h3>
+<p><strong>Problem</strong>: "Permission denied" when scanning or accessing <code>/data</code></p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>
+<p>Check file ownership:</p>
+<pre><code class="language-bash">ls -ln /path/to/your/files
+</code></pre>
+</li>
+<li>
+<p>Set PUID/PGID to match file owner:</p>
+<pre><code class="language-bash">docker run -e PUID=1000 -e PGID=1000 ...
+</code></pre>
+</li>
+<li>
+<p>For bind mounts, ensure host directory is writable:</p>
+<pre><code class="language-bash">chown -R 1000:1000 /mnt/pool/fspulse/data
+</code></pre>
+</li>
+</ol>
+<h3 id="interactive-mode-doesnt-work"><a class="header" href="#interactive-mode-doesnt-work">Interactive Mode Doesn't Work</a></h3>
+<p><strong>Problem</strong>: <code>fspulse interact</code> or <code>fspulse explore</code> looks broken in docker exec</p>
+<p><strong>Solution</strong>: Use <code>-it</code> flags for proper terminal:</p>
+<pre><code class="language-bash"># Wrong (missing -it)
+docker exec fspulse fspulse interact
+
+# Correct
+docker exec -it fspulse fspulse interact
+</code></pre>
+<h3 id="configuration-changes-dont-persist"><a class="header" href="#configuration-changes-dont-persist">Configuration Changes Don't Persist</a></h3>
+<p><strong>Problem</strong>: Settings revert after container restart</p>
+<p><strong>Solution</strong>: Verify <code>/data</code> volume is mounted:</p>
+<pre><code class="language-bash">docker inspect fspulse | grep -A 10 Mounts
+</code></pre>
+<p>If missing, recreate container with volume:</p>
+<pre><code class="language-bash">docker stop fspulse
+docker rm fspulse
+docker run -d --name fspulse -v fspulse-data:/data ...
+</code></pre>
+<h3 id="database-locked-errors"><a class="header" href="#database-locked-errors">Database Locked Errors</a></h3>
+<p><strong>Problem</strong>: "Database is locked" errors</p>
+<p><strong>Cause</strong>: Multiple containers accessing the same database</p>
+<p><strong>Solution</strong>: Only run one FsPulse container per database. Don't mount the same <code>/data</code> volume to multiple containers.</p>
+<hr />
+<h2 id="data-backup"><a class="header" href="#data-backup">Data Backup</a></h2>
+<h3 id="backing-up-your-data"><a class="header" href="#backing-up-your-data">Backing Up Your Data</a></h3>
+<p><strong>For Docker volumes:</strong></p>
+<pre><code class="language-bash"># Stop container
+docker stop fspulse
+
+# Backup volume
+docker run --rm \
+  -v fspulse-data:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/fspulse-backup.tar.gz /data
+
+# Restart container
+docker start fspulse
+</code></pre>
+<p><strong>For bind mounts:</strong></p>
+<pre><code class="language-bash"># Simply backup the host directory
+tar czf fspulse-backup.tar.gz /mnt/pool/fspulse/data
+</code></pre>
+<h3 id="restoring-from-backup"><a class="header" href="#restoring-from-backup">Restoring from Backup</a></h3>
+<p><strong>For Docker volumes:</strong></p>
+<pre><code class="language-bash"># Create volume
+docker volume create fspulse-data-restored
+
+# Restore data
+docker run --rm \
+  -v fspulse-data-restored:/data \
+  -v $(pwd):/backup \
+  alpine sh -c "cd / &amp;&amp; tar xzf /backup/fspulse-backup.tar.gz"
+
+# Use restored volume
+docker run -d --name fspulse -v fspulse-data-restored:/data ...
+</code></pre>
+<p><strong>For bind mounts:</strong></p>
+<pre><code class="language-bash">tar xzf fspulse-backup.tar.gz -C /mnt/pool/fspulse/data
+</code></pre>
+<hr />
+<h2 id="image-tags-and-updates"><a class="header" href="#image-tags-and-updates">Image Tags and Updates</a></h2>
+<p>FsPulse provides multiple tags for different update strategies:</p>
+<div class="table-wrapper"><table><thead><tr><th>Tag</th><th>Description</th><th>When to Use</th></tr></thead><tbody>
+<tr><td><code>latest</code></td><td>Latest stable release</td><td>Production (pinned versions)</td></tr>
+<tr><td><code>1.2.3</code></td><td>Specific version</td><td>Production (exact control)</td></tr>
+<tr><td><code>1.2</code></td><td>Latest patch of minor version</td><td>Production (auto-patch updates)</td></tr>
+<tr><td><code>main</code></td><td>Development builds</td><td>Testing new features</td></tr>
+</tbody></table>
+</div>
+<p><strong>Recommendation</strong>: Use specific version tags (<code>1.2.3</code>) or minor version tags (<code>1.2</code>) for production. Avoid <code>latest</code> in production to prevent unexpected updates.</p>
+<p><strong>Updating to a new version:</strong></p>
+<pre><code class="language-bash">docker pull gtunesdev/fspulse:1.2.3
+docker stop fspulse
+docker rm fspulse
+docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
+</code></pre>
+<p>Your data persists in the volume across updates.</p>
+<hr />
+<h2 id="platform-support"><a class="header" href="#platform-support">Platform Support</a></h2>
+<p>FsPulse images support multiple architectures—Docker automatically pulls the correct one for your platform:</p>
+<ul>
+<li><strong>linux/amd64</strong> - Intel/AMD processors (most common)</li>
+<li><strong>linux/arm64</strong> - ARM processors (Apple Silicon, Raspberry Pi 4, ARM servers)</li>
+</ul>
+<hr />
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li>Explore the <a href="configuration.html">Configuration</a> reference for all available settings</li>
+<li>Learn about <a href="query.html">Query Syntax</a> for advanced data filtering</li>
+<li>Read <a href="scanning.html">Scanning</a> to understand how scans work</li>
+<li>Check <a href="cli.html">Command-Line Interface</a> for all CLI commands</li>
+</ul>
+<hr />
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<ul>
+<li><strong>Issues</strong>: <a href="https://github.com/gtunes-dev/fspulse/issues">GitHub Issues</a></li>
+<li><strong>Docker Hub</strong>: <a href="https://hub.docker.com/r/gtunesdev/fspulse">gtunesdev/fspulse</a></li>
+<li><strong>Documentation</strong>: <a href="https://gtunes-dev.github.io/fspulse/">FsPulse Book</a></li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="getting_started.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="scanning.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="getting_started.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="scanning.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

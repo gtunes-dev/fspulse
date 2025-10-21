@@ -37,11 +37,23 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
     </head>
     <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
     <div id="body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
@@ -82,10 +94,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -119,7 +134,7 @@
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
                             <i class="fa fa-search"></i>
                         </button>
                     </div>
@@ -136,7 +151,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -158,26 +178,57 @@
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="FsPulse logo" style="width: 100%; max-width: 600px;">
-<p>FsPulse is a Rust-based command-line tool designed to capture and analyze directory states, detect changes over time, validate file integrity and formats, and query results using a powerful and intuitive query syntax.</p>
+<p>FsPulse is a Rust-based tool designed to capture and analyze directory states, detect changes over time, validate file integrity and formats, and query results using a powerful and intuitive query syntax. It runs as a <strong>web service</strong> with browser-based interface, or as a traditional <strong>command-line tool</strong>.</p>
 <h2 id="key-capabilities"><a class="header" href="#key-capabilities">Key Capabilities</a></h2>
 <ul>
-<li><strong>Directory Scanning</strong> — Track additions, deletions, and modifications of files and directories.</li>
-<li><strong>Content Validation</strong> — Validate file formats such as FLAC, JPEG, GIF, BMP, PNG, TIFF, and PDF.</li>
-<li><strong>SHA2 Hashing</strong> — Optionally detect file content changes beyond metadata.</li>
-<li><strong>Powerful Querying</strong> — Access scan results directly with flexible, SQL-like queries.</li>
-<li><strong>Interactive Mode</strong> — Navigate and explore scan results using a menu-driven shell interface.</li>
+<li><strong>Web UI &amp; Background Service</strong> — Run as a daemon with browser-based access to all features</li>
+<li><strong>Command-Line Interface</strong> — Full CLI with interactive TUI modes for terminal users</li>
+<li><strong>Directory Scanning</strong> — Track additions, deletions, and modifications of files and directories</li>
+<li><strong>Content Validation</strong> — Validate file formats such as FLAC, JPEG, GIF, BMP, PNG, TIFF, and PDF</li>
+<li><strong>SHA2 Hashing</strong> — Optionally detect file content changes beyond metadata</li>
+<li><strong>Powerful Querying</strong> — Access scan results with flexible, SQL-like queries via web UI or CLI</li>
+<li><strong>Docker Deployment</strong> — Official Docker images for easy containerized deployment</li>
+</ul>
+<h2 id="usage-modes"><a class="header" href="#usage-modes">Usage Modes</a></h2>
+<p>FsPulse offers flexibility in how you interact with it:</p>
+<ul>
+<li><strong>Server Mode</strong>: Run <code>fspulse serve</code> to start a web server on port 8080, providing full functionality through your browser</li>
+<li><strong>CLI Mode</strong>: Use <code>fspulse scan</code>, <code>fspulse query</code>, and other commands for scriptable, terminal-based workflows</li>
+<li><strong>Interactive TUI</strong>: Use <code>fspulse interact</code> or <code>fspulse explore</code> for menu-driven exploration in the terminal</li>
 </ul>
 <p>FsPulse is designed to scale across large file systems while maintaining clarity and control for the user.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h1>
-<p>FsPulse can be installed in one of three ways:</p>
+<p>FsPulse can be installed in one of four ways:</p>
 <ol>
+<li><strong>Run with Docker (Recommended)</strong></li>
 <li><strong>Install via <a href="https://crates.io/crates/fspulse">crates.io</a></strong></li>
 <li><strong>Clone and build from source</strong></li>
 <li><strong>Download a pre-built release binary from GitHub</strong></li>
 </ol>
 <p>Choose the method that works best for your platform and preferences.</p>
 <hr />
-<h2 id="1-install-via-cratesio"><a class="header" href="#1-install-via-cratesio">1. Install via Crates.io</a></h2>
+<h2 id="1-run-with-docker-recommended"><a class="header" href="#1-run-with-docker-recommended">1. Run with Docker (Recommended)</a></h2>
+<p>The easiest way to run FsPulse is with Docker:</p>
+<pre><code class="language-sh">docker pull gtunesdev/fspulse:latest
+
+docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p>Access the web UI at <strong>http://localhost:8080</strong></p>
+<p>The web UI provides full functionality: managing roots, initiating scans, querying data, and viewing results—all from your browser.</p>
+<p>See the <a href="docker.html">Docker Deployment</a> chapter for complete documentation including:</p>
+<ul>
+<li>Volume management for scanning host directories</li>
+<li>Configuration options</li>
+<li>Docker Compose examples</li>
+<li>NAS deployment (TrueNAS, Unraid)</li>
+<li>Troubleshooting</li>
+</ul>
+<hr />
+<h2 id="2-install-via-cratesio"><a class="header" href="#2-install-via-cratesio">2. Install via Crates.io</a></h2>
 <p>The easiest way to get FsPulse is via <a href="https://crates.io/crates/fspulse">crates.io</a>:</p>
 <pre><code class="language-sh">cargo install fspulse
 </code></pre>
@@ -189,7 +240,7 @@
 <pre><code class="language-sh">cargo install fspulse --force
 </code></pre>
 <hr />
-<h2 id="2-clone-and-build-from-source"><a class="header" href="#2-clone-and-build-from-source">2. Clone and Build from Source</a></h2>
+<h2 id="3-clone-and-build-from-source"><a class="header" href="#3-clone-and-build-from-source">3. Clone and Build from Source</a></h2>
 <p>If you prefer working directly with the source code (for example, to contribute or try out development versions):</p>
 <pre><code class="language-sh">git clone https://github.com/gtunes-dev/fspulse.git
 cd fspulse
@@ -199,7 +250,7 @@ cargo build --release
 <pre><code class="language-sh">./target/release/fspulse --help
 </code></pre>
 <hr />
-<h2 id="3-download-pre-built-release-binaries"><a class="header" href="#3-download-pre-built-release-binaries">3. Download Pre-Built Release Binaries</a></h2>
+<h2 id="4-download-pre-built-release-binaries"><a class="header" href="#4-download-pre-built-release-binaries">4. Download Pre-Built Release Binaries</a></h2>
 <p>Pre-built release binaries for Linux, macOS, and Windows are available on the <a href="https://github.com/gtunes-dev/fspulse/releases">GitHub Releases page</a>:</p>
 <ol>
 <li>Visit the releases page.</li>
@@ -214,41 +265,448 @@ cargo build --release
 <pre><code class="language-sh">fspulse --help
 </code></pre>
 <hr />
-<h2 id="first-scan"><a class="header" href="#first-scan">First Scan</a></h2>
-<p>To scan a directory:</p>
+<h2 id="usage-web-ui-or-cli"><a class="header" href="#usage-web-ui-or-cli">Usage: Web UI or CLI</a></h2>
+<p>After installation, you can use FsPulse in two ways:</p>
+<h3 id="web-ui-server-mode"><a class="header" href="#web-ui-server-mode">Web UI (Server Mode)</a></h3>
+<p>Start the server:</p>
+<pre><code class="language-sh">fspulse serve
+</code></pre>
+<p>Then open your browser to <strong>http://localhost:8080</strong> to access the web interface.</p>
+<p>The web UI provides:</p>
+<ul>
+<li>Root management (create, view, delete roots)</li>
+<li>Scan initiation with real-time progress</li>
+<li>Interactive data exploration</li>
+<li>Powerful query interface</li>
+</ul>
+<h3 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h3>
+<p>Use FsPulse directly from the terminal:</p>
+<p><strong>Scan a directory:</strong></p>
 <pre><code class="language-sh">fspulse scan --root-path /some/directory
 </code></pre>
-<hr />
-<h2 id="interactive-exploration"><a class="header" href="#interactive-exploration">Interactive Exploration</a></h2>
-<p>After scanning, you can explore results in an interactive shell:</p>
-<pre><code class="language-sh">fspulse interact
+<p><strong>Interactive exploration:</strong></p>
+<pre><code class="language-sh">fspulse interact  # Menu-driven interface
+fspulse explore   # Data explorer TUI
 </code></pre>
-<hr />
-<h2 id="querying"><a class="header" href="#querying">Querying</a></h2>
-<p>Use flexible, SQL-like queries to retrieve and filter scan results:</p>
+<p><strong>Query results:</strong></p>
 <pre><code class="language-sh"># Items whose path contains 'reports'
 fspulse query "items where item_path:('reports')"
 
 # Changes involving items detected as invalid
 fspulse query "changes where val_new:(I) show default, val_old, val_new order by change_id desc"
 </code></pre>
-<p>See the <a href="query.html">Query Syntax</a> page for more examples.</p>
+<p>See the <a href="query.html">Query Syntax</a> page for more examples and the <a href="cli.html">Command-Line Interface</a> page for all available commands.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="docker-deployment"><a class="header" href="#docker-deployment">Docker Deployment</a></h1>
+<p>The easiest way to run FsPulse is with Docker. The container runs FsPulse as a background service with the web UI accessible on port 8080. You can manage roots, initiate scans, query data, and view results—all from your browser.</p>
+<hr />
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<p>Get FsPulse running in three simple steps:</p>
+<pre><code class="language-bash"># 1. Pull the image
+docker pull gtunesdev/fspulse:latest
+
+# 2. Run the container
+docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+
+# 3. Access the web UI
+open http://localhost:8080
+</code></pre>
+<p>That's it! The web UI is now running.</p>
+<p>This basic setup stores all FsPulse data (database, config, logs) in a Docker volume and uses default settings. <strong>If you need to customize settings</strong> (like running as a specific user for NAS deployments, or changing the port), see the <a href="docker.html#configuration">Configuration</a> and <a href="docker.html#nas-deployments-truenas-unraid">NAS Deployments</a> sections below.</p>
+<hr />
+<h2 id="scanning-your-files"><a class="header" href="#scanning-your-files">Scanning Your Files</a></h2>
+<p>To scan directories on your host machine, you need to mount them into the container. FsPulse can then scan these mounted paths.</p>
+<h3 id="mounting-directories"><a class="header" href="#mounting-directories">Mounting Directories</a></h3>
+<p>Add <code>-v</code> flags to mount host directories into the container. We recommend mounting them under <code>/roots</code> for clarity:</p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -v fspulse-data:/data \
+  -v ~/Documents:/roots/documents:ro \
+  -v ~/Photos:/roots/photos:ro \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p>The <code>:ro</code> (read-only) flag is recommended for safety—FsPulse only reads files during scans and never modifies them.</p>
+<h3 id="creating-roots-in-the-web-ui"><a class="header" href="#creating-roots-in-the-web-ui">Creating Roots in the Web UI</a></h3>
+<p>After mounting directories:</p>
+<ol>
+<li>Open http://localhost:8080 in your browser</li>
+<li>Navigate to <strong>Manage Roots</strong> in the sidebar</li>
+<li>Click <strong>Add Root</strong></li>
+<li>Enter the <strong>container path</strong>: <code>/roots/documents</code> (not the host path <code>~/Documents</code>)</li>
+<li>Click <strong>Create Root</strong></li>
+</ol>
+<p><strong>Important</strong>: Always use the container path (e.g., <code>/roots/documents</code>), not the host path. The container doesn't know about host paths.</p>
+<p>Once roots are created, you can scan them from the web UI and monitor progress in real-time.</p>
+<hr />
+<h2 id="docker-compose-recommended"><a class="header" href="#docker-compose-recommended">Docker Compose (Recommended)</a></h2>
+<p>For persistent deployments, Docker Compose is cleaner and easier to manage:</p>
+<pre><code class="language-yaml">version: '3.8'
+
+services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    container_name: fspulse
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persistent data storage - REQUIRED
+      # Must map /data to either a Docker volume (shown here) or a host path
+      # Must support read/write access for database, config, and logs
+      - fspulse-data:/data
+
+      # Alternative: use a host path instead
+      # - /path/on/host/fspulse-data:/data
+
+      # Directories to scan (read-only recommended for safety)
+      - ~/Documents:/roots/documents:ro
+      - ~/Photos:/roots/photos:ro
+    environment:
+      # Optional: override any configuration setting
+      # See Configuration section below and https://gtunes-dev.github.io/fspulse/configuration.html
+      - TZ=America/New_York
+
+volumes:
+  fspulse-data:
+</code></pre>
+<p>Save as <code>docker-compose.yml</code> and run:</p>
+<pre><code class="language-bash">docker-compose up -d
+</code></pre>
+<hr />
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>FsPulse creates a default <code>config.toml</code> on first run with sensible defaults. Most users won't need to change anything, but when you do, there are three ways to customize settings.</p>
+<h3 id="option-1-use-environment-variables-easiest"><a class="header" href="#option-1-use-environment-variables-easiest">Option 1: Use Environment Variables (Easiest)</a></h3>
+<p>Override any setting using environment variables. This works with both <code>docker run</code> and Docker Compose.</p>
+<p><strong>Docker Compose example:</strong></p>
+<pre><code class="language-yaml">services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    environment:
+      - FSPULSE_SERVER_PORT=9090      # Change web UI port
+      - FSPULSE_LOGGING_FSPULSE=debug # Enable debug logging
+      - FSPULSE_ANALYSIS_THREADS=16   # Use 16 analysis threads
+    ports:
+      - "9090:9090"
+</code></pre>
+<p><strong>Command line example (equivalent to above):</strong></p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -p 9090:9090 \
+  -e FSPULSE_SERVER_PORT=9090 \
+  -e FSPULSE_LOGGING_FSPULSE=debug \
+  -e FSPULSE_ANALYSIS_THREADS=16 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p>Environment variables follow the pattern <code>FSPULSE_&lt;SECTION&gt;_&lt;FIELD&gt;</code> and override any settings in <code>config.toml</code>. See the <a href="configuration.html#environment-variables">Configuration</a> chapter for a complete list of available variables and their purposes.</p>
+<h3 id="option-2-edit-the-config-file"><a class="header" href="#option-2-edit-the-config-file">Option 2: Edit the Config File</a></h3>
+<p>If you prefer editing the config file directly:</p>
+<ol>
+<li>
+<p>Extract the auto-generated config:</p>
+<pre><code class="language-bash">docker exec fspulse cat /data/config.toml &gt; config.toml
+</code></pre>
+</li>
+<li>
+<p>Edit <code>config.toml</code> with your preferred settings</p>
+</li>
+<li>
+<p>Copy back and restart:</p>
+<pre><code class="language-bash">docker cp config.toml fspulse:/data/config.toml
+docker restart fspulse
+</code></pre>
+</li>
+</ol>
+<h3 id="option-3-pre-mount-your-own-config-advanced"><a class="header" href="#option-3-pre-mount-your-own-config-advanced">Option 3: Pre-Mount Your Own Config (Advanced)</a></h3>
+<p>If you want custom settings before first launch, create your own <code>config.toml</code> and mount it:</p>
+<pre><code class="language-yaml">volumes:
+  - fspulse-data:/data
+  - ./my-config.toml:/data/config.toml:ro
+</code></pre>
+<p>Most users should start with Option 1 (environment variables) or Option 2 (edit after first run).</p>
+<hr />
+<h2 id="nas-deployments-truenas-unraid"><a class="header" href="#nas-deployments-truenas-unraid">NAS Deployments (TrueNAS, Unraid)</a></h2>
+<p>NAS systems often have specific user IDs for file ownership. By default, FsPulse runs as user 1000, but you may need it to match your file ownership.</p>
+<h3 id="setting-user-and-group-ids"><a class="header" href="#setting-user-and-group-ids">Setting User and Group IDs</a></h3>
+<p>Use <code>PUID</code> and <code>PGID</code> environment variables to run FsPulse as a specific user:</p>
+<p><strong>TrueNAS Example</strong> (apps user = UID 34):</p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -e PUID=34 \
+  -e PGID=34 \
+  -e TZ=America/New_York \
+  -v /mnt/pool/fspulse/data:/data \
+  -v /mnt/pool/documents:/roots/docs:ro \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p><strong>Unraid Example</strong> (custom UID 1001):</p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -e PUID=1001 \
+  -e PGID=100 \
+  -v /mnt/user/appdata/fspulse:/data \
+  -v /mnt/user/photos:/roots/photos:ro \
+  gtunesdev/fspulse:latest
+</code></pre>
+<h3 id="why-puidpgid-matters"><a class="header" href="#why-puidpgid-matters">Why PUID/PGID Matters</a></h3>
+<p>Even though you mount directories as read-only (<code>:ro</code>), Linux permissions still apply. If your files are owned by UID 34 and aren't world-readable, FsPulse (running as UID 1000 by default) won't be able to scan them. Setting <code>PUID=34</code> makes FsPulse run as the same user that owns the files.</p>
+<p><strong>When to use PUID/PGID:</strong></p>
+<ul>
+<li>Files have restrictive permissions (not world-readable)</li>
+<li>Using NAS with specific user accounts (TrueNAS, Unraid, Synology)</li>
+<li>You need the <code>/data</code> directory to match specific host ownership</li>
+</ul>
+<hr />
+<h2 id="using-the-cli"><a class="header" href="#using-the-cli">Using the CLI</a></h2>
+<p>While the web UI provides full functionality, you can also use CLI commands via <code>docker exec</code>:</p>
+<pre><code class="language-bash"># Run a query
+docker exec fspulse fspulse query "items where scan:(5)"
+
+# View reports
+docker exec fspulse fspulse report scans --last 10
+
+# Interactive menu (requires -it flags)
+docker exec -it fspulse fspulse interact
+
+# Data explorer TUI (requires -it flags)
+docker exec -it fspulse fspulse explore
+</code></pre>
+<p>The <code>-it</code> flags are required for interactive modes (<code>interact</code> and <code>explore</code>) to properly handle terminal input.</p>
+<p><strong>Helper script</strong> (optional): Create <code>fspulse-docker.sh</code> to simplify CLI access:</p>
+<pre><code class="language-bash">#!/bin/bash
+docker exec fspulse fspulse "$@"
+</code></pre>
+<p>Then use it: <code>./fspulse-docker.sh query "items limit 10"</code></p>
+<hr />
+<h2 id="advanced-topics"><a class="header" href="#advanced-topics">Advanced Topics</a></h2>
+<h3 id="custom-network-settings"><a class="header" href="#custom-network-settings">Custom Network Settings</a></h3>
+<p>If you're using macvlan or host networking, ensure the server binds to all interfaces:</p>
+<pre><code class="language-yaml">services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    network_mode: host
+    environment:
+      - FSPULSE_SERVER_HOST=0.0.0.0  # Required for non-bridge networking
+      - FSPULSE_SERVER_PORT=8080
+</code></pre>
+<p><strong>Note</strong>: The Docker image sets <code>FSPULSE_SERVER_HOST=0.0.0.0</code> by default, so this is only needed if your config.toml overrides it to <code>127.0.0.1</code>.</p>
+<h3 id="reverse-proxy-setup"><a class="header" href="#reverse-proxy-setup">Reverse Proxy Setup</a></h3>
+<p>For public access with authentication, use a reverse proxy like nginx:</p>
+<pre><code class="language-nginx">server {
+    listen 80;
+    server_name fspulse.example.com;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+
+        # WebSocket support for scan progress
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+</code></pre>
+<h3 id="using-bind-mounts-instead-of-volumes"><a class="header" href="#using-bind-mounts-instead-of-volumes">Using Bind Mounts Instead of Volumes</a></h3>
+<p>By default, we use Docker volumes (<code>-v fspulse-data:/data</code>) which Docker manages automatically. For NAS deployments, you might prefer bind mounts to integrate with your existing backup schemes:</p>
+<pre><code class="language-bash"># Create directory on host
+mkdir -p /mnt/pool/fspulse/data
+
+# Use bind mount
+docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -v /mnt/pool/fspulse/data:/data \  # Bind mount to host path
+  gtunesdev/fspulse:latest
+</code></pre>
+<p><strong>Benefits of bind mounts for NAS:</strong></p>
+<ul>
+<li>Included in your NAS snapshot schedule</li>
+<li>Backed up with your existing backup system</li>
+<li>Directly accessible for manual inspection</li>
+</ul>
+<p><strong>Trade-off</strong>: You need to manage permissions yourself (use PUID/PGID if needed).</p>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="cannot-access-web-ui"><a class="header" href="#cannot-access-web-ui">Cannot Access Web UI</a></h3>
+<p><strong>Problem</strong>: http://localhost:8080 doesn't respond</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>
+<p>Check the container is running:</p>
+<pre><code class="language-bash">docker ps | grep fspulse
+</code></pre>
+</li>
+<li>
+<p>Check logs for errors:</p>
+<pre><code class="language-bash">docker logs fspulse
+</code></pre>
+<p>Look for "Server started" message.</p>
+</li>
+<li>
+<p>Verify port mapping:</p>
+<pre><code class="language-bash">docker port fspulse
+</code></pre>
+<p>Should show <code>8080/tcp -&gt; 0.0.0.0:8080</code></p>
+</li>
+</ol>
+<h3 id="permission-denied-errors"><a class="header" href="#permission-denied-errors">Permission Denied Errors</a></h3>
+<p><strong>Problem</strong>: "Permission denied" when scanning or accessing <code>/data</code></p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>
+<p>Check file ownership:</p>
+<pre><code class="language-bash">ls -ln /path/to/your/files
+</code></pre>
+</li>
+<li>
+<p>Set PUID/PGID to match file owner:</p>
+<pre><code class="language-bash">docker run -e PUID=1000 -e PGID=1000 ...
+</code></pre>
+</li>
+<li>
+<p>For bind mounts, ensure host directory is writable:</p>
+<pre><code class="language-bash">chown -R 1000:1000 /mnt/pool/fspulse/data
+</code></pre>
+</li>
+</ol>
+<h3 id="interactive-mode-doesnt-work"><a class="header" href="#interactive-mode-doesnt-work">Interactive Mode Doesn't Work</a></h3>
+<p><strong>Problem</strong>: <code>fspulse interact</code> or <code>fspulse explore</code> looks broken in docker exec</p>
+<p><strong>Solution</strong>: Use <code>-it</code> flags for proper terminal:</p>
+<pre><code class="language-bash"># Wrong (missing -it)
+docker exec fspulse fspulse interact
+
+# Correct
+docker exec -it fspulse fspulse interact
+</code></pre>
+<h3 id="configuration-changes-dont-persist"><a class="header" href="#configuration-changes-dont-persist">Configuration Changes Don't Persist</a></h3>
+<p><strong>Problem</strong>: Settings revert after container restart</p>
+<p><strong>Solution</strong>: Verify <code>/data</code> volume is mounted:</p>
+<pre><code class="language-bash">docker inspect fspulse | grep -A 10 Mounts
+</code></pre>
+<p>If missing, recreate container with volume:</p>
+<pre><code class="language-bash">docker stop fspulse
+docker rm fspulse
+docker run -d --name fspulse -v fspulse-data:/data ...
+</code></pre>
+<h3 id="database-locked-errors"><a class="header" href="#database-locked-errors">Database Locked Errors</a></h3>
+<p><strong>Problem</strong>: "Database is locked" errors</p>
+<p><strong>Cause</strong>: Multiple containers accessing the same database</p>
+<p><strong>Solution</strong>: Only run one FsPulse container per database. Don't mount the same <code>/data</code> volume to multiple containers.</p>
+<hr />
+<h2 id="data-backup"><a class="header" href="#data-backup">Data Backup</a></h2>
+<h3 id="backing-up-your-data"><a class="header" href="#backing-up-your-data">Backing Up Your Data</a></h3>
+<p><strong>For Docker volumes:</strong></p>
+<pre><code class="language-bash"># Stop container
+docker stop fspulse
+
+# Backup volume
+docker run --rm \
+  -v fspulse-data:/data \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/fspulse-backup.tar.gz /data
+
+# Restart container
+docker start fspulse
+</code></pre>
+<p><strong>For bind mounts:</strong></p>
+<pre><code class="language-bash"># Simply backup the host directory
+tar czf fspulse-backup.tar.gz /mnt/pool/fspulse/data
+</code></pre>
+<h3 id="restoring-from-backup"><a class="header" href="#restoring-from-backup">Restoring from Backup</a></h3>
+<p><strong>For Docker volumes:</strong></p>
+<pre><code class="language-bash"># Create volume
+docker volume create fspulse-data-restored
+
+# Restore data
+docker run --rm \
+  -v fspulse-data-restored:/data \
+  -v $(pwd):/backup \
+  alpine sh -c "cd / &amp;&amp; tar xzf /backup/fspulse-backup.tar.gz"
+
+# Use restored volume
+docker run -d --name fspulse -v fspulse-data-restored:/data ...
+</code></pre>
+<p><strong>For bind mounts:</strong></p>
+<pre><code class="language-bash">tar xzf fspulse-backup.tar.gz -C /mnt/pool/fspulse/data
+</code></pre>
+<hr />
+<h2 id="image-tags-and-updates"><a class="header" href="#image-tags-and-updates">Image Tags and Updates</a></h2>
+<p>FsPulse provides multiple tags for different update strategies:</p>
+<div class="table-wrapper"><table><thead><tr><th>Tag</th><th>Description</th><th>When to Use</th></tr></thead><tbody>
+<tr><td><code>latest</code></td><td>Latest stable release</td><td>Production (pinned versions)</td></tr>
+<tr><td><code>1.2.3</code></td><td>Specific version</td><td>Production (exact control)</td></tr>
+<tr><td><code>1.2</code></td><td>Latest patch of minor version</td><td>Production (auto-patch updates)</td></tr>
+<tr><td><code>main</code></td><td>Development builds</td><td>Testing new features</td></tr>
+</tbody></table>
+</div>
+<p><strong>Recommendation</strong>: Use specific version tags (<code>1.2.3</code>) or minor version tags (<code>1.2</code>) for production. Avoid <code>latest</code> in production to prevent unexpected updates.</p>
+<p><strong>Updating to a new version:</strong></p>
+<pre><code class="language-bash">docker pull gtunesdev/fspulse:1.2.3
+docker stop fspulse
+docker rm fspulse
+docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
+</code></pre>
+<p>Your data persists in the volume across updates.</p>
+<hr />
+<h2 id="platform-support"><a class="header" href="#platform-support">Platform Support</a></h2>
+<p>FsPulse images support multiple architectures—Docker automatically pulls the correct one for your platform:</p>
+<ul>
+<li><strong>linux/amd64</strong> - Intel/AMD processors (most common)</li>
+<li><strong>linux/arm64</strong> - ARM processors (Apple Silicon, Raspberry Pi 4, ARM servers)</li>
+</ul>
+<hr />
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li>Explore the <a href="configuration.html">Configuration</a> reference for all available settings</li>
+<li>Learn about <a href="query.html">Query Syntax</a> for advanced data filtering</li>
+<li>Read <a href="scanning.html">Scanning</a> to understand how scans work</li>
+<li>Check <a href="cli.html">Command-Line Interface</a> for all CLI commands</li>
+</ul>
+<hr />
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<ul>
+<li><strong>Issues</strong>: <a href="https://github.com/gtunes-dev/fspulse/issues">GitHub Issues</a></li>
+<li><strong>Docker Hub</strong>: <a href="https://hub.docker.com/r/gtunesdev/fspulse">gtunesdev/fspulse</a></li>
+<li><strong>Documentation</strong>: <a href="https://gtunes-dev.github.io/fspulse/">FsPulse Book</a></li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="scanning"><a class="header" href="#scanning">Scanning</a></h1>
 <p>FsPulse scans are at the core of how it tracks changes to the file system over time. A scan creates a snapshot of a root directory and analyzes changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
 <hr />
 <h2 id="initiating-a-scan"><a class="header" href="#initiating-a-scan">Initiating a Scan</a></h2>
-<p>You can start a scan in one of two ways:</p>
+<p>You can start a scan in three ways:</p>
 <ul>
-<li><strong>Command line:</strong>
+<li>
+<p><strong>Web UI (Server Mode):</strong></p>
+<ol>
+<li>Start the server: <code>fspulse serve</code></li>
+<li>Open http://localhost:8080 in your browser</li>
+<li>Navigate to <strong>Manage Roots</strong></li>
+<li>Select a root and click <strong>Scan Root</strong></li>
+<li>Monitor real-time progress in the web interface</li>
+</ol>
+</li>
+<li>
+<p><strong>Command line:</strong></p>
 <pre><code class="language-sh">fspulse scan --root-path /your/path
 </code></pre>
 </li>
-<li><strong>Interactive mode:</strong> From the interactive menu, select <strong>Scan</strong> to re-scan a root path that has previously been scanned.</li>
+<li>
+<p><strong>Interactive mode:</strong> From the interactive menu, select <strong>Scan</strong> to re-scan a root path that has previously been scanned.</p>
+</li>
 </ul>
 <blockquote>
-<p>Interactive mode only supports scanning previously scanned paths. To scan a new root for the first time, use the command line.</p>
+<p><strong>Note</strong>: The web UI and command line support scanning both new and existing roots. Interactive mode (<code>fspulse interact</code>) only supports scanning previously scanned paths. To scan a new root for the first time, use the web UI or command line.</p>
 </blockquote>
 <p>Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on other roots can run independently.</p>
+<p><strong>Docker users</strong>: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage scans, or use <code>docker exec</code> to run CLI commands. See the <a href="docker.html">Docker Deployment</a> chapter for details.</p>
 <hr />
 <h2 id="hashing"><a class="header" href="#hashing">Hashing</a></h2>
 <p>Hashing is a key capabilities of FsPulse.</p>
@@ -383,21 +841,35 @@ is recorded.</p>
 </tbody></table>
 </div>
 <p>Each scan provides a consistent view of the file system at a moment in time and captures important differences across revisions.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
-<p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior and analysis settings such as thread usage.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h1>
+<p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior, analysis settings, server configuration, and more.</p>
+<blockquote>
+<p><strong>📦 Docker Users</strong>: If you're running FsPulse in Docker, see the <a href="docker.html">Docker Deployment</a> chapter for Docker-specific configuration including environment variable overrides and volume management.</p>
+</blockquote>
 <hr />
 <h2 id="finding-configtoml"><a class="header" href="#finding-configtoml">Finding <code>config.toml</code></a></h2>
-<p>FsPulse uses the <a href="https://docs.rs/directories">directories</a> crate to determine the appropriate location for configuration files and logs based on your operating system. Specifically, FsPulse uses the <strong>local data directory</strong> (<code>ProjectDirs::data_local_dir()</code>), which resolves to platform-specific standard paths:</p>
-<h3 id="where-its-stored"><a class="header" href="#where-its-stored">Where it's stored:</a></h3>
+<p>The location of <code>config.toml</code> depends on how you're running FsPulse:</p>
+<h3 id="docker-deployments"><a class="header" href="#docker-deployments">Docker Deployments</a></h3>
+<p>When running in Docker, the config file is located at <strong><code>/data/config.toml</code></strong> inside the container. FsPulse automatically creates this file with default settings on first run.</p>
+<p>To access it from your host machine:</p>
+<pre><code class="language-bash"># View the config
+docker exec fspulse cat /data/config.toml
+
+# Extract to edit
+docker exec fspulse cat /data/config.toml &gt; config.toml
+</code></pre>
+<p>See the <a href="docker.html#configuration">Docker Deployment</a> chapter for details on editing the config in Docker.</p>
+<h3 id="native-installations"><a class="header" href="#native-installations">Native Installations</a></h3>
+<p>FsPulse uses the <a href="https://docs.rs/directories">directories</a> crate to determine platform-specific locations:</p>
 <div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Location Description</th><th>Example Path</th></tr></thead><tbody>
 <tr><td>Linux</td><td><code>$XDG_DATA_HOME</code></td><td><code>/home/alice/.local/share/fspulse</code></td></tr>
 <tr><td>macOS</td><td>Application Support</td><td><code>/Users/alice/Library/Application Support/fspulse</code></td></tr>
 <tr><td>Windows</td><td>Local AppData</td><td><code>C:\Users\Alice\AppData\Local\fspulse</code></td></tr>
 </tbody></table>
 </div>
-<p>These are all managed internally via the <code>directories</code> crate. On first run, FsPulse will automatically create this directory and write a default <code>config.toml</code> there if one doesn't exist.</p>
+<p>On first run, FsPulse automatically creates this directory and writes a default <code>config.toml</code> if one doesn't exist.</p>
 <blockquote>
-<p>Tip: You can delete <code>config.toml</code> at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.</p>
+<p><strong>Tip</strong>: You can delete <code>config.toml</code> at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.</p>
 </blockquote>
 <hr />
 <h2 id="configuration-settings"><a class="header" href="#configuration-settings">Configuration Settings</a></h2>
@@ -405,6 +877,10 @@ is recorded.</p>
 <pre><code class="language-toml">[logging]
 fspulse = "info"
 lopdf = "error"
+
+[server]
+port = 8080
+host = "127.0.0.1"
 
 [analysis]
 threads = 8
@@ -428,6 +904,19 @@ hash = "sha2"
 <li>FsPulse retains up to <strong>100</strong> log files; older files are automatically deleted</li>
 </ul>
 <hr />
+<h2 id="server-settings"><a class="header" href="#server-settings">Server Settings</a></h2>
+<p>The <code>[server]</code> section controls the web UI server behavior when running <code>fspulse serve</code>.</p>
+<ul>
+<li><code>host</code>: IP address to bind to (default: <code>127.0.0.1</code>)
+<ul>
+<li><code>127.0.0.1</code> - Localhost only (secure, only accessible from same machine)</li>
+<li><code>0.0.0.0</code> - All interfaces (required for Docker, remote access)</li>
+</ul>
+</li>
+<li><code>port</code>: Port number to listen on (default: <code>8080</code>)</li>
+</ul>
+<p><strong>Note</strong>: In Docker deployments, the host should be <code>0.0.0.0</code> to allow access from outside the container. The Docker image sets this automatically via environment variable.</p>
+<hr />
 <h2 id="analysis-settings"><a class="header" href="#analysis-settings">Analysis Settings</a></h2>
 <p>The <code>[analysis]</code> section controls how many threads are used during the <strong>analysis phase</strong> of scanning (for hashing and validation).</p>
 <ul>
@@ -438,6 +927,132 @@ hash = "sha2"
 <li><code>hash</code>: hash function to use when hashing files. Values can be <code>sha2</code> or <code>md5</code> (default: <code>sha2</code>)</li>
 </ul>
 <p>Sha2 is more secure but is slower. It is appropriate for most users.</p>
+<hr />
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
+<p>All configuration settings can be overridden using environment variables. This is particularly useful for:</p>
+<ul>
+<li><strong>Docker deployments</strong> where editing files is inconvenient</li>
+<li><strong>Different environments</strong> (development, staging, production) with different settings</li>
+<li><strong>NAS deployments</strong> (TrueNAS, Unraid) using web-based configuration UIs</li>
+<li><strong>CI/CD pipelines</strong> where configuration is managed externally</li>
+</ul>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>Environment variables follow the pattern: <strong><code>FSPULSE_&lt;SECTION&gt;_&lt;FIELD&gt;</code></strong></p>
+<p>The <code>&lt;SECTION&gt;</code> corresponds to a section in <code>config.toml</code> (like <code>[server]</code>, <code>[logging]</code>, <code>[analysis]</code>), and <code>&lt;FIELD&gt;</code> is the setting name within that section.</p>
+<p><strong>Precedence</strong> (highest to lowest):</p>
+<ol>
+<li><strong>Environment variables</strong> - Override everything</li>
+<li><strong>config.toml</strong> - User-defined settings</li>
+<li><strong>Built-in defaults</strong> - Fallback values</li>
+</ol>
+<p>This allows you to set sensible defaults in <code>config.toml</code> and override them as needed per deployment.</p>
+<h3 id="complete-variable-reference"><a class="header" href="#complete-variable-reference">Complete Variable Reference</a></h3>
+<h4 id="server-settings-1"><a class="header" href="#server-settings-1">Server Settings</a></h4>
+<p>Control the web UI server behavior (when running <code>fspulse serve</code>):</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_SERVER_HOST</code></td><td><code>127.0.0.1</code></td><td>IP address</td><td>Bind address. Use <code>0.0.0.0</code> for Docker/remote access, <code>127.0.0.1</code> for localhost only</td></tr>
+<tr><td><code>FSPULSE_SERVER_PORT</code></td><td><code>8080</code></td><td>1-65535</td><td>Web UI port number</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Native - serve only on localhost
+export FSPULSE_SERVER_HOST=127.0.0.1
+export FSPULSE_SERVER_PORT=8080
+fspulse serve
+
+# Docker - must bind to all interfaces
+docker run -e FSPULSE_SERVER_HOST=0.0.0.0 -e FSPULSE_SERVER_PORT=9090 -p 9090:9090 ...
+</code></pre>
+<h4 id="logging-settings"><a class="header" href="#logging-settings">Logging Settings</a></h4>
+<p>Configure log output verbosity:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_LOGGING_FSPULSE</code></td><td><code>info</code></td><td><code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td><td>FsPulse application log level</td></tr>
+<tr><td><code>FSPULSE_LOGGING_LOPDF</code></td><td><code>error</code></td><td><code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td><td>PDF library (lopdf) log level</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Enable debug logging
+export FSPULSE_LOGGING_FSPULSE=debug
+export FSPULSE_LOGGING_LOPDF=error
+
+# Docker
+docker run -e FSPULSE_LOGGING_FSPULSE=debug ...
+</code></pre>
+<h4 id="analysis-settings-1"><a class="header" href="#analysis-settings-1">Analysis Settings</a></h4>
+<p>Configure scan behavior, hashing, and validation:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-256</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
+<tr><td><code>FSPULSE_ANALYSIS_HASH</code></td><td><code>sha2</code></td><td><code>sha2</code>, <code>md5</code></td><td>Hash algorithm (sha2 is more secure, md5 is faster)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Use 16 threads with MD5 hashing
+export FSPULSE_ANALYSIS_THREADS=16
+export FSPULSE_ANALYSIS_HASH=md5
+
+# Docker
+docker run -e FSPULSE_ANALYSIS_THREADS=16 -e FSPULSE_ANALYSIS_HASH=md5 ...
+</code></pre>
+<h4 id="database-settings"><a class="header" href="#database-settings">Database Settings</a></h4>
+<p>Control database location (advanced):</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_DATA_DIR</code></td><td>Platform-specific</td><td>Directory path</td><td>Override entire data directory location</td></tr>
+<tr><td><code>FSPULSE_DATABASE_PATH</code></td><td><code>&lt;data_dir&gt;</code></td><td>Directory path</td><td>Override database directory (rarely needed)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Note</strong>: Most users should use <code>FSPULSE_DATA_DIR</code> rather than <code>FSPULSE_DATABASE_PATH</code>. In Docker, this defaults to <code>/data</code>.</p>
+<h4 id="docker-specific-variables"><a class="header" href="#docker-specific-variables">Docker-Specific Variables</a></h4>
+<p>These variables are specific to Docker deployments:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>PUID</code></td><td><code>1000</code></td><td>UID number</td><td>User ID to run FsPulse as (for NAS permission matching)</td></tr>
+<tr><td><code>PGID</code></td><td><code>1000</code></td><td>GID number</td><td>Group ID to run FsPulse as (for NAS permission matching)</td></tr>
+<tr><td><code>TZ</code></td><td><code>UTC</code></td><td>Timezone string</td><td>Timezone for log timestamps and UI (e.g., <code>America/New_York</code>)</td></tr>
+</tbody></table>
+</div>
+<p>See <a href="docker.html#nas-deployments-truenas-unraid">Docker Deployment - NAS Deployments</a> for details on PUID/PGID usage.</p>
+<h3 id="usage-examples"><a class="header" href="#usage-examples">Usage Examples</a></h3>
+<p><strong>Native (Linux/macOS/Windows):</strong></p>
+<pre><code class="language-bash"># Set environment variables
+export FSPULSE_SERVER_PORT=9090
+export FSPULSE_LOGGING_FSPULSE=debug
+export FSPULSE_ANALYSIS_THREADS=16
+
+# Run FsPulse (uses env vars)
+fspulse serve
+</code></pre>
+<p><strong>Docker - Command Line:</strong></p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -e FSPULSE_SERVER_PORT=9090 \
+  -e FSPULSE_LOGGING_FSPULSE=debug \
+  -e FSPULSE_ANALYSIS_THREADS=16 \
+  -p 9090:9090 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p><strong>Docker Compose:</strong></p>
+<pre><code class="language-yaml">services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    environment:
+      - FSPULSE_SERVER_PORT=9090
+      - FSPULSE_LOGGING_FSPULSE=debug
+      - FSPULSE_ANALYSIS_THREADS=16
+    ports:
+      - "9090:9090"
+</code></pre>
+<h3 id="verifying-environment-variables"><a class="header" href="#verifying-environment-variables">Verifying Environment Variables</a></h3>
+<p>To see what environment variables FsPulse is using:</p>
+<p><strong>Native:</strong></p>
+<pre><code class="language-bash">env | grep FSPULSE_
+</code></pre>
+<p><strong>Docker:</strong></p>
+<pre><code class="language-bash">docker exec fspulse env | grep FSPULSE_
+</code></pre>
+<hr />
+<h2 id="docker-configuration"><a class="header" href="#docker-configuration">Docker Configuration</a></h2>
+<p>When running FsPulse in Docker, configuration is managed slightly differently. The config file lives at <code>/data/config.toml</code> inside the container, and you have several options for customizing settings.</p>
+<p>For step-by-step instructions on configuring FsPulse in Docker, including editing config files and using environment variables, see the <a href="docker.html#configuration">Docker Deployment - Configuration</a> section.</p>
 <hr />
 <h2 id="new-settings-and-restoring-defaults"><a class="header" href="#new-settings-and-restoring-defaults">New Settings and Restoring Defaults</a></h2>
 <p>FsPulse may expand its configuration options over time. When new settings are introduced, they won't automatically appear in your existing <code>config.toml</code>. To take advantage of new options, either:</p>
@@ -610,15 +1225,16 @@ changes where val_new:(I) show default, val_old, val_new order by change_id desc
 </code></pre>
 <hr />
 <p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="validators.html">Validators</a> · <a href="configuration.html">Configuration</a></p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h1>
-<p>FsPulse provides two primary modes of operation:</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="command-line-interface-1"><a class="header" href="#command-line-interface-1">Command-Line Interface</a></h1>
+<p>FsPulse provides multiple modes of operation:</p>
 <ul>
-<li>A powerful <strong>command-line interface</strong> (CLI)</li>
-<li>An interactive, menu-driven interface described in the <a href="interactive_mode.html">Interactive Mode</a> section</li>
+<li><strong>Server mode</strong> — Run as a background service with web UI (see <code>serve</code> command)</li>
+<li><strong>Command-line interface</strong> (CLI) — Direct terminal commands documented on this page</li>
+<li><strong>Interactive modes</strong> — Menu-driven and data explorer interfaces (see <a href="interactive_mode.html">Interactive Mode</a>)</li>
 </ul>
 <p>This page documents the full CLI, including top-level commands, available subcommands, and commonly used options.</p>
 <hr />
-<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<h2 id="getting-help-1"><a class="header" href="#getting-help-1">Getting Help</a></h2>
 <p>At any time, you can get help from the CLI using:</p>
 <pre><code class="language-sh">fspulse --help
 fspulse &lt;command&gt; --help
@@ -629,17 +1245,49 @@ fspulse report items --help
 </code></pre>
 <hr />
 <h2 id="top-level-commands"><a class="header" href="#top-level-commands">Top-Level Commands</a></h2>
+<h3 id="serve"><a class="header" href="#serve"><code>serve</code></a></h3>
+<p>Start the FsPulse server to run as a background service with browser-based access.</p>
+<pre><code class="language-sh">fspulse serve
+</code></pre>
+<p>The server will start on the configured host and port (default: <code>http://127.0.0.1:8080</code>). Access the web UI to:</p>
+<ul>
+<li>Manage roots (create, view, delete)</li>
+<li>Initiate scans with real-time progress</li>
+<li>Query and explore data</li>
+<li>View scan results and changes</li>
+</ul>
+<p><strong>Configuration</strong>: Server host and port can be configured in <code>config.toml</code> under <code>[server]</code> section, or via environment variables <code>FSPULSE_SERVER_HOST</code> and <code>FSPULSE_SERVER_PORT</code>.</p>
+<p><strong>Docker users</strong>: The container automatically runs in serve mode. You can still access CLI commands via <code>docker exec</code>:</p>
+<pre><code class="language-sh">docker exec fspulse fspulse query "items limit 10"
+docker exec -it fspulse fspulse interact
+</code></pre>
+<p>See the <a href="docker.html">Docker Deployment</a> chapter for more details.</p>
+<hr />
 <h3 id="interact"><a class="header" href="#interact"><code>interact</code></a></h3>
-<p>Launches FsPulse in interactive mode.</p>
-<pre><code class="language-sh">fspulse interact [--db-path &lt;path&gt;]
+<p>Launches FsPulse in interactive menu mode.</p>
+<pre><code class="language-sh">fspulse interact
 </code></pre>
 <ul>
-<li>Allows users to choose scan or report actions through a guided menu</li>
+<li>Provides a guided menu for scanning and reporting</li>
+<li>Allows interactive query mode with history</li>
 <li>Only usable for roots that have already been scanned</li>
 </ul>
+<p>See the <a href="interactive_mode.html">Interactive Mode</a> chapter for full details.</p>
+<hr />
+<h3 id="explore"><a class="header" href="#explore"><code>explore</code></a></h3>
+<p>Launches an interactive, terminal-based data explorer.</p>
+<pre><code class="language-sh">fspulse explore
+</code></pre>
+<ul>
+<li>Browse roots, scans, items, and changes in a full-screen TUI</li>
+<li>Navigate between entity views using keyboard shortcuts</li>
+<li>Filter and sort data interactively</li>
+</ul>
+<p>This is different from <code>interact</code> (which is menu-driven). The <code>explore</code> command provides a more visual, spreadsheet-like interface for exploring your data.</p>
+<hr />
 <h3 id="scan"><a class="header" href="#scan"><code>scan</code></a></h3>
 <p>Performs a filesystem scan.</p>
-<pre><code class="language-sh">fspulse scan [--db-path &lt;path&gt;] [--root-id &lt;id&gt; | --root-path &lt;path&gt; | --last] [--hash] [--validate]
+<pre><code class="language-sh">fspulse scan [--root-id &lt;id&gt; | --root-path &lt;path&gt; | --last] [--hash] [--validate]
 </code></pre>
 <ul>
 <li><code>--root-id</code> — scan an existing root by ID</li>
@@ -656,51 +1304,65 @@ fspulse report items --help
 </code></pre>
 <p>Available subcommands:</p>
 <h4 id="roots"><a class="header" href="#roots"><code>roots</code></a></h4>
-<pre><code class="language-sh">fspulse report roots [--db-path &lt;path&gt;] [--root-id &lt;id&gt; | --root-path &lt;path&gt;]
+<pre><code class="language-sh">fspulse report roots [--root-id &lt;id&gt; | --root-path &lt;path&gt;]
 </code></pre>
 <h4 id="scans"><a class="header" href="#scans"><code>scans</code></a></h4>
-<pre><code class="language-sh">fspulse report scans [--db-path &lt;path&gt;] [--scan-id &lt;id&gt; | --last &lt;N&gt;]
+<pre><code class="language-sh">fspulse report scans [--scan-id &lt;id&gt; | --last &lt;N&gt;]
 </code></pre>
 <h4 id="items"><a class="header" href="#items"><code>items</code></a></h4>
-<pre><code class="language-sh">fspulse report items [--db-path &lt;path&gt;] [--item-id &lt;id&gt; | --item-path &lt;path&gt; | --root-id &lt;id&gt;] [--invalid]
+<pre><code class="language-sh">fspulse report items [--item-id &lt;id&gt; | --item-path &lt;path&gt; | --root-id &lt;id&gt;] [--invalid]
 </code></pre>
 <h4 id="changes"><a class="header" href="#changes"><code>changes</code></a></h4>
-<pre><code class="language-sh">fspulse report changes [--db-path &lt;path&gt;] [--change-id &lt;id&gt; | --item-id &lt;id&gt; | --scan-id &lt;id&gt;]
+<pre><code class="language-sh">fspulse report changes [--change-id &lt;id&gt; | --item-id &lt;id&gt; | --scan-id &lt;id&gt;]
 </code></pre>
 <p>Notes:</p>
 <ul>
 <li><code>--invalid</code> on <code>items</code> requires <code>--root-id</code></li>
 </ul>
+<hr />
 <h3 id="query"><a class="header" href="#query"><code>query</code></a></h3>
 <p>Executes a structured query using FsPulse's flexible syntax.</p>
-<pre><code class="language-sh">fspulse query [--db-path &lt;path&gt;] "&lt;query string&gt;"
+<pre><code class="language-sh">fspulse query "&lt;query string&gt;"
 </code></pre>
 <p>Example:</p>
 <pre><code class="language-sh">fspulse query "items where item_path:('docs') order by mod_date desc limit 10"
 </code></pre>
 <p>See <a href="query.html">Query Syntax</a> for full details.</p>
 <hr />
-<h2 id="shared-option---db-path"><a class="header" href="#shared-option---db-path">Shared Option: <code>--db-path</code></a></h2>
-<p>Many commands support the optional <code>--db-path</code> parameter to specify a custom SQLite database location.</p>
+<h2 id="database-location"><a class="header" href="#database-location">Database Location</a></h2>
+<p>FsPulse automatically determines the database location using the following precedence:</p>
+<ol>
+<li><code>FSPULSE_DATA_DIR</code> environment variable (if set)</li>
+<li><code>config.toml</code> <code>[database]</code> <code>path</code> setting (if configured)</li>
+<li>Platform-specific data directory (default):
 <ul>
-<li>If omitted, FsPulse defaults to the appropriate system-specific location using the <a href="https://docs.rs/directories">directories</a> crate</li>
-<li>The database file is always named <code>fspulse.db</code></li>
+<li>Linux: <code>~/.local/share/fspulse/</code></li>
+<li>macOS: <code>~/Library/Application Support/fspulse/</code></li>
+<li>Windows: <code>%LOCALAPPDATA%\fspulse\</code></li>
 </ul>
-<p>Examples:</p>
-<pre><code class="language-sh">fspulse scan --root-path /home/user/data --db-path /tmp/fspulse
-fspulse query --db-path /var/fspulse "changes where val_new:(I)"
-</code></pre>
+</li>
+</ol>
+<p>The database file is always named <code>fspulse.db</code> within the determined directory.</p>
+<p>For Docker deployments, the database is stored in <code>/data/fspulse.db</code> inside the container. See the <a href="docker.html">Docker Deployment</a> chapter for details.</p>
+<p>For more information on configuration, see the <a href="configuration.html">Configuration</a> chapter.</p>
 <hr />
 <p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="query.html">Query Syntax</a> · <a href="configuration.html">Configuration</a></p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h1>
-<p>FsPulse includes an interactive mode that provides a menu-driven interface for common tasks.</p>
+<p>FsPulse provides two terminal-based interactive interfaces for working with your data:</p>
+<ul>
+<li><strong><code>fspulse interact</code></strong> — Menu-driven interface (documented on this page)</li>
+<li><strong><code>fspulse explore</code></strong> — Visual data explorer TUI (see below)</li>
+</ul>
+<p>Both provide alternative ways to interact with FsPulse without needing the web UI.</p>
+<hr />
+<h2 id="interactive-menu-fspulse-interact"><a class="header" href="#interactive-menu-fspulse-interact">Interactive Menu (<code>fspulse interact</code>)</a></h2>
+<p>The <code>interact</code> command provides a menu-driven interface for common tasks.</p>
 <p><img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/interact.png" alt="Interactive menu" /></p>
-<p>To launch interactive mode:</p>
+<p>To launch:</p>
 <pre><code class="language-sh">fspulse interact
 </code></pre>
-<hr />
-<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p>The interactive menu offers the following options:</p>
+<h3 id="available-options"><a class="header" href="#available-options">Available Options</a></h3>
+<p>The interactive menu offers:</p>
 <ul>
 <li><strong>Scan</strong> — Re-scan a previously scanned root</li>
 <li><strong>Query</strong> — Run custom queries using the query language</li>
@@ -745,7 +1407,46 @@ changes where val_new:(I) show default, val_old, val_new
 </ul>
 <p>Reports are internally implemented as saved queries and will expand over time.</p>
 <hr />
-<p>Interactive mode is especially helpful for exploring your data once scans are available, and for learning the query syntax interactively.</p>
+<h2 id="data-explorer-fspulse-explore"><a class="header" href="#data-explorer-fspulse-explore">Data Explorer (<code>fspulse explore</code>)</a></h2>
+<p>The <code>explore</code> command provides a visual, terminal-based data explorer—a full-screen TUI for browsing your FsPulse data.</p>
+<p>To launch:</p>
+<pre><code class="language-sh">fspulse explore
+</code></pre>
+<h3 id="key-features"><a class="header" href="#key-features">Key Features</a></h3>
+<ul>
+<li><strong>Visual Interface</strong>: Spreadsheet-like display of roots, scans, items, and changes</li>
+<li><strong>Keyboard Navigation</strong>: Use arrow keys, Tab, and shortcuts to navigate</li>
+<li><strong>Entity Views</strong>: Switch between different data types (roots, scans, items, changes)</li>
+<li><strong>Filtering &amp; Sorting</strong>: Interactive controls for refining results</li>
+<li><strong>Full-Screen</strong>: Maximizes terminal space for data exploration</li>
+</ul>
+<h3 id="differences-from-interact"><a class="header" href="#differences-from-interact">Differences from <code>interact</code></a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th><code>interact</code></th><th><code>explore</code></th></tr></thead><tbody>
+<tr><td><strong>Interface</strong></td><td>Menu-driven prompts</td><td>Full-screen visual TUI</td></tr>
+<tr><td><strong>Navigation</strong></td><td>Text-based selection</td><td>Arrow keys, visual navigation</td></tr>
+<tr><td><strong>Data Display</strong></td><td>List-based output</td><td>Table/grid layout</td></tr>
+<tr><td><strong>Best For</strong></td><td>Quick scans and queries</td><td>Visual data exploration</td></tr>
+</tbody></table>
+</div>
+<h3 id="docker-usage"><a class="header" href="#docker-usage">Docker Usage</a></h3>
+<p>Both interactive modes work in Docker via <code>docker exec</code> with the <code>-it</code> flags:</p>
+<pre><code class="language-sh"># Interactive menu
+docker exec -it fspulse fspulse interact
+
+# Data explorer
+docker exec -it fspulse fspulse explore
+</code></pre>
+<p><strong>Important</strong>: The <code>-it</code> flags are required for proper terminal interaction.</p>
+<hr />
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>FsPulse offers multiple ways to interact with your data:</p>
+<ul>
+<li><strong>Web UI</strong> — Full-featured browser interface (via <code>fspulse serve</code>)</li>
+<li><strong>Interactive Menu</strong> — Quick access to common tasks (via <code>fspulse interact</code>)</li>
+<li><strong>Data Explorer</strong> — Visual terminal-based exploration (via <code>fspulse explore</code>)</li>
+<li><strong>Direct CLI</strong> — Scriptable commands for automation (see <a href="cli.html">Command-Line Interface</a>)</li>
+</ul>
+<p>Choose the interface that best fits your workflow.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
 <p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, pass the <code>--validate</code> flag when initiating a scan.</p>
 <pre><code class="language-sh">fspulse scan --root-path /your/path --validate
@@ -1004,6 +1705,7 @@ files and directories discovered. The details of scanning are explained in <a hr
             window.setTimeout(window.print, 100);
         });
         </script>
+
 
     </div>
     </body>

@@ -36,11 +36,23 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc.js"></script>
     </head>
     <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
     <div id="body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
@@ -81,10 +93,13 @@
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -118,7 +133,7 @@
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
                             <i class="fa fa-search"></i>
                         </button>
                     </div>
@@ -135,7 +150,12 @@
 
                 <div id="search-wrapper" class="hidden">
                     <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
                     </form>
                     <div id="searchresults-outer" class="searchresults-outer hidden">
                         <div id="searchresults-header" class="searchresults-header"></div>
@@ -156,15 +176,37 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h1>
-<p>FsPulse can be installed in one of three ways:</p>
+<p>FsPulse can be installed in one of four ways:</p>
 <ol>
+<li><strong>Run with Docker (Recommended)</strong></li>
 <li><strong>Install via <a href="https://crates.io/crates/fspulse">crates.io</a></strong></li>
 <li><strong>Clone and build from source</strong></li>
 <li><strong>Download a pre-built release binary from GitHub</strong></li>
 </ol>
 <p>Choose the method that works best for your platform and preferences.</p>
 <hr />
-<h2 id="1-install-via-cratesio"><a class="header" href="#1-install-via-cratesio">1. Install via Crates.io</a></h2>
+<h2 id="1-run-with-docker-recommended"><a class="header" href="#1-run-with-docker-recommended">1. Run with Docker (Recommended)</a></h2>
+<p>The easiest way to run FsPulse is with Docker:</p>
+<pre><code class="language-sh">docker pull gtunesdev/fspulse:latest
+
+docker run -d \
+  --name fspulse \
+  -p 8080:8080 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p>Access the web UI at <strong>http://localhost:8080</strong></p>
+<p>The web UI provides full functionality: managing roots, initiating scans, querying data, and viewing results—all from your browser.</p>
+<p>See the <a href="docker.html">Docker Deployment</a> chapter for complete documentation including:</p>
+<ul>
+<li>Volume management for scanning host directories</li>
+<li>Configuration options</li>
+<li>Docker Compose examples</li>
+<li>NAS deployment (TrueNAS, Unraid)</li>
+<li>Troubleshooting</li>
+</ul>
+<hr />
+<h2 id="2-install-via-cratesio"><a class="header" href="#2-install-via-cratesio">2. Install via Crates.io</a></h2>
 <p>The easiest way to get FsPulse is via <a href="https://crates.io/crates/fspulse">crates.io</a>:</p>
 <pre><code class="language-sh">cargo install fspulse
 </code></pre>
@@ -176,7 +218,7 @@
 <pre><code class="language-sh">cargo install fspulse --force
 </code></pre>
 <hr />
-<h2 id="2-clone-and-build-from-source"><a class="header" href="#2-clone-and-build-from-source">2. Clone and Build from Source</a></h2>
+<h2 id="3-clone-and-build-from-source"><a class="header" href="#3-clone-and-build-from-source">3. Clone and Build from Source</a></h2>
 <p>If you prefer working directly with the source code (for example, to contribute or try out development versions):</p>
 <pre><code class="language-sh">git clone https://github.com/gtunes-dev/fspulse.git
 cd fspulse
@@ -186,7 +228,7 @@ cargo build --release
 <pre><code class="language-sh">./target/release/fspulse --help
 </code></pre>
 <hr />
-<h2 id="3-download-pre-built-release-binaries"><a class="header" href="#3-download-pre-built-release-binaries">3. Download Pre-Built Release Binaries</a></h2>
+<h2 id="4-download-pre-built-release-binaries"><a class="header" href="#4-download-pre-built-release-binaries">4. Download Pre-Built Release Binaries</a></h2>
 <p>Pre-built release binaries for Linux, macOS, and Windows are available on the <a href="https://github.com/gtunes-dev/fspulse/releases">GitHub Releases page</a>:</p>
 <ol>
 <li>Visit the releases page.</li>
@@ -201,25 +243,37 @@ cargo build --release
 <pre><code class="language-sh">fspulse --help
 </code></pre>
 <hr />
-<h2 id="first-scan"><a class="header" href="#first-scan">First Scan</a></h2>
-<p>To scan a directory:</p>
+<h2 id="usage-web-ui-or-cli"><a class="header" href="#usage-web-ui-or-cli">Usage: Web UI or CLI</a></h2>
+<p>After installation, you can use FsPulse in two ways:</p>
+<h3 id="web-ui-server-mode"><a class="header" href="#web-ui-server-mode">Web UI (Server Mode)</a></h3>
+<p>Start the server:</p>
+<pre><code class="language-sh">fspulse serve
+</code></pre>
+<p>Then open your browser to <strong>http://localhost:8080</strong> to access the web interface.</p>
+<p>The web UI provides:</p>
+<ul>
+<li>Root management (create, view, delete roots)</li>
+<li>Scan initiation with real-time progress</li>
+<li>Interactive data exploration</li>
+<li>Powerful query interface</li>
+</ul>
+<h3 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h3>
+<p>Use FsPulse directly from the terminal:</p>
+<p><strong>Scan a directory:</strong></p>
 <pre><code class="language-sh">fspulse scan --root-path /some/directory
 </code></pre>
-<hr />
-<h2 id="interactive-exploration"><a class="header" href="#interactive-exploration">Interactive Exploration</a></h2>
-<p>After scanning, you can explore results in an interactive shell:</p>
-<pre><code class="language-sh">fspulse interact
+<p><strong>Interactive exploration:</strong></p>
+<pre><code class="language-sh">fspulse interact  # Menu-driven interface
+fspulse explore   # Data explorer TUI
 </code></pre>
-<hr />
-<h2 id="querying"><a class="header" href="#querying">Querying</a></h2>
-<p>Use flexible, SQL-like queries to retrieve and filter scan results:</p>
+<p><strong>Query results:</strong></p>
 <pre><code class="language-sh"># Items whose path contains 'reports'
 fspulse query "items where item_path:('reports')"
 
 # Changes involving items detected as invalid
 fspulse query "changes where val_new:(I) show default, val_old, val_new order by change_id desc"
 </code></pre>
-<p>See the <a href="query.html">Query Syntax</a> page for more examples.</p>
+<p>See the <a href="query.html">Query Syntax</a> page for more examples and the <a href="cli.html">Command-Line Interface</a> page for all available commands.</p>
 
                     </main>
 
@@ -229,7 +283,7 @@ fspulse query "changes where val_new:(I) show default, val_old, val_new order by
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="scanning.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="docker.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -243,7 +297,7 @@ fspulse query "changes where val_new:(I) show default, val_old, val_new order by
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="scanning.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="docker.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -267,6 +321,7 @@ fspulse query "changes where val_new:(I) show default, val_old, val_new order by
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+
 
 
     </div>
