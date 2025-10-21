@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     tini \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (uid 1000, gid 1000)
@@ -44,10 +45,7 @@ RUN chmod +x /app/entrypoint.sh
 # Create data and roots directories
 RUN mkdir -p /data /roots && chown -R fspulse:fspulse /data /roots
 
-# Switch to non-root user
-USER fspulse
-
-# Set environment variables
+# Set environment variables (entrypoint.sh will switch to non-root user)
 ENV FSPULSE_DATA_DIR=/data \
     FSPULSE_SERVER_HOST=0.0.0.0 \
     FSPULSE_SERVER_PORT=8080
