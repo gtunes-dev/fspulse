@@ -6,17 +6,27 @@ FsPulse scans are at the core of how it tracks changes to the file system over t
 
 ## Initiating a Scan
 
-You can start a scan in one of two ways:
+You can start a scan in three ways:
+
+- **Web UI (Server Mode):**
+  1. Start the server: `fspulse serve`
+  2. Open http://localhost:8080 in your browser
+  3. Navigate to **Manage Roots**
+  4. Select a root and click **Scan Root**
+  5. Monitor real-time progress in the web interface
 
 - **Command line:**
   ```sh
   fspulse scan --root-path /your/path
   ```
+
 - **Interactive mode:** From the interactive menu, select **Scan** to re-scan a root path that has previously been scanned.
 
-> Interactive mode only supports scanning previously scanned paths. To scan a new root for the first time, use the command line.
+> **Note**: The web UI and command line support scanning both new and existing roots. Interactive mode (`fspulse interact`) only supports scanning previously scanned paths. To scan a new root for the first time, use the web UI or command line.
 
 Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on other roots can run independently.
+
+**Docker users**: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage scans, or use `docker exec` to run CLI commands. See the [Docker Deployment](docker.md) chapter for details.
 
 ---
 

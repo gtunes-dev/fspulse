@@ -2,6 +2,7 @@
 
 - [Introduction](introduction.md)
 - [Getting Started](getting_started.md)
+- [Docker Deployment](docker.md)
 - [Scanning](scanning.md)
 - [Configuration](configuration.md)
 - [Query Syntax](query.md)

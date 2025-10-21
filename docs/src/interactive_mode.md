@@ -1,20 +1,29 @@
 # Interactive Mode
 
-FsPulse includes an interactive mode that provides a menu-driven interface for common tasks.
+FsPulse provides two terminal-based interactive interfaces for working with your data:
+
+- **`fspulse interact`** — Menu-driven interface (documented on this page)
+- **`fspulse explore`** — Visual data explorer TUI (see below)
+
+Both provide alternative ways to interact with FsPulse without needing the web UI.
+
+---
+
+## Interactive Menu (`fspulse interact`)
+
+The `interact` command provides a menu-driven interface for common tasks.
 
 ![Interactive menu](https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/interact.png)
 
-To launch interactive mode:
+To launch:
 
 ```sh
 fspulse interact
 ```
 
----
+### Available Options
 
-## Overview
-
-The interactive menu offers the following options:
+The interactive menu offers:
 
 - **Scan** — Re-scan a previously scanned root
 - **Query** — Run custom queries using the query language
@@ -69,5 +78,57 @@ Reports are internally implemented as saved queries and will expand over time.
 
 ---
 
-Interactive mode is especially helpful for exploring your data once scans are available, and for learning the query syntax interactively.
+## Data Explorer (`fspulse explore`)
+
+The `explore` command provides a visual, terminal-based data explorer—a full-screen TUI for browsing your FsPulse data.
+
+To launch:
+
+```sh
+fspulse explore
+```
+
+### Key Features
+
+- **Visual Interface**: Spreadsheet-like display of roots, scans, items, and changes
+- **Keyboard Navigation**: Use arrow keys, Tab, and shortcuts to navigate
+- **Entity Views**: Switch between different data types (roots, scans, items, changes)
+- **Filtering & Sorting**: Interactive controls for refining results
+- **Full-Screen**: Maximizes terminal space for data exploration
+
+### Differences from `interact`
+
+| Feature | `interact` | `explore` |
+|---------|------------|-----------|
+| **Interface** | Menu-driven prompts | Full-screen visual TUI |
+| **Navigation** | Text-based selection | Arrow keys, visual navigation |
+| **Data Display** | List-based output | Table/grid layout |
+| **Best For** | Quick scans and queries | Visual data exploration |
+
+### Docker Usage
+
+Both interactive modes work in Docker via `docker exec` with the `-it` flags:
+
+```sh
+# Interactive menu
+docker exec -it fspulse fspulse interact
+
+# Data explorer
+docker exec -it fspulse fspulse explore
+```
+
+**Important**: The `-it` flags are required for proper terminal interaction.
+
+---
+
+## Summary
+
+FsPulse offers multiple ways to interact with your data:
+
+- **Web UI** — Full-featured browser interface (via `fspulse serve`)
+- **Interactive Menu** — Quick access to common tasks (via `fspulse interact`)
+- **Data Explorer** — Visual terminal-based exploration (via `fspulse explore`)
+- **Direct CLI** — Scriptable commands for automation (see [Command-Line Interface](cli.md))
+
+Choose the interface that best fits your workflow.
 
