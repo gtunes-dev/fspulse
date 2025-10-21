@@ -1,7 +1,6 @@
-use axum::{extract::Path, http::StatusCode, Extension, Json};
+use axum::{extract::Path, http::StatusCode, Json};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
@@ -43,11 +42,10 @@ pub struct QueryResponse {
 /// Accepts structured query data (columns, filters, limit) and executes an FsPulse query
 pub async fn execute_query(
     Path(domain): Path<String>,
-    Extension(db_path): Extension<Option<PathBuf>>,
     Json(req): Json<QueryRequest>,
 ) -> Result<Json<QueryResponse>, StatusCode> {
     // Create database connection
-    let db = Database::new(db_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let db = Database::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     // Build the FsPulse query string from the request
     let query_str = match build_query_string(&domain, &req) {
         Ok(s) => s,

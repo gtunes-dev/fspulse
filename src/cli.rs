@@ -3,7 +3,6 @@ use dialoguer::{theme::ColorfulTheme, BasicHistory, Input, Select};
 use indicatif::MultiProgress;
 use log::info;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::config::CONFIG;
@@ -37,18 +36,10 @@ pub enum Command {
         long_about = r#"Launches interactive mode where you can choose from one of the main command types:
 Scan, Report, or Query.
 
-Once a command type is selected, you’ll be prompted to select from relevant existing items
+Once a command type is selected, you'll be prompted to select from relevant existing items
 such as roots, scans, items, or changes. The selected command will then be run using your choices."#
     )]
-    Interact {
-        #[arg(
-            long,
-            help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#
-        )]
-        db_path: Option<PathBuf>,
-    },
+    Interact,
 
     #[command(
         about = "Scan the filesystem and track changes",
@@ -68,14 +59,6 @@ with --no-hash or --hash-new. Validation behavior can be modified
 with --no_validate or --validate-all."#
     )]
     Scan {
-        #[arg(
-            long,
-            help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#
-        )]
-        db_path: Option<PathBuf>,
-
         #[arg(long, conflicts_with_all = ["root_path", "last"], help = "Scan a previously recorded root by numeric ID")]
         root_id: Option<u32>,
 
@@ -115,15 +98,7 @@ The database file will always be named 'fspulse.db'."#
         about = "Interactive data explorer",
         long_about = "Interactive, terminal-ui based data exploration of Roots, Scans, Items, and Changes"
     )]
-    Explore {
-        #[arg(
-            long,
-            help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#
-        )]
-        db_path: Option<PathBuf>,
-    },
+    Explore,
     #[command(
         about = "Generate reports",
         long_about = "Generate detailed reports about roots, scans, items, or changes stored in the FsPulse database."
@@ -140,14 +115,6 @@ The database file will always be named 'fspulse.db'."#
 Example query: items where scan:(5) order by path limit 10"#
     )]
     Query {
-        #[arg(
-            long,
-            help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#
-        )]
-        db_path: Option<PathBuf>,
-
         #[arg(help = "The query string (e.g., \"items where scan:(5)\")")]
         query: String,
     },
@@ -156,26 +123,13 @@ The database file will always be named 'fspulse.db'."#
         about = "Start the server",
         long_about = "Start the FsPulse server to run as a background service with browser-based access to filesystem scanning and reporting."
     )]
-    Serve {
-        #[arg(
-            long,
-            help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#
-        )]
-        db_path: Option<PathBuf>,
-    },
+    Serve,
 }
 
 #[derive(Subcommand)]
 pub enum ReportType {
     #[command(about = "Report on known root paths")]
     Roots {
-        #[arg(long, help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#)]
-        db_path: Option<PathBuf>,
-
         #[arg(long, conflicts_with = "root_path", help = "Show details for the root with the specified ID")]
         root_id: Option<u32>,
 
@@ -185,11 +139,6 @@ The database file will always be named 'fspulse.db'."#)]
 
     #[command(about = "Report on scans")]
     Scans {
-        #[arg(long, help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#)]
-        db_path: Option<PathBuf>,
-
         #[arg(long, conflicts_with = "last", help = "Filter by specific scan ID")]
         scan_id: Option<u32>,
 
@@ -199,11 +148,6 @@ The database file will always be named 'fspulse.db'."#)]
 
     #[command(about = "Report on scanned items")]
     Items {
-        #[arg(long, help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#)]
-        db_path: Option<PathBuf>,
-
         #[arg(long, conflicts_with_all = ["item_path", "root_id"], help = "Show a specific item by ID")]
         item_id: Option<u32>,
 
@@ -222,11 +166,6 @@ The database file will always be named 'fspulse.db'."#)]
 
     #[command(about = "Report on changes between scans")]
     Changes {
-        #[arg(long, help = r#"Specifies the directory where the database is stored.
-Defaults to the user's home directory (~/ on Unix, %USERPROFILE%\ on Windows).
-The database file will always be named 'fspulse.db'."#)]
-        db_path: Option<PathBuf>,
-
         #[arg(long, conflicts_with_all = ["item_id", "scan_id"], help = "Filter by change ID")]
         change_id: Option<u32>,
 
@@ -291,14 +230,13 @@ impl Cli {
         let args = Cli::from_arg_matches(&matches).unwrap();
 
         match args.command {
-            Command::Interact { db_path } => {
-                info!("Running interact with db_path: {db_path:?}");
-                let mut db = Database::new(db_path)?;
+            Command::Interact => {
+                info!("Running interact");
+                let mut db = Database::new()?;
 
                 Cli::handle_interact(&mut db, multi_prog)
             }
             Command::Scan {
-                db_path,
                 root_id,
                 root_path,
                 last,
@@ -308,10 +246,10 @@ impl Cli {
                 validate_all,
             } => {
                 info!(
-                    "Running scan with db_path: {db_path:?}, root_id: {root_id:?}, root_path: {root_path:?}, last: {last}, no_hash: {no_hash}, hash_new: {hash_new}, no_validate: {no_validate}, validate_all: {validate_all}"
+                    "Running scan with root_id: {root_id:?}, root_path: {root_path:?}, last: {last}, no_hash: {no_hash}, hash_new: {hash_new}, no_validate: {no_validate}, validate_all: {validate_all}"
                 );
 
-                let mut db = Database::new(db_path)?;
+                let mut db = Database::new()?;
                 let analysis_spec = AnalysisSpec::new(no_hash, hash_new, no_validate, validate_all);
 
                 // Create CliProgressReporter from MultiProgress
@@ -326,43 +264,38 @@ impl Cli {
                     reporter,
                 )
             }
-            Command::Explore { db_path } => {
-                info!(
-                    "Initiating interative explorer",
-                );
+            Command::Explore => {
+                info!("Initiating interactive explorer");
 
-                let db = Database::new(db_path)?;
+                let db = Database::new()?;
                 let mut explorer = Explorer::new();
                 explorer.explore(&db)
 
             }
             Command::Report { report_type } => match report_type {
                 ReportType::Roots {
-                    db_path,
                     root_id,
                     root_path,
                 } => {
                     info!(
-                        "Generating roots report with db_path: {db_path:?}, root_id: {root_id:?}, root_path: {root_path:?}",
+                        "Generating roots report with root_id: {root_id:?}, root_path: {root_path:?}",
                     );
-                    let db = Database::new(db_path)?;
+                    let db = Database::new()?;
 
                     Reports::report_roots(&db, root_id, root_path)
                 }
                 ReportType::Scans {
-                    db_path,
                     scan_id,
                     last,
                 } => {
                     info!(
-                        "Generating scans report with db_path: {db_path:?}, scan_id: {scan_id:?}, last: {last}",
+                        "Generating scans report with scan_id: {scan_id:?}, last: {last}",
                     );
-                    let db = Database::new(db_path)?;
+                    let db = Database::new()?;
 
                     Reports::report_scans(&db, scan_id, last)
                 }
                 ReportType::Items {
-                    db_path,
                     item_id,
                     item_path,
                     root_id,
@@ -370,39 +303,38 @@ impl Cli {
                     format,
                 } => {
                     info!(
-                        "Generating items report with db_path: {db_path:?}, item_id: {item_id:?}, item_path: {item_path:?}, root_id: {root_id:?}, format: {format}"
+                        "Generating items report with item_id: {item_id:?}, item_path: {item_path:?}, root_id: {root_id:?}, format: {format}"
                     );
-                    let db = Database::new(db_path)?;
+                    let db = Database::new()?;
                     let format: ReportFormat = format.parse()?;
 
                     Reports::report_items(&db, item_id, item_path, root_id, invalid, format)
                 }
                 ReportType::Changes {
-                    db_path,
                     change_id,
                     item_id,
                     scan_id,
                 } => {
                     info!(
-                        "Generating changes report with db_path: {db_path:?}, change_id: {change_id:?}, item_id: {item_id:?}, scan_id: {scan_id:?}",
+                        "Generating changes report with change_id: {change_id:?}, item_id: {item_id:?}, scan_id: {scan_id:?}",
                     );
-                    let db = Database::new(db_path)?;
+                    let db = Database::new()?;
 
                     Reports::report_changes(&db, change_id, item_id, scan_id)
                 }
             },
-            Command::Query { db_path, query } => {
-                info!("Processing query with db_path: {db_path:?}, '{query}'");
-                let db = Database::new(db_path)?;
+            Command::Query { query } => {
+                info!("Processing query: '{query}'");
+                let db = Database::new()?;
                 QueryProcessor::execute_query_and_print(&db, &query)
             }
-            Command::Serve { db_path } => {
+            Command::Serve => {
                 let config = CONFIG.get().expect("Config not initialized");
 
                 let host = config.server.host.clone();
                 let port = config.server.port;
 
-                info!("Starting server on {host}:{port} with db_path: {db_path:?}");
+                info!("Starting server on {host}:{port}");
 
                 // Start the async runtime for the web server
                 let rt = tokio::runtime::Runtime::new()
@@ -410,7 +342,7 @@ impl Cli {
 
                 rt.block_on(async {
                     let web_server = crate::web::WebServer::new(host, port);
-                    web_server.start(db_path).await
+                    web_server.start().await
                 })
             }
         }
@@ -725,37 +657,23 @@ mod tests {
     fn test_cli_interact_parsing() {
         let result = Cli::try_parse_from(["fspulse", "interact"]);
         assert!(result.is_ok());
-        
+
         let cli = result.unwrap();
-        if let Command::Interact { db_path } = cli.command {
-            assert_eq!(db_path, None);
+        if let Command::Interact = cli.command {
+            // Success - just verify the command type
         } else {
             panic!("Expected Interact command");
         }
     }
-    
-    #[test]
-    fn test_cli_interact_parsing_with_db_path() {
-        let result = Cli::try_parse_from(["fspulse", "interact", "--db-path", "/custom/db/path"]);
-        assert!(result.is_ok());
-        
-        let cli = result.unwrap();
-        if let Command::Interact { db_path } = cli.command {
-            assert_eq!(db_path, Some(PathBuf::from("/custom/db/path")));
-        } else {
-            panic!("Expected Interact command");
-        }
-    }
-    
+
     #[test]
     fn test_cli_query_parsing() {
         let result = Cli::try_parse_from(["fspulse", "query", "items where scan:(5)"]);
         assert!(result.is_ok());
-        
+
         let cli = result.unwrap();
-        if let Command::Query { query, db_path } = cli.command {
+        if let Command::Query { query } = cli.command {
             assert_eq!(query, "items where scan:(5)");
-            assert_eq!(db_path, None);
         } else {
             panic!("Expected Query command");
         }

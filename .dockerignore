@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+.github
+
+# Build artifacts
+target/
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Assets
+assets/
+
+# Claude context
+.claude/
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Test data
+test-data/
+ValidationCorpus/

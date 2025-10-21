@@ -5,9 +5,7 @@ use axum::{
     Router,
 };
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use tokio::net::TcpListener;
-use tower::ServiceBuilder;
 
 use crate::error::FsPulseError;
 
@@ -23,8 +21,8 @@ impl WebServer {
         Self { host, port }
     }
 
-    pub async fn start(&self, db_path: Option<PathBuf>) -> Result<(), FsPulseError> {
-        let app = self.create_router(db_path)?;
+    pub async fn start(&self) -> Result<(), FsPulseError> {
+        let app = self.create_router()?;
 
         let addr: SocketAddr = format!("{}:{}", self.host, self.port)
             .parse()
@@ -41,11 +39,10 @@ impl WebServer {
         Ok(())
     }
 
-    fn create_router(&self, db_path: Option<PathBuf>) -> Result<Router, FsPulseError> {
+    fn create_router(&self) -> Result<Router, FsPulseError> {
         // Create shared application state
-        let app_state = handlers::scans::AppState::new(db_path.clone());
+        let app_state = handlers::scans::AppState::new();
 
-        // Store database path for handlers to create connections as needed
         let app = Router::new()
             // Static routes
             .route("/", get(handlers::overview::dashboard))
@@ -67,12 +64,7 @@ impl WebServer {
             // WebSocket routes
             .route("/ws/scans/progress", get(handlers::scans::scan_progress_ws))
 
-            // Store database path in extension for legacy handlers
-            .layer(
-                ServiceBuilder::new()
-                    .layer(axum::Extension(db_path))
-            )
-            // Add state for new handlers
+            // Add state for handlers
             .with_state(app_state);
 
         Ok(app)

@@ -1,4 +1,6 @@
+use std::env;
 use std::fs;
+use std::path::PathBuf;
 
 use directories::ProjectDirs;
 use figment::{
@@ -147,24 +149,61 @@ impl ServerConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DatabaseConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+impl DatabaseConfig {
+    fn ensure_valid(&mut self) {
+        // Trim path if provided
+        if let Some(ref mut path) = self.path {
+            *path = path.trim().to_string();
+            if path.is_empty() {
+                eprintln!("Config error: database path cannot be empty - ignoring");
+                self.path = None;
+            }
+        }
+    }
+
+    pub fn get_path(&self) -> Option<&str> {
+        self.path.as_deref()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     pub logging: LoggingConfig,
     pub analysis: AnalysisConfig,
     pub server: ServerConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database: Option<DatabaseConfig>,
 }
 
 impl Config {
     /// Loads the configuration from a TOML file located in your app's data directory.
     /// If the file is missing or fails to parse, defaults are used.
     /// Additionally, writes the default config to disk if no file exists.
+    ///
+    /// Docker Support: Checks FSPULSE_DATA_DIR environment variable first,
+    /// then falls back to OS-specific directories.
     pub fn load_config(project_dirs: &ProjectDirs) -> Self {
-        let config_path = project_dirs.data_local_dir().join("config.toml");
+        // Check for Docker/custom data directory via environment variable
+        let config_dir = if let Ok(data_dir) = env::var("FSPULSE_DATA_DIR") {
+            PathBuf::from(data_dir)
+        } else {
+            project_dirs.data_local_dir().to_path_buf()
+        };
+
+        let config_path = config_dir.join("config.toml");
 
         // Define default config
+        // Note: database is None by default - users can add [database] section if needed
         let default_config = Config {
             logging: LoggingConfig::default(),
             analysis: AnalysisConfig::default(),
             server: ServerConfig::default(),
+            database: None,
         };
 
         // If the config file doesn't exist, write the default configuration to disk.
@@ -214,6 +253,9 @@ impl Config {
         self.logging.ensure_valid();
         self.analysis.ensure_valid();
         self.server.ensure_valid();
+        if let Some(ref mut database) = self.database {
+            database.ensure_valid();
+        }
     }
 }
 
@@ -316,6 +358,7 @@ mod tests {
                 port: 8080,
                 host: "127.0.0.1".to_string(),
             },
+            database: None,
         };
 
         let toml_str = toml::to_string(&config).expect("Failed to serialize config");
@@ -323,6 +366,8 @@ mod tests {
         assert!(toml_str.contains("lopdf = \"warn\""));
         assert!(toml_str.contains("threads = 16"));
         assert!(toml_str.contains("hash = \"md5\""));
+        // database should not be serialized when None
+        assert!(!toml_str.contains("[database]"));
     }
 
     #[test]
@@ -434,5 +479,30 @@ host = "localhost"
         assert!(matches!(config.analysis.hash_func(), HashFunc::SHA2));
         assert_eq!(config.server.port, 8080);
         assert_eq!(config.server.host, "127.0.0.1");
+        assert!(config.database.is_none());
+    }
+
+    #[test]
+    fn test_database_config() {
+        let toml_str = r#"
+[logging]
+fspulse = "info"
+lopdf = "error"
+
+[analysis]
+threads = 8
+hash = "sha2"
+
+[server]
+port = 8080
+host = "127.0.0.1"
+
+[database]
+path = "/custom/db/path"
+"#;
+
+        let config: Config = toml::from_str(toml_str).expect("Failed to deserialize config");
+        assert!(config.database.is_some());
+        assert_eq!(config.database.unwrap().get_path(), Some("/custom/db/path"));
     }
 }

@@ -1,7 +1,6 @@
-use axum::{http::StatusCode, Extension, Json};
+use axum::{http::StatusCode, Json};
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
@@ -48,11 +47,10 @@ pub struct ScanInfo {
 /// POST /api/roots
 /// Creates a new root after validating the path
 pub async fn create_root(
-    Extension(db_path): Extension<Option<PathBuf>>,
     Json(req): Json<CreateRootRequest>,
 ) -> Result<(StatusCode, Json<CreateRootResponse>), (StatusCode, Json<ErrorResponse>)> {
     // Open database connection
-    let db = Database::new(db_path).map_err(|e| {
+    let db = Database::new().map_err(|e| {
         error!("Failed to open database: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -150,11 +148,9 @@ pub async fn create_root(
 
 /// GET /api/roots/with-scans
 /// Fetches all roots with their last scan information
-pub async fn get_roots_with_scans(
-    Extension(db_path): Extension<Option<PathBuf>>,
-) -> Result<Json<Vec<RootWithScan>>, (StatusCode, Json<ErrorResponse>)> {
+pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCode, Json<ErrorResponse>)> {
     // Open database connection
-    let db = Database::new(db_path).map_err(|e| {
+    let db = Database::new().map_err(|e| {
         error!("Failed to open database: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,

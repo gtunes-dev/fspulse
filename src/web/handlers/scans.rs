@@ -5,11 +5,10 @@ use axum::{
     },
     http::StatusCode,
     response::IntoResponse,
-    Extension, Json,
+    Json,
 };
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::database::Database;
@@ -43,10 +42,8 @@ pub struct ScanOptions {
 
 /// GET /api/scans/status
 /// Returns list of roots with their incomplete scan status
-pub async fn get_scans_status(
-    Extension(db_path): Extension<Option<PathBuf>>,
-) -> Result<Json<ScansStatusResponse>, StatusCode> {
-    let db = Database::new(db_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+pub async fn get_scans_status() -> Result<Json<ScansStatusResponse>, StatusCode> {
+    let db = Database::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Get all roots
     let roots = Root::roots_as_vec(&db).map_err(|e| {
@@ -115,14 +112,12 @@ pub async fn get_scans_status(
 /// Shared application state for managing active scans
 #[derive(Clone)]
 pub struct AppState {
-    pub db_path: Option<PathBuf>,
     pub scan_manager: Arc<Mutex<ScanManager>>,
 }
 
 impl AppState {
-    pub fn new(db_path: Option<PathBuf>) -> Self {
+    pub fn new() -> Self {
         Self {
-            db_path,
             scan_manager: Arc::new(Mutex::new(ScanManager::new())),
         }
     }
@@ -148,7 +143,7 @@ pub async fn initiate_scan(
     State(state): State<AppState>,
     Json(req): Json<InitiateScanRequest>,
 ) -> Result<Json<InitiateScanResponse>, StatusCode> {
-    let db = Database::new(state.db_path.clone())
+    let db = Database::new()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Get the root
@@ -228,12 +223,11 @@ pub async fn initiate_scan(
 
     // Clone state for the background task
     let state_clone = state.clone();
-    let db_path = state.db_path.clone();
     let mut scan_copy = scan;
 
     // Spawn scan in background task
     tokio::task::spawn_blocking(move || {
-        let mut db = Database::new(db_path).expect("Failed to open database");
+        let mut db = Database::new().expect("Failed to open database");
         let root = Root::get_by_id(&db, root_id)
             .expect("Failed to get root")
             .expect("Root not found");

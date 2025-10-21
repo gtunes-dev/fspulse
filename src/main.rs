@@ -18,6 +18,8 @@ mod utils;
 mod validate;
 mod web;
 
+use std::env;
+use std::path::PathBuf;
 use std::time::Instant;
 
 use chrono::Local;
@@ -69,7 +71,12 @@ pub fn setup_logging(project_dirs: &ProjectDirs) {
         config.logging.fspulse, config.logging.lopdf
     );
 
-    let log_dir = project_dirs.data_local_dir().join("logs");
+    // Check for Docker/custom data directory via environment variable
+    let log_dir = if let Ok(data_dir) = env::var("FSPULSE_DATA_DIR") {
+        PathBuf::from(data_dir).join("logs")
+    } else {
+        project_dirs.data_local_dir().join("logs")
+    };
 
     Logger::try_with_str(log_levels)
         .unwrap()
