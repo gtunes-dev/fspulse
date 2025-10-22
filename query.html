@@ -313,12 +313,13 @@
 </code></pre>
 <h3 id="format-specifiers-by-type"><a class="header" href="#format-specifiers-by-type">Format Specifiers by Type</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Type</th><th>Allowed Format Modifiers</th></tr></thead><tbody>
-<tr><td>Date</td><td><code>full</code>, <code>short</code></td></tr>
+<tr><td>Date</td><td><code>full</code>, <code>short</code>, <code>timestamp</code></td></tr>
 <tr><td>Path</td><td><code>full</code>, <code>relative</code>, <code>short</code>, <code>name</code></td></tr>
 <tr><td>Validation / Enum / Boolean</td><td><code>full</code>, <code>short</code></td></tr>
 <tr><td>Integer / String</td><td><em>(no formatting options)</em></td></tr>
 </tbody></table>
 </div>
+<p>The <code>timestamp</code> format modifier converts dates to UTC timestamps (seconds since Unix epoch), which is useful for programmatic processing or web applications that need to format dates in the user's local timezone.</p>
 <hr />
 <h2 id="the-order-by-clause"><a class="header" href="#the-order-by-clause">The <code>ORDER BY</code> Clause</a></h2>
 <p>Specifies sort order for the results:</p>
@@ -337,6 +338,9 @@ items where item_path:('reports')
 
 # Changes involving validation failures
 changes where val_new:(I) show default, val_old, val_new order by change_id desc
+
+# Scans with timestamp for programmatic processing
+scans show scan_id, scan_time@timestamp, file_count order by scan_time desc limit 10
 </code></pre>
 <hr />
 <p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="validators.html">Validators</a> · <a href="configuration.html">Configuration</a></p>
