@@ -38,6 +38,48 @@ pub struct QueryResponse {
     pub total: usize,
 }
 
+/// Request structure for raw query execution
+#[derive(Debug, Deserialize)]
+pub struct RawQueryRequest {
+    pub query: String,
+}
+
+/// Response structure for raw query results
+#[derive(Debug, Serialize)]
+pub struct RawQueryResponse {
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+/// POST /api/query/execute
+/// Accepts raw FsPulse query text and executes it, returning columns and rows
+pub async fn execute_raw_query(
+    Json(req): Json<RawQueryRequest>,
+) -> Result<Json<RawQueryResponse>, (StatusCode, String)> {
+    // Create database connection
+    let db = Database::new().map_err(|e| {
+        error!("Database connection failed: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Database connection failed".to_string())
+    })?;
+
+    debug!("Executing raw query: {}", req.query);
+
+    // Execute the query
+    match QueryProcessor::execute_query(&db, &req.query, false) {
+        Ok((rows, column_headers)) => {
+            Ok(Json(RawQueryResponse {
+                columns: column_headers,
+                rows,
+            }))
+        }
+        Err(e) => {
+            let error_msg = e.to_string();
+            error!("Raw query execution failed: {}", error_msg);
+            Err((StatusCode::BAD_REQUEST, error_msg))
+        }
+    }
+}
+
 /// POST /api/query/{domain}
 /// Accepts structured query data (columns, filters, limit) and executes an FsPulse query
 pub async fn execute_query(
@@ -79,21 +121,10 @@ pub async fn execute_query(
 
     // Execute the main query with LIMIT/OFFSET to get page data
     match QueryProcessor::execute_query(&db, &query_str, false) {
-        Ok(rows) => {
-            // Extract column names from first row if available
-            let columns = if !rows.is_empty() {
-                req.columns
-                    .iter()
-                    .filter(|c| c.visible)
-                    .map(|c| c.name.clone())
-                    .collect()
-            } else {
-                Vec::new()
-            };
-
+        Ok((rows, column_headers)) => {
             Ok(Json(QueryResponse {
                 total: total_count,
-                columns,
+                columns: column_headers,
                 rows,
             }))
         }

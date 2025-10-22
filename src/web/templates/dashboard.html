@@ -202,8 +202,10 @@
 
         .main-content {
             flex: 1;
+            min-width: 0;
             padding: 32px;
             background: #fafafa;
+            overflow-x: auto;
         }
 
         /* Explore Section Tabs */
@@ -245,6 +247,288 @@
 
         .explore-tab-content.active {
             display: block;
+        }
+
+        /* Insights tabs - same style as explore tabs */
+        .insights-tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            margin-bottom: 16px;
+        }
+
+        .insights-tab {
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            color: #86868b;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s ease;
+            border-bottom: 2px solid transparent;
+            position: relative;
+            top: 1px;
+        }
+
+        .insights-tab:hover {
+            color: #1d1d1f;
+            background: rgba(0,0,0,0.02);
+        }
+
+        .insights-tab.active {
+            color: #007aff;
+            border-bottom-color: #007aff;
+        }
+
+        .insights-tab-content {
+            display: none;
+        }
+
+        .insights-tab-content.active {
+            display: block;
+        }
+
+        /* Context filter toolbar */
+        .context-filter-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: rgba(0,0,0,0.02);
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .context-filter-label {
+            font-size: 0.9375rem;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+
+        .context-filter-select {
+            padding: 8px 12px;
+            border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 6px;
+            background: white;
+            font-size: 0.875rem;
+            font-family: inherit;
+            color: #1d1d1f;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .context-filter-select:hover {
+            border-color: rgba(0,0,0,0.2);
+        }
+
+        .context-filter-select:focus {
+            outline: none;
+            border-color: #007aff;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+        }
+
+        .context-filter-select option:disabled {
+            color: #86868b;
+        }
+
+        /* Insights content styling */
+        .insights-content {
+            padding: 1rem;
+        }
+
+        /* Insights Alerts Filter Toolbar */
+        .insights-alerts-filters {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: rgba(0,0,0,0.02);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .insights-alerts-filters .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .insights-alerts-filters label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #1d1d1f;
+            white-space: nowrap;
+        }
+
+        .insights-alerts-filters select,
+        .insights-alerts-filters input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 6px;
+            background: white;
+            font-size: 0.875rem;
+            font-family: inherit;
+            color: #1d1d1f;
+            min-width: 150px;
+        }
+
+        .insights-alerts-filters input[type="text"] {
+            min-width: 250px;
+        }
+
+        .insights-alerts-filters select:hover,
+        .insights-alerts-filters input[type="text"]:hover {
+            border-color: rgba(0,0,0,0.2);
+        }
+
+        .insights-alerts-filters select:focus,
+        .insights-alerts-filters input[type="text"]:focus {
+            outline: none;
+            border-color: #007aff;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+        }
+
+        .action-btn {
+            padding: 8px 12px;
+            border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 6px;
+            background: white;
+            color: #007aff;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .action-btn:hover {
+            background: rgba(0,122,255,0.05);
+            border-color: #007aff;
+        }
+
+        /* Insights Alerts Table */
+        .insights-alerts-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .insights-alerts-table thead {
+            background: rgba(0,0,0,0.02);
+        }
+
+        .insights-alerts-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+        }
+
+        .insights-alerts-table tbody tr {
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            transition: background 0.15s ease;
+        }
+
+        .insights-alerts-table tbody tr:hover {
+            background: rgba(0,0,0,0.02);
+        }
+
+        .insights-alerts-table td {
+            padding: 12px 16px;
+            font-size: 0.9375rem;
+            color: #1d1d1f;
+            vertical-align: middle;
+        }
+
+        .alert-type-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+        }
+
+        .alert-type-hash {
+            background: rgba(255, 149, 0, 0.1);
+            color: #ff9500;
+        }
+
+        .alert-type-invalid {
+            background: rgba(255, 59, 48, 0.1);
+            color: #ff3b30;
+        }
+
+        .alert-file-path {
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            color: #007aff;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .alert-file-path:hover {
+            text-decoration: underline;
+        }
+
+        .alert-details {
+            font-size: 0.875rem;
+            color: #86868b;
+            line-height: 1.4;
+        }
+
+        .alert-details-code {
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 0.75rem;
+            background: rgba(0,0,0,0.04);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .alert-status-select {
+            padding: 6px 20px 6px 8px;
+            border: 1px solid rgba(0,0,0,0.12);
+            border-radius: 6px;
+            background: white;
+            font-size: 0.875rem;
+            font-family: inherit;
+            color: #1d1d1f;
+            cursor: pointer;
+            width: 100%;
+            min-width: 140px;
+            box-sizing: border-box;
+        }
+
+        .alert-status-select:hover {
+            border-color: rgba(0,0,0,0.2);
+        }
+
+        .alert-status-select:focus {
+            outline: none;
+            border-color: #007aff;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+        }
+
+        .alert-status-select.status-open {
+            background: rgba(0, 122, 255, 0.05);
+            border-color: #007aff;
+            color: #007aff;
+        }
+
+        .alert-status-select.status-flagged {
+            background: rgba(255, 149, 0, 0.05);
+            border-color: #ff9500;
+            color: #ff9500;
+        }
+
+        .alert-status-select.status-dismissed {
+            background: rgba(142, 142, 147, 0.05);
+            border-color: #8e8e93;
+            color: #8e8e93;
         }
 
         .overview-modules {
@@ -1465,7 +1749,7 @@
         }
 
         /* Responsive design */
-        @media (max-width: 768px) {
+        @media (max-width: 480px) {
             .hamburger {
                 display: block;
             }
@@ -1476,11 +1760,16 @@
                 top: 80px;
                 height: calc(100vh - 80px);
                 z-index: 1000;
+                width: 240px;
                 transition: left 0.3s ease;
             }
 
             .sidebar.open {
                 left: 0;
+            }
+
+            .sidebar:hover {
+                width: 240px;
             }
 
             .main-content {
@@ -1490,6 +1779,32 @@
             .overview-modules {
                 gap: 1rem;
             }
+        }
+
+        /* Query Tab Styles */
+        .execute-query-btn {
+            padding: 0.625rem 1.25rem;
+            background: #0071e3;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .execute-query-btn:hover {
+            background: #0077ED;
+        }
+
+        .execute-query-btn:active {
+            background: #006EDB;
+        }
+
+        .execute-query-btn:disabled {
+            background: #d2d2d7;
+            cursor: not-allowed;
         }
     </style>
 </head>
@@ -1599,7 +1914,151 @@
                 <div class="entity-view-header">
                     <h1 class="entity-view-title">Insights</h1>
                 </div>
-                <p style="color: #86868b; padding: 2rem;">Insights coming soon in Phase 3...</p>
+
+                <!-- Tab Bar -->
+                <div class="insights-tabs">
+                    <button class="insights-tab" onclick="showInsightsTab('alerts')">Alerts</button>
+                    <button class="insights-tab" onclick="showInsightsTab('statistics')">Statistics</button>
+                    <button class="insights-tab" onclick="showInsightsTab('changes')">Changes</button>
+                </div>
+
+                <!-- Context Filter Toolbar -->
+                <div class="context-filter-toolbar">
+                    <label class="context-filter-label">Context:</label>
+                    <select class="context-filter-select" id="insights-context-filter" onchange="handleInsightsContextChange()">
+                        <option value="all">All Data</option>
+                        <option value="root" disabled>By Root (coming soon)</option>
+                        <option value="scan">By Scan ID</option>
+                        <option value="path">By Item Path</option>
+                    </select>
+                    <input type="text"
+                           id="insights-context-value"
+                           class="context-filter-select"
+                           style="display: none; flex: 1;"
+                           placeholder=""
+                           onkeyup="debounceInsightsContextFilter()">
+                </div>
+
+                <!-- Alerts Tab -->
+                <div id="insights-alerts" class="insights-tab-content">
+                    <!-- Filter Toolbar -->
+                    <div class="insights-alerts-filters">
+                        <div class="filter-group">
+                            <label>Status:</label>
+                            <select id="insights-alerts-status-filter" onchange="loadInsightsAlerts()">
+                                <option value="">All Status</option>
+                                <option value="O" selected>Open</option>
+                                <option value="F">Flagged</option>
+                                <option value="D">Dismissed</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-group">
+                            <label>Type:</label>
+                            <select id="insights-alerts-type-filter" onchange="loadInsightsAlerts()">
+                                <option value="">All Types</option>
+                                <option value="H">Suspicious Hash</option>
+                                <option value="I">Invalid Item</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-group" style="flex: 1;">
+                            <label>Path:</label>
+                            <input type="text" id="insights-alerts-search" placeholder="Search file paths..." onkeyup="debounceInsightsAlertsSearch()">
+                        </div>
+
+                        <button class="action-btn" onclick="loadInsightsAlerts()" title="Refresh">
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Alerts Table -->
+                    <div class="card">
+                        <table class="insights-alerts-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 170px; min-width: 170px;">Status</th>
+                                    <th style="width: 130px;">Alert Type</th>
+                                    <th style="width: 80px;">Scan ID</th>
+                                    <th>File Path</th>
+                                    <th style="width: 250px;">Details</th>
+                                    <th style="width: 110px;">Created</th>
+                                </tr>
+                            </thead>
+                            <tbody id="insights-alerts-table-body">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 2rem; color: #86868b;">
+                                        Loading alerts...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="pagination">
+                            <div class="pagination-info" id="insights-alerts-pagination-info">
+                                Showing 0 - 0 of 0 alerts
+                            </div>
+                            <div class="pagination-controls">
+                                <button class="pagination-btn" id="insights-alerts-prev-btn" onclick="changeInsightsAlertsPage(-1)">Previous</button>
+                                <button class="pagination-btn" id="insights-alerts-next-btn" onclick="changeInsightsAlertsPage(1)">Next</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- End Alerts Tab -->
+
+                <!-- Statistics Tab -->
+                <div id="insights-statistics" class="insights-tab-content">
+                    <div class="card">
+                        <h3>Largest Files</h3>
+                        <div id="insights-largest-files" class="insights-content">
+                            <p style="color: #86868b;">Loading largest files...</p>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top: 24px;">
+                        <h3>File Type Distribution</h3>
+                        <div id="insights-file-types" class="insights-content">
+                            <p style="color: #86868b;">Loading file type distribution...</p>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top: 24px;">
+                        <h3>Validation Issues</h3>
+                        <div id="insights-validation-issues" class="insights-content">
+                            <p style="color: #86868b;">Loading validation issues...</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- End Statistics Tab -->
+
+                <!-- Changes Tab -->
+                <div id="insights-changes" class="insights-tab-content">
+                    <div class="card">
+                        <h3>Recent Changes</h3>
+                        <div id="insights-recent-changes" class="insights-content">
+                            <p style="color: #86868b;">Loading recent changes...</p>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top: 24px;">
+                        <h3>Most Active Files</h3>
+                        <div id="insights-active-files" class="insights-content">
+                            <p style="color: #86868b;">Loading most active files...</p>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top: 24px;">
+                        <h3>Hash Changes</h3>
+                        <div id="insights-hash-changes" class="insights-content">
+                            <p style="color: #86868b;">Loading hash changes...</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- End Changes Tab -->
+
             </div>
 
             <!-- Scans Section (Active Scan + Root Management) -->
@@ -1653,7 +2112,7 @@
 
                 <!-- Tab Bar -->
                 <div class="explore-tabs">
-                    <button class="explore-tab active" onclick="showExploreTab('roots')">Roots</button>
+                    <button class="explore-tab" onclick="showExploreTab('roots')">Roots</button>
                     <button class="explore-tab" onclick="showExploreTab('scans')">Scans</button>
                     <button class="explore-tab" onclick="showExploreTab('items')">Items</button>
                     <button class="explore-tab" onclick="showExploreTab('changes')">Changes</button>
@@ -1662,7 +2121,7 @@
                 </div>
 
                 <!-- Roots Tab -->
-                <div id="explore-roots" class="explore-tab-content active">
+                <div id="explore-roots" class="explore-tab-content">
 
                 <div class="section-with-sidebar">
                     <!-- Column List Sidebar -->
@@ -1904,7 +2363,80 @@
 
                 <!-- Query Tab -->
                 <div id="explore-query" class="explore-tab-content">
-                    <p style="color: #86868b; padding: 2rem;">Query interface coming soon in Phase 4...</p>
+                    <div style="padding: 2rem;">
+                        <div class="card">
+                            <div style="padding: 1.5rem;">
+                                <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 1rem; color: #1d1d1f;">Execute FsPulse Query</h3>
+
+                                <!-- Query Input -->
+                                <div style="margin-bottom: 1rem;">
+                                    <textarea
+                                        id="query-input"
+                                        placeholder="Enter your FsPulse query here... (e.g., items where item_type:(F) show item_path, file_size limit 10)"
+                                        style="width: 100%; min-height: 120px; padding: 0.75rem; font-family: 'SF Mono', Monaco, 'Courier New', monospace; font-size: 0.875rem; border: 1px solid #d2d2d7; border-radius: 6px; resize: vertical;"
+                                    ></textarea>
+                                </div>
+
+                                <!-- Action Buttons and Documentation -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                    <div style="display: flex; gap: 1rem; align-items: center;">
+                                        <button onclick="executeQuery()" class="execute-query-btn">Execute Query</button>
+                                        <div id="query-status" style="color: #86868b; font-size: 0.875rem;"></div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 1rem;">📖</span>
+                                        <a href="https://gtunes-dev.github.io/fspulse/query.html" target="_blank" style="color: #0071e3; text-decoration: none; font-size: 0.875rem; white-space: nowrap;">Query Documentation</a>
+                                    </div>
+                                </div>
+
+                                <!-- Error Display -->
+                                <div id="query-error-container" style="display: none; margin-bottom: 1rem;">
+                                    <div style="background: #fff5f5; border: 1px solid #feb2b2; border-radius: 6px; padding: 1rem;">
+                                        <div style="color: #c53030; white-space: pre-wrap; font-family: 'SF Mono', Monaco, 'Courier New', monospace; font-size: 0.875rem; overflow-x: auto;" id="query-error-message"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Example Queries -->
+                                <details style="padding: 1rem; background: #f5f5f7; border-radius: 6px;">
+                                    <summary style="cursor: pointer; font-weight: 500; color: #1d1d1f; font-size: 0.875rem;">Example Queries</summary>
+                                    <div style="margin-top: 0.75rem; font-size: 0.875rem; color: #1d1d1f; font-family: 'SF Mono', Monaco, monospace;">
+                                        <div style="margin-bottom: 0.5rem; cursor: pointer;" onclick="setQueryExample('items limit 10')">
+                                            <strong>Basic:</strong> items limit 10
+                                        </div>
+                                        <div style="margin-bottom: 0.5rem; cursor: pointer;" onclick="setQueryExample('items where item_type:(F) show item_path, file_size limit 25')">
+                                            <strong>Filter files:</strong> items where item_type:(F) show item_path, file_size limit 25
+                                        </div>
+                                        <div style="margin-bottom: 0.5rem; cursor: pointer;" onclick="setQueryExample('items where file_size:(>1000000) show item_path, file_size order by file_size desc limit 20')">
+                                            <strong>Large files:</strong> items where file_size:(>1000000) show item_path, file_size order by file_size desc limit 20
+                                        </div>
+                                        <div style="margin-bottom: 0.5rem; cursor: pointer;" onclick="setQueryExample('alerts where alert_status:(O) show alert_type, item_path, created_at limit 15')">
+                                            <strong>Open alerts:</strong> alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
+                                        </div>
+                                        <div style="cursor: pointer;" onclick="setQueryExample('changes where change_type:(M) show item_path, detected_at order by detected_at desc limit 10')">
+                                            <strong>Recent modifications:</strong> changes where change_type:(M) show item_path, detected_at order by detected_at desc limit 10
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+
+                        <!-- Query Results -->
+                        <div id="query-results-container" style="display: none; margin-top: 1.5rem;">
+                            <div class="card">
+                                <div style="overflow-x: auto;">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr id="query-results-header"></tr>
+                                        </thead>
+                                        <tbody id="query-results-body"></tbody>
+                                    </table>
+                                </div>
+                                <div style="padding: 1rem; text-align: center; color: #86868b; font-size: 0.875rem;" id="query-results-info">
+                                    0 rows returned
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <!-- End Query Tab -->
 
@@ -2006,6 +2538,24 @@
             <div class="filter-modal-footer">
                 <button class="modal-btn" onclick="closeAlertsFilterModal()">Cancel</button>
                 <button class="modal-btn primary" onclick="saveAlertsFilter()">Apply Filter</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Insights Alerts Filter Modal -->
+    <div class="filter-modal-overlay" id="insights-alerts-filter-modal-overlay" onclick="closeInsightsAlertsFilterModal()">
+        <div class="filter-modal" onclick="event.stopPropagation()">
+            <div class="filter-modal-header">
+                <h2 class="filter-modal-title" id="insights-alerts-filter-modal-title">Filter Column</h2>
+            </div>
+            <div class="filter-modal-body">
+                <input type="text" class="filter-input" id="insights-alerts-filter-input" placeholder="Enter filter value...">
+                <p class="filter-hint" id="insights-alerts-filter-hint">Filter syntax hint will appear here</p>
+                <p class="filter-error" id="insights-alerts-filter-error">Error message</p>
+            </div>
+            <div class="filter-modal-footer">
+                <button class="modal-btn" onclick="closeInsightsAlertsFilterModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="saveInsightsAlertsFilter()">Apply Filter</button>
             </div>
         </div>
     </div>
@@ -3538,11 +4088,100 @@
         function closeAlertsFilterModal() { views.alerts.closeFilterModal(); }
         function saveAlertsFilter() { views.alerts.saveFilter(); }
 
-        // Enhanced showSection to load data when needed
+        // ========================================
+        // Routing and Navigation System
+        // ========================================
+
+        // Configuration for sections with tabs
+        const TAB_CONFIG = {
+            explore: {
+                defaultTab: 'roots',
+                loadData: (tabName) => {
+                    // Query tab has no data to load, it's handled by executeQuery()
+                    if (tabName === 'query') return;
+
+                    // Data Explorer tabs use the views system
+                    if (views[tabName]) {
+                        views[tabName].loadData();
+                    }
+                }
+            },
+            insights: {
+                defaultTab: 'alerts',
+                loadData: (tabName) => {
+                    if (tabName === 'alerts') {
+                        loadInsightsAlerts();
+                    } else if (tabName === 'statistics') {
+                        loadInsightsStatistics();
+                    } else if (tabName === 'changes') {
+                        loadInsightsChanges();
+                    }
+                }
+            }
+        };
+
+        // Unified tab switching function - works for any section
+        function showTab(sectionName, tabName, updateHash = true) {
+            const config = TAB_CONFIG[sectionName];
+            if (!config) return;
+
+            // Hide all tab contents for this section
+            document.querySelectorAll(`.${sectionName}-tab-content`).forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            const selectedTab = document.getElementById(`${sectionName}-${tabName}`);
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+
+            // Update tab buttons active state
+            document.querySelectorAll(`.${sectionName}-tab`).forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Find and activate the correct tab button
+            // Uses text matching for now (could be improved with data attributes)
+            const activeBtn = Array.from(document.querySelectorAll(`.${sectionName}-tab`)).find(btn => {
+                return btn.textContent.toLowerCase() === tabName.toLowerCase();
+            });
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+
+            // Update URL hash for deep linking
+            if (updateHash) {
+                window.location.hash = `#/${sectionName}/${tabName}`;
+            }
+
+            // Load data for this tab
+            config.loadData(tabName);
+        }
+
+        // Backwards compatibility wrappers
+        function showExploreTab(tabName, updateHash = true) {
+            showTab('explore', tabName, updateHash);
+        }
+
+        function showInsightsTab(tabName, updateHash = true) {
+            showTab('insights', tabName, updateHash);
+        }
+
+        // Show a section (top-level navigation)
         function showSection(sectionName, updateHash = true) {
+            currentSection = sectionName;
+
             // Update URL hash if requested
             if (updateHash) {
-                window.location.hash = '#/' + sectionName;
+                const config = TAB_CONFIG[sectionName];
+                if (config) {
+                    // Section has tabs - include default tab in URL
+                    window.location.hash = `#/${sectionName}/${config.defaultTab}`;
+                } else {
+                    // Simple section with no tabs
+                    window.location.hash = `#/${sectionName}`;
+                }
             }
 
             // Hide all sections
@@ -3566,13 +4205,9 @@
                 activeNavItem.classList.add('active');
             }
 
-            // Load data for specific sections
+            // Load data for scans section (special case - has no tabs)
             if (sectionName === 'scans') {
-                // Scans section has active scan + root management
                 loadManageRootsData();
-            } else if (sectionName === 'explore') {
-                // Show default tab (roots) when explore section is opened
-                showExploreTab('roots');
             }
 
             // Close sidebar on mobile
@@ -3581,54 +4216,319 @@
             }
         }
 
-        // Show specific tab within Explore section
-        function showExploreTab(tabName) {
-            // Hide all tab contents
-            document.querySelectorAll('.explore-tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
+        function handleInsightsContextChange() {
+            const contextFilter = document.getElementById('insights-context-filter');
+            const contextValue = document.getElementById('insights-context-value');
+            const selectedContext = contextFilter.value;
 
-            // Show selected tab
-            const selectedTab = document.getElementById('explore-' + tabName);
-            if (selectedTab) {
-                selectedTab.classList.add('active');
+            // Show/hide and configure input based on context selection
+            if (selectedContext === 'all' || selectedContext === 'root') {
+                contextValue.style.display = 'none';
+                contextValue.value = '';
+            } else if (selectedContext === 'scan') {
+                contextValue.style.display = 'block';
+                contextValue.placeholder = 'e.g., 100 or 100, 200 or 100..200';
+                contextValue.value = '';
+            } else if (selectedContext === 'path') {
+                contextValue.style.display = 'block';
+                contextValue.placeholder = "e.g., 'invoice.pdf' or '%Documents%'";
+                contextValue.value = '';
             }
 
-            // Update tab buttons active state
-            document.querySelectorAll('.explore-tab').forEach(btn => {
-                btn.classList.remove('active');
-            });
+            // Store context in localStorage for persistence
+            localStorage.setItem('fspulse.insights.context', selectedContext);
 
-            // Find and activate the correct tab button
-            const activeBtn = Array.from(document.querySelectorAll('.explore-tab')).find(btn => {
-                return btn.textContent.toLowerCase() === tabName.toLowerCase();
-            });
-            if (activeBtn) {
-                activeBtn.classList.add('active');
-            }
-
-            // Load data for data explorer tabs
-            if (['roots', 'scans', 'items', 'changes', 'alerts'].includes(tabName) && views[tabName]) {
-                views[tabName].loadData();
+            // Reload current tab data with new context
+            const activeTab = document.querySelector('.insights-tab.active');
+            if (activeTab) {
+                const tabName = activeTab.textContent.toLowerCase();
+                if (tabName === 'alerts') {
+                    loadInsightsAlerts();
+                } else if (tabName === 'statistics') {
+                    loadInsightsStatistics();
+                } else if (tabName === 'changes') {
+                    loadInsightsChanges();
+                }
             }
         }
+
+        // Insights Alerts State
+        let insightsAlertsState = {
+            currentPage: 1,
+            pageSize: 25,
+            totalCount: 0,
+            searchDebounceTimer: null,
+            contextDebounceTimer: null
+        };
+
+        async function loadInsightsAlerts() {
+            const typeFilter = document.getElementById('insights-alerts-type-filter').value;
+            const statusFilter = document.getElementById('insights-alerts-status-filter').value;
+            const searchValue = document.getElementById('insights-alerts-search').value;
+            const contextFilter = document.getElementById('insights-context-filter').value;
+            const contextValue = document.getElementById('insights-context-value').value.trim();
+
+            const tbody = document.getElementById('insights-alerts-table-body');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #86868b;">Loading...</td></tr>';
+
+            try {
+                // Build WHERE clause from filters
+                let whereClause = '';
+                const filterParts = [];
+
+                // Add context filter if applicable
+                if (contextFilter && contextFilter !== 'all' && contextFilter !== 'root' && contextValue) {
+                    if (contextFilter === 'scan') {
+                        filterParts.push(`scan_id:(${contextValue})`);
+                    } else if (contextFilter === 'path') {
+                        filterParts.push(`item_path:(${contextValue})`);
+                    }
+                }
+
+                if (typeFilter) {
+                    filterParts.push(`alert_type:(${typeFilter})`);
+                }
+                if (statusFilter) {
+                    filterParts.push(`alert_status:(${statusFilter})`);
+                }
+                if (searchValue) {
+                    filterParts.push(`item_path:('%${searchValue}%')`);
+                }
+                if (filterParts.length > 0) {
+                    whereClause = ' where ' + filterParts.join(', ');
+                }
+
+                // Execute count query first to get total
+                const countQuery = `alerts${whereClause}`;
+                const countResponse = await fetch('/api/query/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: countQuery })
+                });
+
+                if (!countResponse.ok) {
+                    const errorText = await countResponse.text();
+                    throw new Error(errorText || `HTTP error! status: ${countResponse.status}`);
+                }
+
+                const countData = await countResponse.json();
+                insightsAlertsState.totalCount = countData.rows.length;
+
+                // Build and execute data query with pagination
+                const offset = (insightsAlertsState.currentPage - 1) * insightsAlertsState.pageSize;
+                const dataQuery = `alerts${whereClause} show alert_id, alert_type, alert_status, scan_id, item_path, created_at@timestamp, hash_old, hash_new, val_error order by created_at desc limit ${insightsAlertsState.pageSize} offset ${offset}`;
+
+                const dataResponse = await fetch('/api/query/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: dataQuery })
+                });
+
+                if (!dataResponse.ok) {
+                    const errorText = await dataResponse.text();
+                    throw new Error(errorText || `HTTP error! status: ${dataResponse.status}`);
+                }
+
+                const data = await dataResponse.json();
+                renderInsightsAlertsTable(data.rows || []);
+
+                // Update pagination
+                updateInsightsAlertsPagination();
+
+            } catch (error) {
+                console.error('Error loading insights alerts:', error);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #ff3b30;">Error loading alerts. Please try again.</td></tr>';
+            }
+        }
+
+        function renderInsightsAlertsTable(rows) {
+            const tbody = document.getElementById('insights-alerts-table-body');
+
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #86868b;">No alerts found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = rows.map(row => {
+                const alertId = row[0]; // alert_id
+                const alertType = row[1]; // alert_type
+                const alertStatus = row[2]; // alert_status
+                const scanId = row[3]; // scan_id
+                const itemPath = row[4]; // item_path
+                const createdAt = row[5]; // created_at
+                const hashOld = row[6]; // hash_old
+                const hashNew = row[7]; // hash_new
+                const valError = row[8]; // val_error
+
+                // Format alert type
+                const typeBadge = alertType === 'H'
+                    ? '<span class="alert-type-badge alert-type-hash">Suspicious Hash</span>'
+                    : '<span class="alert-type-badge alert-type-invalid">Invalid Item</span>';
+
+                // Format details based on alert type
+                let details = '';
+                if (alertType === 'H') {
+                    details = `<div class="alert-details">Hash changed<br><span class="alert-details-code">Old: ${hashOld || 'N/A'}</span><br><span class="alert-details-code">New: ${hashNew || 'N/A'}</span></div>`;
+                } else {
+                    details = `<div class="alert-details">${valError || 'Validation error'}</div>`;
+                }
+
+                // Format created time
+                // createdAt is a raw UTC timestamp from query processor (using @timestamp format)
+                const createdDate = new Date(parseInt(createdAt) * 1000);
+                const timeAgo = formatTimeAgo(createdDate);
+
+                // Status dropdown with color
+                const statusClass = alertStatus === 'O' ? 'status-open' : alertStatus === 'F' ? 'status-flagged' : 'status-dismissed';
+                const statusDropdown = `
+                    <select class="alert-status-select ${statusClass}" onchange="updateAlertStatus(${alertId}, this.value)">
+                        <option value="O" ${alertStatus === 'O' ? 'selected' : ''}>Open</option>
+                        <option value="F" ${alertStatus === 'F' ? 'selected' : ''}>Flagged</option>
+                        <option value="D" ${alertStatus === 'D' ? 'selected' : ''}>Dismissed</option>
+                    </select>
+                `;
+
+                return `
+                    <tr>
+                        <td>${statusDropdown}</td>
+                        <td>${typeBadge}</td>
+                        <td style="color: #86868b;">${scanId}</td>
+                        <td><span class="alert-file-path" title="${itemPath}">${truncatePath(itemPath, 60)}</span></td>
+                        <td>${details}</td>
+                        <td style="color: #86868b; font-size: 0.875rem;">${timeAgo}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateInsightsAlertsPagination() {
+            const start = (insightsAlertsState.currentPage - 1) * insightsAlertsState.pageSize + 1;
+            const end = Math.min(start + insightsAlertsState.pageSize - 1, insightsAlertsState.totalCount);
+
+            document.getElementById('insights-alerts-pagination-info').textContent =
+                `Showing ${start} - ${end} of ${insightsAlertsState.totalCount} alerts`;
+
+            document.getElementById('insights-alerts-prev-btn').disabled = insightsAlertsState.currentPage === 1;
+            document.getElementById('insights-alerts-next-btn').disabled = end >= insightsAlertsState.totalCount;
+        }
+
+        function changeInsightsAlertsPage(delta) {
+            insightsAlertsState.currentPage += delta;
+            if (insightsAlertsState.currentPage < 1) insightsAlertsState.currentPage = 1;
+            loadInsightsAlerts();
+        }
+
+        function debounceInsightsAlertsSearch() {
+            clearTimeout(insightsAlertsState.searchDebounceTimer);
+            insightsAlertsState.searchDebounceTimer = setTimeout(() => {
+                insightsAlertsState.currentPage = 1;
+                loadInsightsAlerts();
+            }, 500);
+        }
+
+        function debounceInsightsContextFilter() {
+            clearTimeout(insightsAlertsState.contextDebounceTimer);
+            insightsAlertsState.contextDebounceTimer = setTimeout(() => {
+                insightsAlertsState.currentPage = 1;
+                loadInsightsAlerts();
+            }, 500);
+        }
+
+        async function updateAlertStatus(alertId, newStatus) {
+            try {
+                const response = await fetch(`/api/alerts/${alertId}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                // Optionally reload alerts to reflect the change
+                // loadInsightsAlerts();
+
+            } catch (error) {
+                console.error('Error updating alert status:', error);
+                alert('Failed to update alert status. Please try again.');
+                loadInsightsAlerts(); // Reload to reset the dropdown
+            }
+        }
+
+        function truncatePath(path, maxLength) {
+            if (path.length <= maxLength) return path;
+            const parts = path.split('/');
+            if (parts.length <= 2) return path;
+
+            const filename = parts[parts.length - 1];
+            const remaining = maxLength - filename.length - 5; // 5 for ".../"
+
+            if (remaining <= 0) return '.../' + filename;
+
+            let prefix = parts.slice(0, -1).join('/');
+            if (prefix.length > remaining) {
+                prefix = prefix.substring(0, remaining);
+            }
+
+            return prefix + '/.../' + filename;
+        }
+
+        function formatTimeAgo(date) {
+            const now = new Date();
+            const seconds = Math.floor((now - date) / 1000);
+
+            if (seconds < 60) return 'just now';
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+
+            return date.toLocaleDateString();
+        }
+
+        function loadInsightsStatistics() {
+            // TODO: Implement statistics loading
+            console.log('Loading insights statistics...');
+        }
+
+        function loadInsightsChanges() {
+            // TODO: Implement changes loading
+            console.log('Loading insights changes...');
+        }
+
+        // Track current section to avoid unnecessary reloads
+        let currentSection = 'overview';
 
         // Handle hash-based routing
         function handleRouteChange() {
             const hash = window.location.hash;
-            let sectionName = 'overview'; // default
+            let sectionName = 'overview';
+            let tabName = null;
 
+            // Parse URL hash
             if (hash.startsWith('#/')) {
-                sectionName = hash.substring(2); // Remove '#/'
+                const parts = hash.substring(2).split('/');
+                sectionName = parts[0];
+                tabName = parts[1] || null;
             }
 
             // Validate section exists
-            const sectionElement = document.getElementById(sectionName + '-section');
-            if (!sectionElement) {
+            if (!document.getElementById(sectionName + '-section')) {
                 sectionName = 'overview';
+                tabName = null;
             }
 
-            showSection(sectionName, false); // Don't update hash to avoid loop
+            // Update section if it changed
+            if (currentSection !== sectionName) {
+                showSection(sectionName, false);
+            }
+
+            // Show tab if this section has tabs
+            const config = TAB_CONFIG[sectionName];
+            if (config) {
+                const tab = tabName || config.defaultTab;
+                showTab(sectionName, tab, false);
+            }
         }
 
         // ========================================
@@ -3746,7 +4646,7 @@
                         }
                     }
 
-                    const timestamp = formatTimestamp(scanInfo.scan_time);
+                    const timestamp = scanInfo.scan_time_display;
 
                     let counts = '';
                     if (scanInfo.file_count !== null || scanInfo.folder_count !== null) {
@@ -3932,6 +4832,10 @@
         // Listen for hash changes (back/forward buttons)
         window.addEventListener('hashchange', handleRouteChange);
 
+        // Call handleRouteChange immediately to set correct tab before first render
+        // This prevents flash of default tab when loading deep links
+        handleRouteChange();
+
         // Handle initial load based on URL hash
         document.addEventListener('DOMContentLoaded', () => {
             loadDashboardData();
@@ -3941,8 +4845,123 @@
             views.roots.setupDragListeners();
             views.scans.setupDragListeners();
             views.changes.setupDragListeners();
-            handleRouteChange(); // Load the correct section based on URL hash
+            // No need to call handleRouteChange() again - already called above
         });
+
+        // ==========================================
+        // Query Tab Functions
+        // ==========================================
+
+        function setQueryExample(query) {
+            document.getElementById('query-input').value = query;
+        }
+
+        async function executeQuery() {
+            const queryInput = document.getElementById('query-input');
+            const query = queryInput.value.trim();
+
+            if (!query) {
+                showQueryError('Please enter a query');
+                return;
+            }
+
+            // Hide previous results/errors
+            document.getElementById('query-results-container').style.display = 'none';
+            document.getElementById('query-error-container').style.display = 'none';
+
+            // Show status
+            const statusDiv = document.getElementById('query-status');
+            statusDiv.textContent = 'Executing query...';
+            statusDiv.style.color = '#0071e3';
+
+            // Disable button
+            const executeBtn = document.querySelector('.execute-query-btn');
+            executeBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/query/execute', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query })
+                });
+
+                if (!response.ok) {
+                    // Try to get error message from response body
+                    const errorText = await response.text();
+                    throw new Error(errorText || `Query failed: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Show results
+                displayQueryResults(data.columns, data.rows);
+                statusDiv.textContent = `Query completed (${data.rows.length} rows)`;
+                statusDiv.style.color = '#34c759';
+
+            } catch (error) {
+                console.error('Query execution error:', error);
+                showQueryError(error.message || 'Failed to execute query');
+                statusDiv.textContent = '';
+            } finally {
+                executeBtn.disabled = false;
+            }
+        }
+
+        function displayQueryResults(columns, rows) {
+            const headerRow = document.getElementById('query-results-header');
+            const tbody = document.getElementById('query-results-body');
+            const resultsInfo = document.getElementById('query-results-info');
+            const resultsContainer = document.getElementById('query-results-container');
+
+            // Clear previous results
+            headerRow.innerHTML = '';
+            tbody.innerHTML = '';
+
+            // Build header
+            columns.forEach(col => {
+                const th = document.createElement('th');
+                th.textContent = col;
+                headerRow.appendChild(th);
+            });
+
+            // Build rows
+            if (rows.length === 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = columns.length;
+                td.style.textAlign = 'center';
+                td.style.color = '#86868b';
+                td.textContent = 'No results found';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            } else {
+                rows.forEach(row => {
+                    const tr = document.createElement('tr');
+                    row.forEach(cell => {
+                        const td = document.createElement('td');
+                        td.textContent = cell;
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // Update info
+            resultsInfo.textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''} returned`;
+
+            // Show results container
+            resultsContainer.style.display = 'block';
+        }
+
+        function showQueryError(message) {
+            const errorContainer = document.getElementById('query-error-container');
+            const errorMessage = document.getElementById('query-error-message');
+
+            errorMessage.textContent = message;
+            errorContainer.style.display = 'block';
+        }
     </script>
 </body>
 </html>

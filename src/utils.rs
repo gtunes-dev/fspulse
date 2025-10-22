@@ -37,6 +37,40 @@ impl Utils {
         datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
     }
 
+    /// Format a UTC timestamp for web display
+    /// Returns relative time ("2h ago") for recent dates, absolute date for older dates
+    /// This is the single source of truth for date formatting in web handlers
+    pub fn format_date_display(timestamp: i64) -> String {
+        let datetime_utc = DateTime::<Utc>::from_timestamp(timestamp, 0)
+            .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+
+        let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
+        let now_local = Local::now();
+
+        let duration = now_local.signed_duration_since(datetime_local);
+        let seconds = duration.num_seconds();
+
+        // Return relative time for recent dates
+        if seconds < 0 {
+            // Future date - shouldn't happen, but handle gracefully
+            return datetime_local.format("%Y-%m-%d").to_string();
+        } else if seconds < 60 {
+            return "just now".to_string();
+        } else if seconds < 3600 {
+            let minutes = seconds / 60;
+            return format!("{}m ago", minutes);
+        } else if seconds < 86400 {
+            let hours = seconds / 3600;
+            return format!("{}h ago", hours);
+        } else if seconds < 604800 {
+            let days = seconds / 86400;
+            return format!("{}d ago", days);
+        }
+
+        // For dates older than 7 days, return formatted date
+        datetime_local.format("%m/%d/%Y").to_string()
+    }
+
     /*
     /// Take a UTC timestamp and create a display string in local time
     pub fn format_db_time_short(db_time: i64) -> String {
@@ -217,8 +251,58 @@ mod tests {
     fn test_display_short_path() {
         let short_path = Utils::display_short_path("/very/long/path/to/file.txt");
         assert!(!short_path.is_empty());
-        
+
         let normal_path = Utils::display_short_path("short.txt");
         assert_eq!(normal_path, "short.txt");
+    }
+
+    #[test]
+    fn test_format_date_display_just_now() {
+        let now = Local::now().timestamp();
+        let result = Utils::format_date_display(now);
+        assert_eq!(result, "just now");
+    }
+
+    #[test]
+    fn test_format_date_display_minutes() {
+        let now = Local::now();
+        let five_min_ago = now - chrono::Duration::minutes(5);
+        let result = Utils::format_date_display(five_min_ago.timestamp());
+        assert_eq!(result, "5m ago");
+    }
+
+    #[test]
+    fn test_format_date_display_hours() {
+        let now = Local::now();
+        let two_hours_ago = now - chrono::Duration::hours(2);
+        let result = Utils::format_date_display(two_hours_ago.timestamp());
+        assert_eq!(result, "2h ago");
+    }
+
+    #[test]
+    fn test_format_date_display_days() {
+        let now = Local::now();
+        let three_days_ago = now - chrono::Duration::days(3);
+        let result = Utils::format_date_display(three_days_ago.timestamp());
+        assert_eq!(result, "3d ago");
+    }
+
+    #[test]
+    fn test_format_date_display_old_date() {
+        let now = Local::now();
+        let eight_days_ago = now - chrono::Duration::days(8);
+        let result = Utils::format_date_display(eight_days_ago.timestamp());
+        // Should return formatted date like "01/15/2025"
+        assert!(result.contains("/"));
+        assert!(result.len() >= 8); // MM/DD/YYYY format
+    }
+
+    #[test]
+    fn test_format_date_display_future() {
+        let now = Local::now();
+        let future = now + chrono::Duration::hours(1);
+        let result = Utils::format_date_display(future.timestamp());
+        // Should handle gracefully, returning a formatted date
+        assert!(!result.is_empty());
     }
 }

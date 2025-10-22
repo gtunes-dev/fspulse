@@ -6,6 +6,7 @@ use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::scans::Scan;
+use crate::utils::Utils;
 
 /// Request structure for creating a new root
 #[derive(Debug, Deserialize)]
@@ -39,7 +40,7 @@ pub struct RootWithScan {
 pub struct ScanInfo {
     pub scan_id: i64,
     pub state: String,
-    pub scan_time: i64,
+    pub scan_time_display: String,
     pub file_count: Option<i64>,
     pub folder_count: Option<i64>,
 }
@@ -206,7 +207,7 @@ pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCo
             Ok(Some(scan)) => Some(ScanInfo {
                 scan_id: scan.scan_id(),
                 state: scan.state().to_string(),
-                scan_time: scan.scan_time(),
+                scan_time_display: Utils::format_date_display(scan.scan_time()),
                 file_count: scan.file_count(),
                 folder_count: scan.folder_count(),
             }),

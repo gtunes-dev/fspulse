@@ -177,9 +177,10 @@ impl Alerts {
         new_status: AlertStatus,
     ) -> Result<(), FsPulseError> {
         let sql = r#"
-            UPDATE alerts 
-            set alert_status = :alert_status 
-            where alert_id = :alert_id"#;
+            UPDATE alerts
+            SET alert_status = :alert_status,
+                updated_at = strftime('%s', 'now', 'utc')
+            WHERE alert_id = :alert_id"#;
 
         db.conn().execute(
             sql,

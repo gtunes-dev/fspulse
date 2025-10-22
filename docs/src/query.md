@@ -183,10 +183,12 @@ item_path@name, mod_date@short
 
 | Type                         | Allowed Format Modifiers                          |
 |------------------------------|---------------------------------------------------|
-| Date                         | `full`, `short`                                   |
+| Date                         | `full`, `short`, `timestamp`                      |
 | Path                         | `full`, `relative`, `short`, `name`               |
 | Validation / Enum / Boolean  | `full`, `short`                                   |
 | Integer / String             | *(no formatting options)*                         |
+
+The `timestamp` format modifier converts dates to UTC timestamps (seconds since Unix epoch), which is useful for programmatic processing or web applications that need to format dates in the user's local timezone.
 
 ---
 
@@ -220,6 +222,9 @@ items where item_path:('reports')
 
 # Changes involving validation failures
 changes where val_new:(I) show default, val_old, val_new order by change_id desc
+
+# Scans with timestamp for programmatic processing
+scans show scan_id, scan_time@timestamp, file_count order by scan_time desc limit 10
 ```
 
 ---

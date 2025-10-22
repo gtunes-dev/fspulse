@@ -65,7 +65,7 @@ date_col = { "scan_time" | "mod_date_old" | "mod_date_new" | "mod_date" | "creat
 
 date_show             =  { date_col ~ date_display_modifier? }
 date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }
-date_display_mode     =  { full | short }
+date_display_mode     =  { full | short | timestamp }
 
 date_filter        =  { date_col ~ date_filter_body }
 date_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ date_filter_values ~ WS* ~ RPAREN }
@@ -200,10 +200,11 @@ default = { "default" | "DEFAULT" }
 all     = { "all" | "ALL" }
 
 // Format specifiers
-short    = _{ "SHORT" | "short" }
-full     = _{ "FULL" | "full" }
-name     = _{ "NAME" | "name" }
-relative = _{ "RELATIVE" | "relative" }
+short     = _{ "SHORT" | "short" }
+full      = _{ "FULL" | "full" }
+name      = _{ "NAME" | "name" }
+relative  = _{ "RELATIVE" | "relative" }
+timestamp = _{ "TIMESTAMP" | "timestamp" }
 
 // Basic tokens - all silent
 WS     = _{ " " | "\t" | NEWLINE }

@@ -12,12 +12,13 @@ use tabled::{
 
 use super::{columns::ColSet, Rule};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Format {
     None,
     Short,
     Full,
     Relative,
+    Timestamp,
     Name,
 }
 
@@ -29,6 +30,7 @@ impl Format {
             "SHORT" => Self::Short,
             "FULL" => Self::Full,
             "RELATIVE" => Self::Relative,
+            "TIMESTAMP" => Self::Timestamp,
             "NAME" => Self::Name,
             _ => unreachable!(),
         }
@@ -49,17 +51,22 @@ impl Format {
         let datetime_utc = DateTime::<Utc>::from_timestamp(val, 0)
             .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
 
-        let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
+        // Timestamp is the only format specifier that returns a value in UTC
+        if format == Format::Timestamp {
+            Ok(datetime_utc.timestamp().to_string())
+        } else {            
+            let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
 
-        let format_str = match format {
-            Format::Short | Format::None => "%Y-%m-%d",
-            Format::Full => "%Y-%m-%d %H:%M:%S",
-            _ => {
-                return Err(FsPulseError::Error("Invalid date format".into()));
-            }
-        };
+            let format_str = match format {
+                Format::Short | Format::None => "%Y-%m-%d",
+                Format::Full => "%Y-%m-%d %H:%M:%S",
+                _ => {
+                    return Err(FsPulseError::Error("Invalid date format".into()));
+                }
+            };
 
-        Ok(datetime_local.format(format_str).to_string())
+            Ok(datetime_local.format(format_str).to_string())
+        }
     }
 
     pub fn format_opt_date(val: Option<i64>, format: Format) -> Result<String, FsPulseError> {
@@ -195,9 +202,13 @@ impl Show {
         }
     }
 
+    pub fn get_column_headers(&self) -> Vec<&'static str> {
+        self.display_cols.iter().map(|dc| dc.display_col).collect()
+    }
+
     pub fn prepare_builder(&mut self, builder: &mut Builder) {
         self.ensure_columns();
-        let header: Vec<&'static str> = self.display_cols.iter().map(|dc| dc.display_col).collect();
+        let header = self.get_column_headers();
         builder.push_record(header);
     }
 
