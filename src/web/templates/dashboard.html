@@ -140,10 +140,111 @@
             opacity: 1;
         }
 
+        /* Minimal Scan Progress in Header */
+        .scan-header-progress {
+            flex: 1;
+            margin-left: 32px;
+            cursor: pointer;
+            padding: 4px 12px;
+            border-radius: 6px;
+            transition: background 0.15s ease;
+        }
+
+        .scan-header-progress:hover {
+            background: rgba(0,122,255,0.05);
+        }
+
+        .scan-header-content {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .scan-header-line1 {
+            color: #1d1d1f;
+            font-weight: 500;
+            font-size: 0.875rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .scan-header-line2 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #86868b;
+            font-size: 0.8125rem;
+        }
+
+        .scan-header-bar {
+            flex: 1;
+            max-width: 200px;
+            height: 3px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .scan-header-bar-fill {
+            height: 100%;
+            background: #007aff;
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+
+        #scan-header-percentage {
+            min-width: 35px;
+            text-align: right;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+
         .main-content {
             flex: 1;
             padding: 32px;
             background: #fafafa;
+        }
+
+        /* Explore Section Tabs */
+        .explore-tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+        }
+
+        .explore-tab {
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            color: #86868b;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s ease;
+            border-bottom: 2px solid transparent;
+            position: relative;
+            top: 1px;
+        }
+
+        .explore-tab:hover {
+            color: #1d1d1f;
+            background: rgba(0,0,0,0.02);
+        }
+
+        .explore-tab.active {
+            color: #007aff;
+            border-bottom-color: #007aff;
+        }
+
+        .explore-tab-content {
+            display: none;
+        }
+
+        .explore-tab-content.active {
+            display: block;
         }
 
         .overview-modules {
@@ -1148,11 +1249,6 @@
             font-style: italic;
         }
 
-        /* Active Scans Section */
-        .active-scans-container {
-            margin-bottom: 1.5rem;
-        }
-
         .scan-card {
             background: #ffffff;
             border-radius: 12px;
@@ -1239,10 +1335,11 @@
         .scan-details-toggle .chevron {
             transition: transform 0.2s ease;
             font-size: 0.75rem;
+            display: inline-block;
         }
 
         .scan-details-toggle.expanded .chevron {
-            transform: rotate(180deg);
+            transform: rotate(90deg);
         }
 
         .scan-thread-details {
@@ -1399,49 +1496,33 @@
 <body>
     <header class="header">
         <h1 class="header-title">FsPulse</h1>
+
+        <!-- Minimal Scan Progress (inline in header) -->
+        <div id="scan-header-progress" class="scan-header-progress" style="display: none;">
+            <div class="scan-header-content">
+                <div class="scan-header-line1">
+                    <span id="scan-header-status">Scanning</span>: <span id="scan-header-path">-</span>
+                </div>
+                <div class="scan-header-line2">
+                    <span id="scan-header-phase">Discovery</span> •
+                    <span id="scan-header-items">0 items</span> •
+                    <div class="scan-header-bar">
+                        <div class="scan-header-bar-fill" id="scan-header-bar-fill" style="width: 0%"></div>
+                    </div>
+                    <span id="scan-header-percentage">0%</span>
+                </div>
+            </div>
+        </div>
     </header>
 
     <div class="container">
         <nav class="sidebar" id="sidebar">
-            <!-- Insights Section -->
+            <!-- Main Navigation -->
             <button class="nav-item active" onclick="showSection('overview')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
                 </svg>
                 <span class="nav-label">Overview</span>
-            </button>
-            <button class="nav-item" onclick="showSection('activity')">
-                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-                </svg>
-                <span class="nav-label">Activity</span>
-            </button>
-            <button class="nav-item" onclick="showSection('manage-roots')">
-                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-                    <path d="M10 9a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z" />
-                    <path d="M10 8a1 1 0 100-2 1 1 0 000 2z" />
-                </svg>
-                <span class="nav-label">Manage Roots</span>
-            </button>
-
-            <div class="nav-divider"></div>
-
-            <!-- Data Explorer Section -->
-            <div class="nav-section-header">
-                <span class="nav-label">Data Explorer</span>
-            </div>
-            <button class="nav-item" onclick="showSection('alerts')">
-                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                </svg>
-                <span class="nav-label">Alerts</span>
-            </button>
-            <button class="nav-item" onclick="showSection('roots')">
-                <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-                </svg>
-                <span class="nav-label">Roots</span>
             </button>
             <button class="nav-item" onclick="showSection('scans')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -1450,22 +1531,23 @@
                 </svg>
                 <span class="nav-label">Scans</span>
             </button>
-            <button class="nav-item" onclick="showSection('items')">
+            <button class="nav-item" onclick="showSection('insights')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+                    <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z" />
                 </svg>
-                <span class="nav-label">Items</span>
+                <span class="nav-label">Insights</span>
             </button>
-            <button class="nav-item" onclick="showSection('changes')">
+            <button class="nav-item" onclick="showSection('explore')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                    <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd" />
                 </svg>
-                <span class="nav-label">Changes</span>
+                <span class="nav-label">Explore</span>
             </button>
 
             <div class="nav-divider"></div>
 
-            <!-- Configuration Section -->
+            <!-- Settings -->
             <button class="nav-item" onclick="showSection('settings')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
@@ -1477,13 +1559,6 @@
         <main class="main-content">
             <div id="overview-section">
                 <h2 style="margin-bottom: 1.5rem;">Overview</h2>
-
-                <!-- Active Scan Section -->
-                <div class="active-scans-container">
-                    <div id="active-scans-content">
-                        <!-- Will be populated by JavaScript -->
-                    </div>
-                </div>
 
                 <div class="overview-modules">
                     <div class="card">
@@ -1519,16 +1594,26 @@
                 </div>
             </div>
 
-            <!-- Insights Sections -->
-            <div id="activity-section" style="display: none;">
-                <h2>Activity Monitor</h2>
-                <p>Detailed activity monitoring coming soon...</p>
+            <!-- Insights Section -->
+            <div id="insights-section" style="display: none;">
+                <div class="entity-view-header">
+                    <h1 class="entity-view-title">Insights</h1>
+                </div>
+                <p style="color: #86868b; padding: 2rem;">Insights coming soon in Phase 3...</p>
             </div>
 
-            <!-- Manage Roots Section -->
-            <div id="manage-roots-section" style="display: none;">
-                <div class="entity-view-header">
-                    <h1 class="entity-view-title">Manage Roots</h1>
+            <!-- Scans Section (Active Scan + Root Management) -->
+            <div id="scans-section" style="display: none;">
+                <h1 class="entity-view-title" style="margin-bottom: 1.5rem;">Scan</h1>
+
+                <!-- Active Scan Progress (Large view for details) -->
+                <div id="scans-active-scan-container">
+                    <!-- Will be populated by JavaScript when scan is active -->
+                </div>
+
+                <!-- Roots Section -->
+                <div class="entity-view-header" style="margin-top: 2rem;">
+                    <h2 style="font-size: 1.25rem; font-weight: 600; color: #1d1d1f;">Roots</h2>
                     <button class="primary-action-btn" onclick="showAddRootModal()">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 6px;">
                             <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
@@ -1560,11 +1645,24 @@
                 </div>
             </div>
 
-            <!-- Data Management Sections -->
-            <div id="roots-section" style="display: none;">
+            <!-- Explore Section with Tabs -->
+            <div id="explore-section" style="display: none;">
                 <div class="entity-view-header">
-                    <h1 class="entity-view-title">Data Explorer - Roots</h1>
+                    <h1 class="entity-view-title">Explore</h1>
                 </div>
+
+                <!-- Tab Bar -->
+                <div class="explore-tabs">
+                    <button class="explore-tab active" onclick="showExploreTab('roots')">Roots</button>
+                    <button class="explore-tab" onclick="showExploreTab('scans')">Scans</button>
+                    <button class="explore-tab" onclick="showExploreTab('items')">Items</button>
+                    <button class="explore-tab" onclick="showExploreTab('changes')">Changes</button>
+                    <button class="explore-tab" onclick="showExploreTab('alerts')">Alerts</button>
+                    <button class="explore-tab" onclick="showExploreTab('query')">Query</button>
+                </div>
+
+                <!-- Roots Tab -->
+                <div id="explore-roots" class="explore-tab-content active">
 
                 <div class="section-with-sidebar">
                     <!-- Column List Sidebar -->
@@ -1609,13 +1707,11 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div id="scans-section" style="display: none;">
-                <div class="entity-view-header">
-                    <h1 class="entity-view-title">Data Explorer - Scans</h1>
                 </div>
+                <!-- End Roots Tab -->
 
+                <!-- Scans Tab -->
+                <div id="explore-scans" class="explore-tab-content">
                 <div class="section-with-sidebar">
                     <!-- Column List Sidebar -->
                     <aside class="column-list-sidebar">
@@ -1659,13 +1755,11 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div id="items-section" style="display: none;">
-                <div class="entity-view-header">
-                    <h1 class="entity-view-title">Data Explorer - Items</h1>
                 </div>
+                <!-- End Scans Tab -->
 
+                <!-- Items Tab -->
+                <div id="explore-items" class="explore-tab-content">
                 <div class="section-with-sidebar">
                     <!-- Column List Sidebar -->
                     <aside class="column-list-sidebar">
@@ -1709,13 +1803,11 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div id="changes-section" style="display: none;">
-                <div class="entity-view-header">
-                    <h1 class="entity-view-title">Data Explorer - Changes</h1>
                 </div>
+                <!-- End Items Tab -->
 
+                <!-- Changes Tab -->
+                <div id="explore-changes" class="explore-tab-content">
                 <div class="section-with-sidebar">
                     <!-- Column List Sidebar -->
                     <aside class="column-list-sidebar">
@@ -1759,13 +1851,11 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div id="alerts-section" style="display: none;">
-                <div class="entity-view-header">
-                    <h1 class="entity-view-title">Data Explorer - Alerts</h1>
                 </div>
+                <!-- End Changes Tab -->
 
+                <!-- Alerts Tab -->
+                <div id="explore-alerts" class="explore-tab-content">
                 <div class="section-with-sidebar">
                     <!-- Column List Sidebar -->
                     <aside class="column-list-sidebar">
@@ -1809,9 +1899,19 @@
                         </div>
                     </div>
                 </div>
-            </div>
+                </div>
+                <!-- End Alerts Tab -->
 
-            <!-- Configuration Section -->
+                <!-- Query Tab -->
+                <div id="explore-query" class="explore-tab-content">
+                    <p style="color: #86868b; padding: 2rem;">Query interface coming soon in Phase 4...</p>
+                </div>
+                <!-- End Query Tab -->
+
+            </div>
+            <!-- End Explore Section -->
+
+            <!-- Settings Section -->
             <div id="settings-section" style="display: none;">
                 <h2>Settings</h2>
                 <p>System configuration and preferences...</p>
@@ -2006,6 +2106,56 @@
     </div>
 
     <script>
+        // Minimal Header Scan Progress Functions
+        function updateHeaderProgress(data) {
+            const header = document.getElementById('scan-header-progress');
+
+            if (!data) {
+                header.style.display = 'none';
+                return;
+            }
+
+            header.style.display = 'block';
+
+            // Update status and path
+            document.getElementById('scan-header-status').textContent = data.status;
+            document.getElementById('scan-header-path').textContent = data.root_path;
+            document.getElementById('scan-header-phase').textContent = data.phase;
+
+            // Phase-based display (matching large progress view)
+            if (data.scanPhase === 3) {
+                // Analysis phase: show X/Y files and percentage
+                const itemsText = `${data.current.toLocaleString()} / ${data.total.toLocaleString()} files`;
+                document.getElementById('scan-header-items').textContent = itemsText;
+
+                const percentage = Math.round(data.percentage);
+                document.getElementById('scan-header-bar-fill').style.width = percentage + '%';
+                document.getElementById('scan-header-percentage').textContent = percentage + '%';
+            } else {
+                // Scanning/Tombstoning: show file counts, not percentage
+                const itemsText = `${data.files.toLocaleString()} files in ${data.directories.toLocaleString()} directories`;
+                document.getElementById('scan-header-items').textContent = itemsText;
+
+                // Hide percentage display during scanning phases
+                document.getElementById('scan-header-bar-fill').style.width = '0%';
+                document.getElementById('scan-header-percentage').textContent = '';
+            }
+        }
+
+        function hideHeaderProgress() {
+            document.getElementById('scan-header-progress').style.display = 'none';
+        }
+
+        // Click handler for header progress - navigate to Scans page
+        document.addEventListener('DOMContentLoaded', () => {
+            const headerProgress = document.getElementById('scan-header-progress');
+            if (headerProgress) {
+                headerProgress.addEventListener('click', () => {
+                    showSection('scans');
+                });
+            }
+        });
+
         // Load dashboard data
         async function loadDashboardData() {
             try {
@@ -2086,6 +2236,7 @@
                 this.phaseBreadcrumbs = []; // Track completed phases
                 this.renderPending = false; // Track if a render is already scheduled
                 this.stateChangeCallbacks = []; // Callbacks to notify when scan state changes
+                this.completedScans = new Set(); // Track scans that have already shown completion
             }
 
             // Subscribe to scan state changes
@@ -2109,6 +2260,86 @@
                 return this.currentScanId;
             }
 
+            // =========================================================================
+            // UNIFIED DATA MODEL - Single source of truth for all display logic
+            // =========================================================================
+            getScanDisplayData(scan) {
+                const statusValue = scan.status?.status || 'running';
+                const phaseNames = ['Scanning Files', 'Tombstoning Deletes', 'Analyzing'];
+                const phaseName = phaseNames[scan.phase - 1] || 'Processing';
+                const percentage = scan.progress?.percentage || 0;
+
+                // Phase-specific item counts (matches original updateScanCard logic)
+                let itemsText = '';
+                let showPercentageInStats = false;
+
+                if (scan.phase === 3) {
+                    // Analysis phase: show X / Y files
+                    itemsText = `${scan.progress.current.toLocaleString()} / ${scan.progress.total.toLocaleString()} files`;
+                    showPercentageInStats = true;
+                } else if (scan.phase === 1) {
+                    // Scanning phase: show file/directory counts
+                    itemsText = `Scanned ${this.scanningCounts.files.toLocaleString()} files in ${this.scanningCounts.directories.toLocaleString()} directories...`;
+                    showPercentageInStats = false;
+                } else if (scan.phase === 2) {
+                    // Tombstoning phase
+                    itemsText = `Processing...`;
+                    showPercentageInStats = false;
+                }
+
+                // Status-specific display properties
+                const statusDisplay = {
+                    running: { label: 'Running', showStopBtn: true, stopBtnText: 'Stop', stopBtnDisabled: false },
+                    cancelling: { label: 'Cancelling...', showStopBtn: true, stopBtnText: 'Stopping', stopBtnDisabled: true },
+                    stopped: { label: 'Stopped', showStopBtn: true, stopBtnText: 'Stopped', stopBtnDisabled: true },
+                    completed: { label: 'Completed', showStopBtn: false, stopBtnText: 'Completed', stopBtnDisabled: true },
+                    error: { label: 'Error', showStopBtn: false, stopBtnText: '', stopBtnDisabled: true }
+                };
+
+                const status = statusDisplay[statusValue] || statusDisplay.running;
+
+                return {
+                    // Core scan data
+                    phase: scan.phase,
+                    phaseName: phaseName,
+                    phaseLabel: `Phase ${scan.phase} of 3: ${phaseName}`,
+
+                    // Progress data
+                    percentage: Math.round(percentage),
+                    percentageFormatted: `${percentage.toFixed(1)}%`,
+                    progressBarWidth: `${percentage}%`,
+
+                    // Status data
+                    status: statusValue,
+                    statusLabel: status.label,
+
+                    // Items/stats display
+                    itemsText: itemsText,
+                    showPercentageInStats: showPercentageInStats,
+
+                    // Button state
+                    showStopButton: status.showStopBtn,
+                    stopButtonText: status.stopBtnText,
+                    stopButtonDisabled: status.stopBtnDisabled,
+
+                    // Thread details (phase 3 only)
+                    showThreads: scan.phase === 3 && scan.threads?.length > 0,
+                    threads: scan.threads || [],
+
+                    // Phase breadcrumbs
+                    breadcrumbs: this.phaseBreadcrumbs,
+
+                    // Raw data for special cases
+                    files: this.scanningCounts.files || 0,
+                    directories: this.scanningCounts.directories || 0,
+                    current: scan.progress?.current || 0,
+                    total: scan.progress?.total || 0,
+
+                    // Root path
+                    rootPath: scan.root_path
+                };
+            }
+
             scheduleRender() {
                 // Use requestAnimationFrame to batch renders and sync with browser paint cycle
                 // This prevents render() from interfering with event handling while ensuring
@@ -2123,7 +2354,9 @@
             }
 
             render() {
-                const container = document.getElementById('active-scans-content');
+                // Render ONLY for Scans page (scan UI has been moved there)
+                const container = document.getElementById('scans-active-scan-container');
+                if (!container) return;
 
                 if (this.activeScans.size === 0) {
                     container.innerHTML = `
@@ -2132,27 +2365,26 @@
                             <button class="start-scan-btn" onclick="showStartScanModal()">+ Start New Scan</button>
                         </div>
                     `;
-                    return;
-                }
-
-                // Remove "No Active Scan" UI if present
-                const noScansState = container.querySelector('.no-scans-state');
-                if (noScansState) {
-                    noScansState.remove();
-                }
-
-                // Check if scan card already exists
-                for (const [scanId, scan] of this.activeScans.entries()) {
-                    let scanCard = document.getElementById(`scan-card-${scanId}`);
-
-                    if (!scanCard) {
-                        // Create the scan card structure once
-                        scanCard = this.createScanCard(scanId, scan);
-                        container.appendChild(scanCard);
+                } else {
+                    // Remove "No Active Scan" UI if present
+                    const noScansState = container.querySelector('.no-scans-state');
+                    if (noScansState) {
+                        noScansState.remove();
                     }
 
-                    // Update only the dynamic content
-                    this.updateScanCard(scanId, scan);
+                    // Check if scan card already exists
+                    for (const [scanId, scan] of this.activeScans.entries()) {
+                        let scanCard = document.getElementById(`scan-card-${scanId}`);
+
+                        if (!scanCard) {
+                            // Create the scan card structure once
+                            scanCard = this.createScanCard(scanId, scan);
+                            container.appendChild(scanCard);
+                        }
+
+                        // Update only the dynamic content
+                        this.updateScanCard(scanId, scan);
+                    }
                 }
             }
 
@@ -2180,7 +2412,7 @@
                     </div>
                     <button id="details-btn-${scanId}" class="scan-details-toggle" data-scan-id="${scanId}" style="display: none;">
                         <span>Details</span>
-                        <span class="chevron">▼</span>
+                        <span class="chevron">▶</span>
                     </button>
                     <div id="thread-details-${scanId}" class="scan-thread-details"></div>
                 `;
@@ -2200,16 +2432,15 @@
             }
 
             updateScanCard(scanId, scan) {
-                // Update only the dynamic content - button stays untouched
-                const phaseNames = ['Scanning Files', 'Tombstoning Deletes', 'Analyzing'];
-                const phaseName = phaseNames[scan.phase - 1] || 'Processing';
+                // Update only the dynamic content using unified data model
+                const displayData = this.getScanDisplayData(scan);
 
                 // Update breadcrumbs
                 const breadcrumbsContainer = document.getElementById(`breadcrumbs-${scanId}`);
-                if (this.phaseBreadcrumbs.length > 0) {
+                if (displayData.breadcrumbs.length > 0) {
                     breadcrumbsContainer.innerHTML = `
                         <div style="margin-bottom: 12px;">
-                            ${this.phaseBreadcrumbs.map(crumb => `
+                            ${displayData.breadcrumbs.map(crumb => `
                                 <div style="font-size: 0.875rem; color: #34c759; margin-bottom: 4px;">
                                     ✓ ${crumb}
                                 </div>
@@ -2220,41 +2451,48 @@
                     breadcrumbsContainer.innerHTML = '';
                 }
 
-                // Update phase label and percentage
-                document.getElementById(`phase-label-${scanId}`).textContent = `Phase ${scan.phase} of 3: ${phaseName}`;
-                document.getElementById(`percentage-${scanId}`).textContent = `${scan.progress.percentage.toFixed(1)}%`;
+                // Update phase label
+                document.getElementById(`phase-label-${scanId}`).textContent = displayData.phaseLabel;
 
-                // Update progress bar
-                document.getElementById(`progress-bar-${scanId}`).style.width = `${scan.progress.percentage}%`;
+                // Update percentage (only show during phase 3 - Analysis)
+                const percentageElement = document.getElementById(`percentage-${scanId}`);
+                if (displayData.showPercentageInStats) {
+                    percentageElement.textContent = displayData.percentageFormatted;
+                    percentageElement.style.display = '';
+                } else {
+                    percentageElement.textContent = '';
+                    percentageElement.style.display = 'none';
+                }
+
+                // Update progress bar (only show during phase 3)
+                const progressBar = document.getElementById(`progress-bar-${scanId}`);
+                if (displayData.showPercentageInStats) {
+                    progressBar.style.width = displayData.progressBarWidth;
+                } else {
+                    progressBar.style.width = '0%';
+                }
 
                 // Update stats
                 const statsContainer = document.getElementById(`stats-${scanId}`);
-                if (scan.phase === 3) {
-                    statsContainer.textContent = `${scan.progress.current.toLocaleString()} / ${scan.progress.total.toLocaleString()} files`;
-                    statsContainer.style.color = '';
-                } else if (scan.phase === 1) {
-                    statsContainer.textContent = `Scanned ${this.scanningCounts.files.toLocaleString()} files in ${this.scanningCounts.directories.toLocaleString()} directories...`;
-                    statsContainer.style.color = '#007aff';
-                }
+                statsContainer.textContent = displayData.itemsText;
+                statsContainer.style.color = scan.phase === 1 ? '#007aff' : '';
 
                 // Update Stop button visibility and state
                 const stopButton = document.getElementById(`stop-btn-${scanId}`);
-                // Status is an object like {status: "running"}, check the status field
-                const statusValue = scan.status?.status || 'running';
 
-                if (statusValue === 'running') {
+                if (displayData.status === 'running') {
                     stopButton.style.display = 'inline-block';
                     stopButton.disabled = false;
                     stopButton.textContent = 'Stop';
-                } else if (statusValue === 'cancelling') {
+                } else if (displayData.status === 'cancelling') {
                     stopButton.style.display = 'inline-block';
                     stopButton.disabled = true;
                     stopButton.textContent = 'Stopping';
-                } else if (statusValue === 'stopped') {
+                } else if (displayData.status === 'stopped') {
                     stopButton.style.display = 'inline-block';
                     stopButton.disabled = true;
                     stopButton.textContent = 'Stopped';
-                } else if (statusValue === 'completed') {
+                } else if (displayData.status === 'completed') {
                     // Check if we were in the middle of stopping (race condition)
                     if (stopButton.textContent === 'Stopping') {
                         // User clicked stop but scan completed anyway
@@ -2274,8 +2512,13 @@
                 const button = document.getElementById(`details-btn-${scanId}`);
                 const threadDetailsContainer = document.getElementById(`thread-details-${scanId}`);
 
-                if (scan.phase === 3) {
+                if (displayData.showThreads || displayData.phase === 3) {
                     button.style.display = 'flex';
+
+                    // Load expanded state from localStorage if not yet in set
+                    if (!this.expandedScans.has(scanId) && this.loadExpandedState()) {
+                        this.expandedScans.add(scanId);
+                    }
 
                     // Update button expanded state
                     const isExpanded = this.expandedScans.has(scanId);
@@ -2283,8 +2526,8 @@
                     threadDetailsContainer.className = `scan-thread-details ${isExpanded ? 'visible' : ''}`;
 
                     // Update thread details content
-                    if (scan.threads && scan.threads.length > 0) {
-                        const threadsHtml = scan.threads.map(thread => {
+                    if (displayData.threads.length > 0) {
+                        const threadsHtml = displayData.threads.map(thread => {
                             let operation = 'idle';
                             let filePath = thread.current_file || '-';
 
@@ -2324,93 +2567,6 @@
                 }
             }
 
-            renderScan(scan) {
-                const isExpanded = this.expandedScans.has(scan.scan_id);
-                const phaseNames = ['Scanning Files', 'Tombstoning Deletes', 'Analyzing'];
-                const phaseName = phaseNames[scan.phase - 1] || 'Processing';
-
-                // Render breadcrumbs for completed phases
-                const breadcrumbsHtml = this.phaseBreadcrumbs.length > 0 ? `
-                    <div style="margin-bottom: 12px;">
-                        ${this.phaseBreadcrumbs.map(crumb => `
-                            <div style="font-size: 0.875rem; color: #34c759; margin-bottom: 4px;">
-                                ✓ ${crumb}
-                            </div>
-                        `).join('')}
-                    </div>
-                ` : '';
-
-                // Show scanning activity for phase 1
-                const scanningActivityHtml = scan.phase === 1 ? `
-                    <div class="scan-stats" style="margin-top: 12px; color: #007aff;">
-                        Scanned ${this.scanningCounts.files.toLocaleString()} files in ${this.scanningCounts.directories.toLocaleString()} directories...
-                    </div>
-                ` : '';
-
-                const threadsHtml = scan.threads ? scan.threads.map(thread => {
-                    // Parse thread message to determine operation type
-                    let operation = 'idle';
-                    let filePath = thread.current_file || '-';
-
-                    if (thread.current_file) {
-                        if (thread.current_file.startsWith('Hashing:')) {
-                            operation = 'hashing';
-                            filePath = thread.current_file.substring(9).trim(); // Remove "Hashing: " prefix
-                        } else if (thread.current_file.startsWith('Validating:')) {
-                            operation = 'validating';
-                            filePath = thread.current_file.substring(12).trim(); // Remove "Validating: " prefix
-                        } else if (thread.status === 'active') {
-                            operation = 'scanning';
-                        }
-                    }
-
-                    const statusLabels = {
-                        'hashing': 'HASHING',
-                        'validating': 'VALIDATING',
-                        'scanning': 'SCANNING',
-                        'idle': 'IDLE'
-                    };
-
-                    return `
-                        <div class="scan-thread-item">
-                            <span class="scan-thread-status ${operation}">${statusLabels[operation]}</span>
-                            <span class="scan-thread-file">${filePath}</span>
-                        </div>
-                    `;
-                }).join('') : '';
-
-                return `
-                    <div class="scan-card">
-                        <div class="scan-title">Scanning: ${scan.root_path}</div>
-                        ${breadcrumbsHtml}
-                        <div class="scan-progress-section">
-                            <div class="scan-progress-label">
-                                <span>Phase ${scan.phase} of 3: ${phaseName}</span>
-                                <span>${scan.progress.percentage.toFixed(1)}%</span>
-                            </div>
-                            <div class="scan-progress-bar-container">
-                                <div class="scan-progress-bar" style="width: ${scan.progress.percentage}%"></div>
-                            </div>
-                            ${scan.phase === 3 ? `
-                                <div class="scan-stats">
-                                    ${scan.progress.current.toLocaleString()} / ${scan.progress.total.toLocaleString()} files
-                                </div>
-                            ` : scanningActivityHtml}
-                        </div>
-                        ${scan.phase === 3 ? `
-                            <button class="scan-details-toggle ${isExpanded ? 'expanded' : ''}"
-                                    data-scan-id="${scan.scan_id}">
-                                <span>Details</span>
-                                <span class="chevron">▼</span>
-                            </button>
-                            <div class="scan-thread-details ${isExpanded ? 'visible' : ''}">
-                                ${threadsHtml || '<div style="padding: 12px; color: #86868b; font-style: italic;">Waiting for thread activity...</div>'}
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            }
-
             toggleDetails(scanId) {
                 // Toggle the expanded state
                 if (this.expandedScans.has(scanId)) {
@@ -2418,6 +2574,9 @@
                 } else {
                     this.expandedScans.add(scanId);
                 }
+
+                // Save to localStorage
+                localStorage.setItem('fspulse.scan.details.expanded', this.expandedScans.has(scanId) ? 'true' : 'false');
 
                 // Directly update the button and details container - no re-render needed
                 const isExpanded = this.expandedScans.has(scanId);
@@ -2430,6 +2589,12 @@
                 if (threadDetailsContainer) {
                     threadDetailsContainer.className = `scan-thread-details ${isExpanded ? 'visible' : ''}`;
                 }
+            }
+
+            loadExpandedState() {
+                // Load the expanded state from localStorage
+                const saved = localStorage.getItem('fspulse.scan.details.expanded');
+                return saved === 'true';
             }
 
             async stopScan(scanId) {
@@ -2518,6 +2683,7 @@
                     setTimeout(() => {
                         this.activeScans.delete(scanId);
                         this.currentScanId = null; // Clear active scan ID
+                        hideHeaderProgress(); // Hide header at the same time as Scans page
                         this.scheduleRender();
                         this.notifyStateChange(); // Notify subscribers scan ended
                     }, 2000);
@@ -2608,42 +2774,131 @@
                 this.activeScans.set(state.scan_id, scanData);
                 this.notifyStateChange(); // Notify subscribers of state update
 
+                // Update the persistent scan progress banner
+                this.updateBanner(state, scanData);
+
                 // Handle scan completion
                 // Status is an object like {status: "running"}, check the status field
                 if (state.status && state.status.status) {
                     const statusValue = state.status.status;
 
                     if (statusValue === 'completed') {
-                        // Scan completed - remove after delay
-                        setTimeout(() => {
-                            this.activeScans.delete(state.scan_id);
-                            this.currentScanId = null; // Clear active scan ID
-                            this.scheduleRender();
-                            this.notifyStateChange(); // Notify subscribers scan completed
-                        }, 2000);
+                        // Only handle completion once per scan
+                        if (!this.completedScans.has(state.scan_id)) {
+                            this.completedScans.add(state.scan_id);
+
+                            // Scan completed - remove after delay
+                            setTimeout(() => {
+                                this.activeScans.delete(state.scan_id);
+                                this.completedScans.delete(state.scan_id); // Clean up tracking
+                                this.currentScanId = null; // Clear active scan ID
+                                hideHeaderProgress(); // Hide header at the same time as Scans page
+                                this.scheduleRender();
+                                this.notifyStateChange(); // Notify subscribers scan completed
+                            }, 2000);
+                        }
                     } else if (statusValue === 'stopped') {
-                        // Scan stopped (cancelled) - remove after delay
-                        setTimeout(() => {
-                            this.activeScans.delete(state.scan_id);
-                            this.currentScanId = null; // Clear active scan ID
-                            this.scheduleRender();
-                            this.notifyStateChange(); // Notify subscribers scan stopped
-                        }, 2000);
+                        // Only handle stop once per scan
+                        if (!this.completedScans.has(state.scan_id)) {
+                            this.completedScans.add(state.scan_id);
+
+                            // Scan stopped (cancelled) - remove after delay
+                            setTimeout(() => {
+                                this.activeScans.delete(state.scan_id);
+                                this.completedScans.delete(state.scan_id); // Clean up tracking
+                                this.currentScanId = null; // Clear active scan ID
+                                hideHeaderProgress(); // Hide header at the same time as Scans page
+                                this.scheduleRender();
+                                this.notifyStateChange(); // Notify subscribers scan stopped
+                            }, 2000);
+                        }
                     } else if (statusValue === 'error') {
-                        console.error('Scan error:', state.status.message);
-                        alert(`Scan error: ${state.status.message}`);
-                        // Remove scan on error after delay
-                        setTimeout(() => {
-                            this.activeScans.delete(state.scan_id);
-                            this.currentScanId = null; // Clear active scan ID
-                            this.scheduleRender();
-                            this.notifyStateChange(); // Notify subscribers scan errored
-                        }, 3000);
+                        // Only handle error once per scan
+                        if (!this.completedScans.has(state.scan_id)) {
+                            this.completedScans.add(state.scan_id);
+
+                            console.error('Scan error:', state.status.message);
+                            alert(`Scan error: ${state.status.message}`);
+                            // Remove scan on error after delay
+                            setTimeout(() => {
+                                this.activeScans.delete(state.scan_id);
+                                this.completedScans.delete(state.scan_id); // Clean up tracking
+                                this.currentScanId = null; // Clear active scan ID
+                                hideHeaderProgress(); // Hide header at the same time as Scans page
+                                this.scheduleRender();
+                                this.notifyStateChange(); // Notify subscribers scan errored
+                            }, 3000);
+                        }
                     }
                     // For 'running' and 'cancelling' states, keep the scan visible
                 }
 
                 this.scheduleRender();
+            }
+
+            // Update the header progress (minimal, always visible)
+            // Uses unified data model via getScanDisplayData()
+            updateBanner(state, scanData) {
+                const statusValue = state.status?.status;
+
+                if (statusValue === 'running' || statusValue === 'cancelling') {
+                    // Get unified display data
+                    const displayData = this.getScanDisplayData(scanData);
+
+                    const headerData = {
+                        status: statusValue === 'running' ? 'Scanning' : 'Cancelling',
+                        root_path: this.shortenPath(state.root_path || 'Unknown', 50),
+                        phase: displayData.phaseName,
+                        scanPhase: displayData.phase,
+                        percentage: displayData.percentage,
+                        files: displayData.files,
+                        directories: displayData.directories,
+                        current: displayData.current,
+                        total: displayData.total
+                    };
+
+                    updateHeaderProgress(headerData);
+                } else if (statusValue === 'completed') {
+                    // Show completion briefly - header will be hidden when scan is removed from activeScans
+                    if (!this.completedScans.has(state.scan_id)) {
+                        const completionData = {
+                            status: 'Completed',
+                            root_path: this.shortenPath(state.root_path || '', 50),
+                            phase: 'Complete',
+                            scanPhase: 3,
+                            percentage: 100,
+                            files: this.scanningCounts.files || 0,
+                            directories: this.scanningCounts.directories || 0
+                        };
+                        updateHeaderProgress(completionData);
+                        // Note: hideHeaderProgress() will be called when scan is removed from activeScans
+                    }
+                } else if (statusValue === 'stopped' || statusValue === 'error') {
+                    // These will be hidden when scan is removed from activeScans
+                    // No need to hide here
+                } else {
+                    // No active scan or unknown state - hide
+                    hideHeaderProgress();
+                }
+            }
+
+            // Helper to get friendly phase name
+            getPhaseName(phaseName) {
+                if (!phaseName) return 'Initializing';
+                switch (phaseName.toLowerCase()) {
+                    case 'scanning': return 'Discovery';
+                    case 'sweeping': return 'Sweep';
+                    case 'analyzing': return 'Analysis';
+                    default: return phaseName;
+                }
+            }
+
+            // Helper to shorten file paths for display
+            shortenPath(path, maxLength = 60) {
+                if (!path || path.length <= maxLength) return path;
+                const parts = path.split('/');
+                if (parts.length <= 2) return path;
+                return '.../' + parts.slice(-2).join('/');
             }
 
             // Demo method - adds a mock scan for testing UI
@@ -3312,15 +3567,49 @@
             }
 
             // Load data for specific sections
-            if (['roots', 'scans', 'items', 'changes', 'alerts'].includes(sectionName)) {
-                views[sectionName].loadData();
-            } else if (sectionName === 'manage-roots') {
+            if (sectionName === 'scans') {
+                // Scans section has active scan + root management
                 loadManageRootsData();
+            } else if (sectionName === 'explore') {
+                // Show default tab (roots) when explore section is opened
+                showExploreTab('roots');
             }
 
             // Close sidebar on mobile
             if (window.innerWidth <= 768) {
                 document.getElementById('sidebar').classList.remove('open');
+            }
+        }
+
+        // Show specific tab within Explore section
+        function showExploreTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.explore-tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            const selectedTab = document.getElementById('explore-' + tabName);
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+
+            // Update tab buttons active state
+            document.querySelectorAll('.explore-tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Find and activate the correct tab button
+            const activeBtn = Array.from(document.querySelectorAll('.explore-tab')).find(btn => {
+                return btn.textContent.toLowerCase() === tabName.toLowerCase();
+            });
+            if (activeBtn) {
+                activeBtn.classList.add('active');
+            }
+
+            // Load data for data explorer tabs
+            if (['roots', 'scans', 'items', 'changes', 'alerts'].includes(tabName) && views[tabName]) {
+                views[tabName].loadData();
             }
         }
 

@@ -725,7 +725,10 @@ impl Scanner {
                     Ok(hash_s) => Some(hash_s),
                     Err(error) => {
                         error!("Error hashing '{}': {}", &display_path, error);
-                        None
+                        // If hashing fails, we set the hash to the error string
+                        // This isn't great, but it allows us to have a string value when stopping a scan
+                        // and leaves an error artifact behind for investigation
+                        Some(error.to_string())
                     }
                 };
         }
