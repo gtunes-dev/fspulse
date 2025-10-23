@@ -1927,9 +1927,8 @@
                     <label class="context-filter-label">Context:</label>
                     <select class="context-filter-select" id="insights-context-filter" onchange="handleInsightsContextChange()">
                         <option value="all">All Data</option>
-                        <option value="root" disabled>By Root (coming soon)</option>
+                        <option value="root">By Root</option>
                         <option value="scan">By Scan ID</option>
-                        <option value="path">By Item Path</option>
                     </select>
                     <input type="text"
                            id="insights-context-value"
@@ -1981,6 +1980,7 @@
                                 <tr>
                                     <th style="width: 170px; min-width: 170px;">Status</th>
                                     <th style="width: 130px;">Alert Type</th>
+                                    <th style="width: 80px;">Root ID</th>
                                     <th style="width: 80px;">Scan ID</th>
                                     <th>File Path</th>
                                     <th style="width: 250px;">Details</th>
@@ -4222,16 +4222,16 @@
             const selectedContext = contextFilter.value;
 
             // Show/hide and configure input based on context selection
-            if (selectedContext === 'all' || selectedContext === 'root') {
+            if (selectedContext === 'all') {
                 contextValue.style.display = 'none';
+                contextValue.value = '';
+            } else if (selectedContext === 'root') {
+                contextValue.style.display = 'block';
+                contextValue.placeholder = 'e.g., 1 or 1, 2 or 1..5';
                 contextValue.value = '';
             } else if (selectedContext === 'scan') {
                 contextValue.style.display = 'block';
                 contextValue.placeholder = 'e.g., 100 or 100, 200 or 100..200';
-                contextValue.value = '';
-            } else if (selectedContext === 'path') {
-                contextValue.style.display = 'block';
-                contextValue.placeholder = "e.g., 'invoice.pdf' or '%Documents%'";
                 contextValue.value = '';
             }
 
@@ -4269,7 +4269,7 @@
             const contextValue = document.getElementById('insights-context-value').value.trim();
 
             const tbody = document.getElementById('insights-alerts-table-body');
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #86868b;">Loading...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #86868b;">Loading...</td></tr>';
 
             try {
                 // Build WHERE clause from filters
@@ -4277,11 +4277,11 @@
                 const filterParts = [];
 
                 // Add context filter if applicable
-                if (contextFilter && contextFilter !== 'all' && contextFilter !== 'root' && contextValue) {
-                    if (contextFilter === 'scan') {
+                if (contextFilter && contextFilter !== 'all' && contextValue) {
+                    if (contextFilter === 'root') {
+                        filterParts.push(`root_id:(${contextValue})`);
+                    } else if (contextFilter === 'scan') {
                         filterParts.push(`scan_id:(${contextValue})`);
-                    } else if (contextFilter === 'path') {
-                        filterParts.push(`item_path:(${contextValue})`);
                     }
                 }
 
@@ -4316,7 +4316,7 @@
 
                 // Build and execute data query with pagination
                 const offset = (insightsAlertsState.currentPage - 1) * insightsAlertsState.pageSize;
-                const dataQuery = `alerts${whereClause} show alert_id, alert_type, alert_status, scan_id, item_path, created_at@timestamp, hash_old, hash_new, val_error order by created_at desc limit ${insightsAlertsState.pageSize} offset ${offset}`;
+                const dataQuery = `alerts${whereClause} show alert_id, alert_type, alert_status, root_id, scan_id, item_path, created_at@timestamp, hash_old, hash_new, val_error order by created_at desc limit ${insightsAlertsState.pageSize} offset ${offset}`;
 
                 const dataResponse = await fetch('/api/query/execute', {
                     method: 'POST',
@@ -4337,7 +4337,7 @@
 
             } catch (error) {
                 console.error('Error loading insights alerts:', error);
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #ff3b30;">Error loading alerts. Please try again.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #ff3b30;">Error loading alerts. Please try again.</td></tr>';
             }
         }
 
@@ -4345,7 +4345,7 @@
             const tbody = document.getElementById('insights-alerts-table-body');
 
             if (rows.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #86868b;">No alerts found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #86868b;">No alerts found.</td></tr>';
                 return;
             }
 
@@ -4353,12 +4353,13 @@
                 const alertId = row[0]; // alert_id
                 const alertType = row[1]; // alert_type
                 const alertStatus = row[2]; // alert_status
-                const scanId = row[3]; // scan_id
-                const itemPath = row[4]; // item_path
-                const createdAt = row[5]; // created_at
-                const hashOld = row[6]; // hash_old
-                const hashNew = row[7]; // hash_new
-                const valError = row[8]; // val_error
+                const rootId = row[3]; // root_id
+                const scanId = row[4]; // scan_id
+                const itemPath = row[5]; // item_path
+                const createdAt = row[6]; // created_at
+                const hashOld = row[7]; // hash_old
+                const hashNew = row[8]; // hash_new
+                const valError = row[9]; // val_error
 
                 // Format alert type
                 const typeBadge = alertType === 'H'
@@ -4392,6 +4393,7 @@
                     <tr>
                         <td>${statusDropdown}</td>
                         <td>${typeBadge}</td>
+                        <td style="color: #86868b;">${rootId}</td>
                         <td style="color: #86868b;">${scanId}</td>
                         <td><span class="alert-file-path" title="${itemPath}">${truncatePath(itemPath, 60)}</span></td>
                         <td>${details}</td>
