@@ -2,24 +2,40 @@
 
 <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="FsPulse logo" style="width: 100%; max-width: 600px;">
 
-FsPulse is a Rust-based tool designed to capture and analyze directory states, detect changes over time, validate file integrity and formats, and query results using a powerful and intuitive query syntax. It runs as a **web service** with browser-based interface, or as a traditional **command-line tool**.
+## What is FsPulse?
+
+**FsPulse is an essential filesystem integrity tool for system administrators, home-lab enthusiasts, and anyone who takes data preservation seriously.** It runs as a background service that continuously monitors your critical directories, watching for the silent threats that traditional backup systems miss: **bit rot, corruption, and unexpected tampering**.
+
+Your files can change without you knowing. Hard drives degrade. Ransomware alters files while preserving timestamps. FsPulse catches these problems early through two powerful detection methods:
+
+- **Content Hashing (SHA2)**: Detects when file contents change even though filesystem metadata stays the same—the telltale sign of bit rot or sophisticated tampering
+- **Format Validation**: Uses open-source libraries to read and validate file structures, catching corruption in FLAC audio, JPEG/PNG images, PDFs, and more
+
+Instead of waiting for a file to fail when you need it most, FsPulse gives you **continuous awareness**. Run manual scans when you want, or let scheduled scans (coming soon) monitor your data automatically. When issues are detected, FsPulse's alert system flags them immediately through an elegant web interface.
+
+Whether you're protecting family photos, managing media libraries, or maintaining production servers, FsPulse provides the peace of mind that comes from knowing your data is actually intact—not just backed up.
 
 ## Key Capabilities
 
-- **Web UI & Background Service** — Run as a daemon with browser-based access to all features
-- **Command-Line Interface** — Full CLI with interactive TUI modes for terminal users
-- **Directory Scanning** — Track additions, deletions, and modifications of files and directories
-- **Content Validation** — Validate file formats such as FLAC, JPEG, GIF, BMP, PNG, TIFF, and PDF
-- **SHA2 Hashing** — Optionally detect file content changes beyond metadata
-- **Powerful Querying** — Access scan results with flexible, SQL-like queries via web UI or CLI
-- **Docker Deployment** — Official Docker images for easy containerized deployment
+- **Dual Interface** — Run as a web service with elegant browser UI, or use the full-featured CLI with interactive terminal modes
+- **Integrity Detection** — SHA2 hashing catches content changes even when filesystem metadata stays the same; format validators detect corruption in supported file types
+- **Change Tracking** — Deep directory scanning captures all additions, modifications, and deletions across scan sessions
+- **Alert System** — Suspicious hash changes and validation failures are flagged immediately with status management (Open/Flagged/Dismissed)
+- **Powerful Query Language** — SQL-inspired syntax lets you filter, sort, and analyze your data with precision
+- **Production Ready** — Official Docker images (multi-architecture), comprehensive documentation, and native installers
 
 ## Usage Modes
 
 FsPulse offers flexibility in how you interact with it:
 
-- **Server Mode**: Run `fspulse serve` to start a web server on port 8080, providing full functionality through your browser
-- **CLI Mode**: Use `fspulse scan`, `fspulse query`, and other commands for scriptable, terminal-based workflows
-- **Interactive TUI**: Use `fspulse interact` or `fspulse explore` for menu-driven exploration in the terminal
+- **Web UI Mode**: Run `fspulse serve` to start the server and access the full web interface at http://127.0.0.1:8080. Great for visual data exploration, managing multiple roots, and real-time scan monitoring.
+
+- **Command-Line Mode**: Use direct terminal commands like `fspulse scan`, `fspulse query`, and `fspulse report` for automation, scripted workflows, and quick one-off operations.
+
+- **Interactive Terminal Mode**: Use `fspulse interact` for menu-driven navigation or `fspulse explore` for a full-screen data explorer TUI—perfect for terminal users who want visual feedback without leaving the command line.
 
 FsPulse is designed to scale across large file systems while maintaining clarity and control for the user.
+
+---
+
+This book provides comprehensive documentation for all aspects of FsPulse. Start with [Getting Started](getting_started.md) for installation, or jump to any section that interests you.
