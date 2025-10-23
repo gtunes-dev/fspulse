@@ -10,6 +10,7 @@ on:
       - 'assets/**'
       - 'docs/**'
       - 'scripts/**'
+      - 'README.md'
       - 'CHANGELOG.md'
       - '.github/workflows/**'
 
@@ -18,6 +19,7 @@ on:
       - 'assets/**'
       - 'docs/**'
       - 'scripts/**'
+      - 'README.md'
       - 'CHANGELOG.md'
       - '.github/workflows/**'
 

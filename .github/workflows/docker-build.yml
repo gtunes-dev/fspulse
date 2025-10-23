@@ -8,6 +8,7 @@ on:
       - 'assets/**'
       - 'docs/**'
       - 'scripts/**'
+      - 'README.md'
       - 'CHANGELOG.md'
       - '.github/workflows/**'
     tags:

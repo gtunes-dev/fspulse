@@ -32,8 +32,7 @@ impl Database {
         // Database directory precedence:
         // 1. FSPULSE_DATA_DIR environment variable (Docker / explicit override)
         // 2. Config file database.path (user's persistent choice)
-        // 3. /data directory if config.toml exists there (Docker auto-detect)
-        // 4. BaseDirs home directory (native default)
+        // 3. BaseDirs home directory (native default)
 
         let db_dir = Self::determine_database_directory()?;
 
@@ -75,15 +74,7 @@ impl Database {
             }
         }
 
-        // 3. Docker auto-detect: check if /data/config.toml exists
-        let docker_data_path = Path::new("/data");
-        let docker_config_path = docker_data_path.join("config.toml");
-        if docker_config_path.exists() {
-            info!("Detected Docker environment (/data/config.toml exists), using /data");
-            return Ok(docker_data_path.to_path_buf());
-        }
-
-        // 4. Fall back to home directory (native default)
+        // 3. Fall back to home directory (native default)
         BaseDirs::new()
             .map(|base| {
                 let path = base.home_dir().to_path_buf();
