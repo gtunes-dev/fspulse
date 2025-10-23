@@ -498,6 +498,13 @@ impl Scan {
             [prev_scan_id, scan.scan_id()],
         )?;
 
+        // Undo alerts. Delete all of the alerts created during the scan
+        tx.execute(
+            "DELETE FROM alerts
+            WHERE scan_id = ?1",
+            [scan.scan_id()],
+        )?;
+
         // Mark the scan as stopped
         tx.execute(
             "UPDATE scans

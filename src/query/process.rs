@@ -324,6 +324,7 @@ impl AlertsQuery {
                 "alert_id" => Format::format_i64(alert.alert_id),
                 "alert_type" => Format::format_alert_type(&alert.alert_type, col.format)?,
                 "alert_status" => Format::format_alert_status(&alert.alert_status, col.format)?,
+                "root_id" => Format::format_i64(alert.root_id),
                 "scan_id" => Format::format_i64(alert.scan_id),
                 "item_id" => Format::format_i64(alert.item_id),
                 "item_path" => Format::format_string(&alert.item_path),
@@ -676,6 +677,8 @@ impl QueryImpl {
         FROM alerts
         JOIN items
           ON alerts.item_id = items.item_id
+        JOIN scans
+            on alerts.scan_id = scans.scan_id
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -836,6 +839,7 @@ pub struct AlertsQueryRow {
     alert_id: i64,
     alert_type: String,
     alert_status: String,
+    root_id: i64,
     scan_id: i64,
     item_id: i64,
     item_path: String,
@@ -853,15 +857,16 @@ impl AlertsQueryRow {
             alert_id: row.get(0)?,
             alert_type: row.get(1)?,
             alert_status: row.get(2)?,
-            scan_id: row.get(3)?,
-            item_id: row.get(4)?,
-            item_path: row.get(5)?,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
-            prev_hash_scan: row.get(8)?,
-            hash_old: row.get(9)?,
-            hash_new: row.get(10)?,
-            val_error: row.get(11)?,
+            root_id: row.get(3)?,
+            scan_id: row.get(4)?,
+            item_id: row.get(5)?,
+            item_path: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
+            prev_hash_scan: row.get(9)?,
+            hash_old: row.get(10)?,
+            hash_new: row.get(11)?,
+            val_error: row.get(12)?,
         })
     }
 }
