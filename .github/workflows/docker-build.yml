@@ -89,8 +89,8 @@ jobs:
             # - main
             type=ref,event=branch,enable={{is_default_branch}}
 
-            # For manual workflow dispatch, use sha
-            type=sha,prefix={{branch}}-
+            # For main branch pushes, also add sha tag
+            type=sha,prefix=main-,enable={{is_default_branch}}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
