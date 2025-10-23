@@ -5,34 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.0.15] - Unreleased
+## [v0.1.0] - 2025-10-22
+
+### Breaking Changes
+
+**⚠️ CLI Database Parameter Removed**
+- Removed the `--db` / `-d` CLI parameter
+- Database location is now managed through configuration system
+- **Migration options** (in order of precedence):
+  1. Environment variable: `FSPULSE_DATABASE_PATH=/path/to/db.sqlite`
+  2. Config file: `[database].path = "/path/to/db.sqlite"` in `~/.config/fspulse/config.toml`
+  3. Default location if neither is specified
+
+**⚠️ Default Scan Behavior Changed**
+- Hash default is now "hash all" - all items will be hashed by default
+- Validate new/changed is now the default validation mode
+- Override options: `--no-hash`, `--hash-new`, `--no-validate`, `--validate-all`
 
 ### Added
 
-- Alerts! This is a new top-level data type. "Alerts" are created as part
-  of the analysis phase. 
+**🚀 Web UI and Server Mode**
+- New `serve` command launches FsPulse as a web server with full-featured UI
+- Real-time scan monitoring with WebSocket updates
+- Interactive data exploration with dynamic filtering and column management
+- Alert management interface with context-aware filtering
+- Query builder with support for all FsPulse query syntax
+- Configurable via environment variables or `[server]` section in config:
+  - `FSPULSE_SERVER_HOST` / `[server].host` (default: 127.0.0.1)
+  - `FSPULSE_SERVER_PORT` / `[server].port` (default: 8080)
 
-- Alerts are exposed in the query model as a top-level type "alerts"
+**🐳 Docker Support**
+- Official Docker images now available at `gtunesdev/fspulse`
+- Multi-architecture support (linux/amd64, linux/arm64)
+- Automated builds triggered by version tags
+- Tagged releases: `latest`, `0.1.0`, `0.1`
 
-- Alerts are exposed in the Explore view - they're the new default and the
-  "Recent Alerts" filter is automatically applied at launch
+**📊 Alerts System**
+- New top-level data type for tracking integrity issues
+- Automatically generated during scan analysis phase
+- Two alert types: Suspicious Hash changes, Invalid Items
+- Alert status management (Open, Flagged, Dismissed)
+- Exposed in query model as `alerts` domain
+- Alerts tab in Explore view with automatic filtering
 
-- The filter frame in Explorer is now collapsible. Use ctrl-f to expand and collapse.
+**🎨 Enhanced Explorer UI**
+- Collapsible filter frame (Ctrl+F to toggle)
+- Views system: Press 'V' for pre-configured view templates
+- View persistence per data type
+- Improved column ordering and management
 
-- New "Views" block in Explorer. Press 'V' at any time to bring up a list of selectable
-  pre-configured views. Each top-level type will show, at the top of the window, what
-  the last selected view was. Selecting a view applies that view's filters and column
-  characteristics to the window
+**📝 Query Enhancements**
+- Added `@timestamp` format modifier for dates (UTC Unix timestamps)
+- Enables client-side timezone conversion in web applications
+- All schema fields now available for querying (e.g., `is_undelete`, `last_hash_scan_old`, `hash_old`, `hash_new`, `last_val_scan_old`)
+
+**⚙️ Environment Variable Configuration**
+- All configuration options now support environment variable overrides
+- Environment variables take precedence over config file values
+- Naming pattern: `FSPULSE_<SECTION>_<KEY>` (e.g., `FSPULSE_DATABASE_PATH`, `FSPULSE_SERVER_PORT`)
+- Enables easier Docker and CI/CD configuration
 
 ### Changed
 
-- Scan parameters and default modes changed. The hash default is now equivalent to
-  "hash all" and all items will be hashed. Override options are now no-hash and
-  hash-new. Validate new or changed is now the default. Override options are
-  no-validate and validate-all.
+- Moved all input boxes from tui-input to tui-textarea for better cursor display and text box behaviors
+- Improved navigation architecture in web UI with consistent flexbox layout
+- Updated responsive breakpoint from 768px to 480px for better tablet support
+- Consolidated overflow handling to single source of truth
 
-- Moved all input boxes from tui-input to tui-text area. This helps with cursor
-  display in editable fields and also provides more stand text box behaviors
+### Fixed
+
+- Windows: Filtered out key release events that caused double-press behavior
+- Navigation sidebar expansion now works consistently across all web UI pages
+- Status dropdown display issues resolved with proper column constraints
+- Alert status updates now persist with correct UTC timestamps
 
 ## [v0.0.14] - 2025-05-07
 
