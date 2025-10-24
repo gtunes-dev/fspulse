@@ -23,6 +23,12 @@ Instead of waiting for a file to fail when you need it most, FsPulse gives you *
 
 Whether you're protecting family photos, managing media libraries, or maintaining production servers, FsPulse provides the peace of mind that comes from knowing your data is actually intact—not just backed up.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-scan-progress.png" alt="FsPulse Web UI - Real-time Scan Monitoring" width="90%" style="max-width: 900px;">
+  <br>
+  <em>Web UI showing real-time scan progress with live statistics</em>
+</p>
+
 ---
 
 ## 🚀 Key Capabilities
