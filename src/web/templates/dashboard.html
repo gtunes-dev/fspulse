@@ -531,11 +531,238 @@
             color: #8e8e93;
         }
 
-        .overview-modules {
+        /* Quick Actions Grid */
+        .quick-actions-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .quick-action-card {
+            background: white;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 12px;
+            padding: 1.5rem;
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+            align-items: flex-start;
+            gap: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+            color: inherit;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06);
+        }
+
+        .quick-action-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.1);
+            border-color: rgba(0,122,255,0.3);
+        }
+
+        .quick-action-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .quick-action-icon {
+            width: 22px;
+            height: 22px;
+            color: #007aff;
+            flex-shrink: 0;
+        }
+
+        .quick-action-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            letter-spacing: -0.01em;
+        }
+
+        .quick-action-description {
+            font-size: 0.875rem;
+            color: #86868b;
+            font-weight: 400;
+        }
+
+        /* Scan Status Card */
+        .scan-status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .scan-status-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+
+        .scan-status-action {
+            color: #007aff;
+            text-decoration: none;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            transition: opacity 0.15s ease;
+        }
+
+        .scan-status-action:hover {
+            opacity: 0.7;
+        }
+
+        .scan-status-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .scan-status-info-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9375rem;
+        }
+
+        .scan-status-info-label {
+            color: #86868b;
+            font-weight: 500;
+        }
+
+        .scan-status-info-value {
+            color: #1d1d1f;
+            font-weight: 500;
+        }
+
+        .scan-status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(0,0,0,0.06);
+        }
+
+        .scan-stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .scan-stat-label {
+            font-size: 0.8125rem;
+            color: #86868b;
+            font-weight: 500;
+        }
+
+        .scan-stat-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+
+        /* Scan Status Components */
+        .scan-status-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 16px;
+            background: #fafafa;
+            border: 1px solid rgba(0,0,0,0.06);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9375rem;
+            line-height: 1.4;
+        }
+
+        .scan-changes-table-container {
+            border: 1px solid rgba(0,0,0,0.06);
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .scan-changes-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .scan-changes-table thead th {
+            background: #fafafa;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+        }
+
+        .scan-changes-table thead th:first-child {
+            width: 120px;
+        }
+
+        .scan-changes-table thead th:not(:first-child) {
+            text-align: center;
+        }
+
+        .scan-changes-table tbody td {
+            padding: 10px 16px;
+            font-size: 0.9375rem;
+            color: #1d1d1f;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+        }
+
+        .scan-changes-table tbody td:first-child {
+            color: #86868b;
+            font-weight: 500;
+        }
+
+        .scan-changes-table tbody td:not(:first-child) {
+            text-align: center;
+        }
+
+        .scan-changes-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .scan-changes-table tbody tr:hover {
+            background: rgba(0,0,0,0.02);
+        }
+
+        .scan-analysis-summary {
+            padding: 12px 16px;
+            background: #fafafa;
+            border: 1px solid rgba(0,0,0,0.06);
+            border-radius: 8px;
+            font-size: 0.875rem;
+            color: #86868b;
+            line-height: 1.5;
+            margin-top: 20px;
+        }
+
+        .scan-alerts-display {
+            padding: 12px 16px;
+            border: 1px solid rgba(0,0,0,0.06);
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-align: left;
+            margin: 20px 0;
+        }
+
+        .scan-alerts-display.no-alerts {
+            background: rgba(0,0,0,0.02);
+            color: #86868b;
+        }
+
+        .scan-alerts-display.has-alerts {
+            background: rgba(255,59,48,0.08);
+            color: #ff3b30;
+            border-color: rgba(255,59,48,0.15);
         }
 
         .card {
@@ -759,7 +986,7 @@
         }
 
         .entity-view-title {
-            font-size: 2rem;
+            font-size: 1.5rem;
             font-weight: 600;
             letter-spacing: -0.02em;
             color: #1d1d1f;
@@ -1776,8 +2003,9 @@
                 padding: 1rem;
             }
 
-            .overview-modules {
-                gap: 1rem;
+            .quick-actions-grid {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
             }
         }
 
@@ -1833,18 +2061,18 @@
     <div class="container">
         <nav class="sidebar" id="sidebar">
             <!-- Main Navigation -->
-            <button class="nav-item active" onclick="showSection('overview')">
+            <button class="nav-item active" onclick="showSection('home')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
                 </svg>
-                <span class="nav-label">Overview</span>
+                <span class="nav-label">Home</span>
             </button>
             <button class="nav-item" onclick="showSection('scans')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd" />
                 </svg>
-                <span class="nav-label">Scans</span>
+                <span class="nav-label">Scan</span>
             </button>
             <button class="nav-item" onclick="showSection('insights')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -1854,8 +2082,9 @@
             </button>
             <button class="nav-item" onclick="showSection('explore')">
                 <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd" />
+                    <path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z" />
+                    <path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z" />
+                    <path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z" />
                 </svg>
                 <span class="nav-label">Explore</span>
             </button>
@@ -1872,39 +2101,63 @@
         </nav>
 
         <main class="main-content">
-            <div id="overview-section">
-                <h2 style="margin-bottom: 1.5rem;">Overview</h2>
+            <div id="home-section">
+                <h1 class="entity-view-title" style="margin-bottom: 1.5rem;">Home</h1>
 
-                <div class="overview-modules">
-                    <div class="card">
-                        <h3>
-                            📈 System Status
-                        </h3>
-                        <div id="status-summary" class="loading">Loading status...</div>
+                <!-- Quick Actions Grid -->
+                <div class="quick-actions-grid">
+                    <button class="quick-action-card" onclick="showSection('scans')">
+                        <div class="quick-action-header">
+                            <svg class="quick-action-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd" />
+                            </svg>
+                            <div class="quick-action-title">Scan</div>
+                        </div>
+                        <div class="quick-action-description">Start and manage scans of your filesystem roots</div>
+                    </button>
+
+                    <button class="quick-action-card" onclick="showSection('insights')">
+                        <div class="quick-action-header">
+                            <svg class="quick-action-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z" />
+                            </svg>
+                            <div class="quick-action-title">Insights</div>
+                        </div>
+                        <div class="quick-action-description">View alerts, statistics, and insights about your filesystem and scans</div>
+                    </button>
+
+                    <button class="quick-action-card" onclick="showSection('explore')">
+                        <div class="quick-action-header">
+                            <svg class="quick-action-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z" />
+                                <path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z" />
+                                <path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z" />
+                            </svg>
+                            <div class="quick-action-title">Explore</div>
+                        </div>
+                        <div class="quick-action-description">Interactively explore your data and execute custom queries</div>
+                    </button>
+
+                    <a class="quick-action-card" href="https://gtunes-dev.github.io/fspulse/" target="_blank" rel="noopener noreferrer">
+                        <div class="quick-action-header">
+                            <svg class="quick-action-icon" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                            </svg>
+                            <div class="quick-action-title">Documentation</div>
+                        </div>
+                        <div class="quick-action-description">Read the user guide and API reference documentation</div>
+                    </a>
+                </div>
+
+                <!-- Scan Status Card -->
+                <div id="scan-status-card" class="card" style="margin-top: 1.5rem;">
+                    <div class="scan-status-header">
+                        <h3 id="scan-status-title">Loading...</h3>
+                        <a id="scan-status-link" href="#" class="scan-status-action" style="display: none;">View Details →</a>
                     </div>
-
-                    <div class="card">
-                        <h3>
-                            🚨 Active Alerts
-                            <a href="#" class="module-link" onclick="showSection('alerts')">View All →</a>
-                        </h3>
-                        <div id="alerts-summary" class="loading">Loading alerts...</div>
-                    </div>
-
-                    <div class="card">
-                        <h3>
-                            📊 Current Activity
-                            <a href="#" class="module-link" onclick="showSection('activity')">View All →</a>
-                        </h3>
-                        <div id="activity-summary" class="loading">Loading activity...</div>
-                    </div>
-
-                    <div class="card">
-                        <h3>
-                            📋 Recent Activity
-                            <a href="#" class="module-link" onclick="showSection('activity')">View All →</a>
-                        </h3>
-                        <div id="recent-activity" class="loading">Loading recent activity...</div>
+                    <div id="scan-status-content">
+                        <p style="color: #86868b;">Loading scan information...</p>
                     </div>
                 </div>
             </div>
@@ -2445,7 +2698,7 @@
 
             <!-- Settings Section -->
             <div id="settings-section" style="display: none;">
-                <h2>Settings</h2>
+                <h1 class="entity-view-title" style="margin-bottom: 1.5rem;">Settings</h1>
                 <p>System configuration and preferences...</p>
             </div>
         </main>
@@ -4205,9 +4458,11 @@
                 activeNavItem.classList.add('active');
             }
 
-            // Load data for scans section (special case - has no tabs)
+            // Load data for sections (special cases - no tabs)
             if (sectionName === 'scans') {
                 loadManageRootsData();
+            } else if (sectionName === 'home') {
+                loadHomeScanStats();
             }
 
             // Close sidebar on mobile
@@ -4498,13 +4753,358 @@
             console.log('Loading insights changes...');
         }
 
+        // Home page scan stats
+        // =============================================================================
+        // Home Scan Card State Manager
+        // =============================================================================
+        // Manages the Last Scan / Current Scan card on the Home page
+        // Subscribes to scan state changes and polls for live updates
+        //
+        class HomeScanCardManager {
+            constructor() {
+                this.currentScanId = null; // Scan ID we're currently displaying
+                this.pollIntervalId = null; // setInterval handle for polling
+                this.pendingRequest = null; // Track in-flight requests to handle race conditions
+                this.isInitialized = false;
+            }
+
+            // Initialize and subscribe to scan state changes
+            init() {
+                if (this.isInitialized) return;
+                this.isInitialized = true;
+
+                // Subscribe to scan manager state changes
+                scanManager.onStateChange((activeScanId, activeScans) => {
+                    this.handleScanStateChange(activeScanId, activeScans);
+                });
+
+                // Initial load
+                this.handleScanStateChange(scanManager.getActiveScanId(), scanManager.activeScans);
+            }
+
+            // Handle scan state changes from WebSocket
+            handleScanStateChange(activeScanId, activeScans) {
+                // Only update if we're on the home page
+                if (currentSection !== 'home') return;
+
+                console.log('[HomeScanCardManager] State change:', { activeScanId, hasActiveScans: activeScans.size > 0 });
+
+                if (activeScanId) {
+                    // Scan is active - show "Current Scan" view
+                    this.switchToCurrentScan(activeScanId, activeScans);
+                } else {
+                    // No active scan - show "Last Scan" view
+                    this.switchToLastScan();
+                }
+            }
+
+            // Switch to "Current Scan" view
+            switchToCurrentScan(scanId, activeScans) {
+                // Cancel any existing poll
+                this.stopPolling();
+
+                // Cancel any pending request
+                if (this.pendingRequest) {
+                    this.pendingRequest.cancelled = true;
+                    this.pendingRequest = null;
+                }
+
+                // Update tracked scan ID
+                this.currentScanId = scanId;
+
+                console.log('[HomeScanCardManager] Switching to Current Scan:', scanId);
+
+                // Immediately fetch current stats
+                this.loadCurrentScanStats(scanId);
+
+                // Start polling every 10 seconds
+                this.pollIntervalId = setInterval(() => {
+                    // Only poll if we're still showing this scan
+                    if (this.currentScanId === scanId && currentSection === 'home') {
+                        this.loadCurrentScanStats(scanId);
+                    }
+                }, 10000);
+            }
+
+            // Switch to "Last Scan" view
+            switchToLastScan() {
+                // Cancel polling
+                this.stopPolling();
+
+                // Cancel any pending request
+                if (this.pendingRequest) {
+                    this.pendingRequest.cancelled = true;
+                    this.pendingRequest = null;
+                }
+
+                this.currentScanId = null;
+
+                console.log('[HomeScanCardManager] Switching to Last Scan');
+
+                // Wait a moment for the database to settle after scan completion
+                setTimeout(() => {
+                    // Only load if we're still in "last scan" mode (no new scan started)
+                    if (this.currentScanId === null && currentSection === 'home') {
+                        loadHomeScanStats();
+                    }
+                }, 500);
+            }
+
+            // Stop polling
+            stopPolling() {
+                if (this.pollIntervalId) {
+                    clearInterval(this.pollIntervalId);
+                    this.pollIntervalId = null;
+                }
+            }
+
+            // Load stats for current (in-progress) scan
+            async loadCurrentScanStats(scanId) {
+                const titleEl = document.getElementById('scan-status-title');
+                const contentEl = document.getElementById('scan-status-content');
+                const linkEl = document.getElementById('scan-status-link');
+
+                // Create request tracker for race condition handling
+                const requestTracker = { cancelled: false };
+                this.pendingRequest = requestTracker;
+
+                try {
+                    const response = await fetch(`/api/home/scan-stats/${scanId}`);
+
+                    // Check if this request was cancelled (scan ended during fetch)
+                    if (requestTracker.cancelled) {
+                        console.log('[HomeScanCardManager] Request cancelled (scan ended)');
+                        return;
+                    }
+
+                    if (!response.ok) throw new Error('Failed to fetch current scan stats');
+
+                    const data = await response.json();
+
+                    // Check again after async operation
+                    if (requestTracker.cancelled) {
+                        console.log('[HomeScanCardManager] Request cancelled after response');
+                        return;
+                    }
+
+                    // Verify scan ID matches (race condition protection)
+                    if (data.scan_id !== this.currentScanId) {
+                        console.log('[HomeScanCardManager] Scan ID mismatch, ignoring stale data');
+                        return;
+                    }
+
+                    if (data.state === 'not_found') {
+                        console.log('[HomeScanCardManager] Scan not found, switching to last scan');
+                        this.switchToLastScan();
+                        return;
+                    }
+
+                    // Render "Current Scan" view
+                    titleEl.textContent = `Current Scan - ${data.root_path}`;
+                    linkEl.style.display = 'inline';
+                    linkEl.onclick = () => showSection('scans');
+
+                    // Format timestamp
+                    const scanDate = new Date(data.scan_time * 1000);
+                    const timeAgo = formatTimeAgo(scanDate);
+
+                    // Build content - Summary info
+                    let html = '<div class="scan-status-summary">';
+                    html += `<div><span style="color: #86868b;">Scan ID:</span> ${data.scan_id}</div>`;
+                    html += `<div><span style="color: #86868b;">Started:</span> ${timeAgo}</div>`;
+                    html += `<div><span style="color: #86868b;">Items:</span> ${data.total_files.toLocaleString()} files, ${data.total_folders.toLocaleString()} folders</div>`;
+                    html += `</div>`;
+
+                    // Status indicator for in-progress scan
+                    html += '<div class="scan-alerts-display" style="background: rgba(0,122,255,0.08); color: #007aff; border-color: rgba(0,122,255,0.15);">Scan in progress...</div>';
+
+                    // Changes table - always show even if all zeros
+                    html += '<div class="scan-changes-table-container">';
+                    html += '<table class="scan-changes-table">';
+                    html += '<thead><tr><th></th><th>Files</th><th>Folders</th></tr></thead>';
+                    html += '<tbody>';
+                    html += `<tr><td>Added</td><td>${data.files_added.toLocaleString()}</td><td>${data.folders_added.toLocaleString()}</td></tr>`;
+                    html += `<tr><td>Modified</td><td>${data.files_modified.toLocaleString()}</td><td>${data.folders_modified.toLocaleString()}</td></tr>`;
+                    html += `<tr><td>Deleted</td><td>${data.files_deleted.toLocaleString()}</td><td>${data.folders_deleted.toLocaleString()}</td></tr>`;
+                    html += '</tbody></table>';
+                    html += '</div>';
+
+                    // Analysis summary
+                    const analysisItems = [];
+                    if (data.hash_enabled) {
+                        analysisItems.push(`${data.items_hashed.toLocaleString()} hashed`);
+                    }
+                    if (data.validation_enabled) {
+                        analysisItems.push(`${data.items_validated.toLocaleString()} validated`);
+                    }
+                    analysisItems.push(`<span style="color: #86868b;">${data.alerts_generated.toLocaleString()} ${data.alerts_generated === 1 ? 'alert' : 'alerts'}</span>`);
+
+                    html += '<div class="scan-analysis-summary">';
+                    html += analysisItems.join(' • ');
+                    html += '</div>';
+
+                    contentEl.innerHTML = html;
+                } catch (error) {
+                    // Don't show error if request was cancelled
+                    if (requestTracker.cancelled) return;
+
+                    console.error('[HomeScanCardManager] Error loading current scan stats:', error);
+                    // On error, fall back to last scan view
+                    this.switchToLastScan();
+                }
+            }
+        }
+
+        // Create global instance
+        const homeScanCardManager = new HomeScanCardManager();
+
+        async function loadHomeScanStats() {
+            const titleEl = document.getElementById('scan-status-title');
+            const contentEl = document.getElementById('scan-status-content');
+            const linkEl = document.getElementById('scan-status-link');
+
+            try {
+                const response = await fetch('/api/home/last-scan-stats');
+                if (!response.ok) throw new Error('Failed to fetch scan stats');
+
+                const data = await response.json();
+                console.log('Scan stats data:', data);
+
+                if (data.state === 'no_scans') {
+                    titleEl.textContent = 'No Scans';
+                    contentEl.innerHTML = '<p style="color: #86868b;">No scans have been run yet. Go to the Scans page to start scanning your filesystem roots.</p>';
+                    linkEl.style.display = 'none';
+                    return;
+                }
+
+                // Check scan state
+                const wasStopped = data.scan_state === 'Stopped';
+                const isIncomplete = data.scan_state === 'Scanning'; // Not actively running, but incomplete
+
+                // Determine title and link behavior
+                if (isIncomplete) {
+                    titleEl.textContent = `Incomplete Scan - ${data.root_path}`;
+                    linkEl.style.display = 'inline';
+                    linkEl.onclick = () => showSection('scans');
+                } else {
+                    titleEl.textContent = `Last Scan - ${data.root_path}`;
+                    linkEl.style.display = 'inline';
+                    linkEl.onclick = () => showSection('explore');
+                }
+
+                // Format timestamp
+                const scanDate = new Date(data.scan_time * 1000);
+                const timeAgo = formatTimeAgo(scanDate);
+
+                let html = '';
+
+                if (wasStopped) {
+                    // Stopped scan - minimal display
+                    html += '<div class="scan-status-summary">';
+                    html += `<div><span style="color: #86868b;">Scan ID:</span> ${data.scan_id}</div>`;
+                    html += `<div><span style="color: #86868b;">Started:</span> ${timeAgo}</div>`;
+                    html += `</div>`;
+
+                    // Show stopped message instead of alerts
+                    html += '<div class="scan-alerts-display" style="background: rgba(255,149,0,0.08); color: #ff9500; border-color: rgba(255,149,0,0.15);">Scan was stopped - no changes recorded</div>';
+                } else if (isIncomplete) {
+                    // Incomplete/paused scan - show full summary
+                    html += '<div class="scan-status-summary">';
+                    html += `<div><span style="color: #86868b;">Scan ID:</span> ${data.scan_id}</div>`;
+                    html += `<div><span style="color: #86868b;">Started:</span> ${timeAgo}</div>`;
+                    html += `<div><span style="color: #86868b;">Items:</span> ${data.total_files.toLocaleString()} files, ${data.total_folders.toLocaleString()} folders</div>`;
+                    html += `</div>`;
+
+                    // Show incomplete message instead of alerts
+                    html += '<div class="scan-alerts-display" style="background: rgba(255,149,0,0.08); color: #ff9500; border-color: rgba(255,149,0,0.15);">Scan incomplete - resume or cancel on the Scans page</div>';
+
+                    // Changes table - show current progress
+                    html += '<div class="scan-changes-table-container">';
+                    html += '<table class="scan-changes-table">';
+                    html += '<thead><tr><th></th><th>Files</th><th>Folders</th></tr></thead>';
+                    html += '<tbody>';
+                    html += `<tr><td>Added</td><td>${data.files_added.toLocaleString()}</td><td>${data.folders_added.toLocaleString()}</td></tr>`;
+                    html += `<tr><td>Modified</td><td>${data.files_modified.toLocaleString()}</td><td>${data.folders_modified.toLocaleString()}</td></tr>`;
+                    html += `<tr><td>Deleted</td><td>${data.files_deleted.toLocaleString()}</td><td>${data.folders_deleted.toLocaleString()}</td></tr>`;
+                    html += '</tbody></table>';
+                    html += '</div>';
+
+                    // Analysis summary
+                    const analysisItemsIncomplete = [];
+                    if (data.hash_enabled) {
+                        analysisItemsIncomplete.push(`${data.items_hashed.toLocaleString()} hashed`);
+                    }
+                    if (data.validation_enabled) {
+                        analysisItemsIncomplete.push(`${data.items_validated.toLocaleString()} validated`);
+                    }
+                    if (data.alerts_generated > 0) {
+                        analysisItemsIncomplete.push(`${data.alerts_generated.toLocaleString()} ${data.alerts_generated === 1 ? 'alert' : 'alerts'}`);
+                    }
+
+                    if (analysisItemsIncomplete.length > 0) {
+                        html += '<div class="scan-analysis-summary">';
+                        html += analysisItemsIncomplete.join(' • ');
+                        html += '</div>';
+                    }
+                } else {
+                    // Completed scan - full display
+                    html += '<div class="scan-status-summary">';
+                    html += `<div><span style="color: #86868b;">Scan ID:</span> ${data.scan_id}</div>`;
+                    html += `<div><span style="color: #86868b;">Started:</span> ${timeAgo}</div>`;
+                    html += `<div><span style="color: #86868b;">Items:</span> ${data.total_files.toLocaleString()} files, ${data.total_folders.toLocaleString()} folders</div>`;
+                    html += `</div>`;
+
+                    // Alerts display - prominent section
+                    if (data.alerts_generated > 0) {
+                        const alertText = data.alerts_generated === 1 ? 'Alert Created' : 'Alerts Created';
+                        html += `<div class="scan-alerts-display has-alerts">${data.alerts_generated.toLocaleString()} ${alertText}</div>`;
+                    } else {
+                        html += `<div class="scan-alerts-display no-alerts">No alerts created</div>`;
+                    }
+
+                    // Changes table - always show even if all zeros
+                    html += '<div class="scan-changes-table-container">';
+                    html += '<table class="scan-changes-table">';
+                    html += '<thead><tr><th></th><th>Files</th><th>Folders</th></tr></thead>';
+                    html += '<tbody>';
+                    html += `<tr><td>Added</td><td>${data.files_added.toLocaleString()}</td><td>${data.folders_added.toLocaleString()}</td></tr>`;
+                    html += `<tr><td>Modified</td><td>${data.files_modified.toLocaleString()}</td><td>${data.folders_modified.toLocaleString()}</td></tr>`;
+                    html += `<tr><td>Deleted</td><td>${data.files_deleted.toLocaleString()}</td><td>${data.folders_deleted.toLocaleString()}</td></tr>`;
+                    html += '</tbody></table>';
+                    html += '</div>';
+
+                    // Analysis summary - show hash and validation stats
+                    const analysisItems = [];
+                    if (data.hash_enabled) {
+                        analysisItems.push(`${data.items_hashed.toLocaleString()} hashed`);
+                    }
+                    if (data.validation_enabled) {
+                        analysisItems.push(`${data.items_validated.toLocaleString()} validated`);
+                    }
+
+                    if (analysisItems.length > 0) {
+                        html += '<div class="scan-analysis-summary">';
+                        html += analysisItems.join(' • ');
+                        html += '</div>';
+                    }
+                }
+
+                contentEl.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading scan stats:', error);
+                titleEl.textContent = 'Error';
+                contentEl.innerHTML = '<p style="color: #ff3b30;">Failed to load scan information.</p>';
+                linkEl.style.display = 'none';
+            }
+        }
+
         // Track current section to avoid unnecessary reloads
-        let currentSection = 'overview';
+        let currentSection = 'home';
 
         // Handle hash-based routing
         function handleRouteChange() {
             const hash = window.location.hash;
-            let sectionName = 'overview';
+            let sectionName = 'home';
             let tabName = null;
 
             // Parse URL hash
@@ -4516,7 +5116,7 @@
 
             // Validate section exists
             if (!document.getElementById(sectionName + '-section')) {
-                sectionName = 'overview';
+                sectionName = 'home';
                 tabName = null;
             }
 
@@ -4847,6 +5447,10 @@
             views.roots.setupDragListeners();
             views.scans.setupDragListeners();
             views.changes.setupDragListeners();
+            // Load home page stats if we're on the home page
+            if (currentSection === 'home') {
+                homeScanCardManager.init();
+            }
             // No need to call handleRouteChange() again - already called above
         });
 

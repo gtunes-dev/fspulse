@@ -45,11 +45,13 @@ impl WebServer {
 
         let app = Router::new()
             // Static routes
-            .route("/", get(handlers::overview::dashboard))
+            .route("/", get(handlers::home::dashboard))
             .route("/health", get(health_check))
 
             // API routes
-            .route("/api/status", get(handlers::overview::api_status))
+            .route("/api/status", get(handlers::home::api_status))
+            .route("/api/home/last-scan-stats", get(handlers::home::get_last_scan_stats))
+            .route("/api/home/scan-stats/{scan_id}", get(handlers::home::get_scan_stats))
             .route("/api/alerts", get(handlers::alerts::list_alerts))
             .route("/api/alerts/{alert_id}/status", put(handlers::alerts::update_alert_status))
             .route("/api/activity", get(handlers::activity::recent_activity))

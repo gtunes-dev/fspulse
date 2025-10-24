@@ -1,4 +1,4 @@
-pub mod overview;
+pub mod home;
 pub mod alerts;
 pub mod activity;
 pub mod metadata;

@@ -619,6 +619,127 @@ impl Scan {
     }
 }
 
+/// Statistics for a completed or in-progress scan
+#[derive(Debug, Clone)]
+pub struct ScanStats {
+    pub scan_id: i64,
+    pub root_id: i64,
+    pub root_path: String,
+    pub state: ScanState,
+    pub scan_time: i64,
+
+    // Total counts from scans table
+    pub total_files: i64,
+    pub total_folders: i64,
+
+    // Change breakdown by type (files)
+    pub files_added: i64,
+    pub files_modified: i64,
+    pub files_deleted: i64,
+
+    // Change breakdown by type (folders)
+    pub folders_added: i64,
+    pub folders_modified: i64,
+    pub folders_deleted: i64,
+
+    // Analysis statistics
+    pub items_hashed: i64,
+    pub items_validated: i64,
+    pub alerts_generated: i64,
+
+    // Scan configuration
+    pub hash_enabled: bool,
+    pub validation_enabled: bool,
+}
+
+impl ScanStats {
+    /// Get statistics for a specific scan ID
+    pub fn get_for_scan(db: &Database, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
+        // Use existing function to get scan
+        let scan = match Scan::get_by_id_or_latest(db, Some(scan_id), None)? {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        // Use existing function to get root path
+        let root = crate::roots::Root::get_by_id(db, scan.root_id())?
+            .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", scan.root_id())))?;
+
+        let conn = db.conn();
+
+        // Get change statistics broken down by file vs folder
+        let changes: (i64, i64, i64, i64, i64, i64) = conn.query_row(
+            "SELECT
+                SUM(CASE WHEN c.change_type = 'A' AND i.item_type = 'F' THEN 1 ELSE 0 END) as files_added,
+                SUM(CASE WHEN c.change_type = 'M' AND i.item_type = 'F' THEN 1 ELSE 0 END) as files_modified,
+                SUM(CASE WHEN c.change_type = 'D' AND i.item_type = 'F' THEN 1 ELSE 0 END) as files_deleted,
+                SUM(CASE WHEN c.change_type = 'A' AND i.item_type = 'D' THEN 1 ELSE 0 END) as folders_added,
+                SUM(CASE WHEN c.change_type = 'M' AND i.item_type = 'D' THEN 1 ELSE 0 END) as folders_modified,
+                SUM(CASE WHEN c.change_type = 'D' AND i.item_type = 'D' THEN 1 ELSE 0 END) as folders_deleted
+             FROM changes c
+             JOIN items i ON c.item_id = i.item_id
+             WHERE c.scan_id = ?",
+            params![scan_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
+        ).unwrap_or((0, 0, 0, 0, 0, 0));
+
+        // Get hashing statistics
+        let items_hashed: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM items
+             WHERE last_scan = ? AND hash IS NOT NULL",
+            params![scan_id],
+            |row| row.get(0)
+        ).unwrap_or(0);
+
+        // Get validation statistics
+        let items_validated: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM items
+             WHERE last_scan = ? AND (val IS NOT NULL OR val_error IS NOT NULL)",
+            params![scan_id],
+            |row| row.get(0)
+        ).unwrap_or(0);
+
+        // Get alert count
+        let alerts_generated: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM alerts WHERE scan_id = ?",
+            params![scan_id],
+            |row| row.get(0)
+        ).unwrap_or(0);
+
+        Ok(Some(ScanStats {
+            scan_id: scan.scan_id(),
+            root_id: scan.root_id(),
+            root_path: root.root_path().to_string(),
+            state: scan.state(),
+            scan_time: scan.scan_time(),
+            total_files: scan.file_count().unwrap_or(0),
+            total_folders: scan.folder_count().unwrap_or(0),
+            files_added: changes.0,
+            files_modified: changes.1,
+            files_deleted: changes.2,
+            folders_added: changes.3,
+            folders_modified: changes.4,
+            folders_deleted: changes.5,
+            items_hashed,
+            items_validated,
+            alerts_generated,
+            hash_enabled: scan.analysis_spec().is_hash(),
+            validation_enabled: scan.analysis_spec().is_val(),
+        }))
+    }
+
+    /// Get statistics for the most recent scan across all roots
+    pub fn get_latest(db: &Database) -> Result<Option<Self>, FsPulseError> {
+        // Use existing function with None to get latest scan
+        let scan = match Scan::get_by_id_or_latest(db, None, None)? {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        Self::get_for_scan(db, scan.scan_id())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
