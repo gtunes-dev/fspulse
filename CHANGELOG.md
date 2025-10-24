@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.1.3] - 2025-10-24
+
 ### Changed
 
 - Update dependencies to latest minor versions: console 0.16, dialoguer 0.12, flexi_logger 0.31, indicatif 0.18, phf 0.13, rusqlite 0.37, tabled 0.20, tokio 1.48, toml 0.9
 - Fix tabled API compatibility: `Columns::single()` → `Columns::one()`
 - **CI/CD modernization**: Restructured GitHub workflows following industry best practices - reusable test workflow eliminates duplication, cargo caching reduces build times, artifact retention policies reduce storage costs, and sequential release job eliminates race conditions
 - **macOS Apple Silicon support**: Release artifacts now include native ARM64 builds for Apple Silicon Macs (M1/M2/M3/M4/M5) alongside Intel builds
+- **Enhanced release.sh script**: Added comprehensive safety checks - branch validation, working tree verification, remote sync check, tag existence check, atomic push with rollback, and cross-platform compatibility
 
 ## [v0.1.2] - 2025-10-23
 
