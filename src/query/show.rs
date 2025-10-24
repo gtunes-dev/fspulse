@@ -214,7 +214,7 @@ impl Show {
 
     pub fn set_column_aligments(&self, table: &mut Table) {
         for (col_index, col) in self.display_cols.iter().enumerate() {
-            table.modify(Columns::single(col_index), col.alignment);
+            table.modify(Columns::one(col_index), col.alignment);
         }
     }
     pub fn add_all_columns(&mut self) {
