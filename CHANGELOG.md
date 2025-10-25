@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.1.4] - 2025-10-25
+
 ### Added
 
 - **Error tracking for scans**: Database schema v5 adds error field to scans table with automatic migration from v4
