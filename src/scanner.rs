@@ -77,7 +77,7 @@ impl Scanner {
             Some(existing_scan) => {
                 match Scanner::stop_or_resume_scan(db, &root, existing_scan, true)? {
                     ScanDecision::NewScan => Scanner::initiate_scan_interactive(db, &root)?,
-                    ScanDecision::ContinueExisting => *existing_scan,
+                    ScanDecision::ContinueExisting => existing_scan.clone(),
                     ScanDecision::Exit => return Ok(()),
                 }
             }
@@ -86,7 +86,16 @@ impl Scanner {
 
         // CLI mode doesn't support cancellation - use a dummy token that's always false
         let cancel_token = Arc::new(AtomicBool::new(false));
-        Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token)
+
+        // Wrap scan execution with error handling
+        match Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                // Stop scan with error message
+                Scan::stop_scan(db, &scan, Some(&e.to_string()))?;
+                Err(e)
+            }
+        }
     }
 
     fn initiate_scan_interactive(db: &mut Database, root: &Root) -> Result<Scan, FsPulseError> {
@@ -209,7 +218,7 @@ impl Scanner {
                         reporter
                             .println("Resuming scan")
                             .map_err(|e| FsPulseError::Error(e.to_string()))?;
-                        *existing_scan
+                        existing_scan.clone()
                     }
                     ScanDecision::Exit => return Ok(()),
                 }
@@ -219,9 +228,16 @@ impl Scanner {
 
         // CLI mode doesn't support cancellation - use a dummy token that's always false
         let cancel_token = Arc::new(AtomicBool::new(false));
-        Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token)?;
 
-        Reports::report_scan(db, &scan)
+        // Wrap scan execution with error handling
+        match Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token) {
+            Ok(()) => Reports::report_scan(db, &scan),
+            Err(e) => {
+                // Stop scan with error message
+                Scan::stop_scan(db, &scan, Some(&e.to_string()))?;
+                Err(e)
+            }
+        }
     }
 
     pub fn do_scan_machine(
@@ -576,7 +592,7 @@ impl Scanner {
             // Clone shared resources for each worker thread.
             let receiver = receiver.clone();
             let db = Arc::clone(&db);
-            let scan_copy = *scan;
+            let scan_copy = scan.clone();
             let reporter_clone = reporter.clone_reporter();
             let cancel_token_clone = Arc::clone(cancel_token);
 
@@ -604,7 +620,7 @@ impl Scanner {
                 while let Ok(analysis_item) = receiver.recv() {
                     Scanner::process_item_async(
                         &db,
-                        scan_copy,
+                        &scan_copy,
                         analysis_item,
                         analysis_prog,
                         thread_prog,
@@ -673,7 +689,7 @@ impl Scanner {
     #[allow(clippy::too_many_arguments)]
     fn process_item_async(
         db: &Arc<Mutex<Database>>,
-        scan: Scan,
+        scan: &Scan,
         analysis_item: AnalysisItem,
         analysis_prog_id: ProgressId,
         thread_prog_id: ProgressId,
@@ -778,7 +794,7 @@ impl Scanner {
 
         if let Err(error) = Scanner::update_item_analysis(
             db,
-            &scan,
+            scan,
             &analysis_item,
             new_hash,
             new_val,

@@ -522,6 +522,7 @@ impl ScansQuery {
                 "scan_time" => Format::format_date(scan.scan_time, col.format)?,
                 "file_count" => Format::format_opt_i64(scan.file_count),
                 "folder_count" => Format::format_opt_i64(scan.folder_count),
+                "error" => Format::format_opt_string(&scan.error),
                 "adds" => Format::format_i64(scan.adds),
                 "modifies" => Format::format_i64(scan.modifies),
                 "deletes" => Format::format_i64(scan.deletes),
@@ -810,6 +811,7 @@ pub struct ScansQueryRow {
     scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
+    error: Option<String>,
     adds: i64,
     modifies: i64,
     deletes: i64,
@@ -828,9 +830,10 @@ impl ScansQueryRow {
             scan_time: row.get(7)?,
             file_count: row.get(8)?,
             folder_count: row.get(9)?,
-            adds: row.get(10)?,
-            modifies: row.get(11)?,
-            deletes: row.get(12)?,
+            error: row.get(10)?,
+            adds: row.get(11)?,
+            modifies: row.get(12)?,
+            deletes: row.get(13)?,
         })
     }
 }

@@ -62,6 +62,7 @@ pub async fn get_last_scan_stats() -> Result<Json<Value>, StatusCode> {
             "alerts_generated": stats.alerts_generated,
             "hash_enabled": stats.hash_enabled,
             "validation_enabled": stats.validation_enabled,
+            "error": stats.error,
         }))),
         Ok(None) => Ok(Json(json!({
             "state": "no_scans"
@@ -100,6 +101,7 @@ pub async fn get_scan_stats(Path(scan_id): Path<i64>) -> Result<Json<Value>, Sta
             "alerts_generated": stats.alerts_generated,
             "hash_enabled": stats.hash_enabled,
             "validation_enabled": stats.validation_enabled,
+            "error": stats.error,
         }))),
         Ok(None) => Ok(Json(json!({
             "state": "not_found"

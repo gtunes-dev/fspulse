@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '4');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '5');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (root_path);
 CREATE TABLE IF NOT EXISTS scans (
     scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,          -- Links scan to a root path
-    state INTEGER NOT NULL,            -- The state of the scan (0 = Pending, 1 = Scanning, 2 = Sweeping, 3 = Analyzing, 4 = Completed, 5 = Stopped)
+    state INTEGER NOT NULL,            -- The state of the scan (0 = Pending, 1 = Scanning, 2 = Sweeping, 3 = Analyzing, 4 = Completed, 5 = Stopped, 6 = Error)
     is_hash BOOLEAN NOT NULL,     -- Hash new or changed files
     hash_all BOOLEAN NOT NULL,       -- Hash all items including unchanged and previously hashed
     is_val BOOLEAN NOT NULL,      -- Validate the contents of files
@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS scans (
     scan_time INTEGER NOT NULL,        -- Timestamp of when scan was performed (UTC)
     file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
     folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
+    error TEXT DEFAULT NULL,           -- Error message if scan failed
     FOREIGN KEY (root_id) REFERENCES roots(root_id)
 );
 
@@ -158,6 +159,25 @@ CREATE TABLE alerts (
 
 -- Update schema version
 UPDATE meta SET value = '4' WHERE key = 'schema_version';
+
+COMMIT;
+"#;
+
+pub const UPGRADE_4_TO_5_SQL: &str = r#"
+--
+-- Schema Upgrade: Version 4 → 5
+--
+-- This migration adds error tracking to the scans table
+BEGIN TRANSACTION;
+
+-- Verify schema version is exactly 4
+SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '4' THEN 1 ELSE 0 END);
+
+-- Add error column to scans table
+ALTER TABLE scans ADD COLUMN error TEXT DEFAULT NULL;
+
+-- Update schema version
+UPDATE meta SET value = '5' WHERE key = 'schema_version';
 
 COMMIT;
 "#;

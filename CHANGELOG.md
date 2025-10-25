@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Error tracking for scans**: Database schema v5 adds error field to scans table with automatic migration from v4
+- **Error state**: New scan state for failed scans, distinct from Stopped state for user-cancelled scans
+- **Error handling**: Failed scans now rollback database changes and store error messages, visible in CLI reports, Web UI scan cards, Home page stats, and query results
+
+### Changed
+
+- **Web UI Scans page redesign**: New layout with scan action buttons, schedule placeholders, and improved table styling
+
 ## [v0.1.3] - 2025-10-24
 
 ### Changed

@@ -43,6 +43,7 @@ pub struct ScanInfo {
     pub scan_time_display: String,
     pub file_count: Option<i64>,
     pub folder_count: Option<i64>,
+    pub error: Option<String>,
 }
 
 /// POST /api/roots
@@ -210,6 +211,7 @@ pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCo
                 scan_time_display: Utils::format_date_display(scan.scan_time()),
                 file_count: scan.file_count(),
                 folder_count: scan.folder_count(),
+                error: scan.error().map(|s| s.to_string()),
             }),
             Ok(None) => None,
             Err(e) => {

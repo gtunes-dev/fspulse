@@ -154,6 +154,14 @@
             background: rgba(0,122,255,0.05);
         }
 
+        .scan-header-progress.scan-header-error {
+            background: transparent;
+        }
+
+        .scan-header-progress.scan-header-error .scan-header-bar-fill {
+            background: #ff3b30;
+        }
+
         .scan-header-content {
             display: flex;
             flex-direction: column;
@@ -677,7 +685,8 @@
             line-height: 1.4;
         }
 
-        .scan-changes-table-container {
+        .scan-changes-table-container,
+        .roots-table-container {
             border: 1px solid rgba(0,0,0,0.06);
             border-radius: 8px;
             overflow: hidden;
@@ -862,7 +871,7 @@
         }
 
         .data-table {
-            width: auto;
+            width: 100%;
             border-collapse: collapse;
             margin: 0;
         }
@@ -1582,10 +1591,6 @@
             cursor: default;
         }
 
-        .root-entry-row:hover {
-            background: rgba(0,0,0,0.02);
-        }
-
         .root-entry-cell {
             padding: 16px !important;
             display: flex;
@@ -1658,6 +1663,13 @@
             border: 1px solid rgba(255,59,48,0.2);
         }
 
+        .scan-status-error {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid rgba(220,38,38,0.3);
+            font-weight: 600;
+        }
+
         .scan-status-unknown {
             background: #f5f5f7;
             color: #86868b;
@@ -1675,10 +1687,168 @@
             gap: 4px;
         }
 
-        .root-action-placeholder {
-            width: 100px;
+        .root-scan-error {
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: #fef2f2;
+            border-left: 3px solid #dc2626;
+            border-radius: 4px;
+            color: #991b1b;
+            font-size: 0.8125rem;
+            line-height: 1.4;
+        }
+
+        .root-entry-cell {
+            padding: 16px !important;
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+        }
+
+        .root-actions {
             flex-shrink: 0;
-            /* Reserved for future action button */
+            display: flex;
+            align-items: center;
+        }
+
+        .root-separator {
+            width: 1px;
+            background: #d2d2d7;
+            margin-left: 20px;
+            margin-right: 20px;
+            align-self: stretch;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .root-separator::before {
+            content: '';
+            position: absolute;
+            top: 20%;
+            bottom: 20%;
+            left: 0;
+            right: 0;
+            background: #d2d2d7;
+        }
+
+        .root-scan-btn {
+            padding: 6px 16px;
+            background: #007aff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+            min-width: 80px;
+        }
+
+        .root-scan-btn:hover:not(:disabled) {
+            background: #0051d5;
+        }
+
+        .root-scan-btn:disabled {
+            background: #d1d1d6;
+            cursor: not-allowed;
+        }
+
+        .root-entry-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .root-main-line {
+            display: flex;
+            align-items: baseline;
+            gap: 16px;
+            margin-bottom: 0;
+        }
+
+        .root-path {
+            font-weight: 500;
+            color: #1d1d1f;
+            flex-shrink: 0;
+        }
+
+        .root-last-scan {
+            color: #86868b;
+            font-size: 0.875rem;
+        }
+
+        .root-status-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: -6px;
+        }
+
+        .root-status-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        .root-status-badge-error {
+            background: #ff3b30;
+            color: white;
+        }
+
+        .root-status-badge-warning {
+            background: #ff9500;
+            color: white;
+        }
+
+        .root-status-message {
+            color: #1d1d1f;
+            font-size: 0.875rem;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+        }
+
+        .root-schedule-line {
+            color: #86868b;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .root-schedule-icon {
+            padding: 6px;
+            background: #f5f5f7;
+            border: 1px solid #d2d2d7;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s;
+            color: #1d1d1f;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .root-schedule-icon:hover {
+            background: #d1d1d6;
+            border-color: #a1a1a6;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transform: translateY(-1px);
+        }
+
+        .root-schedule-icon:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+        }
+
+        .root-schedule-icon svg {
+            width: 14px;
+            height: 14px;
         }
 
         .filter-modal-footer {
@@ -1821,6 +1991,18 @@
             font-size: 0.9375rem;
             color: #1d1d1f;
             margin-top: 8px;
+        }
+
+        .scan-error-message {
+            margin-top: 12px;
+            padding: 12px;
+            background: #fef2f2;
+            border-left: 3px solid #ff3b30;
+            border-radius: 6px;
+            color: #991b1b;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
         }
 
         .scan-details-toggle {
@@ -2335,23 +2517,25 @@
                 </div>
 
                 <div class="card">
-                    <table class="data-table">
-                        <tbody id="manage-roots-table-body">
-                            <tr>
-                                <td style="text-align: center; color: #86868b; padding: 2rem;">
-                                    Loading roots...
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="roots-table-container">
+                        <table class="data-table">
+                            <tbody id="manage-roots-table-body">
+                                <tr>
+                                    <td style="text-align: center; color: #86868b; padding: 2rem;">
+                                        Loading roots...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
 
-                    <div class="pagination">
-                        <div class="pagination-info" id="manage-roots-pagination-info">
-                            Showing 0 - 0 of 0 roots
-                        </div>
-                        <div class="pagination-controls">
-                            <button class="pagination-btn" id="manage-roots-prev-btn" onclick="changeManageRootsPage(-1)">Previous</button>
-                            <button class="pagination-btn" id="manage-roots-next-btn" onclick="changeManageRootsPage(1)">Next</button>
+                        <div class="pagination">
+                            <div class="pagination-info" id="manage-roots-pagination-info">
+                                Showing 0 - 0 of 0 roots
+                            </div>
+                            <div class="pagination-controls">
+                                <button class="pagination-btn" id="manage-roots-prev-btn" onclick="changeManageRootsPage(-1)">Previous</button>
+                                <button class="pagination-btn" id="manage-roots-next-btn" onclick="changeManageRootsPage(1)">Next</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2813,57 +2997,52 @@
         </div>
     </div>
 
-    <!-- Start New Scan Modal -->
-    <div class="filter-modal-overlay" id="start-scan-modal-overlay" onclick="closeStartScanModal()">
+    <!-- Scan Options Modal -->
+    <div class="filter-modal-overlay" id="scan-options-modal-overlay" onclick="closeScanOptionsModal()">
         <div class="filter-modal" onclick="event.stopPropagation()">
             <div class="filter-modal-header">
-                <h2 class="filter-modal-title">Choose Root to Scan</h2>
+                <h2 class="filter-modal-title">Scan Options</h2>
             </div>
             <div class="filter-modal-body">
-                <select id="scan-root-select" class="filter-input" style="font-family: inherit; margin-bottom: 20px;" onchange="handleRootSelection()">
-                    <option value="">Loading roots...</option>
-                </select>
-
-                <!-- Scan Options (always shown) -->
-                <div id="scan-options">
-                    <div style="margin-bottom: 16px;">
-                        <label style="font-size: 0.875rem; font-weight: 600; color: #1d1d1f; display: block; margin-bottom: 8px;">Hash:</label>
-                        <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
-                            <input type="radio" name="hash-mode" value="None" style="margin-right: 6px;">
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size: 0.875rem; font-weight: 600; color: #1d1d1f; display: block; margin-bottom: 12px;">Hash:</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="scan-hash-mode" value="None" style="margin-right: 8px;">
                             <span style="font-size: 0.875rem;">None</span>
                         </label>
-                        <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
-                            <input type="radio" name="hash-mode" value="New" style="margin-right: 6px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="scan-hash-mode" value="New" style="margin-right: 8px;">
                             <span style="font-size: 0.875rem;">New or Changed</span>
                         </label>
-                        <label style="display: inline-flex; align-items: center; cursor: pointer;">
-                            <input type="radio" name="hash-mode" value="All" checked style="margin-right: 6px;">
-                            <span style="font-size: 0.875rem;">All</span>
-                        </label>
-                    </div>
-
-                    <div>
-                        <label style="font-size: 0.875rem; font-weight: 600; color: #1d1d1f; display: block; margin-bottom: 8px;">Validate:</label>
-                        <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
-                            <input type="radio" name="validate-mode" value="None" style="margin-right: 6px;">
-                            <span style="font-size: 0.875rem;">None</span>
-                        </label>
-                        <label style="display: inline-flex; align-items: center; margin-right: 16px; cursor: pointer;">
-                            <input type="radio" name="validate-mode" value="New" checked style="margin-right: 6px;">
-                            <span style="font-size: 0.875rem;">New or Changed</span>
-                        </label>
-                        <label style="display: inline-flex; align-items: center; cursor: pointer;">
-                            <input type="radio" name="validate-mode" value="All" style="margin-right: 6px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="scan-hash-mode" value="All" checked style="margin-right: 8px;">
                             <span style="font-size: 0.875rem;">All</span>
                         </label>
                     </div>
                 </div>
 
-                <p class="filter-error" id="scan-error">Error message</p>
+                <div>
+                    <label style="font-size: 0.875rem; font-weight: 600; color: #1d1d1f; display: block; margin-bottom: 12px;">Validate:</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="scan-validate-mode" value="None" style="margin-right: 8px;">
+                            <span style="font-size: 0.875rem;">None</span>
+                        </label>
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="scan-validate-mode" value="New" checked style="margin-right: 8px;">
+                            <span style="font-size: 0.875rem;">New or Changed</span>
+                        </label>
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="scan-validate-mode" value="All" style="margin-right: 8px;">
+                            <span style="font-size: 0.875rem;">All</span>
+                        </label>
+                    </div>
+                </div>
             </div>
             <div class="filter-modal-footer">
-                <button class="modal-btn" onclick="closeStartScanModal()">Cancel</button>
-                <button class="modal-btn primary" id="scan-action-btn" onclick="startScan()">Start Scan</button>
+                <button class="modal-btn" onclick="closeScanOptionsModal()">Cancel</button>
+                <button class="modal-btn primary" id="scan-options-start-btn" onclick="confirmScanOptions()">Start Scan</button>
             </div>
         </div>
     </div>
@@ -2920,14 +3099,43 @@
 
             header.style.display = 'block';
 
-            // Update status and path
-            document.getElementById('scan-header-status').textContent = data.status;
-            document.getElementById('scan-header-path').textContent = data.root_path;
-            document.getElementById('scan-header-phase').textContent = data.phase;
+            // Apply error styling if needed
+            if (data.isError) {
+                header.classList.add('scan-header-error');
+            } else {
+                header.classList.remove('scan-header-error');
+            }
 
-            // Phase-based display (matching large progress view)
-            if (data.scanPhase === 3) {
+            // Update line 1: status and path
+            if (data.isError) {
+                // For errors: show root path only on line 1
+                document.getElementById('scan-header-status').textContent = '';
+                document.getElementById('scan-header-path').textContent = data.root_path;
+            } else {
+                // Normal: show "Scanning" / "Completed" : {path}
+                document.getElementById('scan-header-status').textContent = data.status;
+                document.getElementById('scan-header-path').textContent = data.root_path;
+            }
+
+            // Update line 2: phase/items/progress
+            if (data.isError) {
+                // Error state: show "Error: {message}" in red on line 2
+                const phaseEl = document.getElementById('scan-header-phase');
+                phaseEl.textContent = `Error: ${data.errorMessage}`;
+                phaseEl.style.color = '#ff3b30';
+                phaseEl.style.fontFamily = "'SF Mono', Monaco, 'Courier New', monospace";
+
+                // Hide other line 2 elements
+                document.getElementById('scan-header-items').textContent = '';
+                document.getElementById('scan-header-bar-fill').style.width = '0%';
+                document.getElementById('scan-header-percentage').textContent = '';
+            } else if (data.scanPhase === 3) {
                 // Analysis phase: show X/Y files and percentage
+                const phaseEl = document.getElementById('scan-header-phase');
+                phaseEl.textContent = data.phase;
+                phaseEl.style.color = '';
+                phaseEl.style.fontFamily = '';
+
                 const itemsText = `${data.current.toLocaleString()} / ${data.total.toLocaleString()} files`;
                 document.getElementById('scan-header-items').textContent = itemsText;
 
@@ -2936,6 +3144,11 @@
                 document.getElementById('scan-header-percentage').textContent = percentage + '%';
             } else {
                 // Scanning/Tombstoning: show file counts, not percentage
+                const phaseEl = document.getElementById('scan-header-phase');
+                phaseEl.textContent = data.phase;
+                phaseEl.style.color = '';
+                phaseEl.style.fontFamily = '';
+
                 const itemsText = `${data.files.toLocaleString()} files in ${data.directories.toLocaleString()} directories`;
                 document.getElementById('scan-header-items').textContent = itemsText;
 
@@ -3163,9 +3376,8 @@
 
                 if (this.activeScans.size === 0) {
                     container.innerHTML = `
-                        <div class="no-scans-state">
-                            <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: #333;">No Active Scan</h3>
-                            <button class="start-scan-btn" onclick="showStartScanModal()">+ Start New Scan</button>
+                        <div class="card" style="padding: 2rem; color: #86868b;">
+                            <h3 style="margin: 0; font-size: 1.125rem; font-weight: 500; letter-spacing: 0.01em; text-align: center; display: block;">No Active Scan</h3>
                         </div>
                     `;
                 } else {
@@ -3203,6 +3415,7 @@
                         <button id="stop-btn-${scanId}" class="scan-stop-btn" style="display: none;">Stop</button>
                     </div>
                     <div id="breadcrumbs-${scanId}"></div>
+                    <div id="error-message-${scanId}" class="scan-error-message" style="display: none;"></div>
                     <div class="scan-progress-section">
                         <div class="scan-progress-label">
                             <span id="phase-label-${scanId}"></span>
@@ -3279,6 +3492,15 @@
                 const statsContainer = document.getElementById(`stats-${scanId}`);
                 statsContainer.textContent = displayData.itemsText;
                 statsContainer.style.color = scan.phase === 1 ? '#007aff' : '';
+
+                // Show/hide error message
+                const errorMessageContainer = document.getElementById(`error-message-${scanId}`);
+                if (displayData.status === 'error' && scan.errorMessage) {
+                    errorMessageContainer.textContent = scan.errorMessage;
+                    errorMessageContainer.style.display = 'block';
+                } else {
+                    errorMessageContainer.style.display = 'none';
+                }
 
                 // Update Stop button visibility and state
                 const stopButton = document.getElementById(`stop-btn-${scanId}`);
@@ -3621,7 +3843,10 @@
                             this.completedScans.add(state.scan_id);
 
                             console.error('Scan error:', state.status.message);
-                            alert(`Scan error: ${state.status.message}`);
+                            // Error is displayed in header and scan card - no system modal
+                            // Store error message in scan data for display
+                            state.errorMessage = state.status.message;
+
                             // Remove scan on error after delay
                             setTimeout(() => {
                                 this.activeScans.delete(state.scan_id);
@@ -3657,7 +3882,8 @@
                         files: displayData.files,
                         directories: displayData.directories,
                         current: displayData.current,
-                        total: displayData.total
+                        total: displayData.total,
+                        isError: false
                     };
 
                     updateHeaderProgress(headerData);
@@ -3671,14 +3897,32 @@
                             scanPhase: 3,
                             percentage: 100,
                             files: this.scanningCounts.files || 0,
-                            directories: this.scanningCounts.directories || 0
+                            directories: this.scanningCounts.directories || 0,
+                            isError: false
                         };
                         updateHeaderProgress(completionData);
                         // Note: hideHeaderProgress() will be called when scan is removed from activeScans
                     }
-                } else if (statusValue === 'stopped' || statusValue === 'error') {
-                    // These will be hidden when scan is removed from activeScans
-                    // No need to hide here
+                } else if (statusValue === 'error') {
+                    // Show error state in header - use line 2 for error message
+                    if (!this.completedScans.has(state.scan_id)) {
+                        const errorMessage = state.status.message || 'Unknown error';
+                        const errorData = {
+                            status: '',  // Empty - we'll show it differently
+                            root_path: this.shortenPath(state.root_path || '', 50),
+                            phase: '', // Will be replaced with error in updateHeaderProgress
+                            scanPhase: 0, // Special phase for error
+                            percentage: 0,
+                            files: 0,
+                            directories: 0,
+                            isError: true,
+                            errorMessage: errorMessage
+                        };
+                        updateHeaderProgress(errorData);
+                        // Note: hideHeaderProgress() will be called when scan is removed from activeScans
+                    }
+                } else if (statusValue === 'stopped') {
+                    // Stopped will be hidden when scan is removed from activeScans
                 } else {
                     // No active scan or unknown state - hide
                     hideHeaderProgress();
@@ -3753,154 +3997,6 @@
         // Global scan manager instance
         const scanManager = new ScanManager();
 
-        // Store scan status data globally
-        let scanStatusData = null;
-
-        // Start New Scan Modal Functions
-        async function showStartScanModal() {
-            const modal = document.getElementById('start-scan-modal-overlay');
-            const select = document.getElementById('scan-root-select');
-            const error = document.getElementById('scan-error');
-
-            error.classList.remove('visible');
-
-            // Load scan status (includes roots and incomplete scan info)
-            try {
-                const response = await fetch('/api/scans/status');
-                scanStatusData = await response.json();
-
-                if (scanStatusData.roots && scanStatusData.roots.length > 0) {
-                    // Populate dropdown with roots (no "Select a root..." option)
-                    select.innerHTML = scanStatusData.roots.map(root => {
-                        const label = root.has_incomplete_scan
-                            ? `${root.root_path} (Resume)`
-                            : root.root_path;
-                        return `<option value="${root.root_id}">${label}</option>`;
-                    }).join('');
-
-                    // Trigger selection handler for first root
-                    handleRootSelection();
-                } else {
-                    select.innerHTML = '<option value="">No roots available</option>';
-                }
-            } catch (err) {
-                console.error('Failed to load scan status:', err);
-                select.innerHTML = '<option value="">Error loading roots</option>';
-            }
-
-            modal.classList.add('active');
-        }
-
-        function handleRootSelection() {
-            const select = document.getElementById('scan-root-select');
-            const rootId = parseInt(select.value);
-
-            if (!rootId || !scanStatusData) return;
-
-            const root = scanStatusData.roots.find(r => r.root_id === rootId);
-            if (!root) return;
-
-            const actionBtn = document.getElementById('scan-action-btn');
-
-            // Get all radio inputs
-            const hashRadios = document.querySelectorAll('input[name="hash-mode"]');
-            const validateRadios = document.querySelectorAll('input[name="validate-mode"]');
-
-            if (root.has_incomplete_scan) {
-                // Resume mode: Set values from existing scan and make read-only
-                actionBtn.textContent = 'Resume Scan';
-
-                // Set radio values to match existing scan
-                hashRadios.forEach(radio => {
-                    radio.checked = radio.value === root.scan_options.hash_mode;
-                    radio.disabled = true;
-                    radio.parentElement.style.opacity = '0.6';
-                    radio.parentElement.style.cursor = 'not-allowed';
-                });
-
-                validateRadios.forEach(radio => {
-                    radio.checked = radio.value === root.scan_options.validate_mode;
-                    radio.disabled = true;
-                    radio.parentElement.style.opacity = '0.6';
-                    radio.parentElement.style.cursor = 'not-allowed';
-                });
-            } else {
-                // New scan mode: Enable editing with defaults
-                actionBtn.textContent = 'Start Scan';
-
-                // Reset to defaults and enable
-                hashRadios.forEach(radio => {
-                    radio.checked = radio.value === 'All'; // Default to All
-                    radio.disabled = false;
-                    radio.parentElement.style.opacity = '1';
-                    radio.parentElement.style.cursor = 'pointer';
-                });
-
-                validateRadios.forEach(radio => {
-                    radio.checked = radio.value === 'New'; // Default to New
-                    radio.disabled = false;
-                    radio.parentElement.style.opacity = '1';
-                    radio.parentElement.style.cursor = 'pointer';
-                });
-            }
-        }
-
-        function closeStartScanModal() {
-            const modal = document.getElementById('start-scan-modal-overlay');
-            modal.classList.remove('active');
-        }
-
-        async function startScan() {
-            const select = document.getElementById('scan-root-select');
-            const rootId = parseInt(select.value);
-            const root = scanStatusData.roots.find(r => r.root_id === rootId);
-            const error = document.getElementById('scan-error');
-
-            error.classList.remove('visible');
-
-            // Determine scan options
-            let hashMode, validateMode;
-            if (root.has_incomplete_scan) {
-                // Use existing scan options
-                hashMode = root.scan_options.hash_mode;
-                validateMode = root.scan_options.validate_mode;
-            } else {
-                // Use user-selected options
-                hashMode = document.querySelector('input[name="hash-mode"]:checked').value;
-                validateMode = document.querySelector('input[name="validate-mode"]:checked').value;
-            }
-
-            try {
-                // Call the API to start/resume the scan
-                const response = await fetch('/api/scans/start', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        root_id: rootId,
-                        hash_mode: hashMode,
-                        validate_mode: validateMode
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Failed to start scan: ${response.statusText}`);
-                }
-
-                const data = await response.json();
-                const scanId = data.scan_id;
-
-                // Connect to WebSocket for real-time progress
-                scanManager.connectScanWebSocket(scanId, root.root_path);
-
-                closeStartScanModal();
-            } catch (err) {
-                console.error('Failed to start scan:', err);
-                error.textContent = `Failed to start scan: ${err.message}`;
-                error.classList.add('visible');
-            }
-        }
 
         // =============================================================================
         // DataTableView - Unified implementation for Roots, Scans, and Items
@@ -4979,10 +5075,15 @@
 
                 // Check scan state
                 const wasStopped = data.scan_state === 'Stopped';
+                const wasError = data.scan_state === 'Error';
                 const isIncomplete = data.scan_state === 'Scanning'; // Not actively running, but incomplete
 
                 // Determine title and link behavior
-                if (isIncomplete) {
+                if (wasError) {
+                    titleEl.textContent = `Failed Scan - ${data.root_path}`;
+                    linkEl.style.display = 'inline';
+                    linkEl.onclick = () => showSection('scans');
+                } else if (isIncomplete) {
                     titleEl.textContent = `Incomplete Scan - ${data.root_path}`;
                     linkEl.style.display = 'inline';
                     linkEl.onclick = () => showSection('scans');
@@ -4998,7 +5099,17 @@
 
                 let html = '';
 
-                if (wasStopped) {
+                if (wasError) {
+                    // Error scan - show error message prominently
+                    html += '<div class="scan-status-summary">';
+                    html += `<div><span style="color: #86868b;">Scan ID:</span> ${data.scan_id}</div>`;
+                    html += `<div><span style="color: #86868b;">Started:</span> ${timeAgo}</div>`;
+                    html += `</div>`;
+
+                    // Show error message
+                    const errorMessage = data.error || 'Unknown error occurred';
+                    html += `<div class="scan-alerts-display" style="background: rgba(255,59,48,0.08); color: #ff3b30; border-color: rgba(255,59,48,0.15); font-family: 'SF Mono', Monaco, 'Courier New', monospace;">Error: ${errorMessage}</div>`;
+                } else if (wasStopped) {
                     // Stopped scan - minimal display
                     html += '<div class="scan-status-summary">';
                     html += `<div><span style="color: #86868b;">Scan ID:</span> ${data.scan_id}</div>`;
@@ -5143,19 +5254,21 @@
         let manageRootsCachedData = []; // Cache roots data for re-rendering
         let manageRootsPreviousScanId = null; // Track previous active scan ID
 
-        // Subscribe to scan state changes to update the Manage Roots display
+        // Subscribe to scan state changes to update the Roots table
         scanManager.onStateChange((activeScanId, activeScans) => {
-            // Only update if we're currently on the Manage Roots page and have data
-            const manageRootsSection = document.getElementById('manage-roots-section');
-            if (manageRootsSection && manageRootsSection.style.display !== 'none') {
+            // Only update if we're currently on the Scans page and have data
+            const scansSection = document.getElementById('scans-section');
+            if (scansSection && scansSection.style.display !== 'none') {
                 // Detect if a scan just completed (previous scan ID existed, now it's null)
                 const scanJustCompleted = manageRootsPreviousScanId !== null && activeScanId === null;
 
                 if (scanJustCompleted) {
                     // Reload data from server to get updated scan states
+                    console.log('Scan completed, reloading roots data');
                     loadManageRootsData();
                 } else if (manageRootsCachedData.length > 0) {
                     // Just re-render with cached data (scan is still active or just started)
+                    console.log('Scan state changed, re-rendering table');
                     renderManageRootsTable(manageRootsCachedData);
                 }
 
@@ -5207,6 +5320,116 @@
             return date.toLocaleDateString();
         }
 
+        // Store the root ID for the current scan being configured
+        let pendingScanRootId = null;
+
+        // Handle scan button click for each root
+        async function handleRootScanClick(rootId, isIncomplete) {
+            if (isIncomplete) {
+                // Resume: directly start scan with existing options
+                await resumeScan(rootId);
+            } else {
+                // New scan: show modal with options
+                showScanOptionsModal(rootId);
+            }
+        }
+
+        // Placeholder for schedule button (coming soon)
+        function handleScheduleClick(rootId) {
+            console.log('Schedule click for root', rootId);
+            // Future: open schedule modal
+        }
+
+        // Show scan options modal
+        function showScanOptionsModal(rootId) {
+            pendingScanRootId = rootId;
+
+            // Reset options to defaults
+            document.querySelectorAll('input[name="scan-hash-mode"]').forEach(radio => {
+                radio.checked = radio.value === 'All';
+            });
+            document.querySelectorAll('input[name="scan-validate-mode"]').forEach(radio => {
+                radio.checked = radio.value === 'New';
+            });
+
+            const modal = document.getElementById('scan-options-modal-overlay');
+            modal.classList.add('active');
+        }
+
+        // Close scan options modal
+        function closeScanOptionsModal() {
+            const modal = document.getElementById('scan-options-modal-overlay');
+            modal.classList.remove('active');
+            pendingScanRootId = null;
+        }
+
+        // Confirm scan options and start scan
+        async function confirmScanOptions() {
+            if (!pendingScanRootId) {
+                console.error('No pending scan root ID');
+                return;
+            }
+
+            const hashMode = document.querySelector('input[name="scan-hash-mode"]:checked')?.value || 'All';
+            const validateMode = document.querySelector('input[name="scan-validate-mode"]:checked')?.value || 'New';
+
+            console.log('Starting scan for root', pendingScanRootId, 'with hash:', hashMode, 'validate:', validateMode);
+
+            const rootId = pendingScanRootId;
+            closeScanOptionsModal();
+            await initiateScan(rootId, hashMode, validateMode);
+        }
+
+        // Resume an incomplete scan
+        async function resumeScan(rootId) {
+            // For resume, the backend will use existing scan options, so we can pass any values
+            // The backend ignores the hash_mode and validate_mode for incomplete scans
+            await initiateScan(rootId, 'All', 'New');
+        }
+
+        // Common function to initiate scan (new or resume)
+        async function initiateScan(rootId, hashMode, validateMode) {
+            try {
+                // Find the root in cached data to get the root path
+                const root = manageRootsCachedData.find(r => r.root_id === rootId);
+                if (!root) {
+                    console.error('Root not found:', rootId);
+                    return;
+                }
+
+                // Call the API to start/resume the scan
+                const response = await fetch('/api/scans/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        root_id: rootId,
+                        hash_mode: hashMode,
+                        validate_mode: validateMode
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Failed to start scan: ${response.statusText} - ${errorText}`);
+                }
+
+                const data = await response.json();
+                const scanId = data.scan_id;
+
+                // Connect to WebSocket for real-time progress
+                scanManager.connectScanWebSocket(scanId, root.root_path);
+
+                // Re-render the table to update button states (all should be disabled now)
+                renderManageRootsTable(manageRootsCachedData);
+
+            } catch (err) {
+                console.error('Failed to initiate scan:', err);
+                alert(`Failed to start scan: ${err.message}`);
+            }
+        }
+
         function renderManageRootsTable(roots) {
             const tbody = document.getElementById('manage-roots-table-body');
 
@@ -5223,73 +5446,99 @@
 
             // Get active scan ID from ScanManager
             const activeScanId = scanManager.getActiveScanId();
+            const hasActiveScan = activeScanId !== null;
 
             tbody.innerHTML = roots.map(root => {
                 const scanInfo = root.last_scan;
-                let scanHtml = '';
+                const rootId = root.root_id;
+
+                let isIncomplete = false;
+                let buttonText = 'Scan';
+                let buttonDisabled = hasActiveScan;
+                let lastScanText = '';
+                let statusLineHtml = '';
+                let isThisScanning = false;
 
                 if (scanInfo) {
-                    // Determine display state and class
-                    let displayState = scanInfo.state;
-                    let stateClass = `scan-status-${scanInfo.state.toLowerCase()}`;
-
-                    // Non-terminal states are: Pending, Scanning, Sweeping, Analyzing
                     const nonTerminalStates = ['Pending', 'Scanning', 'Sweeping', 'Analyzing'];
-                    const isNonTerminal = nonTerminalStates.includes(scanInfo.state);
+                    isIncomplete = nonTerminalStates.includes(scanInfo.state);
+                    isThisScanning = activeScanId && activeScanId === scanInfo.scan_id;
 
-                    if (isNonTerminal) {
-                        // Check if this scan is currently active
-                        if (activeScanId && activeScanId === scanInfo.scan_id) {
-                            displayState = 'Scanning';
-                            stateClass = 'scan-status-scanning';
-                        } else {
-                            displayState = 'Incomplete';
-                            stateClass = 'scan-status-incomplete';
-                        }
+                    // Determine button text
+                    if (isIncomplete && !isThisScanning) {
+                        buttonText = 'Resume';
                     }
 
-                    const timestamp = scanInfo.scan_time_display;
+                    // Last scan text (always show for scans that exist)
+                    lastScanText = `Last Scan: ${scanInfo.scan_time_display}`;
 
-                    let counts = '';
-                    if (scanInfo.file_count !== null || scanInfo.folder_count !== null) {
-                        const filePart = scanInfo.file_count !== null ?
-                            `${scanInfo.file_count.toLocaleString()} file${scanInfo.file_count !== 1 ? 's' : ''}` : '';
-                        const folderPart = scanInfo.folder_count !== null ?
-                            `${scanInfo.folder_count.toLocaleString()} folder${scanInfo.folder_count !== 1 ? 's' : ''}` : '';
-
-                        if (filePart && folderPart) {
-                            counts = `<span class="root-scan-meta">${filePart}, ${folderPart}</span>`;
-                        } else if (filePart) {
-                            counts = `<span class="root-scan-meta">${filePart}</span>`;
-                        } else if (folderPart) {
-                            counts = `<span class="root-scan-meta">${folderPart}</span>`;
-                        }
+                    // Status line for Error, Stopped, or Incomplete (only if not currently scanning)
+                    if (scanInfo.state === 'Error') {
+                        const escapedError = scanInfo.error
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#039;');
+                        statusLineHtml = `
+                            <div class="root-status-line">
+                                <span class="root-status-badge root-status-badge-error">Error</span>
+                                <span class="root-status-message">${escapedError}</span>
+                            </div>
+                        `;
+                    } else if (scanInfo.state === 'Stopped' && !isThisScanning) {
+                        statusLineHtml = `
+                            <div class="root-status-line">
+                                <span class="root-status-badge root-status-badge-warning">Stopped</span>
+                                <span class="root-status-message">Stopped by user</span>
+                            </div>
+                        `;
+                    } else if (isIncomplete && !isThisScanning) {
+                        statusLineHtml = `
+                            <div class="root-status-line">
+                                <span class="root-status-badge root-status-badge-warning">Incomplete</span>
+                                <span class="root-status-message">This scan did not complete and can be resumed</span>
+                            </div>
+                        `;
                     }
-
-                    scanHtml = `
-                        <div class="root-scan-info">
-                            <span class="root-scan-badge ${stateClass}">${displayState}</span>
-                            <span class="root-scan-meta">${timestamp}</span>
-                            ${counts}
-                        </div>
-                    `;
-                } else {
-                    scanHtml = `
-                        <div class="root-scan-info">
-                            <span class="root-never-scanned">Never scanned</span>
-                        </div>
-                    `;
                 }
 
+                // Schedule line with inline icon (placeholder for future feature)
+                const scheduleLineHtml = `
+                    <div class="root-schedule-line">
+                        <button
+                            class="root-schedule-icon"
+                            title="Schedule scan (coming soon)"
+                            onclick="handleScheduleClick(${rootId})">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
+                            </svg>
+                        </button>
+                        <span>No scheduled scans</span>
+                    </div>
+                `;
+
                 return `
-                    <tr class="root-entry-row">
+                    <tr class="root-entry-row" data-root-id="${rootId}">
                         <td class="root-entry-cell">
-                            <div class="root-entry-content">
-                                <div class="root-path">${root.root_path}</div>
-                                ${scanHtml}
+                            <div class="root-actions">
+                                <button
+                                    class="root-scan-btn"
+                                    data-root-id="${rootId}"
+                                    data-is-incomplete="${isIncomplete}"
+                                    ${buttonDisabled ? 'disabled' : ''}
+                                    onclick="handleRootScanClick(${rootId}, ${isIncomplete})">
+                                    ${buttonText}
+                                </button>
                             </div>
-                            <div class="root-action-placeholder">
-                                <!-- Reserved for future action button -->
+                            <div class="root-separator"></div>
+                            <div class="root-entry-content">
+                                <div class="root-main-line">
+                                    <span class="root-path">${root.root_path}</span>
+                                    ${lastScanText ? `<span class="root-last-scan">${lastScanText}</span>` : ''}
+                                </div>
+                                ${statusLineHtml}
+                                ${scheduleLineHtml}
                             </div>
                         </td>
                     </tr>

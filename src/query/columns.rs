@@ -170,6 +170,7 @@ pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {
     "scan_time" => ColSpec::new("scan_time", "Scan Time", true, true, ColType::Date, ColAlign::Center),
     "file_count" => ColSpec::new("file_count", "Files", true, true, ColType::Int, ColAlign::Right),
     "folder_count" => ColSpec::new("folder_count", "Folders", true, true, ColType::Int, ColAlign::Right),
+    "error" => ColSpec::new("error", "Error", false, true, ColType::String, ColAlign::Left),
     "adds" => ColSpec::new("adds", "Adds", true, false, ColType::Int, ColAlign::Right),
     "modifies" => ColSpec::new("modifies", "Modifies", true, false, ColType::Int, ColAlign::Right),
     "deletes" => ColSpec::new("deletes", "Deletes", true, false, ColType::Int, ColAlign::Right),

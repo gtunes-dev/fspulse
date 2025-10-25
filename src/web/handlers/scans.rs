@@ -57,7 +57,9 @@ pub async fn get_scans_status() -> Result<Json<ScansStatusResponse>, StatusCode>
         // Check for incomplete scan
         let incomplete_scan = match Scan::get_latest_for_root(&db, root.root_id()) {
             Ok(Some(scan))
-                if scan.state() != ScanState::Completed && scan.state() != ScanState::Stopped =>
+                if scan.state() != ScanState::Completed
+                    && scan.state() != ScanState::Stopped
+                    && scan.state() != ScanState::Error =>
             {
                 Some(scan)
             }
@@ -163,7 +165,9 @@ pub async fn initiate_scan(
             error!("Failed to check for existing scan: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?
-        .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
+        .filter(|s| s.state() != ScanState::Completed
+            && s.state() != ScanState::Stopped
+            && s.state() != ScanState::Error);
 
     // Determine the scan to use
     let scan = if let Some(existing_scan) = existing_scan {
@@ -243,7 +247,7 @@ pub async fn initiate_scan(
                 web_reporter.mark_completed();
             }
             Err(ref e) if matches!(e, crate::error::FsPulseError::ScanCancelled) => {
-                // Scan was cancelled - call set_state_stopped to rollback
+                // Scan was cancelled - call set_state_stopped to rollback (state=Stopped, no error message)
                 log::info!("Scan {} was cancelled, rolling back changes", scan_id);
                 let _ = reporter.println("Scan cancelled, rolling back changes...");
                 if let Err(stop_err) = scan_copy.set_state_stopped(&mut db) {
@@ -256,9 +260,19 @@ pub async fn initiate_scan(
                 }
             }
             Err(e) => {
+                // Scan failed with error - rollback and mark as Error with message
                 error!("Scan {} failed: {}", scan_id, e);
-                let _ = reporter.println(&format!("Scan error: {}", e));
-                web_reporter.mark_error(format!("Scan error: {}", e));
+                let error_msg = e.to_string();
+                let _ = reporter.println(&format!("Scan error: {}", error_msg));
+
+                // Call stop_scan to rollback and store error (state=Error, error message stored)
+                if let Err(stop_err) = Scan::stop_scan(&mut db, &scan_copy, Some(&error_msg)) {
+                    error!("Failed to stop scan {} after error: {}", scan_id, stop_err);
+                    let _ = reporter.println(&format!("Error stopping scan: {}", stop_err));
+                    web_reporter.mark_error(format!("Scan error: {}; Failed to stop: {}", error_msg, stop_err));
+                } else {
+                    web_reporter.mark_error(error_msg);
+                }
             }
         }
 

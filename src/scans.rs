@@ -7,12 +7,12 @@ use rusqlite::{params, OptionalExtension, Result};
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count
+    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count
+    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -80,7 +80,7 @@ impl AnalysisSpec {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Scan {
     // Schema fields
     scan_id: i64,
@@ -91,6 +91,7 @@ pub struct Scan {
     scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
+    error: Option<String>,
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -103,6 +104,7 @@ pub enum ScanState {
     Analyzing = 3,
     Completed = 4,
     Stopped = 5,
+    Error = 6,
     Unknown = -1,
 }
 
@@ -115,6 +117,7 @@ impl ScanState {
             3 => ScanState::Analyzing,
             4 => ScanState::Completed,
             5 => ScanState::Stopped,
+            6 => ScanState::Error,
             _ => ScanState::Unknown, // Handle unknown states
         }
     }
@@ -133,6 +136,7 @@ impl fmt::Display for ScanState {
             ScanState::Analyzing => "Analyzing",
             ScanState::Completed => "Completed",
             ScanState::Stopped => "Stopped",
+            ScanState::Error => "Error",
             ScanState::Unknown => "Unknown",
         };
         write!(f, "{name}")
@@ -157,6 +161,7 @@ impl Scan {
             scan_time,
             file_count: None,
             folder_count: None,
+            error: None,
         }
     }
 
@@ -249,6 +254,7 @@ impl Scan {
                     scan_time: row.get(7)?,
                     file_count: row.get(8)?,
                     folder_count: row.get(9)?,
+                    error: row.get(10)?,
                 })
             })
             .optional()?;
@@ -274,6 +280,10 @@ impl Scan {
 
     pub fn scan_time(&self) -> i64 {
         self.scan_time
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
     }
 
     pub fn file_count(&self) -> Option<i64> {
@@ -344,7 +354,7 @@ impl Scan {
     pub fn set_state_stopped(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
-                Scan::stop_scan(db, self)?;
+                Scan::stop_scan(db, self, None)?;
                 self.state = ScanState::Stopped.as_i64();
                 Ok(())
             }
@@ -376,7 +386,7 @@ impl Scan {
         Ok(())
     }
 
-    pub fn stop_scan(db: &mut Database, scan: &Scan) -> Result<(), FsPulseError> {
+    pub fn stop_scan(db: &mut Database, scan: &Scan, error_message: Option<&str>) -> Result<(), FsPulseError> {
         let tx = db.conn_mut().transaction()?;
 
         // Find the id of the last scan on this root to not be stopped
@@ -505,12 +515,12 @@ impl Scan {
             [scan.scan_id()],
         )?;
 
-        // Mark the scan as stopped
+        // Mark the scan as stopped (state=5) or error (state=6)
+        let final_state = if error_message.is_some() { 6 } else { 5 };
+
         tx.execute(
-            "UPDATE scans
-                SET state = 5
-                WHERE scan_id = ?1",
-            [scan.scan_id()],
+            "UPDATE scans SET state = ?, error = ? WHERE scan_id = ?",
+            params![final_state, error_message, scan.scan_id()],
         )?;
 
         // Find the items that had their last_scan updated but where no change
@@ -596,7 +606,7 @@ impl Scan {
             };
 
             Ok(Scan {
-                
+
                 scan_id: row.get::<_, i64>(0)?, // scan id
                 root_id: row.get::<_, i64>(1)?, // root id
                 state: row.get::<_, i64>(2)?,   // root id
@@ -607,6 +617,7 @@ impl Scan {
                 scan_time: row.get::<_, i64>(7)?, // time of scan
                 file_count: row.get::<_, Option<i64>>(8)?, // file count
                 folder_count: row.get::<_, Option<i64>>(9)?, // folder count
+                error: row.get::<_, Option<String>>(10)?, // error
             })
         })?;
 
@@ -650,6 +661,9 @@ pub struct ScanStats {
     // Scan configuration
     pub hash_enabled: bool,
     pub validation_enabled: bool,
+
+    // Error information
+    pub error: Option<String>,
 }
 
 impl ScanStats {
@@ -725,6 +739,7 @@ impl ScanStats {
             alerts_generated,
             hash_enabled: scan.analysis_spec().is_hash(),
             validation_enabled: scan.analysis_spec().is_val(),
+            error: scan.error().map(|s| s.to_string()),
         }))
     }
 
