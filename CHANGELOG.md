@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Web UI Scan page fit and finish**: Improved layout and spacing of Roots card header with repositioned "Add Root" button
+
 ## [v0.1.4] - 2025-10-25
 
 ### Added

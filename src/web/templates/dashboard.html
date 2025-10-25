@@ -2506,17 +2506,16 @@
                 </div>
 
                 <!-- Roots Section -->
-                <div class="entity-view-header" style="margin-top: 2rem;">
-                    <h2 style="font-size: 1.25rem; font-weight: 600; color: #1d1d1f;">Roots</h2>
-                    <button class="primary-action-btn" onclick="showAddRootModal()">
-                        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 6px;">
-                            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
-                        </svg>
-                        Add Root
-                    </button>
-                </div>
-
-                <div class="card">
+                <div class="card" style="margin-top: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h2 style="font-size: 1.1rem; font-weight: 600; color: #1d1d1f; margin: 0;">Roots</h2>
+                        <button class="primary-action-btn" onclick="showAddRootModal()">
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" style="margin-right: 6px;">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                            </svg>
+                            Add Root
+                        </button>
+                    </div>
                     <div class="roots-table-container">
                         <table class="data-table">
                             <tbody id="manage-roots-table-body">

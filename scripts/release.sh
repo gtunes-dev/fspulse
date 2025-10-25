@@ -120,4 +120,4 @@ echo "✅ GitHub Actions should now build and publish the release."
 echo "📦 Monitor the build at: https://github.com/gtunes-dev/fspulse/actions"
 echo
 echo "When the build completes and you've verified the release, publish to crates.io:"
-echo "   cargo publish"
+echo "   cargo publish --token <your-token>"
