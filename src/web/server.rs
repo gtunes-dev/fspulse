@@ -58,6 +58,7 @@ impl WebServer {
             .route("/api/metadata/{domain}", get(handlers::metadata::get_metadata))
             .route("/api/query/execute", post(handlers::query::execute_raw_query))
             .route("/api/query/{domain}", post(handlers::query::execute_query))
+            .route("/api/validate-filter", post(handlers::query::validate_filter))
             .route("/api/scans/status", get(handlers::scans::get_scans_status))
             .route("/api/scans/start", post(handlers::scans::initiate_scan))
             .route("/api/scans/current", get(handlers::scans::get_current_scan))

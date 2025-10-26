@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::database::Database;
 use crate::error::FsPulseError;
+use crate::query::columns::{ALERTS_QUERY_COLS, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS};
 use crate::query::QueryProcessor;
 
 /// Request structure for query endpoint
@@ -233,6 +234,58 @@ fn build_query_string(domain: &str, req: &QueryRequest) -> Result<String, FsPuls
     }
 
     Ok(query)
+}
+
+/// Request structure for filter validation
+#[derive(Debug, Deserialize)]
+pub struct ValidateFilterRequest {
+    pub domain: String,
+    pub column: String,
+    pub value: String,
+}
+
+/// Response structure for filter validation
+#[derive(Debug, Serialize)]
+pub struct ValidateFilterResponse {
+    pub valid: bool,
+    pub error: Option<String>,
+}
+
+/// POST /api/validate-filter
+/// Validates a filter value for a given column in a domain
+pub async fn validate_filter(
+    Json(req): Json<ValidateFilterRequest>,
+) -> Result<Json<ValidateFilterResponse>, StatusCode> {
+    // Get the column map for the domain
+    let col_map = match req.domain.as_str() {
+        "alerts" => &ALERTS_QUERY_COLS,
+        "items" => &ITEMS_QUERY_COLS,
+        "changes" => &CHANGES_QUERY_COLS,
+        "scans" => &SCANS_QUERY_COLS,
+        "roots" => &ROOTS_QUERY_COLS,
+        _ => return Err(StatusCode::NOT_FOUND),
+    };
+
+    // Look up the column spec to get the filter rule
+    let col_spec = col_map.get(&req.column);
+    if col_spec.is_none() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let col_spec = col_spec.unwrap();
+    let col_type_info = col_spec.col_type.info();
+
+    // Validate the filter using the same logic as the TUI
+    match QueryProcessor::validate_filter(col_type_info.rule, &req.value) {
+        Some(error_msg) => Ok(Json(ValidateFilterResponse {
+            valid: false,
+            error: Some(error_msg),
+        })),
+        None => Ok(Json(ValidateFilterResponse {
+            valid: true,
+            error: None,
+        })),
+    }
 }
 
 #[cfg(test)]

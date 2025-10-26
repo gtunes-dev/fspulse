@@ -3,3 +3,9 @@
 .vscode/
 .DS_Store
 /docs/book/
+
+# Frontend
+/frontend/node_modules
+/frontend/dist
+/frontend/dist-ssr
+/frontend/.vite
