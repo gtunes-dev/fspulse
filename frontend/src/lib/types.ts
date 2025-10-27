@@ -83,3 +83,105 @@ export interface ValidateFilterResponse {
   valid: boolean
   error?: string
 }
+
+// Scan Manager Types
+
+export type ScanStatus = 'running' | 'cancelling' | 'stopped' | 'completed' | 'error'
+
+export interface ScanProgress {
+  current: number
+  total: number
+  percentage: number
+}
+
+export interface ThreadState {
+  thread_index: number
+  status: 'idle' | 'active'
+  current_file: string | null
+}
+
+export interface ThreadOperation {
+  type: 'idle' | 'hashing' | 'validating'
+  file?: string
+}
+
+export interface ThreadStateRaw {
+  thread_index: number
+  operation: ThreadOperation
+}
+
+export interface ScanPhaseInfo {
+  name: 'scanning' | 'sweeping' | 'analyzing'
+}
+
+export interface ScanningProgress {
+  files_scanned: number
+  directories_scanned: number
+}
+
+export interface OverallProgress {
+  completed: number
+  total: number
+  percentage: number
+}
+
+export interface ScanStatusInfo {
+  status: ScanStatus
+  message?: string
+}
+
+export interface ScanState {
+  scan_id: number
+  root_path: string
+  current_phase?: ScanPhaseInfo
+  completed_phases?: string[]
+  scanning_progress?: ScanningProgress
+  overall_progress?: OverallProgress
+  thread_states?: ThreadStateRaw[]
+  status?: ScanStatusInfo
+  error?: string
+}
+
+export interface ScanData {
+  scan_id: number
+  root_path: string
+  phase: number // 1=scanning, 2=sweeping, 3=analyzing
+  progress: ScanProgress
+  threads: ThreadState[]
+  status?: ScanStatusInfo
+  error_message?: string
+  completed_phases?: string[] // Breadcrumbs for completed phases
+  scanning_counts?: { files: number; directories: number } // File/directory counts for phase 1
+}
+
+export interface CurrentScanInfo {
+  scan_id: number
+  root_path: string
+  scan_time: string
+}
+
+// Root with Scan Info (for Scan page)
+export interface LastScanInfo {
+  scan_id: number
+  state: string // 'Pending' | 'Scanning' | 'Sweeping' | 'Analyzing' | 'Completed' | 'Error' | 'Stopped'
+  scan_time: string
+  scan_time_display: string
+  error?: string
+}
+
+export interface RootWithScan {
+  root_id: number
+  root_path: string
+  last_scan?: LastScanInfo
+}
+
+// Scan initiation
+export interface InitiateScanRequest {
+  root_id: number
+  hash_mode: 'All' | 'New' | 'None'
+  validate_mode: 'All' | 'New' | 'None'
+}
+
+export interface InitiateScanResponse {
+  scan_id: number
+}

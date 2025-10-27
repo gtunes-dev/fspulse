@@ -1,8 +1,7 @@
 import * as React from "react"
-import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
+import { MoreHorizontal } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { ButtonProps, buttonVariants } from "@/components/ui/button"
 
 const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
   <nav
@@ -34,80 +33,17 @@ const PaginationItem = React.forwardRef<
 ))
 PaginationItem.displayName = "PaginationItem"
 
-type PaginationLinkProps = {
-  isActive?: boolean
-} & Pick<ButtonProps, "size"> &
-  (
-    | (React.ComponentProps<"a"> & { href: string })
-    | (React.ComponentProps<"button"> & { href?: never })
-  )
-
-const PaginationLink = ({
-  className,
-  isActive,
-  size = "icon",
-  ...props
-}: PaginationLinkProps) => {
-  const classes = cn(
-    buttonVariants({
-      variant: isActive ? "outline" : "ghost",
-      size,
-    }),
-    className
-  )
-
-  if (props.href) {
-    return (
-      <a
-        aria-current={isActive ? "page" : undefined}
-        className={classes}
-        {...(props as React.ComponentProps<"a">)}
-      />
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      aria-current={isActive ? "page" : undefined}
-      className={classes}
-      {...(props as React.ComponentProps<"button">)}
-    />
-  )
-}
+const PaginationLink = ({ className, ...props }: React.ComponentProps<"a">) => (
+  <a
+    aria-current={props["aria-current"]}
+    className={cn(
+      "inline-flex items-center justify-center gap-1 px-3 py-1 text-sm",
+      className
+    )}
+    {...props}
+  />
+)
 PaginationLink.displayName = "PaginationLink"
-
-const PaginationPrevious = ({
-  className,
-  ...props
-}: Omit<PaginationLinkProps, "isActive">) => (
-  <PaginationLink
-    aria-label="Go to previous page"
-    size="default"
-    className={cn("gap-1 pl-2.5", className)}
-    {...props}
-  >
-    <ChevronLeft className="h-4 w-4" />
-    <span>Previous</span>
-  </PaginationLink>
-)
-PaginationPrevious.displayName = "PaginationPrevious"
-
-const PaginationNext = ({
-  className,
-  ...props
-}: Omit<PaginationLinkProps, "isActive">) => (
-  <PaginationLink
-    aria-label="Go to next page"
-    size="default"
-    className={cn("gap-1 pr-2.5", className)}
-    {...props}
-  >
-    <span>Next</span>
-    <ChevronRight className="h-4 w-4" />
-  </PaginationLink>
-)
-PaginationNext.displayName = "PaginationNext"
 
 const PaginationEllipsis = ({
   className,
@@ -124,12 +60,14 @@ const PaginationEllipsis = ({
 )
 PaginationEllipsis.displayName = "PaginationEllipsis"
 
+// NOTE: PaginationPrevious and PaginationNext have been removed due to TypeScript
+// issues with React Router. We use custom pagination buttons in DataExplorerView
+// and RootsTable instead. See migration doc for details.
+
 export {
   Pagination,
   PaginationContent,
   PaginationEllipsis,
   PaginationItem,
   PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
 }

@@ -5,13 +5,18 @@ import type { MetadataResponse, QueryRequest, QueryResponse, ValidateFilterReque
 const API_BASE = '/api'
 
 class ApiError extends Error {
+  status?: number
+  statusText?: string
+
   constructor(
     message: string,
-    public status?: number,
-    public statusText?: string
+    status?: number,
+    statusText?: string
   ) {
     super(message)
     this.name = 'ApiError'
+    this.status = status
+    this.statusText = statusText
   }
 }
 

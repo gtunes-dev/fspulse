@@ -7,7 +7,7 @@ export function Sidebar() {
 
   const mainNavItems = [
     { icon: Home, label: 'Home', to: '/' },
-    { icon: FolderSearch, label: 'Scans', to: '/scans' },
+    { icon: FolderSearch, label: 'Scan', to: '/scan' },
     { icon: Lightbulb, label: 'Insights', to: '/insights' },
     { icon: Database, label: 'Explore', to: '/explore' },
   ]
