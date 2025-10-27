@@ -708,9 +708,9 @@ impl Explorer {
         let (query_str, columns) = self.build_query_and_columns()?;
 
         match QueryProcessor::execute_query(db, &query_str, false) {
-            Ok((rows, _column_headers)) => {
-                // Note: We use columns from build_query_and_columns, not _column_headers
-                // because TUI needs full column metadata, not just display names
+            Ok((rows, _column_headers, _alignments)) => {
+                // Note: We use columns from build_query_and_columns, not _column_headers or _alignments
+                // because TUI needs full column metadata, not just display names and alignments
                 self.grid_frame
                     .set_data(self.query_resets_selection, columns, rows);
                 //self.error_message = None;

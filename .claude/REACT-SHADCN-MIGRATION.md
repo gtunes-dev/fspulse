@@ -1,8 +1,8 @@
 # FsPulse React + shadcn/ui Migration
 
 **Created**: 2025-10-26
-**Last Updated**: 2025-10-26 (Evening Session)
-**Status**: In Progress - All Explore Tabs Implemented
+**Last Updated**: 2025-10-26 (Late Evening Session)
+**Status**: Complete - All Explore Tabs Implemented
 **Branch**: feature/react-shadcn-migration
 
 ## Executive Summary
@@ -120,9 +120,9 @@ frontend/
 - **Features**:
   - Tabbed interface using shadcn/ui Tabs component
   - 6 tabs: Roots, Scans, Items, Changes, Alerts, Query
-  - **All data tabs (Roots, Scans, Items, Changes, Alerts) fully functional**
-  - Query tab remains placeholder (different implementation strategy)
-  - All tabs use generic DataExplorerView component
+  - **ALL TABS FULLY FUNCTIONAL** ✅
+  - Data tabs (Roots, Scans, Items, Changes, Alerts) use generic DataExplorerView component
+  - Query tab uses custom QueryView component for raw FsPulse query execution
 
 #### 6. **Generic Data Explorer Component**
 - **File**: `src/components/data-table/DataExplorerView.tsx`
@@ -177,7 +177,46 @@ frontend/
 - **Implementation**: Thin wrappers around DataExplorerView
 - **Pattern**: `<DataExplorerView domain="roots" />` (domain name is the only difference)
 
-#### 8. **Filter Modal**
+#### 8. **Query View**
+- **File**: `src/pages/explore/QueryView.tsx`
+- **Status**: **FULLY FUNCTIONAL** ✅
+- **Purpose**: Execute raw FsPulse query language queries
+- **Features**:
+  - **Query Input**:
+    - Large monospace textarea for query entry
+    - Placeholder text with example query
+    - Keyboard shortcut (Cmd/Ctrl+Enter) to execute
+    - Auto-focus on page load
+  - **Example Queries**:
+    - Expandable accordion with 5 sample queries
+    - Clickable examples populate textarea
+    - Covers all domains (items, alerts, changes)
+    - Updated examples: Basic, Filter files, Large files, Open alerts, Changed to Invalid
+  - **Query Execution**:
+    - Execute button with loading state
+    - Direct API call to `/api/query/execute`
+    - No pagination manipulation - query executed exactly as entered
+    - User controls LIMIT/OFFSET in their query string
+  - **Results Display**:
+    - Simple table with all results
+    - Uppercase centered column headers (consistent with other tabs)
+    - No pagination controls (user adds LIMIT to query if needed)
+    - Responsive with overflow scrolling
+  - **Error Handling**:
+    - Monospace error display with preserved formatting
+    - Clear error messages from backend
+    - Visual error styling with background color
+  - **Documentation**:
+    - External link to query language docs
+    - Link opens in new tab to https://gtunes-dev.github.io/fspulse/query.html
+- **Implementation Notes**:
+  - Uses shadcn Accordion component for examples (replaces old HTML `<details>`)
+  - Uses shadcn Textarea component with monospace font
+  - No server-side pagination (different from data tabs)
+  - Simpler implementation than DataExplorerView - no column management or filters
+  - Backend endpoint returns all results, no total count
+
+#### 9. **Filter Modal**
 - **File**: `src/components/data-table/FilterModal.tsx`
 - **Features**:
   - shadcn/ui Dialog component with enhanced visibility
@@ -188,7 +227,7 @@ frontend/
   - Keyboard shortcuts (Enter to apply, Escape to cancel)
   - Clear error messaging with visual styling
 
-#### 9. **Theme Hook**
+#### 10. **Theme Hook**
 - **File**: `src/hooks/useTheme.ts`
 - **Features**:
   - Manages light/dark theme state
@@ -197,7 +236,7 @@ frontend/
   - Toggles `dark` class on document root
   - Persists theme choice to localStorage
 
-#### 10. **API Client**
+#### 11. **API Client**
 - **File**: `src/lib/api.ts`
 - **Features**:
   - `fetchMetadata(domain)` - Get column metadata for any domain
@@ -207,7 +246,7 @@ frontend/
   - Centralized error handling
   - Type-safe responses
 
-#### 11. **Type Definitions**
+#### 12. **Type Definitions**
 - **File**: `src/lib/types.ts`
 - **Features**:
   - Complete TypeScript types matching backend API
@@ -218,17 +257,19 @@ frontend/
   - ActiveFilter
   - Type aliases for SortDirection, Alignment, ColumnType
 
-#### 12. **shadcn/ui Components** (Installed & Customized)
+#### 13. **shadcn/ui Components** (Installed & Customized)
 - **Files**: `src/components/ui/`
 - **Components**:
+  - Accordion - Expandable sections for Query tab examples - **NEW**
   - Button - Multiple variants (default, outline, ghost, etc.)
-  - Badge - Inline badges for active filters - **NEW**
+  - Badge - Inline badges for active filters
   - Card - Card, CardHeader, CardTitle, CardContent
   - Dialog - **Enhanced**: Modal dialogs with backdrop blur and stronger borders
   - Input - Styled form inputs
   - Pagination - Pagination controls (not used - incompatible with React Router)
   - Table - Table primitives
   - Tabs - Tabbed interface with Radix UI
+  - Textarea - Multi-line text input for Query tab - **NEW**
 
 ---
 
@@ -261,7 +302,7 @@ Sidebar               Content
 | `/`         | HomePage       | Placeholder | Dashboard with cards           |
 | `/scans`    | ScansPage      | TODO        | Active scan + Root management  |
 | `/insights` | InsightsPage   | TODO        | Alerts, Statistics, Changes    |
-| `/explore`  | ExplorePage    | Partial     | Data explorer with tabs        |
+| `/explore`  | ExplorePage    | ✅ Complete | Data explorer with tabs        |
 | `/settings` | SettingsPage   | TODO        | Application settings           |
 
 ### Explore Tabs
@@ -273,7 +314,7 @@ Sidebar               Content
 | Items    | ✅ Complete | File system items table               |
 | Changes  | ✅ Complete | Change history table                  |
 | Alerts   | ✅ Complete | Alerts data table with full features  |
-| Query    | Placeholder | Text-based FsPulse query interface    |
+| Query    | ✅ Complete | Raw FsPulse query execution interface |
 
 ---
 
@@ -477,16 +518,16 @@ Using Tailwind's 4px-based spacing scale:
    - Query history (localStorage)
 
 **Tasks**:
-- [ ] Create ScansView component
-- [ ] Create ItemsView component
-- [ ] Create ChangesView component
-- [ ] Create AlertsView component
-- [ ] Create QueryView component with text editor
-- [ ] Add example queries to Query tab
-- [ ] Test all tabs with real data
-- [ ] Implement localStorage persistence for query history
+- [x] Create ScansView component
+- [x] Create ItemsView component
+- [x] Create ChangesView component
+- [x] Create AlertsView component
+- [x] Create QueryView component with text editor
+- [x] Add example queries to Query tab
+- [x] Test all tabs with real data
+- [ ] Implement localStorage persistence for query history (Future enhancement)
 
-**Deliverable**: Explore page fully functional with all 6 tabs
+**Deliverable**: ✅ **COMPLETE** - Explore page fully functional with all 6 tabs
 
 ---
 

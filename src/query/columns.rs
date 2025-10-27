@@ -1,11 +1,12 @@
 use phf::ordered_map::{Entries, Values};
 use phf_macros::phf_ordered_map;
+use serde::Serialize;
 
 use super::Rule;
 
 pub type ColMap = phf::OrderedMap<&'static str, ColSpec>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub enum ColAlign {
     Left,
     Center,

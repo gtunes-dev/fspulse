@@ -72,9 +72,12 @@ impl QueryResultBuilder {
     }
 }
 
+use super::columns::ColAlign;
+
 struct QueryResultVector {
     row_vec: Vec<Vec<String>>,
     column_headers: Vec<String>,
+    column_alignments: Vec<ColAlign>,
 }
 
 impl QueryResult for QueryResultVector {
@@ -85,11 +88,12 @@ impl QueryResult for QueryResultVector {
         self.row_vec.push(row);
     }
     fn finalize(&mut self, show: &mut Show) {
-        // Extract column headers from Show after columns are finalized
+        // Extract column headers and alignments from Show after columns are finalized
         self.column_headers = show.get_column_headers()
             .into_iter()
             .map(|s| s.to_string())
             .collect();
+        self.column_alignments = show.get_column_alignments();
     }
 }
 
@@ -98,6 +102,7 @@ impl QueryResultVector {
         QueryResultVector {
             row_vec: Vec::new(),
             column_headers: Vec::new(),
+            column_alignments: Vec::new(),
         }
     }
 }
@@ -875,10 +880,10 @@ impl AlertsQueryRow {
 }
 
 impl QueryProcessor {
-    pub fn execute_query(db: &Database, query_str: &str, count_only: bool) -> Result<(Vec<Vec<String>>, Vec<String>), FsPulseError> {
+    pub fn execute_query(db: &Database, query_str: &str, count_only: bool) -> Result<(Vec<Vec<String>>, Vec<String>, Vec<ColAlign>), FsPulseError> {
         let mut qrv = QueryResultVector::new();
         Self::process_query(db, query_str, count_only, &mut qrv)?;
-        Ok((qrv.row_vec, qrv.column_headers))
+        Ok((qrv.row_vec, qrv.column_headers, qrv.column_alignments))
     }
 
     pub fn execute_query_count(db: &Database, query_str: &str) -> Result<i64, FsPulseError> {

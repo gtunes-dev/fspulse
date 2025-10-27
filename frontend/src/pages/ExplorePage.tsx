@@ -1,10 +1,10 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RootsView } from './explore/RootsView'
 import { ScansView } from './explore/ScansView'
 import { ItemsView } from './explore/ItemsView'
 import { ChangesView } from './explore/ChangesView'
 import { AlertsView } from './explore/AlertsView'
+import { QueryView } from './explore/QueryView'
 
 export function ExplorePage() {
   return (
@@ -41,15 +41,8 @@ export function ExplorePage() {
           <AlertsView />
         </TabsContent>
 
-        <TabsContent value="query">
-          <Card>
-            <CardHeader>
-              <CardTitle>Query</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Query interface will appear here...</p>
-            </CardContent>
-          </Card>
+        <TabsContent value="query" className="flex-1">
+          <QueryView />
         </TabsContent>
       </Tabs>
     </div>

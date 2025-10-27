@@ -6,6 +6,7 @@ mod order;
 mod process;
 mod show;
 
+pub use columns::ColAlign;
 pub use process::QueryProcessor;
 
 #[derive(Parser)]

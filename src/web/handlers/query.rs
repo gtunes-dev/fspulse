@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::query::columns::{ALERTS_QUERY_COLS, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS};
-use crate::query::QueryProcessor;
+use crate::query::{ColAlign, QueryProcessor};
 
 /// Request structure for query endpoint
 /// Mirrors the web UI's column state and filter state
@@ -50,6 +50,7 @@ pub struct RawQueryRequest {
 pub struct RawQueryResponse {
     pub columns: Vec<String>,
     pub rows: Vec<Vec<String>>,
+    pub alignments: Vec<ColAlign>,
 }
 
 /// POST /api/query/execute
@@ -67,10 +68,11 @@ pub async fn execute_raw_query(
 
     // Execute the query
     match QueryProcessor::execute_query(&db, &req.query, false) {
-        Ok((rows, column_headers)) => {
+        Ok((rows, column_headers, alignments)) => {
             Ok(Json(RawQueryResponse {
                 columns: column_headers,
                 rows,
+                alignments,
             }))
         }
         Err(e) => {
@@ -122,7 +124,7 @@ pub async fn execute_query(
 
     // Execute the main query with LIMIT/OFFSET to get page data
     match QueryProcessor::execute_query(&db, &query_str, false) {
-        Ok((rows, column_headers)) => {
+        Ok((rows, column_headers, _alignments)) => {
             Ok(Json(QueryResponse {
                 total: total_count,
                 columns: column_headers,
