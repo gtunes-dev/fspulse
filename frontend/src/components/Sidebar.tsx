@@ -34,7 +34,7 @@ export function Sidebar() {
                 `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
                   isActive
                     ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground hover:bg-accent'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 }`
               }
             >
@@ -65,7 +65,7 @@ export function Sidebar() {
                 `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
                   isActive
                     ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground hover:bg-accent'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 }`
               }
             >
