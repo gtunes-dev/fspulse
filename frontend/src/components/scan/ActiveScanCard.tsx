@@ -42,7 +42,7 @@ export function ActiveScanCard() {
   const statusValue = currentScan.status?.status || 'running'
   const phaseNames = ['Scanning Files', 'Tombstoning Deletes', 'Analyzing']
   const phaseName = phaseNames[currentScan.phase - 1] || 'Processing'
-  const percentage = Math.round(currentScan.progress?.percentage || 0)
+  const percentage = currentScan.progress?.percentage || 0
 
   // Calculate items text based on phase
   let itemsText = ''
@@ -53,12 +53,24 @@ export function ActiveScanCard() {
     itemsText = `${currentScan.progress.current.toLocaleString()} / ${currentScan.progress.total.toLocaleString()} files`
     showPercentage = true
   } else if (currentScan.phase === 1) {
-    // Phase 1 shows file/directory counts, but we need to pass those from context
-    // For now, show a placeholder
-    itemsText = 'Scanning files...'
+    // Phase 1: show file and directory counts
+    if (currentScan.scanning_counts) {
+      const files = currentScan.scanning_counts.files.toLocaleString()
+      const dirs = currentScan.scanning_counts.directories.toLocaleString()
+      itemsText = `${files} files in ${dirs} directories`
+    } else {
+      itemsText = 'Scanning files...'
+    }
     isPhase1 = true
   } else if (currentScan.phase === 2) {
-    itemsText = 'Processing...'
+    // Phase 2: also show file and directory counts
+    if (currentScan.scanning_counts) {
+      const files = currentScan.scanning_counts.files.toLocaleString()
+      const dirs = currentScan.scanning_counts.directories.toLocaleString()
+      itemsText = `${files} files in ${dirs} directories`
+    } else {
+      itemsText = 'Processing...'
+    }
   }
 
   const handleStop = async () => {
