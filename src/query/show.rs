@@ -1,4 +1,5 @@
 use crate::alerts::{AlertStatus, AlertType};
+use crate::query::columns::ColAlign;
 use crate::validate::validator::ValidationState;
 use crate::{changes::ChangeType, error::FsPulseError, items::ItemType, utils::Utils};
 
@@ -6,7 +7,7 @@ use chrono::{DateTime, Local, Utc};
 use pest::iterators::Pair;
 use tabled::{
     builder::Builder,
-    settings::{object::Columns, Alignment},
+    settings::object::Columns,
     Table,
 };
 
@@ -177,7 +178,7 @@ impl Format {
 #[derive(Debug)]
 pub struct DisplayCol {
     pub display_col: &'static str,
-    pub alignment: Alignment,
+    pub alignment: ColAlign,
     pub format: Format,
 }
 
@@ -206,6 +207,10 @@ impl Show {
         self.display_cols.iter().map(|dc| dc.display_col).collect()
     }
 
+    pub fn get_column_alignments(&self) -> Vec<ColAlign> {
+        self.display_cols.iter().map(|dc| dc.alignment).collect()
+    }
+
     pub fn prepare_builder(&mut self, builder: &mut Builder) {
         self.ensure_columns();
         let header = self.get_column_headers();
@@ -214,14 +219,14 @@ impl Show {
 
     pub fn set_column_aligments(&self, table: &mut Table) {
         for (col_index, col) in self.display_cols.iter().enumerate() {
-            table.modify(Columns::one(col_index), col.alignment);
+            table.modify(Columns::one(col_index), col.alignment.to_tabled());
         }
     }
     pub fn add_all_columns(&mut self) {
         for (col, col_spec) in self.col_set.entries() {
             self.display_cols.push(DisplayCol {
                 display_col: col,
-                alignment: col_spec.col_align.to_tabled(),
+                alignment: col_spec.col_align,
                 format: Format::None,
             });
         }
@@ -232,7 +237,7 @@ impl Show {
             if col_spec.is_default {
                 self.display_cols.push(DisplayCol {
                     display_col: col,
-                    alignment: col_spec.col_align.to_tabled(),
+                    alignment: col_spec.col_align,
                     format: Format::None,
                 });
             }
@@ -266,7 +271,7 @@ impl Show {
                             };
                             self.display_cols.push(DisplayCol {
                                 display_col: key,
-                                alignment: display_col.col_align.to_tabled(),
+                                alignment: display_col.col_align,
                                 format,
                             })
                         }
