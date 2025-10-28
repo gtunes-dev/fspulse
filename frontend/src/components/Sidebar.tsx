@@ -6,10 +6,10 @@ export function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(false)
 
   const mainNavItems = [
-    { icon: Home, label: 'Home', to: '/' },
-    { icon: FolderSearch, label: 'Scan', to: '/scan' },
-    { icon: Lightbulb, label: 'Insights', to: '/insights' },
-    { icon: Database, label: 'Explore', to: '/explore' },
+    { icon: Home, label: 'Home', to: '/', end: true },
+    { icon: FolderSearch, label: 'Scan', to: '/scan', end: true },
+    { icon: Lightbulb, label: 'Insights', to: '/insights/alerts', end: false },
+    { icon: Database, label: 'Explore', to: '/explore/roots', end: false },
   ]
 
   const settingsItems = [
@@ -30,6 +30,7 @@ export function Sidebar() {
             <NavLink
               key={item.label}
               to={item.to}
+              end={item.end}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
                   isActive

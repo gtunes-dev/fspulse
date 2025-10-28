@@ -3,7 +3,6 @@
 import type {
   MetadataResponse,
   QueryRequest,
-  QueryResponse,
   ValidateFilterRequest,
   ValidateFilterResponse,
   UpdateAlertStatusRequest,

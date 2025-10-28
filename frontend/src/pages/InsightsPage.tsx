@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
@@ -11,20 +12,46 @@ import { Input } from '@/components/ui/input'
 import { AlertsTab } from './insights/AlertsTab'
 import type { ContextFilterType } from '@/lib/types'
 
+const VALID_TABS = ['alerts', 'statistics', 'changes'] as const
+type TabValue = typeof VALID_TABS[number]
+
 export function InsightsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [contextFilter, setContextFilter] = useState<ContextFilterType>('all')
   const [contextValue, setContextValue] = useState('')
+
+  // Extract current tab from URL path
+  const pathParts = location.pathname.split('/').filter(Boolean)
+  const currentTab = pathParts[1] as TabValue | undefined
+
+  // Redirect to default tab if none specified or invalid
+  useEffect(() => {
+    if (!currentTab || !VALID_TABS.includes(currentTab)) {
+      navigate('/insights/alerts', { replace: true })
+    }
+  }, [currentTab, navigate])
+
+  // Handle tab changes by updating URL
+  const handleTabChange = (value: string) => {
+    navigate(`/insights/${value}`)
+  }
 
   const handleContextFilterChange = (value: ContextFilterType) => {
     setContextFilter(value)
     setContextValue('')
   }
 
+  // If no valid tab yet, don't render tabs (will redirect)
+  if (!currentTab || !VALID_TABS.includes(currentTab)) {
+    return null
+  }
+
   return (
     <div className="flex flex-col h-full">
       <h1 className="text-2xl font-semibold mb-6">Insights</h1>
 
-      <Tabs defaultValue="alerts" className="flex-1 flex flex-col">
+      <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col">
         <TabsList>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
           <TabsTrigger value="statistics">Statistics</TabsTrigger>

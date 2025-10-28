@@ -18,9 +18,9 @@ function App() {
             <main className="flex-1 overflow-auto bg-background p-6">
               <Routes>
                 <Route path="/" element={<HomePage />} />
-                <Route path="/explore" element={<ExplorePage />} />
+                <Route path="/explore/*" element={<ExplorePage />} />
                 <Route path="/scan" element={<ScanPage />} />
-                <Route path="/insights" element={<InsightsPage />} />
+                <Route path="/insights/*" element={<InsightsPage />} />
                 <Route path="/settings" element={<div>Settings page coming soon...</div>} />
               </Routes>
             </main>

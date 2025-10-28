@@ -53,7 +53,7 @@ export function AlertsTab({ contextFilter, contextValue }: AlertsTabProps) {
   const [error, setError] = useState<string | null>(null)
   const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [totalCount, setTotalCount] = useState(0)
-  const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null)
+  const [searchDebounce, setSearchDebounce] = useState<number | null>(null)
   const [updatingAlertId, setUpdatingAlertId] = useState<number | null>(null)
 
   // Load metadata on mount

@@ -1,23 +1,50 @@
+import { QuickActionCard } from '@/components/home/QuickActionCard'
+import { LastScanCard } from '@/components/home/LastScanCard'
+import {
+  FolderSearch,
+  Lightbulb,
+  Database,
+  BookOpen,
+} from 'lucide-react'
+
 export function HomePage() {
   return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-4">Dashboard</h2>
-      <p className="text-muted-foreground">
-        Welcome to FsPulse. Your filesystem monitoring dashboard is ready.
-      </p>
+    <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-semibold">Home</h1>
 
-      {/* Theme test elements */}
-      <div className="mt-8 space-y-4">
-        <div className="p-4 bg-primary text-primary-foreground rounded">
-          Primary color test - This should be blue
-        </div>
-        <div className="p-4 bg-muted text-muted-foreground rounded">
-          Muted color test - This should be light grey
-        </div>
-        <button className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90">
-          Primary Button
-        </button>
+      {/* Quick Actions Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <QuickActionCard
+          icon={<FolderSearch className="w-full h-full" />}
+          title="Scan"
+          description="Start and manage scans of your filesystem roots"
+          to="/scan"
+        />
+
+        <QuickActionCard
+          icon={<Lightbulb className="w-full h-full" />}
+          title="Insights"
+          description="View alerts, statistics, and insights about your filesystem and scans"
+          to="/insights"
+        />
+
+        <QuickActionCard
+          icon={<Database className="w-full h-full" />}
+          title="Explore"
+          description="Interactively explore your data and execute custom queries"
+          to="/explore"
+        />
+
+        <QuickActionCard
+          icon={<BookOpen className="w-full h-full" />}
+          title="Documentation"
+          description="Read the user guide and API reference documentation"
+          href="https://gtunes-dev.github.io/fspulse/"
+        />
       </div>
+
+      {/* Last Scan Card */}
+      <LastScanCard />
     </div>
   )
 }

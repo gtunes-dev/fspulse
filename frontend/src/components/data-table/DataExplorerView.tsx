@@ -8,7 +8,6 @@ import { formatDateFull } from '@/lib/dateUtils'
 import type {
   ColumnState,
   ActiveFilter,
-  QueryRequest,
 } from '@/lib/types'
 
 const ITEMS_PER_PAGE = 25
