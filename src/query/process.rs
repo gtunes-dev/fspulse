@@ -23,7 +23,11 @@ use super::{
     filter::{DateFilter, Filter, IdFilter, PathFilter, StringFilter},
     order::Order,
     QueryParser, Rule,
+    columns::ColAlign,
 };
+
+/// Query result type: (rows, column headers, column alignments)
+pub type QueryResultData = (Vec<Vec<String>>, Vec<String>, Vec<ColAlign>);
 
 pub trait QueryResult {
     fn prepare(&mut self, show: &mut Show);
@@ -71,8 +75,6 @@ impl QueryResultBuilder {
         }
     }
 }
-
-use super::columns::ColAlign;
 
 struct QueryResultVector {
     row_vec: Vec<Vec<String>>,
@@ -880,7 +882,7 @@ impl AlertsQueryRow {
 }
 
 impl QueryProcessor {
-    pub fn execute_query(db: &Database, query_str: &str) -> Result<(Vec<Vec<String>>, Vec<String>, Vec<ColAlign>), FsPulseError> {
+    pub fn execute_query(db: &Database, query_str: &str) -> Result<QueryResultData, FsPulseError> {
         let mut qrv = QueryResultVector::new();
         Self::process_query(db, query_str, &mut qrv)?;
         Ok((qrv.row_vec, qrv.column_headers, qrv.column_alignments))

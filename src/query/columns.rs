@@ -14,7 +14,7 @@ pub enum ColAlign {
 }
 
 impl ColAlign {
-    pub fn to_tabled(&self) -> tabled::settings::Alignment {
+    pub fn to_tabled(self) -> tabled::settings::Alignment {
         match self {
             ColAlign::Left => tabled::settings::Alignment::left(),
             ColAlign::Center => tabled::settings::Alignment::center(),
@@ -22,7 +22,7 @@ impl ColAlign {
         }
     }
 
-    pub fn to_ratatui(&self) -> ratatui::layout::Alignment {
+    pub fn to_ratatui(self) -> ratatui::layout::Alignment {
         match self {
             ColAlign::Left => ratatui::layout::Alignment::Left,
             ColAlign::Center => ratatui::layout::Alignment::Center,
