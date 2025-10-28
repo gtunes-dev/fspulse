@@ -880,9 +880,9 @@ impl AlertsQueryRow {
 }
 
 impl QueryProcessor {
-    pub fn execute_query(db: &Database, query_str: &str, count_only: bool) -> Result<(Vec<Vec<String>>, Vec<String>, Vec<ColAlign>), FsPulseError> {
+    pub fn execute_query(db: &Database, query_str: &str) -> Result<(Vec<Vec<String>>, Vec<String>, Vec<ColAlign>), FsPulseError> {
         let mut qrv = QueryResultVector::new();
-        Self::process_query(db, query_str, count_only, &mut qrv)?;
+        Self::process_query(db, query_str, &mut qrv)?;
         Ok((qrv.row_vec, qrv.column_headers, qrv.column_alignments))
     }
 
@@ -893,7 +893,7 @@ impl QueryProcessor {
     pub fn execute_query_and_print(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
         let mut qrb = QueryResultBuilder::new();
 
-        match Self::process_query(db, query_str, false, &mut qrb) {
+        match Self::process_query(db, query_str, &mut qrb) {
             Ok(()) => {}
             Err(err) => match err {
                 FsPulseError::ParsingError(inner) => {
@@ -925,7 +925,6 @@ impl QueryProcessor {
     fn process_query(
         db: &Database,
         query_str: &str,
-        count_only: bool,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
         info!("Parsing query: {query_str}");
@@ -940,7 +939,7 @@ impl QueryProcessor {
 
         let query_type_pair = query_iter.next().unwrap();
 
-        let mut query = make_query(query_type_pair.as_str(), count_only);
+        let mut query = make_query(query_type_pair.as_str(), false);
 
         QueryProcessor::build(&mut *query, &mut query_iter)?;
 

@@ -338,7 +338,7 @@ impl Cli {
                     .map_err(|e| FsPulseError::Error(format!("Failed to create runtime: {}", e)))?;
 
                 rt.block_on(async {
-                    let web_server = crate::web::WebServer::new(config.server.host.clone(), config.server.port);
+                    let web_server = crate::server::WebServer::new(config.server.host.clone(), config.server.port);
                     web_server.start().await
                 })
             }

@@ -201,7 +201,7 @@ pub async fn fetch_query(
     debug!("Fetch query: {}", query_str);
 
     // Execute fetch query
-    match QueryProcessor::execute_query(&db, &query_str, false) {
+    match QueryProcessor::execute_query(&db, &query_str) {
         Ok((rows, column_headers, _alignments)) => {
             Ok(Json(FetchResponse {
                 columns: column_headers,
@@ -227,7 +227,7 @@ pub async fn execute_raw_query(
 
     debug!("Executing raw query: {}", req.query);
 
-    match QueryProcessor::execute_query(&db, &req.query, false) {
+    match QueryProcessor::execute_query(&db, &req.query) {
         Ok((rows, column_headers, alignments)) => {
             Ok(Json(RawQueryResponse {
                 columns: column_headers,

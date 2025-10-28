@@ -6,13 +6,28 @@ FROM rust:bookworm AS builder
 
 WORKDIR /build
 
+# Install Node.js for frontend build
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
+
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
 
-# Copy source
+# Copy frontend source
+COPY frontend ./frontend
+
+# Build frontend first (creates frontend/dist/ for rust-embed)
+RUN cd frontend && \
+    npm ci && \
+    npm run build && \
+    echo "Frontend built successfully:" && \
+    ls -lh dist/
+
+# Copy Rust source
 COPY src ./src
 
 # Build for release (native architecture - arm64 on Apple Silicon, amd64 on Intel)
+# This will embed the frontend/dist/ files into the binary
 RUN cargo build --release
 
 # Strip binary to reduce size

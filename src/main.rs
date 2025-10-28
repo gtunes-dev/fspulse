@@ -15,9 +15,9 @@ mod roots;
 mod scanner;
 mod scans;
 mod schema;
+mod server;
 mod utils;
 mod validate;
-mod web;
 
 use std::env;
 use std::path::PathBuf;

@@ -707,7 +707,7 @@ impl Explorer {
     fn refresh_query_impl(&mut self, db: &Database) -> Result<(), FsPulseError> {
         let (query_str, columns) = self.build_query_and_columns()?;
 
-        match QueryProcessor::execute_query(db, &query_str, false) {
+        match QueryProcessor::execute_query(db, &query_str) {
             Ok((rows, _column_headers, _alignments)) => {
                 // Note: We use columns from build_query_and_columns, not _column_headers or _alignments
                 // because TUI needs full column metadata, not just display names and alignments

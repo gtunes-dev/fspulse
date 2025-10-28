@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Complete React migration**: Replaced monolithic 5,800-line HTML template with modern React 19 + shadcn/ui component library, featuring improved responsiveness, accessibility, and maintainability
+- **Single-binary distribution**: Implemented embedded assets using rust-embed with conditional compilation - development builds serve from filesystem for fast iteration, release builds embed assets into binary for simplified deployment
+- **Build infrastructure updates**: Updated GitHub CI workflows and Dockerfile to build frontend before Rust compilation, ensuring embedded assets are included in release artifacts
 - **Web UI Scan page fit and finish**: Improved layout and spacing of Roots card header with repositioned "Add Root" button
 
 ## [v0.1.4] - 2025-10-25
