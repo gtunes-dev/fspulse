@@ -100,8 +100,7 @@ jobs:
           cd frontend
           npm ci
           npm run build
-          echo "Frontend built successfully:"
-          ls -lh dist/
+          echo "Frontend built successfully"
 
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
