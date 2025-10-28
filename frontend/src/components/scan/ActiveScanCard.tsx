@@ -200,22 +200,19 @@ export function ActiveScanCard() {
                       idle: 'IDLE',
                     }
 
-                    // Different colors for different operations
-                    const isActive = operation !== 'idle'
-                    let badgeClasses = ''
-                    if (operation === 'hashing') {
-                      badgeClasses = 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700'
-                    } else if (operation === 'validating') {
-                      badgeClasses = 'bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-700'
-                    } else if (operation === 'scanning') {
-                      badgeClasses = 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700'
+                    // Map operations to semantic badge variants
+                    const badgeVariants: Record<string, 'info' | 'info-alternate' | 'success' | 'secondary'> = {
+                      hashing: 'info',
+                      validating: 'info-alternate',
+                      scanning: 'success',
+                      idle: 'secondary',
                     }
 
                     return (
                       <div key={thread.thread_index} className="flex items-center gap-3 text-sm py-2 border-b border-border last:border-b-0">
                         <Badge
-                          variant={isActive ? 'default' : 'secondary'}
-                          className={`min-w-[90px] justify-center font-bold text-xs ${badgeClasses}`}
+                          variant={badgeVariants[operation]}
+                          className="min-w-[90px] justify-center font-bold text-xs"
                         >
                           {statusLabels[operation]}
                         </Badge>

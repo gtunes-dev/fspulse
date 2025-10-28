@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Plus, CalendarCog } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { formatDateRelative } from '@/lib/dateUtils'
 import type { RootWithScan } from '@/lib/types'
 
 interface RootsTableProps {
@@ -109,24 +110,24 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
                   // Determine if we should show the status line (Error, Stopped, or Incomplete)
                   let showStatusLine = false
                   let statusBadgeText = ''
-                  let statusBadgeColor = ''
+                  let statusBadgeVariant: 'error' | 'warning' = 'error'
                   let statusMessage = ''
 
                   if (scanInfo) {
                     if (scanInfo.state === 'Error') {
                       showStatusLine = true
                       statusBadgeText = 'Error'
-                      statusBadgeColor = 'bg-red-600 text-white'
+                      statusBadgeVariant = 'error'
                       statusMessage = scanInfo.error || 'Unknown error'
                     } else if (scanInfo.state === 'Stopped') {
                       showStatusLine = true
                       statusBadgeText = 'Stopped'
-                      statusBadgeColor = 'bg-orange-600 text-white'
+                      statusBadgeVariant = 'warning'
                       statusMessage = 'Stopped by user'
                     } else if (isIncomplete) {
                       showStatusLine = true
                       statusBadgeText = 'Incomplete'
-                      statusBadgeColor = 'bg-orange-600 text-white'
+                      statusBadgeVariant = 'warning'
                       statusMessage = 'This scan did not complete and can be resumed'
                     }
                   }
@@ -158,7 +159,7 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
                               </span>
                               {scanInfo && (
                                 <span className="text-sm text-muted-foreground">
-                                  Last Scan: {scanInfo.scan_time_display}
+                                  Last Scan: {formatDateRelative(scanInfo.scan_time)}
                                 </span>
                               )}
                             </div>
@@ -166,7 +167,7 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
                             {/* Line 2: Status (optional - only if error, stopped, or incomplete) */}
                             {showStatusLine && (
                               <div className="flex items-center gap-2">
-                                <Badge className={`${statusBadgeColor} text-xs font-semibold px-2 py-0.5 pointer-events-none`}>
+                                <Badge variant={statusBadgeVariant}>
                                   {statusBadgeText}
                                 </Badge>
                                 <span className="text-sm text-muted-foreground font-mono">

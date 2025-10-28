@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { GripVertical, Plus, X } from 'lucide-react'
-import { fetchMetadata, executeQuery } from '@/lib/api'
+import { fetchMetadata, countQuery, fetchQuery } from '@/lib/api'
 import { FilterModal } from '@/components/data-table/FilterModal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { formatDateFull } from '@/lib/dateUtils'
 import type {
   ColumnState,
   ActiveFilter,
   QueryRequest,
-  QueryResponse,
 } from '@/lib/types'
 
 const ITEMS_PER_PAGE = 25
@@ -20,7 +20,9 @@ interface DataExplorerViewProps {
 export function DataExplorerView({ domain }: DataExplorerViewProps) {
   const [columns, setColumns] = useState<ColumnState[]>([])
   const [filters, setFilters] = useState<ActiveFilter[]>([])
-  const [data, setData] = useState<QueryResponse | null>(null)
+  const [dataColumns, setDataColumns] = useState<string[]>([])
+  const [dataRows, setDataRows] = useState<string[][]>([])
+  const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -57,43 +59,62 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
   }, [domain])
 
   // Execute query when columns, filters, or page changes
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (columns.length === 0) return
 
-    async function loadData() {
-      try {
-        setLoading(true)
+    try {
+      setLoading(true)
 
-        const request: QueryRequest = {
-          columns: columns
-            .filter((col) => col.visible)
-            .sort((a, b) => a.position - b.position)
-            .map((col) => ({
-              name: col.name,
-              visible: col.visible,
-              sort_direction: col.sort_direction,
-              position: col.position,
-            })),
-          filters: filters.map((f) => ({
-            column: f.column_name,
-            value: f.filter_value,
-          })),
-          limit: ITEMS_PER_PAGE,
-          offset: (currentPage - 1) * ITEMS_PER_PAGE,
-        }
+      const columnSpecs = columns
+        .filter((col) => col.visible)
+        .sort((a, b) => a.position - b.position)
+        .map((col) => ({
+          name: col.name,
+          visible: col.visible,
+          sort_direction: col.sort_direction,
+          position: col.position,
+        }))
 
-        const response = await executeQuery(domain, request)
-        setData(response)
-        setError(null)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data')
-      } finally {
-        setLoading(false)
+      const filterSpecs = filters.map((f) => ({
+        column: f.column_name,
+        value: f.filter_value,
+      }))
+
+      // Build filter key to detect when filters/columns change
+      const filterKey = JSON.stringify({ columnSpecs, filterSpecs })
+      const needsCount = filterKey !== (loadData as any).lastFilterKey
+
+      // Get count only when filters or visible columns change
+      if (needsCount) {
+        const countData = await countQuery(domain, {
+          columns: columnSpecs,
+          filters: filterSpecs,
+        })
+        setTotalCount(countData.count)
+        ;(loadData as any).lastFilterKey = filterKey
       }
-    }
 
-    loadData()
+      // Always fetch current page
+      const fetchData = await fetchQuery(domain, {
+        columns: columnSpecs,
+        filters: filterSpecs,
+        limit: ITEMS_PER_PAGE,
+        offset: (currentPage - 1) * ITEMS_PER_PAGE,
+      })
+
+      setDataColumns(fetchData.columns)
+      setDataRows(fetchData.rows)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load data')
+    } finally {
+      setLoading(false)
+    }
   }, [domain, columns, filters, currentPage])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   // Drag-and-drop handlers
   const handleDragStart = (columnName: string) => {
@@ -311,13 +332,13 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
         <CardContent className="flex-1 overflow-auto p-0">
           {loading ? (
             <div className="p-4">Loading data...</div>
-          ) : data ? (
+          ) : dataRows.length > 0 ? (
             <div className="flex flex-col h-full">
               <div className="flex-1 overflow-auto">
                 <table className="w-full border-collapse">
                   <thead className="bg-muted sticky top-0">
                     <tr>
-                      {data.columns.map((colName) => {
+                      {dataColumns.map((colName) => {
                         const colMeta = columns.find((c) => c.name === colName)
                         const displayName = colMeta ? colMeta.display_name : colName
 
@@ -333,10 +354,10 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.rows.map((row, rowIndex) => (
+                    {dataRows.map((row, rowIndex) => (
                       <tr key={rowIndex} className="hover:bg-muted/50">
                         {row.map((cell, cellIndex) => {
-                          const colName = data.columns[cellIndex]
+                          const colName = dataColumns[cellIndex]
                           const colMeta = columns.find((c) => c.name === colName)
                           const alignClass = colMeta
                             ? colMeta.alignment === 'Right'
@@ -346,12 +367,17 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
                               : 'text-left'
                             : 'text-left'
 
+                          // Format date columns in user's local timezone
+                          const displayValue = colMeta?.col_type === 'Date'
+                            ? formatDateFull(parseInt(cell))
+                            : cell
+
                           return (
                             <td
                               key={cellIndex}
                               className={`border border-border px-4 py-2 ${alignClass}`}
                             >
-                              {cell}
+                              {displayValue}
                             </td>
                           )
                         })}
@@ -365,7 +391,7 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
               <div className="flex items-center justify-between p-4 border-t border-border">
                 <div className="text-sm text-muted-foreground">
                   Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to{' '}
-                  {Math.min(currentPage * ITEMS_PER_PAGE, data.total)} of {data.total}
+                  {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} of {totalCount}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -376,8 +402,8 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
                     Previous
                   </button>
                   <button
-                    onClick={() => currentPage * ITEMS_PER_PAGE < data.total && setCurrentPage(p => p + 1)}
-                    disabled={currentPage * ITEMS_PER_PAGE >= data.total}
+                    onClick={() => currentPage * ITEMS_PER_PAGE < totalCount && setCurrentPage(p => p + 1)}
+                    disabled={currentPage * ITEMS_PER_PAGE >= totalCount}
                     className="px-3 py-1.5 border border-border rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent hover:text-accent-foreground transition-colors"
                   >
                     Next

@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
 use crate::error::FsPulseError;
+use crate::api;
 
 use super::handlers;
 
@@ -40,34 +41,44 @@ impl WebServer {
     }
 
     fn create_router(&self) -> Result<Router, FsPulseError> {
-        // Create shared application state
-        let app_state = handlers::scans::AppState::new();
+        // Create shared application state (used by both old and new scan handlers)
+        let app_state = api::scans::AppState::new();
 
         let app = Router::new()
             // Static routes
             .route("/", get(handlers::home::dashboard))
             .route("/health", get(health_check))
 
-            // API routes
+            // API routes - OLD handlers (for monolith UI)
             .route("/api/status", get(handlers::home::api_status))
             .route("/api/home/last-scan-stats", get(handlers::home::get_last_scan_stats))
             .route("/api/home/scan-stats/{scan_id}", get(handlers::home::get_scan_stats))
             .route("/api/alerts", get(handlers::alerts::list_alerts))
-            .route("/api/alerts/{alert_id}/status", put(handlers::alerts::update_alert_status))
             .route("/api/activity", get(handlers::activity::recent_activity))
-            .route("/api/metadata/{domain}", get(handlers::metadata::get_metadata))
-            .route("/api/query/execute", post(handlers::query::execute_raw_query))
-            .route("/api/query/{domain}", post(handlers::query::execute_query))
-            .route("/api/validate-filter", post(handlers::query::validate_filter))
             .route("/api/scans/status", get(handlers::scans::get_scans_status))
-            .route("/api/scans/start", post(handlers::scans::initiate_scan))
-            .route("/api/scans/current", get(handlers::scans::get_current_scan))
-            .route("/api/scans/{scan_id}/cancel", post(handlers::scans::cancel_scan))
-            .route("/api/roots", post(handlers::roots::create_root))
-            .route("/api/roots/with-scans", get(handlers::roots::get_roots_with_scans))
+
+            // API routes - NEW handlers (for React UI)
+            // Query endpoints
+            .route("/api/query/{domain}/metadata", get(api::query::get_metadata))
+            .route("/api/query/{domain}/count", post(api::query::count_query))
+            .route("/api/query/{domain}/fetch", post(api::query::fetch_query))
+            .route("/api/query/execute", post(api::query::execute_raw_query))
+            .route("/api/validate-filter", post(api::query::validate_filter))
+
+            // Alert endpoints
+            .route("/api/alerts/{alert_id}/status", put(api::alerts::update_alert_status))
+
+            // Scan endpoints
+            .route("/api/scans/start", post(api::scans::initiate_scan))
+            .route("/api/scans/current", get(api::scans::get_current_scan))
+            .route("/api/scans/{scan_id}/cancel", post(api::scans::cancel_scan))
+
+            // Root endpoints
+            .route("/api/roots", post(api::roots::create_root))
+            .route("/api/roots/with-scans", get(api::roots::get_roots_with_scans))
 
             // WebSocket routes
-            .route("/ws/scans/progress", get(handlers::scans::scan_progress_ws))
+            .route("/ws/scans/progress", get(api::scans::scan_progress_ws))
 
             // Add state for handlers
             .with_state(app_state);

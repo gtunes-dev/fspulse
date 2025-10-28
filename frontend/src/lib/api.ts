@@ -1,6 +1,14 @@
 // API client functions for backend communication
 
-import type { MetadataResponse, QueryRequest, QueryResponse, ValidateFilterRequest, ValidateFilterResponse } from './types'
+import type {
+  MetadataResponse,
+  QueryRequest,
+  QueryResponse,
+  ValidateFilterRequest,
+  ValidateFilterResponse,
+  UpdateAlertStatusRequest,
+  UpdateAlertStatusResponse
+} from './types'
 
 const API_BASE = '/api'
 
@@ -35,25 +43,42 @@ async function handleResponse<T>(response: Response): Promise<T> {
  * Fetch column metadata for a given domain (roots, scans, items, changes, alerts)
  */
 export async function fetchMetadata(domain: string): Promise<MetadataResponse> {
-  const response = await fetch(`${API_BASE}/metadata/${domain}`)
+  const response = await fetch(`${API_BASE}/query/${domain}/metadata`)
   return handleResponse<MetadataResponse>(response)
 }
 
 /**
- * Execute a query against a domain with column specifications, filters, and pagination
+ * Count matching rows for a query (efficient - no data fetch)
  */
-export async function executeQuery(
+export async function countQuery(
+  domain: string,
+  request: Omit<QueryRequest, 'limit' | 'offset'>
+): Promise<{ count: number }> {
+  const response = await fetch(`${API_BASE}/query/${domain}/count`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ...request, limit: 0, offset: 0 }),
+  })
+  return handleResponse<{ count: number }>(response)
+}
+
+/**
+ * Fetch a page of query results (efficient - no count)
+ */
+export async function fetchQuery(
   domain: string,
   request: QueryRequest
-): Promise<QueryResponse> {
-  const response = await fetch(`${API_BASE}/query/${domain}`, {
+): Promise<{ columns: string[]; rows: string[][] }> {
+  const response = await fetch(`${API_BASE}/query/${domain}/fetch`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(request),
   })
-  return handleResponse<QueryResponse>(response)
+  return handleResponse<{ columns: string[]; rows: string[][] }>(response)
 }
 
 /**
@@ -70,4 +95,21 @@ export async function validateFilter(
     body: JSON.stringify(request),
   })
   return handleResponse<ValidateFilterResponse>(response)
+}
+
+/**
+ * Update the status of an alert
+ */
+export async function updateAlertStatus(
+  alertId: number,
+  request: UpdateAlertStatusRequest
+): Promise<UpdateAlertStatusResponse> {
+  const response = await fetch(`${API_BASE}/alerts/${alertId}/status`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+  return handleResponse<UpdateAlertStatusResponse>(response)
 }

@@ -164,8 +164,9 @@ export interface CurrentScanInfo {
 export interface LastScanInfo {
   scan_id: number
   state: string // 'Pending' | 'Scanning' | 'Sweeping' | 'Analyzing' | 'Completed' | 'Error' | 'Stopped'
-  scan_time: string
-  scan_time_display: string
+  scan_time: number  // Unix timestamp (seconds) for client-side formatting
+  file_count?: number
+  folder_count?: number
   error?: string
 }
 
@@ -184,4 +185,18 @@ export interface InitiateScanRequest {
 
 export interface InitiateScanResponse {
   scan_id: number
+}
+
+// Insights Page Types
+
+export type AlertStatusValue = 'O' | 'F' | 'D' // Open, Flagged, Dismissed
+export type AlertTypeValue = 'H' | 'I' // Suspicious Hash, Invalid Item
+export type ContextFilterType = 'all' | 'root' | 'scan'
+
+export interface UpdateAlertStatusRequest {
+  status: AlertStatusValue
+}
+
+export interface UpdateAlertStatusResponse {
+  success: boolean
 }
