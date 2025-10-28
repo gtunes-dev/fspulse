@@ -21,6 +21,7 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
   const [currentScanId, setCurrentScanId] = useState<number | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
+  const pingIntervalRef = useRef<number | null>(null)
   const scanPhaseRef = useRef<number>(1)
   const scanningCountsRef = useRef({ files: 0, directories: 0 })
   const phaseBreadcrumbsRef = useRef<string[]>([])
@@ -150,6 +151,12 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
       wsRef.current.close()
     }
 
+    // Clear existing ping interval
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current)
+      pingIntervalRef.current = null
+    }
+
     // Initialize scan state
     setCurrentScanId(scanId)
     scanPhaseRef.current = 1
@@ -181,6 +188,14 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
 
     ws.onopen = () => {
       console.log('WebSocket connected')
+
+      // Start sending pings every 30 seconds to maintain bidirectional traffic
+      // This prevents proxy/load balancer timeouts on the client->server direction
+      pingIntervalRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send('ping')
+        }
+      }, 30000)
     }
 
     ws.onmessage = (event) => {
@@ -194,6 +209,13 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
 
     ws.onclose = () => {
       console.log('WebSocket closed')
+
+      // Clear ping interval
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current)
+        pingIntervalRef.current = null
+      }
+
       setTimeout(() => {
         setActiveScans(prev => {
           const updated = new Map(prev)
@@ -246,6 +268,9 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
     return () => {
       if (wsRef.current) {
         wsRef.current.close()
+      }
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current)
       }
     }
   }, [checkForActiveScan])

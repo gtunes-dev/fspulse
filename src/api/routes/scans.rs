@@ -234,6 +234,26 @@ async fn handle_scan_progress(mut socket: WebSocket, state: AppState) {
                     }
                 }
             }
+            msg = socket.recv() => {
+                // Handle incoming messages from client (keepalive pings)
+                match msg {
+                    Some(Ok(Message::Text(_))) => {
+                        // Client sent a text ping - ignore it, the act of receiving keeps connection alive
+                    }
+                    Some(Ok(Message::Ping(_))) => {
+                        // Client sent a ping - Axum automatically sends pong
+                    }
+                    Some(Ok(Message::Close(_))) | None => {
+                        // Client closed connection
+                        break;
+                    }
+                    Some(Err(_)) => {
+                        // Error receiving message
+                        break;
+                    }
+                    _ => {}
+                }
+            }
             _ = tokio::time::sleep(tokio::time::Duration::from_secs(30)) => {
                 // Send ping to keep connection alive
                 if socket.send(Message::Ping(vec![].into())).await.is_err() {

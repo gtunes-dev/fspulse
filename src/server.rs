@@ -1,15 +1,21 @@
 use axum::{
-    http::StatusCode,
+    body::Body,
+    http::{header, StatusCode},
     response::Html,
     routing::{get, post, put},
     Router,
 };
 
-// These imports are only needed for production (embedded assets)
+// These imports are needed for static file handlers
+#[cfg(debug_assertions)]
+use axum::{
+    http::Uri,
+    response::{IntoResponse, Response},
+};
+
 #[cfg(not(debug_assertions))]
 use axum::{
-    body::Body,
-    http::{header, Uri},
+    http::Uri,
     response::{IntoResponse, Response},
 };
 use std::net::SocketAddr;
@@ -26,10 +32,6 @@ use rust_embed::RustEmbed;
 #[derive(RustEmbed)]
 #[folder = "frontend/dist/"]
 struct Asset;
-
-// Use filesystem serving in debug builds
-#[cfg(debug_assertions)]
-use tower_http::services::ServeDir;
 
 pub struct WebServer {
     host: String,
@@ -104,8 +106,8 @@ impl WebServer {
         // Serve static files differently based on build type
         #[cfg(debug_assertions)]
         {
-            // Development: serve from filesystem for fast iteration
-            let app = app.fallback_service(ServeDir::new("frontend/dist"));
+            // Development: serve from filesystem with SPA fallback
+            let app = app.fallback(dev_static_handler);
             Ok(app)
         }
 
@@ -123,6 +125,43 @@ async fn health_check() -> Result<(StatusCode, Html<String>), StatusCode> {
         StatusCode::OK,
         Html("<h1>FsPulse Server</h1><p>✅ Server is running</p>".to_string()),
     ))
+}
+
+// Handler for filesystem static files (development builds only)
+#[cfg(debug_assertions)]
+async fn dev_static_handler(uri: Uri) -> impl IntoResponse {
+    let path = uri.path().trim_start_matches('/');
+    let file_path = if path.is_empty() {
+        "frontend/dist/index.html"
+    } else {
+        &format!("frontend/dist/{}", path)
+    };
+
+    // Try to serve the requested file
+    if let Ok(content) = std::fs::read(file_path) {
+        let mime = mime_guess::from_path(file_path).first_or_octet_stream();
+
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, mime.as_ref())
+            .body(Body::from(content))
+            .unwrap();
+    }
+
+    // For SPA routing: if file not found, serve index.html
+    if let Ok(content) = std::fs::read("frontend/dist/index.html") {
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html")
+            .body(Body::from(content))
+            .unwrap();
+    }
+
+    // If even index.html is missing, return 404
+    Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(Body::from("404 Not Found"))
+        .unwrap()
 }
 
 // Handler for embedded static files (production builds only)
