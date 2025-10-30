@@ -205,20 +205,23 @@
 <p>All queries that retrieve scan information begin with the keyword <code>scans</code>:</p>
 <pre><code class="language-text">scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 </code></pre>
-<div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th></tr></thead><tbody>
-<tr><td><code>scan_id</code></td><td>Integer</td></tr>
-<tr><td><code>root_id</code></td><td>Integer</td></tr>
-<tr><td><code>state</code></td><td>Integer</td></tr>
-<tr><td><code>is_hash</code></td><td>Boolean</td></tr>
-<tr><td><code>hash_all</code></td><td>Boolean</td></tr>
-<tr><td><code>is_val</code></td><td>Boolean</td></tr>
-<tr><td><code>val_all</code></td><td>Boolean</td></tr>
-<tr><td><code>scan_time</code></td><td>Date</td></tr>
-<tr><td><code>file_count</code></td><td>Integer</td></tr>
-<tr><td><code>folder_count</code></td><td>Integer</td></tr>
-<tr><td><code>adds</code></td><td>Integer</td></tr>
-<tr><td><code>modifies</code></td><td>Integer</td></tr>
-<tr><td><code>deletes</code></td><td>Integer</td></tr>
+<div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>scan_id</code></td><td>Integer</td><td>Unique scan identifier</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td><td>Root directory identifier</td></tr>
+<tr><td><code>state</code></td><td>Integer</td><td>Scan state (0-6)</td></tr>
+<tr><td><code>is_hash</code></td><td>Boolean</td><td>Hash new or changed files</td></tr>
+<tr><td><code>hash_all</code></td><td>Boolean</td><td>Hash all items including unchanged</td></tr>
+<tr><td><code>is_val</code></td><td>Boolean</td><td>Validate new or changed files</td></tr>
+<tr><td><code>val_all</code></td><td>Boolean</td><td>Validate all items including unchanged</td></tr>
+<tr><td><code>scan_time</code></td><td>Date</td><td>Timestamp when scan was performed</td></tr>
+<tr><td><code>file_count</code></td><td>Integer</td><td>Count of files found in the scan</td></tr>
+<tr><td><code>folder_count</code></td><td>Integer</td><td>Count of directories found in the scan</td></tr>
+<tr><td><code>total_file_size</code></td><td>Integer</td><td>Total size in bytes of all files in the scan</td></tr>
+<tr><td><code>alert_count</code></td><td>Integer</td><td>Number of alerts created during the scan</td></tr>
+<tr><td><code>add_count</code></td><td>Integer</td><td>Number of items added in the scan</td></tr>
+<tr><td><code>modify_count</code></td><td>Integer</td><td>Number of items modified in the scan</td></tr>
+<tr><td><code>delete_count</code></td><td>Integer</td><td>Number of items deleted in the scan</td></tr>
+<tr><td><code>error</code></td><td>String</td><td>Error message if scan failed</td></tr>
 </tbody></table>
 </div>
 <hr />
@@ -341,6 +344,9 @@ changes where val_new:(I) show default, val_old, val_new order by change_id desc
 
 # Scans with timestamp for programmatic processing
 scans show scan_id, scan_time@timestamp, file_count order by scan_time desc limit 10
+
+# Scans with changes and alerts
+scans show scan_id, file_count, total_file_size, add_count, modify_count, delete_count, alert_count order by scan_time desc
 </code></pre>
 <hr />
 <p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="validators.html">Validators</a> · <a href="configuration.html">Configuration</a></p>
