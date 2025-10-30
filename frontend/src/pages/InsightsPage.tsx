@@ -10,9 +10,10 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { AlertsTab } from './insights/AlertsTab'
+import { ScanTrendsTab } from './insights/ScanTrendsTab'
 import type { ContextFilterType } from '@/lib/types'
 
-const VALID_TABS = ['alerts', 'statistics', 'changes'] as const
+const VALID_TABS = ['alerts', 'scan-trends', 'statistics', 'changes'] as const
 type TabValue = typeof VALID_TABS[number]
 
 export function InsightsPage() {
@@ -54,41 +55,48 @@ export function InsightsPage() {
       <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col">
         <TabsList>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
+          <TabsTrigger value="scan-trends">Scan Trends</TabsTrigger>
           <TabsTrigger value="statistics">Statistics</TabsTrigger>
           <TabsTrigger value="changes">Changes</TabsTrigger>
         </TabsList>
 
-        {/* Context Filter Toolbar */}
-        <div className="flex items-center gap-4 py-4 px-4 bg-muted/30 rounded-lg mb-4">
-          <label className="text-sm font-medium">Context:</label>
-          <Select value={contextFilter} onValueChange={handleContextFilterChange}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Data</SelectItem>
-              <SelectItem value="root">By Root</SelectItem>
-              <SelectItem value="scan">By Scan ID</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Context Filter Toolbar - only show for tabs that need it */}
+        {currentTab === 'alerts' && (
+          <div className="flex items-center gap-4 py-4 px-4 bg-muted/30 rounded-lg mb-4">
+            <label className="text-sm font-medium">Context:</label>
+            <Select value={contextFilter} onValueChange={handleContextFilterChange}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Data</SelectItem>
+                <SelectItem value="root">By Root</SelectItem>
+                <SelectItem value="scan">By Scan ID</SelectItem>
+              </SelectContent>
+            </Select>
 
-          {contextFilter !== 'all' && (
-            <Input
-              type="text"
-              value={contextValue}
-              onChange={(e) => setContextValue(e.target.value)}
-              placeholder={
-                contextFilter === 'root'
-                  ? 'Enter root ID...'
-                  : 'Enter scan ID...'
-              }
-              className="flex-1 max-w-md"
-            />
-          )}
-        </div>
+            {contextFilter !== 'all' && (
+              <Input
+                type="text"
+                value={contextValue}
+                onChange={(e) => setContextValue(e.target.value)}
+                placeholder={
+                  contextFilter === 'root'
+                    ? 'Enter root ID...'
+                    : 'Enter scan ID...'
+                }
+                className="flex-1 max-w-md"
+              />
+            )}
+          </div>
+        )}
 
         <TabsContent value="alerts" className="flex-1">
           <AlertsTab contextFilter={contextFilter} contextValue={contextValue} />
+        </TabsContent>
+
+        <TabsContent value="scan-trends" className="flex-1">
+          <ScanTrendsTab />
         </TabsContent>
 
         <TabsContent value="statistics" className="flex-1">
