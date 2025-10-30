@@ -46,21 +46,24 @@ All queries that retrieve scan information begin with the keyword `scans`:
 scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 ```
 
-| Property       | Type     |
-|----------------|----------|
-| `scan_id`      | Integer  |
-| `root_id`      | Integer  |
-| `state`        | Integer  |
-| `is_hash`      | Boolean  |
-| `hash_all`     | Boolean  |
-| `is_val`       | Boolean  |
-| `val_all`      | Boolean  |
-| `scan_time`    | Date     |
-| `file_count`   | Integer  |
-| `folder_count` | Integer  |
-| `adds`         | Integer  |
-| `modifies`     | Integer  |
-| `deletes`      | Integer  |
+| Property          | Type     | Description                                    |
+|-------------------|----------|------------------------------------------------|
+| `scan_id`         | Integer  | Unique scan identifier                         |
+| `root_id`         | Integer  | Root directory identifier                      |
+| `state`           | Integer  | Scan state (0-6)                               |
+| `is_hash`         | Boolean  | Hash new or changed files                      |
+| `hash_all`        | Boolean  | Hash all items including unchanged             |
+| `is_val`          | Boolean  | Validate new or changed files                  |
+| `val_all`         | Boolean  | Validate all items including unchanged         |
+| `scan_time`       | Date     | Timestamp when scan was performed              |
+| `file_count`      | Integer  | Count of files found in the scan               |
+| `folder_count`    | Integer  | Count of directories found in the scan         |
+| `total_file_size` | Integer  | Total size in bytes of all files in the scan   |
+| `alert_count`     | Integer  | Number of alerts created during the scan       |
+| `add_count`       | Integer  | Number of items added in the scan              |
+| `modify_count`    | Integer  | Number of items modified in the scan           |
+| `delete_count`    | Integer  | Number of items deleted in the scan            |
+| `error`           | String   | Error message if scan failed                   |
 
 ---
 
@@ -225,6 +228,9 @@ changes where val_new:(I) show default, val_old, val_new order by change_id desc
 
 # Scans with timestamp for programmatic processing
 scans show scan_id, scan_time@timestamp, file_count order by scan_time desc limit 10
+
+# Scans with changes and alerts
+scans show scan_id, file_count, total_file_size, add_count, modify_count, delete_count, alert_count order by scan_time desc
 ```
 
 ---

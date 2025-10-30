@@ -4,6 +4,14 @@ import { useScanManager } from '@/contexts/ScanManagerContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatTimeAgo } from '@/lib/dateUtils'
 
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`
+}
+
 interface LastScanStats {
   state: 'no_scans' | 'last_scan'
   scan_id?: number
@@ -13,6 +21,10 @@ interface LastScanStats {
   scan_time?: number
   total_files?: number
   total_folders?: number
+  total_file_size?: number
+  total_adds?: number
+  total_modifies?: number
+  total_deletes?: number
   files_added?: number
   files_modified?: number
   files_deleted?: number
@@ -175,10 +187,18 @@ export function LastScanCard() {
             <span className="text-muted-foreground">Started:</span> {timeAgo}
           </div>
           {!isError && !isStopped && stats.total_files !== undefined && (
-            <div>
-              <span className="text-muted-foreground">Items:</span>{' '}
-              {stats.total_files.toLocaleString()} files, {stats.total_folders?.toLocaleString() || 0} folders
-            </div>
+            <>
+              <div>
+                <span className="text-muted-foreground">Items:</span>{' '}
+                {stats.total_files.toLocaleString()} files, {stats.total_folders?.toLocaleString() || 0} folders
+              </div>
+              {stats.total_file_size !== undefined && stats.total_file_size > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Total Size:</span>{' '}
+                  {formatFileSize(stats.total_file_size)}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -238,6 +258,9 @@ export function LastScanCard() {
                   <th className="px-4 py-3 text-center font-semibold text-xs uppercase tracking-wider text-muted-foreground">
                     Folders
                   </th>
+                  <th className="px-4 py-3 text-center font-semibold text-xs uppercase tracking-wider text-muted-foreground">
+                    Total
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -245,16 +268,19 @@ export function LastScanCard() {
                   <td className="px-4 py-2.5 text-muted-foreground font-medium">Added</td>
                   <td className="px-4 py-2.5 text-center">{stats.files_added?.toLocaleString() || 0}</td>
                   <td className="px-4 py-2.5 text-center">{stats.folders_added?.toLocaleString() || 0}</td>
+                  <td className="px-4 py-2.5 text-center font-semibold">{stats.total_adds?.toLocaleString() || 0}</td>
                 </tr>
                 <tr className="border-t border-border hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-2.5 text-muted-foreground font-medium">Modified</td>
                   <td className="px-4 py-2.5 text-center">{stats.files_modified?.toLocaleString() || 0}</td>
                   <td className="px-4 py-2.5 text-center">{stats.folders_modified?.toLocaleString() || 0}</td>
+                  <td className="px-4 py-2.5 text-center font-semibold">{stats.total_modifies?.toLocaleString() || 0}</td>
                 </tr>
                 <tr className="border-t border-border hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-2.5 text-muted-foreground font-medium">Deleted</td>
                   <td className="px-4 py-2.5 text-center">{stats.files_deleted?.toLocaleString() || 0}</td>
                   <td className="px-4 py-2.5 text-center">{stats.folders_deleted?.toLocaleString() || 0}</td>
+                  <td className="px-4 py-2.5 text-center font-semibold">{stats.total_deletes?.toLocaleString() || 0}</td>
                 </tr>
               </tbody>
             </table>

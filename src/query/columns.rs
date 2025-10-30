@@ -171,10 +171,12 @@ pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {
     "scan_time" => ColSpec::new("scan_time", "Scan Time", true, true, ColType::Date, ColAlign::Center),
     "file_count" => ColSpec::new("file_count", "Files", true, true, ColType::Int, ColAlign::Right),
     "folder_count" => ColSpec::new("folder_count", "Folders", true, true, ColType::Int, ColAlign::Right),
+    "total_file_size" => ColSpec::new("total_file_size", "Total Size", true, true, ColType::Int, ColAlign::Right),
+    "alert_count" => ColSpec::new("alert_count", "Alerts", true, true, ColType::Int, ColAlign::Right),
+    "add_count" => ColSpec::new("add_count", "Adds", true, true, ColType::Int, ColAlign::Right),
+    "modify_count" => ColSpec::new("modify_count", "Modifies", true, true, ColType::Int, ColAlign::Right),
+    "delete_count" => ColSpec::new("delete_count", "Deletes", true, true, ColType::Int, ColAlign::Right),
     "error" => ColSpec::new("error", "Error", false, true, ColType::String, ColAlign::Left),
-    "adds" => ColSpec::new("adds", "Adds", true, false, ColType::Int, ColAlign::Right),
-    "modifies" => ColSpec::new("modifies", "Modifies", true, false, ColType::Int, ColAlign::Right),
-    "deletes" => ColSpec::new("deletes", "Deletes", true, false, ColType::Int, ColAlign::Right),
 };
 
 pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {

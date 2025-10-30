@@ -7,12 +7,12 @@ use rusqlite::{params, OptionalExtension, Result};
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, error
+    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, total_file_size, alert_count, add_count, modify_count, delete_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, error
+    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, total_file_size, alert_count, add_count, modify_count, delete_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -91,6 +91,11 @@ pub struct Scan {
     scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
+    total_file_size: Option<i64>,
+    alert_count: Option<i64>,
+    add_count: Option<i64>,
+    modify_count: Option<i64>,
+    delete_count: Option<i64>,
     error: Option<String>,
 }
 
@@ -161,6 +166,11 @@ impl Scan {
             scan_time,
             file_count: None,
             folder_count: None,
+            total_file_size: None,
+            alert_count: None,
+            add_count: None,
+            modify_count: None,
+            delete_count: None,
             error: None,
         }
     }
@@ -254,7 +264,12 @@ impl Scan {
                     scan_time: row.get(7)?,
                     file_count: row.get(8)?,
                     folder_count: row.get(9)?,
-                    error: row.get(10)?,
+                    total_file_size: row.get(10)?,
+                    alert_count: row.get(11)?,
+                    add_count: row.get(12)?,
+                    modify_count: row.get(13)?,
+                    delete_count: row.get(14)?,
+                    error: row.get(15)?,
                 })
             })
             .optional()?;
@@ -294,6 +309,26 @@ impl Scan {
         self.folder_count
     }
 
+    pub fn total_file_size(&self) -> Option<i64> {
+        self.total_file_size
+    }
+
+    pub fn alert_count(&self) -> Option<i64> {
+        self.alert_count
+    }
+
+    pub fn add_count(&self) -> Option<i64> {
+        self.add_count
+    }
+
+    pub fn modify_count(&self) -> Option<i64> {
+        self.modify_count
+    }
+
+    pub fn delete_count(&self) -> Option<i64> {
+        self.delete_count
+    }
+
     pub fn set_state_sweeping(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning => self.set_state(db, ScanState::Sweeping),
@@ -306,43 +341,104 @@ impl Scan {
     }
 
     pub fn set_state_analyzing(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
-        let tx = db.conn_mut().transaction()?;
-
-        let (file_count, folder_count): (i64, i64) = tx
-            .query_row(
-                "SELECT 
-                SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count, 
-                SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count 
-                FROM items WHERE last_scan = ?",
-                [self.scan_id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .unwrap_or((0, 0)); // If no data, default to 0
-
-        // Update the scan entity to indicate that it completed
-        tx.execute(
-            "UPDATE scans SET file_count = ?, folder_count = ?, state = ? WHERE scan_id = ?",
-            (
-                file_count,
-                folder_count,
-                ScanState::Analyzing.as_i64(),
-                self.scan_id,
-            ),
-        )?;
-
-        tx.commit()?;
-
-        self.state = ScanState::Analyzing.as_i64();
-
-        self.file_count = Some(file_count);
-        self.folder_count = Some(folder_count);
-
-        Ok(())
+        match self.state() {
+            ScanState::Sweeping => self.set_state(db, ScanState::Analyzing),
+            _ => Err(FsPulseError::Error(format!(
+                "Can't set Scan Id {} to state analyzing from state {}",
+                self.scan_id(),
+                self.state().as_i64()
+            ))),
+        }
     }
 
     pub fn set_state_completed(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::Analyzing => self.set_state(db, ScanState::Completed),
+            ScanState::Analyzing => {
+                let tx = db.conn_mut().transaction()?;
+
+                // Compute file_count and folder_count (exclude tombstones)
+                let (file_count, folder_count): (i64, i64) = tx
+                    .query_row(
+                        "SELECT
+                        SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count,
+                        SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count
+                        FROM items WHERE last_scan = ? AND is_ts = 0",
+                        [self.scan_id],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .unwrap_or((0, 0));
+
+                // Compute total_file_size
+                let total_file_size: i64 = tx
+                    .query_row(
+                        "SELECT COALESCE(SUM(file_size), 0) FROM items
+                         WHERE last_scan = ? AND item_type = 'F' AND is_ts = 0",
+                        [self.scan_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+
+                // Compute alert_count
+                let alert_count: i64 = tx
+                    .query_row(
+                        "SELECT COUNT(*) FROM alerts WHERE scan_id = ?",
+                        [self.scan_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+
+                // Compute add_count, modify_count, delete_count
+                let (add_count, modify_count, delete_count): (i64, i64, i64) = tx
+                    .query_row(
+                        "SELECT
+                        COUNT(*) FILTER (WHERE change_type = 'A'),
+                        COUNT(*) FILTER (WHERE change_type = 'M'),
+                        COUNT(*) FILTER (WHERE change_type = 'D')
+                        FROM changes WHERE scan_id = ?",
+                        [self.scan_id],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )
+                    .unwrap_or((0, 0, 0));
+
+                // Update the scan with all counts and set state to Completed in one operation
+                tx.execute(
+                    "UPDATE scans SET
+                        file_count = ?,
+                        folder_count = ?,
+                        total_file_size = ?,
+                        alert_count = ?,
+                        add_count = ?,
+                        modify_count = ?,
+                        delete_count = ?,
+                        state = ?
+                    WHERE scan_id = ?",
+                    (
+                        file_count,
+                        folder_count,
+                        total_file_size,
+                        alert_count,
+                        add_count,
+                        modify_count,
+                        delete_count,
+                        ScanState::Completed.as_i64(),
+                        self.scan_id,
+                    ),
+                )?;
+
+                tx.commit()?;
+
+                // Update in-memory struct
+                self.state = ScanState::Completed.as_i64();
+                self.file_count = Some(file_count);
+                self.folder_count = Some(folder_count);
+                self.total_file_size = Some(total_file_size);
+                self.alert_count = Some(alert_count);
+                self.add_count = Some(add_count);
+                self.modify_count = Some(modify_count);
+                self.delete_count = Some(delete_count);
+
+                Ok(())
+            }
             _ => Err(FsPulseError::Error(format!(
                 "Can't set Scan Id {} to state completed from state {}",
                 self.scan_id(),
@@ -569,7 +665,7 @@ impl Scan {
         }
 
         let mut stmt = db.conn().prepare(
-            "SELECT 
+            "SELECT
                 s.scan_id,
                 s.root_id,
                 s.state,
@@ -579,10 +675,16 @@ impl Scan {
                 s.val_all,
                 s.scan_time,
                 s.file_count,
-                s.folder_count
+                s.folder_count,
+                s.total_file_size,
+                s.alert_count,
+                s.add_count,
+                s.modify_count,
+                s.delete_count,
+                s.error
             FROM scans s
             LEFT JOIN changes c ON s.scan_id = c.scan_id
-            GROUP BY s.scan_id, s.root_id, s.state, s.is_hash, s.hash_all, s.is_val, s.val_all, s.scan_time, s.file_count, s.folder_count
+            GROUP BY s.scan_id, s.root_id, s.state, s.is_hash, s.hash_all, s.is_val, s.val_all, s.scan_time, s.file_count, s.folder_count, s.total_file_size, s.alert_count, s.add_count, s.modify_count, s.delete_count, s.error
             ORDER BY s.scan_id DESC
             LIMIT ?"
         )?;
@@ -606,18 +708,22 @@ impl Scan {
             };
 
             Ok(Scan {
-
-                scan_id: row.get::<_, i64>(0)?, // scan id
-                root_id: row.get::<_, i64>(1)?, // root id
-                state: row.get::<_, i64>(2)?,   // root id
+                scan_id: row.get::<_, i64>(0)?,
+                root_id: row.get::<_, i64>(1)?,
+                state: row.get::<_, i64>(2)?,
                 analysis_spec: AnalysisSpec {
                     hash_mode,
                     val_mode,
                 },
-                scan_time: row.get::<_, i64>(7)?, // time of scan
-                file_count: row.get::<_, Option<i64>>(8)?, // file count
-                folder_count: row.get::<_, Option<i64>>(9)?, // folder count
-                error: row.get::<_, Option<String>>(10)?, // error
+                scan_time: row.get::<_, i64>(7)?,
+                file_count: row.get::<_, Option<i64>>(8)?,
+                folder_count: row.get::<_, Option<i64>>(9)?,
+                total_file_size: row.get::<_, Option<i64>>(10)?,
+                alert_count: row.get::<_, Option<i64>>(11)?,
+                add_count: row.get::<_, Option<i64>>(12)?,
+                modify_count: row.get::<_, Option<i64>>(13)?,
+                delete_count: row.get::<_, Option<i64>>(14)?,
+                error: row.get::<_, Option<String>>(15)?,
             })
         })?;
 
@@ -642,6 +748,12 @@ pub struct ScanStats {
     // Total counts from scans table
     pub total_files: i64,
     pub total_folders: i64,
+    pub total_file_size: i64,
+
+    // Total change counts from scans table
+    pub total_adds: i64,
+    pub total_modifies: i64,
+    pub total_deletes: i64,
 
     // Change breakdown by type (files)
     pub files_added: i64,
@@ -713,13 +825,6 @@ impl ScanStats {
             |row| row.get(0)
         ).unwrap_or(0);
 
-        // Get alert count
-        let alerts_generated: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM alerts WHERE scan_id = ?",
-            params![scan_id],
-            |row| row.get(0)
-        ).unwrap_or(0);
-
         Ok(Some(ScanStats {
             scan_id: scan.scan_id(),
             root_id: scan.root_id(),
@@ -728,6 +833,10 @@ impl ScanStats {
             scan_time: scan.scan_time(),
             total_files: scan.file_count().unwrap_or(0),
             total_folders: scan.folder_count().unwrap_or(0),
+            total_file_size: scan.total_file_size().unwrap_or(0),
+            total_adds: scan.add_count().unwrap_or(0),
+            total_modifies: scan.modify_count().unwrap_or(0),
+            total_deletes: scan.delete_count().unwrap_or(0),
             files_added: changes.0,
             files_modified: changes.1,
             files_deleted: changes.2,
@@ -736,7 +845,7 @@ impl ScanStats {
             folders_deleted: changes.5,
             items_hashed,
             items_validated,
-            alerts_generated,
+            alerts_generated: scan.alert_count().unwrap_or(0),
             hash_enabled: scan.analysis_spec().is_hash(),
             validation_enabled: scan.analysis_spec().is_val(),
             error: scan.error().map(|s| s.to_string()),

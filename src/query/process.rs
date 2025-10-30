@@ -529,10 +529,12 @@ impl ScansQuery {
                 "scan_time" => Format::format_date(scan.scan_time, col.format)?,
                 "file_count" => Format::format_opt_i64(scan.file_count),
                 "folder_count" => Format::format_opt_i64(scan.folder_count),
+                "total_file_size" => Format::format_opt_i64(scan.total_file_size),
+                "alert_count" => Format::format_opt_i64(scan.alert_count),
+                "add_count" => Format::format_opt_i64(scan.add_count),
+                "modify_count" => Format::format_opt_i64(scan.modify_count),
+                "delete_count" => Format::format_opt_i64(scan.delete_count),
                 "error" => Format::format_opt_string(&scan.error),
-                "adds" => Format::format_i64(scan.adds),
-                "modifies" => Format::format_i64(scan.modifies),
-                "deletes" => Format::format_i64(scan.deletes),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -645,15 +647,9 @@ impl QueryImpl {
         {limit_clause}
         {offset_clause}";
 
-    const SCANS_SQL_QUERY: &str = "SELECT {select_list},
-            COUNT(*) FILTER (WHERE changes.change_type = 'A') AS adds,
-            COUNT(*) FILTER (WHERE changes.change_type = 'M') AS modifies,
-            COUNT(*) FILTER (WHERE changes.change_type = 'D') AS deletes
+    const SCANS_SQL_QUERY: &str = "SELECT {select_list}
         FROM scans
-        LEFT JOIN changes
-            ON changes.scan_id = scans.scan_id
         {where_clause}
-        GROUP BY scans.scan_id
         {order_clause}
         {limit_clause}
         {offset_clause}";
@@ -818,10 +814,12 @@ pub struct ScansQueryRow {
     scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
+    total_file_size: Option<i64>,
+    alert_count: Option<i64>,
+    add_count: Option<i64>,
+    modify_count: Option<i64>,
+    delete_count: Option<i64>,
     error: Option<String>,
-    adds: i64,
-    modifies: i64,
-    deletes: i64,
 }
 
 impl ScansQueryRow {
@@ -837,10 +835,12 @@ impl ScansQueryRow {
             scan_time: row.get(7)?,
             file_count: row.get(8)?,
             folder_count: row.get(9)?,
-            error: row.get(10)?,
-            adds: row.get(11)?,
-            modifies: row.get(12)?,
-            deletes: row.get(13)?,
+            total_file_size: row.get(10)?,
+            alert_count: row.get(11)?,
+            add_count: row.get(12)?,
+            modify_count: row.get(13)?,
+            delete_count: row.get(14)?,
+            error: row.get(15)?,
         })
     }
 }

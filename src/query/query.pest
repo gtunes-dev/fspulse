@@ -185,7 +185,7 @@ alert_status_flagged       =  { ^"F" }
 alert_status_open          =  { ^"O" }
 
 // Integer columns
-int_col  = { "file_size" | "file_count" | "folder_count" | "adds" | "modifies" | "deletes" | "state" }
+int_col  = { "file_size" | "file_count" | "folder_count" | "total_file_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "state" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

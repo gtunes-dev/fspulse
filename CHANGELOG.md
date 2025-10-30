@@ -7,12 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Enhanced scan statistics**: Database schema v6 adds denormalized count columns to scans table (`total_file_size`, `alert_count`, `add_count`, `modify_count`, `delete_count`) for improved query performance and future charting capabilities. total_file_size will be computed for new scans only
+- **Home page statistics display**: Added total file size and aggregate change count displays with color-coded visual indicators for adds (green), modifies (blue), and deletes (red)
+
 ### Changed
 
+- **Query language updates**: Replaced computed columns (`adds`, `modifies`, `deletes`) with stored columns (`add_count`, `modify_count`, `delete_count`) in scans queries - **Breaking change**: queries using old column names will fail after upgrade
 - **Complete React migration**: Replaced monolithic 5,800-line HTML template with modern React 19 + shadcn/ui component library, featuring improved responsiveness, accessibility, and maintainability
 - **Single-binary distribution**: Implemented embedded assets using rust-embed with conditional compilation - development builds serve from filesystem for fast iteration, release builds embed assets into binary for simplified deployment
 - **Build infrastructure updates**: Updated GitHub CI workflows and Dockerfile to build frontend before Rust compilation, ensuring embedded assets are included in release artifacts
 - **Web UI Scan page fit and finish**: Improved layout and spacing of Roots card header with repositioned "Add Root" button
+
+### Fixed
+
+- **Tombstone exclusion**: Corrected `file_count` and `folder_count` computation to exclude tombstoned (deleted) items, fixing a bug where deleted items were incorrectly included in totals
 
 ## [v0.1.4] - 2025-10-25
 
