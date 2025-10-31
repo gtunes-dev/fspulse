@@ -1113,7 +1113,7 @@ fspulse serve
 <div class="table-wrapper"><table><thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>scan_id</code></td><td>Integer</td><td>Unique scan identifier</td></tr>
 <tr><td><code>root_id</code></td><td>Integer</td><td>Root directory identifier</td></tr>
-<tr><td><code>state</code></td><td>Integer</td><td>Scan state (0-6)</td></tr>
+<tr><td><code>scan_state</code></td><td>Scan State Enum</td><td>State of the scan</td></tr>
 <tr><td><code>is_hash</code></td><td>Boolean</td><td>Hash new or changed files</td></tr>
 <tr><td><code>hash_all</code></td><td>Boolean</td><td>Hash all items including unchanged</td></tr>
 <tr><td><code>is_val</code></td><td>Boolean</td><td>Validate new or changed files</td></tr>
@@ -1192,8 +1192,9 @@ fspulse serve
 <tr><td>String</td><td><code>'example'</code>, <code>'error: missing EOF'</code>, <code>null</code>, <code>NULL</code></td><td>Quoted strings. Null values are allowed in all-lower or all-upper case.</td></tr>
 <tr><td>Path</td><td><code>'photos/reports'</code>, <code>'file.txt'</code></td><td>Must be quoted. <strong>Null values are not supported.</strong></td></tr>
 <tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Valid (V), Invalid (I), No Validator (N), Unknown (U). Unquoted. Ranges not supported.</td></tr>
-<tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>File (F), Directory (D). Unquoted. Ranges not supported.</td></tr>
-<tr><td>Change Type Enum</td><td><code>A</code>, <code>D</code>, <code>M</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Add (A), Delete (D), Modify (M). Unquoted. Ranges not supported.</td></tr>
+<tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>S</code>, <code>O</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>File (F), Directory (D), Symlink (S), Other (O). Unquoted. Ranges not supported.</td></tr>
+<tr><td>Change Type Enum</td><td><code>A</code>, <code>D</code>, <code>M</code>, <code>N</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Add (A), Delete (D), Modify (M), No Change (N). Unquoted. Ranges not supported.</td></tr>
+<tr><td>Scan State Enum</td><td><code>S</code>, <code>W</code>, <code>A</code>, <code>C</code>, <code>P</code>, <code>E</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Scanning (S), Sweeping (W), Analyzing (A), Completed (C), Stopped (P), Error (E). Unquoted. Ranges not supported.</td></tr>
 </tbody></table>
 </div>
 <hr />
