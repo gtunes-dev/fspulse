@@ -12,12 +12,12 @@ use super::{
         ColSet, ALERTS_QUERY_COLS, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS,
         SCANS_QUERY_COLS,
     },
-    filter::{EnumFilter, IntFilter},
+    filter::{BoolFilter, EnumFilter, IntFilter},
     show::{Format, Show},
 };
 //use tablestream::{Column, Stream};
 
-use crate::{database::Database, error::FsPulseError};
+use crate::{alerts::{AlertStatus, AlertType}, changes::ChangeType, database::Database, error::FsPulseError, items::ItemType, scans::ScanState, validate::validator::ValidationState};
 
 use super::{
     filter::{DateFilter, Filter, IdFilter, PathFilter, StringFilter},
@@ -329,8 +329,8 @@ impl AlertsQuery {
         for col in &self.show().display_cols {
             let col_string = match col.display_col {
                 "alert_id" => Format::format_i64(alert.alert_id),
-                "alert_type" => Format::format_alert_type(&alert.alert_type, col.format)?,
-                "alert_status" => Format::format_alert_status(&alert.alert_status, col.format)?,
+                "alert_type" => Format::format_alert_type(alert.alert_type, col.format)?,
+                "alert_status" => Format::format_alert_status(alert.alert_status, col.format)?,
                 "root_id" => Format::format_i64(alert.root_id),
                 "scan_id" => Format::format_i64(alert.scan_id),
                 "item_id" => Format::format_i64(alert.item_id),
@@ -455,7 +455,7 @@ impl ItemsQuery {
                 "item_id" => Format::format_i64(item.item_id),
                 "root_id" => Format::format_i64(item.root_id),
                 "item_path" => Format::format_path(&item.item_path, col.format)?,
-                "item_type" => Format::format_item_type(&item.item_type, col.format)?,
+                "item_type" => Format::format_item_type(item.item_type, col.format)?,
                 "last_scan" => Format::format_i64(item.last_scan),
                 "is_ts" => Format::format_bool(item.is_ts, col.format)?,
                 "mod_date" => Format::format_opt_date(item.mod_date, col.format)?,
@@ -463,7 +463,7 @@ impl ItemsQuery {
                 "file_hash" => Format::format_opt_string(&item.file_hash),
                 "last_hash_scan" => Format::format_opt_i64(item.last_hash_scan),
                 "last_val_scan" => Format::format_opt_i64(item.last_val_scan),
-                "val" => Format::format_val(&item.val, col.format)?,
+                "val" => Format::format_val(ValidationState::from_i64(item.val), col.format)?,
                 "val_error" => Format::format_opt_string(&item.val_error),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
@@ -521,7 +521,7 @@ impl ScansQuery {
             let col_string = match col.display_col {
                 "scan_id" => Format::format_i64(scan.scan_id),
                 "root_id" => Format::format_i64(scan.root_id),
-                "state" => Format::format_i64(scan.state),
+                "scan_state" => Format::format_scan_state(scan.state, col.format)?,
                 "is_hash" => Format::format_bool(scan.is_hash, col.format)?,
                 "hash_all" => Format::format_bool(scan.hash_all, col.format)?,
                 "is_val" => Format::format_bool(scan.is_val, col.format)?,
@@ -596,7 +596,7 @@ impl ChangesQuery {
                 "scan_id" => Format::format_i64(change.scan_id),
                 "item_id" => Format::format_i64(change.item_id),
                 "item_path" => Format::format_path(&change.item_path, col.format)?,
-                "change_type" => Format::format_change_type(&change.change_type, col.format)?,
+                "change_type" => Format::format_change_type(change.change_type, col.format)?,
                 "is_undelete" => Format::format_opt_bool(change.is_undelete, col.format)?,
                 "meta_change" => Format::format_opt_bool(change.meta_change, col.format)?,
                 "mod_date_old" => Format::format_opt_date(change.mod_date_old, col.format)?,
@@ -607,8 +607,8 @@ impl ChangesQuery {
                 "hash_new" => Format::format_opt_string(&change.hash_new),
                 "val_change" => Format::format_opt_bool(change.val_change, col.format)?,
                 "last_val_scan_old" => Format::format_opt_i64(change.last_val_scan_old),
-                "val_old" => Format::format_opt_val(change.val_old.as_deref(), col.format)?,
-                "val_new" => Format::format_opt_val(change.val_new.as_deref(), col.format)?,
+                "val_old" => Format::format_opt_val(change.val_old.map(ValidationState::from_i64), col.format)?,
+                "val_new" => Format::format_opt_val(change.val_new.map(ValidationState::from_i64), col.format)?,
                 "val_error_old" => Format::format_opt_string(&change.val_error_old),
                 "val_error_new" => Format::format_opt_string(&change.val_error_new),
                 _ => {
@@ -720,7 +720,7 @@ struct ItemsQueryRow {
     item_id: i64,
     root_id: i64,
     item_path: String,
-    item_type: String,
+    item_type: ItemType,
     last_scan: i64,
     is_ts: bool,
     mod_date: Option<i64>,
@@ -728,7 +728,7 @@ struct ItemsQueryRow {
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
     last_val_scan: Option<i64>,
-    val: String,
+    val: i64,
     val_error: Option<String>,
 }
 
@@ -738,7 +738,7 @@ impl ItemsQueryRow {
             item_id: row.get(0)?,
             root_id: row.get(1)?,
             item_path: row.get(2)?,
-            item_type: row.get(3)?,
+            item_type: ItemType::from_i64(row.get(3)?),
             last_scan: row.get(4)?,
             is_ts: row.get(5)?,
             mod_date: row.get(6)?,
@@ -759,7 +759,7 @@ pub struct ChangesQueryRow {
     pub scan_id: i64,
     pub item_id: i64,
     pub item_path: String,
-    pub change_type: String,
+    pub change_type: ChangeType,
     pub is_undelete: Option<bool>,
     pub meta_change: Option<bool>,
     pub mod_date_old: Option<i64>,
@@ -770,8 +770,8 @@ pub struct ChangesQueryRow {
     pub hash_new: Option<String>,
     pub val_change: Option<bool>,
     pub last_val_scan_old: Option<i64>,
-    pub val_old: Option<String>,
-    pub val_new: Option<String>,
+    pub val_old: Option<i64>,
+    pub val_new: Option<i64>,
     pub val_error_old: Option<String>,
     pub val_error_new: Option<String>,
 }
@@ -784,7 +784,7 @@ impl ChangesQueryRow {
             scan_id: row.get(2)?,
             item_id: row.get(3)?,
             item_path: row.get(4)?,
-            change_type: row.get(5)?,
+            change_type: ChangeType::from_i64(row.get(5)?),
             is_undelete: row.get(6)?,
             meta_change: row.get(7)?,
             mod_date_old: row.get(8)?,
@@ -806,7 +806,7 @@ impl ChangesQueryRow {
 pub struct ScansQueryRow {
     scan_id: i64,
     root_id: i64,
-    state: i64,
+    state: ScanState,
     is_hash: bool,
     hash_all: bool,
     is_val: bool,
@@ -824,10 +824,11 @@ pub struct ScansQueryRow {
 
 impl ScansQueryRow {
     pub fn from_row(row: &Row) -> rusqlite::Result<Self> {
+        let state_i64: i64 = row.get(2)?;
         Ok(ScansQueryRow {
             scan_id: row.get(0)?,
             root_id: row.get(1)?,
-            state: row.get(2)?,
+            state: ScanState::from_i64(state_i64),
             is_hash: row.get(3)?,
             hash_all: row.get(4)?,
             is_val: row.get(5)?,
@@ -847,8 +848,8 @@ impl ScansQueryRow {
 
 pub struct AlertsQueryRow {
     alert_id: i64,
-    alert_type: String,
-    alert_status: String,
+    alert_type: AlertType,
+    alert_status: AlertStatus,
     root_id: i64,
     scan_id: i64,
     item_id: i64,
@@ -865,8 +866,8 @@ impl AlertsQueryRow {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(AlertsQueryRow {
             alert_id: row.get(0)?,
-            alert_type: row.get(1)?,
-            alert_status: row.get(2)?,
+            alert_type: AlertType::from_i64(row.get(1)?),
+            alert_status: AlertStatus::from_i64(row.get(2)?),
             root_id: row.get(3)?,
             scan_id: row.get(4)?,
             item_id: row.get(5)?,
@@ -1007,12 +1008,15 @@ impl QueryProcessor {
                 Rule::date_filter => {
                     DateFilter::add_to_query(token, query)?;
                 }
-                Rule::bool_filter
-                | Rule::val_filter
+                Rule::bool_filter => {
+                    BoolFilter::add_bool_filter_to_query(token, query)?;
+                }
+                Rule::scan_state_filter
                 | Rule::item_type_filter
                 | Rule::change_type_filter
                 | Rule::alert_type_filter
-                | Rule::alert_status_filter => {
+                | Rule::alert_status_filter
+                | Rule::val_filter => {
                     EnumFilter::add_enum_filter_to_query(token, query)?;
                 }
                 Rule::path_filter => {

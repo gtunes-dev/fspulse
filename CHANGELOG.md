@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Integer-based enum storage**: Database schema v7 migrates all enums (item_type, change_type, alert_type, alert_status, validation state, scan_state) from single-character string storage to integer values for improved type safety and performance
+- **Removed Default trait from enums**: Eliminated Default implementations from all enums to enforce explicit value handling
+- **Removed ScanState::Unknown variant**: Eliminated invalid Unknown state from ScanState enum
+- **Query column rename**: Renamed `state` column to `scan_state` in scans query domain
 - **Query language updates**: Replaced computed columns (`adds`, `modifies`, `deletes`) with stored columns (`add_count`, `modify_count`, `delete_count`) in scans queries - **Breaking change**: queries using old column names will fail after upgrade
 - **Complete React migration**: Replaced monolithic 5,800-line HTML template with modern React 19 + shadcn/ui component library, featuring improved responsiveness, accessibility, and maintainability
 - **Single-binary distribution**: Implemented embedded assets using rust-embed with conditional compilation - development builds serve from filesystem for fast iteration, release builds embed assets into binary for simplified deployment

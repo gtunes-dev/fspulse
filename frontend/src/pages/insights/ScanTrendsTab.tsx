@@ -103,12 +103,10 @@ export function ScanTrendsTab() {
       setLoading(true)
       setError(null)
 
-      // Build filters: root_id and only completed scans (state = 4)
-      // Note: state is an int column, so we need >3 and <5 to match exactly 4
+      // Build filters: root_id and only completed scans
       const filters: Array<{ column: string; value: string }> = [
         { column: 'root_id', value: selectedRootId },
-        { column: 'state', value: '>3' },  // state > 3
-        { column: 'state', value: '<5' },  // state < 5 (combined = state 4)
+        { column: 'scan_state', value: 'C' },  // Completed scans only
       ]
 
       // Add date range filter - DON'T include parentheses, backend adds them

@@ -1,16 +1,16 @@
 use rusqlite::params;
-use strum_macros::{AsRefStr, Display, EnumIter, EnumString};
+use serde::{Deserialize, Serialize};
 
 use crate::database::Database;
 use crate::error::FsPulseError;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct Change {
     pub change_id: i64,
     pub scan_id: i64,
     pub item_id: i64,
-    pub change_type: String,
+    pub change_type: ChangeType,
     pub is_undelete: Option<bool>, // Present if "A". True if add is undelete
     pub meta_change: Option<bool>, // Present if "M". True if metadata changed, else False
     pub mod_date_old: Option<i64>, // Meaningful if undelete or meta_change
@@ -26,9 +26,9 @@ pub struct Change {
     pub val_change: Option<bool>,  // Present if "M", True if validation changed, else False
     #[allow(dead_code)]
     pub last_val_scan_old: Option<i64>, // Present if "M" and validation changed
-    pub val_old: Option<String>,   // Validation state of the item if val_change = true
+    pub val_old: Option<i64>,   // Validation state of the item if val_change = true
     #[allow(dead_code)]
-    pub val_new: Option<String>, // Meaningful if undelete or val_change
+    pub val_new: Option<i64>, // Meaningful if undelete or val_change
     #[allow(dead_code)]
     pub val_error_old: Option<String>, // Meaningful if undelete or val_change
     #[allow(dead_code)]
@@ -60,20 +60,40 @@ pub struct ValidationTransitions {
     pub no_validator_to_invalid: i32,
 }
 
-#[derive(AsRefStr, EnumIter, EnumString, Debug, Display, PartialEq, Eq, Copy, Clone)]
+#[repr(i64)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize)]
 pub enum ChangeType {
-    #[strum(serialize = "A")]
-    Add,
-    #[strum(serialize = "D")]
-    Delete,
-    #[strum(serialize = "M")]
-    Modify,
-    #[strum(serialize = "N")]
-    NoChange,
+    Add = 0,
+    Delete = 1,
+    Modify = 2,
+    NoChange = 3,
 }
 
 impl ChangeType {
-    pub fn long_name(&self) -> &'static str {
+    pub fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            0 => ChangeType::Add,
+            1 => ChangeType::Delete,
+            2 => ChangeType::Modify,
+            3 => ChangeType::NoChange,
+            _ => ChangeType::Add, // Default for invalid values
+        }
+    }
+
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            ChangeType::Add => "A",
+            ChangeType::Delete => "D",
+            ChangeType::Modify => "M",
+            ChangeType::NoChange => "N",
+        }
+    }
+
+    pub fn full_name(&self) -> &'static str {
         match self {
             ChangeType::Add => "Add",
             ChangeType::Delete => "Delete",
@@ -81,32 +101,35 @@ impl ChangeType {
             ChangeType::NoChange => "No Change",
         }
     }
-}
 
-/* 
-impl std::fmt::Display for ChangeType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-    */
-
-/* 
-
-impl FromStr for ChangeType {
-    type Err = FsPulseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "A" => Ok(Self::Add),
-            "D" => Ok(Self::Delete),
-            "M" => Ok(Self::Modify),
-            "N" => Ok(Self::NoChange),
-            _ => Err(FsPulseError::Error(format!("Invalid change type: '{}'", s))),
+    pub fn from_string(s: &str) -> Option<Self> {
+        match s.to_ascii_uppercase().as_str() {
+            // Full names
+            "ADD" => Some(ChangeType::Add),
+            "DELETE" => Some(ChangeType::Delete),
+            "MODIFY" => Some(ChangeType::Modify),
+            "NO CHANGE" | "NOCHANGE" => Some(ChangeType::NoChange),
+            // Short names
+            "A" => Some(ChangeType::Add),
+            "D" => Some(ChangeType::Delete),
+            "M" => Some(ChangeType::Modify),
+            "N" => Some(ChangeType::NoChange),
+            _ => None,
         }
     }
 }
-    */
+
+impl std::fmt::Display for ChangeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.full_name())
+    }
+}
+
+impl crate::query::QueryEnum for ChangeType {
+    fn from_token(s: &str) -> Option<i64> {
+        Self::from_string(s).map(|change_type| change_type.as_i64())
+    }
+}
 
 impl Change {
     // TODO: Implement accessors for other fields
@@ -115,12 +138,12 @@ impl Change {
         self.hash_old.as_deref()
     }
     #[allow(dead_code)]
-    pub fn val_old(&self) -> Option<&str> {
-        self.val_old.as_deref()
+    pub fn val_old(&self) -> Option<i64> {
+        self.val_old
     }
     #[allow(dead_code)]
-    pub fn val_new(&self) -> Option<&str> {
-        self.val_new.as_deref()
+    pub fn val_new(&self) -> Option<i64> {
+        self.val_new
     }
 
     pub fn get_validation_transitions_for_scan(
@@ -129,46 +152,46 @@ impl Change {
     ) -> Result<ValidationTransitions, FsPulseError> {
         let conn = db.conn();
         // TODO: This is unnecessarily complex now that we have old and new validation states in the change record
-        let sql = "SELECT 
-                COALESCE(SUM(CASE 
-                    WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.val_old, 'U') = 'U'
-                        AND i.val = 'V'
+        let sql = "SELECT
+                COALESCE(SUM(CASE
+                    WHEN c.change_type IN (0,2)
+                        AND COALESCE(c.val_old, 0) = 0
+                        AND i.val = 1
                     THEN 1 ELSE 0 END), 0) AS unknown_to_valid,
-                COALESCE(SUM(CASE 
-                    WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.val_old, 'U') = 'U'
-                        AND i.val = 'I'
+                COALESCE(SUM(CASE
+                    WHEN c.change_type IN (0,2)
+                        AND COALESCE(c.val_old, 0) = 0
+                        AND i.val = 2
                     THEN 1 ELSE 0 END), 0) AS unknown_to_invalid,
-                COALESCE(SUM(CASE 
-                    WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.val_old, 'U') = 'U'
-                        AND i.val = 'N'
+                COALESCE(SUM(CASE
+                    WHEN c.change_type IN (0,2)
+                        AND COALESCE(c.val_old, 0) = 0
+                        AND i.val = 3
                     THEN 1 ELSE 0 END), 0) AS unknown_to_no_validator,
-                COALESCE(SUM(CASE 
-                    WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.val_old, 'U') = 'V'
-                        AND i.val = 'I'
+                COALESCE(SUM(CASE
+                    WHEN c.change_type IN (0,2)
+                        AND COALESCE(c.val_old, 0) = 1
+                        AND i.val = 2
                     THEN 1 ELSE 0 END), 0) AS valid_to_invalid,
-                COALESCE(SUM(CASE 
-                    WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.val_old, 'U') = 'V'
-                        AND i.val = 'N'
+                COALESCE(SUM(CASE
+                    WHEN c.change_type IN (0,2)
+                        AND COALESCE(c.val_old, 0) = 1
+                        AND i.val = 3
                     THEN 1 ELSE 0 END), 0) AS valid_to_no_validator,
-                COALESCE(SUM(CASE 
-                    WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.val_old, 'U') = 'N'
-                        AND i.val = 'V'
+                COALESCE(SUM(CASE
+                    WHEN c.change_type IN (0,2)
+                        AND COALESCE(c.val_old, 0) = 3
+                        AND i.val = 1
                     THEN 1 ELSE 0 END), 0) AS no_validator_to_valid,
-                COALESCE(SUM(CASE 
-                    WHEN c.change_type IN ('A','M')
-                        AND COALESCE(c.val_old, 'U') = 'N'
-                        AND i.val = 'I'
+                COALESCE(SUM(CASE
+                    WHEN c.change_type IN (0,2)
+                        AND COALESCE(c.val_old, 0) = 3
+                        AND i.val = 2
                     THEN 1 ELSE 0 END), 0) AS no_validator_to_invalid
             FROM changes c
                 JOIN items i ON c.item_id = i.item_id
             WHERE c.scan_id = ?
-                AND i.item_type = 'F'
+                AND i.item_type = 0
                 AND i.is_ts = 0";
 
         let validation_transitions = conn.query_row(sql, params![scan_id], |row| {
@@ -199,10 +222,10 @@ impl ChangeCounts {
         let mut rows = stmt.query([scan_id])?;
 
         while let Some(row) = rows.next()? {
-            let change_type: String = row.get(0)?;
+            let change_type_value: i64 = row.get(0)?;
             let count: i64 = row.get(1)?;
 
-            let change_type = change_type.parse()?;
+            let change_type = ChangeType::from_i64(change_type_value);
 
             match change_type {
                 ChangeType::Add => change_counts.set_count_of(ChangeType::Add, count),
@@ -229,105 +252,46 @@ impl ChangeCounts {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use strum::IntoEnumIterator;
-    
+
     #[test]
-    fn test_change_type_as_ref_str() {
-        assert_eq!(ChangeType::Add.as_ref(), "A");
-        assert_eq!(ChangeType::Delete.as_ref(), "D");
-        assert_eq!(ChangeType::Modify.as_ref(), "M");
-        assert_eq!(ChangeType::NoChange.as_ref(), "N");
+    fn test_change_type_short_name() {
+        assert_eq!(ChangeType::Add.short_name(), "A");
+        assert_eq!(ChangeType::Delete.short_name(), "D");
+        assert_eq!(ChangeType::Modify.short_name(), "M");
+        assert_eq!(ChangeType::NoChange.short_name(), "N");
     }
     
     #[test]
     fn test_change_type_display() {
-        assert_eq!(ChangeType::Add.to_string(), "A");
-        assert_eq!(ChangeType::Delete.to_string(), "D");
-        assert_eq!(ChangeType::Modify.to_string(), "M");
-        assert_eq!(ChangeType::NoChange.to_string(), "N");
+        assert_eq!(ChangeType::Add.to_string(), "Add");
+        assert_eq!(ChangeType::Delete.to_string(), "Delete");
+        assert_eq!(ChangeType::Modify.to_string(), "Modify");
+        assert_eq!(ChangeType::NoChange.to_string(), "No Change");
     }
     
     #[test]
-    fn test_change_type_from_str() {
-        assert_eq!("A".parse::<ChangeType>().unwrap(), ChangeType::Add);
-        assert_eq!("D".parse::<ChangeType>().unwrap(), ChangeType::Delete);
-        assert_eq!("M".parse::<ChangeType>().unwrap(), ChangeType::Modify);
-        assert_eq!("N".parse::<ChangeType>().unwrap(), ChangeType::NoChange);
-        
+    fn test_change_type_from_string() {
+        assert_eq!(ChangeType::from_string("A"), Some(ChangeType::Add));
+        assert_eq!(ChangeType::from_string("D"), Some(ChangeType::Delete));
+        assert_eq!(ChangeType::from_string("M"), Some(ChangeType::Modify));
+        assert_eq!(ChangeType::from_string("N"), Some(ChangeType::NoChange));
+        assert_eq!(ChangeType::from_string("Add"), Some(ChangeType::Add));
+        assert_eq!(ChangeType::from_string("DELETE"), Some(ChangeType::Delete));
+
         // Test invalid parse
-        assert!("X".parse::<ChangeType>().is_err());
-        assert!("".parse::<ChangeType>().is_err());
-        assert!("Add".parse::<ChangeType>().is_err()); // Should be "A", not "Add"
+        assert_eq!(ChangeType::from_string("X"), None);
+        assert_eq!(ChangeType::from_string(""), None);
     }
-    
-    #[test]
-    fn test_change_type_long_name() {
-        assert_eq!(ChangeType::Add.long_name(), "Add");
-        assert_eq!(ChangeType::Delete.long_name(), "Delete");
-        assert_eq!(ChangeType::Modify.long_name(), "Modify");
-        assert_eq!(ChangeType::NoChange.long_name(), "No Change");
-    }
-    
-    #[test]
-    fn test_change_type_enum_iter() {
-        let all_types: Vec<ChangeType> = ChangeType::iter().collect();
-        assert_eq!(all_types.len(), 4);
-        assert!(all_types.contains(&ChangeType::Add));
-        assert!(all_types.contains(&ChangeType::Delete));
-        assert!(all_types.contains(&ChangeType::Modify));
-        assert!(all_types.contains(&ChangeType::NoChange));
-    }
-    
+
     #[test]
     fn test_change_type_round_trip() {
         let types = [ChangeType::Add, ChangeType::Delete, ChangeType::Modify, ChangeType::NoChange];
-        
+
         for change_type in types {
-            let str_val = change_type.as_ref();
-            let parsed_back = str_val.parse::<ChangeType>().unwrap();
+            let str_val = change_type.short_name();
+            let parsed_back = ChangeType::from_string(str_val).unwrap();
             assert_eq!(change_type, parsed_back, "Round trip failed for {change_type:?}");
         }
-    }
-    
-    #[test]
-    fn test_change_default() {
-        let change = Change::default();
-        
-        assert_eq!(change.change_id, 0);
-        assert_eq!(change.scan_id, 0);
-        assert_eq!(change.item_id, 0);
-        assert_eq!(change.change_type, "");
-        assert_eq!(change.is_undelete, None);
-        assert_eq!(change.meta_change, None);
-        assert_eq!(change.mod_date_old, None);
-        assert_eq!(change.mod_date_new, None);
-        assert_eq!(change.file_size_old, None);
-        assert_eq!(change.file_size_new, None);
-        assert_eq!(change.hash_change, None);
-        assert_eq!(change.hash_old, None);
-        assert_eq!(change.val_change, None);
-        assert_eq!(change.val_old, None);
-        assert_eq!(change.item_type, "");
-        assert_eq!(change.item_path, "");
-    }
-    
-    #[test]
-    fn test_change_accessor_methods() {
-        let mut change = Change::default();
-        
-        // Test None values
-        assert_eq!(change.hash_old(), None);
-        assert_eq!(change.val_old(), None);
-        assert_eq!(change.val_new(), None);
-        
-        // Test Some values
-        change.hash_old = Some("abc123".to_string());
-        change.val_old = Some("V".to_string());
-        change.val_new = Some("I".to_string());
-        
-        assert_eq!(change.hash_old(), Some("abc123"));
-        assert_eq!(change.val_old(), Some("V"));
-        assert_eq!(change.val_new(), Some("I"));
     }
     
     #[test]
@@ -404,23 +368,5 @@ mod tests {
         assert_eq!(counts.add_count, counts_copy.add_count);
         assert_eq!(counts.modify_count, counts_clone.modify_count);
         assert_eq!(counts_copy.add_count, counts_clone.add_count);
-    }
-    
-    #[test]
-    fn test_change_clone() {
-        let change = Change {
-            change_id: 123,
-            scan_id: 456,
-            hash_old: Some("test_hash".to_string()),
-            item_path: "/test/path".to_string(),
-            ..Change::default()
-        };
-        
-        let change_clone = change.clone();
-        
-        assert_eq!(change.change_id, change_clone.change_id);
-        assert_eq!(change.scan_id, change_clone.scan_id);
-        assert_eq!(change.hash_old(), change_clone.hash_old());
-        assert_eq!(change.item_path, change_clone.item_path);
     }
 }

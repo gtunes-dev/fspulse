@@ -50,7 +50,7 @@ scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 |-------------------|----------|------------------------------------------------|
 | `scan_id`         | Integer  | Unique scan identifier                         |
 | `root_id`         | Integer  | Root directory identifier                      |
-| `state`           | Integer  | Scan state (0-6)                               |
+| `scan_state`      | Scan State Enum | State of the scan                       |
 | `is_hash`         | Boolean  | Hash new or changed files                      |
 | `hash_all`        | Boolean  | Hash all items including unchanged             |
 | `is_val`          | Boolean  | Validate new or changed files                  |
@@ -145,8 +145,9 @@ Values must match the column’s type. You can use individual values, ranges (wh
 | String              | `'example'`, `'error: missing EOF'`, `null`, `NULL`   | Quoted strings. Null values are allowed in all-lower or all-upper case.     |
 | Path                | `'photos/reports'`, `'file.txt'`                      | Must be quoted. **Null values are not supported.**                    |
 | Validation Status   | `V`, `I`, `N`, `U`, `null`, `not null`, `NULL`, `NOT NULL` | Valid (V), Invalid (I), No Validator (N), Unknown (U). Unquoted. Ranges not supported. |
-| Item Type Enum      | `F`, `D`, `null`, `not null`, `NULL`, `NOT NULL`      | File (F), Directory (D). Unquoted. Ranges not supported.              |
-| Change Type Enum    | `A`, `D`, `M`, `null`, `not null`, `NULL`, `NOT NULL` | Add (A), Delete (D), Modify (M). Unquoted. Ranges not supported.      |
+| Item Type Enum      | `F`, `D`, `S`, `O`, `null`, `not null`, `NULL`, `NOT NULL` | File (F), Directory (D), Symlink (S), Other (O). Unquoted. Ranges not supported. |
+| Change Type Enum    | `A`, `D`, `M`, `N`, `null`, `not null`, `NULL`, `NOT NULL` | Add (A), Delete (D), Modify (M), No Change (N). Unquoted. Ranges not supported. |
+| Scan State Enum     | `S`, `W`, `A`, `C`, `P`, `E`, `null`, `not null`, `NULL`, `NOT NULL` | Scanning (S), Sweeping (W), Analyzing (A), Completed (C), Stopped (P), Error (E). Unquoted. Ranges not supported. |
 
 ---
 

@@ -1,7 +1,7 @@
 use crate::{
     config::CONFIG,
     error::FsPulseError,
-    schema::{CREATE_SCHEMA_SQL, UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL},
+    schema::{CREATE_SCHEMA_SQL, UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL, UPGRADE_6_TO_7_SQL},
 };
 use directories::BaseDirs;
 use log::info;
@@ -10,7 +10,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 6;
+const CURRENT_SCHEMA_VERSION: u32 = 7;
 
 #[derive(Debug, Default)]
 pub struct Database {
@@ -163,6 +163,7 @@ impl Database {
                     3 => self.upgrade_schema(db_version, UPGRADE_3_TO_4_SQL)?,
                     4 => self.upgrade_schema(db_version, UPGRADE_4_TO_5_SQL)?,
                     5 => self.upgrade_schema(db_version, UPGRADE_5_TO_6_SQL)?,
+                    6 => self.upgrade_schema(db_version, UPGRADE_6_TO_7_SQL)?,
                     _ => {
                         return Err(FsPulseError::Error(
                             "No valid database update available".to_string(),
@@ -283,7 +284,7 @@ mod tests {
             )
             .expect("Should be able to query schema version");
 
-        assert_eq!(version, "6", "Schema version should be 6");
+        assert_eq!(version, "7", "Schema version should be 7");
     }
 
     #[test]

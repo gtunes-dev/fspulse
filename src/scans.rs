@@ -85,7 +85,7 @@ pub struct Scan {
     // Schema fields
     scan_id: i64,
     root_id: i64,
-    state: i64,
+    state: ScanState,
     analysis_spec: AnalysisSpec,
     #[allow(dead_code)]
     scan_time: i64,
@@ -99,52 +99,87 @@ pub struct Scan {
     error: Option<String>,
 }
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(i64)] // Ensures explicit numeric representation
 pub enum ScanState {
-    #[default]
-    Pending = 0,
     Scanning = 1,
     Sweeping = 2,
     Analyzing = 3,
     Completed = 4,
     Stopped = 5,
     Error = 6,
-    Unknown = -1,
 }
 
 impl ScanState {
     pub fn from_i64(value: i64) -> Self {
         match value {
-            0 => ScanState::Pending,
             1 => ScanState::Scanning,
             2 => ScanState::Sweeping,
             3 => ScanState::Analyzing,
             4 => ScanState::Completed,
             5 => ScanState::Stopped,
             6 => ScanState::Error,
-            _ => ScanState::Unknown, // Handle unknown states
+            _ => panic!("Invalid ScanState value: {}", value),
         }
     }
 
     pub fn as_i64(&self) -> i64 {
         *self as i64
     }
-}
 
-impl fmt::Display for ScanState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
-            ScanState::Pending => "Pending",
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            ScanState::Scanning => "S",
+            ScanState::Sweeping => "W",
+            ScanState::Analyzing => "A",
+            ScanState::Completed => "C",
+            ScanState::Stopped => "P",
+            ScanState::Error => "E",
+        }
+    }
+
+    pub fn full_name(&self) -> &'static str {
+        match self {
             ScanState::Scanning => "Scanning",
             ScanState::Sweeping => "Sweeping",
             ScanState::Analyzing => "Analyzing",
             ScanState::Completed => "Completed",
             ScanState::Stopped => "Stopped",
             ScanState::Error => "Error",
-            ScanState::Unknown => "Unknown",
-        };
-        write!(f, "{name}")
+        }
+    }
+
+    pub fn from_string(s: &str) -> Option<Self> {
+        // Try to match against full name or short name (case-insensitive)
+        match s.to_ascii_uppercase().as_str() {
+            // Full names
+            "SCANNING" => Some(ScanState::Scanning),
+            "SWEEPING" => Some(ScanState::Sweeping),
+            "ANALYZING" => Some(ScanState::Analyzing),
+            "COMPLETED" => Some(ScanState::Completed),
+            "STOPPED" => Some(ScanState::Stopped),
+            "ERROR" => Some(ScanState::Error),
+            // Short names
+            "S" => Some(ScanState::Scanning),
+            "W" => Some(ScanState::Sweeping),
+            "A" => Some(ScanState::Analyzing),
+            "C" => Some(ScanState::Completed),
+            "P" => Some(ScanState::Stopped),
+            "E" => Some(ScanState::Error),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for ScanState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.full_name())
+    }
+}
+
+impl crate::query::QueryEnum for ScanState {
+    fn from_token(s: &str) -> Option<i64> {
+        Self::from_string(s).map(|state| state.as_i64())
     }
 }
 
@@ -161,7 +196,7 @@ impl Scan {
         Scan {
             scan_id,
             root_id,
-            state,
+            state: ScanState::from_i64(state),
             analysis_spec,
             scan_time,
             file_count: None,
@@ -256,7 +291,7 @@ impl Scan {
                 Ok(Scan {
                     scan_id: row.get(0)?,
                     root_id: row.get(1)?,
-                    state: row.get(2)?,
+                    state: ScanState::from_i64(row.get(2)?),
                     analysis_spec: AnalysisSpec {
                         hash_mode,
                         val_mode,
@@ -286,7 +321,7 @@ impl Scan {
     }
 
     pub fn state(&self) -> ScanState {
-        ScanState::from_i64(self.state)
+        self.state
     }
 
     pub fn analysis_spec(&self) -> &AnalysisSpec {
@@ -360,8 +395,8 @@ impl Scan {
                 let (file_count, folder_count): (i64, i64) = tx
                     .query_row(
                         "SELECT
-                        SUM(CASE WHEN item_type = 'F' THEN 1 ELSE 0 END) AS file_count,
-                        SUM(CASE WHEN item_type = 'D' THEN 1 ELSE 0 END) AS folder_count
+                        SUM(CASE WHEN item_type = 0 THEN 1 ELSE 0 END) AS file_count,
+                        SUM(CASE WHEN item_type = 1 THEN 1 ELSE 0 END) AS folder_count
                         FROM items WHERE last_scan = ? AND is_ts = 0",
                         [self.scan_id],
                         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -372,7 +407,7 @@ impl Scan {
                 let total_file_size: i64 = tx
                     .query_row(
                         "SELECT COALESCE(SUM(file_size), 0) FROM items
-                         WHERE last_scan = ? AND item_type = 'F' AND is_ts = 0",
+                         WHERE last_scan = ? AND item_type = 0 AND is_ts = 0",
                         [self.scan_id],
                         |row| row.get(0),
                     )
@@ -391,9 +426,9 @@ impl Scan {
                 let (add_count, modify_count, delete_count): (i64, i64, i64) = tx
                     .query_row(
                         "SELECT
-                        COUNT(*) FILTER (WHERE change_type = 'A'),
-                        COUNT(*) FILTER (WHERE change_type = 'M'),
-                        COUNT(*) FILTER (WHERE change_type = 'D')
+                        COUNT(*) FILTER (WHERE change_type = 0),
+                        COUNT(*) FILTER (WHERE change_type = 2),
+                        COUNT(*) FILTER (WHERE change_type = 1)
                         FROM changes WHERE scan_id = ?",
                         [self.scan_id],
                         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -428,7 +463,7 @@ impl Scan {
                 tx.commit()?;
 
                 // Update in-memory struct
-                self.state = ScanState::Completed.as_i64();
+                self.state = ScanState::Completed;
                 self.file_count = Some(file_count);
                 self.folder_count = Some(folder_count);
                 self.total_file_size = Some(total_file_size);
@@ -451,7 +486,7 @@ impl Scan {
         match self.state() {
             ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
                 Scan::stop_scan(db, self, None)?;
-                self.state = ScanState::Stopped.as_i64();
+                self.state = ScanState::Stopped;
                 Ok(())
             }
             _ => Err(FsPulseError::Error(format!(
@@ -477,7 +512,7 @@ impl Scan {
             )));
         }
 
-        self.state = new_state.as_i64();
+        self.state = new_state;
 
         Ok(())
     }
@@ -526,7 +561,7 @@ impl Scan {
             ) =
             (
                 SELECT 
-                    CASE WHEN c.change_type = 'A' THEN 1 ELSE items.is_ts END,
+                    CASE WHEN c.change_type = 0 THEN 1 ELSE items.is_ts END,
                     c.mod_date_old,
                     c.file_size_old,
                     c.last_hash_scan_old,
@@ -538,14 +573,14 @@ impl Scan {
                 FROM changes c
                 WHERE c.item_id = items.item_id
                     AND c.scan_id = ?2
-                    AND (c.change_type = 'A' AND c.is_undelete = 1)
+                    AND (c.change_type = 0 AND c.is_undelete = 1)
                 LIMIT 1
             )
             WHERE item_id IN (
                 SELECT item_id 
                 FROM changes 
                 WHERE scan_id = ?2
-                    AND (change_type = 'A' AND is_undelete = 1)
+                    AND (change_type = 0 AND is_undelete = 1)
             )",
             [prev_scan_id, scan.scan_id()],
         )?;
@@ -577,7 +612,7 @@ impl Scan {
             FROM changes c
             WHERE c.item_id = items.item_id 
                 AND c.scan_id = ?2
-                AND c.change_type = 'M'
+                AND c.change_type = 2
             LIMIT 1
             )
             WHERE last_scan = ?2
@@ -585,7 +620,7 @@ impl Scan {
                 SELECT 1 FROM changes c 
                 WHERE c.item_id = items.item_id 
                     AND c.scan_id = ?2
-                    AND c.change_type = 'M'
+                    AND c.change_type = 2
             )", 
             [prev_scan_id, scan.scan_id()]
         )?;
@@ -599,7 +634,7 @@ impl Scan {
                 SELECT item_id
                 FROM changes
                 WHERE scan_id = ?2
-                  AND change_type = 'D'
+                  AND change_type = 1
             )",
             [prev_scan_id, scan.scan_id()],
         )?;
@@ -710,7 +745,7 @@ impl Scan {
             Ok(Scan {
                 scan_id: row.get::<_, i64>(0)?,
                 root_id: row.get::<_, i64>(1)?,
-                state: row.get::<_, i64>(2)?,
+                state: ScanState::from_i64(row.get::<_, i64>(2)?),
                 analysis_spec: AnalysisSpec {
                     hash_mode,
                     val_mode,
@@ -796,12 +831,12 @@ impl ScanStats {
         // Get change statistics broken down by file vs folder
         let changes: (i64, i64, i64, i64, i64, i64) = conn.query_row(
             "SELECT
-                SUM(CASE WHEN c.change_type = 'A' AND i.item_type = 'F' THEN 1 ELSE 0 END) as files_added,
-                SUM(CASE WHEN c.change_type = 'M' AND i.item_type = 'F' THEN 1 ELSE 0 END) as files_modified,
-                SUM(CASE WHEN c.change_type = 'D' AND i.item_type = 'F' THEN 1 ELSE 0 END) as files_deleted,
-                SUM(CASE WHEN c.change_type = 'A' AND i.item_type = 'D' THEN 1 ELSE 0 END) as folders_added,
-                SUM(CASE WHEN c.change_type = 'M' AND i.item_type = 'D' THEN 1 ELSE 0 END) as folders_modified,
-                SUM(CASE WHEN c.change_type = 'D' AND i.item_type = 'D' THEN 1 ELSE 0 END) as folders_deleted
+                SUM(CASE WHEN c.change_type = 0 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_added,
+                SUM(CASE WHEN c.change_type = 2 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_modified,
+                SUM(CASE WHEN c.change_type = 1 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_deleted,
+                SUM(CASE WHEN c.change_type = 0 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_added,
+                SUM(CASE WHEN c.change_type = 2 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_modified,
+                SUM(CASE WHEN c.change_type = 1 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_deleted
              FROM changes c
              JOIN items i ON c.item_id = i.item_id
              WHERE c.scan_id = ?",
@@ -870,40 +905,33 @@ mod tests {
 
     #[test]
     fn test_scan_state_as_i64() {
-        assert_eq!(ScanState::Pending.as_i64(), 0);
         assert_eq!(ScanState::Scanning.as_i64(), 1);
         assert_eq!(ScanState::Sweeping.as_i64(), 2);
         assert_eq!(ScanState::Analyzing.as_i64(), 3);
         assert_eq!(ScanState::Completed.as_i64(), 4);
         assert_eq!(ScanState::Stopped.as_i64(), 5);
-        assert_eq!(ScanState::Unknown.as_i64(), -1);
+        assert_eq!(ScanState::Error.as_i64(), 6);
     }
 
     #[test]
     fn test_scan_state_from_i64() {
-        assert_eq!(ScanState::from_i64(0), ScanState::Pending);
         assert_eq!(ScanState::from_i64(1), ScanState::Scanning);
         assert_eq!(ScanState::from_i64(2), ScanState::Sweeping);
         assert_eq!(ScanState::from_i64(3), ScanState::Analyzing);
         assert_eq!(ScanState::from_i64(4), ScanState::Completed);
         assert_eq!(ScanState::from_i64(5), ScanState::Stopped);
-        
-        // Test invalid values default to Unknown
-        assert_eq!(ScanState::from_i64(-5), ScanState::Unknown);
-        assert_eq!(ScanState::from_i64(99), ScanState::Unknown);
-        assert_eq!(ScanState::from_i64(100), ScanState::Unknown);
+        assert_eq!(ScanState::from_i64(6), ScanState::Error);
     }
 
     #[test]
     fn test_scan_state_round_trip() {
         let states = [
-            ScanState::Pending,
             ScanState::Scanning,
             ScanState::Sweeping,
             ScanState::Analyzing,
             ScanState::Completed,
             ScanState::Stopped,
-            ScanState::Unknown,
+            ScanState::Error,
         ];
 
         for state in states {
@@ -915,29 +943,22 @@ mod tests {
 
     #[test]
     fn test_scan_state_display() {
-        assert_eq!(ScanState::Pending.to_string(), "Pending");
         assert_eq!(ScanState::Scanning.to_string(), "Scanning");
         assert_eq!(ScanState::Sweeping.to_string(), "Sweeping");
         assert_eq!(ScanState::Analyzing.to_string(), "Analyzing");
         assert_eq!(ScanState::Completed.to_string(), "Completed");
         assert_eq!(ScanState::Stopped.to_string(), "Stopped");
-        assert_eq!(ScanState::Unknown.to_string(), "Unknown");
-    }
-
-    #[test]
-    fn test_scan_state_default() {
-        assert_eq!(ScanState::default(), ScanState::Pending);
+        assert_eq!(ScanState::Error.to_string(), "Error");
     }
 
     #[test]
     fn test_scan_state_ordering() {
         // Test that enum ordering works as expected
-        assert!(ScanState::Pending < ScanState::Scanning);
         assert!(ScanState::Scanning < ScanState::Sweeping);
         assert!(ScanState::Sweeping < ScanState::Analyzing);
         assert!(ScanState::Analyzing < ScanState::Completed);
         assert!(ScanState::Completed < ScanState::Stopped);
-        assert!(ScanState::Unknown < ScanState::Pending); // -1 < 0
+        assert!(ScanState::Stopped < ScanState::Error);
     }
 
     #[test]

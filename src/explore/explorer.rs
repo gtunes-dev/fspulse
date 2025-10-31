@@ -848,7 +848,7 @@ impl Explorer {
         };
 
         match Alerts::set_alert_status(db, alert_id, new_status) {
-            Ok(()) => row[status_col] = new_status.as_str().to_owned(),
+            Ok(()) => row[status_col] = new_status.short_name().to_owned(),
             Err(err) => self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
                 MessageBoxType::Error,
                 err.to_string(),

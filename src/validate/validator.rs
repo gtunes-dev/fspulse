@@ -7,15 +7,15 @@ use crate::progress::{ProgressId, ProgressReporter};
 use super::{claxon::ClaxonValidator, image::ImageValidator, lopdf::LopdfValidator};
 
 /// Represents the validation state of an item.
-/// Stored as a single-character code in the database for compactness.
+/// Stored as integer in the database.
 /// Unknown or invalid values in the database default to `Unknown`.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[repr(i64)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ValidationState {
-    #[default]
-    Unknown,
-    Valid,
-    Invalid,
-    NoValidator,
+    Unknown = 0,
+    Valid = 1,
+    Invalid = 2,
+    NoValidator = 3,
 }
 
 // macro to simplify code in validators which generates Ok(invalid) results
@@ -30,8 +30,21 @@ macro_rules! try_invalid {
 }
 
 impl ValidationState {
-    /// Returns the short code representing the validation state.
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            0 => ValidationState::Unknown,
+            1 => ValidationState::Valid,
+            2 => ValidationState::Invalid,
+            3 => ValidationState::NoValidator,
+            _ => ValidationState::Unknown, // Default for invalid values
+        }
+    }
+
+    pub fn short_name(&self) -> &'static str {
         match self {
             ValidationState::Unknown => "U",
             ValidationState::Valid => "V",
@@ -40,44 +53,42 @@ impl ValidationState {
         }
     }
 
-    pub fn short_str_to_full(s: &str) -> Result<&str, FsPulseError> {
-        match s {
-            "U" => Ok("Unknown"),
-            "V" => Ok("Valid"),
-            "I" => Ok("Invalid"),
-            "N" => Ok("No Validator"),
-            _ => Err(FsPulseError::Error(format!(
-                "Invalid validation state: '{s}'"
-            ))),
+    pub fn full_name(&self) -> &'static str {
+        match self {
+            ValidationState::Unknown => "Unknown",
+            ValidationState::Valid => "Valid",
+            ValidationState::Invalid => "Invalid",
+            ValidationState::NoValidator => "No Validator",
         }
     }
 
-    /// Converts from a string representation from the database,
-    /// defaulting to `Unknown` for invalid or empty values.
-    pub fn from_string(value: &str) -> Self {
-        value
-            .chars()
-            .next()
-            .map(ValidationState::from_char)
-            .unwrap_or_default()
-    }
-
-    /// Convert a single-character string from the database into a State
-    pub fn from_char(value: char) -> Self {
-        match value {
-            'U' => ValidationState::Unknown,
-            'V' => ValidationState::Valid,
-            'I' => ValidationState::Invalid,
-            'N' => ValidationState::NoValidator,
-            _ => ValidationState::Unknown,
+    pub fn from_string(s: &str) -> Option<Self> {
+        match s.to_ascii_uppercase().as_str() {
+            // Full names
+            "UNKNOWN" => Some(ValidationState::Unknown),
+            "VALID" => Some(ValidationState::Valid),
+            "INVALID" => Some(ValidationState::Invalid),
+            "NO VALIDATOR" | "NOVALIDATOR" => Some(ValidationState::NoValidator),
+            // Short names
+            "U" => Some(ValidationState::Unknown),
+            "V" => Some(ValidationState::Valid),
+            "I" => Some(ValidationState::Invalid),
+            "N" => Some(ValidationState::NoValidator),
+            _ => None,
         }
     }
 }
 
-/// Implement Display to print the short codes directly
+/// Implement Display to print the full names
 impl fmt::Display for ValidationState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        write!(f, "{}", self.full_name())
+    }
+}
+
+impl crate::query::QueryEnum for ValidationState {
+    fn from_token(s: &str) -> Option<i64> {
+        Self::from_string(s).map(|state| state.as_i64())
     }
 }
 
@@ -121,53 +132,27 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn test_validation_state_as_str() {
-        assert_eq!(ValidationState::Unknown.as_str(), "U");
-        assert_eq!(ValidationState::Valid.as_str(), "V");
-        assert_eq!(ValidationState::Invalid.as_str(), "I");
-        assert_eq!(ValidationState::NoValidator.as_str(), "N");
-    }
-
-    #[test]
-    fn test_validation_state_from_char() {
-        assert_eq!(ValidationState::from_char('U'), ValidationState::Unknown);
-        assert_eq!(ValidationState::from_char('V'), ValidationState::Valid);
-        assert_eq!(ValidationState::from_char('I'), ValidationState::Invalid);
-        assert_eq!(ValidationState::from_char('N'), ValidationState::NoValidator);
-        assert_eq!(ValidationState::from_char('X'), ValidationState::Unknown); // Default for invalid
-    }
-
-    #[test]
     fn test_validation_state_from_string() {
-        assert_eq!(ValidationState::from_string("U"), ValidationState::Unknown);
-        assert_eq!(ValidationState::from_string("V"), ValidationState::Valid);
-        assert_eq!(ValidationState::from_string("I"), ValidationState::Invalid);
-        assert_eq!(ValidationState::from_string("N"), ValidationState::NoValidator);
-        assert_eq!(ValidationState::from_string(""), ValidationState::Unknown); // Default for empty
-        assert_eq!(ValidationState::from_string("Invalid"), ValidationState::Invalid); // First char
+        assert_eq!(ValidationState::from_string("U"), Some(ValidationState::Unknown));
+        assert_eq!(ValidationState::from_string("V"), Some(ValidationState::Valid));
+        assert_eq!(ValidationState::from_string("I"), Some(ValidationState::Invalid));
+        assert_eq!(ValidationState::from_string("N"), Some(ValidationState::NoValidator));
+        assert_eq!(ValidationState::from_string("UNKNOWN"), Some(ValidationState::Unknown));
+        assert_eq!(ValidationState::from_string("VALID"), Some(ValidationState::Valid));
+        assert_eq!(ValidationState::from_string("INVALID"), Some(ValidationState::Invalid));
+        assert_eq!(ValidationState::from_string("NO VALIDATOR"), Some(ValidationState::NoValidator));
+        assert_eq!(ValidationState::from_string(""), None); // Invalid
+        assert_eq!(ValidationState::from_string("X"), None); // Invalid
     }
 
     #[test]
     fn test_validation_state_display() {
-        assert_eq!(format!("{}", ValidationState::Unknown), "U");
-        assert_eq!(format!("{}", ValidationState::Valid), "V");
-        assert_eq!(format!("{}", ValidationState::Invalid), "I");
-        assert_eq!(format!("{}", ValidationState::NoValidator), "N");
+        assert_eq!(format!("{}", ValidationState::Unknown), "Unknown");
+        assert_eq!(format!("{}", ValidationState::Valid), "Valid");
+        assert_eq!(format!("{}", ValidationState::Invalid), "Invalid");
+        assert_eq!(format!("{}", ValidationState::NoValidator), "No Validator");
     }
 
-    #[test]
-    fn test_validation_state_short_str_to_full() {
-        assert_eq!(ValidationState::short_str_to_full("U").unwrap(), "Unknown");
-        assert_eq!(ValidationState::short_str_to_full("V").unwrap(), "Valid");
-        assert_eq!(ValidationState::short_str_to_full("I").unwrap(), "Invalid");
-        assert_eq!(ValidationState::short_str_to_full("N").unwrap(), "No Validator");
-        assert!(ValidationState::short_str_to_full("X").is_err());
-    }
-
-    #[test]
-    fn test_validation_state_default() {
-        assert_eq!(ValidationState::default(), ValidationState::Unknown);
-    }
 
     #[test]
     fn test_from_extension() {

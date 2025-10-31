@@ -1,7 +1,7 @@
 use crate::changes::{Change, ChangeCounts};
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::items::Item;
+use crate::items::{Item, ItemType};
 use crate::query::QueryProcessor;
 use crate::roots::Root;
 use crate::scans::Scan;
@@ -271,7 +271,7 @@ impl Reports {
         let mut item_count = 0;
 
         Item::for_each_item_in_latest_scan(db, scan.scan_id(), |item| {
-            let is_dir = item.item_type() == "D";
+            let is_dir = item.item_type() == ItemType::Directory;
 
             let (indent_level, new_path) =
                 Self::get_tree_path(&mut path_stack, root_path, item.item_path(), is_dir);

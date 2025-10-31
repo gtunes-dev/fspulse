@@ -1,7 +1,9 @@
 use crate::alerts::{AlertStatus, AlertType};
+use crate::changes::ChangeType;
+use crate::items::ItemType;
 use crate::query::columns::ColAlign;
 use crate::validate::validator::ValidationState;
-use crate::{changes::ChangeType, error::FsPulseError, items::ItemType, utils::Utils};
+use crate::{error::FsPulseError, utils::Utils};
 
 use chrono::{DateTime, Local, Utc};
 use pest::iterators::Pair;
@@ -108,55 +110,53 @@ impl Format {
         }
     }
 
-    pub fn format_item_type(val: &str, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_item_type(item_type: ItemType, format: Format) -> Result<String, FsPulseError> {
         match format {
-            Format::Full => Ok(ItemType::short_str_to_full(val)?.to_owned()),
-            Format::Short | Format::None => Ok(val.to_owned()),
+            Format::Short | Format::None => Ok(item_type.short_name().to_owned()),
+            Format::Full => Ok(item_type.full_name().to_owned()),
             _ => Err(FsPulseError::Error("Invalid item_type format".into())),
         }
     }
 
-    pub fn format_change_type(val: &str, format: Format) -> Result<String, FsPulseError> {
-        let change_type: ChangeType = val.parse()?;
-
+    pub fn format_change_type(change_type: ChangeType, format: Format) -> Result<String, FsPulseError> {
         match format {
-            Format::Full => Ok(change_type.long_name().to_owned()),
-            Format::Short | Format::None => Ok(val.to_owned()),
+            Format::Short | Format::None => Ok(change_type.short_name().to_owned()),
+            Format::Full => Ok(change_type.full_name().to_owned()),
             _ => Err(FsPulseError::Error("Invalid change_type format".into())),
         }
     }
 
-    pub fn format_val(val: &str, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_val(val: ValidationState, format: Format) -> Result<String, FsPulseError> {
         match format {
-            Format::Full => Ok(ValidationState::short_str_to_full(val)?.to_owned()),
-            Format::Short | Format::None => Ok(val.to_owned()),
+            Format::Short | Format::None => Ok(val.short_name().to_owned()),
+            Format::Full => Ok(val.full_name().to_owned()),
             _ => Err(FsPulseError::Error(
                 "Invalid validation state format".into(),
             )),
         }
     }
 
-    pub fn format_opt_val(val: Option<&str>, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_opt_val(val: Option<ValidationState>, format: Format) -> Result<String, FsPulseError> {
         match val {
             Some(val) => Self::format_val(val, format),
             None => Ok("-".into()),
         }
     }
 
-    pub fn format_alert_type(alert_type: &str, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_alert_type(alert_type: AlertType, format: Format) -> Result<String, FsPulseError> {
         match format {
-            Format::Full => Ok(AlertType::short_str_to_full(alert_type)?.to_owned()),
-            Format::Short | Format::None => Ok(alert_type.to_owned()),
+            Format::Short | Format::None => Ok(alert_type.short_name().to_owned()),
+            Format::Full => Ok(alert_type.full_name().to_owned()),
             _ => Err(FsPulseError::Error(
                 "Invalid alert type state format".into(),
             )),
         }
     }
 
-    pub fn format_alert_status(alert_status: &str, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_alert_status(alert_status: AlertStatus, format: Format) -> Result<String, FsPulseError> {
         match format {
-            Format::Full => Ok(AlertStatus::short_str_to_full(alert_status)?.to_owned()),
-            Format::Short | Format::None => Ok(alert_status.to_owned()),
+            Format::Short | Format::None => Ok(alert_status.short_name().to_owned()),
+            Format::Full => Ok(alert_status.full_name().to_owned()),
             _ => Err(FsPulseError::Error(
                 "Invalid alert type state format".into(),
             )),
@@ -172,6 +172,49 @@ impl Format {
             Some(val) => Self::format_string(val),
             None => "-".into(),
         }
+    }
+
+    pub fn format_scan_state(state: crate::scans::ScanState, format: Format) -> Result<String, FsPulseError> {
+        match format {
+            Format::Short | Format::None => Ok(state.short_name().to_owned()),
+            Format::Full => Ok(state.full_name().to_owned()),
+            _ => Err(FsPulseError::Error("Invalid scan_state format".into())),
+        }
+    }
+
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scans::ScanState;
+
+    #[test]
+    fn test_format_scan_state_full() {
+        let result = Format::format_scan_state(ScanState::Scanning, Format::Full);
+        assert_eq!(result.unwrap(), "Scanning");
+
+        let result = Format::format_scan_state(ScanState::Completed, Format::Full);
+        assert_eq!(result.unwrap(), "Completed");
+    }
+
+    #[test]
+    fn test_format_scan_state_short() {
+        let result = Format::format_scan_state(ScanState::Scanning, Format::Short);
+        assert_eq!(result.unwrap(), "S");
+
+        let result = Format::format_scan_state(ScanState::Stopped, Format::Short);
+        assert_eq!(result.unwrap(), "P");
+
+        // Test that Format::None defaults to short
+        let result = Format::format_scan_state(ScanState::Completed, Format::None);
+        assert_eq!(result.unwrap(), "C");
+    }
+
+    #[test]
+    fn test_format_scan_state_invalid_format() {
+        let result = Format::format_scan_state(ScanState::Scanning, Format::Timestamp);
+        assert!(result.is_err());
     }
 }
 
@@ -259,7 +302,8 @@ impl Show {
                 | Rule::item_type_show
                 | Rule::change_type_show
                 | Rule::alert_type_show
-                | Rule::alert_status_show => {
+                | Rule::alert_status_show
+                | Rule::scan_state_show => {
                     let mut path_show_parts = element.into_inner();
                     let display_col = path_show_parts.next().unwrap().as_str();
 

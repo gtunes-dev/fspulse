@@ -1,39 +1,90 @@
 use rusqlite::{named_params, Transaction};
+use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, error::FsPulseError};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(i64)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlertType {
-    SuspiciousHash,
-    InvalidItem,
+    SuspiciousHash = 0,
+    InvalidItem = 1,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(i64)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlertStatus {
-    Open,
-    Flagged,
-    Dismissed,
+    Open = 0,
+    Flagged = 1,
+    Dismissed = 2,
 }
 
 impl AlertType {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            0 => AlertType::SuspiciousHash,
+            1 => AlertType::InvalidItem,
+            _ => AlertType::SuspiciousHash, // Default for invalid values
+        }
+    }
+
+    pub fn short_name(&self) -> &'static str {
         match self {
             AlertType::SuspiciousHash => "H",
             AlertType::InvalidItem => "I",
         }
     }
 
-    pub fn short_str_to_full(s: &str) -> Result<&str, FsPulseError> {
-        match s {
-            "H" => Ok("Suspicious Hash"),
-            "I" => Ok("Invalid Item"),
-            _ => Err(FsPulseError::Error(format!("Invalid alert type: '{s}'"))),
+    pub fn full_name(&self) -> &'static str {
+        match self {
+            AlertType::SuspiciousHash => "Suspicious Hash",
+            AlertType::InvalidItem => "Invalid Item",
+        }
+    }
+
+    pub fn from_string(s: &str) -> Option<Self> {
+        match s.to_ascii_uppercase().as_str() {
+            // Full names
+            "SUSPICIOUS HASH" | "SUSPICIOUSHASH" => Some(AlertType::SuspiciousHash),
+            "INVALID ITEM" | "INVALIDITEM" => Some(AlertType::InvalidItem),
+            // Short names
+            "H" => Some(AlertType::SuspiciousHash),
+            "I" => Some(AlertType::InvalidItem),
+            _ => None,
         }
     }
 }
 
+impl std::fmt::Display for AlertType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.full_name())
+    }
+}
+
+impl crate::query::QueryEnum for AlertType {
+    fn from_token(s: &str) -> Option<i64> {
+        Self::from_string(s).map(|alert_type| alert_type.as_i64())
+    }
+}
+
 impl AlertStatus {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            0 => AlertStatus::Open,
+            1 => AlertStatus::Flagged,
+            2 => AlertStatus::Dismissed,
+            _ => AlertStatus::Open, // Default for invalid values
+        }
+    }
+
+    pub fn short_name(&self) -> &'static str {
         match self {
             AlertStatus::Open => "O",
             AlertStatus::Flagged => "F",
@@ -41,15 +92,39 @@ impl AlertStatus {
         }
     }
 
-    pub fn short_str_to_full(s: &str) -> Result<&str, FsPulseError> {
-        match s {
-            "O" => Ok("Open"),
-            "F" => Ok("Flagged"),
-            "D" => Ok("Dismissed"),
-            _ => Err(FsPulseError::Error(format!(
-                "Invalid alert status: '{s}'"
-            ))),
+    pub fn full_name(&self) -> &'static str {
+        match self {
+            AlertStatus::Open => "Open",
+            AlertStatus::Flagged => "Flagged",
+            AlertStatus::Dismissed => "Dismissed",
         }
+    }
+
+    pub fn from_string(s: &str) -> Option<Self> {
+        match s.to_ascii_uppercase().as_str() {
+            // Full names
+            "OPEN" => Some(AlertStatus::Open),
+            "FLAGGED" => Some(AlertStatus::Flagged),
+            "DISMISSED" => Some(AlertStatus::Dismissed),
+            // Short names
+            "O" => Some(AlertStatus::Open),
+            "F" => Some(AlertStatus::Flagged),
+            "D" => Some(AlertStatus::Dismissed),
+            _ => None,
+        }
+    }
+
+}
+
+impl std::fmt::Display for AlertStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.full_name())
+    }
+}
+
+impl crate::query::QueryEnum for AlertStatus {
+    fn from_token(s: &str) -> Option<i64> {
+        Self::from_string(s).map(|status| status.as_i64())
     }
 }
 
@@ -120,8 +195,8 @@ impl Alerts {
         tx.execute(
             sql,
             named_params! {
-                ":alert_type":      AlertType::SuspiciousHash.as_str(),
-                ":alert_status":    AlertStatus::Open.as_str(),
+                ":alert_type":      AlertType::SuspiciousHash.as_i64(),
+                ":alert_status":    AlertStatus::Open.as_i64(),
                 ":scan_id":         scan_id,
                 ":item_id":         item_id,
                 ":prev_hash_scan":  prev_hash_scan,
@@ -160,8 +235,8 @@ impl Alerts {
         tx.execute(
             sql,
             named_params! {
-                ":alert_type":      AlertType::InvalidItem.as_str(),
-                ":alert_status":    AlertStatus::Open.as_str(),
+                ":alert_type":      AlertType::InvalidItem.as_i64(),
+                ":alert_status":    AlertStatus::Open.as_i64(),
                 ":scan_id":         scan_id,
                 ":item_id":         item_id,
                 ":val_error":       val_error,
@@ -185,7 +260,7 @@ impl Alerts {
         db.conn().execute(
             sql,
             named_params! {
-                ":alert_status":    new_status.as_str(),
+                ":alert_status":    new_status.as_i64(),
                 ":alert_id":        alert_id,
             },
         )?;
@@ -199,51 +274,15 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_alert_type_as_str() {
-        assert_eq!(AlertType::SuspiciousHash.as_str(), "H");
-        assert_eq!(AlertType::InvalidItem.as_str(), "I");
+    fn test_alert_type_short_name() {
+        assert_eq!(AlertType::SuspiciousHash.short_name(), "H");
+        assert_eq!(AlertType::InvalidItem.short_name(), "I");
     }
-    
+
     #[test]
-    fn test_alert_type_short_str_to_full_valid() {
-        assert_eq!(AlertType::short_str_to_full("H").unwrap(), "Suspicious Hash");
-        assert_eq!(AlertType::short_str_to_full("I").unwrap(), "Invalid Item");
-    }
-    
-    #[test]
-    fn test_alert_type_short_str_to_full_invalid() {
-        let result = AlertType::short_str_to_full("X");
-        assert!(result.is_err());
-        if let Err(FsPulseError::Error(msg)) = result {
-            assert_eq!(msg, "Invalid alert type: 'X'");
-        } else {
-            panic!("Expected FsPulseError::Error");
-        }
-        
-        // Test empty string
-        let result = AlertType::short_str_to_full("");
-        assert!(result.is_err());
-        if let Err(FsPulseError::Error(msg)) = result {
-            assert_eq!(msg, "Invalid alert type: ''");
-        } else {
-            panic!("Expected FsPulseError::Error");
-        }
-    }
-    
-    #[test]
-    fn test_alert_type_round_trip_conversion() {
-        let types = [AlertType::SuspiciousHash, AlertType::InvalidItem];
-        
-        for alert_type in types {
-            let short_str = alert_type.as_str();
-            let full_str = AlertType::short_str_to_full(short_str).unwrap();
-            
-            // Verify the conversion works and produces expected full strings
-            match alert_type {
-                AlertType::SuspiciousHash => assert_eq!(full_str, "Suspicious Hash"),
-                AlertType::InvalidItem => assert_eq!(full_str, "Invalid Item"),
-            }
-        }
+    fn test_alert_type_full_name() {
+        assert_eq!(AlertType::SuspiciousHash.full_name(), "Suspicious Hash");
+        assert_eq!(AlertType::InvalidItem.full_name(), "Invalid Item");
     }
     
     #[test]
@@ -270,54 +309,17 @@ mod tests {
     }
     
     #[test]
-    fn test_alert_status_as_str() {
-        assert_eq!(AlertStatus::Open.as_str(), "O");
-        assert_eq!(AlertStatus::Flagged.as_str(), "F");
-        assert_eq!(AlertStatus::Dismissed.as_str(), "D");
+    fn test_alert_status_short_name() {
+        assert_eq!(AlertStatus::Open.short_name(), "O");
+        assert_eq!(AlertStatus::Flagged.short_name(), "F");
+        assert_eq!(AlertStatus::Dismissed.short_name(), "D");
     }
-    
+
     #[test]
-    fn test_alert_status_short_str_to_full_valid() {
-        assert_eq!(AlertStatus::short_str_to_full("O").unwrap(), "Open");
-        assert_eq!(AlertStatus::short_str_to_full("F").unwrap(), "Flagged");
-        assert_eq!(AlertStatus::short_str_to_full("D").unwrap(), "Dismissed");
-    }
-    
-    #[test]
-    fn test_alert_status_short_str_to_full_invalid() {
-        let result = AlertStatus::short_str_to_full("X");
-        assert!(result.is_err());
-        if let Err(FsPulseError::Error(msg)) = result {
-            assert_eq!(msg, "Invalid alert status: 'X'");
-        } else {
-            panic!("Expected FsPulseError::Error");
-        }
-        
-        // Test empty string
-        let result = AlertStatus::short_str_to_full("");
-        assert!(result.is_err());
-        if let Err(FsPulseError::Error(msg)) = result {
-            assert_eq!(msg, "Invalid alert status: ''");
-        } else {
-            panic!("Expected FsPulseError::Error");
-        }
-    }
-    
-    #[test]
-    fn test_alert_status_round_trip_conversion() {
-        let statuses = [AlertStatus::Open, AlertStatus::Flagged, AlertStatus::Dismissed];
-        
-        for status in statuses {
-            let short_str = status.as_str();
-            let full_str = AlertStatus::short_str_to_full(short_str).unwrap();
-            
-            // Verify the conversion works and produces expected full strings
-            match status {
-                AlertStatus::Open => assert_eq!(full_str, "Open"),
-                AlertStatus::Flagged => assert_eq!(full_str, "Flagged"),
-                AlertStatus::Dismissed => assert_eq!(full_str, "Dismissed"),
-            }
-        }
+    fn test_alert_status_full_name() {
+        assert_eq!(AlertStatus::Open.full_name(), "Open");
+        assert_eq!(AlertStatus::Flagged.full_name(), "Flagged");
+        assert_eq!(AlertStatus::Dismissed.full_name(), "Dismissed");
     }
     
     #[test]
@@ -351,47 +353,29 @@ mod tests {
     fn test_alert_type_completeness() {
         // Verify we can convert all enum variants to strings
         let all_types = [AlertType::SuspiciousHash, AlertType::InvalidItem];
-        
+
         for alert_type in all_types {
-            let short_str = alert_type.as_str();
+            let short_str = alert_type.short_name();
             assert!(!short_str.is_empty(), "Short string should not be empty");
             assert_eq!(short_str.len(), 1, "Short string should be single character");
+
+            let full_str = alert_type.full_name();
+            assert!(!full_str.is_empty(), "Full string should not be empty");
         }
-        
-        // Verify all short strings can be converted back
-        assert!(AlertType::short_str_to_full("H").is_ok());
-        assert!(AlertType::short_str_to_full("I").is_ok());
     }
-    
+
     #[test]
     fn test_alert_status_completeness() {
         // Verify we can convert all enum variants to strings
         let all_statuses = [AlertStatus::Open, AlertStatus::Flagged, AlertStatus::Dismissed];
-        
+
         for status in all_statuses {
-            let short_str = status.as_str();
+            let short_str = status.short_name();
             assert!(!short_str.is_empty(), "Short string should not be empty");
             assert_eq!(short_str.len(), 1, "Short string should be single character");
+
+            let full_str = status.full_name();
+            assert!(!full_str.is_empty(), "Full string should not be empty");
         }
-        
-        // Verify all short strings can be converted back
-        assert!(AlertStatus::short_str_to_full("O").is_ok());
-        assert!(AlertStatus::short_str_to_full("F").is_ok());
-        assert!(AlertStatus::short_str_to_full("D").is_ok());
-    }
-    
-    #[test]
-    fn test_alert_type_case_sensitivity() {
-        // Verify that case matters for the conversion
-        assert!(AlertType::short_str_to_full("h").is_err());
-        assert!(AlertType::short_str_to_full("i").is_err());
-    }
-    
-    #[test]
-    fn test_alert_status_case_sensitivity() {
-        // Verify that case matters for the conversion
-        assert!(AlertStatus::short_str_to_full("o").is_err());
-        assert!(AlertStatus::short_str_to_full("f").is_err());
-        assert!(AlertStatus::short_str_to_full("d").is_err());
     }
 }

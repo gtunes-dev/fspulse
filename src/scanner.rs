@@ -515,7 +515,7 @@ impl Scanner {
                 WHERE root_id = ? AND is_ts = 0 AND last_scan < ?",
             (
                 scan.scan_id(),
-                ChangeType::Delete.to_string(),
+                ChangeType::Delete.as_i64(),
                 scan.root_id(),
                 scan.scan_id(),
             ),
@@ -872,7 +872,7 @@ impl Scanner {
                     (
                         mod_date,
                         file_size,
-                        ValidationState::Unknown.to_string(),
+                        ValidationState::Unknown.as_i64(),
                         scan.scan_id(),
                         existing_item.item_id(),
                     ),
@@ -904,7 +904,7 @@ impl Scanner {
                     (
                         scan.scan_id(),
                         existing_item.item_id(),
-                        ChangeType::Add.to_string(),
+                        ChangeType::Add.as_i64(),
                         existing_item.mod_date(),
                         mod_date,
                         existing_item.file_size(),
@@ -948,7 +948,7 @@ impl Scanner {
                     (
                         scan.scan_id(),
                         existing_item.item_id(),
-                        ChangeType::Modify.to_string(),
+                        ChangeType::Modify.as_i64(),
                         meta_change.then_some(existing_item.mod_date()),
                         meta_change.then_some(mod_date),
                         meta_change.then_some(existing_item.file_size()),
@@ -976,12 +976,12 @@ impl Scanner {
             let tx = db.conn_mut().transaction()?;
 
             tx.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, file_size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (scan.root_id(), &path_str, item_type.as_str(), mod_date, file_size, ValidationState::Unknown.to_string(), scan.scan_id()))?;
+                (scan.root_id(), &path_str, item_type.as_i64(), mod_date, file_size, ValidationState::Unknown.as_i64(), scan.scan_id()))?;
 
             let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
             tx.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, file_size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
-                (scan.scan_id(), item_id, ChangeType::Add.to_string(), mod_date, file_size))?;
+                (scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, file_size))?;
             tx.commit()?;
         }
 
@@ -1061,8 +1061,8 @@ impl Scanner {
                 update_changes = true;
                 c_val_change = Some(true);
                 c_last_val_scan_old = analysis_item.last_val_scan();
-                c_val_old = Some(analysis_item.val().as_str());
-                c_val_new = Some(new_val.as_str());
+                c_val_old = Some(analysis_item.val().as_i64());
+                c_val_new = Some(new_val.as_i64());
                 c_val_error_old = analysis_item.val_error();
                 c_val_error_new = new_val_error.as_deref();
 
@@ -1128,7 +1128,7 @@ impl Scanner {
                         val_error_old,
                         val_error_new
                     )
-                    VALUES (?, ?, 'M', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, 2, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scan_id, item_id) 
                     DO UPDATE SET
                         hash_change = excluded.hash_change,
@@ -1170,7 +1170,7 @@ impl Scanner {
             WHERE item_id = ?",
             rusqlite::params![
                 i_hash,
-                i_val.as_str(),
+                i_val.as_i64(),
                 i_val_error,
                 i_last_hash_scan,
                 i_last_val_scan,

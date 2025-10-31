@@ -1,6 +1,7 @@
-use crate::{error::FsPulseError, utils::Utils};
+use crate::{alerts::{AlertStatus, AlertType}, changes::ChangeType, error::FsPulseError, items::ItemType, scans::ScanState, utils::Utils, validate::validator::ValidationState};
 use pest::iterators::{Pair, Pairs};
-use phf_macros::phf_ordered_map;
+use phf::Map;
+use phf_macros::{phf_map, phf_ordered_map};
 use rusqlite::ToSql;
 use std::fmt::Debug;
 
@@ -12,6 +13,12 @@ use super::{process::Query, Rule};
 pub trait Filter: Debug {
     /// return predicate text and params
     fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError>;
+}
+
+/// Trait for enums that can be used in query filters with integer backing
+pub trait QueryEnum {
+    /// Parse a query token (short or full name) and return the database i64 value
+    fn from_token(s: &str) -> Option<i64>;
 }
 
 #[derive(Debug, Clone)]
@@ -362,20 +369,21 @@ impl StringFilter {
 }
 
 #[derive(Debug)]
-pub struct EnumFilter {
-    enum_col_db: &'static str,
+/// Filter for boolean columns
+pub struct BoolFilter {
+    bool_col_db: &'static str,
     match_null: bool,
     match_not_null: bool,
-    enum_vals: Vec<String>,
+    bool_vals: Vec<String>,
 }
 
-impl Filter for EnumFilter {
+impl Filter for BoolFilter {
     fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
         let mut pred_str = String::new();
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
 
-        let mut pred_count = self.enum_vals.iter().len();
+        let mut pred_count = self.bool_vals.iter().len();
         if self.match_null {
             pred_count += 1
         };
@@ -389,7 +397,7 @@ impl Filter for EnumFilter {
 
         if self.match_null {
             first = false;
-            pred_str.push_str(&format!("({} IS NULL)", &self.enum_col_db));
+            pred_str.push_str(&format!("({} IS NULL)", &self.bool_col_db));
         }
 
         if self.match_not_null {
@@ -397,7 +405,121 @@ impl Filter for EnumFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            pred_str.push_str(&format!("({} IS NOT NULL)", &self.enum_col_db));
+            pred_str.push_str(&format!("({} IS NOT NULL)", &self.bool_col_db));
+        }
+
+        for bool_val in &self.bool_vals {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+
+            pred_str.push_str(&format!("({} = ?)", &self.bool_col_db));
+            pred_vec.push(Box::new(bool_val.to_owned()));
+        }
+
+        if pred_count > 1 {
+            pred_str.push(')');
+        }
+
+        Ok((pred_str, pred_vec))
+    }
+}
+
+impl BoolFilter {
+    fn new(bool_col_db: &'static str) -> Self {
+        BoolFilter {
+            bool_col_db,
+            match_null: false,
+            match_not_null: false,
+            bool_vals: Vec::new(),
+        }
+    }
+
+    pub fn add_bool_filter_to_query(
+        bool_filter_pair: Pair<Rule>,
+        query: &mut dyn Query,
+    ) -> Result<(), FsPulseError> {
+        let mut iter = bool_filter_pair.into_inner();
+        let bool_col_pair = iter.next().unwrap();
+        let bool_col = bool_col_pair.as_str().to_owned();
+
+        let mut bool_filter = match query.col_set().col_name_to_db(&bool_col) {
+            Some(bool_col_db) => Self::new(bool_col_db),
+            None => {
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Column not found: '{bool_col}'"
+                )))
+            }
+        };
+
+        for bool_val_pair in iter {
+            match bool_val_pair.as_rule() {
+                Rule::null => bool_filter.match_null = true,
+                Rule::not_null => bool_filter.match_not_null = true,
+                rule => {
+                    let rule_str = format!("{rule:?}");
+                    let val_opt = Self::BOOL_VALUES.get(&rule_str).copied();
+                    match val_opt {
+                        Some(val) => bool_filter.bool_vals.push(val.to_owned()),
+                        None => {
+                            return Err(FsPulseError::CustomParsingError(format!(
+                                "Invalid filter value: '{}'",
+                                bool_val_pair.as_str()
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+
+        query.add_filter(Box::new(bool_filter));
+
+        Ok(())
+    }
+
+    // Map boolean rule names to database values (1 for true, 0 for false)
+    // Null and Not Null are handled directly in code
+    const BOOL_VALUES: OrderedStrMap = phf_ordered_map! {
+        "bool_true" => "1",
+        "bool_false" => "0",
+    };
+}
+
+// ==================================================================================
+// Integer-backed Enum Filter (for scan_state and future integer-backed enums)
+// ==================================================================================
+
+/// Function pointer type for parsing enum tokens to database values
+type EnumParser = fn(&str) -> Option<i64>;
+
+/// Static map from column names to enum parsers
+static ENUM_PARSERS: Map<&'static str, EnumParser> = phf_map! {
+    "scan_state" => ScanState::from_token,
+    "item_type" => ItemType::from_token,
+    "change_type" => ChangeType::from_token,
+    "alert_type" => AlertType::from_token,
+    "alert_status" => AlertStatus::from_token,
+    "val" => ValidationState::from_token,
+    "val_old" => ValidationState::from_token,
+    "val_new" => ValidationState::from_token,
+};
+
+/// Filter for integer-backed enums (like scan_state)
+#[derive(Debug)]
+pub struct EnumFilter {
+    enum_col_db: &'static str,
+    enum_vals: Vec<i64>,
+}
+
+impl Filter for EnumFilter {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+        let mut pred_str = String::new();
+        let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
+        let mut first = true;
+
+        if self.enum_vals.len() > 1 {
+            pred_str.push('(');
         }
 
         for enum_val in &self.enum_vals {
@@ -407,10 +529,10 @@ impl Filter for EnumFilter {
             }
 
             pred_str.push_str(&format!("({} = ?)", &self.enum_col_db));
-            pred_vec.push(Box::new(enum_val.to_owned()));
+            pred_vec.push(Box::new(*enum_val));
         }
 
-        if pred_count > 1 {
+        if self.enum_vals.len() > 1 {
             pred_str.push(')');
         }
 
@@ -422,8 +544,6 @@ impl EnumFilter {
     fn new(enum_col_db: &'static str) -> Self {
         EnumFilter {
             enum_col_db,
-            match_null: false,
-            match_not_null: false,
             enum_vals: Vec::new(),
         }
     }
@@ -445,22 +565,24 @@ impl EnumFilter {
             }
         };
 
+        // Get the parser for this enum column
+        let parser = ENUM_PARSERS.get(enum_col.as_str())
+            .ok_or_else(|| FsPulseError::CustomParsingError(format!(
+                "Unknown enum column: '{}'",
+                enum_col
+            )))?;
+
+        // Parse each enum value using the parser
         for enum_val_pair in iter {
-            match enum_val_pair.as_rule() {
-                Rule::null => enum_filter.match_null = true,
-                Rule::not_null => enum_filter.match_not_null = true,
-                rule => {
-                    let rule_str = format!("{rule:?}");
-                    let val_opt = Self::ENUM_RULES.get(&rule_str).copied();
-                    match val_opt {
-                        Some(val) => enum_filter.enum_vals.push(val.to_owned()),
-                        None => {
-                            return Err(FsPulseError::CustomParsingError(format!(
-                                "Invalid filter value: '{}'",
-                                enum_val_pair.as_str()
-                            )));
-                        }
-                    }
+            let token = enum_val_pair.as_str();
+            match parser(token) {
+                Some(db_val) => enum_filter.enum_vals.push(db_val),
+                None => {
+                    return Err(FsPulseError::CustomParsingError(format!(
+                        "Invalid {} value: '{}'",
+                        enum_col,
+                        token
+                    )))
                 }
             }
         }
@@ -469,42 +591,6 @@ impl EnumFilter {
 
         Ok(())
     }
-
-    // We use a single, common map for all of the enum mappings
-    // The parser grammar guarantees that values are valid for a given
-    // enum type. We stringify rule names because there is no
-    // straightforward way to include a rule in a static mapping
-    // Null and Not Null are not expressed in these mapping - they
-    // are handled directly in code
-    const ENUM_RULES: OrderedStrMap = phf_ordered_map! {
-        // bool values
-        "bool_true" => "1",
-        "bool_false" => "0",
-
-        // val values
-        "val_valid" => "V",
-        "val_invalid" => "I",
-        "val_no_validator" => "N",
-        "val_unknown" => "U",
-
-        // change type values
-        "change_add" => "A",
-        "change_modify" => "M",
-        "change_delete" => "D",
-
-        // item_type values
-        "item_file" => "F",
-        "item_directory" => "D",
-        "item_symlink" => "S",
-
-        // alert_type values
-        "alert_suspicious_hash" => "H",
-        "alert_invalid_file" => "I",
-
-        "alert_status_dismissed" => "D",
-        "alert_status_flagged" => "F",
-        "alert_status_open" => "O",
-    };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -641,5 +727,616 @@ impl IntFilter {
         query.add_filter(Box::new(int_filter));
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::query::QueryParser;
+    use pest::Parser;
+
+    // ==================================================================================
+    // ID Filter Tests
+    // ==================================================================================
+
+    #[test]
+    fn test_id_filter_single_id() {
+        let result = QueryParser::parse(Rule::id_filter_EOI, "42");
+        assert!(result.is_ok(), "Failed to parse single ID '42': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_id_filter_multiple_ids() {
+        let result = QueryParser::parse(Rule::id_filter_EOI, "1, 5, 10");
+        assert!(result.is_ok(), "Failed to parse multiple IDs: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_id_filter_range() {
+        let result = QueryParser::parse(Rule::id_filter_EOI, "1..10");
+        assert!(result.is_ok(), "Failed to parse range '1..10': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_id_filter_multiple_ranges() {
+        let result = QueryParser::parse(Rule::id_filter_EOI, "1..10, 20..30");
+        assert!(result.is_ok(), "Failed to parse multiple ranges: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_id_filter_mixed() {
+        let result = QueryParser::parse(Rule::id_filter_EOI, "1, 5..10, 15");
+        assert!(result.is_ok(), "Failed to parse mixed IDs and ranges: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_id_filter_null() {
+        let result = QueryParser::parse(Rule::id_filter_EOI, "null");
+        assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_id_filter_not_null() {
+        let result = QueryParser::parse(Rule::id_filter_EOI, "not null");
+        assert!(result.is_ok(), "Failed to parse 'not null': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_id_filter_whitespace() {
+        let result = QueryParser::parse(Rule::id_filter_EOI, "  1 ,  5 .. 10  ,  15  ");
+        assert!(result.is_ok(), "Failed to parse with whitespace: {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // Date Filter Tests
+    // ==================================================================================
+
+    #[test]
+    fn test_date_filter_single_date() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15");
+        assert!(result.is_ok(), "Failed to parse single date: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_date_filter_range() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-01..2025-01-31");
+        assert!(result.is_ok(), "Failed to parse date range: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_date_filter_multiple_dates() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-01, 2025-02-01");
+        assert!(result.is_ok(), "Failed to parse multiple dates: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_date_filter_null() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "null");
+        assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_date_filter_not_null() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "not null");
+        assert!(result.is_ok(), "Failed to parse 'not null': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_date_filter_invalid_format() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "01/15/2025");
+        assert!(result.is_err(), "Should reject non-ISO date format");
+    }
+
+    // ==================================================================================
+    // Bool Filter Tests
+    // ==================================================================================
+
+    #[test]
+    fn test_bool_filter_true() {
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "true");
+        assert!(result.is_ok(), "Failed to parse 'true': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "TRUE");
+        assert!(result.is_ok(), "Failed to parse 'TRUE': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "T");
+        assert!(result.is_ok(), "Failed to parse 'T': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_bool_filter_false() {
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "false");
+        assert!(result.is_ok(), "Failed to parse 'false': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "FALSE");
+        assert!(result.is_ok(), "Failed to parse 'FALSE': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "F");
+        assert!(result.is_ok(), "Failed to parse 'F': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_bool_filter_null() {
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "null");
+        assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_bool_filter_not_null() {
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "not null");
+        assert!(result.is_ok(), "Failed to parse 'not null': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_bool_filter_multiple() {
+        let result = QueryParser::parse(Rule::bool_filter_EOI, "true, false");
+        assert!(result.is_ok(), "Failed to parse multiple bool values: {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // String Filter Tests
+    // ==================================================================================
+
+    #[test]
+    fn test_string_filter_single() {
+        let result = QueryParser::parse(Rule::string_filter_EOI, "'error'");
+        assert!(result.is_ok(), "Failed to parse single string: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_string_filter_multiple() {
+        let result = QueryParser::parse(Rule::string_filter_EOI, "'error', 'warning'");
+        assert!(result.is_ok(), "Failed to parse multiple strings: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_string_filter_empty() {
+        let result = QueryParser::parse(Rule::string_filter_EOI, "''");
+        assert!(result.is_ok(), "Failed to parse empty string: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_string_filter_with_spaces() {
+        let result = QueryParser::parse(Rule::string_filter_EOI, "'file not found'");
+        assert!(result.is_ok(), "Failed to parse string with spaces: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_string_filter_escaped_quote() {
+        let result = QueryParser::parse(Rule::string_filter_EOI, r"'can\'t open file'");
+        assert!(result.is_ok(), "Failed to parse string with escaped quote: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_string_filter_null() {
+        let result = QueryParser::parse(Rule::string_filter_EOI, "null");
+        assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_string_filter_not_null() {
+        let result = QueryParser::parse(Rule::string_filter_EOI, "not null");
+        assert!(result.is_ok(), "Failed to parse 'not null': {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // Path Filter Tests
+    // ==================================================================================
+
+    #[test]
+    fn test_path_filter_single() {
+        let result = QueryParser::parse(Rule::path_filter_EOI, "'/home/user'");
+        assert!(result.is_ok(), "Failed to parse single path: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_path_filter_multiple() {
+        let result = QueryParser::parse(Rule::path_filter_EOI, "'/var/log', '/tmp'");
+        assert!(result.is_ok(), "Failed to parse multiple paths: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_path_filter_windows() {
+        let result = QueryParser::parse(Rule::path_filter_EOI, r"'C:\Users\Documents'");
+        assert!(result.is_ok(), "Failed to parse Windows path: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_path_filter_with_spaces() {
+        let result = QueryParser::parse(Rule::path_filter_EOI, "'/home/my documents'");
+        assert!(result.is_ok(), "Failed to parse path with spaces: {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // Val Filter Tests (EnumFilter - integer-backed)
+    // ==================================================================================
+
+    #[test]
+    fn test_val_filter_valid() {
+        let result = QueryParser::parse(Rule::val_filter_EOI, "Valid");
+        assert!(result.is_ok(), "Failed to parse 'Valid': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::val_filter_EOI, "V");
+        assert!(result.is_ok(), "Failed to parse 'V': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_val_filter_invalid() {
+        let result = QueryParser::parse(Rule::val_filter_EOI, "Invalid");
+        assert!(result.is_ok(), "Failed to parse 'Invalid': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::val_filter_EOI, "I");
+        assert!(result.is_ok(), "Failed to parse 'I': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_val_filter_no_validator() {
+        let result = QueryParser::parse(Rule::val_filter_EOI, "No Validator");
+        assert!(result.is_ok(), "Failed to parse 'No Validator': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::val_filter_EOI, "N");
+        assert!(result.is_ok(), "Failed to parse 'N': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_val_filter_unknown() {
+        let result = QueryParser::parse(Rule::val_filter_EOI, "Unknown");
+        assert!(result.is_ok(), "Failed to parse 'Unknown': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::val_filter_EOI, "U");
+        assert!(result.is_ok(), "Failed to parse 'U': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_val_filter_multiple() {
+        let result = QueryParser::parse(Rule::val_filter_EOI, "Valid, Invalid");
+        assert!(result.is_ok(), "Failed to parse multiple values: {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::val_filter_EOI, "V, I, N");
+        assert!(result.is_ok(), "Failed to parse multiple short codes: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_val_filter_null() {
+        let result = QueryParser::parse(Rule::val_filter_EOI, "null");
+        assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // Item Type Filter Tests (EnumFilter - integer-backed)
+    // ==================================================================================
+
+    #[test]
+    fn test_item_type_filter_file() {
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "File");
+        assert!(result.is_ok(), "Failed to parse 'File': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "F");
+        assert!(result.is_ok(), "Failed to parse 'F': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_item_type_filter_directory() {
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "Directory");
+        assert!(result.is_ok(), "Failed to parse 'Directory': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "Dir");
+        assert!(result.is_ok(), "Failed to parse 'Dir': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "D");
+        assert!(result.is_ok(), "Failed to parse 'D': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_item_type_filter_symlink() {
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "Symlink");
+        assert!(result.is_ok(), "Failed to parse 'Symlink': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "S");
+        assert!(result.is_ok(), "Failed to parse 'S': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_item_type_filter_multiple() {
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "File, Directory");
+        assert!(result.is_ok(), "Failed to parse multiple types: {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::item_type_filter_EOI, "F, D, S");
+        assert!(result.is_ok(), "Failed to parse multiple short codes: {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // Change Type Filter Tests (EnumFilter - integer-backed)
+    // ==================================================================================
+
+    #[test]
+    fn test_change_type_filter_add() {
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "Add");
+        assert!(result.is_ok(), "Failed to parse 'Add': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "A");
+        assert!(result.is_ok(), "Failed to parse 'A': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_change_type_filter_modify() {
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "Modify");
+        assert!(result.is_ok(), "Failed to parse 'Modify': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "M");
+        assert!(result.is_ok(), "Failed to parse 'M': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_change_type_filter_delete() {
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "Delete");
+        assert!(result.is_ok(), "Failed to parse 'Delete': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "D");
+        assert!(result.is_ok(), "Failed to parse 'D': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_change_type_filter_multiple() {
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "Add, Modify");
+        assert!(result.is_ok(), "Failed to parse multiple types: {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "A, M, D");
+        assert!(result.is_ok(), "Failed to parse multiple short codes: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_change_type_filter_null() {
+        let result = QueryParser::parse(Rule::change_type_filter_EOI, "null");
+        assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // Alert Type Filter Tests (EnumFilter - integer-backed)
+    // ==================================================================================
+
+    #[test]
+    fn test_alert_type_filter_suspicious_hash() {
+        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "H");
+        assert!(result.is_ok(), "Failed to parse 'H': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "h");
+        assert!(result.is_ok(), "Failed to parse 'h': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_alert_type_filter_invalid_file() {
+        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "I");
+        assert!(result.is_ok(), "Failed to parse 'I': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "i");
+        assert!(result.is_ok(), "Failed to parse 'i': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_alert_type_filter_multiple() {
+        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "H, I");
+        assert!(result.is_ok(), "Failed to parse multiple alert types: {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // Alert Status Filter Tests (EnumFilter - integer-backed)
+    // ==================================================================================
+
+    #[test]
+    fn test_alert_status_filter_dismissed() {
+        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "D");
+        assert!(result.is_ok(), "Failed to parse 'D': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "d");
+        assert!(result.is_ok(), "Failed to parse 'd': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_alert_status_filter_flagged() {
+        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "F");
+        assert!(result.is_ok(), "Failed to parse 'F': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "f");
+        assert!(result.is_ok(), "Failed to parse 'f': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_alert_status_filter_open() {
+        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "O");
+        assert!(result.is_ok(), "Failed to parse 'O': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "o");
+        assert!(result.is_ok(), "Failed to parse 'o': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_alert_status_filter_multiple() {
+        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "D, F, O");
+        assert!(result.is_ok(), "Failed to parse multiple alert statuses: {:?}", result.err());
+    }
+
+    // ==================================================================================
+    // Scan State Filter Tests (EnumFilter - Integer)
+    // ==================================================================================
+
+    #[test]
+    fn test_scan_state_filter_single_full_name() {
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning");
+        assert!(result.is_ok(), "Failed to parse 'Scanning': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Completed");
+        assert!(result.is_ok(), "Failed to parse 'Completed': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_scan_state_filter_single_short_code() {
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "S");
+        assert!(result.is_ok(), "Failed to parse 'S': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "C");
+        assert!(result.is_ok(), "Failed to parse 'C': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "P");
+        assert!(result.is_ok(), "Failed to parse 'P' (Stopped): {:?}", result.err());
+    }
+
+    #[test]
+    fn test_scan_state_filter_case_variations() {
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "scanning");
+        assert!(result.is_ok(), "Failed to parse 'scanning' (lowercase): {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "SCANNING");
+        assert!(result.is_ok(), "Failed to parse 'SCANNING' (uppercase): {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning");
+        assert!(result.is_ok(), "Failed to parse 'Scanning' (titlecase): {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "s");
+        assert!(result.is_ok(), "Failed to parse 's' (lowercase short code): {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "S");
+        assert!(result.is_ok(), "Failed to parse 'S' (uppercase short code): {:?}", result.err());
+    }
+
+    #[test]
+    fn test_scan_state_filter_multiple_values() {
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning, Completed");
+        assert!(result.is_ok(), "Failed to parse 'Scanning, Completed': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "S, C, E");
+        assert!(result.is_ok(), "Failed to parse 'S, C, E': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning, C, Error");
+        assert!(result.is_ok(), "Failed to parse mixed 'Scanning, C, Error': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_scan_state_filter_all_states() {
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning");
+        assert!(result.is_ok(), "Failed to parse 'Scanning': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Sweeping");
+        assert!(result.is_ok(), "Failed to parse 'Sweeping': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Analyzing");
+        assert!(result.is_ok(), "Failed to parse 'Analyzing': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Completed");
+        assert!(result.is_ok(), "Failed to parse 'Completed': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Stopped");
+        assert!(result.is_ok(), "Failed to parse 'Stopped': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Error");
+        assert!(result.is_ok(), "Failed to parse 'Error': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "S");
+        assert!(result.is_ok(), "Failed to parse 'S': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "W");
+        assert!(result.is_ok(), "Failed to parse 'W': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "A");
+        assert!(result.is_ok(), "Failed to parse 'A': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "C");
+        assert!(result.is_ok(), "Failed to parse 'C': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "P");
+        assert!(result.is_ok(), "Failed to parse 'P': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "E");
+        assert!(result.is_ok(), "Failed to parse 'E': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_scan_state_filter_invalid_value() {
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Invalid");
+        assert!(result.is_err(), "Should reject invalid state 'Invalid'");
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Pending");
+        assert!(result.is_err(), "Should reject removed state 'Pending'");
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "T");
+        assert!(result.is_err(), "Should reject old Stopped code 'T'");
+    }
+
+    #[test]
+    fn test_scan_state_filter_whitespace() {
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, " Scanning ");
+        assert!(result.is_ok(), "Failed to parse with whitespace: {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning , Completed");
+        assert!(result.is_ok(), "Failed to parse with comma whitespace: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_enum_filter_predicate_generation() {
+        let filter = EnumFilter {
+            enum_col_db: "state",
+            enum_vals: vec![1],
+        };
+
+        let result = filter.to_predicate_parts();
+        assert!(result.is_ok());
+        let (pred_str, pred_vec) = result.unwrap();
+        assert_eq!(pred_str, "(state = ?)");
+        assert_eq!(pred_vec.len(), 1);
+    }
+
+    #[test]
+    fn test_enum_filter_predicate_multiple_values() {
+        let filter = EnumFilter {
+            enum_col_db: "state",
+            enum_vals: vec![1, 4, 6],
+        };
+
+        let result = filter.to_predicate_parts();
+        assert!(result.is_ok());
+        let (pred_str, pred_vec) = result.unwrap();
+        assert_eq!(pred_str, "((state = ?) OR (state = ?) OR (state = ?))");
+        assert_eq!(pred_vec.len(), 3);
+    }
+
+    // ==================================================================================
+    // Int Filter Tests
+    // ==================================================================================
+
+    #[test]
+    fn test_int_filter_greater_than() {
+        let result = QueryParser::parse(Rule::int_filter_EOI, "> 100");
+        assert!(result.is_ok(), "Failed to parse '> 100': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::int_filter_EOI, ">100");
+        assert!(result.is_ok(), "Failed to parse '>100': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_int_filter_less_than() {
+        let result = QueryParser::parse(Rule::int_filter_EOI, "< 100");
+        assert!(result.is_ok(), "Failed to parse '< 100': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::int_filter_EOI, "<100");
+        assert!(result.is_ok(), "Failed to parse '<100': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_int_filter_zero() {
+        let result = QueryParser::parse(Rule::int_filter_EOI, "> 0");
+        assert!(result.is_ok(), "Failed to parse '> 0': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_int_filter_large_value() {
+        let result = QueryParser::parse(Rule::int_filter_EOI, "> 1000000000");
+        assert!(result.is_ok(), "Failed to parse large value: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_int_filter_whitespace() {
+        let result = QueryParser::parse(Rule::int_filter_EOI, "  >   100  ");
+        assert!(result.is_ok(), "Failed to parse with whitespace: {:?}", result.err());
     }
 }

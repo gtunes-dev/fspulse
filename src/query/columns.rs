@@ -60,6 +60,7 @@ pub enum ColType {
     ChangeType,
     AlertType,
     AlertStatus,
+    ScanState,
     Int,
 }
 
@@ -121,6 +122,11 @@ impl ColType {
                 "Alert Status",
                 "Alert status types: D (dismissed), F (flagged), O (open)\nComma-separated values",
             ),
+            ColType::ScanState => ColTypeInfo::new(
+                Rule::scan_state_filter_EOI,
+                "Scan State",
+                "Scan states: S (Scanning), W (Sweeping), A (Analyzing), C (Completed), P (Stopped), E (Error)\nComma-separated values",
+            ),
         }
     }
 }
@@ -163,7 +169,7 @@ pub const ROOTS_QUERY_COLS: ColMap = phf_ordered_map! {
 pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {
     "scan_id"  => ColSpec::new("scans.scan_id", "Scan Id", true, true, ColType::Id, ColAlign::Right),
     "root_id" => ColSpec::new("root_id", "Root Id", true, true, ColType::Id, ColAlign::Right),
-    "state" => ColSpec::new("state", "State", false, true, ColType::Int, ColAlign::Center),
+    "scan_state" => ColSpec::new("state", "State", false, true, ColType::ScanState, ColAlign::Center),
     "is_hash" => ColSpec::new("is_hash", "Is Hash", true, true, ColType::Bool, ColAlign::Center),
     "hash_all" => ColSpec::new("hash_all", "Hash All", false, true, ColType::Bool, ColAlign::Center),
     "is_val" => ColSpec::new("is_val", "Is Val", true, true, ColType::Bool, ColAlign::Center),
