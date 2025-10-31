@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enhanced scan statistics**: Database schema v6 adds denormalized count columns to scans table (`total_file_size`, `alert_count`, `add_count`, `modify_count`, `delete_count`) for improved query performance and future charting capabilities. total_file_size will be computed for new scans only
 - **Home page statistics display**: Added total file size and aggregate change count displays with color-coded visual indicators for adds (green), modifies (blue), and deletes (red)
 - **Scan Trends visualization**: New Insights tab with interactive charts showing historical scan data over time, including total file size, file/folder counts, change activity (adds/modifies/deletes), and alerts created. Features root selection, date range filtering, and human-readable formatting for large numbers and byte sizes
+- **Standalone Alerts page**: Moved Alerts from Insights tabs to dedicated top-level navigation page with context filtering by root or scan ID
+- **Preset time window selector**: Added quick-select time ranges (Last 7 Days, Last 30 Days, Last 3 Months, Last 6 Months, Last Year, Custom Range) with inline custom date pickers
+- **Smart baseline scan filtering**: Added "Exclude initial baseline scan" checkbox for Changes and New Alerts charts that automatically detects and filters the first scan (or first validating scan for alerts) when present in the time window
 
 ### Changed
 
@@ -25,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Single-binary distribution**: Implemented embedded assets using rust-embed with conditional compilation - development builds serve from filesystem for fast iteration, release builds embed assets into binary for simplified deployment
 - **Build infrastructure updates**: Updated GitHub CI workflows and Dockerfile to build frontend before Rust compilation, ensuring embedded assets are included in release artifacts
 - **Web UI Scan page fit and finish**: Improved layout and spacing of Roots card header with repositioned "Add Root" button
+- **Chart visualization improvements**: Standardized chart titles to singular form, converted Items chart to stacked area visualization, Changes chart to stacked bars (single bar per scan), and New Alerts to bar chart for better clarity of discrete events
+- **Insights page redesign**: Improved visual hierarchy with prominent root selector and compact secondary time range controls, automatic selection of first root with 3-month default time range
+- **Integer-only Y-axes**: All count-based charts (Items, Changes, New Alerts) now enforce integer tick marks, preventing misleading decimal values
 
 ### Fixed
 

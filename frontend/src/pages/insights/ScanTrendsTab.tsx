@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { format } from 'date-fns'
+import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import { Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -43,6 +43,7 @@ interface Root {
 }
 
 interface ScanData {
+  scan_id: number
   scan_time: number // Unix timestamp
   file_count: number
   folder_count: number
@@ -53,14 +54,57 @@ interface ScanData {
   delete_count: number
 }
 
+type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
+
 export function ScanTrendsTab() {
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>('')
+  const [timeWindow, setTimeWindow] = useState<TimeWindowPreset>('3m') // Default to 3 months
   const [fromDate, setFromDate] = useState<Date | undefined>()
   const [toDate, setToDate] = useState<Date | undefined>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scanData, setScanData] = useState<ScanData[]>([])
+  const [hasAutoSelected, setHasAutoSelected] = useState(false)
+  const [firstScanId, setFirstScanId] = useState<number | null>(null)
+  const [firstValidatingScanId, setFirstValidatingScanId] = useState<number | null>(null)
+  const [excludeFirstScan, setExcludeFirstScan] = useState(false)
+  const [excludeFirstValidatingScan, setExcludeFirstValidatingScan] = useState(false)
+
+  // Calculate date range based on time window preset
+  const getDateRangeForPreset = (preset: TimeWindowPreset): { from: Date; to: Date } => {
+    const now = new Date()
+    const today = startOfDay(now)
+
+    switch (preset) {
+      case '7d':
+        return { from: subDays(today, 7), to: today }
+      case '30d':
+        return { from: subDays(today, 30), to: today }
+      case '3m':
+        return { from: subMonths(today, 3), to: today }
+      case '6m':
+        return { from: subMonths(today, 6), to: today }
+      case '1y':
+        return { from: subYears(today, 1), to: today }
+      case 'custom':
+        // For custom, just return current dates
+        return {
+          from: fromDate || subMonths(today, 3),
+          to: toDate || today
+        }
+    }
+  }
+
+  // Update date range when time window changes
+  useEffect(() => {
+    if (timeWindow !== 'custom') {
+      const { from, to } = getDateRangeForPreset(timeWindow)
+      setFromDate(from)
+      setToDate(to)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeWindow])
 
   // Load roots on mount
   useEffect(() => {
@@ -85,12 +129,78 @@ export function ScanTrendsTab() {
         }))
 
         setRoots(rootsData)
+
+        // Auto-select first root and set default date range
+        if (rootsData.length > 0 && !hasAutoSelected) {
+          setSelectedRootId(rootsData[0].root_id.toString())
+          const today = startOfDay(new Date())
+          setFromDate(subMonths(today, 3))
+          setToDate(today)
+          setHasAutoSelected(true)
+        }
       } catch (err) {
         console.error('Error loading roots:', err)
       }
     }
     loadRoots()
-  }, [])
+  }, [hasAutoSelected])
+
+  // Load the very first scan ID for this root
+  useEffect(() => {
+    async function loadFirstScan() {
+      if (!selectedRootId) {
+        setFirstScanId(null)
+        setFirstValidatingScanId(null)
+        return
+      }
+
+      try {
+        // Query for the first completed scan for this root
+        const columns: ColumnSpec[] = [
+          { name: 'scan_id', visible: true, sort_direction: 'asc', position: 0 },
+        ]
+
+        const response = await fetchQuery('scans', {
+          columns,
+          filters: [
+            { column: 'root_id', value: selectedRootId },
+            { column: 'scan_state', value: 'C' },
+          ],
+          limit: 1,
+          offset: 0,
+        })
+
+        if (response.rows.length > 0) {
+          setFirstScanId(parseInt(response.rows[0][0]))
+        } else {
+          setFirstScanId(null)
+        }
+
+        // Query for the first validating scan (is_val = true)
+        const validatingResponse = await fetchQuery('scans', {
+          columns,
+          filters: [
+            { column: 'root_id', value: selectedRootId },
+            { column: 'scan_state', value: 'C' },
+            { column: 'is_val', value: 'true' },
+          ],
+          limit: 1,
+          offset: 0,
+        })
+
+        if (validatingResponse.rows.length > 0) {
+          setFirstValidatingScanId(parseInt(validatingResponse.rows[0][0]))
+        } else {
+          setFirstValidatingScanId(null)
+        }
+      } catch (err) {
+        console.error('Error loading first scan:', err)
+        setFirstScanId(null)
+        setFirstValidatingScanId(null)
+      }
+    }
+    loadFirstScan()
+  }, [selectedRootId])
 
   // Load scan data when root or date range changes
   const loadScanData = useCallback(async () => {
@@ -138,6 +248,7 @@ export function ScanTrendsTab() {
       })
 
       const data: ScanData[] = response.rows.map((row) => ({
+        scan_id: parseInt(row[0]),
         scan_time: parseInt(row[1]), // Position 1 now (scan_id is position 0)
         file_count: parseInt(row[2]) || 0,
         folder_count: parseInt(row[3]) || 0,
@@ -149,14 +260,6 @@ export function ScanTrendsTab() {
       }))
 
       setScanData(data)
-
-      // Auto-set date range to span of available data if not already set
-      if (data.length > 0 && !fromDate && !toDate) {
-        const minTime = Math.min(...data.map(d => d.scan_time))
-        const maxTime = Math.max(...data.map(d => d.scan_time))
-        setFromDate(new Date(minTime * 1000))
-        setToDate(new Date(maxTime * 1000))
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load scan data')
       console.error('Error loading scan data:', err)
@@ -170,46 +273,83 @@ export function ScanTrendsTab() {
     loadScanData()
   }, [loadScanData])
 
+  const handleTimeWindowChange = (value: TimeWindowPreset) => {
+    setTimeWindow(value)
+    // If switching to custom, keep current dates
+    // Otherwise, dates will be updated by the useEffect
+  }
+
+  const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
+
+  // Check if first scan is in current data
+  const firstScanInView = firstScanId !== null && scanData.some(d => d.scan_id === firstScanId)
+  const firstValidatingScanInView = firstValidatingScanId !== null && scanData.some(d => d.scan_id === firstValidatingScanId)
+
+  // Filter data for change count chart
+  const changeCountData = excludeFirstScan && firstScanId !== null
+    ? scanData.filter(d => d.scan_id !== firstScanId)
+    : scanData
+
+  // Filter data for alerts chart
+  const alertsData = excludeFirstValidatingScan && firstValidatingScanId !== null
+    ? scanData.filter(d => d.scan_id !== firstValidatingScanId)
+    : scanData
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Control Toolbar */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4 flex-wrap">
-            {/* Root Picker */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium whitespace-nowrap">Root:</label>
-              <Select value={selectedRootId} onValueChange={setSelectedRootId}>
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue placeholder="Select a root to analyze" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roots.map((root) => (
-                    <SelectItem key={root.root_id} value={root.root_id.toString()}>
-                      {root.root_path}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      {/* Root Selection - Prominent Display */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-base font-medium text-muted-foreground">Root</span>
+          <Select value={selectedRootId} onValueChange={setSelectedRootId}>
+            <SelectTrigger className="h-auto border-none shadow-none px-0 text-xl font-semibold hover:bg-transparent focus:ring-0">
+              <SelectValue>
+                {selectedRoot ? selectedRoot.root_path : 'Select a root'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {roots.map((root) => (
+                <SelectItem key={root.root_id} value={root.root_id.toString()}>
+                  {root.root_path}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-            {/* From Date Picker */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium whitespace-nowrap">From:</label>
+        {/* Time Range Controls - Compact, Secondary */}
+        <div className="flex items-center gap-3">
+          <Select value={timeWindow} onValueChange={handleTimeWindowChange}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7d">Last 7 Days</SelectItem>
+              <SelectItem value="30d">Last 30 Days</SelectItem>
+              <SelectItem value="3m">Last 3 Months</SelectItem>
+              <SelectItem value="6m">Last 6 Months</SelectItem>
+              <SelectItem value="1y">Last Year</SelectItem>
+              <SelectItem value="custom">Custom Range</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Custom Date Pickers - Inline when selected */}
+          {timeWindow === 'custom' && (
+            <>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     className={cn(
-                      'w-[160px] justify-start text-left font-normal',
+                      'w-[140px] justify-start text-left font-normal',
                       !fromDate && 'text-muted-foreground'
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {fromDate ? format(fromDate, 'yyyy-MM-dd') : 'Pick a date'}
+                    {fromDate ? format(fromDate, 'MMM dd') : 'From'}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0" align="end">
                   <Calendar
                     mode="single"
                     selected={fromDate}
@@ -218,25 +358,23 @@ export function ScanTrendsTab() {
                   />
                 </PopoverContent>
               </Popover>
-            </div>
 
-            {/* To Date Picker */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium whitespace-nowrap">To:</label>
+              <span className="text-muted-foreground">to</span>
+
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     className={cn(
-                      'w-[160px] justify-start text-left font-normal',
+                      'w-[140px] justify-start text-left font-normal',
                       !toDate && 'text-muted-foreground'
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {toDate ? format(toDate, 'yyyy-MM-dd') : 'Pick a date'}
+                    {toDate ? format(toDate, 'MMM dd') : 'To'}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0" align="end">
                   <Calendar
                     mode="single"
                     selected={toDate}
@@ -245,10 +383,10 @@ export function ScanTrendsTab() {
                   />
                 </PopoverContent>
               </Popover>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Chart Area */}
       {!selectedRootId ? (
@@ -272,7 +410,7 @@ export function ScanTrendsTab() {
           {/* Total File Size Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Total File Size</CardTitle>
+              <CardTitle>Total Size</CardTitle>
             </CardHeader>
             <CardContent>
               <ChartContainer
@@ -337,10 +475,10 @@ export function ScanTrendsTab() {
             </CardContent>
           </Card>
 
-          {/* File & Folder Counts Chart */}
+          {/* Item Count Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>File & Folder Counts</CardTitle>
+              <CardTitle>Items</CardTitle>
             </CardHeader>
             <CardContent>
               <ChartContainer
@@ -356,7 +494,7 @@ export function ScanTrendsTab() {
                 }}
                 className="aspect-auto h-[300px]"
               >
-                <LineChart
+                <AreaChart
                   data={scanData.map((d) => ({
                     date: format(new Date(d.scan_time * 1000), 'MMM dd'),
                     file_count: d.file_count,
@@ -369,29 +507,32 @@ export function ScanTrendsTab() {
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <YAxis
+                    allowDecimals={false}
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Legend />
-                  <Line
+                  {/* Files as base layer */}
+                  <Area
                     type="monotone"
                     dataKey="file_count"
+                    stackId="1"
                     stroke="var(--color-file_count)"
-                    strokeWidth={2}
-                    dot={{ fill: 'var(--color-file_count)', r: 3 }}
-                    activeDot={{ r: 5 }}
+                    fill="var(--color-file_count)"
+                    fillOpacity={0.6}
                     name="Files"
                   />
-                  <Line
+                  {/* Folders stacked on top */}
+                  <Area
                     type="monotone"
                     dataKey="folder_count"
+                    stackId="1"
                     stroke="var(--color-folder_count)"
-                    strokeWidth={2}
-                    dot={{ fill: 'var(--color-folder_count)', r: 3 }}
-                    activeDot={{ r: 5 }}
+                    fill="var(--color-folder_count)"
+                    fillOpacity={0.6}
                     name="Folders"
                   />
-                </LineChart>
+                </AreaChart>
               </ChartContainer>
             </CardContent>
           </Card>
@@ -399,8 +540,19 @@ export function ScanTrendsTab() {
           {/* Change Activity and Alerts - Side by side */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
-              <CardHeader>
-                <CardTitle>Change Counts</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle>Changes</CardTitle>
+                {firstScanInView && (
+                  <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={excludeFirstScan}
+                      onChange={(e) => setExcludeFirstScan(e.target.checked)}
+                      className="cursor-pointer"
+                    />
+                    <span className="text-muted-foreground">Exclude initial baseline scan</span>
+                  </label>
+                )}
               </CardHeader>
               <CardContent>
                 <ChartContainer
@@ -421,7 +573,7 @@ export function ScanTrendsTab() {
                   className="aspect-auto h-[300px]"
                 >
                   <BarChart
-                    data={scanData.map((d) => ({
+                    data={changeCountData.map((d) => ({
                       date: format(new Date(d.scan_time * 1000), 'MMM dd'),
                       add_count: d.add_count,
                       modify_count: d.modify_count,
@@ -434,21 +586,34 @@ export function ScanTrendsTab() {
                       tick={{ fill: 'hsl(var(--muted-foreground))' }}
                     />
                     <YAxis
+                      allowDecimals={false}
                       tick={{ fill: 'hsl(var(--muted-foreground))' }}
                     />
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Legend />
-                    <Bar dataKey="add_count" fill="var(--color-add_count)" name="Added" />
-                    <Bar dataKey="modify_count" fill="var(--color-modify_count)" name="Modified" />
-                    <Bar dataKey="delete_count" fill="var(--color-delete_count)" name="Deleted" />
+                    {/* Stacked bars - all on same vertical bar */}
+                    <Bar dataKey="add_count" stackId="a" fill="var(--color-add_count)" name="Added" />
+                    <Bar dataKey="modify_count" stackId="a" fill="var(--color-modify_count)" name="Modified" />
+                    <Bar dataKey="delete_count" stackId="a" fill="var(--color-delete_count)" name="Deleted" />
                   </BarChart>
                 </ChartContainer>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Alerts Created</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle>New Alerts</CardTitle>
+                {firstValidatingScanInView && (
+                  <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={excludeFirstValidatingScan}
+                      onChange={(e) => setExcludeFirstValidatingScan(e.target.checked)}
+                      className="cursor-pointer"
+                    />
+                    <span className="text-muted-foreground">Exclude initial baseline scan</span>
+                  </label>
+                )}
               </CardHeader>
               <CardContent>
                 <ChartContainer
@@ -460,8 +625,8 @@ export function ScanTrendsTab() {
                   }}
                   className="aspect-auto h-[300px]"
                 >
-                  <LineChart
-                    data={scanData.map((d) => ({
+                  <BarChart
+                    data={alertsData.map((d) => ({
                       date: format(new Date(d.scan_time * 1000), 'MMM dd'),
                       alert_count: d.alert_count,
                     }))}
@@ -472,20 +637,17 @@ export function ScanTrendsTab() {
                       tick={{ fill: 'hsl(var(--muted-foreground))' }}
                     />
                     <YAxis
+                      allowDecimals={false}
                       tick={{ fill: 'hsl(var(--muted-foreground))' }}
                     />
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Legend />
-                    <Line
-                      type="monotone"
+                    <Bar
                       dataKey="alert_count"
-                      stroke="var(--color-alert_count)"
-                      strokeWidth={2}
-                      dot={{ fill: 'var(--color-alert_count)', r: 3 }}
-                      activeDot={{ r: 5 }}
+                      fill="var(--color-alert_count)"
                       name="Alerts"
                     />
-                  </LineChart>
+                  </BarChart>
                 </ChartContainer>
               </CardContent>
             </Card>

@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar'
 import { HomePage } from './pages/HomePage'
 import { ExplorePage } from './pages/ExplorePage'
 import { ScanPage } from './pages/ScanPage'
+import { AlertsPage } from './pages/AlertsPage'
 import { InsightsPage } from './pages/InsightsPage'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/explore/*" element={<ExplorePage />} />
                 <Route path="/scan" element={<ScanPage />} />
+                <Route path="/alerts" element={<AlertsPage />} />
                 <Route path="/insights/*" element={<InsightsPage />} />
                 <Route path="/settings" element={<div>Settings page coming soon...</div>} />
               </Routes>
