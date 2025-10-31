@@ -426,9 +426,9 @@ impl Scan {
                 let (add_count, modify_count, delete_count): (i64, i64, i64) = tx
                     .query_row(
                         "SELECT
-                        COUNT(*) FILTER (WHERE change_type = 0),
+                        COUNT(*) FILTER (WHERE change_type = 1),
                         COUNT(*) FILTER (WHERE change_type = 2),
-                        COUNT(*) FILTER (WHERE change_type = 1)
+                        COUNT(*) FILTER (WHERE change_type = 3)
                         FROM changes WHERE scan_id = ?",
                         [self.scan_id],
                         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -560,8 +560,8 @@ impl Scan {
                 last_scan
             ) =
             (
-                SELECT 
-                    CASE WHEN c.change_type = 0 THEN 1 ELSE items.is_ts END,
+                SELECT
+                    CASE WHEN c.change_type = 1 THEN 1 ELSE items.is_ts END,
                     c.mod_date_old,
                     c.file_size_old,
                     c.last_hash_scan_old,
@@ -573,14 +573,14 @@ impl Scan {
                 FROM changes c
                 WHERE c.item_id = items.item_id
                     AND c.scan_id = ?2
-                    AND (c.change_type = 0 AND c.is_undelete = 1)
+                    AND (c.change_type = 1 AND c.is_undelete = 1)
                 LIMIT 1
             )
             WHERE item_id IN (
-                SELECT item_id 
-                FROM changes 
+                SELECT item_id
+                FROM changes
                 WHERE scan_id = ?2
-                    AND (change_type = 0 AND is_undelete = 1)
+                    AND (change_type = 1 AND is_undelete = 1)
             )",
             [prev_scan_id, scan.scan_id()],
         )?;
@@ -634,7 +634,7 @@ impl Scan {
                 SELECT item_id
                 FROM changes
                 WHERE scan_id = ?2
-                  AND change_type = 1
+                  AND change_type = 3
             )",
             [prev_scan_id, scan.scan_id()],
         )?;
@@ -831,12 +831,12 @@ impl ScanStats {
         // Get change statistics broken down by file vs folder
         let changes: (i64, i64, i64, i64, i64, i64) = conn.query_row(
             "SELECT
-                SUM(CASE WHEN c.change_type = 0 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_added,
+                SUM(CASE WHEN c.change_type = 1 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_added,
                 SUM(CASE WHEN c.change_type = 2 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_modified,
-                SUM(CASE WHEN c.change_type = 1 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_deleted,
-                SUM(CASE WHEN c.change_type = 0 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_added,
+                SUM(CASE WHEN c.change_type = 3 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_deleted,
+                SUM(CASE WHEN c.change_type = 1 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_added,
                 SUM(CASE WHEN c.change_type = 2 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_modified,
-                SUM(CASE WHEN c.change_type = 1 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_deleted
+                SUM(CASE WHEN c.change_type = 3 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_deleted
              FROM changes c
              JOIN items i ON c.item_id = i.item_id
              WHERE c.scan_id = ?",

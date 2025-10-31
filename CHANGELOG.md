@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Integer-based enum storage**: Database schema v7 migrates all enums (item_type, change_type, alert_type, alert_status, validation state, scan_state) from single-character string storage to integer values for improved type safety and performance
+- **ChangeType enum reordering**: Changed ChangeType integer values to logical order (NoChange=0, Add=1, Modify=2, Delete=3) and updated all SQL queries, documentation, and tests accordingly
 - **Removed Default trait from enums**: Eliminated Default implementations from all enums to enforce explicit value handling
 - **Removed ScanState::Unknown variant**: Eliminated invalid Unknown state from ScanState enum
 - **Query column rename**: Renamed `state` column to `scan_state` in scans query domain
@@ -28,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Tombstone exclusion**: Corrected `file_count` and `folder_count` computation to exclude tombstoned (deleted) items, fixing a bug where deleted items were incorrectly included in totals
+- **Schema migration corrections**: Fixed v6_to_v7 migration to use correct integer mappings for ValidationState, and corrected v5_to_v6 migration to use character values (not integers) when operating on pre-v7 database
+- **Invalid enum value logging**: Added warning logs when database contains invalid enum integer values, helping detect data corruption or migration issues while maintaining graceful degradation
+- **Comprehensive enum tests**: Added integer value and round-trip conversion tests for all enum types to prevent future mapping errors
 
 ## [v0.1.4] - 2025-10-25
 

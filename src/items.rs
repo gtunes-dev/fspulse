@@ -1,3 +1,4 @@
+use log::warn;
 use rusqlite::{self, params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -98,7 +99,10 @@ impl ItemType {
             1 => ItemType::Directory,
             2 => ItemType::Symlink,
             3 => ItemType::Other,
-            _ => ItemType::Other, // Default for invalid values
+            _ => {
+                warn!("Invalid ItemType value in database: {}, defaulting to Other", value);
+                ItemType::Other
+            }
         }
     }
 
@@ -312,7 +316,7 @@ impl Item {
                     WHEN $1 = 0 THEN 0
                     WHEN $2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan IS NULL OR i.last_hash_scan < $3) THEN 1
                     WHEN i.file_hash IS NULL THEN 1
-                    WHEN c.change_type = 0 THEN 1
+                    WHEN c.change_type = 1 THEN 1
                     WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
                     ELSE 0
                 END AS needs_hash,
@@ -320,7 +324,7 @@ impl Item {
                     WHEN $4 = 0 THEN 0
                     WHEN $5 = 1 AND (i.val = 0 OR i.last_val_scan IS NULL OR i.last_val_scan < $3) THEN 1
                     WHEN i.val = 0 THEN 1
-                    WHEN c.change_type = 0 THEN 1
+                    WHEN c.change_type = 1 THEN 1
                     WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
                     ELSE 0
                 END AS needs_val
@@ -395,7 +399,7 @@ impl Item {
                 WHEN $1 = 0 THEN 0  -- hash disabled
                 WHEN $2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan < $3) THEN 1  -- hash_all
                 WHEN i.file_hash IS NULL THEN 1
-                WHEN c.change_type = 0 THEN 1
+                WHEN c.change_type = 1 THEN 1
                 WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
                 ELSE 0
             END AS needs_hash,
@@ -403,7 +407,7 @@ impl Item {
                 WHEN $4 = 0 THEN 0  -- val disabled
                 WHEN $5 = 1 AND (i.val = 0 OR i.last_val_scan < $3) THEN 1  -- val_all
                 WHEN i.val = 0 THEN 1
-                WHEN c.change_type = 0 THEN 1
+                WHEN c.change_type = 1 THEN 1
                 WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
                 ELSE 0
             END AS needs_val
@@ -419,13 +423,13 @@ impl Item {
                 ($1 = 1 AND (  -- hash enabled
                     ($2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan < $3)) OR
                     i.file_hash IS NULL OR
-                    c.change_type = 0 OR
+                    c.change_type = 1 OR
                     (c.change_type = 2 AND c.meta_change = 1)
                 )) OR
                 ($4 = 1 AND (  -- val enabled
                     ($5 = 1 AND (i.val = 0 OR i.last_val_scan < $3)) OR
                     i.val = 0 OR
-                    c.change_type = 0 OR
+                    c.change_type = 1 OR
                     (c.change_type = 2 AND c.meta_change = 1)
                 ))
             )
@@ -513,6 +517,28 @@ impl Item {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_item_type_integer_values() {
+        // Verify the integer values match the expected order
+        assert_eq!(ItemType::File.as_i64(), 0);
+        assert_eq!(ItemType::Directory.as_i64(), 1);
+        assert_eq!(ItemType::Symlink.as_i64(), 2);
+        assert_eq!(ItemType::Other.as_i64(), 3);
+    }
+
+    #[test]
+    fn test_item_type_from_i64() {
+        // Verify round-trip conversion
+        assert_eq!(ItemType::from_i64(0), ItemType::File);
+        assert_eq!(ItemType::from_i64(1), ItemType::Directory);
+        assert_eq!(ItemType::from_i64(2), ItemType::Symlink);
+        assert_eq!(ItemType::from_i64(3), ItemType::Other);
+
+        // Invalid values should default to Other
+        assert_eq!(ItemType::from_i64(999), ItemType::Other);
+        assert_eq!(ItemType::from_i64(-1), ItemType::Other);
+    }
 
     #[test]
     fn test_item_type_short_name() {

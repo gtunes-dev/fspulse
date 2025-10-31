@@ -1,6 +1,8 @@
 use std::sync::atomic::AtomicBool;
 use std::{ffi::OsStr, fmt, path::Path, sync::Arc};
 
+use log::warn;
+
 use crate::error::FsPulseError;
 use crate::progress::{ProgressId, ProgressReporter};
 
@@ -40,7 +42,10 @@ impl ValidationState {
             1 => ValidationState::Valid,
             2 => ValidationState::Invalid,
             3 => ValidationState::NoValidator,
-            _ => ValidationState::Unknown, // Default for invalid values
+            _ => {
+                warn!("Invalid ValidationState value in database: {}, defaulting to Unknown", value);
+                ValidationState::Unknown
+            }
         }
     }
 
@@ -130,6 +135,28 @@ pub trait Validator {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn test_validation_state_integer_values() {
+        // Verify the integer values match the expected order
+        assert_eq!(ValidationState::Unknown.as_i64(), 0);
+        assert_eq!(ValidationState::Valid.as_i64(), 1);
+        assert_eq!(ValidationState::Invalid.as_i64(), 2);
+        assert_eq!(ValidationState::NoValidator.as_i64(), 3);
+    }
+
+    #[test]
+    fn test_validation_state_from_i64() {
+        // Verify round-trip conversion
+        assert_eq!(ValidationState::from_i64(0), ValidationState::Unknown);
+        assert_eq!(ValidationState::from_i64(1), ValidationState::Valid);
+        assert_eq!(ValidationState::from_i64(2), ValidationState::Invalid);
+        assert_eq!(ValidationState::from_i64(3), ValidationState::NoValidator);
+
+        // Invalid values should default to Unknown
+        assert_eq!(ValidationState::from_i64(999), ValidationState::Unknown);
+        assert_eq!(ValidationState::from_i64(-1), ValidationState::Unknown);
+    }
 
     #[test]
     fn test_validation_state_from_string() {

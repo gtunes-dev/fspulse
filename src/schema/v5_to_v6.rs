@@ -23,9 +23,9 @@ ALTER TABLE scans ADD COLUMN delete_count INTEGER DEFAULT NULL;
 -- For completed scans (state = 4), compute alert and change counts from persistent tables
 UPDATE scans SET
   alert_count = (SELECT COUNT(*) FROM alerts WHERE alerts.scan_id = scans.scan_id),
-  add_count = (SELECT COUNT(*) FROM changes WHERE changes.scan_id = scans.scan_id AND change_type = 0),
-  modify_count = (SELECT COUNT(*) FROM changes WHERE changes.scan_id = scans.scan_id AND change_type = 2),
-  delete_count = (SELECT COUNT(*) FROM changes WHERE changes.scan_id = scans.scan_id AND change_type = 1)
+  add_count = (SELECT COUNT(*) FROM changes WHERE changes.scan_id = scans.scan_id AND change_type = 'A'),
+  modify_count = (SELECT COUNT(*) FROM changes WHERE changes.scan_id = scans.scan_id AND change_type = 'M'),
+  delete_count = (SELECT COUNT(*) FROM changes WHERE changes.scan_id = scans.scan_id AND change_type = 'D')
 WHERE state = 4;
 
 -- For incomplete scans (state != 4), NULL out file_count and folder_count

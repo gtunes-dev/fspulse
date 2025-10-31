@@ -146,7 +146,7 @@ Values must match the column’s type. You can use individual values, ranges (wh
 | Path                | `'photos/reports'`, `'file.txt'`                      | Must be quoted. **Null values are not supported.**                    |
 | Validation Status   | `V`, `I`, `N`, `U`, `null`, `not null`, `NULL`, `NOT NULL` | Valid (V), Invalid (I), No Validator (N), Unknown (U). Unquoted. Ranges not supported. |
 | Item Type Enum      | `F`, `D`, `S`, `O`, `null`, `not null`, `NULL`, `NOT NULL` | File (F), Directory (D), Symlink (S), Other (O). Unquoted. Ranges not supported. |
-| Change Type Enum    | `A`, `D`, `M`, `N`, `null`, `not null`, `NULL`, `NOT NULL` | Add (A), Delete (D), Modify (M), No Change (N). Unquoted. Ranges not supported. |
+| Change Type Enum    | `N`, `A`, `M`, `D`, `null`, `not null`, `NULL`, `NOT NULL` | No Change (N), Add (A), Modify (M), Delete (D). Unquoted. Ranges not supported. |
 | Scan State Enum     | `S`, `W`, `A`, `C`, `P`, `E`, `null`, `not null`, `NULL`, `NOT NULL` | Scanning (S), Sweeping (W), Analyzing (A), Completed (C), Stopped (P), Error (E). Unquoted. Ranges not supported. |
 
 ---

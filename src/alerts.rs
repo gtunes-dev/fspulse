@@ -1,3 +1,4 @@
+use log::warn;
 use rusqlite::{named_params, Transaction};
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +28,10 @@ impl AlertType {
         match value {
             0 => AlertType::SuspiciousHash,
             1 => AlertType::InvalidItem,
-            _ => AlertType::SuspiciousHash, // Default for invalid values
+            _ => {
+                warn!("Invalid AlertType value in database: {}, defaulting to SuspiciousHash", value);
+                AlertType::SuspiciousHash
+            }
         }
     }
 
@@ -80,7 +84,10 @@ impl AlertStatus {
             0 => AlertStatus::Open,
             1 => AlertStatus::Flagged,
             2 => AlertStatus::Dismissed,
-            _ => AlertStatus::Open, // Default for invalid values
+            _ => {
+                warn!("Invalid AlertStatus value in database: {}, defaulting to Open", value);
+                AlertStatus::Open
+            }
         }
     }
 
@@ -274,6 +281,24 @@ mod tests {
     use super::*;
     
     #[test]
+    fn test_alert_type_integer_values() {
+        // Verify the integer values match the expected order
+        assert_eq!(AlertType::SuspiciousHash.as_i64(), 0);
+        assert_eq!(AlertType::InvalidItem.as_i64(), 1);
+    }
+
+    #[test]
+    fn test_alert_type_from_i64() {
+        // Verify round-trip conversion
+        assert_eq!(AlertType::from_i64(0), AlertType::SuspiciousHash);
+        assert_eq!(AlertType::from_i64(1), AlertType::InvalidItem);
+
+        // Invalid values should default to SuspiciousHash
+        assert_eq!(AlertType::from_i64(999), AlertType::SuspiciousHash);
+        assert_eq!(AlertType::from_i64(-1), AlertType::SuspiciousHash);
+    }
+
+    #[test]
     fn test_alert_type_short_name() {
         assert_eq!(AlertType::SuspiciousHash.short_name(), "H");
         assert_eq!(AlertType::InvalidItem.short_name(), "I");
@@ -308,6 +333,26 @@ mod tests {
         assert!(debug_str.contains("SuspiciousHash"));
     }
     
+    #[test]
+    fn test_alert_status_integer_values() {
+        // Verify the integer values match the expected order
+        assert_eq!(AlertStatus::Open.as_i64(), 0);
+        assert_eq!(AlertStatus::Flagged.as_i64(), 1);
+        assert_eq!(AlertStatus::Dismissed.as_i64(), 2);
+    }
+
+    #[test]
+    fn test_alert_status_from_i64() {
+        // Verify round-trip conversion
+        assert_eq!(AlertStatus::from_i64(0), AlertStatus::Open);
+        assert_eq!(AlertStatus::from_i64(1), AlertStatus::Flagged);
+        assert_eq!(AlertStatus::from_i64(2), AlertStatus::Dismissed);
+
+        // Invalid values should default to Open
+        assert_eq!(AlertStatus::from_i64(999), AlertStatus::Open);
+        assert_eq!(AlertStatus::from_i64(-1), AlertStatus::Open);
+    }
+
     #[test]
     fn test_alert_status_short_name() {
         assert_eq!(AlertStatus::Open.short_name(), "O");

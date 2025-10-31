@@ -1,3 +1,4 @@
+use log::warn;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
@@ -63,10 +64,10 @@ pub struct ValidationTransitions {
 #[repr(i64)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize)]
 pub enum ChangeType {
-    Add = 0,
-    Delete = 1,
+    NoChange = 0,
+    Add = 1,
     Modify = 2,
-    NoChange = 3,
+    Delete = 3,
 }
 
 impl ChangeType {
@@ -76,44 +77,47 @@ impl ChangeType {
 
     pub fn from_i64(value: i64) -> Self {
         match value {
-            0 => ChangeType::Add,
-            1 => ChangeType::Delete,
+            0 => ChangeType::NoChange,
+            1 => ChangeType::Add,
             2 => ChangeType::Modify,
-            3 => ChangeType::NoChange,
-            _ => ChangeType::Add, // Default for invalid values
+            3 => ChangeType::Delete,
+            _ => {
+                warn!("Invalid ChangeType value in database: {}, defaulting to NoChange", value);
+                ChangeType::NoChange
+            }
         }
     }
 
     pub fn short_name(&self) -> &'static str {
         match self {
-            ChangeType::Add => "A",
-            ChangeType::Delete => "D",
-            ChangeType::Modify => "M",
             ChangeType::NoChange => "N",
+            ChangeType::Add => "A",
+            ChangeType::Modify => "M",
+            ChangeType::Delete => "D",
         }
     }
 
     pub fn full_name(&self) -> &'static str {
         match self {
-            ChangeType::Add => "Add",
-            ChangeType::Delete => "Delete",
-            ChangeType::Modify => "Modify",
             ChangeType::NoChange => "No Change",
+            ChangeType::Add => "Add",
+            ChangeType::Modify => "Modify",
+            ChangeType::Delete => "Delete",
         }
     }
 
     pub fn from_string(s: &str) -> Option<Self> {
         match s.to_ascii_uppercase().as_str() {
             // Full names
-            "ADD" => Some(ChangeType::Add),
-            "DELETE" => Some(ChangeType::Delete),
-            "MODIFY" => Some(ChangeType::Modify),
             "NO CHANGE" | "NOCHANGE" => Some(ChangeType::NoChange),
+            "ADD" => Some(ChangeType::Add),
+            "MODIFY" => Some(ChangeType::Modify),
+            "DELETE" => Some(ChangeType::Delete),
             // Short names
-            "A" => Some(ChangeType::Add),
-            "D" => Some(ChangeType::Delete),
-            "M" => Some(ChangeType::Modify),
             "N" => Some(ChangeType::NoChange),
+            "A" => Some(ChangeType::Add),
+            "M" => Some(ChangeType::Modify),
+            "D" => Some(ChangeType::Delete),
             _ => None,
         }
     }
@@ -154,37 +158,37 @@ impl Change {
         // TODO: This is unnecessarily complex now that we have old and new validation states in the change record
         let sql = "SELECT
                 COALESCE(SUM(CASE
-                    WHEN c.change_type IN (0,2)
+                    WHEN c.change_type IN (1,2)
                         AND COALESCE(c.val_old, 0) = 0
                         AND i.val = 1
                     THEN 1 ELSE 0 END), 0) AS unknown_to_valid,
                 COALESCE(SUM(CASE
-                    WHEN c.change_type IN (0,2)
+                    WHEN c.change_type IN (1,2)
                         AND COALESCE(c.val_old, 0) = 0
                         AND i.val = 2
                     THEN 1 ELSE 0 END), 0) AS unknown_to_invalid,
                 COALESCE(SUM(CASE
-                    WHEN c.change_type IN (0,2)
+                    WHEN c.change_type IN (1,2)
                         AND COALESCE(c.val_old, 0) = 0
                         AND i.val = 3
                     THEN 1 ELSE 0 END), 0) AS unknown_to_no_validator,
                 COALESCE(SUM(CASE
-                    WHEN c.change_type IN (0,2)
+                    WHEN c.change_type IN (1,2)
                         AND COALESCE(c.val_old, 0) = 1
                         AND i.val = 2
                     THEN 1 ELSE 0 END), 0) AS valid_to_invalid,
                 COALESCE(SUM(CASE
-                    WHEN c.change_type IN (0,2)
+                    WHEN c.change_type IN (1,2)
                         AND COALESCE(c.val_old, 0) = 1
                         AND i.val = 3
                     THEN 1 ELSE 0 END), 0) AS valid_to_no_validator,
                 COALESCE(SUM(CASE
-                    WHEN c.change_type IN (0,2)
+                    WHEN c.change_type IN (1,2)
                         AND COALESCE(c.val_old, 0) = 3
                         AND i.val = 1
                     THEN 1 ELSE 0 END), 0) AS no_validator_to_valid,
                 COALESCE(SUM(CASE
-                    WHEN c.change_type IN (0,2)
+                    WHEN c.change_type IN (1,2)
                         AND COALESCE(c.val_old, 0) = 3
                         AND i.val = 2
                     THEN 1 ELSE 0 END), 0) AS no_validator_to_invalid
@@ -228,10 +232,10 @@ impl ChangeCounts {
             let change_type = ChangeType::from_i64(change_type_value);
 
             match change_type {
-                ChangeType::Add => change_counts.set_count_of(ChangeType::Add, count),
-                ChangeType::Delete => change_counts.set_count_of(ChangeType::Delete, count),
-                ChangeType::Modify => change_counts.set_count_of(ChangeType::Modify, count),
                 ChangeType::NoChange => change_counts.set_count_of(ChangeType::NoChange, count),
+                ChangeType::Add => change_counts.set_count_of(ChangeType::Add, count),
+                ChangeType::Modify => change_counts.set_count_of(ChangeType::Modify, count),
+                ChangeType::Delete => change_counts.set_count_of(ChangeType::Delete, count),
             }
         }
 
@@ -240,10 +244,10 @@ impl ChangeCounts {
 
     pub fn set_count_of(&mut self, change_type: ChangeType, count: i64) {
         let target = match change_type {
-            ChangeType::Add => &mut self.add_count,
-            ChangeType::Delete => &mut self.delete_count,
-            ChangeType::Modify => &mut self.modify_count,
             ChangeType::NoChange => &mut self.no_change_count,
+            ChangeType::Add => &mut self.add_count,
+            ChangeType::Modify => &mut self.modify_count,
+            ChangeType::Delete => &mut self.delete_count,
         };
         *target = count;
     }
@@ -252,6 +256,28 @@ impl ChangeCounts {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_change_type_integer_values() {
+        // Verify the integer values match the expected order
+        assert_eq!(ChangeType::NoChange.as_i64(), 0);
+        assert_eq!(ChangeType::Add.as_i64(), 1);
+        assert_eq!(ChangeType::Modify.as_i64(), 2);
+        assert_eq!(ChangeType::Delete.as_i64(), 3);
+    }
+
+    #[test]
+    fn test_change_type_from_i64() {
+        // Verify round-trip conversion
+        assert_eq!(ChangeType::from_i64(0), ChangeType::NoChange);
+        assert_eq!(ChangeType::from_i64(1), ChangeType::Add);
+        assert_eq!(ChangeType::from_i64(2), ChangeType::Modify);
+        assert_eq!(ChangeType::from_i64(3), ChangeType::Delete);
+
+        // Invalid values should default to NoChange
+        assert_eq!(ChangeType::from_i64(999), ChangeType::NoChange);
+        assert_eq!(ChangeType::from_i64(-1), ChangeType::NoChange);
+    }
 
     #[test]
     fn test_change_type_short_name() {
@@ -285,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_change_type_round_trip() {
-        let types = [ChangeType::Add, ChangeType::Delete, ChangeType::Modify, ChangeType::NoChange];
+        let types = [ChangeType::NoChange, ChangeType::Add, ChangeType::Modify, ChangeType::Delete];
 
         for change_type in types {
             let str_val = change_type.short_name();

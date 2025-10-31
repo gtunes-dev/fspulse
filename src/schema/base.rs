@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS changes (
     change_id INTEGER PRIMARY KEY AUTOINCREMENT,
     scan_id INTEGER NOT NULL,                   -- The scan in which the change was detected
     item_id INTEGER NOT NULL,                   -- The file or directory that changed
-    change_type INTEGER NOT NULL,               -- Change type enum (0=Add, 1=Modify, 2=Delete, 3=NoChange)
+    change_type INTEGER NOT NULL,               -- Change type enum (0=NoChange, 1=Add, 2=Modify, 3=Delete)
 
     -- Add specific properties
     is_undelete BOOLEAN DEFAULT NULL,           -- Not Null if "A". True if item was tombstone

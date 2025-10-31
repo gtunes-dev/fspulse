@@ -4,10 +4,10 @@ pub const UPGRADE_6_TO_7_SQL: &str = r#"
 --
 -- This migration converts character-based enum columns to integer-based enums:
 -- - item_type: CHAR(1) → INTEGER ('F'→0, 'D'→1, 'S'→2, 'O'→3)
--- - change_type: CHAR(1) → INTEGER ('A'→0, 'M'→1, 'D'→2, 'N'→3)
+-- - change_type: CHAR(1) → INTEGER ('N'→0, 'A'→1, 'M'→2, 'D'→3)
 -- - alert_type: CHAR(1) → INTEGER ('H'→0, 'I'→1)
 -- - alert_status: CHAR(1) → INTEGER ('O'→0, 'F'→1, 'D'→2)
--- - val: CHAR(1) → INTEGER ('V'→0, 'I'→1, 'N'→2, 'U'→3)
+-- - val: CHAR(1) → INTEGER ('U'→0, 'V'→1, 'I'→2, 'N'→3)
 --
 -- Following SQLite's table reconstruction pattern (same as v2→v3 migration)
 --
@@ -73,10 +73,10 @@ SELECT
     last_hash_scan, file_hash,
     last_val_scan,
     CASE val
-        WHEN 'V' THEN 0
-        WHEN 'I' THEN 1
-        WHEN 'N' THEN 2
-        WHEN 'U' THEN 3
+        WHEN 'U' THEN 0
+        WHEN 'V' THEN 1
+        WHEN 'I' THEN 2
+        WHEN 'N' THEN 3
     END,
     val_error
 FROM items;
@@ -141,27 +141,27 @@ INSERT INTO new_changes (
 SELECT
     change_id, scan_id, item_id,
     CASE change_type
-        WHEN 'A' THEN 0
-        WHEN 'M' THEN 1
-        WHEN 'D' THEN 2
-        WHEN 'N' THEN 3
+        WHEN 'N' THEN 0
+        WHEN 'A' THEN 1
+        WHEN 'M' THEN 2
+        WHEN 'D' THEN 3
     END,
     is_undelete,
     meta_change, mod_date_old, mod_date_new, file_size_old, file_size_new,
     hash_change, last_hash_scan_old, hash_old, hash_new,
     val_change, last_val_scan_old,
     CASE val_old
-        WHEN 'V' THEN 0
-        WHEN 'I' THEN 1
-        WHEN 'N' THEN 2
-        WHEN 'U' THEN 3
+        WHEN 'U' THEN 0
+        WHEN 'V' THEN 1
+        WHEN 'I' THEN 2
+        WHEN 'N' THEN 3
         ELSE NULL
     END,
     CASE val_new
-        WHEN 'V' THEN 0
-        WHEN 'I' THEN 1
-        WHEN 'N' THEN 2
-        WHEN 'U' THEN 3
+        WHEN 'U' THEN 0
+        WHEN 'V' THEN 1
+        WHEN 'I' THEN 2
+        WHEN 'N' THEN 3
         ELSE NULL
     END,
     val_error_old, val_error_new
