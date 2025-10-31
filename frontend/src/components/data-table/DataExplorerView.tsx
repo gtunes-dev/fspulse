@@ -367,7 +367,8 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
                             : 'text-left'
 
                           // Format date columns in user's local timezone
-                          const displayValue = colMeta?.col_type === 'Date'
+                          // Backend sends "-" for null dates, don't try to parse it
+                          const displayValue = colMeta?.col_type === 'Date' && cell !== '-'
                             ? formatDateFull(parseInt(cell))
                             : cell
 

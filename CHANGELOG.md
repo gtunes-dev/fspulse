@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Schema migration corrections**: Fixed v6_to_v7 migration to use correct integer mappings for ValidationState, and corrected v5_to_v6 migration to use character values (not integers) when operating on pre-v7 database
 - **Invalid enum value logging**: Added warning logs when database contains invalid enum integer values, helping detect data corruption or migration issues while maintaining graceful degradation
 - **Comprehensive enum tests**: Added integer value and round-trip conversion tests for all enum types to prevent future mapping errors
+- **Null date display in Explore view**: Fixed DataExplorerView to check for null sentinel value ("-") before attempting to parse date columns, preventing "NaN-NaN-NaN" display for null dates
 
 ## [v0.1.4] - 2025-10-25
 
