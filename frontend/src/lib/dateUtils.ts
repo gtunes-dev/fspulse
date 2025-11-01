@@ -72,3 +72,15 @@ export function formatTimeAgo(timestampSeconds: number): string {
   if (seconds < 31536000) return `${Math.floor(seconds / 2592000)}mo ago`
   return `${Math.floor(seconds / 31536000)}y ago`
 }
+
+/**
+ * Format timestamp as short date only: MM/DD/YYYY
+ * Used for: ItemDetailSheet scan dates
+ */
+export function formatDateShort(timestampSeconds: number): string {
+  const date = new Date(timestampSeconds * 1000)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${month}/${day}/${year}`
+}

@@ -10,7 +10,7 @@ query_type = { "roots" | "scans" | "items" | "changes" | "alerts" }
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | int_filter }
+filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | int_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
@@ -122,11 +122,27 @@ val_filter        =  { val_col ~ val_filter_body }
 val_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_filter_values ~ WS* ~ RPAREN }
 val_filter_values = _{ val_spec ~ (WS* ~ COMMA ~ WS* ~ val_spec)* }
 val_spec          = _{ null | not_null | val }
-val               =  { "UNKNOWN" | "unknown" | "Unknown"
-                     | "VALID" | "valid" | "Valid"
-                     | "INVALID" | "invalid" | "Invalid"
-                     | "NO VALIDATOR" | "no validator" | "No Validator" | "NOVALIDATOR" | "novalidator" | "NoValidator"
-                     | ^"U" | ^"V" | ^"I" | ^"N" }
+val               =  {
+    "UNKNOWN"
+  | "unknown"
+  | "Unknown"
+  | "VALID"
+  | "valid"
+  | "Valid"
+  | "INVALID"
+  | "invalid"
+  | "Invalid"
+  | "NO VALIDATOR"
+  | "no validator"
+  | "No Validator"
+  | "NOVALIDATOR"
+  | "novalidator"
+  | "NoValidator"
+  | ^"U"
+  | ^"V"
+  | ^"I"
+  | ^"N"
+}
 
 // Item Type Columns
 item_type_col = { "item_type" }
@@ -138,10 +154,23 @@ item_type_display_mode =  { full | short }
 item_type_filter        =  { item_type_col ~ item_type_filter_body }
 item_type_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ item_type_filter_values ~ WS* ~ RPAREN }
 item_type_filter_values = _{ item_type ~ (WS* ~ COMMA ~ WS* ~ item_type)* }
-item_type               =  { "FILE" | "file" | "File"
-                             | "DIRECTORY" | "directory" | "Directory" | "DIR" | "dir" | "Dir"
-                             | "SYMLINK" | "symlink" | "Symlink"
-                             | ^"F" | ^"D" | ^"S" }
+item_type               =  {
+    "FILE"
+  | "file"
+  | "File"
+  | "DIRECTORY"
+  | "directory"
+  | "Directory"
+  | "DIR"
+  | "dir"
+  | "Dir"
+  | "SYMLINK"
+  | "symlink"
+  | "Symlink"
+  | ^"F"
+  | ^"D"
+  | ^"S"
+}
 
 // Change Type Columns
 change_type_col = { "change_type" }
@@ -154,11 +183,27 @@ change_type_filter        =  { change_type_col ~ change_type_filter_body }
 change_type_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_type_filter_values ~ WS* ~ RPAREN }
 change_type_filter_values = _{ change_type_spec ~ (WS* ~ COMMA ~ WS* ~ change_type_spec)* }
 change_type_spec          = _{ null | not_null | change_type }
-change_type               =  { "ADD" | "add" | "Add"
-                             | "DELETE" | "delete" | "Delete"
-                             | "MODIFY" | "modify" | "Modify"
-                             | "NO CHANGE" | "no change" | "No Change" | "NOCHANGE" | "nochange" | "NoChange"
-                             | ^"A" | ^"D" | ^"M" | ^"N" }
+change_type               =  {
+    "ADD"
+  | "add"
+  | "Add"
+  | "DELETE"
+  | "delete"
+  | "Delete"
+  | "MODIFY"
+  | "modify"
+  | "Modify"
+  | "NO CHANGE"
+  | "no change"
+  | "No Change"
+  | "NOCHANGE"
+  | "nochange"
+  | "NoChange"
+  | ^"A"
+  | ^"D"
+  | ^"M"
+  | ^"N"
+}
 
 alert_type_col = { "alert_type" }
 
@@ -170,9 +215,22 @@ alert_type_filter        =  { alert_type_col ~ alert_type_filter_body }
 alert_type_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ alert_type_filter_values ~ WS* ~ RPAREN }
 alert_type_filter_values = _{ alert_type_spec ~ (WS* ~ COMMA ~ WS* ~ alert_type_spec)* }
 alert_type_spec          = _{ null | not_null | alert_type }
-alert_type               =  { "SUSPICIOUS HASH" | "suspicious hash" | "Suspicious Hash" | "SUSPICIOUSHASH" | "suspicioushash" | "SuspiciousHash"
-                             | "INVALID ITEM" | "invalid item" | "Invalid Item" | "INVALIDITEM" | "invaliditem" | "InvalidItem"
-                             | ^"H" | ^"I" }
+alert_type               =  {
+    "SUSPICIOUS HASH"
+  | "suspicious hash"
+  | "Suspicious Hash"
+  | "SUSPICIOUSHASH"
+  | "suspicioushash"
+  | "SuspiciousHash"
+  | "INVALID ITEM"
+  | "invalid item"
+  | "Invalid Item"
+  | "INVALIDITEM"
+  | "invaliditem"
+  | "InvalidItem"
+  | ^"H"
+  | ^"I"
+}
 
 alert_status_col = { "alert_status" }
 
@@ -184,10 +242,20 @@ alert_status_filter        =  { alert_status_col ~ alert_status_filter_body }
 alert_status_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ alert_status_filter_values ~ WS* ~ RPAREN }
 alert_status_filter_values = _{ alert_status_spec ~ (WS* ~ COMMA ~ WS* ~ alert_status_spec)* }
 alert_status_spec          = _{ null | not_null | alert_status }
-alert_status               =  { "OPEN" | "open" | "Open"
-                             | "FLAGGED" | "flagged" | "Flagged"
-                             | "DISMISSED" | "dismissed" | "Dismissed"
-                             | ^"O" | ^"F" | ^"D" }
+alert_status               =  {
+    "OPEN"
+  | "open"
+  | "Open"
+  | "FLAGGED"
+  | "flagged"
+  | "Flagged"
+  | "DISMISSED"
+  | "dismissed"
+  | "Dismissed"
+  | ^"O"
+  | ^"F"
+  | ^"D"
+}
 
 // Scan State Columns
 scan_state_col = { "scan_state" }
@@ -199,16 +267,35 @@ scan_state_display_mode =  { full | short }
 scan_state_filter        =  { scan_state_col ~ scan_state_filter_body }
 scan_state_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ scan_state_filter_values ~ WS* ~ RPAREN }
 scan_state_filter_values = _{ scan_state ~ (WS* ~ COMMA ~ WS* ~ scan_state)* }
-scan_state               =  { "SCANNING" | "scanning" | "Scanning"
-                             | "SWEEPING" | "sweeping" | "Sweeping"
-                             | "ANALYZING" | "analyzing" | "Analyzing"
-                             | "COMPLETED" | "completed" | "Completed"
-                             | "STOPPED" | "stopped" | "Stopped"
-                             | "ERROR" | "error" | "Error"
-                             | ^"S" | ^"W" | ^"A" | ^"C" | ^"P" | ^"E" }
+scan_state               =  {
+    "SCANNING"
+  | "scanning"
+  | "Scanning"
+  | "SWEEPING"
+  | "sweeping"
+  | "Sweeping"
+  | "ANALYZING"
+  | "analyzing"
+  | "Analyzing"
+  | "COMPLETED"
+  | "completed"
+  | "Completed"
+  | "STOPPED"
+  | "stopped"
+  | "Stopped"
+  | "ERROR"
+  | "error"
+  | "Error"
+  | ^"S"
+  | ^"W"
+  | ^"A"
+  | ^"C"
+  | ^"P"
+  | ^"E"
+}
 
 // Integer columns
-int_col  = { "file_size" | "file_count" | "folder_count" | "total_file_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" }
+int_col  = { "file_size_new" | "file_size_old" | "file_size" | "file_count" | "folder_count" | "total_file_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

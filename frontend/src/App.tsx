@@ -7,6 +7,7 @@ import { ExplorePage } from './pages/ExplorePage'
 import { ScanPage } from './pages/ScanPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { InsightsPage } from './pages/InsightsPage'
+import { BrowsePage } from './pages/BrowsePage'
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
                 <Route path="/scan" element={<ScanPage />} />
                 <Route path="/alerts" element={<AlertsPage />} />
                 <Route path="/insights/*" element={<InsightsPage />} />
+                <Route path="/browse" element={<BrowsePage />} />
                 <Route path="/settings" element={<div>Settings page coming soon...</div>} />
               </Routes>
             </main>

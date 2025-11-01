@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Browse page with detailed item view**: New Browse page allows navigation through filesystem hierarchy with detailed item cards showing file metadata, validation status, change history, and associated alerts in an elegant sliding panel interface
 - **Enhanced scan statistics**: Database schema v6 adds denormalized count columns to scans table (`total_file_size`, `alert_count`, `add_count`, `modify_count`, `delete_count`) for improved query performance and future charting capabilities. total_file_size will be computed for new scans only
 - **Home page statistics display**: Added total file size and aggregate change count displays with color-coded visual indicators for adds (green), modifies (blue), and deletes (red)
 - **Scan Trends visualization**: New Insights tab with interactive charts showing historical scan data over time, including total file size, file/folder counts, change activity (adds/modifies/deletes), and alerts created. Features root selection, date range filtering, and human-readable formatting for large numbers and byte sizes
