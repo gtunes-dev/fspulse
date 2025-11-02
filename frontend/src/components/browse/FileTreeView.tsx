@@ -9,9 +9,10 @@ interface FileTreeViewProps {
   rootId: number
   rootPath: string
   showTombstones: boolean
+  searchFilter?: string
 }
 
-export function FileTreeView({ rootId, rootPath, showTombstones }: FileTreeViewProps) {
+export function FileTreeView({ rootId, rootPath, showTombstones, searchFilter }: FileTreeViewProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [allItems, setAllItems] = useState<ItemData[]>([])
@@ -57,6 +58,11 @@ export function FileTreeView({ rootId, rootPath, showTombstones }: FileTreeViewP
           filters.push({ column: 'is_ts', value: 'false' })
         }
 
+        // Add search filter if provided
+        if (searchFilter && searchFilter.trim()) {
+          filters.push({ column: 'item_path', value: `'${searchFilter.trim()}'` })
+        }
+
         const columns: ColumnSpec[] = [
           { name: 'item_id', visible: true, sort_direction: 'none', position: 0 },
           { name: 'item_path', visible: true, sort_direction: 'asc', position: 1 },
@@ -98,7 +104,7 @@ export function FileTreeView({ rootId, rootPath, showTombstones }: FileTreeViewP
     }
 
     loadItems()
-  }, [rootId, rootPath, showTombstones])
+  }, [rootId, rootPath, showTombstones, searchFilter])
 
   if (loading) {
     return (

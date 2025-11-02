@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Browse page with detailed item view**: New Browse page allows navigation through filesystem hierarchy with detailed item cards showing file metadata, validation status, change history, and associated alerts in an elegant sliding panel interface
+- **Unified filter toolbar design**: Introduced consistent elevated toolbar styling across Browse and Alerts pages with drop shadows, refined spacing, and reusable components (FilterToolbar, RootPicker, SearchFilter) for a polished, cohesive UI
+- **Browse page path search**: Added debounced search filter to Browse page for filtering items by path, with search icon inside input for modern iOS-inspired aesthetic
 - **Enhanced scan statistics**: Database schema v6 adds denormalized count columns to scans table (`total_file_size`, `alert_count`, `add_count`, `modify_count`, `delete_count`) for improved query performance and future charting capabilities. total_file_size will be computed for new scans only
 - **Home page statistics display**: Added total file size and aggregate change count displays with color-coded visual indicators for adds (green), modifies (blue), and deletes (red)
 - **Scan Trends visualization**: New Insights tab with interactive charts showing historical scan data over time, including total file size, file/folder counts, change activity (adds/modifies/deletes), and alerts created. Features root selection, date range filtering, and human-readable formatting for large numbers and byte sizes
@@ -19,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Browse page navigation priority**: Moved Browse page in sidebar navigation to appear between Scan and Alerts, reflecting its importance as a core feature
+- **Alerts page context filter**: Replaced manual root ID input with root picker dropdown when filtering by root, with automatic selection of first root for improved usability
+- **Consolidated Alerts filter UI**: Combined two-level filter controls (context + alert filters) into single unified toolbar with two rows for cleaner layout
+- **Root query sorting**: Fixed root picker to properly sort roots by path using natural path collation via ORDER BY clause
 - **Natural path sorting**: Database schema v8 implements natural, case-insensitive path sorting using the icu_collator crate. Paths now sort hierarchically (e.g., `/proj` and its children appear before `/proj-A`) with proper numeric ordering (e.g., `file2` before `file10`). Updated all queries and indexes to use the natural_path collation
 - **Integer-based enum storage**: Database schema v7 migrates all enums (item_type, change_type, alert_type, alert_status, validation state, scan_state) from single-character string storage to integer values for improved type safety and performance
 - **ChangeType enum reordering**: Changed ChangeType integer values to logical order (NoChange=0, Add=1, Modify=2, Delete=3) and updated all SQL queries, documentation, and tests accordingly

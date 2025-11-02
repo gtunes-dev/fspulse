@@ -3,6 +3,8 @@ import { RefreshCw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SearchFilter } from '@/components/ui/SearchFilter'
+import { RootPicker } from '@/components/ui/RootPicker'
 import {
   Select,
   SelectContent,
@@ -23,9 +25,17 @@ import { updateAlertStatus, fetchMetadata } from '@/lib/api'
 import { formatTimeAgo } from '@/lib/dateUtils'
 import type { AlertStatusValue, AlertTypeValue, ContextFilterType, ColumnState } from '@/lib/types'
 
+interface Root {
+  root_id: number
+  root_path: string
+}
+
 interface AlertsTabProps {
   contextFilter: ContextFilterType
   contextValue: string
+  roots: Root[]
+  onContextFilterChange: (value: ContextFilterType) => void
+  onContextValueChange: (value: string) => void
 }
 
 interface AlertRow {
@@ -43,7 +53,7 @@ interface AlertRow {
 
 const ITEMS_PER_PAGE = 25
 
-export function AlertsTab({ contextFilter, contextValue }: AlertsTabProps) {
+export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterChange, onContextValueChange }: AlertsTabProps) {
   const [columns, setColumns] = useState<ColumnState[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('O') // Default to "Open"
   const [typeFilter, setTypeFilter] = useState<string>('all')
@@ -266,56 +276,92 @@ export function AlertsTab({ contextFilter, contextValue }: AlertsTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter Toolbar */}
-      <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium whitespace-nowrap">Status:</label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="O">Open</SelectItem>
-              <SelectItem value="F">Flagged</SelectItem>
-              <SelectItem value="D">Dismissed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      {/* Combined Filter Toolbar - Two Rows */}
+      <div className="mb-4">
+        <div className="flex flex-col gap-4 px-6 py-4 bg-background rounded-xl border-2 border-border/60 shadow-lg shadow-black/5 dark:shadow-black/20">
+          {/* First Row - Context Filter */}
+          <div className="flex items-center gap-5">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-muted-foreground/80">Context:</span>
+              <Select value={contextFilter} onValueChange={onContextFilterChange}>
+                <SelectTrigger className="w-[180px] shadow-sm ring-1 ring-border/50 hover:ring-border transition-all">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Data</SelectItem>
+                  <SelectItem value="root">By Root</SelectItem>
+                  <SelectItem value="scan">By Scan ID</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium whitespace-nowrap">Type:</label>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="H">Suspicious Hash</SelectItem>
-              <SelectItem value="I">Invalid Item</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+            {contextFilter === 'root' && (
+              <RootPicker
+                roots={roots}
+                value={contextValue}
+                onChange={onContextValueChange}
+                placeholder="Select a root"
+              />
+            )}
 
-        <div className="flex items-center gap-2 flex-1">
-          <label className="text-sm font-medium whitespace-nowrap">Path:</label>
-          <Input
-            type="text"
-            value={pathSearch}
-            onChange={(e) => handlePathSearchChange(e.target.value)}
-            placeholder="Search file paths..."
-            className="flex-1"
-          />
-        </div>
+            {contextFilter === 'scan' && (
+              <Input
+                type="text"
+                value={contextValue}
+                onChange={(e) => onContextValueChange(e.target.value)}
+                placeholder="Enter scan ID..."
+                className="flex-1 max-w-md shadow-sm ring-1 ring-border/50 hover:ring-border transition-all"
+              />
+            )}
+          </div>
 
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => loadAlerts()}
-          title="Refresh"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+          {/* Second Row - Alert Filters */}
+          <div className="flex items-center gap-5">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-muted-foreground/80">Status:</span>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[150px] shadow-sm ring-1 ring-border/50 hover:ring-border transition-all">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="O">Open</SelectItem>
+                  <SelectItem value="F">Flagged</SelectItem>
+                  <SelectItem value="D">Dismissed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-muted-foreground/80">Type:</span>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-[180px] shadow-sm ring-1 ring-border/50 hover:ring-border transition-all">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="H">Suspicious Hash</SelectItem>
+                  <SelectItem value="I">Invalid Item</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <SearchFilter
+              value={pathSearch}
+              onChange={handlePathSearchChange}
+            />
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => loadAlerts()}
+              title="Refresh"
+              className="shadow-sm ring-1 ring-border/50 hover:ring-border transition-all"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Alerts Table */}

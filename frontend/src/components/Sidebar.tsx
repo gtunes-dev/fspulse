@@ -8,10 +8,10 @@ export function Sidebar() {
   const mainNavItems = [
     { icon: Home, label: 'Home', to: '/', end: true },
     { icon: FolderSearch, label: 'Scan', to: '/scan', end: true },
+    { icon: FolderTree, label: 'Browse', to: '/browse', end: true },
     { icon: TriangleAlert, label: 'Alerts', to: '/alerts', end: true },
     { icon: Lightbulb, label: 'Insights', to: '/insights/scan-trends', end: false },
     { icon: Database, label: 'Explore', to: '/explore/roots', end: false },
-    { icon: FolderTree, label: 'Browse', to: '/browse', end: true },
   ]
 
   const settingsItems = [
