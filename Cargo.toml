@@ -33,6 +33,7 @@ directories = "6.0"
 figment = { version = "0.10", features = ["toml"] }
 flexi_logger = "0.31"
 hex = "0.4"
+icu_collator = "1.5"
 indicatif = "0.18"
 image = "0.25"
 log = "0.4"
@@ -44,7 +45,7 @@ pest_derive = "2.8"
 phf = "0.13"
 phf_macros = "0.13"
 ratatui = { version = "0.29", features = ["macros"] }
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled", "collation"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"

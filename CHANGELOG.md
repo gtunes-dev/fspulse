@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Natural path sorting**: Database schema v8 implements natural, case-insensitive path sorting using the icu_collator crate. Paths now sort hierarchically (e.g., `/proj` and its children appear before `/proj-A`) with proper numeric ordering (e.g., `file2` before `file10`). Updated all queries and indexes to use the natural_path collation
 - **Integer-based enum storage**: Database schema v7 migrates all enums (item_type, change_type, alert_type, alert_status, validation state, scan_state) from single-character string storage to integer values for improved type safety and performance
 - **ChangeType enum reordering**: Changed ChangeType integer values to logical order (NoChange=0, Add=1, Modify=2, Delete=3) and updated all SQL queries, documentation, and tests accordingly
 - **Removed Default trait from enums**: Eliminated Default implementations from all enums to enforce explicit value handling

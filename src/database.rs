@@ -1,7 +1,8 @@
 use crate::{
     config::CONFIG,
     error::FsPulseError,
-    schema::{CREATE_SCHEMA_SQL, UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL, UPGRADE_6_TO_7_SQL},
+    schema::{CREATE_SCHEMA_SQL, UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL, UPGRADE_6_TO_7_SQL, UPGRADE_7_TO_8_SQL},
+    sort::compare_paths,
 };
 use directories::BaseDirs;
 use log::info;
@@ -10,7 +11,18 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 7;
+const CURRENT_SCHEMA_VERSION: u32 = 8;
+
+/// Register custom collations on a database connection.
+/// This must be called on every new connection.
+fn register_collations(conn: &Connection) -> Result<(), FsPulseError> {
+    conn.create_collation("natural_path", |a, b| {
+        compare_paths(a, b)
+    })
+    .map_err(FsPulseError::DatabaseError)?;
+
+    Ok(())
+}
 
 #[derive(Debug, Default)]
 pub struct Database {
@@ -45,6 +57,9 @@ impl Database {
         // Attempt to open the database
         info!("Opening database: {}", db_path.display());
         let conn = Connection::open(&db_path).map_err(FsPulseError::DatabaseError)?;
+
+        // Register custom collations on this connection
+        register_collations(&conn)?;
 
         let db = Self {
             conn: Some(conn),
@@ -164,6 +179,7 @@ impl Database {
                     4 => self.upgrade_schema(db_version, UPGRADE_4_TO_5_SQL)?,
                     5 => self.upgrade_schema(db_version, UPGRADE_5_TO_6_SQL)?,
                     6 => self.upgrade_schema(db_version, UPGRADE_6_TO_7_SQL)?,
+                    7 => self.upgrade_schema(db_version, UPGRADE_7_TO_8_SQL)?,
                     _ => {
                         return Err(FsPulseError::Error(
                             "No valid database update available".to_string(),
@@ -284,7 +300,7 @@ mod tests {
             )
             .expect("Should be able to query schema version");
 
-        assert_eq!(version, "7", "Schema version should be 7");
+        assert_eq!(version, "8", "Schema version should be 8");
     }
 
     #[test]
@@ -389,5 +405,59 @@ mod tests {
                 panic!("Unexpected error type: {other:?}");
             }
         }
+    }
+
+    #[test]
+    fn test_collation_registered() {
+        // Test that the natural_path collation is registered and works correctly
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let _env = TestEnv::set_data_dir(temp_dir.path().to_str().unwrap());
+
+        let db = Database::new().expect("Database creation should succeed");
+
+        // Create a temporary table with test paths
+        db.conn().execute(
+            "CREATE TEMPORARY TABLE test_paths (path TEXT)",
+            [],
+        ).expect("Should create test table");
+
+        // Insert paths in scrambled order
+        let test_paths = vec![
+            "/proj-A/file1",
+            "/proj",
+            "/proj/file3",
+            "/proj/file2",
+        ];
+
+        for path in &test_paths {
+            db.conn().execute(
+                "INSERT INTO test_paths (path) VALUES (?)",
+                [path],
+            ).expect("Should insert test path");
+        }
+
+        // Query with the natural_path collation
+        let mut stmt = db.conn().prepare(
+            "SELECT path FROM test_paths ORDER BY path COLLATE natural_path"
+        ).expect("Should prepare query with collation");
+
+        let sorted_paths: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .expect("Should execute query")
+            .map(|r| r.expect("Should read row"))
+            .collect();
+
+        // Expected order: /proj, then its children, then /proj-A
+        let expected = vec![
+            "/proj",
+            "/proj/file2",
+            "/proj/file3",
+            "/proj-A/file1",
+        ];
+
+        assert_eq!(
+            sorted_paths, expected,
+            "Paths should be sorted correctly using natural_path collation"
+        );
     }
 }

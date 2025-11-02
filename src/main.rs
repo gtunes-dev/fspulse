@@ -16,6 +16,7 @@ mod scanner;
 mod scans;
 mod schema;
 mod server;
+mod sort;
 mod utils;
 mod validate;
 

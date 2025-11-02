@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '7');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '8');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS roots (
 );
 
 -- Indexes to optimize queries
-CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (root_path);
+CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (root_path COLLATE natural_path);
 
 -- Scans table tracks individual scan sessions
 CREATE TABLE IF NOT EXISTS scans (
@@ -69,8 +69,9 @@ CREATE TABLE IF NOT EXISTS items (
 );
 
 -- Indexes to optimize queries
-CREATE INDEX IF NOT EXISTS idx_items_path ON items (root_id, item_path, item_type);
-CREATE INDEX IF NOT EXISTS idx_items_scan ON items (root_id, last_scan, is_ts);
+CREATE INDEX IF NOT EXISTS idx_items_path ON items (item_path COLLATE natural_path);
+CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
+CREATE INDEX IF NOT EXISTS idx_items_root_scan ON items (root_id, last_scan, is_ts);
 
 -- Changes table tracks modifications between scans
 CREATE TABLE IF NOT EXISTS changes (

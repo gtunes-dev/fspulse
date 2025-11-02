@@ -469,7 +469,7 @@ impl Item {
             "SELECT {}
              FROM items
              WHERE root_id = ? AND is_ts = 0 AND val = 2
-             ORDER BY item_path ASC",
+             ORDER BY item_path COLLATE natural_path ASC",
             Item::ITEM_COLUMNS
         );
 
@@ -498,7 +498,7 @@ impl Item {
             "SELECT {}
              FROM items
              WHERE last_scan = ?
-             ORDER BY item_path ASC",
+             ORDER BY item_path COLLATE natural_path ASC",
             Item::ITEM_COLUMNS
         );
 

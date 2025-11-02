@@ -138,17 +138,14 @@ pub trait Query {
 
     fn cols_as_select_list(&self) -> String {
         let mut select_list = String::new();
-
         let mut first = true;
 
         for col_spec in self.query_impl().col_set.values() {
-            if col_spec.in_select_list {
-                match first {
-                    true => first = false,
-                    false => select_list.push_str(", "),
-                }
-                select_list.push_str(col_spec.name_db);
+            match first {
+                true => first = false,
+                false => select_list.push_str(", "),
             }
+            select_list.push_str(col_spec.name_db);
         }
 
         select_list

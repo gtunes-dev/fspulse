@@ -8,6 +8,7 @@ use super::{columns::ColSet, Rule};
 struct OrderSpec {
     column: String,
     direction: Option<String>,
+    collation: Option<&'static str>,
 }
 
 #[derive(Debug)]
@@ -29,14 +30,18 @@ impl Order {
         col_display_name: &str,
         direction: Option<String>,
     ) -> Result<(), FsPulseError> {
-        let db_col_name = self
+        let col_spec = self
             .col_set
-            .col_name_to_db(col_display_name)
+            .col_set()
+            .get(col_display_name)
             .ok_or_else(|| {
                 FsPulseError::CustomParsingError(format!(
                     "Invalid column '{col_display_name}' in order clause"
                 ))
             })?;
+
+        let db_col_name = col_spec.name_db;
+        let collation = col_spec.col_type.collation();
 
         for order_spec in &self.order_specs {
             if order_spec.column == db_col_name {
@@ -49,6 +54,7 @@ impl Order {
         self.order_specs.push(OrderSpec {
             column: db_col_name.into(),
             direction,
+            collation,
         });
         Ok(())
     }
@@ -83,6 +89,12 @@ impl Order {
             }
 
             order_clause.push_str(&order.column);
+
+            if let Some(collation) = order.collation {
+                order_clause.push_str(" COLLATE ");
+                order_clause.push_str(collation);
+            }
+
             order_clause.push(' ');
 
             match &order.direction {
