@@ -88,6 +88,9 @@ impl WebServer {
             // Alert endpoints
             .route("/api/alerts/{alert_id}/status", put(api::alerts::update_alert_status))
 
+            // Item endpoints
+            .route("/api/items/{item_id}/folder-size", get(api::items::get_folder_size))
+
             // Scan endpoints
             .route("/api/scans/start", post(api::scans::initiate_scan))
             .route("/api/scans/current", get(api::scans::get_current_scan))

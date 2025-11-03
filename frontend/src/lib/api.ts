@@ -112,3 +112,11 @@ export async function updateAlertStatus(
   })
   return handleResponse<UpdateAlertStatusResponse>(response)
 }
+
+/**
+ * Get the calculated folder size for a directory item
+ */
+export async function fetchItemFolderSize(itemId: number): Promise<{ size: number }> {
+  const response = await fetch(`${API_BASE}/items/${itemId}/folder-size`)
+  return handleResponse<{ size: number }>(response)
+}

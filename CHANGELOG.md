@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Browse page with detailed item view**: New Browse page allows navigation through filesystem hierarchy with detailed item cards showing file metadata, validation status, change history, and associated alerts in an elegant sliding panel interface
+- **Folder size calculation**: ItemDetailSheet now displays total size for directory items by recursively summing all files within the folder
 - **Unified filter toolbar design**: Introduced consistent elevated toolbar styling across Browse and Alerts pages with drop shadows, refined spacing, and reusable components (FilterToolbar, RootPicker, SearchFilter) for a polished, cohesive UI
 - **Browse page path search**: Added debounced search filter to Browse page for filtering items by path, with search icon inside input for modern iOS-inspired aesthetic
 - **Enhanced scan statistics**: Database schema v6 adds denormalized count columns to scans table (`total_file_size`, `alert_count`, `add_count`, `modify_count`, `delete_count`) for improved query performance and future charting capabilities. total_file_size will be computed for new scans only

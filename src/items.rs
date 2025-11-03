@@ -1,6 +1,7 @@
 use log::warn;
 use rusqlite::{self, params, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::path::MAIN_SEPARATOR;
 
 use crate::{
     database::Database,
@@ -511,6 +512,42 @@ impl Item {
             func(&item)?;
         }
         Ok(())
+    }
+
+    /// Calculate the total size of all files within a directory item.
+    /// This recursively sums file_size for all non-tombstone files
+    /// under the given directory path.
+    ///
+    /// The folder_path must end with the platform's path separator.
+    /// Returns an error if the path doesn't end with a separator.
+    pub fn calculate_folder_size(
+        db: &Database,
+        root_id: i64,
+        folder_path: &str,
+    ) -> Result<i64, FsPulseError> {
+        // Validate that this is a folder path (ends with separator)
+        if !folder_path.ends_with(MAIN_SEPARATOR) {
+            return Err(FsPulseError::Error(
+                format!("Path must end with separator: {}", folder_path)
+            ));
+        }
+
+        let sql = r#"
+            SELECT COALESCE(SUM(file_size), 0) as total_size
+            FROM items
+            WHERE root_id = ?
+              AND item_type = 0
+              AND is_ts = 0
+              AND item_path LIKE ? || '%'
+        "#;
+
+        let total_size = db.conn().query_row(
+            sql,
+            params![root_id, folder_path],
+            |row| row.get(0),
+        )?;
+
+        Ok(total_size)
     }
 }
 

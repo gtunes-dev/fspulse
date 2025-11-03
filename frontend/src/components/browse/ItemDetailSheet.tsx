@@ -15,7 +15,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { fetchQuery, countQuery } from '@/lib/api'
+import { fetchQuery, countQuery, fetchItemFolderSize } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateFull } from '@/lib/dateUtils'
 
@@ -148,6 +148,7 @@ export function ItemDetailSheet({
   const [loadingMoreChanges, setLoadingMoreChanges] = useState(false)
   const [loadingMoreAlerts, setLoadingMoreAlerts] = useState(false)
   const [openChanges, setOpenChanges] = useState<Record<number, boolean>>({})
+  const [folderSize, setFolderSize] = useState<number | null>(null)
 
   // Extract file/folder name from path
   const itemName = itemPath.split('/').filter(Boolean).pop() || itemPath
@@ -231,6 +232,19 @@ export function ItemDetailSheet({
         })
 
         setAlerts(alertResponse.rows.map(parseAlertRow))
+
+        // Load folder size if this is a directory
+        if (itemType === 'D') {
+          try {
+            const sizeResponse = await fetchItemFolderSize(itemId)
+            setFolderSize(sizeResponse.size)
+          } catch (error) {
+            console.error('Error loading folder size:', error)
+            setFolderSize(null)
+          }
+        } else {
+          setFolderSize(null)
+        }
       } catch (error) {
         console.error('Error loading item details:', error)
       } finally {
@@ -239,7 +253,7 @@ export function ItemDetailSheet({
     }
 
     loadItemDetails()
-  }, [open, itemId])
+  }, [open, itemId, itemType])
 
   const loadMoreChanges = async () => {
     setLoadingMoreChanges(true)
@@ -416,6 +430,12 @@ export function ItemDetailSheet({
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Size</p>
                       <p className="text-base font-semibold mt-1">{formatFileSize(details.file_size)}</p>
+                    </div>
+                  )}
+                  {details.item_type === 'D' && folderSize !== null && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Total Size</p>
+                      <p className="text-base font-semibold mt-1">{formatFileSize(folderSize)}</p>
                     </div>
                   )}
                   {details.item_type === 'F' && (
