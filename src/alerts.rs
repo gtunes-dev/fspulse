@@ -1,5 +1,5 @@
 use log::warn;
-use rusqlite::{named_params, Transaction};
+use rusqlite::{named_params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, error::FsPulseError};
@@ -139,7 +139,7 @@ pub struct Alerts;
 
 impl Alerts {
     pub fn meta_changed_between(
-        tx: &Transaction,
+        conn: &Connection,
         item_id: i64,
         prev_hash_scan: i64,
         current_scan: i64,
@@ -155,7 +155,7 @@ impl Alerts {
             ) AS has_meta_change;
         "#;
 
-        let has_meta_change: bool = tx.query_row(
+        let has_meta_change: bool = conn.query_row(
             sql,
             named_params! {
                 ":item_id":      item_id,
@@ -169,7 +169,7 @@ impl Alerts {
     }
 
     pub fn add_suspicious_hash_alert(
-        tx: &Transaction,
+        conn: &Connection,
         scan_id: i64,
         item_id: i64,
         prev_hash_scan: Option<i64>,
@@ -199,7 +199,7 @@ impl Alerts {
             )
         "#;
 
-        tx.execute(
+        conn.execute(
             sql,
             named_params! {
                 ":alert_type":      AlertType::SuspiciousHash.as_i64(),
@@ -215,7 +215,7 @@ impl Alerts {
     }
 
     pub fn add_invalid_item_alert(
-        tx: &Transaction,
+        conn: &Connection,
         scan_id: i64,
         item_id: i64,
         val_error: &str,
@@ -239,7 +239,7 @@ impl Alerts {
             )
         "#;
 
-        tx.execute(
+        conn.execute(
             sql,
             named_params! {
                 ":alert_type":      AlertType::InvalidItem.as_i64(),

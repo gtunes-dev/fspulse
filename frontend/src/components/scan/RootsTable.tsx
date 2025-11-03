@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, CalendarCog } from 'lucide-react'
+import { Plus, CalendarCog, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { DeleteRootDialog } from '@/components/scan/DeleteRootDialog'
 import { formatDateRelative } from '@/lib/dateUtils'
 import type { RootWithScan } from '@/lib/types'
 
@@ -18,6 +19,8 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
 
   const loadRoots = async () => {
     try {
@@ -75,6 +78,7 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -136,6 +140,24 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
                     <tr key={root.root_id} className="border-b border-border last:border-b-0">
                       <td className="p-0">
                         <div className="flex items-center gap-4 py-3 px-4">
+                          {/* Delete Button */}
+                          <div className="flex-shrink-0">
+                            <button
+                              onClick={() => {
+                                setSelectedRoot({ id: root.root_id, path: root.root_path })
+                                setDeleteDialogOpen(true)
+                              }}
+                              disabled={isScanning}
+                              className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              title="Delete root"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          </div>
+
+                          {/* Vertical Separator */}
+                          <div className="w-px self-stretch bg-border" />
+
                           {/* Scan Button */}
                           <div className="flex-shrink-0">
                             <button
@@ -228,5 +250,18 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
         )}
       </CardContent>
     </Card>
+
+    {/* Delete Root Dialog */}
+    <DeleteRootDialog
+      open={deleteDialogOpen}
+      onOpenChange={setDeleteDialogOpen}
+      rootId={selectedRoot?.id ?? null}
+      rootPath={selectedRoot?.path ?? ''}
+      onDeleteSuccess={() => {
+        loadRoots()
+        setSelectedRoot(null)
+      }}
+    />
+  </>
   )
 }

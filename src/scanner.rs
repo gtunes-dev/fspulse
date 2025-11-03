@@ -505,32 +505,32 @@ impl Scanner {
     }
 
     fn do_state_sweeping(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> {
-        let tx = db.conn_mut().transaction()?;
+        db.immediate_transaction(|conn| {
+            // Insert deletion records into changes
+            conn.execute(
+                "INSERT INTO changes (scan_id, item_id, change_type)
+                    SELECT ?, item_id, ?
+                    FROM items
+                    WHERE root_id = ? AND is_ts = 0 AND last_scan < ?",
+                (
+                    scan.scan_id(),
+                    ChangeType::Delete.as_i64(),
+                    scan.root_id(),
+                    scan.scan_id(),
+                ),
+            )?;
 
-        // Insert deletion records into changes
-        tx.execute(
-            "INSERT INTO changes (scan_id, item_id, change_type)
-                SELECT ?, item_id, ?
-                FROM items
-                WHERE root_id = ? AND is_ts = 0 AND last_scan < ?",
-            (
-                scan.scan_id(),
-                ChangeType::Delete.as_i64(),
-                scan.root_id(),
-                scan.scan_id(),
-            ),
-        )?;
+            // Mark unseen items as tombstones
+            conn.execute(
+                "UPDATE items SET
+                    is_ts = 1,
+                    last_scan = ?
+                WHERE root_id = ? AND last_scan < ? AND is_ts = 0",
+                (scan.scan_id(), scan.root_id(), scan.scan_id()),
+            )?;
 
-        // Mark unseen items as tombstones
-        tx.execute(
-            "UPDATE items SET 
-                is_ts = 1,
-                last_scan = ?
-            WHERE root_id = ? AND last_scan < ? AND is_ts = 0",
-            (scan.scan_id(), scan.root_id(), scan.scan_id()),
-        )?;
-
-        tx.commit()?;
+            Ok(())
+        })?;
 
         scan.set_state_analyzing(db)
     }
@@ -856,107 +856,108 @@ impl Scanner {
 
             if existing_item.is_ts() {
                 // Rehydrate a tombstone
-                let tx = db.conn_mut().transaction()?;
-                let rows_updated = tx.execute(
-                    "UPDATE items SET 
-                            is_ts = 0, 
-                            mod_date = ?, 
-                            file_size = ?, 
-                            file_hash = NULL, 
-                            val = ?,
-                            val_error = NULL,
-                            last_scan = ?,
-                            last_hash_scan = NULL, 
-                            last_val_scan = NULL 
-                        WHERE item_id = ?",
-                    (
-                        mod_date,
-                        file_size,
-                        ValidationState::Unknown.as_i64(),
-                        scan.scan_id(),
-                        existing_item.item_id(),
-                    ),
-                )?;
-                if rows_updated == 0 {
-                    return Err(FsPulseError::Error(format!(
-                        "Item Id {} not found for update",
-                        existing_item.item_id()
-                    )));
-                }
-
-                tx.execute(
-                    "INSERT INTO changes 
+                db.immediate_transaction(|conn| {
+                    let rows_updated = conn.execute(
+                        "UPDATE items SET
+                                is_ts = 0,
+                                mod_date = ?,
+                                file_size = ?,
+                                file_hash = NULL,
+                                val = ?,
+                                val_error = NULL,
+                                last_scan = ?,
+                                last_hash_scan = NULL,
+                                last_val_scan = NULL
+                            WHERE item_id = ?",
                         (
-                            scan_id, 
-                            item_id, 
-                            change_type, 
-                            is_undelete, 
-                            mod_date_old, 
-                            mod_date_new, 
-                            file_size_old, 
-                            file_size_new, 
-                            hash_old,
-                            val_old, 
-                            val_error_old
-                        ) 
-                    VALUES 
-                        (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        scan.scan_id(),
-                        existing_item.item_id(),
-                        ChangeType::Add.as_i64(),
-                        existing_item.mod_date(),
-                        mod_date,
-                        existing_item.file_size(),
-                        file_size,
-                        existing_item.file_hash(),
-                        existing_item.validity_state_as_str(),
-                        existing_item.val_error(),
-                    ),
-                )?;
+                            mod_date,
+                            file_size,
+                            ValidationState::Unknown.as_i64(),
+                            scan.scan_id(),
+                            existing_item.item_id(),
+                        ),
+                    )?;
+                    if rows_updated == 0 {
+                        return Err(FsPulseError::Error(format!(
+                            "Item Id {} not found for update",
+                            existing_item.item_id()
+                        )));
+                    }
 
-                tx.commit()?;
-            } else if meta_change {
-                let tx = db.conn_mut().transaction()?;
-
-                let rows_updated = tx.execute(
-                    "UPDATE items SET
-                        mod_date = ?, 
-                        file_size = ?,             
-                        last_scan = ? 
-                    WHERE item_id = ?",
-                    (mod_date, file_size, scan.scan_id(), existing_item.item_id()),
-                )?;
-                if rows_updated == 0 {
-                    return Err(FsPulseError::Error(format!(
-                        "Item Id {} not found for update",
-                        existing_item.item_id()
-                    )));
-                }
-                tx.execute(
-                    "INSERT INTO changes 
+                    conn.execute(
+                        "INSERT INTO changes
                             (
-                                scan_id, 
-                                item_id, 
-                                change_type, 
-                                meta_change, 
-                                mod_date_old, 
-                                mod_date_new, 
-                                file_size_old, 
-                                file_size_new) 
-                            VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
-                    (
-                        scan.scan_id(),
-                        existing_item.item_id(),
-                        ChangeType::Modify.as_i64(),
-                        meta_change.then_some(existing_item.mod_date()),
-                        meta_change.then_some(mod_date),
-                        meta_change.then_some(existing_item.file_size()),
-                        meta_change.then_some(file_size),
-                    ),
-                )?;
+                                scan_id,
+                                item_id,
+                                change_type,
+                                is_undelete,
+                                mod_date_old,
+                                mod_date_new,
+                                file_size_old,
+                                file_size_new,
+                                hash_old,
+                                val_old,
+                                val_error_old
+                            )
+                        VALUES
+                            (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            scan.scan_id(),
+                            existing_item.item_id(),
+                            ChangeType::Add.as_i64(),
+                            existing_item.mod_date(),
+                            mod_date,
+                            existing_item.file_size(),
+                            file_size,
+                            existing_item.file_hash(),
+                            existing_item.validity_state_as_str(),
+                            existing_item.val_error(),
+                        ),
+                    )?;
 
-                tx.commit()?;
+                    Ok(())
+                })?;
+            } else if meta_change {
+                db.immediate_transaction(|conn| {
+                    let rows_updated = conn.execute(
+                        "UPDATE items SET
+                            mod_date = ?,
+                            file_size = ?,
+                            last_scan = ?
+                        WHERE item_id = ?",
+                        (mod_date, file_size, scan.scan_id(), existing_item.item_id()),
+                    )?;
+                    if rows_updated == 0 {
+                        return Err(FsPulseError::Error(format!(
+                            "Item Id {} not found for update",
+                            existing_item.item_id()
+                        )));
+                    }
+                    conn.execute(
+                        "INSERT INTO changes
+                                (
+                                    scan_id,
+                                    item_id,
+                                    change_type,
+                                    meta_change,
+                                    mod_date_old,
+                                    mod_date_new,
+                                    file_size_old,
+                                    file_size_new)
+                                VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
+                        (
+                            scan.scan_id(),
+                            existing_item.item_id(),
+                            ChangeType::Modify.as_i64(),
+                            meta_change.then_some(existing_item.mod_date()),
+                            meta_change.then_some(mod_date),
+                            meta_change.then_some(existing_item.file_size()),
+                            meta_change.then_some(file_size),
+                        ),
+                    )?;
+
+                    Ok(())
+                })?;
             } else {
                 // No change - just update last_scan
                 let rows_updated = db.conn().execute(
@@ -973,16 +974,17 @@ impl Scanner {
             }
         } else {
             // Item is new, insert into items and changes tables
-            let tx = db.conn_mut().transaction()?;
+            db.immediate_transaction(|conn| {
+                conn.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, file_size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (scan.root_id(), &path_str, item_type.as_i64(), mod_date, file_size, ValidationState::Unknown.as_i64(), scan.scan_id()))?;
 
-            tx.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, file_size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (scan.root_id(), &path_str, item_type.as_i64(), mod_date, file_size, ValidationState::Unknown.as_i64(), scan.scan_id()))?;
+                let item_id: i64 = conn.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
-            let item_id: i64 = tx.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
+                conn.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, file_size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
+                    (scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, file_size))?;
 
-            tx.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, file_size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
-                (scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, file_size))?;
-            tx.commit()?;
+                Ok(())
+            })?;
         }
 
         Ok(())
@@ -1075,110 +1077,110 @@ impl Scanner {
             i_last_val_scan = Some(scan.scan_id());
         }
 
-        let mut db_guard = db.lock().unwrap();
-        let conn = db_guard.conn_mut();
+        let db_guard = db.lock().unwrap();
 
-        let tx = conn.transaction()?; // Start transaction
-
-        if alert_possible_hash {
-            if let Some(last_hash_scan) = analysis_item.last_hash_scan() {
-                if !Alerts::meta_changed_between(
-                    &tx,
-                    analysis_item.item_id(),
-                    last_hash_scan,
-                    scan.scan_id(),
-                )? {
-                    Alerts::add_suspicious_hash_alert(
-                        &tx,
-                        scan.scan_id(),
+        // Use IMMEDIATE transaction for read-then-write pattern
+        db_guard.immediate_transaction(|conn| {
+            if alert_possible_hash {
+                if let Some(last_hash_scan) = analysis_item.last_hash_scan() {
+                    if !Alerts::meta_changed_between(
+                        conn,
                         analysis_item.item_id(),
-                        analysis_item.last_hash_scan(),
-                        analysis_item.file_hash(),
-                        c_hash_new.unwrap(),
-                    )?;
+                        last_hash_scan,
+                        scan.scan_id(),
+                    )? {
+                        Alerts::add_suspicious_hash_alert(
+                            conn,
+                            scan.scan_id(),
+                            analysis_item.item_id(),
+                            analysis_item.last_hash_scan(),
+                            analysis_item.file_hash(),
+                            c_hash_new.unwrap(),
+                        )?;
+                    }
                 }
             }
-        }
 
-        if alert_invalid_item {
-            Alerts::add_invalid_item_alert(
-                &tx,
-                scan.scan_id(),
-                analysis_item.item_id(),
-                c_val_error_new.unwrap(),
-            )?;
-        }
-
-        // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
-        if update_changes {
-            tx.execute(
-                "INSERT INTO changes (
-                        scan_id, 
-                        item_id, 
-                        change_type, 
-                        meta_change, 
-                        hash_change, 
-                        last_hash_scan_old,
-                        hash_old,
-                        hash_new,
-                        val_change,
-                        last_val_scan_old,
-                        val_old, 
-                        val_new,
-                        val_error_old,
-                        val_error_new
-                    )
-                    VALUES (?, ?, 2, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(scan_id, item_id) 
-                    DO UPDATE SET
-                        hash_change = excluded.hash_change,
-                        last_hash_scan_old = excluded.last_hash_scan_old,
-                        hash_old = excluded.hash_old,
-                        hash_new = excluded.hash_new,
-                        val_change = excluded.val_change,
-                        last_val_scan_old = excluded.last_val_scan_old,
-                        val_old = excluded.val_old,
-                        val_new = excluded.val_new,
-                        val_error_old = excluded.val_error_old,
-                        val_error_new = excluded.val_error_new",
-                rusqlite::params![
+            if alert_invalid_item {
+                Alerts::add_invalid_item_alert(
+                    conn,
                     scan.scan_id(),
                     analysis_item.item_id(),
-                    c_hash_change,
-                    c_last_hash_scan_old,
-                    c_hash_old,
-                    c_hash_new,
-                    c_val_change,
-                    c_last_val_scan_old,
-                    c_val_old,
-                    c_val_new,
-                    c_val_error_old,
-                    c_val_error_new,
+                    c_val_error_new.unwrap(),
+                )?;
+            }
+
+            // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
+            if update_changes {
+                conn.execute(
+                    "INSERT INTO changes (
+                            scan_id,
+                            item_id,
+                            change_type,
+                            meta_change,
+                            hash_change,
+                            last_hash_scan_old,
+                            hash_old,
+                            hash_new,
+                            val_change,
+                            last_val_scan_old,
+                            val_old,
+                            val_new,
+                            val_error_old,
+                            val_error_new
+                        )
+                        VALUES (?, ?, 2, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(scan_id, item_id)
+                        DO UPDATE SET
+                            hash_change = excluded.hash_change,
+                            last_hash_scan_old = excluded.last_hash_scan_old,
+                            hash_old = excluded.hash_old,
+                            hash_new = excluded.hash_new,
+                            val_change = excluded.val_change,
+                            last_val_scan_old = excluded.last_val_scan_old,
+                            val_old = excluded.val_old,
+                            val_new = excluded.val_new,
+                            val_error_old = excluded.val_error_old,
+                            val_error_new = excluded.val_error_new",
+                    rusqlite::params![
+                        scan.scan_id(),
+                        analysis_item.item_id(),
+                        c_hash_change,
+                        c_last_hash_scan_old,
+                        c_hash_old,
+                        c_hash_new,
+                        c_val_change,
+                        c_last_val_scan_old,
+                        c_val_old,
+                        c_val_new,
+                        c_val_error_old,
+                        c_val_error_new,
+                    ],
+                )?;
+            }
+
+            // Step 2: Update `items` table
+            conn.execute(
+                "UPDATE items
+                SET
+                    file_hash = ?,
+                    val = ?,
+                    val_error = ?,
+                    last_hash_scan = ?,
+                    last_val_scan = ?
+                WHERE item_id = ?",
+                rusqlite::params![
+                    i_hash,
+                    i_val.as_i64(),
+                    i_val_error,
+                    i_last_hash_scan,
+                    i_last_val_scan,
+                    analysis_item.item_id()
                 ],
             )?;
-        }
 
-        // Step 2: Update `items` table
-        tx.execute(
-            "UPDATE items 
-            SET 
-                file_hash = ?,
-                val = ?,
-                val_error = ?,
-                last_hash_scan = ?,
-                last_val_scan = ?
-            WHERE item_id = ?",
-            rusqlite::params![
-                i_hash,
-                i_val.as_i64(),
-                i_val_error,
-                i_last_hash_scan,
-                i_last_val_scan,
-                analysis_item.item_id()
-            ],
-        )?;
-
-        tx.commit()?; // Commit transaction
+            Ok(())
+        })?;
 
         Ok(())
     }

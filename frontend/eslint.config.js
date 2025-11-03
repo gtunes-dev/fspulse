@@ -19,5 +19,16 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Allow exporting constants and hooks alongside components
+      // This is a standard pattern in UI libraries (shadcn/ui) and context providers
+      'react-refresh/only-export-components': [
+        'warn',
+        {
+          allowConstantExport: true,
+          allowExportNames: ['badgeVariants', 'buttonVariants', 'useScanManager']
+        },
+      ],
+    },
   },
 ])

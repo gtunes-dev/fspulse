@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Standardized database transaction pattern**: All explicit transaction wrappers now use IMMEDIATE transactions via a helper function for maximum safety and consistency. Eliminates lock upgrade failures and simplifies transaction management throughout the codebase
 - **Alerts page enhancements**: Added ITEM ID column (positioned between ROOT ID and SCAN ID), clickable file names with Info icon that open ItemDetailSheet for detailed item inspection
 - **Server-side path parsing**: File and directory names now parsed by backend using platform-aware Rust path utilities with `@name` format specifier, eliminating client-side path parsing concerns
 - **Browse page navigation priority**: Moved Browse page in sidebar navigation to appear between Scan and Alerts, reflecting its importance as a core feature

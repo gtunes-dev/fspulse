@@ -1,4 +1,4 @@
-use axum::{http::StatusCode, Json};
+use axum::{extract::Path, http::StatusCode, Json};
 use log::error;
 use serde::{Deserialize, Serialize};
 
@@ -226,6 +226,55 @@ pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCo
     }
 
     Ok(Json(results))
+}
+
+/// DELETE /api/roots/{root_id}
+/// Deletes a root and all associated data (scans, items, changes, alerts)
+pub async fn delete_root(
+    Path(root_id): Path<i64>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    // Open database connection
+    let db = Database::new().map_err(|e| {
+        error!("Failed to open database: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "Database connection error".to_string(),
+            }),
+        )
+    })?;
+
+    // Attempt to delete the root
+    match Root::delete_root(&db, root_id) {
+        Ok(()) => {
+            log::info!("Deleted root with id: {}", root_id);
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Err(e) => {
+            // Map FsPulseError to user-friendly error messages
+            let (status_code, error_message) = match &e {
+                FsPulseError::Error(msg) if msg.contains("not found") => {
+                    (StatusCode::NOT_FOUND, format!("Root with id {} not found", root_id))
+                }
+                FsPulseError::DatabaseError(db_err) => {
+                    error!("Database error deleting root: {}", db_err);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Database error occurred while deleting root".to_string(),
+                    )
+                }
+                _ => {
+                    error!("Unexpected error deleting root: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "An unexpected error occurred".to_string(),
+                    )
+                }
+            };
+
+            Err((status_code, Json(ErrorResponse { error: error_message })))
+        }
+    }
 }
 
 /// Helper function to extract the path from error messages

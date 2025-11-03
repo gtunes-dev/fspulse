@@ -22,6 +22,7 @@ export function ActiveScanCard() {
     } else {
       setBreadcrumbs([])
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScan?.completed_phases])
 
   // Save expanded state to localStorage

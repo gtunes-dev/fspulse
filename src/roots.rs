@@ -134,6 +134,47 @@ impl Root {
         Ok(())
     }
 
+    /// Delete a root and all associated data (scans, items, changes, alerts).
+    /// This operation is performed within a transaction to ensure atomicity.
+    /// Returns Ok(()) if successful, or an error if the root doesn't exist or deletion fails.
+    pub fn delete_root(db: &Database, root_id: i64) -> Result<(), FsPulseError> {
+        db.immediate_transaction(|conn| {
+            // Delete in order based on foreign key constraints:
+            // 1. alerts (references scan_id and item_id)
+            // 2. changes (references scan_id and item_id)
+            // 3. items (references root_id and scan_id)
+            // 4. scans (references root_id)
+            // 5. root itself
+
+            // Delete alerts for all scans of this root
+            conn.execute(
+                "DELETE FROM alerts WHERE scan_id IN (SELECT scan_id FROM scans WHERE root_id = ?)",
+                [root_id]
+            )?;
+
+            // Delete changes for all scans of this root
+            conn.execute(
+                "DELETE FROM changes WHERE scan_id IN (SELECT scan_id FROM scans WHERE root_id = ?)",
+                [root_id]
+            )?;
+
+            // Delete items for this root
+            conn.execute("DELETE FROM items WHERE root_id = ?", [root_id])?;
+
+            // Delete scans for this root
+            conn.execute("DELETE FROM scans WHERE root_id = ?", [root_id])?;
+
+            // Finally, delete the root itself
+            let rows_affected = conn.execute("DELETE FROM roots WHERE root_id = ?", [root_id])?;
+
+            if rows_affected == 0 {
+                return Err(FsPulseError::Error(format!("Root with id {} not found", root_id)));
+            }
+
+            Ok(())
+        })
+    }
+
     pub fn validate_and_canonicalize_path(path_arg: &str) -> Result<PathBuf, FsPulseError> {
         let path_arg = path_arg.trim();
         if path_arg.is_empty() {

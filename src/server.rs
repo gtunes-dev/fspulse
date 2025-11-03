@@ -2,7 +2,7 @@ use axum::{
     body::Body,
     http::{header, StatusCode},
     response::Html,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Router,
 };
 
@@ -99,6 +99,7 @@ impl WebServer {
             // Root endpoints
             .route("/api/roots", post(api::roots::create_root))
             .route("/api/roots/with-scans", get(api::roots::get_roots_with_scans))
+            .route("/api/roots/{root_id}", delete(api::roots::delete_root))
 
             // WebSocket routes
             .route("/ws/scans/progress", get(api::scans::scan_progress_ws))

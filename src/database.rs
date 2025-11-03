@@ -9,6 +9,7 @@ use log::info;
 use rusqlite::{Connection, OptionalExtension, Result};
 use std::env;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 const DB_FILENAME: &str = "fspulse.db";
 const CURRENT_SCHEMA_VERSION: u32 = 8;
@@ -60,6 +61,14 @@ impl Database {
 
         // Register custom collations on this connection
         register_collations(&conn)?;
+
+        // Enable WAL mode for better concurrency (readers don't block writers)
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(FsPulseError::DatabaseError)?;
+
+        // Set busy timeout for lock contention handling
+        conn.busy_timeout(Duration::from_secs(5))
+            .map_err(FsPulseError::DatabaseError)?;
 
         let db = Self {
             conn: Some(conn),
@@ -215,6 +224,39 @@ impl Database {
         info!("Database successfully upgraded");
 
         Ok(current_version + 1)
+    }
+
+    /// Execute a function within an IMMEDIATE transaction.
+    /// Use for read-then-write patterns to prevent lock upgrade failures.
+    ///
+    /// # Example
+    /// ```
+    /// let result = db.immediate_transaction(|conn| {
+    ///     let count: i32 = conn.query_row("SELECT COUNT(*) ...", [], |row| row.get(0))?;
+    ///     conn.execute("UPDATE ... WHERE count = ?", [count])?;
+    ///     Ok(count)
+    /// })?;
+    /// ```
+    pub fn immediate_transaction<F, T>(&self, f: F) -> Result<T, FsPulseError>
+    where
+        F: FnOnce(&Connection) -> Result<T, FsPulseError>,
+    {
+        let conn = self.conn();
+        conn.execute("BEGIN IMMEDIATE", [])
+            .map_err(FsPulseError::DatabaseError)?;
+
+        match f(conn) {
+            Ok(result) => {
+                conn.execute("COMMIT", [])
+                    .map_err(FsPulseError::DatabaseError)?;
+                Ok(result)
+            }
+            Err(e) => {
+                // Attempt rollback, but preserve original error
+                let _ = conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
     }
 
 }

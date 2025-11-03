@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { GripVertical, Plus, X } from 'lucide-react'
 import { fetchMetadata, countQuery, fetchQuery } from '@/lib/api'
 import { FilterModal } from '@/components/data-table/FilterModal'
@@ -29,6 +29,7 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
   const [isDraggingDown, setIsDraggingDown] = useState(false)
   const [filterModalColumn, setFilterModalColumn] = useState<ColumnState | null>(null)
+  const lastFilterKeyRef = useRef<string>('')
 
   // Load column metadata on mount
   useEffect(() => {
@@ -81,7 +82,7 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
 
       // Build filter key to detect when filters/columns change
       const filterKey = JSON.stringify({ columnSpecs, filterSpecs })
-      const needsCount = filterKey !== (loadData as any).lastFilterKey
+      const needsCount = filterKey !== lastFilterKeyRef.current
 
       // Get count only when filters or visible columns change
       if (needsCount) {
@@ -90,7 +91,7 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
           filters: filterSpecs,
         })
         setTotalCount(countData.count)
-        ;(loadData as any).lastFilterKey = filterKey
+        lastFilterKeyRef.current = filterKey
       }
 
       // Always fetch current page

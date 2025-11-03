@@ -4,7 +4,7 @@ import { ActiveScanCard } from '@/components/scan/ActiveScanCard'
 import { RootsTable } from '@/components/scan/RootsTable'
 import { AddRootDialog } from '@/components/scan/AddRootDialog'
 import { ScanOptionsDialog } from '@/components/scan/ScanOptionsDialog'
-import type { InitiateScanRequest } from '@/lib/types'
+import type { InitiateScanRequest, RootWithScan } from '@/lib/types'
 
 export function ScanPage() {
   const { isScanning, connectScanWebSocket } = useScanManager()
@@ -66,8 +66,8 @@ export function ScanPage() {
       // Get root path for WebSocket connection
       // We'll need to fetch it or pass it through
       const rootResponse = await fetch('/api/roots/with-scans')
-      const roots = await rootResponse.json()
-      const root = roots.find((r: any) => r.root_id === rootId)
+      const roots: RootWithScan[] = await rootResponse.json()
+      const root = roots.find((r) => r.root_id === rootId)
 
       if (root) {
         // Connect WebSocket to start receiving updates

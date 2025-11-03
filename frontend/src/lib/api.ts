@@ -120,3 +120,21 @@ export async function fetchItemFolderSize(itemId: number): Promise<{ size: numbe
   const response = await fetch(`${API_BASE}/items/${itemId}/folder-size`)
   return handleResponse<{ size: number }>(response)
 }
+
+/**
+ * Delete a root and all associated data (scans, items, changes, alerts)
+ */
+export async function deleteRoot(rootId: number): Promise<void> {
+  const response = await fetch(`${API_BASE}/roots/${rootId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: response.statusText }))
+    throw new ApiError(
+      errorData.error || `Failed to delete root: ${response.statusText}`,
+      response.status,
+      response.statusText
+    )
+  }
+}
