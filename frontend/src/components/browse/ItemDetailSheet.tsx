@@ -64,7 +64,7 @@ interface Alert {
   scan_id: number
   alert_type: string
   alert_status: string
-  details: string
+  val_error: string | null
   created: number
 }
 
@@ -95,7 +95,7 @@ const ALERT_COLUMNS: ColumnSpec[] = [
   { name: 'scan_id', visible: true, sort_direction: 'none', position: 1 },
   { name: 'alert_type', visible: true, sort_direction: 'none', position: 2 },
   { name: 'alert_status', visible: true, sort_direction: 'none', position: 3 },
-  { name: 'details', visible: true, sort_direction: 'none', position: 4 },
+  { name: 'val_error', visible: true, sort_direction: 'none', position: 4 },
   { name: 'created_at', visible: true, sort_direction: 'none', position: 5 },
 ]
 
@@ -126,7 +126,7 @@ function parseAlertRow(row: string[]): Alert {
     scan_id: parseInt(row[1]),
     alert_type: row[2],
     alert_status: row[3],
-    details: row[4],
+    val_error: row[4] && row[4] !== '-' ? row[4] : null,
     created: parseInt(row[5]),
   }
 }
@@ -659,7 +659,9 @@ export function ItemDetailSheet({
                                   Scan <span className="font-mono font-semibold">#{alert.scan_id}</span>
                                 </p>
                               </div>
-                              <p className="text-sm">{alert.details}</p>
+                              {alert.val_error && (
+                                <p className="text-sm text-red-600">{alert.val_error}</p>
+                              )}
                               <p className="text-xs text-muted-foreground">
                                 Created on {formatDateFull(alert.created)}
                               </p>

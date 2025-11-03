@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Alerts page enhancements**: Added ITEM ID column (positioned between ROOT ID and SCAN ID), clickable file names with Info icon that open ItemDetailSheet for detailed item inspection
+- **Server-side path parsing**: File and directory names now parsed by backend using platform-aware Rust path utilities with `@name` format specifier, eliminating client-side path parsing concerns
 - **Browse page navigation priority**: Moved Browse page in sidebar navigation to appear between Scan and Alerts, reflecting its importance as a core feature
 - **Alerts page context filter**: Replaced manual root ID input with root picker dropdown when filtering by root, with automatic selection of first root for improved usability
 - **Consolidated Alerts filter UI**: Combined two-level filter controls (context + alert filters) into single unified toolbar with two rows for cleaner layout
@@ -42,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Alert path formatting**: Fixed alerts query to respect `@name` format specifier by using `format_path()` instead of `format_string()`, enabling proper filename extraction
+- **ItemDetailSheet alerts loading**: Corrected alert query to use existing `val_error` column instead of non-existent `details` column, resolving 500 errors when viewing item details
 - **Tombstone exclusion**: Corrected `file_count` and `folder_count` computation to exclude tombstoned (deleted) items, fixing a bug where deleted items were incorrectly included in totals
 - **Schema migration corrections**: Fixed v6_to_v7 migration to use correct integer mappings for ValidationState, and corrected v5_to_v6 migration to use character values (not integers) when operating on pre-v7 database
 - **Invalid enum value logging**: Added warning logs when database contains invalid enum integer values, helping detect data corruption or migration issues while maintaining graceful degradation

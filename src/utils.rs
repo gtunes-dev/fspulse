@@ -1,4 +1,5 @@
 use chrono::{offset::LocalResult, DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use std::ffi::OsStr;
 use std::path::{Path, MAIN_SEPARATOR_STR};
 use tico::tico;
 
@@ -11,6 +12,14 @@ pub struct Utils {}
 impl Utils {
     pub fn display_short_path(path: &str) -> String {
         tico(path, None)
+    }
+
+    pub fn display_path_name(path: &str) -> String {
+        Path::new(path)
+            .file_name()
+            .and_then(OsStr::to_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| path.to_owned())
     }
 
     pub fn display_opt_i64(opt_i64: &Option<i64>) -> String {
@@ -220,5 +229,29 @@ mod tests {
 
         let normal_path = Utils::display_short_path("short.txt");
         assert_eq!(normal_path, "short.txt");
+    }
+
+    #[test]
+    fn test_display_path_name() {
+        // Test absolute path with file
+        assert_eq!(Utils::display_path_name("/path/to/file.txt"), "file.txt");
+
+        // Test absolute path with directory
+        assert_eq!(Utils::display_path_name("/path/to/directory"), "directory");
+
+        // Test relative path
+        assert_eq!(Utils::display_path_name("path/to/file.txt"), "file.txt");
+
+        // Test just a filename
+        assert_eq!(Utils::display_path_name("file.txt"), "file.txt");
+
+        // Test root path - should return the original path
+        assert_eq!(Utils::display_path_name("/"), "/");
+
+        // Test empty string - should return empty string
+        assert_eq!(Utils::display_path_name(""), "");
+
+        // Test path with trailing separator
+        assert_eq!(Utils::display_path_name("/path/to/dir/"), "dir");
     }
 }

@@ -3,6 +3,7 @@
 export interface ItemData {
   item_id: number
   item_path: string
+  item_name: string // Filename/directory name (from backend using @name format)
   item_type: 'F' | 'D' | 'S' | 'O' // File, Directory, Symlink, Other
   is_ts: boolean // Is tombstone
 }
@@ -12,16 +13,6 @@ export interface TreeNodeData extends ItemData {
   children?: TreeNodeData[] // Lazy-loaded
   isExpanded?: boolean
   isLoading?: boolean
-}
-
-/**
- * Extract the name from a path (last segment)
- * Example: "/Users/alice/Documents/file.txt" -> "file.txt"
- * Example: "/Users/alice/Documents" -> "Documents"
- */
-export function getPathName(path: string): string {
-  const segments = path.split('/').filter(Boolean)
-  return segments[segments.length - 1] || path
 }
 
 /**
@@ -87,7 +78,7 @@ export function sortTreeItems(items: TreeNodeData[]): TreeNodeData[] {
 export function itemToTreeNode(item: ItemData): TreeNodeData {
   return {
     ...item,
-    name: getPathName(item.item_path),
+    name: item.item_name, // Use backend-parsed name instead of client-side parsing
     children: undefined,
     isExpanded: false,
     isLoading: false,

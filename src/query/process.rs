@@ -331,7 +331,7 @@ impl AlertsQuery {
                 "root_id" => Format::format_i64(alert.root_id),
                 "scan_id" => Format::format_i64(alert.scan_id),
                 "item_id" => Format::format_i64(alert.item_id),
-                "item_path" => Format::format_string(&alert.item_path),
+                "item_path" => Format::format_path(&alert.item_path, col.format)?,
                 "created_at" => Format::format_date(alert.created_at, col.format)?,
                 "updated_at" => Format::format_opt_date(alert.updated_at, col.format)?,
                 "prev_hash_scan" => Format::format_opt_i64(alert.prev_hash_scan),

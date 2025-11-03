@@ -82,8 +82,9 @@ export function TreeNode({ node, rootId, level, showTombstones, allItems }: Tree
           const columns: ColumnSpec[] = [
             { name: 'item_id', visible: true, sort_direction: 'none', position: 0 },
             { name: 'item_path', visible: true, sort_direction: 'asc', position: 1 },
-            { name: 'item_type', visible: true, sort_direction: 'none', position: 2 },
-            { name: 'is_ts', visible: true, sort_direction: 'none', position: 3 },
+            { name: 'item_path@name', visible: true, sort_direction: 'none', position: 2 },
+            { name: 'item_type', visible: true, sort_direction: 'none', position: 3 },
+            { name: 'is_ts', visible: true, sort_direction: 'none', position: 4 },
           ]
 
           const response = await fetchQuery('items', {
@@ -96,8 +97,9 @@ export function TreeNode({ node, rootId, level, showTombstones, allItems }: Tree
           childItems = response.rows.map(row => ({
             item_id: parseInt(row[0]),
             item_path: row[1],
-            item_type: row[2] as 'F' | 'D' | 'S' | 'O',
-            is_ts: row[3] === 'true',
+            item_name: row[2],
+            item_type: row[3] as 'F' | 'D' | 'S' | 'O',
+            is_ts: row[4] === 'true',
           }))
 
           // Filter to immediate children

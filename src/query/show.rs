@@ -104,6 +104,7 @@ impl Format {
     pub fn format_path(val: &str, format: Format) -> Result<String, FsPulseError> {
         match format {
             Format::Short => Ok(Utils::display_short_path(val)),
+            Format::Name => Ok(Utils::display_path_name(val)),
             Format::Full | Format::None => Ok(val.to_owned()),
             Format::Relative => Ok(Utils::display_short_path(val)),
             _ => Err(FsPulseError::Error("Invalid path format".into())),

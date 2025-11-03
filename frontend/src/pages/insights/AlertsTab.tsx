@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { RefreshCw, Info } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SearchFilter } from '@/components/ui/SearchFilter'
 import { RootPicker } from '@/components/ui/RootPicker'
+import { ItemDetailSheet } from '@/components/browse/ItemDetailSheet'
 import {
   Select,
   SelectContent,
@@ -43,8 +44,10 @@ interface AlertRow {
   alert_type: AlertTypeValue
   alert_status: AlertStatusValue
   root_id: number
+  item_id: number
   scan_id: number
   item_path: string
+  item_name: string
   created_at: number
   hash_old: string | null
   hash_new: string | null
@@ -65,18 +68,40 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
   const [totalCount, setTotalCount] = useState(0)
   const [searchDebounce, setSearchDebounce] = useState<number | null>(null)
   const [updatingAlertId, setUpdatingAlertId] = useState<number | null>(null)
+  const [selectedItem, setSelectedItem] = useState<{ itemId: number; itemPath: string; rootId: number } | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+
+  // Track last filter key to avoid redundant count queries
+  const lastFilterKeyRef = useRef<string>('')
 
   // Load metadata on mount
   useEffect(() => {
     async function loadMetadata() {
       try {
         const metadata = await fetchMetadata('alerts')
-        const columnState: ColumnState[] = metadata.columns.map((col, index) => ({
-          ...col,
-          visible: true,
-          sort_direction: col.name === 'created_at' ? 'desc' : 'none',
-          position: index,
-        }))
+        const columnState: ColumnState[] = []
+
+        metadata.columns.forEach((col) => {
+          columnState.push({
+            ...col,
+            visible: true,
+            sort_direction: col.name === 'created_at' ? 'desc' : 'none',
+            position: columnState.length,
+          })
+
+          // Add item_path@name column right after item_path for display
+          if (col.name === 'item_path') {
+            columnState.push({
+              ...col,
+              name: 'item_path@name',
+              display_name: 'File Name',
+              visible: true,
+              sort_direction: 'none',
+              position: columnState.length,
+            })
+          }
+        })
+
         setColumns(columnState)
       } catch (err) {
         console.error('Error loading metadata:', err)
@@ -121,7 +146,7 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
 
       // Build filter key to detect when filters change
       const filterKey = JSON.stringify(filters)
-      const needsCount = filterKey !== (loadAlerts as any).lastFilterKey
+      const needsCount = filterKey !== lastFilterKeyRef.current
 
       // Get count only when filters change
       if (needsCount) {
@@ -142,7 +167,7 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
 
         const countData = await countResponse.json()
         setTotalCount(countData.count)
-        ;(loadAlerts as any).lastFilterKey = filterKey
+        lastFilterKeyRef.current = filterKey
       }
 
       // Always fetch current page
@@ -168,24 +193,26 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
 
       const fetchData = await fetchResponse.json()
 
+      // Build index map from the columns WE sent (which include format specifiers like @name)
+      // This way we can distinguish between item_path and item_path@name
+      const sortedCols = columns.filter(c => c.visible).sort((a, b) => a.position - b.position)
+      const colIndexMap: Record<string, number> = {}
+      sortedCols.forEach((col, idx) => {
+        colIndexMap[col.name] = idx  // Uses full name like "item_path@name"
+      })
+
       // Map response to AlertRow format
       const rows: AlertRow[] = (fetchData.rows || []).map((row: string[]) => {
-        const colIndexMap: Record<string, number> = {}
-        fetchData.columns.forEach((colName: string, idx: number) => {
-          colIndexMap[colName] = idx
-        })
-
-        // Parse created_at as Unix timestamp in seconds (backend returns raw timestamp with @timestamp format modifier)
-        const createdAtTimestamp = parseInt(row[colIndexMap['created_at']])
-
         return {
           alert_id: parseInt(row[colIndexMap['alert_id']]),
           alert_type: row[colIndexMap['alert_type']] as AlertTypeValue,
           alert_status: row[colIndexMap['alert_status']] as AlertStatusValue,
           root_id: parseInt(row[colIndexMap['root_id']]),
+          item_id: parseInt(row[colIndexMap['item_id']]),
           scan_id: parseInt(row[colIndexMap['scan_id']]),
           item_path: row[colIndexMap['item_path']],
-          created_at: createdAtTimestamp,
+          item_name: row[colIndexMap['item_path@name']],
+          created_at: parseInt(row[colIndexMap['created_at']]),
           hash_old: row[colIndexMap['hash_old']] || null,
           hash_new: row[colIndexMap['hash_new']] || null,
           val_error: row[colIndexMap['val_error']] || null,
@@ -241,12 +268,6 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
     } finally {
       setUpdatingAlertId(null)
     }
-  }
-
-  const truncatePath = (path: string, maxLength: number): string => {
-    if (path.length <= maxLength) return path
-    const half = Math.floor(maxLength / 2)
-    return `${path.slice(0, half)}...${path.slice(-half)}`
   }
 
   const getAlertTypeBadge = (type: AlertTypeValue) => {
@@ -373,28 +394,29 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
                 <TableHead className="text-center w-[120px]">STATUS</TableHead>
                 <TableHead className="text-center w-[180px]">ALERT TYPE</TableHead>
                 <TableHead className="text-center w-[80px]">ROOT ID</TableHead>
+                <TableHead className="text-center w-[80px]">ITEM ID</TableHead>
                 <TableHead className="text-center w-[80px]">SCAN ID</TableHead>
-                <TableHead className="text-center">FILE PATH</TableHead>
-                <TableHead className="text-center w-[250px]">DETAILS</TableHead>
+                <TableHead className="w-[250px]">FILE</TableHead>
+                <TableHead className="text-center">DETAILS</TableHead>
                 <TableHead className="text-center w-[110px]">CREATED</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-red-600">
+                  <TableCell colSpan={8} className="text-center py-8 text-red-600">
                     {error}
                   </TableCell>
                 </TableRow>
               ) : alerts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No alerts found.
                   </TableCell>
                 </TableRow>
@@ -419,11 +441,22 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
                     </TableCell>
                     <TableCell className="text-center">{getAlertTypeBadge(alert.alert_type)}</TableCell>
                     <TableCell className="text-center text-muted-foreground">{alert.root_id}</TableCell>
+                    <TableCell className="text-center text-muted-foreground">{alert.item_id}</TableCell>
                     <TableCell className="text-center text-muted-foreground">{alert.scan_id}</TableCell>
                     <TableCell>
-                      <span className="font-mono text-sm" title={alert.item_path}>
-                        {truncatePath(alert.item_path, 60)}
-                      </span>
+                      <div
+                        className="group flex items-center gap-2 cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded transition-colors"
+                        onClick={() => {
+                          setSelectedItem({ itemId: alert.item_id, itemPath: alert.item_path, rootId: alert.root_id })
+                          setSheetOpen(true)
+                        }}
+                        title={alert.item_path}
+                      >
+                        <Info className="h-5 w-5 flex-shrink-0 text-muted-foreground group-hover:text-primary transition-colors translate-y-[0.5px]" />
+                        <span className="font-mono text-sm group-hover:text-foreground group-hover:underline transition-colors truncate">
+                          {alert.item_name}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>{getAlertDetails(alert)}</TableCell>
                     <TableCell className="text-center text-sm text-muted-foreground">
@@ -461,6 +494,19 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
           </div>
         </CardContent>
       </Card>
+
+      {/* Item Detail Sheet */}
+      {selectedItem && (
+        <ItemDetailSheet
+          itemId={selectedItem.itemId}
+          itemPath={selectedItem.itemPath}
+          itemType="F"
+          isTombstone={false}
+          rootId={selectedItem.rootId}
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+        />
+      )}
     </div>
   )
 }
