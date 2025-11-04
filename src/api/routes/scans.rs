@@ -58,7 +58,7 @@ pub async fn initiate_scan(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Get the root
-    let root = Root::get_by_id(&db, req.root_id).map_err(|e| {
+    let root = Root::get_by_id(db.conn(), req.root_id).map_err(|e| {
         error!("Failed to get root {}: {}", req.root_id, e);
         StatusCode::NOT_FOUND
     })?;
@@ -107,7 +107,7 @@ pub async fn initiate_scan(
             req.validate_mode
         );
 
-        Scan::create(&db, &root, &analysis_spec).map_err(|e| {
+        Scan::create(db.conn(), &root, &analysis_spec).map_err(|e| {
             error!("Failed to create scan: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?
@@ -140,7 +140,7 @@ pub async fn initiate_scan(
     // Spawn scan in background task
     tokio::task::spawn_blocking(move || {
         let mut db = Database::new().expect("Failed to open database");
-        let root = Root::get_by_id(&db, root_id)
+        let root = Root::get_by_id(db.conn(), root_id)
             .expect("Failed to get root")
             .expect("Root not found");
 

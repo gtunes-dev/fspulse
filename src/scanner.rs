@@ -156,7 +156,7 @@ impl Scanner {
         // If an incomplete scan exists, find it.
         let (root, mut existing_scan) = match (root_id, root_path, last) {
             (Some(root_id), _, _) => {
-                let root = Root::get_by_id(db, root_id.into())?
+                let root = Root::get_by_id(db.conn(), root_id.into())?
                     .ok_or_else(|| FsPulseError::Error(format!("Root id {root_id} not found")))?;
                 // Look for an outstanding scan on the root
                 let scan = Scan::get_latest_for_root(db, root.root_id())?.filter(|s: &Scan| {
@@ -187,7 +187,7 @@ impl Scanner {
             (_, _, true) => {
                 let scan = Scan::get_latest(db)?
                     .ok_or_else(|| FsPulseError::Error("No latest scan found".to_string()))?;
-                let root = Root::get_by_id(db, scan.root_id())?.ok_or_else(|| {
+                let root = Root::get_by_id(db.conn(), scan.root_id())?.ok_or_else(|| {
                     FsPulseError::Error(format!(
                         "No root found for latest Scan Id {}",
                         scan.scan_id()
@@ -404,7 +404,7 @@ impl Scanner {
         root: &Root,
         analysis_spec: &AnalysisSpec,
     ) -> Result<Scan, FsPulseError> {
-        Scan::create(db, root, analysis_spec)
+        Scan::create(db.conn(), root, analysis_spec)
     }
 
     fn do_state_scanning(

@@ -43,9 +43,7 @@ impl Root {
         }
     }
 
-    pub fn get_by_id(db: &Database, root_id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
-
+    pub fn get_by_id(conn: &rusqlite::Connection, root_id: i64) -> Result<Option<Self>, FsPulseError> {
         conn.query_row("SELECT root_path FROM roots WHERE root_id = ?", [root_id], |row| {
             Ok(Root {
                 root_id,

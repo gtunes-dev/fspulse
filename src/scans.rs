@@ -18,18 +18,50 @@ const SQL_LATEST_FOR_ROOT: &str =
         ORDER BY scan_id DESC LIMIT 1";
 
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[repr(i32)]
 pub enum HashMode {
-    None,
-    New,
-    All
+    None = 0,
+    New = 1,
+    All = 2,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+impl HashMode {
+    pub fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::None),
+            1 => Some(Self::New),
+            2 => Some(Self::All),
+            _ => None,
+        }
+    }
+
+    pub fn as_i32(self) -> i32 {
+        self as i32
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[repr(i32)]
 pub enum ValidateMode {
-    None,
-    New,
-    All
+    None = 0,
+    New = 1,
+    All = 2,
+}
+
+impl ValidateMode {
+    pub fn from_i32(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::None),
+            1 => Some(Self::New),
+            2 => Some(Self::All),
+            _ => None,
+        }
+    }
+
+    pub fn as_i32(self) -> i32 {
+        self as i32
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -54,6 +86,12 @@ impl AnalysisSpec {
         }
     }
 
+    pub fn from_modes(hash_mode: HashMode, val_mode: ValidateMode) -> Self {
+        AnalysisSpec {
+            hash_mode,
+            val_mode,
+        }
+    }
 
     pub fn is_hash(&self) -> bool {
         self.hash_mode != HashMode::None
@@ -211,11 +249,11 @@ impl Scan {
     }
 
     pub fn create(
-        db: &Database,
+        conn: &rusqlite::Connection,
         root: &Root,
         analysis_spec: &AnalysisSpec,
     ) -> Result<Self, FsPulseError> {
-        let (scan_id, scan_time): (i64, i64) = db.conn().query_row(
+        let (scan_id, scan_time): (i64, i64) = conn.query_row(
             "INSERT INTO scans (root_id, state, is_hash, hash_all, is_val, val_all, scan_time) 
              VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
              RETURNING scan_id, scan_time",
@@ -241,25 +279,27 @@ impl Scan {
     }
 
     pub fn get_latest(db: &Database) -> Result<Option<Self>, FsPulseError> {
-        Self::get_by_id_or_latest(db, None, None)
+        let conn = db.conn();
+        Self::get_by_id_or_latest(conn, None, None)
     }
 
     /*
     pub fn get_by_id(db: &Database, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
-        Self::get_by_id_or_latest(db, Some(scan_id), None)
+        let conn = db.conn();
+        Self::get_by_id_or_latest(conn, Some(scan_id), None)
     }
     */
 
     pub fn get_latest_for_root(db: &Database, root_id: i64) -> Result<Option<Self>, FsPulseError> {
-        Self::get_by_id_or_latest(db, None, Some(root_id))
+        let conn = db.conn();
+        Self::get_by_id_or_latest(conn, None, Some(root_id))
     }
 
     fn get_by_id_or_latest(
-        db: &Database,
+        conn: &rusqlite::Connection,
         scan_id: Option<i64>,
         root_id: Option<i64>,
     ) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
 
         let (query, query_param) = match (scan_id, root_id) {
             (Some(_), _) => (SQL_SCAN_ID_OR_LATEST, scan_id),
@@ -816,17 +856,17 @@ pub struct ScanStats {
 impl ScanStats {
     /// Get statistics for a specific scan ID
     pub fn get_for_scan(db: &Database, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
+        let conn = db.conn();
+
         // Use existing function to get scan
-        let scan = match Scan::get_by_id_or_latest(db, Some(scan_id), None)? {
+        let scan = match Scan::get_by_id_or_latest(conn, Some(scan_id), None)? {
             Some(s) => s,
             None => return Ok(None),
         };
 
         // Use existing function to get root path
-        let root = crate::roots::Root::get_by_id(db, scan.root_id())?
+        let root = crate::roots::Root::get_by_id(conn, scan.root_id())?
             .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", scan.root_id())))?;
-
-        let conn = db.conn();
 
         // Get change statistics broken down by file vs folder
         let changes: (i64, i64, i64, i64, i64, i64) = conn.query_row(
@@ -889,8 +929,10 @@ impl ScanStats {
 
     /// Get statistics for the most recent scan across all roots
     pub fn get_latest(db: &Database) -> Result<Option<Self>, FsPulseError> {
+        let conn = db.conn();
+
         // Use existing function with None to get latest scan
-        let scan = match Scan::get_by_id_or_latest(db, None, None)? {
+        let scan = match Scan::get_by_id_or_latest(conn, None, None)? {
             Some(s) => s,
             None => return Ok(None),
         };

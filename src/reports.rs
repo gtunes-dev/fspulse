@@ -90,7 +90,7 @@ impl Reports {
             QueryProcessor::execute_query_and_print(db, query)?;
         } else if let Some(root_id) = root_id {
             // TODO: Does this even make sense???
-            let root = Root::get_by_id(db, root_id.into())?
+            let root = Root::get_by_id(db.conn(), root_id.into())?
                 .ok_or_else(|| FsPulseError::Error(format!("Root Id {root_id} not found")))?;
 
             let scan = Scan::get_latest_for_root(db, root.root_id())?.ok_or_else(|| {
@@ -320,7 +320,7 @@ impl Reports {
         let label = Style::new().white().bold();
         let command = Style::new().green();
 
-        let root = Root::get_by_id(db, scan.root_id())?
+        let root = Root::get_by_id(db.conn(), scan.root_id())?
             .ok_or_else(|| FsPulseError::Error("Root Not Found".to_string()))?;
 
         let changes = ChangeCounts::get_by_scan_id(db, scan.scan_id())?;

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::database::Database;
 use crate::error::FsPulseError;
+use crate::scans::{HashMode, ValidateMode};
 use rusqlite::OptionalExtension;
 
 /// Schedule type: Daily, Weekly, Interval, or Monthly
@@ -62,54 +63,6 @@ impl IntervalUnit {
             Self::Days => value * 86400,
             Self::Weeks => value * 604800,
         }
-    }
-}
-
-/// Hash mode for scans (matches existing HashMode in scans.rs)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(i32)]
-pub enum HashMode {
-    None = 0,
-    New = 1,
-    All = 2,
-}
-
-impl HashMode {
-    pub fn from_i32(value: i32) -> Option<Self> {
-        match value {
-            0 => Some(Self::None),
-            1 => Some(Self::New),
-            2 => Some(Self::All),
-            _ => None,
-        }
-    }
-
-    pub fn as_i32(self) -> i32 {
-        self as i32
-    }
-}
-
-/// Validate mode for scans (matches existing ValidateMode in scans.rs)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(i32)]
-pub enum ValidateMode {
-    None = 0,
-    New = 1,
-    All = 2,
-}
-
-impl ValidateMode {
-    pub fn from_i32(value: i32) -> Option<Self> {
-        match value {
-            0 => Some(Self::None),
-            1 => Some(Self::New),
-            2 => Some(Self::All),
-            _ => None,
-        }
-    }
-
-    pub fn as_i32(self) -> i32 {
-        self as i32
     }
 }
 
@@ -597,9 +550,7 @@ impl Schedule {
     }
 
     /// Get a schedule by ID
-    pub fn get_by_id(db: &Database, schedule_id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
-
+    pub fn get_by_id(conn: &rusqlite::Connection, schedule_id: i64) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
             "SELECT
                 schedule_id, root_id, enabled, schedule_name, schedule_type,
@@ -809,7 +760,7 @@ impl Schedule {
         // If enabling, we need to recalculate next_scan_time
         // Get the schedule to calculate next_scan_time BEFORE transaction
         let next_scan_time = if enabled {
-            let schedule = Self::get_by_id(db, schedule_id)?
+            let schedule = Self::get_by_id(db.conn(), schedule_id)?
                 .ok_or_else(|| FsPulseError::Error(format!("Schedule {} not found", schedule_id)))?;
 
             Some(schedule.calculate_next_scan_time(now)
@@ -854,7 +805,7 @@ impl Schedule {
                 } else {
                     // Create new queue entry (shouldn't normally happen, but handle it)
                     // Need to get schedule details
-                    let schedule = Self::get_by_id_from_conn(conn, schedule_id)?
+                    let schedule = Self::get_by_id(conn, schedule_id)?
                         .ok_or_else(|| FsPulseError::Error(format!("Schedule {} not found", schedule_id)))?;
 
                     conn.execute(
@@ -885,48 +836,6 @@ impl Schedule {
 
             Ok(())
         })
-    }
-
-    /// Helper to get schedule by ID from within a connection (for transactions)
-    fn get_by_id_from_conn(conn: &rusqlite::Connection, schedule_id: i64) -> Result<Option<Self>, FsPulseError> {
-        conn.query_row(
-            "SELECT
-                schedule_id, root_id, enabled, schedule_name, schedule_type,
-                time_of_day, days_of_week, day_of_month,
-                interval_value, interval_unit,
-                hash_mode, validate_mode,
-                created_at, updated_at
-            FROM scan_schedules
-            WHERE schedule_id = ?",
-            [schedule_id],
-            |row| {
-                Ok(Schedule {
-                    schedule_id: row.get(0)?,
-                    root_id: row.get(1)?,
-                    enabled: row.get(2)?,
-                    schedule_name: row.get(3)?,
-                    schedule_type: ScheduleType::from_i32(row.get(4)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(4, "schedule_type".to_string(), rusqlite::types::Type::Integer))?,
-                    time_of_day: row.get(5)?,
-                    days_of_week: row.get(6)?,
-                    day_of_month: row.get(7)?,
-                    interval_value: row.get(8)?,
-                    interval_unit: row.get::<_, Option<i32>>(9)?
-                        .map(|v| IntervalUnit::from_i32(v).ok_or_else(||
-                            rusqlite::Error::InvalidColumnType(9, "interval_unit".to_string(), rusqlite::types::Type::Integer)
-                        ))
-                        .transpose()?,
-                    hash_mode: HashMode::from_i32(row.get(10)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(10, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
-                    validate_mode: ValidateMode::from_i32(row.get(11)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(11, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
-                    created_at: row.get(12)?,
-                    updated_at: row.get(13)?,
-                })
-            },
-        )
-        .optional()
-        .map_err(FsPulseError::DatabaseError)
     }
 
     /// Delete a schedule and its associated queue entry
