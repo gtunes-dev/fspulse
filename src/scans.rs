@@ -295,7 +295,7 @@ impl Scan {
         Self::get_by_id_or_latest(conn, None, Some(root_id))
     }
 
-    fn get_by_id_or_latest(
+    pub fn get_by_id_or_latest(
         conn: &rusqlite::Connection,
         scan_id: Option<i64>,
         root_id: Option<i64>,

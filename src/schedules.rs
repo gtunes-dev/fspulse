@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::scans::{HashMode, ValidateMode};
+use crate::scans::{AnalysisSpec, HashMode, Scan, ValidateMode};
+use crate::roots::Root;
 use rusqlite::OptionalExtension;
 
 /// Schedule type: Daily, Weekly, Interval, or Monthly
@@ -1057,75 +1058,98 @@ impl QueueEntry {
         Ok(entries)
     }
 
-    /// Get the next work item to run (manual first, then scheduled by next_scan_time)
-    /// Returns the most urgent work item (manual scans have priority, then most overdue scheduled)
-    pub fn get_next_work(db: &Database) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
+    /// Get the next scan to run, creating it atomically if needed
+    ///
+    /// This function handles the complete scan initiation workflow:
+    /// 1. Checks for incomplete scans (resume case) - returns existing scan
+    /// 2. Finds highest priority work (manual first, then scheduled due)
+    /// 3. Creates scan record for the work
+    /// 4. Updates queue entry with scan_id
+    /// 5. For scheduled scans: calculates next_scan_time (fail-fast before crashes)
+    ///
+    /// Returns the Scan object ready to be executed, or None if no work available.
+    pub fn get_next_work(db: &Database) -> Result<Option<Scan>, FsPulseError> {
         let now = chrono::Utc::now().timestamp();
 
-        // First, check for manual scans (always take priority)
-        let manual = conn.query_row(
-            "SELECT
-                queue_id, root_id, schedule_id, scan_id, next_scan_time,
-                hash_mode, validate_mode, source, created_at
-            FROM scan_queue
-            WHERE source = ?
-            ORDER BY next_scan_time ASC, queue_id ASC
-            LIMIT 1",
-            [SourceType::Manual.as_i32()],
-            |row| {
-                Ok(QueueEntry {
-                    queue_id: row.get(0)?,
-                    root_id: row.get(1)?,
-                    schedule_id: row.get(2)?,
-                    scan_id: row.get(3)?,
-                    next_scan_time: row.get(4)?,
-                    hash_mode: HashMode::from_i32(row.get(5)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(5, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
-                    validate_mode: ValidateMode::from_i32(row.get(6)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(6, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
-                    source: SourceType::from_i32(row.get(7)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(7, "source".to_string(), rusqlite::types::Type::Integer))?,
-                    created_at: row.get(8)?,
-                })
-            },
-        )
-        .optional()
-        .map_err(FsPulseError::DatabaseError)?;
+        db.immediate_transaction(|conn| {
+            // Step 1: Check if ANY scan is currently running (resume case)
+            let running_scan_id: Option<i64> = conn.query_row(
+                "SELECT scan_id FROM scan_queue WHERE scan_id IS NOT NULL LIMIT 1",
+                [],
+                |row| row.get(0)
+            )
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?;
 
-        if manual.is_some() {
-            return Ok(manual);
-        }
+            if let Some(scan_id) = running_scan_id {
+                // Resume case: return existing incomplete scan
+                return Scan::get_by_id_or_latest(conn, Some(scan_id), None);
+            }
 
-        // No manual scans, check for scheduled scans that are due
-        conn.query_row(
-            "SELECT
-                queue_id, root_id, schedule_id, scan_id, next_scan_time,
-                hash_mode, validate_mode, source, created_at
-            FROM scan_queue
-            WHERE source = ? AND next_scan_time <= ?
-            ORDER BY next_scan_time ASC, queue_id ASC
-            LIMIT 1",
-            rusqlite::params![SourceType::Scheduled.as_i32(), now],
-            |row| {
-                Ok(QueueEntry {
-                    queue_id: row.get(0)?,
-                    root_id: row.get(1)?,
-                    schedule_id: row.get(2)?,
-                    scan_id: row.get(3)?,
-                    next_scan_time: row.get(4)?,
-                    hash_mode: HashMode::from_i32(row.get(5)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(5, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
-                    validate_mode: ValidateMode::from_i32(row.get(6)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(6, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
-                    source: SourceType::from_i32(row.get(7)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(7, "source".to_string(), rusqlite::types::Type::Integer))?,
-                    created_at: row.get(8)?,
-                })
-            },
-        )
-        .optional()
-        .map_err(FsPulseError::DatabaseError)
+            // Step 2: Find highest priority work (manual first, then scheduled due)
+            // Single query with priority: manual scans (source=0) always first,
+            // then scheduled scans (source=1) only if due
+            let work = conn.query_row(
+                "SELECT queue_id, root_id, schedule_id, hash_mode, validate_mode
+                 FROM scan_queue
+                 WHERE scan_id IS NULL AND (source = ? OR next_scan_time <= ?)
+                 ORDER BY source ASC, next_scan_time ASC, queue_id ASC
+                 LIMIT 1",
+                rusqlite::params![SourceType::Manual.as_i32(), now],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,  // queue_id
+                        row.get::<_, i64>(1)?,  // root_id
+                        row.get::<_, Option<i64>>(2)?,  // schedule_id
+                        HashMode::from_i32(row.get(3)?)
+                            .ok_or_else(|| rusqlite::Error::InvalidColumnType(3, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
+                        ValidateMode::from_i32(row.get(4)?)
+                            .ok_or_else(|| rusqlite::Error::InvalidColumnType(4, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
+                    ))
+                }
+            )
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?;
+
+            let work = match work {
+                Some(w) => w,
+                None => return Ok(None), // No work available
+            };
+
+            let (queue_id, root_id, schedule_id, hash_mode, validate_mode) = work;
+
+            // Step 3: Get root for scan creation
+            let root = Root::get_by_id(conn, root_id)?
+                .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", root_id)))?;
+
+            // Step 4: Create analysis spec and scan
+            let analysis_spec = AnalysisSpec::from_modes(hash_mode, validate_mode);
+            let scan = Scan::create(conn, &root, &analysis_spec)?;
+
+            // Step 5: Update queue entry with scan_id
+            conn.execute(
+                "UPDATE scan_queue SET scan_id = ? WHERE queue_id = ?",
+                rusqlite::params![scan.scan_id(), queue_id]
+            )
+            .map_err(FsPulseError::DatabaseError)?;
+
+            // Step 6: For scheduled scans, calculate and set next_scan_time NOW
+            if let Some(schedule_id) = schedule_id {
+                let schedule = Schedule::get_by_id(conn, schedule_id)?
+                    .ok_or_else(|| FsPulseError::Error(format!("Schedule {} not found", schedule_id)))?;
+
+                let next_time = schedule.calculate_next_scan_time(now)
+                    .map_err(|e| FsPulseError::Error(format!("Failed to calculate next scan time: {}", e)))?;
+
+                conn.execute(
+                    "UPDATE scan_queue SET next_scan_time = ? WHERE queue_id = ?",
+                    rusqlite::params![next_time, queue_id]
+                )
+                .map_err(FsPulseError::DatabaseError)?;
+            }
+
+            Ok(Some(scan))
+        })
     }
 
     /// Set scan_id when ScanManager starts a scan
