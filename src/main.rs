@@ -14,6 +14,7 @@ mod reports;
 mod roots;
 mod scanner;
 mod scans;
+mod schedules;
 mod schema;
 mod server;
 mod sort;

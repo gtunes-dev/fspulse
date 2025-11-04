@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '8');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '9');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -130,6 +130,47 @@ CREATE TABLE IF NOT EXISTS alerts (
   val_error TEXT DEFAULT NULL
 );
 
+-- Scan schedules table stores recurring scan configurations
+CREATE TABLE IF NOT EXISTS scan_schedules (
+    schedule_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    root_id INTEGER NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    schedule_name TEXT NOT NULL,
+    schedule_type INTEGER NOT NULL CHECK(schedule_type IN (0, 1, 2, 3)),  -- 0=daily, 1=weekly, 2=interval, 3=monthly
+    time_of_day TEXT,                                                   -- 'HH:MM' format for daily/weekly/monthly
+    days_of_week TEXT,                                                  -- JSON array for weekly schedules
+    day_of_month INTEGER,                                               -- Day (1-31) for monthly schedules
+    interval_value INTEGER,                                             -- For interval schedules
+    interval_unit INTEGER CHECK(interval_unit IN (0, 1, 2, 3)),       -- 0=minutes, 1=hours, 2=days, 3=weeks
+    hash_mode INTEGER NOT NULL CHECK(hash_mode IN (0, 1, 2)),
+    validate_mode INTEGER NOT NULL CHECK(validate_mode IN (0, 1, 2)),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (root_id) REFERENCES roots(root_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_scan_schedules_enabled ON scan_schedules(enabled);
+CREATE INDEX IF NOT EXISTS idx_scan_schedules_root ON scan_schedules(root_id);
+
+-- Scan queue table stores active work items (both scheduled and manual scans)
+CREATE TABLE IF NOT EXISTS scan_queue (
+    queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    root_id INTEGER NOT NULL,
+    schedule_id INTEGER,
+    scan_id INTEGER,                                                   -- NULL until scan starts, set by ScanManager
+    next_scan_time INTEGER,                                            -- Unix timestamp (UTC) when work should run, NULL when disabled
+    hash_mode INTEGER NOT NULL CHECK(hash_mode IN (0, 1, 2)),
+    validate_mode INTEGER NOT NULL CHECK(validate_mode IN (0, 1, 2)),
+    source INTEGER NOT NULL CHECK(source IN (0, 1)),                   -- 0=manual, 1=scheduled
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (root_id) REFERENCES roots(root_id),
+    FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id),
+    FOREIGN KEY (scan_id) REFERENCES scans(scan_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_scan_queue_source_next ON scan_queue(source, next_scan_time);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_scan_queue_schedule ON scan_queue(schedule_id) WHERE schedule_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_scan_queue_root ON scan_queue(root_id);
 
 COMMIT;
 "#;
