@@ -1328,6 +1328,83 @@ impl QueueEntry {
 
         Ok(())
     }
+
+    /// Get upcoming scans for display in UI (excludes currently running scan)
+    /// Returns queue entries with root_path and schedule_name joined
+    /// Limited to next 10 upcoming scans, ordered by priority (manual first, then by time)
+    pub fn get_upcoming_scans(db: &Database, limit: i64) -> Result<Vec<UpcomingScan>, FsPulseError> {
+        let now = chrono::Utc::now().timestamp();
+        let conn = db.conn();
+
+        let mut stmt = conn.prepare(
+            "SELECT
+                q.queue_id,
+                q.root_id,
+                r.root_path,
+                q.schedule_id,
+                s.schedule_name,
+                q.next_scan_time,
+                q.source
+             FROM scan_queue q
+             INNER JOIN roots r ON q.root_id = r.root_id
+             LEFT JOIN scan_schedules s ON q.schedule_id = s.schedule_id
+             WHERE q.scan_id IS NULL
+               AND q.next_scan_time IS NOT NULL
+             ORDER BY q.source ASC, q.next_scan_time ASC, q.queue_id ASC
+             LIMIT ?"
+        )
+        .map_err(FsPulseError::DatabaseError)?;
+
+        let scans = stmt.query_map([limit], |row| {
+            let next_scan_time: i64 = row.get(5)?;
+            let source: i32 = row.get(6)?;
+
+            Ok(UpcomingScan {
+                queue_id: row.get(0)?,
+                root_id: row.get(1)?,
+                root_path: row.get(2)?,
+                schedule_id: row.get(3)?,
+                schedule_name: row.get(4)?,
+                next_scan_time,
+                source: SourceType::from_i32(source)
+                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(6, "source".to_string(), rusqlite::types::Type::Integer))?,
+                is_queued: next_scan_time <= now,
+            })
+        })
+        .map_err(FsPulseError::DatabaseError)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(FsPulseError::DatabaseError)?;
+
+        Ok(scans)
+    }
+}
+
+/// Count active schedules for a specific root
+/// Returns the number of enabled schedules for the given root
+pub fn count_schedules_for_root(db: &Database, root_id: i64) -> Result<i64, FsPulseError> {
+    let conn = db.conn();
+
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM scan_schedules WHERE root_id = ? AND enabled = 1",
+        [root_id],
+        |row| row.get(0)
+    )
+    .map_err(FsPulseError::DatabaseError)?;
+
+    Ok(count)
+}
+
+/// Information about an upcoming scan for UI display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpcomingScan {
+    pub queue_id: i64,
+    pub root_id: i64,
+    pub root_path: String,
+    pub schedule_id: Option<i64>,
+    pub schedule_name: Option<String>,  // NULL for manual scans
+    pub next_scan_time: i64,  // Unix timestamp
+    pub source: SourceType,
+    pub is_queued: bool,  // true if next_scan_time <= now (waiting to start)
 }
 
 #[cfg(test)]

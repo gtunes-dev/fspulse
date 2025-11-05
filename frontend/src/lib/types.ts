@@ -174,6 +174,7 @@ export interface RootWithScan {
   root_id: number
   root_path: string
   last_scan?: LastScanInfo
+  schedule_count: number  // Number of active schedules for this root
 }
 
 // Scan scheduling

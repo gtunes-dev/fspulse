@@ -2,9 +2,9 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ScanManagerProvider } from './contexts/ScanManagerContext'
 import { Header } from './components/Header'
 import { Sidebar } from './components/Sidebar'
-import { HomePage } from './pages/HomePage'
+import { ActivityPage } from './pages/ActivityPage'
+import { MonitorPage } from './pages/MonitorPage'
 import { ExplorePage } from './pages/ExplorePage'
-import { ScanPage } from './pages/ScanPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { InsightsPage } from './pages/InsightsPage'
 import { BrowsePage } from './pages/BrowsePage'
@@ -19,9 +19,9 @@ function App() {
             <Sidebar />
             <main className="flex-1 overflow-auto bg-background p-6">
               <Routes>
-                <Route path="/" element={<HomePage />} />
+                <Route path="/" element={<ActivityPage />} />
+                <Route path="/monitor" element={<MonitorPage />} />
                 <Route path="/explore/*" element={<ExplorePage />} />
-                <Route path="/scan" element={<ScanPage />} />
                 <Route path="/alerts" element={<AlertsPage />} />
                 <Route path="/insights/*" element={<InsightsPage />} />
                 <Route path="/browse" element={<BrowsePage />} />

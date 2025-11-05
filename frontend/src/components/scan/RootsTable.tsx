@@ -1,20 +1,28 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, CalendarCog, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { DeleteRootDialog } from '@/components/scan/DeleteRootDialog'
 import { formatDateRelative } from '@/lib/dateUtils'
 import type { RootWithScan } from '@/lib/types'
 
 interface RootsTableProps {
   onAddRoot: () => void
-  onScanClick: (rootId: number, isIncomplete: boolean) => void
   isScanning: boolean
 }
 
 const ITEMS_PER_PAGE = 25
 
-export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTableProps) {
+export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -67,6 +75,25 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
   const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalCount)
   const paginatedRoots = roots.slice(startIndex, endIndex)
 
+  // Helper function to get staleness indicator based on scan age
+  // Option A: 0-14 days (none), 14-30 (> 2 weeks), 30-365 (> 1 month), > 365 (> 1 year)
+  const getStalenessIndicator = (timestamp: number): string | null => {
+    const now = Date.now() / 1000  // Convert to seconds
+    const ageInSeconds = now - timestamp
+    const ageInDays = ageInSeconds / 86400
+
+    if (ageInDays < 14) return null
+    if (ageInDays < 30) return '(> 2 weeks)'
+    if (ageInDays < 365) return '(> 1 month)'
+    return '(> 1 year)'
+  }
+
+  // Helper to format file/folder counts
+  const formatCounts = (fileCount: number | undefined, folderCount: number | undefined): string => {
+    if (fileCount === undefined || folderCount === undefined) return ''
+    return `${fileCount.toLocaleString()} files, ${folderCount.toLocaleString()} folders`
+  }
+
   if (loading) {
     return (
       <Card>
@@ -81,173 +108,246 @@ export function RootsTable({ onAddRoot, onScanClick, isScanning }: RootsTablePro
     <>
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Roots</CardTitle>
-          <button
-            onClick={onAddRoot}
-            className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
-          >
-            <Plus className="h-4 w-4" />
-            Add Root
-          </button>
-        </div>
+        <CardTitle>Roots</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {/* Action Bar */}
+        <div className="flex items-center">
+          <Button onClick={onAddRoot} size="default">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Root
+          </Button>
+        </div>
+
         {paginatedRoots.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             No roots found. Click "Add Root" to get started.
           </div>
         ) : (
-          <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <tbody>
+          <>
+            {/* Bordered Table Container */}
+            <div className="border border-border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader className="bg-muted">
+                <TableRow>
+                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide">Last Scan</TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide">Schedules</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {paginatedRoots.map((root) => {
                   const scanInfo = root.last_scan
-                  const nonTerminalStates = ['Pending', 'Scanning', 'Sweeping', 'Analyzing']
-                  const isIncomplete = scanInfo ? nonTerminalStates.includes(scanInfo.state) : false
+                  const scheduleCount = root.schedule_count
 
-                  let buttonText = 'Scan'
-                  if (isIncomplete) {
-                    buttonText = 'Resume'
-                  }
+                  // Build Last Scan content
+                  let lastScanContent: JSX.Element
+                  if (!scanInfo) {
+                    lastScanContent = (
+                      <span className="text-muted-foreground">Never scanned</span>
+                    )
+                  } else {
+                    const staleness = getStalenessIndicator(scanInfo.scan_time)
+                    const dateText = formatDateRelative(scanInfo.scan_time)
+                    const dateWithStaleness = staleness ? `${dateText} ${staleness}` : dateText
 
-                  // Determine if we should show the status line (Error, Stopped, or Incomplete)
-                  let showStatusLine = false
-                  let statusBadgeText = ''
-                  let statusBadgeVariant: 'error' | 'warning' = 'error'
-                  let statusMessage = ''
-
-                  if (scanInfo) {
-                    if (scanInfo.state === 'Error') {
-                      showStatusLine = true
-                      statusBadgeText = 'Error'
-                      statusBadgeVariant = 'error'
-                      statusMessage = scanInfo.error || 'Unknown error'
+                    if (scanInfo.state === 'Completed') {
+                      lastScanContent = (
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            className="text-left hover:underline"
+                            onClick={() => {
+                              // TODO: Open ScanDetailSheet (Phase 3)
+                              console.log('Scan detail clicked:', scanInfo.scan_id)
+                            }}
+                          >
+                            <span>{dateWithStaleness}</span>
+                          </button>
+                          <span className="text-sm text-muted-foreground">
+                            {formatCounts(scanInfo.file_count, scanInfo.folder_count)}
+                          </span>
+                        </div>
+                      )
+                    } else if (scanInfo.state === 'Error') {
+                      lastScanContent = (
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            className="text-left hover:underline"
+                            onClick={() => {
+                              // TODO: Open ScanDetailSheet (Phase 3)
+                              console.log('Scan detail clicked:', scanInfo.scan_id)
+                            }}
+                          >
+                            <span>{dateWithStaleness}</span>
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="error">Error</Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {scanInfo.error || 'Unknown error'}
+                            </span>
+                          </div>
+                        </div>
+                      )
                     } else if (scanInfo.state === 'Stopped') {
-                      showStatusLine = true
-                      statusBadgeText = 'Stopped'
-                      statusBadgeVariant = 'warning'
-                      statusMessage = 'Stopped by user'
-                    } else if (isIncomplete) {
-                      showStatusLine = true
-                      statusBadgeText = 'Incomplete'
-                      statusBadgeVariant = 'warning'
-                      statusMessage = 'This scan did not complete and can be resumed'
+                      lastScanContent = (
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            className="text-left hover:underline"
+                            onClick={() => {
+                              // TODO: Open ScanDetailSheet (Phase 3)
+                              console.log('Scan detail clicked:', scanInfo.scan_id)
+                            }}
+                          >
+                            <span>{dateWithStaleness}</span>
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="warning">Stopped</Badge>
+                            {scanInfo.file_count !== undefined && (
+                              <span className="text-sm text-muted-foreground">
+                                {scanInfo.file_count.toLocaleString()} files scanned
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    } else if (['Pending', 'Scanning', 'Sweeping', 'Analyzing'].includes(scanInfo.state)) {
+                      lastScanContent = (
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            className="text-left hover:underline"
+                            onClick={() => {
+                              // TODO: Open ScanDetailSheet (Phase 3)
+                              console.log('Scan detail clicked:', scanInfo.scan_id)
+                            }}
+                          >
+                            <span>{dateWithStaleness}</span>
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="warning">Incomplete</Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {scanInfo.state} phase
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    } else {
+                      // Fallback for unknown states
+                      lastScanContent = (
+                        <button
+                          className="text-left hover:underline"
+                          onClick={() => {
+                            // TODO: Open ScanDetailSheet (Phase 3)
+                            console.log('Scan detail clicked:', scanInfo.scan_id)
+                          }}
+                        >
+                          <span>{dateWithStaleness}</span>
+                        </button>
+                      )
                     }
                   }
 
                   return (
-                    <tr key={root.root_id} className="border-b border-border last:border-b-0">
-                      <td className="p-0">
-                        <div className="flex items-center gap-4 py-3 px-4">
-                          {/* Delete Button */}
-                          <div className="flex-shrink-0">
-                            <button
+                    <TableRow key={root.root_id}>
+                      {/* Delete Icon Column */}
+                      <TableCell className="w-10 pr-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={isScanning}
+                          onClick={() => {
+                            setSelectedRoot({ id: root.root_id, path: root.root_path })
+                            setDeleteDialogOpen(true)
+                          }}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </Button>
+                      </TableCell>
+
+                      {/* Root Path Column */}
+                      <TableCell>
+                        <button
+                          className="font-medium text-left hover:underline hover:text-primary"
+                          onClick={() => {
+                            // TODO: Open RootDetailSheet (Phase 3)
+                            console.log('Root detail clicked:', root.root_id)
+                          }}
+                        >
+                          {root.root_path}
+                        </button>
+                      </TableCell>
+
+                      {/* Last Scan Column */}
+                      <TableCell>
+                        {lastScanContent}
+                      </TableCell>
+
+                      {/* Schedules Column */}
+                      <TableCell>
+                        {scheduleCount === 0 ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">None</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
                               onClick={() => {
-                                setSelectedRoot({ id: root.root_id, path: root.root_path })
-                                setDeleteDialogOpen(true)
+                                // TODO: Implement schedule creation (Phase 2)
+                                console.log('Create schedule clicked:', root.root_id)
                               }}
-                              disabled={isScanning}
-                              className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              title="Delete root"
+                              className="text-xs"
                             >
-                              <Trash2 className="h-5 w-5" />
-                            </button>
+                              + Create
+                            </Button>
                           </div>
-
-                          {/* Vertical Separator */}
-                          <div className="w-px self-stretch bg-border" />
-
-                          {/* Scan Button */}
-                          <div className="flex-shrink-0">
-                            <button
-                              onClick={() => onScanClick(root.root_id, isIncomplete)}
-                              disabled={isScanning}
-                              className="px-4 py-1.5 min-w-[80px] rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-                            >
-                              {buttonText}
-                            </button>
-                          </div>
-
-                          {/* Vertical Separator */}
-                          <div className="w-px self-stretch bg-border" />
-
-                          {/* Root Info (2-3 lines) */}
-                          <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                            {/* Line 1: Root path and last scan time */}
-                            <div className="flex items-baseline gap-3 flex-wrap">
-                              <span className="font-medium text-base">
-                                {root.root_path}
-                              </span>
-                              {scanInfo && (
-                                <span className="text-sm text-muted-foreground">
-                                  Last Scan: {formatDateRelative(scanInfo.scan_time)}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Line 2: Status (optional - only if error, stopped, or incomplete) */}
-                            {showStatusLine && (
-                              <div className="flex items-center gap-2">
-                                <Badge variant={statusBadgeVariant}>
-                                  {statusBadgeText}
-                                </Badge>
-                                <span className="text-sm text-muted-foreground font-mono">
-                                  {statusMessage}
-                                </span>
-                              </div>
-                            )}
-
-                            {/* Line 3: Schedule (always shown, but not implemented yet) */}
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => {
-                                  // TODO: Implement scan scheduling
-                                }}
-                                className="inline-flex items-center justify-center rounded-md p-1.5 hover:bg-accent hover:text-accent-foreground transition-colors"
-                                title="Schedule scan (coming soon)"
-                              >
-                                <CalendarCog className="h-5 w-5" />
-                              </button>
-                              <span className="text-sm text-muted-foreground">
-                                No scheduled scans
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              // TODO: Implement schedule management (Phase 2)
+                              console.log('Manage schedules clicked:', root.root_id)
+                            }}
+                          >
+                            {scheduleCount} {scheduleCount === 1 ? 'schedule' : 'schedules'}
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
                   )
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
-        )}
 
-        {/* Pagination */}
-        {totalCount > ITEMS_PER_PAGE && (
-          <div className="flex items-center justify-between mt-4">
-            <div className="text-sm text-muted-foreground">
-              Showing {startIndex + 1} - {endIndex} of {totalCount} roots
+          {/* Pagination */}
+          {totalCount > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between pt-4">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} - {endIndex} of {totalCount} roots
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => endIndex < totalCount && setCurrentPage(p => p + 1)}
+                  disabled={endIndex >= totalCount}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 border border-border rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent hover:text-accent-foreground transition-colors"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => endIndex < totalCount && setCurrentPage(p => p + 1)}
-                disabled={endIndex >= totalCount}
-                className="px-3 py-1.5 border border-border rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent hover:text-accent-foreground transition-colors"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+          )}
+        </>
+      )}
       </CardContent>
     </Card>
 

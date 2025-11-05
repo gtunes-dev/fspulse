@@ -6,6 +6,7 @@ use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::scans::Scan;
+use crate::schedules;
 
 /// Request structure for creating a new root
 #[derive(Debug, Deserialize)]
@@ -32,6 +33,7 @@ pub struct RootWithScan {
     pub root_id: i64,
     pub root_path: String,
     pub last_scan: Option<ScanInfo>,
+    pub schedule_count: i64,  // Number of active schedules for this root
 }
 
 /// Scan information subset for display
@@ -218,10 +220,18 @@ pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCo
             }
         };
 
+        // Count active schedules for this root
+        let schedule_count = schedules::count_schedules_for_root(&db, root_id)
+            .unwrap_or_else(|e| {
+                error!("Failed to count schedules for root {}: {}", root_id, e);
+                0 // Continue with 0 count rather than failing
+            });
+
         results.push(RootWithScan {
             root_id,
             root_path,
             last_scan,
+            schedule_count,
         });
     }
 

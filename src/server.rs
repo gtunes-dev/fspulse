@@ -126,6 +126,9 @@ impl WebServer {
             .route("/api/roots/with-scans", get(api::roots::get_roots_with_scans))
             .route("/api/roots/{root_id}", delete(api::roots::delete_root))
 
+            // Schedule endpoints
+            .route("/api/schedules/upcoming", get(api::schedules::get_upcoming_scans))
+
             // WebSocket routes
             .route("/ws/scans/progress", get(api::scans::scan_progress_ws))
 

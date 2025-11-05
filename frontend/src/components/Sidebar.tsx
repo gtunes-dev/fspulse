@@ -1,4 +1,4 @@
-import { Home, FolderSearch, TriangleAlert, Lightbulb, Database, Settings, FolderTree } from 'lucide-react'
+import { Activity, Target, TriangleAlert, Lightbulb, Database, Settings, FolderTree } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 
@@ -6,8 +6,8 @@ export function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(false)
 
   const mainNavItems = [
-    { icon: Home, label: 'Home', to: '/', end: true },
-    { icon: FolderSearch, label: 'Scan', to: '/scan', end: true },
+    { icon: Activity, label: 'Activity', to: '/', end: true },
+    { icon: Target, label: 'Monitor', to: '/monitor', end: false },
     { icon: FolderTree, label: 'Browse', to: '/browse', end: true },
     { icon: TriangleAlert, label: 'Alerts', to: '/alerts', end: true },
     { icon: Lightbulb, label: 'Insights', to: '/insights/scan-trends', end: false },

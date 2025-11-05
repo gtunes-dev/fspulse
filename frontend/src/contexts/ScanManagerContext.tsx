@@ -9,6 +9,7 @@ interface ScanManagerContextType {
   activeScans: Map<number, ScanData>
   currentScanId: number | null
   isScanning: boolean
+  lastScanCompletedAt: number | null
   connectScanWebSocket: (scanId: number, rootPath: string) => void
   stopScan: (scanId: number) => Promise<void>
   checkForActiveScan: () => Promise<void>
@@ -19,6 +20,7 @@ const ScanManagerContext = createContext<ScanManagerContextType | null>(null)
 export function ScanManagerProvider({ children }: { children: React.ReactNode }) {
   const [activeScans, setActiveScans] = useState<Map<number, ScanData>>(new Map())
   const [currentScanId, setCurrentScanId] = useState<number | null>(null)
+  const [lastScanCompletedAt, setLastScanCompletedAt] = useState<number | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const pingIntervalRef = useRef<number | null>(null)
@@ -125,6 +127,9 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
       if (statusValue && ['completed', 'stopped', 'error'].includes(statusValue)) {
         if (!completedScansRef.current.has(state.scan_id)) {
           completedScansRef.current.add(state.scan_id)
+
+          // Notify that a scan has completed (triggers refresh in RecentScansTable)
+          setLastScanCompletedAt(Date.now())
 
           // Remove scan after delay
           const delay = statusValue === 'error' ? 3000 : 2000
@@ -279,6 +284,7 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
     activeScans,
     currentScanId,
     isScanning,
+    lastScanCompletedAt,
     connectScanWebSocket,
     stopScan,
     checkForActiveScan,

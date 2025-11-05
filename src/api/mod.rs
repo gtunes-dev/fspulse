@@ -7,3 +7,4 @@ pub use routes::alerts;
 pub use routes::scans;
 pub use routes::roots;
 pub use routes::items;
+pub use routes::schedules;
