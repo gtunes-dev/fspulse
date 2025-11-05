@@ -63,8 +63,8 @@ impl WebServer {
 
         // Start background queue processor
         tokio::spawn(async {
-            log::info!("Starting background queue processor (polling every 5 seconds)");
-            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            log::info!("Starting background queue processor (polling every 20 seconds)");
+            let mut interval = tokio::time::interval(Duration::from_secs(20));
 
             loop {
                 interval.tick().await;
@@ -117,7 +117,7 @@ impl WebServer {
             .route("/api/items/{item_id}/folder-size", get(api::items::get_folder_size))
 
             // Scan endpoints
-            .route("/api/scans/start", post(api::scans::initiate_scan))
+            .route("/api/scans/schedule", post(api::scans::schedule_scan))
             .route("/api/scans/current", get(api::scans::get_current_scan))
             .route("/api/scans/{scan_id}/cancel", post(api::scans::cancel_scan))
 

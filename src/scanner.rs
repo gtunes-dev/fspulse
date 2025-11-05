@@ -89,7 +89,12 @@ impl Scanner {
 
         // Wrap scan execution with error handling
         match Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                println!();
+                println!();
+                Reports::report_scan(db, &scan)?;
+                Ok(())
+            },
             Err(e) => {
                 // Stop scan with error message
                 Scan::stop_scan(db, &scan, Some(&e.to_string()))?;
@@ -341,10 +346,6 @@ impl Scanner {
                 }
             };
         }
-
-        println!();
-        println!();
-        Reports::report_scan(db, scan)?;
 
         Ok(())
     }

@@ -4,15 +4,15 @@ import { ActiveScanCard } from '@/components/scan/ActiveScanCard'
 import { RootsTable } from '@/components/scan/RootsTable'
 import { AddRootDialog } from '@/components/scan/AddRootDialog'
 import { ScanOptionsDialog } from '@/components/scan/ScanOptionsDialog'
-import type { InitiateScanRequest, RootWithScan } from '@/lib/types'
+import type { ScheduleScanRequest } from '@/lib/types'
 
 export function ScanPage() {
-  const { isScanning, connectScanWebSocket } = useScanManager()
+  const { isScanning, checkForActiveScan } = useScanManager()
   const [addRootDialogOpen, setAddRootDialogOpen] = useState(false)
   const [scanOptionsDialogOpen, setScanOptionsDialogOpen] = useState(false)
   const [selectedRootId, setSelectedRootId] = useState<number | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
-  const [isStartingScan, setIsStartingScan] = useState(false)
+  const [isSchedulingScan, setIsSchedulingScan] = useState(false)
 
   const handleScanClick = (rootId: number, isIncomplete: boolean) => {
     setSelectedRootId(rootId)
@@ -20,15 +20,15 @@ export function ScanPage() {
 
     if (isIncomplete) {
       // Resume scan - use default options (backend will continue with existing options)
-      startScan(rootId, 'All', 'New or Changed')
+      scheduleScan(rootId, 'All', 'New or Changed')
     } else {
       // New scan - show options dialog
       setScanOptionsDialogOpen(true)
     }
   }
 
-  const startScan = async (rootId: number, hashMode: string, validateMode: string) => {
-    setIsStartingScan(true)
+  const scheduleScan = async (rootId: number, hashMode: string, validateMode: string) => {
+    setIsSchedulingScan(true)
     setScanError(null)
 
     try {
@@ -44,13 +44,13 @@ export function ScanPage() {
         'None': 'None'
       }
 
-      const request: InitiateScanRequest = {
+      const request: ScheduleScanRequest = {
         root_id: rootId,
         hash_mode: hashModeMap[hashMode] as 'All' | 'New' | 'None',
         validate_mode: validateModeMap[validateMode] as 'All' | 'New' | 'None'
       }
 
-      const response = await fetch('/api/scans/start', {
+      const response = await fetch('/api/scans/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request)
@@ -58,32 +58,23 @@ export function ScanPage() {
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(`Failed to start scan: ${response.statusText} - ${errorText}`)
+        throw new Error(`Failed to schedule scan: ${response.statusText} - ${errorText}`)
       }
 
-      const data = await response.json()
-
-      // Get root path for WebSocket connection
-      // We'll need to fetch it or pass it through
-      const rootResponse = await fetch('/api/roots/with-scans')
-      const roots: RootWithScan[] = await rootResponse.json()
-      const root = roots.find((r) => r.root_id === rootId)
-
-      if (root) {
-        // Connect WebSocket to start receiving updates
-        connectScanWebSocket(data.scan_id, root.root_path)
-      }
+      // Scan was scheduled successfully
+      // Check if it started (should happen immediately for manual scans)
+      await checkForActiveScan()
     } catch (error) {
-      console.error('Error starting scan:', error)
-      setScanError(error instanceof Error ? error.message : 'Failed to start scan')
+      console.error('Error scheduling scan:', error)
+      setScanError(error instanceof Error ? error.message : 'Failed to schedule scan')
     } finally {
-      setIsStartingScan(false)
+      setIsSchedulingScan(false)
     }
   }
 
-  const handleStartScan = (hashMode: string, validateMode: string) => {
+  const handleScheduleScan = (hashMode: string, validateMode: string) => {
     if (selectedRootId !== null) {
-      startScan(selectedRootId, hashMode, validateMode)
+      scheduleScan(selectedRootId, hashMode, validateMode)
     }
     setScanOptionsDialogOpen(false)
     setSelectedRootId(null)
@@ -97,7 +88,7 @@ export function ScanPage() {
       {scanError && (
         <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md p-4">
           <div className="text-sm text-red-600 dark:text-red-400 font-medium mb-1">
-            Failed to Start Scan
+            Failed to Schedule Scan
           </div>
           <div className="text-sm text-red-600 dark:text-red-400">
             {scanError}
@@ -112,7 +103,7 @@ export function ScanPage() {
       <RootsTable
         onAddRoot={() => setAddRootDialogOpen(true)}
         onScanClick={handleScanClick}
-        isScanning={isScanning || isStartingScan}
+        isScanning={isScanning || isSchedulingScan}
       />
 
       {/* Add Root Dialog */}
@@ -125,7 +116,7 @@ export function ScanPage() {
       <ScanOptionsDialog
         open={scanOptionsDialogOpen}
         onOpenChange={setScanOptionsDialogOpen}
-        onConfirm={handleStartScan}
+        onConfirm={handleScheduleScan}
       />
     </div>
   )

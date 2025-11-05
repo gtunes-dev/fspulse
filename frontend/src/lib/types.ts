@@ -176,15 +176,11 @@ export interface RootWithScan {
   last_scan?: LastScanInfo
 }
 
-// Scan initiation
-export interface InitiateScanRequest {
+// Scan scheduling
+export interface ScheduleScanRequest {
   root_id: number
   hash_mode: 'All' | 'New' | 'None'
   validate_mode: 'All' | 'New' | 'None'
-}
-
-export interface InitiateScanResponse {
-  scan_id: number
 }
 
 // Insights Page Types

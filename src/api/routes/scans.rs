@@ -25,27 +25,21 @@ impl AppState {
     }
 }
 
-/// Request structure for scan initiation
+/// Request structure for scheduling a scan
 #[derive(Debug, Deserialize)]
-pub struct InitiateScanRequest {
+pub struct ScheduleScanRequest {
     pub root_id: i64,
     pub hash_mode: String,    // "None", "New", "All"
     pub validate_mode: String, // "None", "New", "All"
 }
 
-/// Response structure for scan initiation
-#[derive(Debug, Serialize)]
-pub struct InitiateScanResponse {
-    pub scan_id: i64,
-}
-
-/// POST /api/scans/start
+/// POST /api/scans/schedule
 /// Schedules a new manual scan through the queue
 /// Returns 200 OK if scan was scheduled
 /// UI should call GET /api/scans/current to check if scan started
-pub async fn initiate_scan(
+pub async fn schedule_scan(
     State(_state): State<AppState>,
-    Json(req): Json<InitiateScanRequest>,
+    Json(req): Json<ScheduleScanRequest>,
 ) -> Result<StatusCode, StatusCode> {
     use crate::scan_manager::ScanManager;
     use crate::scans::{HashMode, ValidateMode};
