@@ -1,0 +1,257 @@
+use crate::database::Database;
+use crate::error::FsPulseError;
+use crate::progress::state::{ScanProgressState, ScanStatus};
+use crate::progress::web::WebProgressReporter;
+use crate::progress::ProgressReporter;
+use crate::roots::Root;
+use crate::scanner::Scanner;
+use crate::scans::{HashMode, Scan, ValidateMode};
+use crate::schedules::QueueEntry;
+use log::{error, info};
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
+use tokio::task::JoinHandle;
+
+/// Global singleton instance
+static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
+    Mutex::new(ScanManager {
+        current_scan: None,
+        broadcaster: None,
+    })
+});
+
+/// Manages the currently active scan with singleton semantics
+pub struct ScanManager {
+    current_scan: Option<ActiveScanInfo>,
+    broadcaster: Option<broadcast::Sender<ScanProgressState>>,
+}
+
+/// Information about the currently running scan
+struct ActiveScanInfo {
+    scan_id: i64,
+    root_id: i64,
+    root_path: String,
+    cancel_token: Arc<AtomicBool>,
+    reporter: Arc<WebProgressReporter>,
+    #[allow(dead_code)]
+    task_handle: Option<JoinHandle<()>>,
+}
+
+/// Information about current scan for status queries
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CurrentScanInfo {
+    pub scan_id: i64,
+    pub root_id: i64,
+    pub root_path: String,
+}
+
+impl ScanManager {
+    /// Get the global singleton instance
+    pub fn instance() -> &'static Mutex<ScanManager> {
+        &SCAN_MANAGER
+    }
+
+    /// Entry point 1: Manual scan from UI
+    /// Creates queue entry and immediately tries to start it
+    /// Returns Ok if scan was scheduled, Err if scheduling failed
+    /// UI should check GET /api/scans/current to see if scan started
+    pub fn schedule_manual_scan(
+        db: &Database,
+        root_id: i64,
+        hash_mode: HashMode,
+        validate_mode: ValidateMode,
+    ) -> Result<(), FsPulseError> {
+        // Hold mutex for entire operation to avoid race
+        let mut manager = Self::instance().lock().unwrap();
+
+        // Create queue entry atomically with root existence check
+        db.immediate_transaction(|conn| {
+            QueueEntry::create_manual(conn, root_id, hash_mode, validate_mode)
+        })?;
+
+        // Try to start immediately (while still holding mutex)
+        // Whether it starts or not, scheduling succeeded
+        manager.try_start_next_scan(db)?;
+
+        Ok(())
+    }
+
+    /// Entry point 2: Background polling (every 5 seconds)
+    pub fn poll_queue(db: &Database) -> Result<(), FsPulseError> {
+        let mut manager = Self::instance().lock().unwrap();
+
+        // Try to start next scan - it's fine if nothing happens
+        manager.try_start_next_scan(db)?;
+
+        Ok(())
+    }
+
+    /// Shared logic: Find and start next scan
+    /// Called with mutex already held
+    /// Updates self.current_scan if scan started
+    fn try_start_next_scan(&mut self, db: &Database) -> Result<(), FsPulseError> {
+        // Already running?
+        if self.current_scan.is_some() {
+            return Ok(());
+        }
+
+        // Get next work (creates scan, updates queue)
+        let work = match QueueEntry::get_next_work(db)? {
+            Some(w) => w,
+            None => return Ok(()), // No work available - not an error
+        };
+
+        let scan_id = work.scan.scan_id();
+        let root_id = work.scan.root_id();
+
+        // Get root for progress reporting
+        let root = Root::get_by_id(db.conn(), root_id)?
+            .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?;
+        let root_path = root.root_path().to_string();
+
+        // Create progress infrastructure
+        let (web_reporter, broadcaster) = WebProgressReporter::new(scan_id, root_path.clone());
+        let web_reporter = Arc::new(web_reporter);
+        let reporter: Arc<dyn ProgressReporter> = web_reporter.clone();
+        let cancel_token = Arc::new(AtomicBool::new(false));
+
+        // Store active scan state
+        self.current_scan = Some(ActiveScanInfo {
+            scan_id,
+            root_id,
+            root_path: root_path.clone(),
+            cancel_token: cancel_token.clone(),
+            reporter: web_reporter.clone(),
+            task_handle: None,
+        });
+        self.broadcaster = Some(broadcaster);
+
+        // Clone for background task
+        let mut scan_copy = work.scan;
+
+        // Spawn scan task
+        tokio::task::spawn_blocking(move || {
+            let db = Database::new().expect("Failed to open database");
+            let root = Root::get_by_id(db.conn(), root_id)
+                .expect("Failed to get root")
+                .expect("Root not found");
+
+            // Run scan
+            let mut db_mut = db;
+            let scan_result = Scanner::do_scan_machine(
+                &mut db_mut,
+                &mut scan_copy,
+                &root,
+                reporter.clone(),
+                cancel_token,
+            );
+
+            // Handle result
+            match scan_result {
+                Ok(()) => {
+                    let _ = reporter.println("Scan completed successfully");
+                    web_reporter.mark_completed();
+                }
+                Err(ref e) if matches!(e, FsPulseError::ScanCancelled) => {
+                    info!("Scan {} was cancelled, rolling back changes", scan_id);
+                    let _ = reporter.println("Scan cancelled, rolling back changes...");
+                    if let Err(stop_err) = scan_copy.set_state_stopped(&mut db_mut) {
+                        error!("Failed to stop scan {}: {}", scan_id, stop_err);
+                        web_reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
+                    } else {
+                        web_reporter.mark_stopped();
+                    }
+                }
+                Err(e) => {
+                    error!("Scan {} failed: {}", scan_id, e);
+                    let error_msg = e.to_string();
+                    let _ = reporter.println(&format!("Scan error: {}", error_msg));
+                    if let Err(stop_err) = Scan::stop_scan(&mut db_mut, &scan_copy, Some(&error_msg)) {
+                        error!("Failed to stop scan {} after error: {}", scan_id, stop_err);
+                        web_reporter.mark_error(format!(
+                            "Scan error: {}; Failed to stop: {}",
+                            error_msg, stop_err
+                        ));
+                    } else {
+                        web_reporter.mark_error(error_msg);
+                    }
+                }
+            }
+
+            // Clean up queue and ScanManager
+            if let Err(e) = ScanManager::on_scan_complete(&db_mut, scan_id) {
+                error!("Failed to complete scan {}: {}", scan_id, e);
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Called when scan finishes (from background task)
+    /// Acquires mutex internally
+    pub fn on_scan_complete(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
+        // Clean up queue (verifies state, deletes/clears entry)
+        QueueEntry::complete_work(db, scan_id)?;
+
+        // Clear ScanManager state
+        let mut manager = Self::instance().lock().unwrap();
+        if let Some(active) = &manager.current_scan {
+            if active.scan_id == scan_id {
+                manager.current_scan = None;
+                manager.broadcaster = None;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Request cancellation of the current scan
+    pub fn request_cancellation(scan_id: i64) -> Result<(), String> {
+        let manager = Self::instance().lock().unwrap();
+
+        match &manager.current_scan {
+            Some(active) if active.scan_id == scan_id => {
+                let current_status = active.reporter.get_status();
+
+                match current_status {
+                    ScanStatus::Running => {
+                        active.reporter.mark_cancelling();
+                        active.cancel_token.store(true, Ordering::Release);
+                        Ok(())
+                    }
+                    ScanStatus::Cancelling => Err("Scan is already cancelling".to_string()),
+                    ScanStatus::Stopped => Err("Scan has already been stopped".to_string()),
+                    ScanStatus::Completed => Err("Scan has already completed".to_string()),
+                    ScanStatus::Error { .. } => Err("Scan has already errored".to_string()),
+                }
+            }
+            Some(active) => Err(format!(
+                "Scan {} is not the current scan (current: {})",
+                scan_id, active.scan_id
+            )),
+            None => Err("No scan is currently running".to_string()),
+        }
+    }
+
+    /// Subscribe to progress updates
+    pub fn subscribe() -> Result<broadcast::Receiver<ScanProgressState>, String> {
+        let manager = Self::instance().lock().unwrap();
+        match &manager.broadcaster {
+            Some(tx) => Ok(tx.subscribe()),
+            None => Err("No scan is currently running".to_string()),
+        }
+    }
+
+    /// Get current scan info
+    pub fn get_current_scan_info() -> Option<CurrentScanInfo> {
+        let manager = Self::instance().lock().unwrap();
+        manager.current_scan.as_ref().map(|active| CurrentScanInfo {
+            scan_id: active.scan_id,
+            root_id: active.root_id,
+            root_path: active.root_path.clone(),
+        })
+    }
+}

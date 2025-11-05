@@ -10,27 +10,18 @@ use axum::{
 use log::error;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::{Arc, Mutex};
-
 use crate::database::Database;
-use crate::progress::web::WebProgressReporter;
-use crate::progress::ProgressReporter;
-use crate::roots::Root;
-use crate::scanner::Scanner;
-use crate::scans::{AnalysisSpec, Scan, ScanState, ScanStats};
-use crate::api::scan_manager::ScanManager;
+use crate::scans::{ScanStats};
 
-/// Shared application state for managing active scans
+/// Shared application state
+/// ScanManager is now a global singleton, so AppState is empty
 #[derive(Clone)]
 pub struct AppState {
-    pub scan_manager: Arc<Mutex<ScanManager>>,
 }
 
 impl AppState {
     pub fn new() -> Self {
-        Self {
-            scan_manager: Arc::new(Mutex::new(ScanManager::new())),
-        }
+        Self {}
     }
 }
 
@@ -49,163 +40,70 @@ pub struct InitiateScanResponse {
 }
 
 /// POST /api/scans/start
-/// Initiates a new scan or resumes an existing one
+/// Schedules a new manual scan through the queue
+/// Returns 200 OK if scan was scheduled
+/// UI should call GET /api/scans/current to check if scan started
 pub async fn initiate_scan(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(req): Json<InitiateScanRequest>,
-) -> Result<Json<InitiateScanResponse>, StatusCode> {
+) -> Result<StatusCode, StatusCode> {
+    use crate::scan_manager::ScanManager;
+    use crate::scans::{HashMode, ValidateMode};
+
     let db = Database::new()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Get the root
-    let root = Root::get_by_id(db.conn(), req.root_id).map_err(|e| {
-        error!("Failed to get root {}: {}", req.root_id, e);
-        StatusCode::NOT_FOUND
-    })?;
-
-    let root = root.ok_or_else(|| {
-        error!("Root {} not found", req.root_id);
-        StatusCode::NOT_FOUND
-    })?;
-
-    // Check for existing incomplete scan
-    let existing_scan = Scan::get_latest_for_root(&db, root.root_id())
-        .map_err(|e| {
-            error!("Failed to check for existing scan: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .filter(|s| s.state() != ScanState::Completed
-            && s.state() != ScanState::Stopped
-            && s.state() != ScanState::Error);
-
-    // Determine the scan to use
-    let scan = if let Some(existing_scan) = existing_scan {
-        // Resume existing scan - use existing options
-        log::info!(
-            "Resuming scan {} for root {} with Hash={:?}, Validate={:?}",
-            existing_scan.scan_id(),
-            root.root_path(),
-            existing_scan.analysis_spec().hash_mode(),
-            existing_scan.analysis_spec().val_mode()
-        );
-        existing_scan
-    } else {
-        // Create new scan with provided options
-        let no_hash = req.hash_mode.as_str() == "None";
-        let hash_new = req.hash_mode.as_str() == "New";
-        let no_validate = req.validate_mode.as_str() == "None";
-        let validate_all = req.validate_mode.as_str() == "All";
-
-        let analysis_spec = AnalysisSpec::new(no_hash, hash_new, no_validate, validate_all);
-
-        log::info!(
-            "Starting new scan for root {} with options: Hash={:?} (from '{}'), Validate={:?} (from '{}')",
-            root.root_path(),
-            analysis_spec.hash_mode(),
-            req.hash_mode,
-            analysis_spec.val_mode(),
-            req.validate_mode
-        );
-
-        Scan::create(db.conn(), &root, &analysis_spec).map_err(|e| {
-            error!("Failed to create scan: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-    };
-
-    let scan_id = scan.scan_id();
-    let root_id = root.root_id();
-    let root_path = root.root_path().to_string();
-
-    // Create web progress reporter (which creates the broadcaster)
-    let (web_reporter, broadcaster) = WebProgressReporter::new(scan_id, root_path.clone());
-    let web_reporter = Arc::new(web_reporter);
-    let reporter: Arc<dyn ProgressReporter> = web_reporter.clone();
-
-    // Atomically try to start the scan using ScanManager
-    let cancel_token = {
-        let mut manager = state.scan_manager.lock().unwrap();
-        manager
-            .try_start_scan(scan_id, root_id, root_path.clone(), broadcaster, web_reporter.clone())
-            .map_err(|e| {
-                error!("Failed to start scan: {}", e);
-                StatusCode::CONFLICT // 409 Conflict - scan already in progress
-            })?
-    };
-
-    // Clone state for the background task
-    let state_clone = state.clone();
-    let mut scan_copy = scan;
-
-    // Spawn scan in background task
-    tokio::task::spawn_blocking(move || {
-        let mut db = Database::new().expect("Failed to open database");
-        let root = Root::get_by_id(db.conn(), root_id)
-            .expect("Failed to get root")
-            .expect("Root not found");
-
-        // Run the scan with the cancel token
-        let scan_result =
-            Scanner::do_scan_machine(&mut db, &mut scan_copy, &root, reporter.clone(), cancel_token);
-
-        // Handle scan result and update state status
-        match scan_result {
-            Ok(()) => {
-                let _ = reporter.println("Scan completed successfully");
-                web_reporter.mark_completed();
-            }
-            Err(ref e) if matches!(e, crate::error::FsPulseError::ScanCancelled) => {
-                // Scan was cancelled - call set_state_stopped to rollback (state=Stopped, no error message)
-                log::info!("Scan {} was cancelled, rolling back changes", scan_id);
-                let _ = reporter.println("Scan cancelled, rolling back changes...");
-                if let Err(stop_err) = scan_copy.set_state_stopped(&mut db) {
-                    error!("Failed to stop scan {}: {}", scan_id, stop_err);
-                    let _ = reporter.println(&format!("Error stopping scan: {}", stop_err));
-                    web_reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
-                } else {
-                    let _ = reporter.println("Scan stopped and rolled back");
-                    web_reporter.mark_stopped();
-                }
-            }
-            Err(e) => {
-                // Scan failed with error - rollback and mark as Error with message
-                error!("Scan {} failed: {}", scan_id, e);
-                let error_msg = e.to_string();
-                let _ = reporter.println(&format!("Scan error: {}", error_msg));
-
-                // Call stop_scan to rollback and store error (state=Error, error message stored)
-                if let Err(stop_err) = Scan::stop_scan(&mut db, &scan_copy, Some(&error_msg)) {
-                    error!("Failed to stop scan {} after error: {}", scan_id, stop_err);
-                    let _ = reporter.println(&format!("Error stopping scan: {}", stop_err));
-                    web_reporter.mark_error(format!("Scan error: {}; Failed to stop: {}", error_msg, stop_err));
-                } else {
-                    web_reporter.mark_error(error_msg);
-                }
-            }
+    // Parse scan options
+    let hash_mode = match req.hash_mode.as_str() {
+        "None" => HashMode::None,
+        "New" => HashMode::New,
+        "All" => HashMode::All,
+        _ => {
+            error!("Invalid hash_mode: {}", req.hash_mode);
+            return Err(StatusCode::BAD_REQUEST);
         }
+    };
 
-        // Mark scan as complete in ScanManager
-        state_clone.scan_manager.lock().unwrap().mark_complete(scan_id);
-    });
+    let validate_mode = match req.validate_mode.as_str() {
+        "None" => ValidateMode::None,
+        "New" => ValidateMode::New,
+        "All" => ValidateMode::All,
+        _ => {
+            error!("Invalid validate_mode: {}", req.validate_mode);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
 
-    Ok(Json(InitiateScanResponse { scan_id }))
+    // Schedule manual scan (creates queue entry and tries to start it)
+    ScanManager::schedule_manual_scan(&db, req.root_id, hash_mode, validate_mode)
+        .map_err(|e| {
+            error!("Failed to schedule manual scan: {}", e);
+            if e.to_string().contains("Root not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+        })?;
+
+    log::info!("Manual scan scheduled for root {}", req.root_id);
+
+    Ok(StatusCode::OK)
 }
 
 /// WebSocket endpoint for streaming scan progress
 /// GET /ws/scans/progress
 pub async fn scan_progress_ws(
     ws: WebSocketUpgrade,
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_scan_progress(socket, state))
+    ws.on_upgrade(move |socket| handle_scan_progress(socket))
 }
 
-async fn handle_scan_progress(mut socket: WebSocket, state: AppState) {
+async fn handle_scan_progress(mut socket: WebSocket) {
+    use crate::scan_manager::ScanManager;
+
     // Subscribe to scan progress state snapshots
-    let receiver_result = {
-        let manager = state.scan_manager.lock().unwrap();
-        manager.subscribe()
-    };
+    let receiver_result = ScanManager::subscribe();
 
     let mut receiver = match receiver_result {
         Ok(rx) => rx,
@@ -268,12 +166,12 @@ async fn handle_scan_progress(mut socket: WebSocket, state: AppState) {
 /// POST /api/scans/{scan_id}/cancel
 /// Request cancellation of a running scan
 pub async fn cancel_scan(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Path(scan_id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
-    let mut manager = state.scan_manager.lock().unwrap();
+    use crate::scan_manager::ScanManager;
 
-    manager.request_cancellation(scan_id).map_err(|e| {
+    ScanManager::request_cancellation(scan_id).map_err(|e| {
         error!("Failed to cancel scan {}: {}", scan_id, e);
         StatusCode::NOT_FOUND
     })?;
@@ -285,10 +183,11 @@ pub async fn cancel_scan(
 /// GET /api/scans/current
 /// Get information about the currently running scan, if any
 pub async fn get_current_scan(
-    State(state): State<AppState>,
-) -> Result<Json<Option<crate::api::scan_manager::CurrentScanInfo>>, StatusCode> {
-    let manager = state.scan_manager.lock().unwrap();
-    let current = manager.get_current_scan_info();
+    State(_state): State<AppState>,
+) -> Result<Json<Option<crate::scan_manager::CurrentScanInfo>>, StatusCode> {
+    use crate::scan_manager::ScanManager;
+
+    let current = ScanManager::get_current_scan_info();
     Ok(Json(current))
 }
 

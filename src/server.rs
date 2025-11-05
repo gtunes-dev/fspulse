@@ -19,9 +19,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::TcpListener;
 
+use crate::database::Database;
 use crate::error::FsPulseError;
+use crate::scan_manager::ScanManager;
 use crate::api;
 
 // Embed static files in release builds
@@ -57,6 +60,28 @@ impl WebServer {
 
         #[cfg(not(debug_assertions))]
         println!("   Running in PRODUCTION mode - serving embedded assets");
+
+        // Start background queue processor
+        tokio::spawn(async {
+            log::info!("Starting background queue processor (polling every 5 seconds)");
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+            loop {
+                interval.tick().await;
+
+                let db = match Database::new() {
+                    Ok(db) => db,
+                    Err(e) => {
+                        log::error!("Queue processor: Failed to open database: {}", e);
+                        continue;
+                    }
+                };
+
+                if let Err(e) = ScanManager::poll_queue(&db) {
+                    log::error!("Queue processor error: {}", e);
+                }
+            }
+        });
 
         let listener = TcpListener::bind(addr).await
             .map_err(|e| FsPulseError::Error(format!("Failed to bind to {}: {}", addr, e)))?;

@@ -12,6 +12,7 @@ mod progress;
 mod query;
 mod reports;
 mod roots;
+mod scan_manager;
 mod scanner;
 mod scans;
 mod schedules;

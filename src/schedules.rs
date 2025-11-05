@@ -911,27 +911,49 @@ pub struct QueueEntry {
     pub created_at: i64,  // Unix timestamp (UTC)
 }
 
+/// Work item returned by get_next_work()
+/// Contains scan, queue_id, and source for completion handling
+#[derive(Debug)]
+pub struct WorkItem {
+    pub scan: Scan,
+    pub queue_id: i64,
+    pub source: SourceType,
+}
+
 impl QueueEntry {
     // ========================================
     // Database operations
     // ========================================
 
     /// Create a new manual queue entry
+    /// Must be called within a transaction for atomicity
     pub fn create_manual(
-        db: &Database,
+        conn: &rusqlite::Connection,
         root_id: i64,
         hash_mode: HashMode,
         validate_mode: ValidateMode,
-    ) -> Result<Self, FsPulseError> {
+    ) -> Result<(), FsPulseError> {
         let now = chrono::Utc::now().timestamp();
-        let conn = db.conn();
 
-        let queue_id: i64 = conn.query_row(
+        // Verify root exists (within same transaction)
+        let root_exists = conn.query_row(
+            "SELECT 1 FROM roots WHERE root_id = ?",
+            [root_id],
+            |_| Ok(())
+        )
+        .optional()
+        .map_err(FsPulseError::DatabaseError)?;
+
+        if root_exists.is_none() {
+            return Err(FsPulseError::Error(format!("Root {} not found", root_id)));
+        }
+
+        // Create queue entry
+        conn.execute(
             "INSERT INTO scan_queue (
                 root_id, schedule_id, scan_id, next_scan_time,
                 hash_mode, validate_mode, source, created_at
-            ) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?)
-            RETURNING queue_id",
+            ) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?)",
             rusqlite::params![
                 root_id,
                 now,  // Manual scans run immediately
@@ -940,21 +962,10 @@ impl QueueEntry {
                 SourceType::Manual.as_i32(),
                 now,
             ],
-            |row| row.get(0),
         )
         .map_err(FsPulseError::DatabaseError)?;
 
-        Ok(QueueEntry {
-            queue_id,
-            root_id,
-            schedule_id: None,
-            scan_id: None,
-            next_scan_time: Some(now),
-            hash_mode,
-            validate_mode,
-            source: SourceType::Manual,
-            created_at: now,
-        })
+        Ok(())
     }
 
     /// Get a queue entry by ID
@@ -1068,29 +1079,36 @@ impl QueueEntry {
     /// 5. For scheduled scans: calculates next_scan_time (fail-fast before crashes)
     ///
     /// Returns the Scan object ready to be executed, or None if no work available.
-    pub fn get_next_work(db: &Database) -> Result<Option<Scan>, FsPulseError> {
+    pub fn get_next_work(db: &Database) -> Result<Option<WorkItem>, FsPulseError> {
         let now = chrono::Utc::now().timestamp();
 
         db.immediate_transaction(|conn| {
             // Step 1: Check if ANY scan is currently running (resume case)
-            let running_scan_id: Option<i64> = conn.query_row(
-                "SELECT scan_id FROM scan_queue WHERE scan_id IS NOT NULL LIMIT 1",
+            let running_work = conn.query_row(
+                "SELECT scan_id, queue_id, source FROM scan_queue WHERE scan_id IS NOT NULL LIMIT 1",
                 [],
-                |row| row.get(0)
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, i32>(2)?))
             )
             .optional()
             .map_err(FsPulseError::DatabaseError)?;
 
-            if let Some(scan_id) = running_scan_id {
+            if let Some((scan_id, queue_id, source)) = running_work {
                 // Resume case: return existing incomplete scan
-                return Scan::get_by_id_or_latest(conn, Some(scan_id), None);
+                let scan = Scan::get_by_id_or_latest(conn, Some(scan_id), None)?
+                    .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?;
+                return Ok(Some(WorkItem {
+                    scan,
+                    queue_id,
+                    source: SourceType::from_i32(source)
+                        .ok_or_else(|| FsPulseError::Error(format!("Invalid source type: {}", source)))?,
+                }));
             }
 
             // Step 2: Find highest priority work (manual first, then scheduled due)
             // Single query with priority: manual scans (source=0) always first,
             // then scheduled scans (source=1) only if due
             let work = conn.query_row(
-                "SELECT queue_id, root_id, schedule_id, hash_mode, validate_mode
+                "SELECT queue_id, root_id, schedule_id, hash_mode, validate_mode, source
                  FROM scan_queue
                  WHERE scan_id IS NULL AND (source = ? OR next_scan_time <= ?)
                  ORDER BY source ASC, next_scan_time ASC, queue_id ASC
@@ -1105,6 +1123,7 @@ impl QueueEntry {
                             .ok_or_else(|| rusqlite::Error::InvalidColumnType(3, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
                         ValidateMode::from_i32(row.get(4)?)
                             .ok_or_else(|| rusqlite::Error::InvalidColumnType(4, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
+                        row.get::<_, i32>(5)?,  // source
                     ))
                 }
             )
@@ -1116,7 +1135,7 @@ impl QueueEntry {
                 None => return Ok(None), // No work available
             };
 
-            let (queue_id, root_id, schedule_id, hash_mode, validate_mode) = work;
+            let (queue_id, root_id, schedule_id, hash_mode, validate_mode, source) = work;
 
             // Step 3: Get root for scan creation
             let root = Root::get_by_id(conn, root_id)?
@@ -1148,7 +1167,74 @@ impl QueueEntry {
                 .map_err(FsPulseError::DatabaseError)?;
             }
 
-            Ok(Some(scan))
+            Ok(Some(WorkItem {
+                scan,
+                queue_id,
+                source: SourceType::from_i32(source)
+                    .ok_or_else(|| FsPulseError::Error(format!("Invalid source type: {}", source)))?,
+            }))
+        })
+    }
+
+    /// Complete work and clean up queue entry
+    /// Verifies scan is in final state before updating queue
+    pub fn complete_work(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
+        use crate::scans::ScanState;
+
+        db.immediate_transaction(|conn| {
+            // 1. Get scan and verify state
+            let scan = Scan::get_by_id_or_latest(conn, Some(scan_id), None)?
+                .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?;
+
+            let is_final = matches!(
+                scan.state(),
+                ScanState::Completed | ScanState::Stopped | ScanState::Error
+            );
+
+            if !is_final {
+                log::error!(
+                    "Attempting to complete work for scan {} in non-final state {:?}",
+                    scan_id,
+                    scan.state()
+                );
+                return Err(FsPulseError::Error(format!(
+                    "Scan {} is not in final state (state: {:?})",
+                    scan_id,
+                    scan.state()
+                )));
+            }
+
+            // 2. Find queue entry
+            let queue_entry = conn.query_row(
+                "SELECT queue_id, source FROM scan_queue WHERE scan_id = ?",
+                [scan_id],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?))
+            )
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?;
+
+            let (queue_id, source) = match queue_entry {
+                Some(e) => e,
+                None => {
+                    log::warn!("No queue entry found for scan {} during completion", scan_id);
+                    return Ok(()); // Not fatal - maybe already cleaned up
+                }
+            };
+
+            // 3. Clean up based on source
+            if source == SourceType::Manual.as_i32() {
+                conn.execute("DELETE FROM scan_queue WHERE queue_id = ?", [queue_id])
+                    .map_err(FsPulseError::DatabaseError)?;
+                log::debug!("Deleted manual scan queue entry {}", queue_id);
+            } else if source == SourceType::Scheduled.as_i32() {
+                conn.execute("UPDATE scan_queue SET scan_id = NULL WHERE queue_id = ?", [queue_id])
+                    .map_err(FsPulseError::DatabaseError)?;
+                log::debug!("Cleared scan_id for scheduled queue entry {}", queue_id);
+            } else {
+                log::error!("Unknown source type {} for queue entry {}", source, queue_id);
+            }
+
+            Ok(())
         })
     }
 
