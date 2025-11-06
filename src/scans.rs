@@ -108,14 +108,6 @@ impl AnalysisSpec {
     pub fn val_all(&self) -> bool {
         self.val_mode == ValidateMode::All
     }
-
-    pub fn hash_mode(&self) -> HashMode {
-        self.hash_mode
-    }
-
-    pub fn val_mode(&self) -> ValidateMode {
-        self.val_mode
-    }
 }
 
 #[derive(Clone, Debug)]

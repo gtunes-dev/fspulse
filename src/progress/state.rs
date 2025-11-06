@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 /// This is the single source of truth broadcast to web clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanProgressState {
-    pub scan_id: i64,
-    pub root_path: String,
+    pub scan_id: Option<i64>,  // None when idle
+    pub root_id: Option<i64>,  // None when idle
+    pub root_path: String,     // Empty string when idle
     pub status: ScanStatus,
     pub current_phase: Option<PhaseInfo>,
     pub completed_phases: Vec<String>, // For breadcrumb display
@@ -16,11 +17,29 @@ pub struct ScanProgressState {
 }
 
 impl ScanProgressState {
-    pub fn new(scan_id: i64, root_path: String) -> Self {
+    /// Create state for an active scan with the given scan ID, root ID, and path
+    pub fn new(scan_id: i64, root_id: i64, root_path: String) -> Self {
         Self {
-            scan_id,
+            scan_id: Some(scan_id),
+            root_id: Some(root_id),
             root_path,
             status: ScanStatus::Running,
+            current_phase: None,
+            completed_phases: Vec::new(),
+            overall_progress: None,
+            scanning_progress: None,
+            thread_states: Vec::new(),
+            messages: Vec::new(),
+        }
+    }
+
+    /// Create idle state to indicate no scan is currently running
+    pub fn idle() -> Self {
+        Self {
+            scan_id: None,
+            root_id: None,
+            root_path: String::new(),
+            status: ScanStatus::Idle,
             current_phase: None,
             completed_phases: Vec::new(),
             overall_progress: None,
@@ -76,11 +95,12 @@ impl ScanProgressState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum ScanStatus {
-    Running,
-    Cancelling,
-    Stopped,
-    Completed,
-    Error { message: String },
+    Idle,       // No scan is currently running
+    Running,    // Scan is actively running
+    Cancelling, // Scan cancellation requested
+    Stopped,    // Scan was stopped
+    Completed,  // Scan completed successfully
+    Error { message: String }, // Scan failed with error
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,8 +142,9 @@ mod tests {
 
     #[test]
     fn test_new_state() {
-        let state = ScanProgressState::new(1, "/test".to_string());
-        assert_eq!(state.scan_id, 1);
+        let state = ScanProgressState::new(1, 100, "/test".to_string());
+        assert_eq!(state.scan_id, Some(1));
+        assert_eq!(state.root_id, Some(100));
         assert_eq!(state.root_path, "/test");
         assert!(matches!(state.status, ScanStatus::Running));
         assert!(state.current_phase.is_none());
@@ -132,8 +153,19 @@ mod tests {
     }
 
     #[test]
+    fn test_idle_state() {
+        let state = ScanProgressState::idle();
+        assert_eq!(state.scan_id, None);
+        assert_eq!(state.root_id, None);
+        assert_eq!(state.root_path, "");
+        assert!(matches!(state.status, ScanStatus::Idle));
+        assert!(state.current_phase.is_none());
+        assert_eq!(state.thread_states.len(), 0);
+    }
+
+    #[test]
     fn test_add_message_limits_to_20() {
-        let mut state = ScanProgressState::new(1, "/test".to_string());
+        let mut state = ScanProgressState::new(1, 100, "/test".to_string());
         for i in 0..30 {
             state.add_message(format!("Message {}", i));
         }
@@ -144,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_update_thread_creates_slots() {
-        let mut state = ScanProgressState::new(1, "/test".to_string());
+        let mut state = ScanProgressState::new(1, 100, "/test".to_string());
         state.update_thread(2, ThreadOperation::Hashing {
             file: "test.txt".to_string()
         });
@@ -157,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_update_thread_replaces_existing() {
-        let mut state = ScanProgressState::new(1, "/test".to_string());
+        let mut state = ScanProgressState::new(1, 100, "/test".to_string());
         state.update_thread(0, ThreadOperation::Hashing {
             file: "file1.txt".to_string()
         });
@@ -171,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_increment_scanning() {
-        let mut state = ScanProgressState::new(1, "/test".to_string());
+        let mut state = ScanProgressState::new(1, 100, "/test".to_string());
 
         state.increment_scanning(false); // file
         state.increment_scanning(true);  // directory

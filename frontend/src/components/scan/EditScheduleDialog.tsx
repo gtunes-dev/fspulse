@@ -114,7 +114,7 @@ export function EditScheduleDialog({
       }
 
       // Build request body based on schedule type
-      const requestBody: any = {
+      const requestBody: Record<string, unknown> = {
         schedule_name: scheduleName.trim(),
         schedule_type: scheduleType,
         hash_mode: mapMode(hashMode),

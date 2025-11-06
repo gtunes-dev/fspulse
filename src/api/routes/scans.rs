@@ -8,7 +8,7 @@ use axum::{
     Json,
 };
 use log::error;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use crate::database::Database;
 use crate::scans::{ScanStats};
@@ -90,23 +90,26 @@ pub async fn scan_progress_ws(
     ws: WebSocketUpgrade,
     State(_state): State<AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_scan_progress(socket))
+    ws.on_upgrade(handle_scan_progress)
 }
 
 async fn handle_scan_progress(mut socket: WebSocket) {
     use crate::scan_manager::ScanManager;
 
-    // Subscribe to scan progress state snapshots
-    let receiver_result = ScanManager::subscribe();
+    // Subscribe to scan state broadcasts from ScanManager
+    let mut receiver = ScanManager::subscribe();
 
-    let mut receiver = match receiver_result {
-        Ok(rx) => rx,
-        Err(e) => {
-            let error_msg = format!(r#"{{"error":"{}"}}"#, e);
-            let _ = socket.send(Message::Text(error_msg.into())).await;
-            return;
+    // Send initial state to client immediately upon connection
+    if let Some(current) = ScanManager::get_current_scan_info() {
+        log::debug!("WebSocket connected, scan {} is active", current.scan_id);
+        // Active scan state will arrive in next broadcast message
+    } else {
+        // Send idle state to indicate no scan is currently running
+        let idle_state = crate::progress::state::ScanProgressState::idle();
+        if let Ok(json) = serde_json::to_string(&idle_state) {
+            let _ = socket.send(Message::Text(json.into())).await;
         }
-    };
+    }
 
     // Stream state snapshots
     loop {

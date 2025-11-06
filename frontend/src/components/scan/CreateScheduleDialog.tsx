@@ -149,7 +149,7 @@ export function CreateScheduleDialog({
       }
 
       // Build request body based on schedule type
-      const requestBody: any = {
+      const requestBody: Record<string, unknown> = {
         root_id: parseInt(selectedRootId),
         schedule_name: scheduleName.trim(),
         schedule_type: scheduleType,

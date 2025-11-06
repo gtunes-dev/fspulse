@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import type {
   ScanData,
   ScanState,
-  CurrentScanInfo,
 } from '@/lib/types'
 
 interface ScanManagerContextType {
@@ -11,9 +10,7 @@ interface ScanManagerContextType {
   isScanning: boolean
   lastScanCompletedAt: number | null
   lastScanScheduledAt: number | null
-  connectScanWebSocket: (scanId: number, rootPath: string) => void
   stopScan: (scanId: number) => Promise<void>
-  checkForActiveScan: () => Promise<void>
   notifyScanScheduled: () => void
 }
 
@@ -26,8 +23,7 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
   const [lastScanScheduledAt, setLastScanScheduledAt] = useState<number | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
-  const pingIntervalRef = useRef<number | null>(null)
-  const currentScanIdRef = useRef<number | null>(null)
+  const reconnectTimerRef = useRef<number | null>(null)
   const scanPhaseRef = useRef<number>(1)
   const scanningCountsRef = useRef({ files: 0, directories: 0 })
   const phaseBreadcrumbsRef = useRef<string[]>([])
@@ -35,18 +31,27 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
 
   const isScanning = currentScanId !== null
 
-  // Handle WebSocket state updates
+  // Process scan state updates received from backend via WebSocket
   const handleStateUpdate = useCallback((state: ScanState) => {
-    if (state.error) {
-      console.error('WebSocket error:', state.error)
+    // Clear UI when backend indicates idle (no scan running)
+    if (!state.scan_id || state.scan_id === 0) {
+      setCurrentScanId(null)
+      setActiveScans(new Map())
       return
+    }
+
+    const scanId = state.scan_id
+
+    // Handle error in state
+    if (state.error) {
+      console.error('Scan error:', state.error)
     }
 
     setActiveScans(prevScans => {
       const newScans = new Map(prevScans)
 
-      const scanData: ScanData = newScans.get(state.scan_id) || {
-        scan_id: state.scan_id,
+      const scanData: ScanData = newScans.get(scanId) || {
+        scan_id: scanId,
         root_path: state.root_path,
         phase: 1,
         progress: { current: 0, total: 1, percentage: 0 },
@@ -124,13 +129,18 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
         }
       }
 
-      newScans.set(state.scan_id, scanData)
+      newScans.set(scanId, scanData)
+
+      // Update current scan ID if different
+      if (currentScanId !== scanId) {
+        setCurrentScanId(scanId)
+      }
 
       // Handle scan completion/termination
       const statusValue = state.status?.status
       if (statusValue && ['completed', 'stopped', 'error'].includes(statusValue)) {
-        if (!completedScansRef.current.has(state.scan_id)) {
-          completedScansRef.current.add(state.scan_id)
+        if (!completedScansRef.current.has(scanId)) {
+          completedScansRef.current.add(scanId)
 
           // Notify that a scan has completed (triggers refresh in RecentScansTable)
           setLastScanCompletedAt(Date.now())
@@ -140,111 +150,69 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
           setTimeout(() => {
             setActiveScans(prev => {
               const updated = new Map(prev)
-              updated.delete(state.scan_id)
+              updated.delete(scanId)
               return updated
             })
-            completedScansRef.current.delete(state.scan_id)
-            setCurrentScanId(null)
-            currentScanIdRef.current = null
+            completedScansRef.current.delete(scanId)
           }, delay)
         }
       }
 
       return newScans
     })
-  }, [])
+  }, [currentScanId])
 
-  // Connect to WebSocket
-  const connectScanWebSocket = useCallback((scanId: number, rootPath: string) => {
-    // If we're already connected to this scan, don't reconnect
-    if (currentScanIdRef.current === scanId && wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log(`Already connected to scan ${scanId}, skipping reconnect`)
+  // Establish persistent WebSocket connection to receive scan state updates
+  const connectWebSocket = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('WebSocket already connected')
       return
     }
 
-    // Close existing connection if switching to a different scan
+    // Close stale connection if present
     if (wsRef.current) {
-      console.log(`Closing WebSocket for scan ${currentScanIdRef.current}, connecting to scan ${scanId}`)
       wsRef.current.close()
     }
 
-    // Clear existing ping interval
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current)
-      pingIntervalRef.current = null
-    }
-
-    // Initialize scan state
-    setCurrentScanId(scanId)
-    currentScanIdRef.current = scanId
-    scanPhaseRef.current = 1
-    scanningCountsRef.current = { files: 0, directories: 0 }
-    phaseBreadcrumbsRef.current = []
-
-    setActiveScans(prevScans => {
-      const newScans = new Map(prevScans)
-      newScans.set(scanId, {
-        scan_id: scanId,
-        root_path: rootPath,
-        phase: 1,
-        progress: {
-          current: 0,
-          total: 1,
-          percentage: 0
-        },
-        threads: []
-      })
-      return newScans
-    })
-
-    // Connect to WebSocket
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/ws/scans/progress`
 
+    console.log('Connecting to WebSocket:', wsUrl)
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
-      console.log('WebSocket connected')
-
-      // Start sending pings every 30 seconds to maintain bidirectional traffic
-      // This prevents proxy/load balancer timeouts on the client->server direction
-      pingIntervalRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send('ping')
-        }
-      }, 30000)
+      console.log('WebSocket connected to scan state broadcast')
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
     }
 
     ws.onmessage = (event) => {
-      const state: ScanState = JSON.parse(event.data)
-      handleStateUpdate(state)
+      try {
+        const state: ScanState = JSON.parse(event.data)
+        handleStateUpdate(state)
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error)
+      }
     }
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error)
     }
 
-    ws.onclose = () => {
-      console.log('WebSocket closed')
+    ws.onclose = (event) => {
+      console.log('WebSocket closed:', event.code, event.reason)
 
-      // Clear ping interval
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current)
-        pingIntervalRef.current = null
+      // Automatically reconnect after brief delay
+      if (!reconnectTimerRef.current) {
+        reconnectTimerRef.current = window.setTimeout(() => {
+          reconnectTimerRef.current = null
+          console.log('Attempting to reconnect WebSocket...')
+          connectWebSocket()
+        }, 2000)
       }
-
-      // Clear state after a delay (safety mechanism for unexpected closures)
-      // Normal completion is also handled by handleStateUpdate
-      setTimeout(() => {
-        setActiveScans(prev => {
-          const updated = new Map(prev)
-          updated.delete(scanId)
-          return updated
-        })
-        setCurrentScanId(null)
-        currentScanIdRef.current = null
-      }, 2000)
     }
   }, [handleStateUpdate])
 
@@ -265,48 +233,24 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
     }
   }, [])
 
-  // Check for active scan on mount
-  const checkForActiveScan = useCallback(async () => {
-    try {
-      const response = await fetch('/api/scans/current')
-      if (!response.ok) return
-
-      const data: CurrentScanInfo | null = await response.json()
-
-      if (data && data.scan_id) {
-        console.log('Found active scan:', data)
-        connectScanWebSocket(data.scan_id, data.root_path)
-      }
-    } catch (error) {
-      console.error('Failed to check for active scan:', error)
-    }
-  }, [connectScanWebSocket])
-
   // Notify that a scan was scheduled (triggers refresh in UpcomingScansTable)
   const notifyScanScheduled = useCallback(() => {
     setLastScanScheduledAt(Date.now())
   }, [])
 
-  // Poll for active scan on mount and periodically
+  // Initialize WebSocket connection on mount
   useEffect(() => {
-    // Check immediately on mount
-    checkForActiveScan()
-
-    // Poll every 5 seconds to detect new scans (from any source: UI, CLI, scheduler)
-    const pollInterval = setInterval(() => {
-      checkForActiveScan()
-    }, 5000)
+    connectWebSocket()
 
     return () => {
-      clearInterval(pollInterval)
       if (wsRef.current) {
         wsRef.current.close()
       }
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current)
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
       }
     }
-  }, [checkForActiveScan])
+  }, [connectWebSocket])
 
   const value: ScanManagerContextType = {
     activeScans,
@@ -314,9 +258,7 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
     isScanning,
     lastScanCompletedAt,
     lastScanScheduledAt,
-    connectScanWebSocket,
     stopScan,
-    checkForActiveScan,
     notifyScanScheduled,
   }
 

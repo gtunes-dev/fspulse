@@ -32,19 +32,20 @@ enum ProgressContext {
 }
 
 impl WebProgressReporter {
-    /// Create a new web progress reporter
+    /// Create a web progress reporter that broadcasts state snapshots every 250ms
     ///
-    /// Spawns a background task that broadcasts state snapshots every 250ms
+    /// Uses the provided broadcaster channel to send state updates to all WebSocket clients
     pub fn new(
         scan_id: i64,
+        root_id: i64,
         root_path: String,
-    ) -> (Self, broadcast::Sender<ScanProgressState>) {
-        let state = Arc::new(Mutex::new(ScanProgressState::new(scan_id, root_path)));
-        let (tx, _rx) = broadcast::channel(100);
+        broadcaster: broadcast::Sender<ScanProgressState>,
+    ) -> Self {
+        let state = Arc::new(Mutex::new(ScanProgressState::new(scan_id, root_id, root_path)));
 
         // Spawn background task to periodically broadcast state
         let state_clone = Arc::clone(&state);
-        let tx_clone = tx.clone();
+        let tx_clone = broadcaster.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(250));
             loop {
@@ -63,7 +64,7 @@ impl WebProgressReporter {
                     let state_guard = state_clone.lock().unwrap();
                     matches!(
                         state_guard.status,
-                        ScanStatus::Stopped | ScanStatus::Completed | ScanStatus::Error { .. }
+                        ScanStatus::Idle | ScanStatus::Stopped | ScanStatus::Completed | ScanStatus::Error { .. }
                     )
                 };
                 if is_complete {
@@ -76,14 +77,12 @@ impl WebProgressReporter {
             }
         });
 
-        let reporter = Self {
-            state: state.clone(),
-            broadcaster: tx.clone(),
+        Self {
+            state,
+            broadcaster,
             thread_map: Arc::new(Mutex::new(HashMap::new())),
             context_map: Arc::new(Mutex::new(HashMap::new())),
-        };
-
-        (reporter, tx)
+        }
     }
 
     /// Mark scan as completed

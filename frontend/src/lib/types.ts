@@ -86,7 +86,7 @@ export interface ValidateFilterResponse {
 
 // Scan Manager Types
 
-export type ScanStatus = 'running' | 'cancelling' | 'stopped' | 'completed' | 'error'
+export type ScanStatus = 'idle' | 'running' | 'cancelling' | 'stopped' | 'completed' | 'error'
 
 export interface ScanProgress {
   current: number
@@ -131,8 +131,9 @@ export interface ScanStatusInfo {
 }
 
 export interface ScanState {
-  scan_id: number
-  root_path: string
+  scan_id: number | null  // null when idle
+  root_id?: number | null  // null when idle
+  root_path: string  // empty when idle
   current_phase?: ScanPhaseInfo
   completed_phases?: string[]
   scanning_progress?: ScanningProgress

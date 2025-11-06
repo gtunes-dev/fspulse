@@ -6,7 +6,7 @@ use crate::progress::ProgressReporter;
 use crate::roots::Root;
 use crate::scanner::Scanner;
 use crate::scans::{HashMode, Scan, ValidateMode};
-use crate::schedules::{QueueEntry, Schedule, ScheduleType, IntervalUnit};
+use crate::schedules::{QueueEntry, Schedule};
 use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -17,16 +17,17 @@ use tokio::task::JoinHandle;
 
 /// Global singleton instance
 static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
+    let (broadcaster, _) = broadcast::channel(1024);
     Mutex::new(ScanManager {
         current_scan: None,
-        broadcaster: None,
+        broadcaster,
     })
 });
 
 /// Manages the currently active scan with singleton semantics
 pub struct ScanManager {
     current_scan: Option<ActiveScanInfo>,
-    broadcaster: Option<broadcast::Sender<ScanProgressState>>,
+    broadcaster: broadcast::Sender<ScanProgressState>, // Broadcasts state changes to all WebSocket clients
 }
 
 /// Information about the currently running scan
@@ -84,35 +85,14 @@ impl ScanManager {
     /// Returns the created schedule with assigned schedule_id
     pub fn create_schedule(
         db: &Database,
-        root_id: i64,
-        schedule_name: String,
-        schedule_type: ScheduleType,
-        time_of_day: Option<String>,
-        days_of_week: Option<String>,
-        day_of_month: Option<i64>,
-        interval_value: Option<i64>,
-        interval_unit: Option<IntervalUnit>,
-        hash_mode: HashMode,
-        validate_mode: ValidateMode,
+        params: crate::schedules::CreateScheduleParams,
     ) -> Result<Schedule, FsPulseError> {
         // Hold mutex to prevent queue modifications during schedule creation
         let _manager = Self::instance().lock().unwrap();
 
         // Create schedule and queue entry in transaction
         db.immediate_transaction(|conn| {
-            Schedule::create_and_queue(
-                conn,
-                root_id,
-                schedule_name,
-                schedule_type,
-                time_of_day,
-                days_of_week,
-                day_of_month,
-                interval_value,
-                interval_unit,
-                hash_mode,
-                validate_mode,
-            )
+            Schedule::create_and_queue(conn, params)
         })
     }
 
@@ -167,22 +147,27 @@ impl ScanManager {
             return Ok(());
         }
 
-        // Get next work (creates scan, updates queue)
-        let work = match QueueEntry::get_next_work(db)? {
-            Some(w) => w,
+        // Get next scan from queue (creates scan, updates queue)
+        let mut scan = match QueueEntry::get_next_scan(db)? {
+            Some(s) => s,
             None => return Ok(()), // No work available - not an error
         };
 
-        let scan_id = work.scan.scan_id();
-        let root_id = work.scan.root_id();
+        let scan_id = scan.scan_id();
+        let root_id = scan.root_id();
 
         // Get root for progress reporting
         let root = Root::get_by_id(db.conn(), root_id)?
             .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?;
         let root_path = root.root_path().to_string();
 
-        // Create progress infrastructure
-        let (web_reporter, broadcaster) = WebProgressReporter::new(scan_id, root_path.clone());
+        // Create progress reporter that broadcasts to WebSocket clients
+        let web_reporter = WebProgressReporter::new(
+            scan_id,
+            root_id,
+            root_path.clone(),
+            self.broadcaster.clone()
+        );
         let web_reporter = Arc::new(web_reporter);
         let reporter: Arc<dyn ProgressReporter> = web_reporter.clone();
         let cancel_token = Arc::new(AtomicBool::new(false));
@@ -196,10 +181,6 @@ impl ScanManager {
             reporter: web_reporter.clone(),
             task_handle: None,
         });
-        self.broadcaster = Some(broadcaster);
-
-        // Clone for background task
-        let mut scan_copy = work.scan;
 
         // Spawn scan task
         tokio::task::spawn_blocking(move || {
@@ -212,7 +193,7 @@ impl ScanManager {
             let mut db_mut = db;
             let scan_result = Scanner::do_scan_machine(
                 &mut db_mut,
-                &mut scan_copy,
+                &mut scan,
                 &root,
                 reporter.clone(),
                 cancel_token,
@@ -227,7 +208,7 @@ impl ScanManager {
                 Err(ref e) if matches!(e, FsPulseError::ScanCancelled) => {
                     info!("Scan {} was cancelled, rolling back changes", scan_id);
                     let _ = reporter.println("Scan cancelled, rolling back changes...");
-                    if let Err(stop_err) = scan_copy.set_state_stopped(&mut db_mut) {
+                    if let Err(stop_err) = scan.set_state_stopped(&mut db_mut) {
                         error!("Failed to stop scan {}: {}", scan_id, stop_err);
                         web_reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
                     } else {
@@ -238,7 +219,7 @@ impl ScanManager {
                     error!("Scan {} failed: {}", scan_id, e);
                     let error_msg = e.to_string();
                     let _ = reporter.println(&format!("Scan error: {}", error_msg));
-                    if let Err(stop_err) = Scan::stop_scan(&mut db_mut, &scan_copy, Some(&error_msg)) {
+                    if let Err(stop_err) = Scan::stop_scan(&mut db_mut, &scan, Some(&error_msg)) {
                         error!("Failed to stop scan {} after error: {}", scan_id, stop_err);
                         web_reporter.mark_error(format!(
                             "Scan error: {}; Failed to stop: {}",
@@ -260,17 +241,22 @@ impl ScanManager {
     }
 
     /// Called when scan finishes (from background task)
-    /// Acquires mutex internally
+    /// Cleans up queue, clears active scan, and broadcasts idle state to clients
     pub fn on_scan_complete(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
         // Clean up queue (verifies state, deletes/clears entry)
         QueueEntry::complete_work(db, scan_id)?;
 
-        // Clear ScanManager state
+        // Clear active scan and notify WebSocket clients
         let mut manager = Self::instance().lock().unwrap();
         if let Some(active) = &manager.current_scan {
             if active.scan_id == scan_id {
                 manager.current_scan = None;
-                manager.broadcaster = None;
+
+                // Broadcast idle state to all connected clients
+                let idle_state = ScanProgressState::idle();
+                let _ = manager.broadcaster.send(idle_state);
+
+                log::info!("Scan {} completed, ScanManager now idle", scan_id);
             }
         }
 
@@ -291,6 +277,7 @@ impl ScanManager {
                         active.cancel_token.store(true, Ordering::Release);
                         Ok(())
                     }
+                    ScanStatus::Idle => Err("Cannot cancel: scan is idle".to_string()),
                     ScanStatus::Cancelling => Err("Scan is already cancelling".to_string()),
                     ScanStatus::Stopped => Err("Scan has already been stopped".to_string()),
                     ScanStatus::Completed => Err("Scan has already completed".to_string()),
@@ -305,13 +292,11 @@ impl ScanManager {
         }
     }
 
-    /// Subscribe to progress updates
-    pub fn subscribe() -> Result<broadcast::Receiver<ScanProgressState>, String> {
+    /// Subscribe to scan state updates
+    /// Returns a receiver that will receive state snapshots for all scan events
+    pub fn subscribe() -> broadcast::Receiver<ScanProgressState> {
         let manager = Self::instance().lock().unwrap();
-        match &manager.broadcaster {
-            Some(tx) => Ok(tx.subscribe()),
-            None => Err("No scan is currently running".to_string()),
-        }
+        manager.broadcaster.subscribe()
     }
 
     /// Get current scan info

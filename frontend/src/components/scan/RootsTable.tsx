@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactElement } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -25,7 +25,7 @@ interface RootsTableProps {
 const ITEMS_PER_PAGE = 25
 
 export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
-  const { currentScan } = useScanManager()
+  const { currentScanId } = useScanManager()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -147,7 +147,7 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                   const scheduleCount = root.schedule_count
 
                   // Build Last Scan content
-                  let lastScanContent: JSX.Element
+                  let lastScanContent: ReactElement
                   if (!scanInfo) {
                     lastScanContent = (
                       <span className="text-muted-foreground">Never scanned</span>
@@ -218,7 +218,7 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                       )
                     } else if (['Pending', 'Scanning', 'Sweeping', 'Analyzing'].includes(scanInfo.state)) {
                       // Check if this is the currently active scan
-                      const isActiveScan = currentScan?.scan_id === scanInfo.scan_id
+                      const isActiveScan = currentScanId === scanInfo.scan_id
 
                       lastScanContent = (
                         <div className="flex flex-col gap-0.5">

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useScanManager } from '@/contexts/ScanManagerContext'
 import { ActiveScanCard } from '@/components/scan/ActiveScanCard'
 import { ScansCard } from '@/components/scan/ManualScanCard'
 import { RecentScansTable } from '@/components/activity/RecentScansTable'
@@ -27,7 +26,6 @@ import { countQuery } from '@/lib/api'
  * Without any parameter, the page uses actual database counts to determine state.
  */
 export function ActivityPage() {
-  const { isScanning } = useScanManager()
   const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [rootCount, setRootCount] = useState(0)

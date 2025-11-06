@@ -25,7 +25,7 @@ interface ManualScanDialogProps {
 }
 
 export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) {
-  const { checkForActiveScan, notifyScanScheduled } = useScanManager()
+  const { notifyScanScheduled } = useScanManager()
 
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>('')
@@ -113,8 +113,7 @@ export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) 
       // Notify that a scan was scheduled (triggers refresh in UpcomingScansTable)
       notifyScanScheduled()
 
-      // Check for active scan (backend state already reflects current status)
-      await checkForActiveScan()
+      // WebSocket will receive state updates when backend starts the scan
 
       // Close dialog (form will reset when reopened)
       onOpenChange(false)

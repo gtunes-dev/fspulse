@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use crate::database::Database;
 use crate::scan_manager::ScanManager;
-use crate::schedules::{QueueEntry, Schedule, ScheduleType, IntervalUnit};
+use crate::schedules::{CreateScheduleParams, QueueEntry, Schedule, ScheduleType, IntervalUnit};
 use crate::scans::{HashMode, ValidateMode};
 
 /// Request body for creating a schedule
@@ -58,16 +58,18 @@ pub async fn create_schedule(
 
     let schedule = ScanManager::create_schedule(
         &db,
-        request.root_id,
-        request.schedule_name,
-        request.schedule_type,
-        request.time_of_day,
-        request.days_of_week,
-        request.day_of_month,
-        request.interval_value,
-        request.interval_unit,
-        request.hash_mode,
-        request.validate_mode,
+        CreateScheduleParams {
+            root_id: request.root_id,
+            schedule_name: request.schedule_name,
+            schedule_type: request.schedule_type,
+            time_of_day: request.time_of_day,
+            days_of_week: request.days_of_week,
+            day_of_month: request.day_of_month,
+            interval_value: request.interval_value,
+            interval_unit: request.interval_unit,
+            hash_mode: request.hash_mode,
+            validate_mode: request.validate_mode,
+        },
     )
     .map_err(|e| {
         log::error!("Failed to create schedule: {}", e);
