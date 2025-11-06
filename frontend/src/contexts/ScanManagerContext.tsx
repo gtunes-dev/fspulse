@@ -10,9 +10,11 @@ interface ScanManagerContextType {
   currentScanId: number | null
   isScanning: boolean
   lastScanCompletedAt: number | null
+  lastScanScheduledAt: number | null
   connectScanWebSocket: (scanId: number, rootPath: string) => void
   stopScan: (scanId: number) => Promise<void>
   checkForActiveScan: () => Promise<void>
+  notifyScanScheduled: () => void
 }
 
 const ScanManagerContext = createContext<ScanManagerContextType | null>(null)
@@ -21,9 +23,11 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
   const [activeScans, setActiveScans] = useState<Map<number, ScanData>>(new Map())
   const [currentScanId, setCurrentScanId] = useState<number | null>(null)
   const [lastScanCompletedAt, setLastScanCompletedAt] = useState<number | null>(null)
+  const [lastScanScheduledAt, setLastScanScheduledAt] = useState<number | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const pingIntervalRef = useRef<number | null>(null)
+  const currentScanIdRef = useRef<number | null>(null)
   const scanPhaseRef = useRef<number>(1)
   const scanningCountsRef = useRef({ files: 0, directories: 0 })
   const phaseBreadcrumbsRef = useRef<string[]>([])
@@ -141,6 +145,7 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
             })
             completedScansRef.current.delete(state.scan_id)
             setCurrentScanId(null)
+            currentScanIdRef.current = null
           }, delay)
         }
       }
@@ -151,8 +156,15 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
 
   // Connect to WebSocket
   const connectScanWebSocket = useCallback((scanId: number, rootPath: string) => {
-    // Close existing connection
+    // If we're already connected to this scan, don't reconnect
+    if (currentScanIdRef.current === scanId && wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log(`Already connected to scan ${scanId}, skipping reconnect`)
+      return
+    }
+
+    // Close existing connection if switching to a different scan
     if (wsRef.current) {
+      console.log(`Closing WebSocket for scan ${currentScanIdRef.current}, connecting to scan ${scanId}`)
       wsRef.current.close()
     }
 
@@ -164,6 +176,7 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
 
     // Initialize scan state
     setCurrentScanId(scanId)
+    currentScanIdRef.current = scanId
     scanPhaseRef.current = 1
     scanningCountsRef.current = { files: 0, directories: 0 }
     phaseBreadcrumbsRef.current = []
@@ -221,6 +234,8 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
         pingIntervalRef.current = null
       }
 
+      // Clear state after a delay (safety mechanism for unexpected closures)
+      // Normal completion is also handled by handleStateUpdate
       setTimeout(() => {
         setActiveScans(prev => {
           const updated = new Map(prev)
@@ -228,6 +243,7 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
           return updated
         })
         setCurrentScanId(null)
+        currentScanIdRef.current = null
       }, 2000)
     }
   }, [handleStateUpdate])
@@ -266,11 +282,23 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
     }
   }, [connectScanWebSocket])
 
-  // Check for active scan on mount
+  // Notify that a scan was scheduled (triggers refresh in UpcomingScansTable)
+  const notifyScanScheduled = useCallback(() => {
+    setLastScanScheduledAt(Date.now())
+  }, [])
+
+  // Poll for active scan on mount and periodically
   useEffect(() => {
+    // Check immediately on mount
     checkForActiveScan()
 
+    // Poll every 5 seconds to detect new scans (from any source: UI, CLI, scheduler)
+    const pollInterval = setInterval(() => {
+      checkForActiveScan()
+    }, 5000)
+
     return () => {
+      clearInterval(pollInterval)
       if (wsRef.current) {
         wsRef.current.close()
       }
@@ -285,9 +313,11 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
     currentScanId,
     isScanning,
     lastScanCompletedAt,
+    lastScanScheduledAt,
     connectScanWebSocket,
     stopScan,
     checkForActiveScan,
+    notifyScanScheduled,
   }
 
   return (

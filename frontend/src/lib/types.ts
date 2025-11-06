@@ -184,6 +184,32 @@ export interface ScheduleScanRequest {
   validate_mode: 'All' | 'New' | 'None'
 }
 
+// Schedule types
+export type ScheduleType = 'Daily' | 'Weekly' | 'Interval' | 'Monthly'
+export type IntervalUnit = 'Minutes' | 'Hours' | 'Days' | 'Weeks'
+
+export interface Schedule {
+  schedule_id: number
+  root_id: number
+  enabled: boolean
+  schedule_name: string
+  schedule_type: ScheduleType
+  time_of_day?: string  // 'HH:MM' format
+  days_of_week?: string  // JSON array of day names
+  day_of_month?: number  // 1-31
+  interval_value?: number
+  interval_unit?: IntervalUnit
+  hash_mode: 'All' | 'New' | 'None'
+  validate_mode: 'All' | 'New' | 'None'
+  created_at: number  // Unix timestamp
+  updated_at: number  // Unix timestamp
+}
+
+export interface ScheduleWithRoot extends Schedule {
+  root_path: string
+  next_scan_time?: number  // Unix timestamp
+}
+
 // Insights Page Types
 
 export type AlertStatusValue = 'O' | 'F' | 'D' // Open, Flagged, Dismissed

@@ -6,7 +6,7 @@ use crate::progress::ProgressReporter;
 use crate::roots::Root;
 use crate::scanner::Scanner;
 use crate::scans::{HashMode, Scan, ValidateMode};
-use crate::schedules::QueueEntry;
+use crate::schedules::{QueueEntry, Schedule, ScheduleType, IntervalUnit};
 use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -77,6 +77,75 @@ impl ScanManager {
         manager.try_start_next_scan(db)?;
 
         Ok(())
+    }
+
+    /// Create a new schedule
+    /// Creates schedule and queue entry atomically
+    /// Returns the created schedule with assigned schedule_id
+    pub fn create_schedule(
+        db: &Database,
+        root_id: i64,
+        schedule_name: String,
+        schedule_type: ScheduleType,
+        time_of_day: Option<String>,
+        days_of_week: Option<String>,
+        day_of_month: Option<i64>,
+        interval_value: Option<i64>,
+        interval_unit: Option<IntervalUnit>,
+        hash_mode: HashMode,
+        validate_mode: ValidateMode,
+    ) -> Result<Schedule, FsPulseError> {
+        // Hold mutex to prevent queue modifications during schedule creation
+        let _manager = Self::instance().lock().unwrap();
+
+        // Create schedule and queue entry in transaction
+        db.immediate_transaction(|conn| {
+            Schedule::create_and_queue(
+                conn,
+                root_id,
+                schedule_name,
+                schedule_type,
+                time_of_day,
+                days_of_week,
+                day_of_month,
+                interval_value,
+                interval_unit,
+                hash_mode,
+                validate_mode,
+            )
+        })
+    }
+
+    /// Update an existing schedule
+    /// Updates schedule and recalculates next_scan_time atomically
+    pub fn update_schedule(db: &Database, schedule: &Schedule) -> Result<(), FsPulseError> {
+        // Hold mutex to prevent queue modifications during schedule update
+        let _manager = Self::instance().lock().unwrap();
+
+        // Update schedule in transaction
+        db.immediate_transaction(|conn| schedule.update(conn))
+    }
+
+    /// Delete a schedule
+    /// Deletes schedule and associated queue entry atomically
+    /// Fails if a scan is currently running for this schedule
+    pub fn delete_schedule(db: &Database, schedule_id: i64) -> Result<(), FsPulseError> {
+        // Hold mutex to prevent queue modifications during schedule deletion
+        let _manager = Self::instance().lock().unwrap();
+
+        // Delete schedule in transaction
+        db.immediate_transaction(|conn| Schedule::delete(conn, schedule_id))
+    }
+
+    /// Set schedule enabled/disabled state
+    /// When disabling: removes from queue (running scan completes normally)
+    /// When enabling: recalculates next_scan_time and adds back to queue
+    pub fn set_schedule_enabled(db: &Database, schedule_id: i64, enabled: bool) -> Result<(), FsPulseError> {
+        // Hold mutex to prevent queue modifications during enable/disable
+        let _manager = Self::instance().lock().unwrap();
+
+        // set_enabled already creates its own transaction
+        Schedule::set_enabled(db, schedule_id, enabled)
     }
 
     /// Entry point 2: Background polling (every 5 seconds)

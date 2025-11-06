@@ -2,7 +2,7 @@ use axum::{
     body::Body,
     http::{header, StatusCode},
     response::Html,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 
@@ -127,6 +127,11 @@ impl WebServer {
             .route("/api/roots/{root_id}", delete(api::roots::delete_root))
 
             // Schedule endpoints
+            .route("/api/schedules", get(api::schedules::list_schedules))
+            .route("/api/schedules", post(api::schedules::create_schedule))
+            .route("/api/schedules/{id}", put(api::schedules::update_schedule))
+            .route("/api/schedules/{id}", delete(api::schedules::delete_schedule))
+            .route("/api/schedules/{id}/toggle", patch(api::schedules::toggle_schedule))
             .route("/api/schedules/upcoming", get(api::schedules::get_upcoming_scans))
 
             // WebSocket routes

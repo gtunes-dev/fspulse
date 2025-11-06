@@ -24,21 +24,36 @@ export function formatDateFull(timestampSeconds: number): string {
 
 /**
  * Format timestamp as relative time for recent dates, absolute for older
- * Used for: Scan page roots table
+ * Used for: Scan page roots table, schedule next scan time
  *
  * Returns:
- * - "Today" / "Yesterday" / "Nd ago" for last 7 days
- * - "Mon DD, YYYY" for older dates
+ * - "Today" / "Yesterday" / "Nd ago" for last 7 days (past)
+ * - "Tomorrow" / "In Nd" for next 7 days (future)
+ * - "Mon DD, YYYY" for older/further dates
  */
 export function formatDateRelative(timestampSeconds: number): string {
   const date = new Date(timestampSeconds * 1000)
   const now = new Date()
-  const daysDiff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
 
-  // If less than 7 days, show relative time
-  if (daysDiff === 0) return 'Today'
-  if (daysDiff === 1) return 'Yesterday'
-  if (daysDiff < 7) return `${daysDiff}d ago`
+  // Calculate difference in calendar days (not just 24-hour periods)
+  // Normalize both dates to midnight to compare calendar days
+  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const daysDiff = Math.round((nowOnly.getTime() - dateOnly.getTime()) / (1000 * 60 * 60 * 24))
+
+  // Handle future dates (negative daysDiff)
+  if (daysDiff < 0) {
+    const futureDays = Math.abs(daysDiff)
+    if (futureDays === 0) return 'Today'
+    if (futureDays === 1) return 'Tomorrow'
+    if (futureDays < 7) return `In ${futureDays}d`
+    // For future dates >= 7 days, fall through to formatted date
+  } else {
+    // Handle past dates (positive daysDiff)
+    if (daysDiff === 0) return 'Today'
+    if (daysDiff === 1) return 'Yesterday'
+    if (daysDiff < 7) return `${daysDiff}d ago`
+  }
 
   // Otherwise show formatted date
   return date.toLocaleDateString(undefined, {

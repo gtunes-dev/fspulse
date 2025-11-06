@@ -397,7 +397,7 @@ impl Schedule {
 
     /// Calculate next monthly occurrence
     fn calculate_next_monthly(&self, from_time: i64, time_of_day: &str, day_of_month: i64) -> Result<i64, String> {
-        use chrono::{Datelike, Local, TimeZone, Timelike};
+        use chrono::{Datelike, Local, TimeZone};
 
         if day_of_month < 1 || day_of_month > 31 {
             return Err(format!("Invalid day_of_month: {}", day_of_month));
@@ -416,17 +416,18 @@ impl Schedule {
 
         // Try to find next occurrence within the next 12 months
         for month_offset in 0..12 {
-            let candidate_month = from_local + chrono::Duration::days(30 * month_offset);
+            // Calculate target year and month using proper month arithmetic
+            let current_year = from_local.year();
+            let current_month = from_local.month();
 
-            // Get the last day of this month to check if our target day exists
-            let year = candidate_month.year();
-            let month = candidate_month.month();
+            let total_months = current_month as i32 + month_offset;
+            let target_year = current_year + (total_months - 1) / 12;
+            let target_month = ((total_months - 1) % 12) + 1;
 
-            // Check if this month has the target day
             // Try to create a date with the target day
             let candidate_date = Local.with_ymd_and_hms(
-                year,
-                month,
+                target_year,
+                target_month as u32,
                 day_of_month as u32,
                 hours,
                 minutes,
@@ -452,8 +453,10 @@ impl Schedule {
     /// Create a new schedule and queue entry atomically
     /// This is the primary way to create schedules from API/UI
     /// Creates schedule as enabled by default
+    ///
+    /// IMPORTANT: Caller must hold an immediate transaction
     pub fn create_and_queue(
-        db: &Database,
+        conn: &rusqlite::Connection,
         root_id: i64,
         schedule_name: String,
         schedule_type: ScheduleType,
@@ -489,64 +492,62 @@ impl Schedule {
         schedule.validate()
             .map_err(|e| FsPulseError::Error(format!("Invalid schedule: {}", e)))?;
 
-        // Calculate next_scan_time BEFORE transaction
-        // This ensures we fail fast if calculation fails, avoiding transaction rollback
+        // Calculate next_scan_time BEFORE database operations
+        // This ensures we fail fast if calculation fails
         let next_scan_time = schedule.calculate_next_scan_time(now)
             .map_err(|e| FsPulseError::Error(format!("Failed to calculate next scan time: {}", e)))?;
 
-        // Now perform database operations in transaction
-        db.immediate_transaction(|conn| {
-            // Insert schedule
-            let schedule_id: i64 = conn.query_row(
-                "INSERT INTO scan_schedules (
-                    root_id, enabled, schedule_name, schedule_type,
-                    time_of_day, days_of_week, day_of_month,
-                    interval_value, interval_unit,
-                    hash_mode, validate_mode,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                RETURNING schedule_id",
-                rusqlite::params![
-                    root_id,
-                    schedule.enabled,
-                    schedule.schedule_name,
-                    schedule.schedule_type.as_i32(),
-                    schedule.time_of_day,
-                    schedule.days_of_week,
-                    schedule.day_of_month,
-                    schedule.interval_value,
-                    schedule.interval_unit.map(|u| u.as_i32()),
-                    schedule.hash_mode.as_i32(),
-                    schedule.validate_mode.as_i32(),
-                    schedule.created_at,
-                    schedule.updated_at,
-                ],
-                |row| row.get(0),
-            )
-            .map_err(FsPulseError::DatabaseError)?;
+        // Perform database operations (caller holds transaction)
+        // Insert schedule
+        let schedule_id: i64 = conn.query_row(
+            "INSERT INTO scan_schedules (
+                root_id, enabled, schedule_name, schedule_type,
+                time_of_day, days_of_week, day_of_month,
+                interval_value, interval_unit,
+                hash_mode, validate_mode,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING schedule_id",
+            rusqlite::params![
+                root_id,
+                schedule.enabled,
+                schedule.schedule_name,
+                schedule.schedule_type.as_i32(),
+                schedule.time_of_day,
+                schedule.days_of_week,
+                schedule.day_of_month,
+                schedule.interval_value,
+                schedule.interval_unit.map(|u| u.as_i32()),
+                schedule.hash_mode.as_i32(),
+                schedule.validate_mode.as_i32(),
+                schedule.created_at,
+                schedule.updated_at,
+            ],
+            |row| row.get(0),
+        )
+        .map_err(FsPulseError::DatabaseError)?;
 
-            // Insert queue entry (schedule is enabled by default)
-            conn.execute(
-                "INSERT INTO scan_queue (
-                    root_id, schedule_id, scan_id, next_scan_time,
-                    hash_mode, validate_mode, source, created_at
-                ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?)",
-                rusqlite::params![
-                    root_id,
-                    schedule_id,
-                    next_scan_time,
-                    schedule.hash_mode.as_i32(),
-                    schedule.validate_mode.as_i32(),
-                    SourceType::Scheduled.as_i32(),
-                    now,
-                ],
-            )
-            .map_err(FsPulseError::DatabaseError)?;
-
-            Ok(Schedule {
+        // Insert queue entry (schedule is enabled by default)
+        conn.execute(
+            "INSERT INTO scan_queue (
+                root_id, schedule_id, scan_id, next_scan_time,
+                hash_mode, validate_mode, source, created_at
+            ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                root_id,
                 schedule_id,
-                ..schedule
-            })
+                next_scan_time,
+                schedule.hash_mode.as_i32(),
+                schedule.validate_mode.as_i32(),
+                SourceType::Scheduled.as_i32(),
+                now,
+            ],
+        )
+        .map_err(FsPulseError::DatabaseError)?;
+
+        Ok(Schedule {
+            schedule_id,
+            ..schedule
         })
     }
 
@@ -692,64 +693,63 @@ impl Schedule {
 
     /// Update an existing schedule and recalculate next_scan_time
     /// This atomically updates both the schedule and its queue entry
-    pub fn update(&self, db: &Database) -> Result<(), FsPulseError> {
+    ///
+    /// IMPORTANT: Caller must hold an immediate transaction
+    pub fn update(&self, conn: &rusqlite::Connection) -> Result<(), FsPulseError> {
         // Validate before updating
         self.validate()
             .map_err(|e| FsPulseError::Error(format!("Invalid schedule: {}", e)))?;
 
         let now = chrono::Utc::now().timestamp();
 
-        // Calculate next_scan_time BEFORE transaction
+        // Calculate next_scan_time BEFORE database operations
         let next_scan_time = self.calculate_next_scan_time(now)
             .map_err(|e| FsPulseError::Error(format!("Failed to calculate next scan time: {}", e)))?;
+        // Update schedule
+        let rows_affected = conn.execute(
+            "UPDATE scan_schedules SET
+                schedule_name = ?,
+                schedule_type = ?,
+                time_of_day = ?,
+                days_of_week = ?,
+                day_of_month = ?,
+                interval_value = ?,
+                interval_unit = ?,
+                hash_mode = ?,
+                validate_mode = ?,
+                updated_at = ?
+            WHERE schedule_id = ?",
+            rusqlite::params![
+                self.schedule_name,
+                self.schedule_type.as_i32(),
+                self.time_of_day,
+                self.days_of_week,
+                self.day_of_month,
+                self.interval_value,
+                self.interval_unit.map(|u| u.as_i32()),
+                self.hash_mode.as_i32(),
+                self.validate_mode.as_i32(),
+                now,
+                self.schedule_id,
+            ],
+        )
+        .map_err(FsPulseError::DatabaseError)?;
 
-        db.immediate_transaction(|conn| {
-            // Update schedule
-            let rows_affected = conn.execute(
-                "UPDATE scan_schedules SET
-                    schedule_name = ?,
-                    schedule_type = ?,
-                    time_of_day = ?,
-                    days_of_week = ?,
-                    day_of_month = ?,
-                    interval_value = ?,
-                    interval_unit = ?,
-                    hash_mode = ?,
-                    validate_mode = ?,
-                    updated_at = ?
-                WHERE schedule_id = ?",
-                rusqlite::params![
-                    self.schedule_name,
-                    self.schedule_type.as_i32(),
-                    self.time_of_day,
-                    self.days_of_week,
-                    self.day_of_month,
-                    self.interval_value,
-                    self.interval_unit.map(|u| u.as_i32()),
-                    self.hash_mode.as_i32(),
-                    self.validate_mode.as_i32(),
-                    now,
-                    self.schedule_id,
-                ],
-            )
-            .map_err(FsPulseError::DatabaseError)?;
+        if rows_affected == 0 {
+            return Err(FsPulseError::Error(format!(
+                "Schedule with id {} not found",
+                self.schedule_id
+            )));
+        }
 
-            if rows_affected == 0 {
-                return Err(FsPulseError::Error(format!(
-                    "Schedule with id {} not found",
-                    self.schedule_id
-                )));
-            }
+        // Update next_scan_time in queue (if queue entry exists)
+        conn.execute(
+            "UPDATE scan_queue SET next_scan_time = ? WHERE schedule_id = ?",
+            rusqlite::params![next_scan_time, self.schedule_id],
+        )
+        .map_err(FsPulseError::DatabaseError)?;
 
-            // Update next_scan_time in queue (if queue entry exists)
-            conn.execute(
-                "UPDATE scan_queue SET next_scan_time = ? WHERE schedule_id = ?",
-                rusqlite::params![next_scan_time, self.schedule_id],
-            )
-            .map_err(FsPulseError::DatabaseError)?;
-
-            Ok(())
-        })
+        Ok(())
     }
 
     /// Enable or disable a schedule
@@ -841,49 +841,49 @@ impl Schedule {
 
     /// Delete a schedule and its associated queue entry
     /// Fails if a scan is currently running for this schedule
-    pub fn delete(db: &Database, schedule_id: i64) -> Result<(), FsPulseError> {
-        db.immediate_transaction(|conn| {
-            // Check if scan is currently running for this schedule
-            let scan_id: Option<Option<i64>> = conn.query_row(
-                "SELECT scan_id FROM scan_queue WHERE schedule_id = ?",
-                [schedule_id],
-                |row| row.get(0)
-            )
-            .optional()
-            .map_err(FsPulseError::DatabaseError)?;
+    ///
+    /// IMPORTANT: Caller must hold an immediate transaction
+    pub fn delete(conn: &rusqlite::Connection, schedule_id: i64) -> Result<(), FsPulseError> {
+        // Check if scan is currently running for this schedule
+        let scan_id: Option<Option<i64>> = conn.query_row(
+            "SELECT scan_id FROM scan_queue WHERE schedule_id = ?",
+            [schedule_id],
+            |row| row.get(0)
+        )
+        .optional()
+        .map_err(FsPulseError::DatabaseError)?;
 
-            // scan_id is Some(Some(id)) if queue entry exists with a running scan
-            // scan_id is Some(None) if queue entry exists but no scan running
-            // scan_id is None if no queue entry exists
-            if let Some(Some(_)) = scan_id {
-                return Err(FsPulseError::Error(
-                    "Cannot delete schedule while scan is in progress. Stop the scan first.".to_string()
-                ));
-            }
+        // scan_id is Some(Some(id)) if queue entry exists with a running scan
+        // scan_id is Some(None) if queue entry exists but no scan running
+        // scan_id is None if no queue entry exists
+        if let Some(Some(_)) = scan_id {
+            return Err(FsPulseError::Error(
+                "Cannot delete schedule while scan is in progress. Stop the scan first.".to_string()
+            ));
+        }
 
-            // Delete queue entry first (references schedule_id)
-            conn.execute(
-                "DELETE FROM scan_queue WHERE schedule_id = ?",
-                [schedule_id]
-            )
-            .map_err(FsPulseError::DatabaseError)?;
+        // Delete queue entry first (references schedule_id)
+        conn.execute(
+            "DELETE FROM scan_queue WHERE schedule_id = ?",
+            [schedule_id]
+        )
+        .map_err(FsPulseError::DatabaseError)?;
 
-            // Delete the schedule itself
-            let rows_affected = conn.execute(
-                "DELETE FROM scan_schedules WHERE schedule_id = ?",
-                [schedule_id]
-            )
-            .map_err(FsPulseError::DatabaseError)?;
+        // Delete the schedule itself
+        let rows_affected = conn.execute(
+            "DELETE FROM scan_schedules WHERE schedule_id = ?",
+            [schedule_id]
+        )
+        .map_err(FsPulseError::DatabaseError)?;
 
-            if rows_affected == 0 {
-                return Err(FsPulseError::Error(format!(
-                    "Schedule with id {} not found",
-                    schedule_id
-                )));
-            }
+        if rows_affected == 0 {
+            return Err(FsPulseError::Error(format!(
+                "Schedule with id {} not found",
+                schedule_id
+            )));
+        }
 
-            Ok(())
-        })
+        Ok(())
     }
 
 }

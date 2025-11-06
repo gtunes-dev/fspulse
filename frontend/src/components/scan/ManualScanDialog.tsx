@@ -25,7 +25,7 @@ interface ManualScanDialogProps {
 }
 
 export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) {
-  const { checkForActiveScan } = useScanManager()
+  const { checkForActiveScan, notifyScanScheduled } = useScanManager()
 
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>('')
@@ -109,6 +109,9 @@ export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) 
       if (!response.ok) {
         throw new Error(`Failed to schedule scan: ${response.statusText}`)
       }
+
+      // Notify that a scan was scheduled (triggers refresh in UpcomingScansTable)
+      notifyScanScheduled()
 
       // Check for active scan (backend state already reflects current status)
       await checkForActiveScan()

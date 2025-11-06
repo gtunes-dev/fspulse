@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -12,7 +12,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DeleteRootDialog } from '@/components/scan/DeleteRootDialog'
+import { CreateScheduleDialog } from '@/components/scan/CreateScheduleDialog'
 import { formatDateRelative } from '@/lib/dateUtils'
+import { useScanManager } from '@/contexts/ScanManagerContext'
 import type { RootWithScan } from '@/lib/types'
 
 interface RootsTableProps {
@@ -23,12 +25,15 @@ interface RootsTableProps {
 const ITEMS_PER_PAGE = 25
 
 export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
+  const { currentScan } = useScanManager()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
+  const [createScheduleDialogOpen, setCreateScheduleDialogOpen] = useState(false)
+  const [preselectedRootId, setPreselectedRootId] = useState<number | undefined>(undefined)
 
   const loadRoots = async () => {
     try {
@@ -114,7 +119,6 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
         {/* Action Bar */}
         <div className="flex items-center">
           <Button onClick={onAddRoot} size="default">
-            <Plus className="h-4 w-4 mr-2" />
             Add Root
           </Button>
         </div>
@@ -134,6 +138,7 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                   <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Last Scan</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Schedules</TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide w-32"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -212,6 +217,9 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                         </div>
                       )
                     } else if (['Pending', 'Scanning', 'Sweeping', 'Analyzing'].includes(scanInfo.state)) {
+                      // Check if this is the currently active scan
+                      const isActiveScan = currentScan?.scan_id === scanInfo.scan_id
+
                       lastScanContent = (
                         <div className="flex flex-col gap-0.5">
                           <button
@@ -224,10 +232,21 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                             <span>{dateWithStaleness}</span>
                           </button>
                           <div className="flex items-center gap-2">
-                            <Badge variant="warning">Incomplete</Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {scanInfo.state} phase
-                            </span>
+                            {isActiveScan ? (
+                              <>
+                                <Badge variant="default">In Progress</Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {scanInfo.state} phase
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Badge variant="warning">Incomplete</Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {scanInfo.state} phase
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       )
@@ -283,35 +302,31 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                         {lastScanContent}
                       </TableCell>
 
-                      {/* Schedules Column */}
+                      {/* Schedules Column - Info only */}
                       <TableCell>
-                        {scheduleCount === 0 ? (
-                          <div className="flex items-center gap-2">
+                        <span className="text-sm">
+                          {scheduleCount === 0 ? (
                             <span className="text-muted-foreground">None</span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                // TODO: Implement schedule creation (Phase 2)
-                                console.log('Create schedule clicked:', root.root_id)
-                              }}
-                              className="text-xs"
-                            >
-                              + Create
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              // TODO: Implement schedule management (Phase 2)
-                              console.log('Manage schedules clicked:', root.root_id)
-                            }}
-                          >
-                            {scheduleCount} {scheduleCount === 1 ? 'schedule' : 'schedules'}
-                          </Button>
-                        )}
+                          ) : (
+                            `${scheduleCount} ${scheduleCount === 1 ? 'schedule' : 'schedules'}`
+                          )}
+                        </span>
+                      </TableCell>
+
+                      {/* Add Schedule Action Column */}
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          disabled={isScanning}
+                          onClick={() => {
+                            setPreselectedRootId(root.root_id)
+                            setCreateScheduleDialogOpen(true)
+                          }}
+                          className="text-xs"
+                        >
+                          Add Schedule
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )
@@ -360,6 +375,17 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
       onDeleteSuccess={() => {
         loadRoots()
         setSelectedRoot(null)
+      }}
+    />
+
+    {/* Create Schedule Dialog */}
+    <CreateScheduleDialog
+      open={createScheduleDialogOpen}
+      onOpenChange={setCreateScheduleDialogOpen}
+      preselectedRootId={preselectedRootId}
+      onSuccess={() => {
+        loadRoots()
+        setPreselectedRootId(undefined)
       }}
     />
   </>

@@ -2,14 +2,12 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import { ActiveScanCard } from '@/components/scan/ActiveScanCard'
+import { ScansCard } from '@/components/scan/ManualScanCard'
 import { RecentScansTable } from '@/components/activity/RecentScansTable'
 import { UpcomingScansTable } from '@/components/activity/UpcomingScansTable'
 import { EmptyStateNoRoots } from '@/components/activity/EmptyStateNoRoots'
 import { EmptyStateNoScans } from '@/components/activity/EmptyStateNoScans'
-import { ManualScanDialog } from '@/components/scan/ManualScanDialog'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Play } from 'lucide-react'
 import { countQuery } from '@/lib/api'
 
 /**
@@ -34,7 +32,6 @@ export function ActivityPage() {
   const [loading, setLoading] = useState(true)
   const [rootCount, setRootCount] = useState(0)
   const [scanCount, setScanCount] = useState(0)
-  const [scanDialogOpen, setScanDialogOpen] = useState(false)
 
   // Check for state override parameter (for testing/development)
   const stateOverride = searchParams.get('state')
@@ -129,27 +126,11 @@ export function ActivityPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Activity</h1>
 
-      {/* Current Scan Section */}
-      {isScanning ? (
-        <ActiveScanCard />
-      ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <p className="text-sm text-muted-foreground mb-4">
-                No scan in progress
-              </p>
-              <Button size="lg" onClick={() => setScanDialogOpen(true)}>
-                <Play className="h-4 w-4 mr-2" />
-                Scan Now
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Scans Action Card - Always visible */}
+      <ScansCard />
 
-      {/* Manual Scan Dialog */}
-      <ManualScanDialog open={scanDialogOpen} onOpenChange={setScanDialogOpen} />
+      {/* Active Scan Status Card - Always visible, handles both states internally */}
+      <ActiveScanCard />
 
       {/* Upcoming Scans */}
       <UpcomingScansTable />
