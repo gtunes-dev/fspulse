@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -27,11 +27,16 @@ export function UpcomingScansTable() {
   const [scans, setScans] = useState<UpcomingScan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isInitialLoad = useRef(true)
 
   useEffect(() => {
     async function loadData() {
       try {
-        setLoading(true)
+        // Only show loading on initial mount, keep old data during refetch
+        if (isInitialLoad.current) {
+          setLoading(true)
+          isInitialLoad.current = false
+        }
         setError(null)
 
         const response = await fetch('/api/schedules/upcoming')

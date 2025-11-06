@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -33,11 +33,16 @@ export function RecentScansTable() {
   const [roots, setRoots] = useState<RootMap>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isInitialLoad = useRef(true)
 
   useEffect(() => {
     async function loadData() {
       try {
-        setLoading(true)
+        // Only show loading on initial mount, keep old data during refetch
+        if (isInitialLoad.current) {
+          setLoading(true)
+          isInitialLoad.current = false
+        }
         setError(null)
 
         // Load roots first to create a map

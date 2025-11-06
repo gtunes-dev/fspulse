@@ -86,7 +86,12 @@ export interface ValidateFilterResponse {
 
 // Scan Manager Types
 
-export type ScanStatus = 'idle' | 'running' | 'cancelling' | 'stopped' | 'completed' | 'error'
+export type ScanStatus = 'running' | 'cancelling' | 'stopped' | 'completed' | 'error'
+
+// Broadcast message types from WebSocket
+export type BroadcastMessage =
+  | { type: 'active_scan'; scan: ScanState }
+  | { type: 'no_active_scan' }
 
 export interface ScanProgress {
   current: number

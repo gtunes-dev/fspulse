@@ -33,22 +33,6 @@ impl ScanProgressState {
         }
     }
 
-    /// Create idle state to indicate no scan is currently running
-    pub fn idle() -> Self {
-        Self {
-            scan_id: None,
-            root_id: None,
-            root_path: String::new(),
-            status: ScanStatus::Idle,
-            current_phase: None,
-            completed_phases: Vec::new(),
-            overall_progress: None,
-            scanning_progress: None,
-            thread_states: Vec::new(),
-            messages: Vec::new(),
-        }
-    }
-
     /// Add a log message (keeps only last 20)
     pub fn add_message(&mut self, message: String) {
         self.messages.push(message);
@@ -95,12 +79,20 @@ impl ScanProgressState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum ScanStatus {
-    Idle,       // No scan is currently running
     Running,    // Scan is actively running
     Cancelling, // Scan cancellation requested
     Stopped,    // Scan was stopped
     Completed,  // Scan completed successfully
     Error { message: String }, // Scan failed with error
+}
+
+/// Broadcast message type for WebSocket protocol
+/// Represents either an active scan or no active scan
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum BroadcastMessage {
+    ActiveScan { scan: ScanProgressState },
+    NoActiveScan,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,17 +141,6 @@ mod tests {
         assert!(matches!(state.status, ScanStatus::Running));
         assert!(state.current_phase.is_none());
         assert_eq!(state.completed_phases.len(), 0);
-        assert_eq!(state.thread_states.len(), 0);
-    }
-
-    #[test]
-    fn test_idle_state() {
-        let state = ScanProgressState::idle();
-        assert_eq!(state.scan_id, None);
-        assert_eq!(state.root_id, None);
-        assert_eq!(state.root_path, "");
-        assert!(matches!(state.status, ScanStatus::Idle));
-        assert!(state.current_phase.is_none());
         assert_eq!(state.thread_states.len(), 0);
     }
 

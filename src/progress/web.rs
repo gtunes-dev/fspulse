@@ -2,7 +2,6 @@ use super::*;
 use crate::progress::state::{PhaseInfo, ProgressInfo, ScanProgressState, ScanStatus, ThreadOperation};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
 
 /// Web implementation of ProgressReporter using state snapshots
 ///
@@ -17,7 +16,6 @@ use tokio::sync::broadcast;
 /// - Simplified frontend (just render the state)
 pub struct WebProgressReporter {
     state: Arc<Mutex<ScanProgressState>>,
-    broadcaster: broadcast::Sender<ScanProgressState>,
     // Map ProgressId to thread index for thread-specific progress updates
     thread_map: Arc<Mutex<HashMap<ProgressId, usize>>>,
     // Map ProgressId to context for detecting scanning/file updates
@@ -32,54 +30,18 @@ enum ProgressContext {
 }
 
 impl WebProgressReporter {
-    /// Create a web progress reporter that broadcasts state snapshots every 250ms
+    /// Create a web progress reporter that maintains scan state
     ///
-    /// Uses the provided broadcaster channel to send state updates to all WebSocket clients
+    /// ScanManager's persistent broadcast task reads this state and broadcasts it to WebSocket clients
     pub fn new(
         scan_id: i64,
         root_id: i64,
         root_path: String,
-        broadcaster: broadcast::Sender<ScanProgressState>,
     ) -> Self {
         let state = Arc::new(Mutex::new(ScanProgressState::new(scan_id, root_id, root_path)));
 
-        // Spawn background task to periodically broadcast state
-        let state_clone = Arc::clone(&state);
-        let tx_clone = broadcaster.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(250));
-            loop {
-                interval.tick().await;
-                let current_state = {
-                    let state_guard = state_clone.lock().unwrap();
-                    state_guard.clone()
-                };
-
-                // Broadcast returns Err only if there are no receivers, which is fine
-                let _ = tx_clone.send(current_state);
-
-                // Stop broadcasting only when scan reaches a terminal state
-                // Continue broadcasting during Cancelling to show thread cleanup progress
-                let is_complete = {
-                    let state_guard = state_clone.lock().unwrap();
-                    matches!(
-                        state_guard.status,
-                        ScanStatus::Idle | ScanStatus::Stopped | ScanStatus::Completed | ScanStatus::Error { .. }
-                    )
-                };
-                if is_complete {
-                    // Send one final update and exit
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                    let final_state = state_clone.lock().unwrap().clone();
-                    let _ = tx_clone.send(final_state);
-                    break;
-                }
-            }
-        });
-
         Self {
             state,
-            broadcaster,
             thread_map: Arc::new(Mutex::new(HashMap::new())),
             context_map: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -113,6 +75,12 @@ impl WebProgressReporter {
     pub fn get_status(&self) -> ScanStatus {
         let state = self.state.lock().unwrap();
         state.status.clone()
+    }
+
+    /// Get a clone of the current state for broadcasting
+    pub fn get_current_state(&self) -> ScanProgressState {
+        let state = self.state.lock().unwrap();
+        state.clone()
     }
 }
 
@@ -338,7 +306,6 @@ impl ProgressReporter for WebProgressReporter {
     fn clone_reporter(&self) -> Arc<dyn ProgressReporter> {
         Arc::new(Self {
             state: Arc::clone(&self.state),
-            broadcaster: self.broadcaster.clone(),
             thread_map: Arc::clone(&self.thread_map),
             context_map: Arc::clone(&self.context_map),
         })

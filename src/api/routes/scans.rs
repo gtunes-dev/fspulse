@@ -96,35 +96,32 @@ pub async fn scan_progress_ws(
 async fn handle_scan_progress(mut socket: WebSocket) {
     use crate::scan_manager::ScanManager;
 
+    log::info!("[WS] New WebSocket connection established");
+
     // Subscribe to scan state broadcasts from ScanManager
     let mut receiver = ScanManager::subscribe();
 
     // Send initial state to client immediately upon connection
-    if let Some(current) = ScanManager::get_current_scan_info() {
-        log::debug!("WebSocket connected, scan {} is active", current.scan_id);
-        // Active scan state will arrive in next broadcast message
-    } else {
-        // Send idle state to indicate no scan is currently running
-        let idle_state = crate::progress::state::ScanProgressState::idle();
-        if let Ok(json) = serde_json::to_string(&idle_state) {
-            let _ = socket.send(Message::Text(json.into())).await;
-        }
-    }
+    // This is the handshake that ensures clients always know the current state
+    log::info!("[WS] Broadcasting current state to new client");
+    ScanManager::broadcast_current_state();
 
-    // Stream state snapshots
+    // Stream broadcast messages (ActiveScan or NoActiveScan)
     loop {
         tokio::select! {
             result = receiver.recv() => {
                 match result {
-                    Ok(state_snapshot) => {
-                        if let Ok(json) = serde_json::to_string(&state_snapshot) {
+                    Ok(broadcast_message) => {
+                        if let Ok(json) = serde_json::to_string(&broadcast_message) {
                             if socket.send(Message::Text(json.into())).await.is_err() {
+                                log::info!("[WS] Client disconnected (send failed)");
                                 break; // Client disconnected
                             }
                         }
                     }
-                    Err(_) => {
-                        // Channel closed - scan completed
+                    Err(e) => {
+                        // Channel closed or lagged
+                        log::info!("[WS] Broadcast channel error: {:?} - closing connection", e);
                         break;
                     }
                 }
@@ -140,10 +137,12 @@ async fn handle_scan_progress(mut socket: WebSocket) {
                     }
                     Some(Ok(Message::Close(_))) | None => {
                         // Client closed connection
+                        log::info!("[WS] Client initiated close");
                         break;
                     }
-                    Some(Err(_)) => {
+                    Some(Err(e)) => {
                         // Error receiving message
+                        log::info!("[WS] Error receiving from client: {:?}", e);
                         break;
                     }
                     _ => {}
@@ -152,11 +151,13 @@ async fn handle_scan_progress(mut socket: WebSocket) {
             _ = tokio::time::sleep(tokio::time::Duration::from_secs(30)) => {
                 // Send ping to keep connection alive
                 if socket.send(Message::Ping(vec![].into())).await.is_err() {
+                    log::info!("[WS] Keepalive ping failed - client disconnected");
                     break;
                 }
             }
         }
     }
+    log::info!("[WS] WebSocket handler exiting");
     // WebSocket will close automatically when dropped
 }
 

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import type {
+  BroadcastMessage,
   ScanData,
   ScanState,
 } from '@/lib/types'
@@ -27,20 +28,66 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
   const scanPhaseRef = useRef<number>(1)
   const scanningCountsRef = useRef({ files: 0, directories: 0 })
   const phaseBreadcrumbsRef = useRef<string[]>([])
-  const completedScansRef = useRef<Set<number>>(new Set())
+  const lastProcessedState = useRef<{ scan_id: number | null; status: string | null }>({ scan_id: null, status: null })
+  const completionTimeouts = useRef<Map<number, number>>(new Map())
+  const currentScanIdRef = useRef<number | null>(currentScanId)
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentScanIdRef.current = currentScanId
+  }, [currentScanId])
 
   const isScanning = currentScanId !== null
 
-  // Process scan state updates received from backend via WebSocket
-  const handleStateUpdate = useCallback((state: ScanState) => {
-    // Clear UI when backend indicates idle (no scan running)
-    if (!state.scan_id || state.scan_id === 0) {
+  // Process broadcast messages received from backend via WebSocket
+  const handleBroadcastMessage = useCallback((message: BroadcastMessage) => {
+    // Handle no_active_scan message
+    if (message.type === 'no_active_scan') {
+      // If we have no active scan, ignore (already idle)
+      if (currentScanIdRef.current === null) {
+        return
+      }
+
+      // Clear active scan (handles reconnect desync)
+      console.log('[ScanManager] Received no_active_scan, clearing state')
       setCurrentScanId(null)
       setActiveScans(new Map())
+      lastProcessedState.current = { scan_id: null, status: null }
+
+      // Cancel any pending completion timeouts
+      if (currentScanIdRef.current !== null) {
+        const timeoutId = completionTimeouts.current.get(currentScanIdRef.current)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          completionTimeouts.current.delete(currentScanIdRef.current)
+        }
+      }
       return
     }
 
+    // Handle active_scan message
+    const state = message.scan
     const scanId = state.scan_id
+    const statusValue = state.status?.status
+
+    // Validate scan ID
+    if (!scanId) {
+      console.error('[ScanManager] Received active_scan with null scan_id')
+      return
+    }
+
+    // Deduplicate terminal states only (completed, stopped, error)
+    // Running states need all updates for progress tracking
+    const isTerminalState = statusValue && ['completed', 'stopped', 'error'].includes(statusValue)
+    if (isTerminalState) {
+      if (lastProcessedState.current.scan_id === scanId && lastProcessedState.current.status === statusValue) {
+        console.log('[ScanManager] Deduplicating terminal state:', { scanId, status: statusValue })
+        return
+      }
+      console.log('[ScanManager] Processing terminal state:', { scanId, status: statusValue })
+      // Update last processed state for terminal states only
+      lastProcessedState.current = { scan_id: scanId, status: statusValue || null }
+    }
 
     // Handle error in state
     if (state.error) {
@@ -132,35 +179,42 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
       newScans.set(scanId, scanData)
 
       // Update current scan ID if different
-      if (currentScanId !== scanId) {
+      if (currentScanIdRef.current !== scanId) {
+        console.log('[ScanManager] Setting currentScanId:', { from: currentScanIdRef.current, to: scanId })
         setCurrentScanId(scanId)
       }
 
       // Handle scan completion/termination
-      const statusValue = state.status?.status
       if (statusValue && ['completed', 'stopped', 'error'].includes(statusValue)) {
-        if (!completedScansRef.current.has(scanId)) {
-          completedScansRef.current.add(scanId)
-
+        // Check if we already have a timeout for this scan
+        if (!completionTimeouts.current.has(scanId)) {
+          console.log('[ScanManager] Creating completion timeout for scan:', scanId)
           // Notify that a scan has completed (triggers refresh in RecentScansTable)
           setLastScanCompletedAt(Date.now())
 
-          // Remove scan after delay
+          // Display completion status for a moment before clearing
           const delay = statusValue === 'error' ? 3000 : 2000
-          setTimeout(() => {
+          const timeoutId = window.setTimeout(() => {
+            console.log('[ScanManager] Completion timeout fired - clearing scan:', scanId)
             setActiveScans(prev => {
               const updated = new Map(prev)
               updated.delete(scanId)
               return updated
             })
-            completedScansRef.current.delete(scanId)
+            setCurrentScanId(null)
+            lastProcessedState.current = { scan_id: null, status: null }
+            completionTimeouts.current.delete(scanId)
           }, delay)
+
+          completionTimeouts.current.set(scanId, timeoutId)
+        } else {
+          console.log('[ScanManager] Completion timeout already exists for scan:', scanId)
         }
       }
 
       return newScans
     })
-  }, [currentScanId])
+  }, [])
 
   // Establish persistent WebSocket connection to receive scan state updates
   const connectWebSocket = useCallback(() => {
@@ -191,8 +245,8 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
 
     ws.onmessage = (event) => {
       try {
-        const state: ScanState = JSON.parse(event.data)
-        handleStateUpdate(state)
+        const message: BroadcastMessage = JSON.parse(event.data)
+        handleBroadcastMessage(message)
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error)
       }
@@ -214,7 +268,7 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
         }, 2000)
       }
     }
-  }, [handleStateUpdate])
+  }, [handleBroadcastMessage])
 
   // Stop scan
   const stopScan = useCallback(async (scanId: number) => {
@@ -249,6 +303,9 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current)
       }
+      // Clear any pending completion timeouts
+      completionTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+      completionTimeouts.current.clear()
     }
   }, [connectWebSocket])
 

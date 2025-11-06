@@ -63,7 +63,7 @@ impl WebServer {
 
         // Start background queue processor
         tokio::spawn(async {
-            log::info!("Starting background queue processor (polling every 20 seconds)");
+            println!("   Starting background queue processor (polling every 20 seconds)");
             let mut interval = tokio::time::interval(Duration::from_secs(20));
 
             loop {

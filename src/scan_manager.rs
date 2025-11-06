@@ -1,6 +1,6 @@
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::progress::state::{ScanProgressState, ScanStatus};
+use crate::progress::state::{BroadcastMessage, ScanStatus};
 use crate::progress::web::WebProgressReporter;
 use crate::progress::ProgressReporter;
 use crate::roots::Root;
@@ -12,6 +12,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 
@@ -27,7 +28,7 @@ static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
 /// Manages the currently active scan with singleton semantics
 pub struct ScanManager {
     current_scan: Option<ActiveScanInfo>,
-    broadcaster: broadcast::Sender<ScanProgressState>, // Broadcasts state changes to all WebSocket clients
+    broadcaster: broadcast::Sender<BroadcastMessage>,
 }
 
 /// Information about the currently running scan
@@ -39,6 +40,8 @@ struct ActiveScanInfo {
     reporter: Arc<WebProgressReporter>,
     #[allow(dead_code)]
     task_handle: Option<JoinHandle<()>>,
+    #[allow(dead_code)]
+    broadcast_handle: Option<JoinHandle<()>>,
 }
 
 /// Information about current scan for status queries
@@ -161,16 +164,61 @@ impl ScanManager {
             .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?;
         let root_path = root.root_path().to_string();
 
-        // Create progress reporter that broadcasts to WebSocket clients
+        // Create progress reporter that maintains scan state
         let web_reporter = WebProgressReporter::new(
             scan_id,
             root_id,
-            root_path.clone(),
-            self.broadcaster.clone()
+            root_path.clone()
         );
         let web_reporter = Arc::new(web_reporter);
         let reporter: Arc<dyn ProgressReporter> = web_reporter.clone();
         let cancel_token = Arc::new(AtomicBool::new(false));
+
+        // Spawn per-scan broadcast thread
+        // This thread polls state every 250ms and broadcasts to all connected clients
+        // It exits when the scan reaches a terminal state
+        let broadcast_handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(250));
+
+            log::info!("Broadcast thread started for scan {}", scan_id);
+
+            loop {
+                interval.tick().await;
+
+                // Broadcast current state
+                Self::broadcast_current_state();
+
+                // Check if scan reached terminal state
+                let is_terminal = {
+                    let manager = Self::instance().lock().unwrap();
+                    if let Some(active) = &manager.current_scan {
+                        if active.scan_id == scan_id {
+                            matches!(
+                                active.reporter.get_status(),
+                                ScanStatus::Completed | ScanStatus::Stopped | ScanStatus::Error { .. }
+                            )
+                        } else {
+                            // Scan was replaced, exit this broadcast thread
+                            true
+                        }
+                    } else {
+                        // Scan was cleared, exit
+                        true
+                    }
+                };
+
+                if is_terminal {
+                    // Send terminal state a few more times for reliability
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    Self::broadcast_current_state();
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    Self::broadcast_current_state();
+
+                    log::info!("Broadcast thread exiting for scan {} (terminal state reached)", scan_id);
+                    break;
+                }
+            }
+        });
 
         // Store active scan state
         self.current_scan = Some(ActiveScanInfo {
@@ -180,6 +228,7 @@ impl ScanManager {
             cancel_token: cancel_token.clone(),
             reporter: web_reporter.clone(),
             task_handle: None,
+            broadcast_handle: Some(broadcast_handle),
         });
 
         // Spawn scan task
@@ -241,21 +290,21 @@ impl ScanManager {
     }
 
     /// Called when scan finishes (from background task)
-    /// Cleans up queue, clears active scan, and broadcasts idle state to clients
+    /// Cleans up queue and clears active scan
+    /// Adds delay to allow broadcast thread to send terminal state multiple times
     pub fn on_scan_complete(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
         // Clean up queue (verifies state, deletes/clears entry)
         QueueEntry::complete_work(db, scan_id)?;
 
-        // Clear active scan and notify WebSocket clients
+        // Wait for broadcast thread to send terminal state multiple times
+        // The broadcast thread sends 3 times over ~1 second before exiting
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+
+        // Clear active scan
         let mut manager = Self::instance().lock().unwrap();
         if let Some(active) = &manager.current_scan {
             if active.scan_id == scan_id {
                 manager.current_scan = None;
-
-                // Broadcast idle state to all connected clients
-                let idle_state = ScanProgressState::idle();
-                let _ = manager.broadcaster.send(idle_state);
-
                 log::info!("Scan {} completed, ScanManager now idle", scan_id);
             }
         }
@@ -277,7 +326,6 @@ impl ScanManager {
                         active.cancel_token.store(true, Ordering::Release);
                         Ok(())
                     }
-                    ScanStatus::Idle => Err("Cannot cancel: scan is idle".to_string()),
                     ScanStatus::Cancelling => Err("Scan is already cancelling".to_string()),
                     ScanStatus::Stopped => Err("Scan has already been stopped".to_string()),
                     ScanStatus::Completed => Err("Scan has already completed".to_string()),
@@ -293,10 +341,25 @@ impl ScanManager {
     }
 
     /// Subscribe to scan state updates
-    /// Returns a receiver that will receive state snapshots for all scan events
-    pub fn subscribe() -> broadcast::Receiver<ScanProgressState> {
+    /// Returns a receiver that will receive broadcast messages for all scan events
+    pub fn subscribe() -> broadcast::Receiver<BroadcastMessage> {
         let manager = Self::instance().lock().unwrap();
         manager.broadcaster.subscribe()
+    }
+
+    /// Broadcast current state immediately
+    /// Called on WebSocket connection and by broadcast thread
+    /// Thread-safe: acquires mutex to read current state
+    pub fn broadcast_current_state() {
+        let manager = Self::instance().lock().unwrap();
+        let message = if let Some(active) = &manager.current_scan {
+            BroadcastMessage::ActiveScan {
+                scan: active.reporter.get_current_state(),
+            }
+        } else {
+            BroadcastMessage::NoActiveScan
+        };
+        let _ = manager.broadcaster.send(message);
     }
 
     /// Get current scan info
