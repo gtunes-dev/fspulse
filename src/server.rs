@@ -131,6 +131,9 @@ impl WebServer {
             .route("/api/schedules/{id}/toggle", patch(api::schedules::toggle_schedule))
             .route("/api/schedules/upcoming", get(api::schedules::get_upcoming_scans))
 
+            // Item endpoints
+            .route("/api/items/{item_id}/size-history", get(api::items::get_item_size_history))
+
             // WebSocket routes
             .route("/ws/scans/progress", get(api::scans::scan_progress_ws))
 

@@ -6,6 +6,7 @@ use crate::{
     database::Database,
     error::FsPulseError,
     scans::AnalysisSpec,
+    utils::Utils,
     validate::validator::ValidationState,
 };
 
@@ -511,6 +512,58 @@ impl Item {
             func(&item)?;
         }
         Ok(())
+    }
+
+    /// Get size history for an item over a date range
+    /// Returns a list of (scan_id, scan_time, size) tuples from the changes table
+    /// filtered by scan date range. Only includes changes where size_new is not NULL.
+    /// Date strings should be in format "yyyy-MM-dd" (e.g., "2025-11-07")
+    pub fn get_size_history(
+        db: &Database,
+        item_id: i64,
+        from_date_str: &str,  // Date string in format "yyyy-MM-dd"
+        to_date_str: &str,    // Date string in format "yyyy-MM-dd"
+    ) -> Result<Vec<SizeHistoryPoint>, FsPulseError> {
+        // Use the same date bounds logic as FsPulse queries
+        // This ensures full-day inclusivity (start at 00:00:00, end at 23:59:59)
+        let (from_timestamp, to_timestamp) = Utils::range_date_bounds(from_date_str, to_date_str)?;
+
+        let sql = r#"
+            SELECT c.scan_id, s.scan_time, c.size_new
+            FROM changes c
+            JOIN scans s ON c.scan_id = s.scan_id
+            WHERE c.item_id = ?
+              AND c.size_new IS NOT NULL
+              AND s.scan_time BETWEEN ? AND ?
+            ORDER BY s.scan_time ASC"#;
+
+        let conn = db.conn();
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt.query_map(params![item_id, from_timestamp, to_timestamp], SizeHistoryPoint::from_row)?;
+
+        let mut history = Vec::new();
+        for row in rows {
+            history.push(row?);
+        }
+
+        Ok(history)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SizeHistoryPoint {
+    pub scan_id: i64,
+    pub scan_time: i64,
+    pub size: i64,
+}
+
+impl SizeHistoryPoint {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(SizeHistoryPoint {
+            scan_id: row.get(0)?,
+            scan_time: row.get(1)?,
+            size: row.get(2)?,
+        })
     }
 }
 

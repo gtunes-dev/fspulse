@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { File, Folder, FileX, FolderX, Calendar, HardDrive, Hash, ShieldAlert, ShieldCheck, ShieldQuestion, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
+import { File, Folder, FileX, FolderX, Calendar as CalendarIcon, HardDrive, Hash, ShieldAlert, ShieldCheck, ShieldQuestion, ChevronDown } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -11,14 +12,41 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '@/components/ui/chart'
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
+} from 'recharts'
 import { fetchQuery, countQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateFull } from '@/lib/dateUtils'
 import { formatFileSize } from '@/lib/formatUtils'
+import { cn } from '@/lib/utils'
 
 interface ItemDetailSheetProps {
   itemId: number
@@ -68,6 +96,14 @@ interface Alert {
   val_error: string | null
   created: number
 }
+
+interface SizeHistoryPoint {
+  scan_id: number
+  scan_time: number
+  size: number
+}
+
+type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
 const CHANGES_PER_PAGE = 20
 const ALERTS_PER_PAGE = 20
@@ -149,6 +185,13 @@ export function ItemDetailSheet({
   const [loadingMoreChanges, setLoadingMoreChanges] = useState(false)
   const [loadingMoreAlerts, setLoadingMoreAlerts] = useState(false)
   const [openChanges, setOpenChanges] = useState<Record<number, boolean>>({})
+
+  // Size history state
+  const [sizeHistory, setSizeHistory] = useState<SizeHistoryPoint[]>([])
+  const [timeWindow, setTimeWindow] = useState<TimeWindowPreset>('3m')
+  const [fromDate, setFromDate] = useState<Date | undefined>()
+  const [toDate, setToDate] = useState<Date | undefined>()
+  const [loadingSizeHistory, setLoadingSizeHistory] = useState(false)
 
   // Extract file/folder name from path
   const itemName = itemPath.split('/').filter(Boolean).pop() || itemPath
@@ -295,6 +338,79 @@ export function ItemDetailSheet({
     }
   }
 
+  // Date range helper (same as Insights)
+  const getDateRangeForPreset = (preset: TimeWindowPreset): { from: Date; to: Date } => {
+    const now = new Date()
+    const today = startOfDay(now)
+
+    switch (preset) {
+      case '7d':
+        return { from: subDays(today, 7), to: today }
+      case '30d':
+        return { from: subDays(today, 30), to: today }
+      case '3m':
+        return { from: subMonths(today, 3), to: today }
+      case '6m':
+        return { from: subMonths(today, 6), to: today }
+      case '1y':
+        return { from: subYears(today, 1), to: today }
+      case 'custom':
+        return {
+          from: fromDate || subMonths(today, 3),
+          to: toDate || today
+        }
+    }
+  }
+
+  // Update date range when time window changes
+  useEffect(() => {
+    if (timeWindow !== 'custom') {
+      const { from, to } = getDateRangeForPreset(timeWindow)
+      setFromDate(from)
+      setToDate(to)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeWindow])
+
+  // Initialize date range on mount
+  useEffect(() => {
+    const today = startOfDay(new Date())
+    setFromDate(subMonths(today, 3))
+    setToDate(today)
+  }, [])
+
+  // Load size history when dates or item changes
+  const loadSizeHistory = useCallback(async () => {
+    if (!open || !fromDate || !toDate) return
+
+    setLoadingSizeHistory(true)
+    try {
+      // Format dates as "yyyy-MM-dd" strings to match FsPulse query system
+      const fromDateStr = format(fromDate, 'yyyy-MM-dd')
+      const toDateStr = format(toDate, 'yyyy-MM-dd')
+
+      const response = await fetch(
+        `/api/items/${itemId}/size-history?from_date=${fromDateStr}&to_date=${toDateStr}`
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to load size history')
+      }
+
+      const data = await response.json()
+      setSizeHistory(data.history || [])
+    } catch (error) {
+      console.error('Error loading size history:', error)
+      setSizeHistory([])
+    } finally {
+      setLoadingSizeHistory(false)
+    }
+  }, [itemId, fromDate, toDate, open])
+
+  useEffect(() => {
+    loadSizeHistory()
+  }, [loadSizeHistory])
+
   const getChangeTypeBadge = (type: string) => {
     switch (type) {
       case 'A':
@@ -393,7 +509,7 @@ export function ItemDetailSheet({
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
+                      <CalendarIcon className="h-4 w-4" />
                       Modified
                     </p>
                     <p className="text-base font-semibold mt-1">
@@ -433,6 +549,136 @@ export function ItemDetailSheet({
                 </div>
               </CardContent>
             </Card>
+
+            {/* Size History Section */}
+            {details.size !== null && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <CardTitle>Size History</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Select value={timeWindow} onValueChange={(v) => setTimeWindow(v as TimeWindowPreset)}>
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="7d">Last 7 Days</SelectItem>
+                          <SelectItem value="30d">Last 30 Days</SelectItem>
+                          <SelectItem value="3m">Last 3 Months</SelectItem>
+                          <SelectItem value="6m">Last 6 Months</SelectItem>
+                          <SelectItem value="1y">Last Year</SelectItem>
+                          <SelectItem value="custom">Custom Range</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {timeWindow === 'custom' && (
+                        <>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn("w-[140px] justify-start text-left font-normal", !fromDate && "text-muted-foreground")}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {fromDate ? format(fromDate, "MMM dd, yyyy") : "From"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar mode="single" selected={fromDate} onSelect={setFromDate} />
+                            </PopoverContent>
+                          </Popover>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn("w-[140px] justify-start text-left font-normal", !toDate && "text-muted-foreground")}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {toDate ? format(toDate, "MMM dd, yyyy") : "To"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar mode="single" selected={toDate} onSelect={setToDate} />
+                            </PopoverContent>
+                          </Popover>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loadingSizeHistory ? (
+                    <div className="border border-border rounded-lg">
+                      <div className="flex items-center justify-center h-64">
+                        <p className="text-muted-foreground">Loading history...</p>
+                      </div>
+                    </div>
+                  ) : sizeHistory.length === 0 ? (
+                    <div className="border border-border rounded-lg">
+                      <div className="flex items-center justify-center h-64">
+                        <p className="text-sm text-muted-foreground">
+                          No size history available for this time range
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-border rounded-lg p-4">
+                      <ChartContainer
+                        config={{
+                          size: {
+                            label: 'Size',
+                            color: 'hsl(271 81% 56%)',
+                          },
+                        }}
+                        className="aspect-auto h-[300px]"
+                      >
+                        <AreaChart
+                          data={sizeHistory.map((point) => ({
+                            date: format(new Date(point.scan_time * 1000), 'MMM dd'),
+                            size: point.size,
+                          }))}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                          />
+                          <YAxis
+                            tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                            tickFormatter={(value) => {
+                              const bytes = value as number
+                              const units = ['B', 'KB', 'MB', 'GB', 'TB']
+                              let i = 0
+                              let size = bytes
+                              while (size >= 1024 && i < units.length - 1) {
+                                size /= 1024
+                                i++
+                              }
+                              return `${size.toFixed(1)} ${units[i]}`
+                            }}
+                          />
+                          <ChartTooltip
+                            content={<ChartTooltipContent />}
+                            formatter={(value) => {
+                              const bytes = value as number
+                              return formatFileSize(bytes)
+                            }}
+                          />
+                          <Legend />
+                          <Area
+                            type="monotone"
+                            dataKey="size"
+                            stroke="var(--color-size)"
+                            fill="var(--color-size)"
+                            fillOpacity={0.6}
+                            name="Size"
+                          />
+                        </AreaChart>
+                      </ChartContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* History Section */}
             <Card>

@@ -300,7 +300,7 @@ int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }
 int_filter_body = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ int_comparator ~ WS* ~ RPAREN }
-int_comparator  = _{ (GT | LT) ~ int_val }
+int_comparator  = _{ (GT | LT) ~ WS* ~ int_val }
 int_val         =  { WS* ~ ASCII_DIGIT* }
 
 null     = { "-" | "NULL" | "null" }
