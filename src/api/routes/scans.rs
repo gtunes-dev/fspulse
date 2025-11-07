@@ -104,7 +104,9 @@ async fn handle_scan_progress(mut socket: WebSocket) {
     // Send initial state to client immediately upon connection
     // This is the handshake that ensures clients always know the current state
     log::info!("[WS] Broadcasting current state to new client");
-    ScanManager::broadcast_current_state();
+    
+    // Immediately broadcast status. Terminal status is only sent from 
+    ScanManager::broadcast_current_state(false);
 
     // Stream broadcast messages (ActiveScan or NoActiveScan)
     loop {

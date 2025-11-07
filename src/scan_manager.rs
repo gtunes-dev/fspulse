@@ -94,9 +94,7 @@ impl ScanManager {
         let _manager = Self::instance().lock().unwrap();
 
         // Create schedule and queue entry in transaction
-        db.immediate_transaction(|conn| {
-            Schedule::create_and_queue(conn, params)
-        })
+        db.immediate_transaction(|conn| Schedule::create_and_queue(conn, params))
     }
 
     /// Update an existing schedule
@@ -123,7 +121,11 @@ impl ScanManager {
     /// Set schedule enabled/disabled state
     /// When disabling: removes from queue (running scan completes normally)
     /// When enabling: recalculates next_scan_time and adds back to queue
-    pub fn set_schedule_enabled(db: &Database, schedule_id: i64, enabled: bool) -> Result<(), FsPulseError> {
+    pub fn set_schedule_enabled(
+        db: &Database,
+        schedule_id: i64,
+        enabled: bool,
+    ) -> Result<(), FsPulseError> {
         // Hold mutex to prevent queue modifications during enable/disable
         let _manager = Self::instance().lock().unwrap();
 
@@ -165,11 +167,7 @@ impl ScanManager {
         let root_path = root.root_path().to_string();
 
         // Create progress reporter that maintains scan state
-        let web_reporter = WebProgressReporter::new(
-            scan_id,
-            root_id,
-            root_path.clone()
-        );
+        let web_reporter = WebProgressReporter::new(scan_id, root_id, root_path.clone());
         let web_reporter = Arc::new(web_reporter);
         let reporter: Arc<dyn ProgressReporter> = web_reporter.clone();
         let cancel_token = Arc::new(AtomicBool::new(false));
@@ -185,8 +183,8 @@ impl ScanManager {
             loop {
                 interval.tick().await;
 
-                // Broadcast current state
-                Self::broadcast_current_state();
+                // Broadcast current state. Only on_scan_complete is allowed to send terminal messages
+                Self::broadcast_current_state(false);
 
                 // Check if scan reached terminal state
                 let is_terminal = {
@@ -195,7 +193,9 @@ impl ScanManager {
                         if active.scan_id == scan_id {
                             matches!(
                                 active.reporter.get_status(),
-                                ScanStatus::Completed | ScanStatus::Stopped | ScanStatus::Error { .. }
+                                ScanStatus::Completed
+                                    | ScanStatus::Stopped
+                                    | ScanStatus::Error { .. }
                             )
                         } else {
                             // Scan was replaced, exit this broadcast thread
@@ -208,13 +208,10 @@ impl ScanManager {
                 };
 
                 if is_terminal {
-                    // Send terminal state a few more times for reliability
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                    Self::broadcast_current_state();
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                    Self::broadcast_current_state();
-
-                    log::info!("Broadcast thread exiting for scan {} (terminal state reached)", scan_id);
+                    log::info!(
+                        "Broadcast thread exiting for scan {} (terminal state reached)",
+                        scan_id
+                    );
                     break;
                 }
             }
@@ -291,19 +288,25 @@ impl ScanManager {
 
     /// Called when scan finishes (from background task)
     /// Cleans up queue and clears active scan
-    /// Adds delay to allow broadcast thread to send terminal state multiple times
     pub fn on_scan_complete(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
+        // Clear active scan
+        let mut manager = Self::instance().lock().unwrap();
+
         // Clean up queue (verifies state, deletes/clears entry)
         QueueEntry::complete_work(db, scan_id)?;
 
-        // Wait for broadcast thread to send terminal state multiple times
-        // The broadcast thread sends 3 times over ~1 second before exiting
-        std::thread::sleep(std::time::Duration::from_millis(1500));
-
-        // Clear active scan
-        let mut manager = Self::instance().lock().unwrap();
         if let Some(active) = &manager.current_scan {
             if active.scan_id == scan_id {
+                // Notify the UI that the scan is complete. It should be in a terminal state
+                // This is the only place from which we send terminal messages
+                // Terminal messages are a "best effort". We assume that one of two things is
+                // true when the web UI is trying to show progress:
+                // A) the web ui is connected and will receive this terminal message when it is sent
+                // B) the web ui is connecting or is not connected, in which case they will receeive
+                // a "NoActiveScan" message when they do connect
+                // If the web UI is in a state in which it thinks an active scan is occuring, these
+                // messages are enough to get it into a corrected state
+                manager.broadcast_current_state_locked(true);
                 manager.current_scan = None;
                 log::info!("Scan {} completed, ScanManager now idle", scan_id);
             }
@@ -350,16 +353,41 @@ impl ScanManager {
     /// Broadcast current state immediately
     /// Called on WebSocket connection and by broadcast thread
     /// Thread-safe: acquires mutex to read current state
-    pub fn broadcast_current_state() {
+    pub fn broadcast_current_state(allow_send_terminal: bool) {
         let manager = Self::instance().lock().unwrap();
-        let message = if let Some(active) = &manager.current_scan {
-            BroadcastMessage::ActiveScan {
-                scan: active.reporter.get_current_state(),
+
+        manager.broadcast_current_state_locked(allow_send_terminal);
+    }
+
+    /// Broadcast current state immediately
+    /// Called on WebSocket connection and by broadcast thread
+    /// Thread-safe: acquires mutex to read current state
+    pub fn broadcast_current_state_locked(&self, allow_send_terminal: bool) {
+        if let Some(active) = &self.current_scan {
+            let scan_progress_status = active.reporter.get_current_state();
+            let scan_status = active.reporter.get_current_state().status;
+
+            match scan_status {
+                ScanStatus::Completed | ScanStatus::Error { .. } | ScanStatus::Stopped => {
+                    if allow_send_terminal {
+                        let _ = self.broadcaster.send(BroadcastMessage::ActiveScan {
+                            scan: Box::new(scan_progress_status),
+                        });
+                    } else {
+                        // Terminal state, and sending is not allowed → do nothing.
+                    }
+                }
+                _ => {
+                    // Non-terminal state → always broadcast.
+                    let _ = self.broadcaster.send(BroadcastMessage::ActiveScan {
+                        scan: Box::new(scan_progress_status),
+                    });
+                }
             }
         } else {
-            BroadcastMessage::NoActiveScan
-        };
-        let _ = manager.broadcaster.send(message);
+            // No active scan → broadcast as before.
+            let _ = self.broadcaster.send(BroadcastMessage::NoActiveScan);
+        }
     }
 
     /// Get current scan info

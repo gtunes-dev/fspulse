@@ -12,12 +12,12 @@ function shortenPath(path: string, maxLength = 50): string {
 
 export function Header() {
   const { theme, toggleTheme } = useTheme()
-  const { activeScans, currentScanId } = useScanManager()
+  const { activeScan } = useScanManager()
   const navigate = useNavigate()
 
   // Get current scan data
-  const currentScan = currentScanId ? activeScans.get(currentScanId) : null
-  const isScanning = currentScan !== undefined && currentScan !== null
+  const currentScan = activeScan
+  const isScanning = currentScan !== null
 
   // Compute display data for scan progress
   let scanStatus = ''

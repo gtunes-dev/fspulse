@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 export function ActiveScanCard() {
-  const { activeScans, currentScanId, stopScan } = useScanManager()
+  const { activeScan, currentScanId, stopScan } = useScanManager()
   const [detailsExpanded, setDetailsExpanded] = useState(() => {
     // Load from localStorage
     return localStorage.getItem('fspulse.scan.details.expanded') === 'true'
@@ -13,7 +13,7 @@ export function ActiveScanCard() {
   const [stopping, setStopping] = useState(false)
   const [breadcrumbs, setBreadcrumbs] = useState<string[]>([])
 
-  const currentScan = currentScanId ? activeScans.get(currentScanId) : null
+  const currentScan = activeScan
 
   // Update breadcrumbs from scan state - these come from WebSocket
   useEffect(() => {
