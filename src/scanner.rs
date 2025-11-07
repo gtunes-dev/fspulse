@@ -532,16 +532,18 @@ impl Scanner {
 
         // Recursively scan the root directory and get the total size
         // Note: We don't store the root directory itself as an item in the database
-        let _total_size = Scanner::scan_directory_recursive(
+        let total_size = Scanner::scan_directory_recursive(
             &mut ctx,
             &root_path_buf,
         )?;
 
-        // TODO: Store total_size on the scan record if needed
-        // For now, it will be computed via SQL query in set_state_completed
-
         reporter.finish_and_clear(item_prog);
         reporter.finish_and_clear(dir_prog);
+
+        // The total_size column is set on the scan row before advancing to the next phase
+        // This means it doesn't have to be computed or set later in the scan, but it does need
+        // to be set to NULL if the scan ends in stoppage or error
+        scan.set_total_size(db, total_size)?;
 
         scan.set_state_sweeping(db)
     }

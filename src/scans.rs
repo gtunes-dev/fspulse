@@ -275,13 +275,6 @@ impl Scan {
         Self::get_by_id_or_latest(conn, None, None)
     }
 
-    /*
-    pub fn get_by_id(db: &Database, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
-        Self::get_by_id_or_latest(conn, Some(scan_id), None)
-    }
-    */
-
     pub fn get_latest_for_root(db: &Database, root_id: i64) -> Result<Option<Self>, FsPulseError> {
         let conn = db.conn();
         Self::get_by_id_or_latest(conn, None, Some(root_id))
@@ -396,6 +389,27 @@ impl Scan {
         self.delete_count
     }
 
+    pub fn set_total_size(&mut self, db: &mut Database, total_size: i64) -> Result<(), FsPulseError> {
+        let conn = &mut db.conn_mut();
+
+        let rows_updated = conn.execute(
+            "UPDATE scans SET total_size = ? WHERE scan_id = ?",
+            [total_size, self.scan_id],
+        )?;
+
+        if rows_updated == 0 {
+            return Err(FsPulseError::Error(format!(
+                "Could not update the total_size of Scan Id {} to {}",
+                self.scan_id,
+                total_size
+            )));
+        }
+
+        self.total_size = Some(total_size);
+
+        Ok(())
+    }
+
     pub fn set_state_sweeping(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning => self.set_state(db, ScanState::Sweeping),
@@ -422,7 +436,7 @@ impl Scan {
         match self.state() {
             ScanState::Analyzing => {
                 // Use IMMEDIATE transaction for read-then-write pattern
-                let (file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count) =
+                let (file_count, folder_count, alert_count, add_count, modify_count, delete_count) =
                     db.immediate_transaction(|conn| {
                         // Compute file_count and folder_count (exclude tombstones)
                         let (file_count, folder_count): (i64, i64) = conn
@@ -435,16 +449,6 @@ impl Scan {
                                 |row| Ok((row.get(0)?, row.get(1)?)),
                             )
                             .unwrap_or((0, 0));
-
-                        // Compute total_size (sum of all item sizes)
-                        let total_size: i64 = conn
-                            .query_row(
-                                "SELECT COALESCE(SUM(size), 0) FROM items
-                                 WHERE last_scan = ? AND is_ts = 0",
-                                [self.scan_id],
-                                |row| row.get(0),
-                            )
-                            .unwrap_or(0);
 
                         // Compute alert_count
                         let alert_count: i64 = conn
@@ -473,7 +477,6 @@ impl Scan {
                             "UPDATE scans SET
                                 file_count = ?,
                                 folder_count = ?,
-                                total_size = ?,
                                 alert_count = ?,
                                 add_count = ?,
                                 modify_count = ?,
@@ -483,7 +486,6 @@ impl Scan {
                             (
                                 file_count,
                                 folder_count,
-                                total_size,
                                 alert_count,
                                 add_count,
                                 modify_count,
@@ -493,14 +495,13 @@ impl Scan {
                             ),
                         )?;
 
-                        Ok((file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count))
+                        Ok((file_count, folder_count, alert_count, add_count, modify_count, delete_count))
                     })?;
 
                 // Update in-memory struct
                 self.state = ScanState::Completed;
                 self.file_count = Some(file_count);
                 self.folder_count = Some(folder_count);
-                self.total_size = Some(total_size);
                 self.alert_count = Some(alert_count);
                 self.add_count = Some(add_count);
                 self.modify_count = Some(modify_count);
@@ -680,10 +681,12 @@ impl Scan {
             )?;
 
             // Mark the scan as stopped (state=5) or error (state=6)
+            // Null the total_size that may have been set at the end of the scanning phase - it's not reliable in the
+            // context of a cancellation or error
             let final_state = if error_message.is_some() { 6 } else { 5 };
 
             conn.execute(
-                "UPDATE scans SET state = ?, error = ? WHERE scan_id = ?",
+                "UPDATE scans SET state = ?, total_size = NULL, error = ? WHERE scan_id = ?",
                 params![final_state, error_message, scan.scan_id()],
             )?;
 
