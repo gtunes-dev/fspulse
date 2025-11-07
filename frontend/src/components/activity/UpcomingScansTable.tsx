@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/table'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import { Clock, Calendar } from 'lucide-react'
+import { RootDetailSheet } from '@/components/browse/RootDetailSheet'
 
 interface UpcomingScan {
   queue_id: number
@@ -27,6 +28,8 @@ export function UpcomingScansTable() {
   const [scans, setScans] = useState<UpcomingScan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
+  const [rootSheetOpen, setRootSheetOpen] = useState(false)
   const isInitialLoad = useRef(true)
 
   useEffect(() => {
@@ -136,63 +139,83 @@ export function UpcomingScansTable() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Upcoming Scans</CardTitle>
-      </CardHeader>
-      <CardContent className="p-6">
-        <div className="border border-border rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader className="bg-muted">
-            <TableRow>
-              <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
-              <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
-              <TableHead className="text-center uppercase text-xs tracking-wide">Status</TableHead>
-              <TableHead className="text-right uppercase text-xs tracking-wide">Next Run</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {scans.map((scan) => {
-              // Calculate queue position for queued scans
-              const queuedScans = scans.filter(s => s.is_queued)
-              const queuePosition = queuedScans.findIndex(s => s.queue_id === scan.queue_id)
-
-              return (
-                <TableRow key={scan.queue_id}>
-                  <TableCell
-                    className="max-w-[200px] truncate"
-                    title={scan.root_path}
-                  >
-                    {shortenPath(scan.root_path)}
-                  </TableCell>
-                  <TableCell>
-                    {scan.schedule_name || <span className="text-muted-foreground">(Manual)</span>}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      {scan.is_queued ? (
-                        <>
-                          <Clock className="h-4 w-4 text-orange-500" />
-                          <span className="text-sm">Queued</span>
-                        </>
-                      ) : (
-                        <>
-                          <Calendar className="h-4 w-4 text-blue-500" />
-                          <span className="text-sm">Scheduled</span>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatNextRun(scan.next_scan_time, scan.is_queued, queuePosition)}
-                  </TableCell>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Upcoming Scans</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="border border-border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader className="bg-muted">
+                <TableRow>
+                  <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
+                  <TableHead className="text-center uppercase text-xs tracking-wide">Status</TableHead>
+                  <TableHead className="text-right uppercase text-xs tracking-wide">Next Run</TableHead>
                 </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </CardContent>
-  </Card>
-)
+              </TableHeader>
+              <TableBody>
+                {scans.map((scan) => {
+                  // Calculate queue position for queued scans
+                  const queuedScans = scans.filter(s => s.is_queued)
+                  const queuePosition = queuedScans.findIndex(s => s.queue_id === scan.queue_id)
+
+                  return (
+                    <TableRow key={scan.queue_id}>
+                      <TableCell
+                        className="max-w-[200px] truncate"
+                        title={scan.root_path}
+                      >
+                        <button
+                          onClick={() => {
+                            setSelectedRoot({ id: scan.root_id, path: scan.root_path })
+                            setRootSheetOpen(true)
+                          }}
+                          className="text-left hover:underline hover:text-primary cursor-pointer"
+                        >
+                          {shortenPath(scan.root_path)}
+                        </button>
+                      </TableCell>
+                      <TableCell>
+                        {scan.schedule_name || <span className="text-muted-foreground">(Manual)</span>}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {scan.is_queued ? (
+                            <>
+                              <Clock className="h-4 w-4 text-orange-500" />
+                              <span className="text-sm">Queued</span>
+                            </>
+                          ) : (
+                            <>
+                              <Calendar className="h-4 w-4 text-blue-500" />
+                              <span className="text-sm">Scheduled</span>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatNextRun(scan.next_scan_time, scan.is_queued, queuePosition)}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Root Detail Sheet */}
+      {selectedRoot && (
+        <RootDetailSheet
+          rootId={selectedRoot.id}
+          rootPath={selectedRoot.path}
+          open={rootSheetOpen}
+          onOpenChange={setRootSheetOpen}
+        />
+      )}
+    </>
+  )
 }

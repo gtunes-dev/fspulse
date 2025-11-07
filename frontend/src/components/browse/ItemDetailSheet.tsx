@@ -400,7 +400,7 @@ export function ItemDetailSheet({
             {/* Beautiful Summary Section */}
             <Card className="border-2">
               <CardHeader>
-                <CardTitle className="text-lg">Current State</CardTitle>
+                <CardTitle>Current State</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
@@ -466,24 +466,29 @@ export function ItemDetailSheet({
               </CardContent>
             </Card>
 
-            <Separator />
-
-            {/* Changes Section - Single Card Container */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold">History</h3>
-                {totalChanges > CHANGES_PER_PAGE && (
-                  <p className="text-sm text-muted-foreground">
-                    Showing {changes.length} of {totalChanges} change{totalChanges !== 1 ? 's' : ''}
-                  </p>
-                )}
-              </div>
-              {totalChanges === 0 ? (
-                <p className="text-sm text-muted-foreground">No changes recorded</p>
-              ) : (
-                <>
-                  <Card className="shadow-md">
-                    <CardContent className="p-0">
+            {/* History Section */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>History</CardTitle>
+                  {totalChanges > CHANGES_PER_PAGE && (
+                    <p className="text-sm text-muted-foreground">
+                      Showing {changes.length} of {totalChanges} change{totalChanges !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {totalChanges === 0 ? (
+                  <div className="border border-border rounded-lg">
+                    <p className="text-sm text-muted-foreground text-center py-12">
+                      No history recorded for this item
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="border border-border rounded-lg">
+                      <div className="p-0">
                       {changes.map((change, idx) => {
                         const isOpen = openChanges[change.change_id] || false
                         const setIsOpen = (open: boolean) => {
@@ -633,41 +638,47 @@ export function ItemDetailSheet({
                           </div>
                         )
                       })}
-                    </CardContent>
-                  </Card>
-                  {totalChanges > changes.length && changes.length >= CHANGES_PER_PAGE && (
-                    <div className="mt-4 flex justify-center">
-                      <Button
-                        variant="outline"
-                        onClick={loadMoreChanges}
-                        disabled={loadingMoreChanges}
-                      >
-                        {loadingMoreChanges ? 'Loading...' : `Load ${Math.min(CHANGES_PER_PAGE, totalChanges - changes.length)} more`}
-                      </Button>
                     </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Alerts Section - Single Card Container */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold">Alerts</h3>
-                {totalAlerts > ALERTS_PER_PAGE && (
-                  <p className="text-sm text-muted-foreground">
-                    Showing {alerts.length} of {totalAlerts} alert{totalAlerts !== 1 ? 's' : ''}
-                  </p>
+                    </div>
+                    {totalChanges > changes.length && changes.length >= CHANGES_PER_PAGE && (
+                      <div className="mt-4 flex justify-center">
+                        <Button
+                          variant="outline"
+                          onClick={loadMoreChanges}
+                          disabled={loadingMoreChanges}
+                        >
+                          {loadingMoreChanges ? 'Loading...' : `Load ${Math.min(CHANGES_PER_PAGE, totalChanges - changes.length)} more`}
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
-              </div>
-              {totalAlerts === 0 ? (
-                <p className="text-sm text-muted-foreground">No alerts for this item</p>
-              ) : (
-                <>
-                  <Card className="shadow-md">
-                    <CardContent className="p-0">
+              </CardContent>
+            </Card>
+
+            {/* Alerts Section */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Alerts</CardTitle>
+                  {totalAlerts > ALERTS_PER_PAGE && (
+                    <p className="text-sm text-muted-foreground">
+                      Showing {alerts.length} of {totalAlerts} alert{totalAlerts !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {totalAlerts === 0 ? (
+                  <div className="border border-border rounded-lg">
+                    <p className="text-sm text-muted-foreground text-center py-12">
+                      No alerts for this item
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="border border-border rounded-lg">
+                      <div className="p-0">
                       {alerts.map((alert, idx) => (
                         <div key={alert.alert_id}>
                           <div className="p-4">
@@ -690,22 +701,23 @@ export function ItemDetailSheet({
                           {idx < alerts.length - 1 && <Separator />}
                         </div>
                       ))}
-                    </CardContent>
-                  </Card>
-                  {totalAlerts > alerts.length && alerts.length >= ALERTS_PER_PAGE && (
-                    <div className="mt-4 flex justify-center">
-                      <Button
-                        variant="outline"
-                        onClick={loadMoreAlerts}
-                        disabled={loadingMoreAlerts}
-                      >
-                        {loadingMoreAlerts ? 'Loading...' : `Load ${Math.min(ALERTS_PER_PAGE, totalAlerts - alerts.length)} more`}
-                      </Button>
                     </div>
-                  )}
-                </>
-              )}
-            </div>
+                    </div>
+                    {totalAlerts > alerts.length && alerts.length >= ALERTS_PER_PAGE && (
+                      <div className="mt-4 flex justify-center">
+                        <Button
+                          variant="outline"
+                          onClick={loadMoreAlerts}
+                          disabled={loadingMoreAlerts}
+                        >
+                          {loadingMoreAlerts ? 'Loading...' : `Load ${Math.min(ALERTS_PER_PAGE, totalAlerts - alerts.length)} more`}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
           </div>
         ) : null}
       </SheetContent>

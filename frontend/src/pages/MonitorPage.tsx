@@ -15,6 +15,7 @@ export function MonitorPage() {
 
       <RootsTable
         onAddRoot={() => setAddRootDialogOpen(true)}
+        onScheduleCreated={() => schedulesTableRef.current?.reload()}
       />
 
       <SchedulesTable

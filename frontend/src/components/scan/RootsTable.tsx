@@ -13,17 +13,20 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DeleteRootDialog } from '@/components/scan/DeleteRootDialog'
 import { CreateScheduleDialog } from '@/components/scan/CreateScheduleDialog'
+import { RootDetailSheet } from '@/components/browse/RootDetailSheet'
+import { ScanDetailSheet } from '@/components/browse/ScanDetailSheet'
 import { formatDateRelative } from '@/lib/dateUtils'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import type { RootWithScan } from '@/lib/types'
 
 interface RootsTableProps {
   onAddRoot: () => void
+  onScheduleCreated?: () => void
 }
 
 const ITEMS_PER_PAGE = 25
 
-export function RootsTable({ onAddRoot }: RootsTableProps) {
+export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
   const { currentScanId, lastScanCompletedAt } = useScanManager()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,6 +34,9 @@ export function RootsTable({ onAddRoot }: RootsTableProps) {
   const [totalCount, setTotalCount] = useState(0)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
+  const [rootSheetOpen, setRootSheetOpen] = useState(false)
+  const [selectedScanId, setSelectedScanId] = useState<number | null>(null)
+  const [scanSheetOpen, setScanSheetOpen] = useState(false)
   const [createScheduleDialogOpen, setCreateScheduleDialogOpen] = useState(false)
   const [preselectedRootId, setPreselectedRootId] = useState<number | undefined>(undefined)
   const [reloadTrigger, setReloadTrigger] = useState(0)
@@ -152,8 +158,8 @@ export function RootsTable({ onAddRoot }: RootsTableProps) {
                           <button
                             className="text-left hover:underline"
                             onClick={() => {
-                              // TODO: Open ScanDetailSheet (Phase 3)
-                              console.log('Scan detail clicked:', scanInfo.scan_id)
+                              setSelectedScanId(scanInfo.scan_id)
+                              setScanSheetOpen(true)
                             }}
                           >
                             <span>{dateWithStaleness}</span>
@@ -169,8 +175,8 @@ export function RootsTable({ onAddRoot }: RootsTableProps) {
                           <button
                             className="text-left hover:underline"
                             onClick={() => {
-                              // TODO: Open ScanDetailSheet (Phase 3)
-                              console.log('Scan detail clicked:', scanInfo.scan_id)
+                              setSelectedScanId(scanInfo.scan_id)
+                              setScanSheetOpen(true)
                             }}
                           >
                             <span>{dateWithStaleness}</span>
@@ -189,8 +195,8 @@ export function RootsTable({ onAddRoot }: RootsTableProps) {
                           <button
                             className="text-left hover:underline"
                             onClick={() => {
-                              // TODO: Open ScanDetailSheet (Phase 3)
-                              console.log('Scan detail clicked:', scanInfo.scan_id)
+                              setSelectedScanId(scanInfo.scan_id)
+                              setScanSheetOpen(true)
                             }}
                           >
                             <span>{dateWithStaleness}</span>
@@ -214,8 +220,8 @@ export function RootsTable({ onAddRoot }: RootsTableProps) {
                           <button
                             className="text-left hover:underline"
                             onClick={() => {
-                              // TODO: Open ScanDetailSheet (Phase 3)
-                              console.log('Scan detail clicked:', scanInfo.scan_id)
+                              setSelectedScanId(scanInfo.scan_id)
+                              setScanSheetOpen(true)
                             }}
                           >
                             <span>{dateWithStaleness}</span>
@@ -245,8 +251,8 @@ export function RootsTable({ onAddRoot }: RootsTableProps) {
                         <button
                           className="text-left hover:underline"
                           onClick={() => {
-                            // TODO: Open ScanDetailSheet (Phase 3)
-                            console.log('Scan detail clicked:', scanInfo.scan_id)
+                            setSelectedScanId(scanInfo.scan_id)
+                            setScanSheetOpen(true)
                           }}
                         >
                           <span>{dateWithStaleness}</span>
@@ -278,8 +284,8 @@ export function RootsTable({ onAddRoot }: RootsTableProps) {
                         <button
                           className="font-medium text-left hover:underline hover:text-primary"
                           onClick={() => {
-                            // TODO: Open RootDetailSheet (Phase 3)
-                            console.log('Root detail clicked:', root.root_id)
+                            setSelectedRoot({ id: root.root_id, path: root.root_path })
+                            setRootSheetOpen(true)
                           }}
                         >
                           {root.root_path}
@@ -374,8 +380,28 @@ export function RootsTable({ onAddRoot }: RootsTableProps) {
       onSuccess={() => {
         setReloadTrigger(prev => prev + 1)
         setPreselectedRootId(undefined)
+        onScheduleCreated?.()
       }}
     />
+
+    {/* Root Detail Sheet */}
+    {selectedRoot && (
+      <RootDetailSheet
+        rootId={selectedRoot.id}
+        rootPath={selectedRoot.path}
+        open={rootSheetOpen}
+        onOpenChange={setRootSheetOpen}
+      />
+    )}
+
+    {/* Scan Detail Sheet */}
+    {selectedScanId && (
+      <ScanDetailSheet
+        scanId={selectedScanId}
+        open={scanSheetOpen}
+        onOpenChange={setScanSheetOpen}
+      />
+    )}
   </>
   )
 }

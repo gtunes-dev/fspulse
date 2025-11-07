@@ -20,7 +20,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DeleteScheduleDialog } from './DeleteScheduleDialog'
 import { EditScheduleDialog } from './EditScheduleDialog'
+import { RootDetailSheet } from '@/components/browse/RootDetailSheet'
 import { formatDateRelative } from '@/lib/dateUtils'
+import { useScanManager } from '@/contexts/ScanManagerContext'
 import type { ScheduleWithRoot } from '@/lib/types'
 
 interface SchedulesTableProps {
@@ -35,6 +37,7 @@ const ITEMS_PER_PAGE = 25
 
 export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>(
   function SchedulesTable({ isScanning }, ref) {
+    const { lastScanCompletedAt, lastScanScheduledAt } = useScanManager()
     const [schedules, setSchedules] = useState<ScheduleWithRoot[]>([])
     const [loading, setLoading] = useState(true)
     const [currentPage, setCurrentPage] = useState(1)
@@ -42,21 +45,10 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
     const [selectedSchedule, setSelectedSchedule] = useState<ScheduleWithRoot | null>(null)
-
-    const loadSchedules = async () => {
-      try {
-        setLoading(true)
-        const response = await fetch('/api/schedules')
-        if (!response.ok) throw new Error('Failed to load schedules')
-
-        const data: ScheduleWithRoot[] = await response.json()
-        setSchedules(data)
-      } catch (error) {
-        console.error('Error loading schedules:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
+    const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
+    const [rootSheetOpen, setRootSheetOpen] = useState(false)
+    const [reloadTrigger, setReloadTrigger] = useState(0)
+    const isInitialLoad = useRef(true)
 
     // Extract unique roots for the filter dropdown
     const uniqueRoots = useMemo(() => {
@@ -77,34 +69,36 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
       return schedules.filter(s => s.root_id === parseInt(selectedRootId))
     }, [schedules, selectedRootId])
 
-    // Expose reload method via ref
-    useImperativeHandle(ref, () => ({
-      reload: loadSchedules
-    }))
-
     useEffect(() => {
-      loadSchedules()
-    }, [])
+      async function loadSchedules() {
+        try {
+          // Only show loading on initial mount, keep old data during refetch
+          if (isInitialLoad.current) {
+            setLoading(true)
+            isInitialLoad.current = false
+          }
 
-    // Track previous scan state using a ref to detect completion
-    const wasScanningRef = useRef(isScanning)
+          const response = await fetch('/api/schedules')
+          if (!response.ok) throw new Error('Failed to load schedules')
 
-    useEffect(() => {
-      // Detect scan completion (was scanning, now not scanning)
-      if (wasScanningRef.current && !isScanning) {
-        console.log('Scan completed, reloading schedules data')
-        // Give backend time to finish writing to database
-        const timer = setTimeout(() => {
-          loadSchedules()
-        }, 1500)
-
-        wasScanningRef.current = isScanning
-        return () => clearTimeout(timer)
+          const data: ScheduleWithRoot[] = await response.json()
+          setSchedules(data)
+        } catch (error) {
+          console.error('Error loading schedules:', error)
+        } finally {
+          setLoading(false)
+        }
       }
 
-      // Update ref for next check
-      wasScanningRef.current = isScanning
-    }, [isScanning])
+      loadSchedules()
+    }, [lastScanCompletedAt, lastScanScheduledAt, reloadTrigger])
+
+    // Expose reload method via ref for manual refresh
+    useImperativeHandle(ref, () => ({
+      reload: () => {
+        setReloadTrigger(prev => prev + 1)
+      }
+    }))
 
     // Reset to page 1 when filter changes
     useEffect(() => {
@@ -152,7 +146,7 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
         if (!response.ok) throw new Error('Failed to toggle schedule')
 
         // Reload schedules
-        await loadSchedules()
+        setReloadTrigger(prev => prev + 1)
       } catch (error) {
         console.error('Error toggling schedule:', error)
         alert('Failed to toggle schedule')
@@ -285,9 +279,15 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
 
                         {/* Root Path Column */}
                         <TableCell>
-                          <span className="text-sm text-muted-foreground">
+                          <button
+                            onClick={() => {
+                              setSelectedRoot({ id: schedule.root_id, path: schedule.root_path })
+                              setRootSheetOpen(true)
+                            }}
+                            className="text-sm text-muted-foreground hover:underline hover:text-primary text-left"
+                          >
                             {schedule.root_path}
-                          </span>
+                          </button>
                         </TableCell>
 
                         {/* Schedule Description Column */}
@@ -360,7 +360,7 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
         scheduleId={selectedSchedule?.schedule_id ?? null}
         scheduleName={selectedSchedule?.schedule_name ?? ''}
         onDeleteSuccess={() => {
-          loadSchedules()
+          setReloadTrigger(prev => prev + 1)
           setSelectedSchedule(null)
         }}
       />
@@ -371,10 +371,20 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
         onOpenChange={setEditDialogOpen}
         schedule={selectedSchedule}
         onSuccess={() => {
-          loadSchedules()
+          setReloadTrigger(prev => prev + 1)
           setSelectedSchedule(null)
         }}
       />
+
+      {/* Root Detail Sheet */}
+      {selectedRoot && (
+        <RootDetailSheet
+          rootId={selectedRoot.id}
+          rootPath={selectedRoot.path}
+          open={rootSheetOpen}
+          onOpenChange={setRootSheetOpen}
+        />
+      )}
     </>
     )
   }

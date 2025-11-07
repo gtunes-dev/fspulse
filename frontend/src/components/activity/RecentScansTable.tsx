@@ -12,6 +12,7 @@ import { fetchQuery } from '@/lib/api'
 import { formatTimeAgo } from '@/lib/dateUtils'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
+import { RootDetailSheet } from '@/components/browse/RootDetailSheet'
 
 interface ScanRow {
   scan_id: number
@@ -33,6 +34,8 @@ export function RecentScansTable() {
   const [roots, setRoots] = useState<RootMap>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
+  const [rootSheetOpen, setRootSheetOpen] = useState(false)
   const isInitialLoad = useRef(true)
 
   useEffect(() => {
@@ -197,13 +200,14 @@ export function RecentScansTable() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recent Scans</CardTitle>
-      </CardHeader>
-      <CardContent className="p-6">
-        <div className="border border-border rounded-lg overflow-hidden">
-          <Table>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Scans</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="border border-border rounded-lg overflow-hidden">
+            <Table>
             <TableHeader className="bg-muted">
             <TableRow>
               <TableHead className="uppercase text-xs tracking-wide">Time</TableHead>
@@ -225,7 +229,16 @@ export function RecentScansTable() {
                   className="max-w-[200px] truncate"
                   title={roots[scan.root_id] || `Root ${scan.root_id}`}
                 >
-                  {shortenPath(roots[scan.root_id] || `Root ${scan.root_id}`)}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedRoot({ id: scan.root_id, path: roots[scan.root_id] || `Root ${scan.root_id}` })
+                      setRootSheetOpen(true)
+                    }}
+                    className="text-left hover:underline hover:text-primary cursor-pointer"
+                  >
+                    {shortenPath(roots[scan.root_id] || `Root ${scan.root_id}`)}
+                  </button>
                 </TableCell>
                 <TableCell className="text-center">
                   {formatChanges(scan.add_count, scan.modify_count, scan.delete_count)}
@@ -239,9 +252,20 @@ export function RecentScansTable() {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
-      </div>
-    </CardContent>
-  </Card>
-)
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Root Detail Sheet */}
+      {selectedRoot && (
+        <RootDetailSheet
+          rootId={selectedRoot.id}
+          rootPath={selectedRoot.path}
+          open={rootSheetOpen}
+          onOpenChange={setRootSheetOpen}
+        />
+      )}
+    </>
+  )
 }
