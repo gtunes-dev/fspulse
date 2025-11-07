@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Scheduled and recurring scans**: New scheduling system allows daily, weekly, monthly, and interval-based automatic scans with queue-based execution and database-backed persistence
 - **Browse page with detailed item view**: New Browse page allows navigation through filesystem hierarchy with detailed item cards showing file metadata, validation status, change history, and associated alerts in an elegant sliding panel interface
 - **Folder size calculation**: ItemDetailSheet now displays total size for directory items by recursively summing all files within the folder
 - **Unified filter toolbar design**: Introduced consistent elevated toolbar styling across Browse and Alerts pages with drop shadows, refined spacing, and reusable components (FilterToolbar, RootPicker, SearchFilter) for a polished, cohesive UI
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **UI design language overhaul**: Comprehensive visual redesign with card-based layouts, improved typography, refined spacing, and cohesive component styling across all pages
 - **Standardized database transaction pattern**: All explicit transaction wrappers now use IMMEDIATE transactions via a helper function for maximum safety and consistency. Eliminates lock upgrade failures and simplifies transaction management throughout the codebase
 - **Alerts page enhancements**: Added ITEM ID column (positioned between ROOT ID and SCAN ID), clickable file names with Info icon that open ItemDetailSheet for detailed item inspection
 - **Server-side path parsing**: File and directory names now parsed by backend using platform-aware Rust path utilities with `@name` format specifier, eliminating client-side path parsing concerns
