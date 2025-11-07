@@ -15,9 +15,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { fetchQuery, countQuery, fetchItemFolderSize } from '@/lib/api'
+import { fetchQuery, countQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateFull } from '@/lib/dateUtils'
+import { formatFileSize } from '@/lib/formatUtils'
 
 interface ItemDetailSheetProps {
   itemId: number
@@ -35,7 +36,7 @@ interface ItemDetails {
   item_type: string
   is_ts: boolean
   mod_date: number
-  file_size: number | null
+  size: number | null
   file_hash: string | null
   val_status: string | null
   val_error: string | null
@@ -49,8 +50,8 @@ interface Change {
   meta_change: boolean
   mod_date_old: number | null
   mod_date_new: number | null
-  file_size_old: number | null
-  file_size_new: number | null
+  size_old: number | null
+  size_new: number | null
   hash_change: boolean
   hash_old: string | null
   hash_new: string | null
@@ -80,8 +81,8 @@ const CHANGE_COLUMNS: ColumnSpec[] = [
   { name: 'meta_change', visible: true, sort_direction: 'none', position: 4 },
   { name: 'mod_date_old', visible: true, sort_direction: 'none', position: 5 },
   { name: 'mod_date_new', visible: true, sort_direction: 'none', position: 6 },
-  { name: 'file_size_old', visible: true, sort_direction: 'none', position: 7 },
-  { name: 'file_size_new', visible: true, sort_direction: 'none', position: 8 },
+  { name: 'size_old', visible: true, sort_direction: 'none', position: 7 },
+  { name: 'size_new', visible: true, sort_direction: 'none', position: 8 },
   { name: 'hash_change', visible: true, sort_direction: 'none', position: 9 },
   { name: 'hash_old', visible: true, sort_direction: 'none', position: 10 },
   { name: 'hash_new', visible: true, sort_direction: 'none', position: 11 },
@@ -109,8 +110,8 @@ function parseChangeRow(row: string[]): Change {
     meta_change: row[4] === 'T',
     mod_date_old: row[5] && row[5] !== '-' ? parseInt(row[5]) : null,
     mod_date_new: row[6] && row[6] !== '-' ? parseInt(row[6]) : null,
-    file_size_old: row[7] && row[7] !== '-' ? parseInt(row[7]) : null,
-    file_size_new: row[8] && row[8] !== '-' ? parseInt(row[8]) : null,
+    size_old: row[7] && row[7] !== '-' ? parseInt(row[7]) : null,
+    size_new: row[8] && row[8] !== '-' ? parseInt(row[8]) : null,
     hash_change: row[9] === 'T',
     hash_old: row[10] && row[10] !== '-' ? row[10] : null,
     hash_new: row[11] && row[11] !== '-' ? row[11] : null,
@@ -148,7 +149,6 @@ export function ItemDetailSheet({
   const [loadingMoreChanges, setLoadingMoreChanges] = useState(false)
   const [loadingMoreAlerts, setLoadingMoreAlerts] = useState(false)
   const [openChanges, setOpenChanges] = useState<Record<number, boolean>>({})
-  const [folderSize, setFolderSize] = useState<number | null>(null)
 
   // Extract file/folder name from path
   const itemName = itemPath.split('/').filter(Boolean).pop() || itemPath
@@ -171,7 +171,7 @@ export function ItemDetailSheet({
           { name: 'item_type', visible: true, sort_direction: 'none', position: 2 },
           { name: 'is_ts', visible: true, sort_direction: 'none', position: 3 },
           { name: 'mod_date', visible: true, sort_direction: 'none', position: 4 },
-          { name: 'file_size', visible: true, sort_direction: 'none', position: 5 },
+          { name: 'size', visible: true, sort_direction: 'none', position: 5 },
           { name: 'file_hash', visible: true, sort_direction: 'none', position: 6 },
           { name: 'val', visible: true, sort_direction: 'none', position: 7 },
           { name: 'val_error', visible: true, sort_direction: 'none', position: 8 },
@@ -192,7 +192,7 @@ export function ItemDetailSheet({
             item_type: row[2],
             is_ts: row[3] === 'T',
             mod_date: parseInt(row[4] || '0'),
-            file_size: row[5] && row[5] !== '-' ? parseInt(row[5]) : null,
+            size: row[5] && row[5] !== '-' ? parseInt(row[5]) : null,
             file_hash: row[6] && row[6] !== '-' ? row[6] : null,
             val_status: row[7] && row[7] !== '-' ? row[7] : null,
             val_error: row[8] && row[8] !== '-' ? row[8] : null,
@@ -232,19 +232,6 @@ export function ItemDetailSheet({
         })
 
         setAlerts(alertResponse.rows.map(parseAlertRow))
-
-        // Load folder size if this is a directory
-        if (itemType === 'D') {
-          try {
-            const sizeResponse = await fetchItemFolderSize(itemId)
-            setFolderSize(sizeResponse.size)
-          } catch (error) {
-            console.error('Error loading folder size:', error)
-            setFolderSize(null)
-          }
-        } else {
-          setFolderSize(null)
-        }
       } catch (error) {
         console.error('Error loading item details:', error)
       } finally {
@@ -291,19 +278,6 @@ export function ItemDetailSheet({
     } finally {
       setLoadingMoreAlerts(false)
     }
-  }
-
-  const formatFileSize = (bytes: number | null): string => {
-    if (bytes === null) return 'N/A'
-    if (bytes === 0) return '0 B'
-    const units = ['B', 'KB', 'MB', 'GB', 'TB']
-    let size = bytes
-    let unitIndex = 0
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024
-      unitIndex++
-    }
-    return `${size.toFixed(2)} ${units[unitIndex]}`
   }
 
   const getValidationBadge = (status: string | null) => {
@@ -426,16 +400,10 @@ export function ItemDetailSheet({
                       {details.mod_date ? formatDateFull(details.mod_date) : 'N/A'}
                     </p>
                   </div>
-                  {details.item_type === 'F' && details.file_size !== null && (
+                  {details.size !== null && (
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Size</p>
-                      <p className="text-base font-semibold mt-1">{formatFileSize(details.file_size)}</p>
-                    </div>
-                  )}
-                  {details.item_type === 'D' && folderSize !== null && (
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Total Size</p>
-                      <p className="text-base font-semibold mt-1">{formatFileSize(folderSize)}</p>
+                      <p className="text-base font-semibold mt-1">{formatFileSize(details.size)}</p>
                     </div>
                   )}
                   {details.item_type === 'F' && (
@@ -499,7 +467,7 @@ export function ItemDetailSheet({
                           <div key={change.change_id}>
                             <div className="p-4">
                               {change.change_type === 'M' && (() => {
-                                const hasMetaChanges = change.meta_change && (change.mod_date_old !== change.mod_date_new || change.file_size_old !== change.file_size_new)
+                                const hasMetaChanges = change.meta_change && (change.mod_date_old !== change.mod_date_new || change.size_old !== change.size_new)
                                 const hasHashChanges = change.hash_change && change.hash_old !== change.hash_new
                                 const hasValChanges = change.val_change && change.val_old !== change.val_new
                                 const hasAnyChanges = hasMetaChanges || hasHashChanges || hasValChanges
@@ -556,7 +524,7 @@ export function ItemDetailSheet({
                                           </div>
                                         )}
 
-                                        {change.meta_change && change.file_size_old !== change.file_size_new && (
+                                        {change.meta_change && change.size_old !== change.size_new && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 flex items-center gap-1">
                                               <HardDrive className="h-3 w-3" />
@@ -564,11 +532,11 @@ export function ItemDetailSheet({
                                             </p>
                                             <div className="flex items-center gap-2">
                                               <span className="text-muted-foreground">
-                                                {formatFileSize(change.file_size_old)}
+                                                {formatFileSize(change.size_old)}
                                               </span>
                                               <span className="text-muted-foreground">→</span>
                                               <span className="font-medium">
-                                                {formatFileSize(change.file_size_new)}
+                                                {formatFileSize(change.size_new)}
                                               </span>
                                             </div>
                                           </div>

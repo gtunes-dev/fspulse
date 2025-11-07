@@ -21,7 +21,7 @@ interface LastScanStats {
   scan_time?: number
   total_files?: number
   total_folders?: number
-  total_file_size?: number
+  total_size?: number
   total_adds?: number
   total_modifies?: number
   total_deletes?: number
@@ -192,10 +192,10 @@ export function LastScanCard() {
                 <span className="text-muted-foreground">Items:</span>{' '}
                 {stats.total_files.toLocaleString()} files, {stats.total_folders?.toLocaleString() || 0} folders
               </div>
-              {stats.total_file_size !== undefined && stats.total_file_size > 0 && (
+              {stats.total_size !== undefined && stats.total_size > 0 && (
                 <div>
                   <span className="text-muted-foreground">Total Size:</span>{' '}
-                  {formatFileSize(stats.total_file_size)}
+                  {formatFileSize(stats.total_size)}
                 </div>
               )}
             </>

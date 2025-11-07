@@ -24,11 +24,11 @@ const SAMPLE_QUERIES = [
   },
   {
     label: 'Filter files',
-    query: 'items where item_type:(F) show item_path, file_size limit 25',
+    query: 'items where item_type:(F) show item_path, size limit 25',
   },
   {
     label: 'Large files',
-    query: 'items where file_size:(>1000000) show item_path, file_size order by file_size desc limit 20',
+    query: 'items where item_type:(F), size:(>1000000) show item_path, size order by size desc limit 20',
   },
   {
     label: 'Open alerts',
@@ -110,7 +110,7 @@ export function QueryView() {
           <Textarea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter your FsPulse query here... (e.g., items where item_type:(F) show item_path, file_size limit 10)"
+            placeholder="Enter your FsPulse query here... (e.g., items where item_type:(F) show item_path, size limit 10)"
             className="min-h-[120px] font-mono text-sm resize-y"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

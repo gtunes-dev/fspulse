@@ -11,10 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Scheduled and recurring scans**: New scheduling system allows daily, weekly, monthly, and interval-based automatic scans with queue-based execution and database-backed persistence
 - **Browse page with detailed item view**: New Browse page allows navigation through filesystem hierarchy with detailed item cards showing file metadata, validation status, change history, and associated alerts in an elegant sliding panel interface
-- **Folder size calculation**: ItemDetailSheet now displays total size for directory items by recursively summing all files within the folder
+- **Folder size calculation and storage**: Folder sizes are now computed during scan by recursive directory traversal and stored in the database. Scan resumption properly aggregates sizes from already-processed subdirectories. Database schema v10 generalizes size storage from files-only to all item types
+- **Dual-format file size display**: File sizes now show both decimal (KB/MB/GB) and binary (KiB/MiB/GiB) units for cross-platform clarity, e.g., "16.3 MB (15.54 MiB)"
 - **Unified filter toolbar design**: Introduced consistent elevated toolbar styling across Browse and Alerts pages with drop shadows, refined spacing, and reusable components (FilterToolbar, RootPicker, SearchFilter) for a polished, cohesive UI
 - **Browse page path search**: Added debounced search filter to Browse page for filtering items by path, with search icon inside input for modern iOS-inspired aesthetic
-- **Enhanced scan statistics**: Database schema v6 adds denormalized count columns to scans table (`total_file_size`, `alert_count`, `add_count`, `modify_count`, `delete_count`) for improved query performance and future charting capabilities. total_file_size will be computed for new scans only
+- **Enhanced scan statistics**: Database schema v6 adds denormalized count columns to scans table (`total_size`, `alert_count`, `add_count`, `modify_count`, `delete_count`) for improved query performance and future charting capabilities
 - **Home page statistics display**: Added total file size and aggregate change count displays with color-coded visual indicators for adds (green), modifies (blue), and deletes (red)
 - **Scan Trends visualization**: New Insights tab with interactive charts showing historical scan data over time, including total file size, file/folder counts, change activity (adds/modifies/deletes), and alerts created. Features root selection, date range filtering, and human-readable formatting for large numbers and byte sizes
 - **Standalone Alerts page**: Moved Alerts from Insights tabs to dedicated top-level navigation page with context filtering by root or scan ID
@@ -23,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Query column renames**: Database schema v10 renames `file_size` → `size` (in items, changes tables) and `total_file_size` → `total_size` (in scans table) to reflect that directories now have stored sizes - **Breaking change**: queries using old column names (`file_size`, `total_file_size`) will fail after upgrade
+- **Recursive directory scanning**: Replaced queue-based directory traversal with depth-first recursive scanning to enable bottom-up folder size calculation during scan
 - **UI design language overhaul**: Comprehensive visual redesign with card-based layouts, improved typography, refined spacing, and cohesive component styling across all pages
 - **Standardized database transaction pattern**: All explicit transaction wrappers now use IMMEDIATE transactions via a helper function for maximum safety and consistency. Eliminates lock upgrade failures and simplifies transaction management throughout the codebase
 - **Alerts page enhancements**: Added ITEM ID column (positioned between ROOT ID and SCAN ID), clickable file names with Info icon that open ItemDetailSheet for detailed item inspection

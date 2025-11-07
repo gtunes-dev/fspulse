@@ -1,7 +1,6 @@
 use log::warn;
 use rusqlite::{self, params, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::path::MAIN_SEPARATOR;
 
 use crate::{
     database::Database,
@@ -171,7 +170,7 @@ pub struct Item {
 
     // Metadata property group
     mod_date: Option<i64>,
-    file_size: Option<i64>,
+    size: Option<i64>,
 
     // Hash property group
     #[allow(dead_code)]
@@ -187,14 +186,14 @@ pub struct Item {
 
 impl Item {
     const ITEM_COLUMNS: &str = "
-        item_id, 
-        root_id, 
+        item_id,
+        root_id,
         item_path,
         item_type,
-        last_scan, 
+        last_scan,
         is_ts,
         mod_date,
-        file_size,
+        size,
         last_hash_scan,
         file_hash,
         last_val_scan,
@@ -210,7 +209,7 @@ impl Item {
             last_scan: row.get(4)?,
             is_ts: row.get(5)?,
             mod_date: row.get(6)?,
-            file_size: row.get(7)?,
+            size: row.get(7)?,
             last_hash_scan: row.get(8)?,
             file_hash: row.get(9)?,
             last_val_scan: row.get(10)?,
@@ -272,8 +271,8 @@ impl Item {
     pub fn mod_date(&self) -> Option<i64> {
         self.mod_date
     }
-    pub fn file_size(&self) -> Option<i64> {
-        self.file_size
+    pub fn size(&self) -> Option<i64> {
+        self.size
     }
     #[allow(dead_code)]
     pub fn last_hash_scan(&self) -> Option<i64> {
@@ -513,42 +512,6 @@ impl Item {
         }
         Ok(())
     }
-
-    /// Calculate the total size of all files within a directory item.
-    /// This recursively sums file_size for all non-tombstone files
-    /// under the given directory path.
-    ///
-    /// The folder_path must end with the platform's path separator.
-    /// Returns an error if the path doesn't end with a separator.
-    pub fn calculate_folder_size(
-        db: &Database,
-        root_id: i64,
-        folder_path: &str,
-    ) -> Result<i64, FsPulseError> {
-        // Validate that this is a folder path (ends with separator)
-        if !folder_path.ends_with(MAIN_SEPARATOR) {
-            return Err(FsPulseError::Error(
-                format!("Path must end with separator: {}", folder_path)
-            ));
-        }
-
-        let sql = r#"
-            SELECT COALESCE(SUM(file_size), 0) as total_size
-            FROM items
-            WHERE root_id = ?
-              AND item_type = 0
-              AND is_ts = 0
-              AND item_path LIKE ? || '%'
-        "#;
-
-        let total_size = db.conn().query_row(
-            sql,
-            params![root_id, folder_path],
-            |row| row.get(0),
-        )?;
-
-        Ok(total_size)
-    }
 }
 
 #[cfg(test)]
@@ -629,7 +592,7 @@ mod tests {
             last_scan: 123456789,
             is_ts: true,
             mod_date: Some(987654321),
-            file_size: Some(1024),
+            size: Some(1024),
             last_hash_scan: Some(111),
             file_hash: Some("def456".to_string()),
             last_val_scan: Some(222),
@@ -644,7 +607,7 @@ mod tests {
         assert_eq!(item.last_scan(), 123456789);
         assert!(item.is_ts());
         assert_eq!(item.mod_date(), Some(987654321));
-        assert_eq!(item.file_size(), Some(1024));
+        assert_eq!(item.size(), Some(1024));
         assert_eq!(item.last_hash_scan(), Some(111));
         assert_eq!(item.file_hash(), Some("def456"));
         assert_eq!(item.last_val_scan(), Some(222));

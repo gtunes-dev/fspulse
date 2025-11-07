@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import { fetchQuery, countQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateFull } from '@/lib/dateUtils'
+import { formatFileSize } from '@/lib/formatUtils'
 
 interface RootDetailSheetProps {
   rootId: number
@@ -36,7 +37,7 @@ interface Scan {
   alert_count: number
   file_count: number
   folder_count: number
-  total_file_size: number | null
+  total_size: number | null
 }
 
 const SCANS_PER_PAGE = 20
@@ -52,7 +53,7 @@ const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'alert_count', visible: true, sort_direction: 'none', position: 6 },
   { name: 'file_count', visible: true, sort_direction: 'none', position: 7 },
   { name: 'folder_count', visible: true, sort_direction: 'none', position: 8 },
-  { name: 'total_file_size', visible: true, sort_direction: 'none', position: 9 },
+  { name: 'total_size', visible: true, sort_direction: 'none', position: 9 },
 ]
 
 // Row parsing helper
@@ -67,7 +68,7 @@ function parseScanRow(row: string[]): Scan {
     alert_count: parseInt(row[6]) || 0,
     file_count: parseInt(row[7]) || 0,
     folder_count: parseInt(row[8]) || 0,
-    total_file_size: row[9] && row[9] !== '-' ? parseInt(row[9]) : null,
+    total_size: row[9] && row[9] !== '-' ? parseInt(row[9]) : null,
   }
 }
 
@@ -152,19 +153,6 @@ export function RootDetailSheet({
     } finally {
       setLoadingMoreScans(false)
     }
-  }
-
-  const formatFileSize = (bytes: number | null): string => {
-    if (bytes === null) return 'N/A'
-    if (bytes === 0) return '0 B'
-    const units = ['B', 'KB', 'MB', 'GB', 'TB']
-    let size = bytes
-    let unitIndex = 0
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024
-      unitIndex++
-    }
-    return `${size.toFixed(2)} ${units[unitIndex]}`
   }
 
   const formatChanges = (add: number, modify: number, del: number): string => {
@@ -309,10 +297,10 @@ export function RootDetailSheet({
                                       <span className="text-muted-foreground">Changes: </span>
                                       <span className="font-medium">{formatChanges(scan.add_count, scan.modify_count, scan.delete_count)}</span>
                                     </div>
-                                    {scan.total_file_size !== null && (
+                                    {scan.total_size !== null && (
                                       <div>
                                         <span className="text-muted-foreground">Size: </span>
-                                        <span className="font-medium">{formatFileSize(scan.total_file_size)}</span>
+                                        <span className="font-medium">{formatFileSize(scan.total_size)}</span>
                                       </div>
                                     )}
                                   </div>

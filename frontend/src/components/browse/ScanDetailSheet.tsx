@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateFull } from '@/lib/dateUtils'
+import { formatFileSize } from '@/lib/formatUtils'
 
 interface ScanDetailSheetProps {
   scanId: number
@@ -30,7 +31,7 @@ interface ScanDetails {
   alert_count: number
   file_count: number
   folder_count: number
-  total_file_size: number | null
+  total_size: number | null
 }
 
 // Column specifications for scan query (matching RootDetailSheet)
@@ -45,7 +46,7 @@ const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'alert_count', visible: true, sort_direction: 'none', position: 7 },
   { name: 'file_count', visible: true, sort_direction: 'none', position: 8 },
   { name: 'folder_count', visible: true, sort_direction: 'none', position: 9 },
-  { name: 'total_file_size', visible: true, sort_direction: 'none', position: 10 },
+  { name: 'total_size', visible: true, sort_direction: 'none', position: 10 },
 ]
 
 // Column specifications for root query
@@ -109,7 +110,7 @@ export function ScanDetailSheet({
           alert_count: parseInt(row[7]) || 0,
           file_count: parseInt(row[8]) || 0,
           folder_count: parseInt(row[9]) || 0,
-          total_file_size: row[10] && row[10] !== '-' ? parseInt(row[10]) : null,
+          total_size: row[10] && row[10] !== '-' ? parseInt(row[10]) : null,
         })
       } catch (error) {
         console.error('Error loading scan details:', error)
@@ -121,19 +122,6 @@ export function ScanDetailSheet({
 
     loadScanDetails()
   }, [open, scanId])
-
-  const formatFileSize = (bytes: number | null): string => {
-    if (bytes === null) return 'N/A'
-    if (bytes === 0) return '0 B'
-    const units = ['B', 'KB', 'MB', 'GB', 'TB']
-    let size = bytes
-    let unitIndex = 0
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024
-      unitIndex++
-    }
-    return `${size.toFixed(2)} ${units[unitIndex]}`
-  }
 
   const formatChanges = (add: number, modify: number, del: number): string => {
     const changes = []
@@ -240,11 +228,11 @@ export function ScanDetailSheet({
                         {formatChanges(details.add_count, details.modify_count, details.delete_count)}
                       </p>
                     </div>
-                    {details.total_file_size !== null && (
+                    {details.total_size !== null && (
                       <div className="text-right">
                         <p className="text-sm font-medium text-muted-foreground">Total Size</p>
                         <p className="text-base font-semibold mt-1">
-                          {formatFileSize(details.total_file_size)}
+                          {formatFileSize(details.total_size)}
                         </p>
                       </div>
                     )}

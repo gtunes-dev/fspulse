@@ -45,7 +45,7 @@ interface ScanData {
   scan_time: number // Unix timestamp
   file_count: number
   folder_count: number
-  total_file_size: number
+  total_size: number
   alert_count: number
   modify_count: number
   add_count: number
@@ -231,7 +231,7 @@ export function ScanTrendsTab() {
         { name: 'scan_time', visible: true, sort_direction: 'asc', position: 1 },
         { name: 'file_count', visible: true, sort_direction: 'none', position: 2 },
         { name: 'folder_count', visible: true, sort_direction: 'none', position: 3 },
-        { name: 'total_file_size', visible: true, sort_direction: 'none', position: 4 },
+        { name: 'total_size', visible: true, sort_direction: 'none', position: 4 },
         { name: 'alert_count', visible: true, sort_direction: 'none', position: 5 },
         { name: 'modify_count', visible: true, sort_direction: 'none', position: 6 },
         { name: 'add_count', visible: true, sort_direction: 'none', position: 7 },
@@ -250,7 +250,7 @@ export function ScanTrendsTab() {
         scan_time: parseInt(row[1]), // Position 1 now (scan_id is position 0)
         file_count: parseInt(row[2]) || 0,
         folder_count: parseInt(row[3]) || 0,
-        total_file_size: parseInt(row[4]) || 0,
+        total_size: parseInt(row[4]) || 0,
         alert_count: parseInt(row[5]) || 0,
         modify_count: parseInt(row[6]) || 0,
         add_count: parseInt(row[7]) || 0,
@@ -405,7 +405,7 @@ export function ScanTrendsTab() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
-          {/* Total File Size Chart */}
+          {/* Total Size Chart */}
           <Card>
             <CardHeader>
               <CardTitle>Total Size</CardTitle>
@@ -413,7 +413,7 @@ export function ScanTrendsTab() {
             <CardContent>
               <ChartContainer
                 config={{
-                  total_file_size: {
+                  total_size: {
                     label: 'Total Size',
                     color: 'hsl(271 81% 56%)', // Vibrant purple
                   },
@@ -423,7 +423,7 @@ export function ScanTrendsTab() {
                 <AreaChart
                   data={scanData.map((d) => ({
                     date: format(new Date(d.scan_time * 1000), 'MMM dd'),
-                    total_file_size: d.total_file_size,
+                    total_size: d.total_size,
                   }))}
                 >
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -462,9 +462,9 @@ export function ScanTrendsTab() {
                   <Legend />
                   <Area
                     type="monotone"
-                    dataKey="total_file_size"
-                    stroke="var(--color-total_file_size)"
-                    fill="var(--color-total_file_size)"
+                    dataKey="total_size"
+                    stroke="var(--color-total_size)"
+                    fill="var(--color-total_size)"
                     fillOpacity={0.6}
                     name="Total Size"
                   />

@@ -114,14 +114,6 @@ export async function updateAlertStatus(
 }
 
 /**
- * Get the calculated folder size for a directory item
- */
-export async function fetchItemFolderSize(itemId: number): Promise<{ size: number }> {
-  const response = await fetch(`${API_BASE}/items/${itemId}/folder-size`)
-  return handleResponse<{ size: number }>(response)
-}
-
-/**
  * Delete a root and all associated data (scans, items, changes, alerts)
  */
 export async function deleteRoot(rootId: number): Promise<void> {

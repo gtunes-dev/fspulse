@@ -36,7 +36,6 @@ use dialoguer::{MultiSelect, Select};
 use log::{error, info};
 use threadpool::ThreadPool;
 
-use std::collections::VecDeque;
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,13 +43,18 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{cmp, fs};
 
-#[derive(Clone, Debug)]
-struct QueueEntry {
-    path: PathBuf,
-    metadata: fs::Metadata,
-}
-
 pub struct Scanner {}
+
+/// Context passed through recursive directory scanning to avoid large parameter lists
+struct ScanContext<'a> {
+    db: &'a mut Database,
+    scan: &'a Scan,
+    reporter: &'a Arc<dyn ProgressReporter>,
+    dir_prog: ProgressId,
+    item_prog: ProgressId,
+    cancel_token: &'a Arc<AtomicBool>,
+    items_processed: &'a mut i32,
+}
 
 enum ScanDecision {
     NewScan,
@@ -408,6 +412,88 @@ impl Scanner {
         Scan::create(db.conn(), root, analysis_spec)
     }
 
+    fn scan_directory_recursive(
+        ctx: &mut ScanContext,
+        path: &Path,
+    ) -> Result<i64, FsPulseError> {
+        // Check for cancellation every 100 items
+        *ctx.items_processed += 1;
+        if *ctx.items_processed % 100 == 0 && ctx.cancel_token.load(Ordering::Acquire) {
+            return Err(FsPulseError::ScanCancelled);
+        }
+
+        ctx.reporter.update_work(
+            ctx.dir_prog,
+            WorkUpdate::Directory {
+                path: path.to_string_lossy().to_string(),
+            },
+        );
+
+        let items = fs::read_dir(path)?;
+        let mut total_size: i64 = 0;
+
+        for item in items {
+            let item = item?;
+            let item_metadata = fs::symlink_metadata(item.path())?;
+
+            ctx.reporter.update_work(
+                ctx.item_prog,
+                WorkUpdate::File {
+                    path: item.file_name().to_string_lossy().to_string(),
+                },
+            );
+
+            if item_metadata.is_dir() {
+                // Recursively scan the subdirectory and get its size
+                let subdir_size = Scanner::scan_directory_recursive(
+                    ctx,
+                    &item.path(),
+                )?;
+
+                // Handle the subdirectory with its computed size
+                let returned_size = Scanner::handle_scan_item(
+                    ctx.db,
+                    ctx.scan,
+                    ItemType::Directory,
+                    &item.path(),
+                    &item_metadata,
+                    Some(subdir_size),
+                )?;
+
+                total_size += returned_size;
+            } else {
+                // Handle files, symlinks, and other items
+                let item_type = if item_metadata.is_file() {
+                    ItemType::File
+                } else if item_metadata.is_symlink() {
+                    ItemType::Symlink
+                } else {
+                    ItemType::Other
+                };
+
+                // Files have meaningful sizes, symlinks and other don't
+                let item_size = if item_metadata.is_file() {
+                    Some(item_metadata.len() as i64)
+                } else {
+                    None
+                };
+
+                let returned_size = Scanner::handle_scan_item(
+                    ctx.db,
+                    ctx.scan,
+                    item_type,
+                    &item.path(),
+                    &item_metadata,
+                    item_size,
+                )?;
+
+                total_size += returned_size;
+            }
+        }
+
+        Ok(total_size)
+    }
+
     fn do_state_scanning(
         db: &mut Database,
         root: &Root,
@@ -416,9 +502,6 @@ impl Scanner {
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let root_path_buf = PathBuf::from(root.root_path());
-        let metadata = fs::symlink_metadata(&root_path_buf)?;
-
-        let mut q = VecDeque::new();
 
         let dir_prog = reporter.create(ProgressConfig {
             style: ProgressStyle::Spinner,
@@ -434,70 +517,28 @@ impl Scanner {
             steady_tick: Some(Duration::from_millis(250)),
         });
 
-        q.push_back(QueueEntry {
-            path: root_path_buf.clone(),
-            metadata,
-        });
-
         let mut items_processed: i32 = 100;
 
-        while let Some(q_entry) = q.pop_front() {
-            // Check for cancellation every 100 items
-            items_processed += 1;
-            if items_processed % 100 == 0 && cancel_token.load(Ordering::Acquire) {
-                return Err(FsPulseError::ScanCancelled);
-            }
+        // Create scanning context
+        let mut ctx = ScanContext {
+            db,
+            scan,
+            reporter: &reporter,
+            dir_prog,
+            item_prog,
+            cancel_token,
+            items_processed: &mut items_processed,
+        };
 
-            reporter.update_work(
-                dir_prog,
-                WorkUpdate::Directory {
-                    path: q_entry.path.to_string_lossy().to_string(),
-                },
-            );
+        // Recursively scan the root directory and get the total size
+        // Note: We don't store the root directory itself as an item in the database
+        let _total_size = Scanner::scan_directory_recursive(
+            &mut ctx,
+            &root_path_buf,
+        )?;
 
-            // Handle the directory itself before iterating its contents. The root dir
-            // was previously pushed into the queue - if this is that entry, we skip it
-            if q_entry.path != root_path_buf {
-                Scanner::handle_scan_item(
-                    db,
-                    scan,
-                    ItemType::Directory,
-                    q_entry.path.as_path(),
-                    &q_entry.metadata,
-                )?;
-            }
-
-            let items = fs::read_dir(&q_entry.path)?;
-
-            for item in items {
-                let item = item?;
-
-                let metadata = fs::symlink_metadata(item.path())?; // Use symlink_metadata to check for symlinks
-                reporter.update_work(
-                    item_prog,
-                    WorkUpdate::File {
-                        path: item.file_name().to_string_lossy().to_string(),
-                    },
-                );
-
-                if metadata.is_dir() {
-                    q.push_back(QueueEntry {
-                        path: item.path(),
-                        metadata,
-                    });
-                } else {
-                    let item_type = if metadata.is_file() {
-                        ItemType::File
-                    } else if metadata.is_symlink() {
-                        ItemType::Symlink
-                    } else {
-                        ItemType::Other
-                    };
-
-                    Scanner::handle_scan_item(db, scan, item_type, &item.path(), &metadata)?;
-                }
-            }
-        }
+        // TODO: Store total_size on the scan record if needed
+        // For now, it will be computed via SQL query in set_state_completed
 
         reporter.finish_and_clear(item_prog);
         reporter.finish_and_clear(dir_prog);
@@ -822,7 +863,8 @@ impl Scanner {
         item_type: ItemType,
         path: &Path,
         metadata: &Metadata,
-    ) -> Result<(), FsPulseError> {
+        computed_size: Option<i64>,
+    ) -> Result<i64, FsPulseError> {
         //let conn = &mut db.conn;
 
         // load the item
@@ -835,25 +877,23 @@ impl Scanner {
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs() as i64);
 
-        let file_size = if metadata.is_file() {
-            Some(metadata.len() as i64)
-        } else {
-            None
-        };
+        let size = computed_size;
 
-        // If the item was already processed for this scan, just skip it. We intentionally
-        // do not handle the case where the item was seen within this scan, but has since
-        // either been mod_date or has changed type. There are edge cases where this might
-        // cause strangeness in reports such as when an item was seen as a file, the scan
-        // was resumed and the item has changed into a directory. In this case, we'll still
-        // traverse the children within the resumed scan and a tree report will look odd
         if let Some(existing_item) = existing_item {
+            // If the item was already processed for this scan, return its size from the database.
+            // This allows scan resumption to work correctly - we don't re-process the item, but
+            // we do need its size for folder size aggregation. We intentionally do not handle
+            // the case where the item was seen within this scan but has since been modified or
+            // changed type. There are edge cases where this might cause strangeness in reports
+            // such as when an item was seen as a file, the scan was resumed and the item has
+            // changed into a directory. In this case, we'll still traverse the children within
+            // the resumed scan and a tree report will look odd.
             if existing_item.last_scan() == scan.scan_id() {
-                return Ok(());
+                return Ok(existing_item.size().unwrap_or(0));
             }
 
             let meta_change =
-                existing_item.mod_date() != mod_date || existing_item.file_size() != file_size;
+                existing_item.mod_date() != mod_date || existing_item.size() != size;
 
             if existing_item.is_ts() {
                 // Rehydrate a tombstone
@@ -862,7 +902,7 @@ impl Scanner {
                         "UPDATE items SET
                                 is_ts = 0,
                                 mod_date = ?,
-                                file_size = ?,
+                                size = ?,
                                 file_hash = NULL,
                                 val = ?,
                                 val_error = NULL,
@@ -872,7 +912,7 @@ impl Scanner {
                             WHERE item_id = ?",
                         (
                             mod_date,
-                            file_size,
+                            size,
                             ValidationState::Unknown.as_i64(),
                             scan.scan_id(),
                             existing_item.item_id(),
@@ -894,8 +934,8 @@ impl Scanner {
                                 is_undelete,
                                 mod_date_old,
                                 mod_date_new,
-                                file_size_old,
-                                file_size_new,
+                                size_old,
+                                size_new,
                                 hash_old,
                                 val_old,
                                 val_error_old
@@ -908,8 +948,8 @@ impl Scanner {
                             ChangeType::Add.as_i64(),
                             existing_item.mod_date(),
                             mod_date,
-                            existing_item.file_size(),
-                            file_size,
+                            existing_item.size(),
+                            size,
                             existing_item.file_hash(),
                             existing_item.validity_state_as_str(),
                             existing_item.val_error(),
@@ -923,10 +963,10 @@ impl Scanner {
                     let rows_updated = conn.execute(
                         "UPDATE items SET
                             mod_date = ?,
-                            file_size = ?,
+                            size = ?,
                             last_scan = ?
                         WHERE item_id = ?",
-                        (mod_date, file_size, scan.scan_id(), existing_item.item_id()),
+                        (mod_date, size, scan.scan_id(), existing_item.item_id()),
                     )?;
                     if rows_updated == 0 {
                         return Err(FsPulseError::Error(format!(
@@ -943,8 +983,8 @@ impl Scanner {
                                     meta_change,
                                     mod_date_old,
                                     mod_date_new,
-                                    file_size_old,
-                                    file_size_new)
+                                    size_old,
+                                    size_new)
                                 VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
                         (
                             scan.scan_id(),
@@ -952,8 +992,8 @@ impl Scanner {
                             ChangeType::Modify.as_i64(),
                             meta_change.then_some(existing_item.mod_date()),
                             meta_change.then_some(mod_date),
-                            meta_change.then_some(existing_item.file_size()),
-                            meta_change.then_some(file_size),
+                            meta_change.then_some(existing_item.size()),
+                            meta_change.then_some(size),
                         ),
                     )?;
 
@@ -976,19 +1016,20 @@ impl Scanner {
         } else {
             // Item is new, insert into items and changes tables
             db.immediate_transaction(|conn| {
-                conn.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, file_size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (scan.root_id(), &path_str, item_type.as_i64(), mod_date, file_size, ValidationState::Unknown.as_i64(), scan.scan_id()))?;
+                conn.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (scan.root_id(), &path_str, item_type.as_i64(), mod_date, size, ValidationState::Unknown.as_i64(), scan.scan_id()))?;
 
                 let item_id: i64 = conn.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
-                conn.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, file_size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
-                    (scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, file_size))?;
+                conn.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
+                    (scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, size))?;
 
                 Ok(())
             })?;
         }
 
-        Ok(())
+        // Return the size for folder aggregation (0 if None)
+        Ok(computed_size.unwrap_or(0))
     }
 
     pub fn update_item_analysis(

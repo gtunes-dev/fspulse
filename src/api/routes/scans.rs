@@ -209,7 +209,7 @@ pub async fn get_last_scan_stats() -> Result<Json<Value>, StatusCode> {
             "scan_time": stats.scan_time,
             "total_files": stats.total_files,
             "total_folders": stats.total_folders,
-            "total_file_size": stats.total_file_size,
+            "total_size": stats.total_size,
             "total_adds": stats.total_adds,
             "total_modifies": stats.total_modifies,
             "total_deletes": stats.total_deletes,

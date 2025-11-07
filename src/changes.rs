@@ -16,8 +16,8 @@ pub struct Change {
     pub meta_change: Option<bool>, // Present if "M". True if metadata changed, else False
     pub mod_date_old: Option<i64>, // Meaningful if undelete or meta_change
     pub mod_date_new: Option<i64>, // Meaningful if metdata_changed
-    pub file_size_old: Option<i64>, // Meaningful if undelete or meta_change
-    pub file_size_new: Option<i64>, // Meaningful if undelete or meta_change
+    pub size_old: Option<i64>, // Meaningful if undelete or meta_change
+    pub size_new: Option<i64>, // Meaningful if undelete or meta_change
     pub hash_change: Option<bool>, // Present if "M". True if hash changed, else False
     #[allow(dead_code)]
     pub last_hash_scan_old: Option<i64>, // Present if "M" and hash_change

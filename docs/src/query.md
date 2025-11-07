@@ -58,7 +58,7 @@ scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 | `scan_time`       | Date     | Timestamp when scan was performed              |
 | `file_count`      | Integer  | Count of files found in the scan               |
 | `folder_count`    | Integer  | Count of directories found in the scan         |
-| `total_file_size` | Integer  | Total size in bytes of all files in the scan   |
+| `total_size`      | Integer  | Total size in bytes of all files in the scan   |
 | `alert_count`     | Integer  | Number of alerts created during the scan       |
 | `add_count`       | Integer  | Number of items added in the scan              |
 | `modify_count`    | Integer  | Number of items modified in the scan           |
@@ -85,7 +85,7 @@ items [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 | `last_scan`      | Integer             |
 | `is_ts`          | Boolean             |
 | `mod_date`       | Date                |
-| `file_size`      | Integer             |
+| `size`           | Integer             |
 | `last_hash_scan` | Integer             |
 | `file_hash`      | String              |
 | `last_val_scan`  | Integer             |
@@ -231,7 +231,7 @@ changes where val_new:(I) show default, val_old, val_new order by change_id desc
 scans show scan_id, scan_time@timestamp, file_count order by scan_time desc limit 10
 
 # Scans with changes and alerts
-scans show scan_id, file_count, total_file_size, add_count, modify_count, delete_count, alert_count order by scan_time desc
+scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by scan_time desc
 ```
 
 ---

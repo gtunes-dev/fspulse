@@ -295,7 +295,7 @@ scan_state               =  {
 }
 
 // Integer columns
-int_col  = { "file_size_new" | "file_size_old" | "file_size" | "file_count" | "folder_count" | "total_file_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" }
+int_col  = { "size_new" | "size_old" | "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

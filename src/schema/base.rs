@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '9');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '10');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS scans (
     scan_time INTEGER NOT NULL,        -- Timestamp of when scan was performed (UTC)
     file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
     folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
-    total_file_size INTEGER DEFAULT NULL, -- Total size of all files seen in the scan
+    total_size INTEGER DEFAULT NULL, -- Total size of all items (files and directories) seen in the scan
     alert_count INTEGER DEFAULT NULL,  -- Count of alerts created during the scan
     add_count INTEGER DEFAULT NULL,    -- Count of items added in the scan
     modify_count INTEGER DEFAULT NULL, -- Count of items modified in the scan
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS items (
 
     -- Medatadata Property Group
     mod_date INTEGER,                           -- Last mod_date timestamp
-    file_size INTEGER,                          -- File size in bytes (NULL for directories)
+    size INTEGER,                               -- Size in bytes (file size for files, computed size for directories)
 
     -- Hash Property Group
     last_hash_scan INTEGER,                  -- Id of last scan during which a hash was computed
@@ -87,8 +87,8 @@ CREATE TABLE IF NOT EXISTS changes (
     meta_change BOOLEAN DEFAULT NULL,      -- Not Null if "M". True if metadata changed
     mod_date_old INTEGER DEFAULT NULL,          -- Stores the previous mod_date timestamp (if changed)
     mod_date_new INTEGER DEFAULT NULL,          -- Stores the new mod_date timestamp (if changed)
-    file_size_old INTEGER DEFAULT NULL,         -- Stores the previous file_size (if changed)
-    file_size_new INTEGER DEFAULT NULL,         -- Stores the new file_size (if changed)
+    size_old INTEGER DEFAULT NULL,              -- Stores the previous size (if changed)
+    size_new INTEGER DEFAULT NULL,              -- Stores the new size (if changed)
 
     -- Hash Properties (Add, Modify)
     hash_change BOOLEAN DEFAULT NULL,          -- Not Null if "A" or "M". True if hash changed

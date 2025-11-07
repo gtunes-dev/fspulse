@@ -7,12 +7,12 @@ use rusqlite::{params, OptionalExtension, Result};
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, total_file_size, alert_count, add_count, modify_count, delete_count, error
+    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, total_file_size, alert_count, add_count, modify_count, delete_count, error
+    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -121,7 +121,7 @@ pub struct Scan {
     scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
-    total_file_size: Option<i64>,
+    total_size: Option<i64>,
     alert_count: Option<i64>,
     add_count: Option<i64>,
     modify_count: Option<i64>,
@@ -231,7 +231,7 @@ impl Scan {
             scan_time,
             file_count: None,
             folder_count: None,
-            total_file_size: None,
+            total_size: None,
             alert_count: None,
             add_count: None,
             modify_count: None,
@@ -331,7 +331,7 @@ impl Scan {
                     scan_time: row.get(7)?,
                     file_count: row.get(8)?,
                     folder_count: row.get(9)?,
-                    total_file_size: row.get(10)?,
+                    total_size: row.get(10)?,
                     alert_count: row.get(11)?,
                     add_count: row.get(12)?,
                     modify_count: row.get(13)?,
@@ -376,8 +376,8 @@ impl Scan {
         self.folder_count
     }
 
-    pub fn total_file_size(&self) -> Option<i64> {
-        self.total_file_size
+    pub fn total_size(&self) -> Option<i64> {
+        self.total_size
     }
 
     pub fn alert_count(&self) -> Option<i64> {
@@ -422,7 +422,7 @@ impl Scan {
         match self.state() {
             ScanState::Analyzing => {
                 // Use IMMEDIATE transaction for read-then-write pattern
-                let (file_count, folder_count, total_file_size, alert_count, add_count, modify_count, delete_count) =
+                let (file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count) =
                     db.immediate_transaction(|conn| {
                         // Compute file_count and folder_count (exclude tombstones)
                         let (file_count, folder_count): (i64, i64) = conn
@@ -436,11 +436,11 @@ impl Scan {
                             )
                             .unwrap_or((0, 0));
 
-                        // Compute total_file_size
-                        let total_file_size: i64 = conn
+                        // Compute total_size (sum of all item sizes)
+                        let total_size: i64 = conn
                             .query_row(
-                                "SELECT COALESCE(SUM(file_size), 0) FROM items
-                                 WHERE last_scan = ? AND item_type = 0 AND is_ts = 0",
+                                "SELECT COALESCE(SUM(size), 0) FROM items
+                                 WHERE last_scan = ? AND is_ts = 0",
                                 [self.scan_id],
                                 |row| row.get(0),
                             )
@@ -473,7 +473,7 @@ impl Scan {
                             "UPDATE scans SET
                                 file_count = ?,
                                 folder_count = ?,
-                                total_file_size = ?,
+                                total_size = ?,
                                 alert_count = ?,
                                 add_count = ?,
                                 modify_count = ?,
@@ -483,7 +483,7 @@ impl Scan {
                             (
                                 file_count,
                                 folder_count,
-                                total_file_size,
+                                total_size,
                                 alert_count,
                                 add_count,
                                 modify_count,
@@ -493,14 +493,14 @@ impl Scan {
                             ),
                         )?;
 
-                        Ok((file_count, folder_count, total_file_size, alert_count, add_count, modify_count, delete_count))
+                        Ok((file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count))
                     })?;
 
                 // Update in-memory struct
                 self.state = ScanState::Completed;
                 self.file_count = Some(file_count);
                 self.folder_count = Some(folder_count);
-                self.total_file_size = Some(total_file_size);
+                self.total_size = Some(total_size);
                 self.alert_count = Some(alert_count);
                 self.add_count = Some(add_count);
                 self.modify_count = Some(modify_count);
@@ -584,7 +584,7 @@ impl Scan {
                 SET (
                     is_ts,
                     mod_date,
-                    file_size,
+                    size,
                     last_hash_scan,
                     file_hash,
                     last_val_scan,
@@ -596,7 +596,7 @@ impl Scan {
                     SELECT
                         CASE WHEN c.change_type = 1 THEN 1 ELSE items.is_ts END,
                         c.mod_date_old,
-                        c.file_size_old,
+                        c.size_old,
                         c.last_hash_scan_old,
                         c.hash_old,
                         c.last_val_scan_old,
@@ -624,7 +624,7 @@ impl Scan {
                 "UPDATE items
                 SET (
                     mod_date,
-                    file_size,
+                    size,
                     last_hash_scan,
                     file_hash,
                     last_val_scan,
@@ -635,7 +635,7 @@ impl Scan {
                 (
                 SELECT
                     CASE WHEN c.meta_change = 1 THEN COALESCE(c.mod_date_old, items.mod_date) ELSE items.mod_date END,
-                    CASE WHEN c.meta_change = 1 THEN COALESCE(c.file_size_old, items.file_size) ELSE items.file_size END,
+                    CASE WHEN c.meta_change = 1 THEN COALESCE(c.size_old, items.size) ELSE items.size END,
                     CASE WHEN c.hash_change = 1 THEN c.last_hash_scan_old ELSE items.last_hash_scan END,
                     CASE WHEN c.hash_change = 1 THEN c.hash_old ELSE items.file_hash END,
                     CASE WHEN c.val_change = 1 THEN c.last_val_scan_old ELSE items.last_val_scan END,
@@ -743,7 +743,7 @@ impl Scan {
                 s.scan_time,
                 s.file_count,
                 s.folder_count,
-                s.total_file_size,
+                s.total_size,
                 s.alert_count,
                 s.add_count,
                 s.modify_count,
@@ -751,7 +751,7 @@ impl Scan {
                 s.error
             FROM scans s
             LEFT JOIN changes c ON s.scan_id = c.scan_id
-            GROUP BY s.scan_id, s.root_id, s.state, s.is_hash, s.hash_all, s.is_val, s.val_all, s.scan_time, s.file_count, s.folder_count, s.total_file_size, s.alert_count, s.add_count, s.modify_count, s.delete_count, s.error
+            GROUP BY s.scan_id, s.root_id, s.state, s.is_hash, s.hash_all, s.is_val, s.val_all, s.scan_time, s.file_count, s.folder_count, s.total_size, s.alert_count, s.add_count, s.modify_count, s.delete_count, s.error
             ORDER BY s.scan_id DESC
             LIMIT ?"
         )?;
@@ -785,7 +785,7 @@ impl Scan {
                 scan_time: row.get::<_, i64>(7)?,
                 file_count: row.get::<_, Option<i64>>(8)?,
                 folder_count: row.get::<_, Option<i64>>(9)?,
-                total_file_size: row.get::<_, Option<i64>>(10)?,
+                total_size: row.get::<_, Option<i64>>(10)?,
                 alert_count: row.get::<_, Option<i64>>(11)?,
                 add_count: row.get::<_, Option<i64>>(12)?,
                 modify_count: row.get::<_, Option<i64>>(13)?,
@@ -815,7 +815,7 @@ pub struct ScanStats {
     // Total counts from scans table
     pub total_files: i64,
     pub total_folders: i64,
-    pub total_file_size: i64,
+    pub total_size: i64,
 
     // Total change counts from scans table
     pub total_adds: i64,
@@ -900,7 +900,7 @@ impl ScanStats {
             scan_time: scan.scan_time(),
             total_files: scan.file_count().unwrap_or(0),
             total_folders: scan.folder_count().unwrap_or(0),
-            total_file_size: scan.total_file_size().unwrap_or(0),
+            total_size: scan.total_size().unwrap_or(0),
             total_adds: scan.add_count().unwrap_or(0),
             total_modifies: scan.modify_count().unwrap_or(0),
             total_deletes: scan.delete_count().unwrap_or(0),
