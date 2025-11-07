@@ -19,13 +19,12 @@ import type { RootWithScan } from '@/lib/types'
 
 interface RootsTableProps {
   onAddRoot: () => void
-  isScanning: boolean
 }
 
 const ITEMS_PER_PAGE = 25
 
-export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
-  const { currentScanId } = useScanManager()
+export function RootsTable({ onAddRoot }: RootsTableProps) {
+  const { currentScanId, lastScanCompletedAt } = useScanManager()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -34,46 +33,33 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
   const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
   const [createScheduleDialogOpen, setCreateScheduleDialogOpen] = useState(false)
   const [preselectedRootId, setPreselectedRootId] = useState<number | undefined>(undefined)
-
-  const loadRoots = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/roots/with-scans')
-      if (!response.ok) throw new Error('Failed to load roots')
-
-      const data: RootWithScan[] = await response.json()
-      setRoots(data)
-      setTotalCount(data.length)
-    } catch (error) {
-      console.error('Error loading roots:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [reloadTrigger, setReloadTrigger] = useState(0)
+  const isInitialLoad = useRef(true)
 
   useEffect(() => {
+    async function loadRoots() {
+      try {
+        // Only show loading on initial mount, keep old data during refetch
+        if (isInitialLoad.current) {
+          setLoading(true)
+          isInitialLoad.current = false
+        }
+
+        const response = await fetch('/api/roots/with-scans')
+        if (!response.ok) throw new Error('Failed to load roots')
+
+        const data: RootWithScan[] = await response.json()
+        setRoots(data)
+        setTotalCount(data.length)
+      } catch (error) {
+        console.error('Error loading roots:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     loadRoots()
-  }, [])
-
-  // Track previous scan state using a ref to detect completion
-  const wasScanningRef = useRef(isScanning)
-
-  useEffect(() => {
-    // Detect scan completion (was scanning, now not scanning)
-    if (wasScanningRef.current && !isScanning) {
-      console.log('Scan completed, reloading roots data')
-      // Give backend time to finish writing to database
-      const timer = setTimeout(() => {
-        loadRoots()
-      }, 1500)
-
-      wasScanningRef.current = isScanning
-      return () => clearTimeout(timer)
-    }
-
-    // Update ref for next check
-    wasScanningRef.current = isScanning
-  }, [isScanning])
+  }, [lastScanCompletedAt, reloadTrigger])
 
   // Pagination
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -145,6 +131,9 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                 {paginatedRoots.map((root) => {
                   const scanInfo = root.last_scan
                   const scheduleCount = root.schedule_count
+
+                  // Check if this root has the currently active scan
+                  const hasActiveScan = scanInfo && currentScanId === scanInfo.scan_id
 
                   // Build Last Scan content
                   let lastScanContent: ReactElement
@@ -273,7 +262,7 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={isScanning}
+                          disabled={hasActiveScan}
                           onClick={() => {
                             setSelectedRoot({ id: root.root_id, path: root.root_path })
                             setDeleteDialogOpen(true)
@@ -318,7 +307,6 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
                         <Button
                           size="sm"
                           variant="default"
-                          disabled={isScanning}
                           onClick={() => {
                             setPreselectedRootId(root.root_id)
                             setCreateScheduleDialogOpen(true)
@@ -373,7 +361,7 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
       rootId={selectedRoot?.id ?? null}
       rootPath={selectedRoot?.path ?? ''}
       onDeleteSuccess={() => {
-        loadRoots()
+        setReloadTrigger(prev => prev + 1)
         setSelectedRoot(null)
       }}
     />
@@ -384,7 +372,7 @@ export function RootsTable({ onAddRoot, isScanning }: RootsTableProps) {
       onOpenChange={setCreateScheduleDialogOpen}
       preselectedRootId={preselectedRootId}
       onSuccess={() => {
-        loadRoots()
+        setReloadTrigger(prev => prev + 1)
         setPreselectedRootId(undefined)
       }}
     />

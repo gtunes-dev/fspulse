@@ -48,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Activity and Monitor page table refresh**: Tables now properly refresh when scan state changes, showing loading indicator only on initial load
+- **Monitor page button states**: Add Schedule buttons always enabled; Delete button only disabled for root with active scan
+- **Root deletion with schedules**: Deleting a root now properly removes all associated schedules and queue entries, and prevents deletion when an active scan is in progress
+
 - **Alert path formatting**: Fixed alerts query to respect `@name` format specifier by using `format_path()` instead of `format_string()`, enabling proper filename extraction
 - **ItemDetailSheet alerts loading**: Corrected alert query to use existing `val_error` column instead of non-existent `details` column, resolving 500 errors when viewing item details
 - **Tombstone exclusion**: Corrected `file_count` and `folder_count` computation to exclude tombstoned (deleted) items, fixing a bug where deleted items were incorrectly included in totals

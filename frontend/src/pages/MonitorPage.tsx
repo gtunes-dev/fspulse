@@ -15,7 +15,6 @@ export function MonitorPage() {
 
       <RootsTable
         onAddRoot={() => setAddRootDialogOpen(true)}
-        isScanning={isScanning}
       />
 
       <SchedulesTable

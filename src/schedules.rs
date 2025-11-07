@@ -1090,6 +1090,78 @@ pub fn count_schedules_for_root(db: &Database, root_id: i64) -> Result<i64, FsPu
     Ok(count)
 }
 
+/// Check if a root has an active scan in progress.
+///
+/// A root has an active scan if there is a row in the scan_queue table
+/// with the specified root_id and a non-null scan_id.
+///
+/// IMPORTANT: The `_immediate` suffix indicates this function MUST be called
+/// within an immediate transaction. The caller is responsible for managing
+/// the transaction.
+///
+/// # Arguments
+/// * `conn` - Database connection within an immediate transaction
+/// * `root_id` - ID of the root to check
+///
+/// # Returns
+/// * `Ok(true)` if the root has an active scan
+/// * `Ok(false)` if the root has no active scan
+/// * `Err` on database error
+pub fn root_has_active_scan_immediate(
+    conn: &rusqlite::Connection,
+    root_id: i64,
+) -> Result<bool, FsPulseError> {
+    let has_active_scan: bool = conn.query_row(
+        "SELECT COUNT(*) FROM scan_queue WHERE root_id = ? AND scan_id IS NOT NULL",
+        [root_id],
+        |row| row.get::<_, i64>(0)
+    )
+    .map(|count| count > 0)
+    .map_err(FsPulseError::DatabaseError)?;
+
+    Ok(has_active_scan)
+}
+
+/// Delete all schedules and queue entries for a specific root.
+///
+/// This function deletes all scan queue entries and scan schedules associated
+/// with the specified root. The deletions are performed in the correct order
+/// to respect foreign key constraints:
+/// 1. Delete from scan_queue (references schedule_id)
+/// 2. Delete from scan_schedules
+///
+/// IMPORTANT: The `_immediate` suffix indicates this function MUST be called
+/// within an immediate transaction. The caller is responsible for managing
+/// the transaction.
+///
+/// # Arguments
+/// * `conn` - Database connection within an immediate transaction
+/// * `root_id` - ID of the root whose schedules should be deleted
+///
+/// # Returns
+/// * `Ok(())` on success
+/// * `Err` on database error
+pub fn delete_schedules_for_root_immediate(
+    conn: &rusqlite::Connection,
+    root_id: i64,
+) -> Result<(), FsPulseError> {
+    // Delete queue entries first (they reference schedule_id)
+    conn.execute(
+        "DELETE FROM scan_queue WHERE root_id = ?",
+        [root_id]
+    )
+    .map_err(FsPulseError::DatabaseError)?;
+
+    // Delete schedules
+    conn.execute(
+        "DELETE FROM scan_schedules WHERE root_id = ?",
+        [root_id]
+    )
+    .map_err(FsPulseError::DatabaseError)?;
+
+    Ok(())
+}
+
 /// Information about an upcoming scan for UI display
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpcomingScan {

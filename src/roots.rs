@@ -6,6 +6,7 @@ use dialoguer::Select;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
+use crate::schedules::{root_has_active_scan_immediate, delete_schedules_for_root_immediate};
 use rusqlite::OptionalExtension;
 use serde::Serialize;
 
@@ -132,11 +133,21 @@ impl Root {
         Ok(())
     }
 
-    /// Delete a root and all associated data (scans, items, changes, alerts).
+    /// Delete a root and all associated data (scans, items, changes, alerts, schedules).
     /// This operation is performed within a transaction to ensure atomicity.
-    /// Returns Ok(()) if successful, or an error if the root doesn't exist or deletion fails.
+    /// Returns Ok(()) if successful, or an error if the root doesn't exist, has an active scan, or deletion fails.
     pub fn delete_root(db: &Database, root_id: i64) -> Result<(), FsPulseError> {
         db.immediate_transaction(|conn| {
+            // First, check if root has an active scan
+            if root_has_active_scan_immediate(conn, root_id)? {
+                return Err(FsPulseError::Error(
+                    "Cannot delete root because it has an active scan in progress. Please wait for the scan to complete or stop it first.".to_string()
+                ));
+            }
+
+            // Delete schedules and queue entries for this root
+            delete_schedules_for_root_immediate(conn, root_id)?;
+
             // Delete in order based on foreign key constraints:
             // 1. alerts (references scan_id and item_id)
             // 2. changes (references scan_id and item_id)

@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import { useScanManager } from '@/contexts/ScanManagerContext'
 import { ActiveScanCard } from '@/components/scan/ActiveScanCard'
 import { RootsTable } from '@/components/scan/RootsTable'
 import { AddRootDialog } from '@/components/scan/AddRootDialog'
 
 export function ScanPage() {
-  const { isScanning } = useScanManager()
   const [addRootDialogOpen, setAddRootDialogOpen] = useState(false)
 
   return (
@@ -18,7 +16,6 @@ export function ScanPage() {
       {/* Roots Table */}
       <RootsTable
         onAddRoot={() => setAddRootDialogOpen(true)}
-        isScanning={isScanning}
       />
 
       {/* Add Root Dialog */}
