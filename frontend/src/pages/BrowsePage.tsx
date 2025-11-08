@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { RootPicker } from '@/components/ui/RootPicker'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { RootCard } from '@/components/ui/RootCard'
 import { SearchFilter } from '@/components/ui/SearchFilter'
-import { FilterToolbar } from '@/components/ui/FilterToolbar'
 import { FileTreeView } from '@/components/browse/FileTreeView'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
@@ -103,41 +104,42 @@ export function BrowsePage() {
     <div className="flex flex-col h-full">
       <h1 className="text-2xl font-semibold mb-8">Browse</h1>
 
-      {/* Filter Controls */}
-      <FilterToolbar>
-        <RootPicker
-          roots={roots}
-          value={selectedRootId}
-          onChange={setSelectedRootId}
-        />
+      <RootCard
+        roots={roots}
+        selectedRootId={selectedRootId}
+        onRootChange={setSelectedRootId}
+        actionBar={
+          <>
+            <SearchFilter
+              value={searchFilter}
+              onChange={handleSearchChange}
+            />
 
-        <SearchFilter
-          value={searchFilter}
-          onChange={handleSearchChange}
-        />
-
-        <label className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-muted/30 cursor-pointer transition-colors">
-          <input
-            type="checkbox"
-            checked={showTombstones}
-            onChange={(e) => setShowTombstones(e.target.checked)}
-            className="cursor-pointer h-4 w-4 rounded border-border"
-          />
-          <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Show deleted</span>
-        </label>
-      </FilterToolbar>
-
-      {/* File Tree - Content Area */}
-      <div className="flex-1">
-        {selectedRoot && (
-          <FileTreeView
-            rootId={selectedRoot.root_id}
-            rootPath={selectedRoot.root_path}
-            showTombstones={showTombstones}
-            searchFilter={searchFilter}
-          />
-        )}
-      </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-deleted"
+                checked={showTombstones}
+                onCheckedChange={(checked) => setShowTombstones(checked === true)}
+              />
+              <Label htmlFor="show-deleted" className="text-sm font-medium cursor-pointer">
+                Show deleted
+              </Label>
+            </div>
+          </>
+        }
+      >
+        {/* Bordered Tree */}
+        <div className="border border-border rounded-lg">
+          {selectedRoot && (
+            <FileTreeView
+              rootId={selectedRoot.root_id}
+              rootPath={selectedRoot.root_path}
+              showTombstones={showTombstones}
+              searchFilter={searchFilter}
+            />
+          )}
+        </div>
+      </RootCard>
     </div>
   )
 }

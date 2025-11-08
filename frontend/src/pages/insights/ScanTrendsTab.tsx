@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { RootCard } from '@/components/ui/RootCard'
 import {
   ChartContainer,
   ChartTooltip,
@@ -277,8 +278,6 @@ export function ScanTrendsTab() {
     // Otherwise, dates will be updated by the useEffect
   }
 
-  const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
-
   // Check if first scan is in current data
   const firstScanInView = firstScanId !== null && scanData.some(d => d.scan_id === firstScanId)
   const firstValidatingScanInView = firstValidatingScanId !== null && scanData.some(d => d.scan_id === firstValidatingScanId)
@@ -294,29 +293,12 @@ export function ScanTrendsTab() {
     : scanData
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Root Selection - Prominent Display */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-base font-medium text-muted-foreground">Root</span>
-          <Select value={selectedRootId} onValueChange={setSelectedRootId}>
-            <SelectTrigger className="h-auto border-none shadow-none px-0 text-xl font-semibold hover:bg-transparent focus:ring-0">
-              <SelectValue>
-                {selectedRoot ? selectedRoot.root_path : 'Select a root'}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {roots.map((root) => (
-                <SelectItem key={root.root_id} value={root.root_id.toString()}>
-                  {root.root_path}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Time Range Controls - Compact, Secondary */}
-        <div className="flex items-center gap-3">
+    <RootCard
+      roots={roots}
+      selectedRootId={selectedRootId}
+      onRootChange={setSelectedRootId}
+      actionBar={
+        <>
           <Select value={timeWindow} onValueChange={handleTimeWindowChange}>
             <SelectTrigger className="w-[160px]">
               <SelectValue />
@@ -383,9 +365,9 @@ export function ScanTrendsTab() {
               </Popover>
             </>
           )}
-        </div>
-      </div>
-
+        </>
+      }
+    >
       {/* Chart Area */}
       {!selectedRootId ? (
         <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -652,6 +634,6 @@ export function ScanTrendsTab() {
           </div>
         </div>
       )}
-    </div>
+    </RootCard>
   )
 }
