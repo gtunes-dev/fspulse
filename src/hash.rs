@@ -15,7 +15,6 @@ use sha2::Sha256;
 use crate::{
     config::HashFunc,
     error::FsPulseError,
-    progress::{ProgressId, ProgressReporter},
 };
 
 pub struct Hash;
@@ -23,27 +22,20 @@ pub struct Hash;
 impl Hash {
     pub fn compute_hash(
         path: &Path,
-        prog_id: ProgressId,
-        reporter: &Arc<dyn ProgressReporter>,
         hash_func: HashFunc,
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<String, FsPulseError> {
         match hash_func {
-            HashFunc::MD5 => Self::compute_md5_hash(path, prog_id, reporter, cancel_token),
-            HashFunc::SHA2 => Self::compute_sha2_256_hash(path, prog_id, reporter, cancel_token),
+            HashFunc::MD5 => Self::compute_md5_hash(path, cancel_token),
+            HashFunc::SHA2 => Self::compute_sha2_256_hash(path, cancel_token),
         }
     }
 
     pub fn compute_sha2_256_hash(
         path: &Path,
-        prog_id: ProgressId,
-        reporter: &Arc<dyn ProgressReporter>,
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<String, FsPulseError> {
         let f = File::open(path)?;
-        let len = f.metadata()?.len();
-
-        reporter.set_length(prog_id, len);
 
         let mut hasher = Sha256::new();
 
@@ -64,7 +56,6 @@ impl Hash {
                 break;
             }
             hasher.update(&buffer[..bytes_read]);
-            reporter.inc(prog_id, bytes_read.try_into().unwrap());
         }
 
         let hash = hasher.finalize();
@@ -74,16 +65,9 @@ impl Hash {
 
     pub fn compute_md5_hash(
         path: &Path,
-        prog_id: ProgressId,
-        reporter: &Arc<dyn ProgressReporter>,
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<String, FsPulseError> {
         let f = File::open(path)?;
-        let len = f.metadata()?.len();
-
-        // The progress bar is mostly set up by our caller. We just need to set the
-        // length and go
-        reporter.set_length(prog_id, len);
 
         let mut reader = BufReader::new(f);
         let mut hasher = Md5::new();
@@ -103,7 +87,6 @@ impl Hash {
                 break;
             }
             hasher.update(&buffer[..bytes_read]);
-            reporter.inc(prog_id, bytes_read.try_into().unwrap());
         }
 
         let hash = hasher.finalize();
@@ -124,62 +107,8 @@ impl Hash {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::progress::{ProgressConfig, ProgressReporter};
-    use std::collections::HashMap;
     use std::io::Write;
-    use std::sync::{Arc, Mutex};
     use tempfile::NamedTempFile;
-
-    /// Simple mock reporter for testing that does nothing
-    struct MockReporter {
-        _state: Arc<Mutex<HashMap<ProgressId, u64>>>,
-    }
-
-    impl MockReporter {
-        fn new() -> Self {
-            Self {
-                _state: Arc::new(Mutex::new(HashMap::new())),
-            }
-        }
-    }
-
-    impl ProgressReporter for MockReporter {
-        fn section_start(&self, _stage_index: u32, _message: &str) -> ProgressId {
-            ProgressId::new()
-        }
-
-        fn section_finish(&self, _id: ProgressId, _message: &str) {}
-
-        fn create(&self, _config: ProgressConfig) -> ProgressId {
-            ProgressId::new()
-        }
-
-        fn update_work(&self, _id: ProgressId, _work: crate::progress::WorkUpdate) {}
-
-        fn set_position(&self, _id: ProgressId, _position: u64) {}
-
-        fn set_length(&self, _id: ProgressId, _length: u64) {}
-
-        fn inc(&self, _id: ProgressId, _delta: u64) {}
-
-        fn enable_steady_tick(&self, _id: ProgressId, _interval: std::time::Duration) {}
-
-        fn disable_steady_tick(&self, _id: ProgressId) {}
-
-        fn finish_and_clear(&self, _id: ProgressId) {}
-
-        fn println(&self, _message: &str) -> Result<(), Box<dyn std::error::Error>> {
-            Ok(())
-        }
-
-        fn clone_reporter(&self) -> Arc<dyn ProgressReporter> {
-            Arc::new(Self::new())
-        }
-    }
-
-    fn create_test_reporter() -> Arc<dyn ProgressReporter> {
-        Arc::new(MockReporter::new())
-    }
 
     #[test]
     fn test_compute_md5_hash_empty_file() {
@@ -188,10 +117,8 @@ mod tests {
             .write_all(b"")
             .expect("Failed to write to temp file");
 
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_md5_hash(temp_file.path(), prog_id, &reporter, &cancel_token);
+        let result = Hash::compute_md5_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -206,11 +133,9 @@ mod tests {
             .write_all(b"")
             .expect("Failed to write to temp file");
 
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(false));
         let result =
-            Hash::compute_sha2_256_hash(temp_file.path(), prog_id, &reporter, &cancel_token);
+            Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -228,10 +153,8 @@ mod tests {
             .write_all(b"hello world")
             .expect("Failed to write to temp file");
 
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_md5_hash(temp_file.path(), prog_id, &reporter, &cancel_token);
+        let result = Hash::compute_md5_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -246,11 +169,9 @@ mod tests {
             .write_all(b"hello world")
             .expect("Failed to write to temp file");
 
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(false));
         let result =
-            Hash::compute_sha2_256_hash(temp_file.path(), prog_id, &reporter, &cancel_token);
+            Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -268,13 +189,9 @@ mod tests {
             .write_all(b"test")
             .expect("Failed to write to temp file");
 
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(false));
         let result = Hash::compute_hash(
             temp_file.path(),
-            prog_id,
-            &reporter,
             HashFunc::MD5,
             &cancel_token,
         );
@@ -292,13 +209,9 @@ mod tests {
             .write_all(b"test")
             .expect("Failed to write to temp file");
 
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(false));
         let result = Hash::compute_hash(
             temp_file.path(),
-            prog_id,
-            &reporter,
             HashFunc::SHA2,
             &cancel_token,
         );
@@ -315,14 +228,10 @@ mod tests {
     #[test]
     fn test_compute_hash_nonexistent_file() {
         let nonexistent_path = std::path::Path::new("/this/path/does/not/exist.txt");
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(false));
 
         let result = Hash::compute_hash(
             nonexistent_path,
-            prog_id,
-            &reporter,
             HashFunc::MD5,
             &cancel_token,
         );
@@ -340,11 +249,9 @@ mod tests {
             .write_all(&large_data)
             .expect("Failed to write to temp file");
 
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(true)); // Set to true to trigger cancellation
 
-        let result = Hash::compute_md5_hash(temp_file.path(), prog_id, &reporter, &cancel_token);
+        let result = Hash::compute_md5_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), FsPulseError::ScanCancelled));
@@ -360,12 +267,10 @@ mod tests {
             .write_all(&large_data)
             .expect("Failed to write to temp file");
 
-        let reporter = create_test_reporter();
-        let prog_id = ProgressId::new();
         let cancel_token = Arc::new(AtomicBool::new(true)); // Set to true to trigger cancellation
 
         let result =
-            Hash::compute_sha2_256_hash(temp_file.path(), prog_id, &reporter, &cancel_token);
+            Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), FsPulseError::ScanCancelled));

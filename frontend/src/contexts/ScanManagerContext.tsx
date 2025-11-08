@@ -94,11 +94,11 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
 
       // Map phase name to phase number
       if (state.current_phase) {
-        if (state.current_phase.name === 'scanning') {
+        if (state.current_phase === 'scanning') {
           scanData.phase = 1
-        } else if (state.current_phase.name === 'sweeping') {
+        } else if (state.current_phase === 'sweeping') {
           scanData.phase = 2
-        } else if (state.current_phase.name === 'analyzing') {
+        } else if (state.current_phase === 'analyzing') {
           scanData.phase = 3
         }
       }

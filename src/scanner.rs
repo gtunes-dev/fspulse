@@ -22,7 +22,7 @@ use crate::changes::ChangeType;
 use crate::config::{HashFunc, CONFIG};
 use crate::hash::Hash;
 use crate::items::{AnalysisItem, Item, ItemType};
-use crate::progress::{ProgressConfig, ProgressId, ProgressReporter, ProgressStyle, WorkUpdate};
+use crate::progress::ProgressReporter;
 use crate::roots::Root;
 use crate::scans::ScanState;
 use crate::validate::validator::{from_path, ValidationState};
@@ -36,7 +36,6 @@ use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use std::{cmp, fs};
 
 pub struct Scanner {}
@@ -45,9 +44,7 @@ pub struct Scanner {}
 struct ScanContext<'a> {
     db: &'a mut Database,
     scan: &'a Scan,
-    reporter: &'a Arc<dyn ProgressReporter>,
-    dir_prog: ProgressId,
-    item_prog: ProgressId,
+    reporter: &'a Arc<ProgressReporter>,
     cancel_token: &'a Arc<AtomicBool>,
     items_processed: &'a mut i32,
 }
@@ -57,7 +54,7 @@ impl Scanner {
         db: &mut Database,
         scan: &mut Scan,
         root: &Root,
-        reporter: Arc<dyn ProgressReporter>,
+        reporter: Arc<ProgressReporter>,
         cancel_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         // NOTE: We check for cancellation at appropriate points in the scanner code with:
@@ -69,10 +66,6 @@ impl Scanner {
         //
         // After detecting cancellation and returning the error, the calling code will
         // invoke Scan::set_state_stopped() to atomically rollback all changes.
-
-        reporter
-            .println("-- FsPulse Scan --")
-            .map_err(|e| FsPulseError::Error(e.to_string()))?;
 
         // Loop through all states, even if resuming, to allow progress updates
         let mut loop_state = ScanState::Scanning;
@@ -92,7 +85,7 @@ impl Scanner {
 
             match loop_state {
                 ScanState::Scanning => {
-                    let section_id = reporter.section_start(1, "Quick scanning...");
+                    reporter.start_scanning_phase();
                     if scan.state() == ScanState::Scanning {
                         Scanner::do_state_scanning(
                             db,
@@ -102,20 +95,16 @@ impl Scanner {
                             &cancel_token,
                         )?;
                     }
-                    reporter.section_finish(section_id, "✔ Quick scanning");
                     loop_state = ScanState::Sweeping;
                 }
                 ScanState::Sweeping => {
-                    let section_id = reporter.section_start(2, "Tombstoning deletes...");
+                    reporter.start_sweeping_phase();
                     if scan.state() == ScanState::Sweeping {
                         Scanner::do_state_sweeping(db, scan)?;
                     }
-                    reporter.section_finish(section_id, "✔ Tombstoning deletes");
                     loop_state = ScanState::Analyzing;
                 }
                 ScanState::Analyzing => {
-                    let section_id = reporter.section_start(3, "Analyzing...");
-
                     let mut analysis_result = Ok(());
                     // Should never get here in a situation in which scan.state() isn't Analyzing
                     // but we protect against it just in case
@@ -144,7 +133,6 @@ impl Scanner {
 
                     analysis_result?;
 
-                    reporter.section_finish(section_id, "✔ Analyzing");
                     loop_state = ScanState::Completed;
                 }
                 unexpected => {
@@ -168,12 +156,7 @@ impl Scanner {
             return Err(FsPulseError::ScanCancelled);
         }
 
-        ctx.reporter.update_work(
-            ctx.dir_prog,
-            WorkUpdate::Directory {
-                path: path.to_string_lossy().to_string(),
-            },
-        );
+        ctx.reporter.increment_directories_scanned();
 
         let items = fs::read_dir(path)?;
         let mut total_size: i64 = 0;
@@ -182,12 +165,7 @@ impl Scanner {
             let item = item?;
             let item_metadata = fs::symlink_metadata(item.path())?;
 
-            ctx.reporter.update_work(
-                ctx.item_prog,
-                WorkUpdate::File {
-                    path: item.file_name().to_string_lossy().to_string(),
-                },
-            );
+            ctx.reporter.increment_files_scanned();
 
             if item_metadata.is_dir() {
                 // Recursively scan the subdirectory and get its size
@@ -244,22 +222,10 @@ impl Scanner {
         db: &mut Database,
         root: &Root,
         scan: &mut Scan,
-        reporter: Arc<dyn ProgressReporter>,
+        reporter: Arc<ProgressReporter>,
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let root_path_buf = PathBuf::from(root.root_path());
-
-        let dir_prog = reporter.create(ProgressConfig {
-            style: ProgressStyle::Spinner,
-            prefix: "   ".to_string(),
-            message: "Directory:".to_string(),
-        });
-
-        let item_prog = reporter.create(ProgressConfig {
-            style: ProgressStyle::Spinner,
-            prefix: "   ".to_string(),
-            message: "File:".to_string(),
-        });
 
         let mut items_processed: i32 = 100;
 
@@ -268,8 +234,6 @@ impl Scanner {
             db,
             scan,
             reporter: &reporter,
-            dir_prog,
-            item_prog,
             cancel_token,
             items_processed: &mut items_processed,
         };
@@ -280,9 +244,6 @@ impl Scanner {
             &mut ctx,
             &root_path_buf,
         )?;
-
-        reporter.finish_and_clear(item_prog);
-        reporter.finish_and_clear(dir_prog);
 
         // The total_size column is set on the scan row before advancing to the next phase
         // This means it doesn't have to be computed or set later in the scan, but it does need
@@ -326,7 +287,7 @@ impl Scanner {
     fn do_state_analyzing(
         db: Arc<Mutex<Database>>,
         scan: &mut Scan,
-        reporter: Arc<dyn ProgressReporter>,
+        reporter: Arc<ProgressReporter>,
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let is_hash = scan.analysis_spec().is_hash();
@@ -346,15 +307,7 @@ impl Scanner {
         //let analyzed_items =
         //    Item::count_analyzed_items(&db.lock().unwrap(), scan.scan_id())?.max(0) as u64; // may be resuming the scan
 
-        let analysis_prog = reporter.create(ProgressConfig {
-            style: ProgressStyle::Bar {
-                total: analyze_total,
-            },
-            prefix: "   ".to_string(),
-            message: "Files".to_string(),
-        });
-
-        reporter.set_position(analysis_prog, analyze_done);
+        reporter.start_analyzing_phase(analyze_total, analyze_done);
 
         // Create a bounded channel to limit the number of queued tasks (e.g., max 100 tasks)
         let (sender, receiver) = bounded::<AnalysisItem>(100);
@@ -380,26 +333,11 @@ impl Scanner {
             let receiver = receiver.clone();
             let db = Arc::clone(&db);
             let scan_copy = scan.clone();
-            let reporter_clone = reporter.clone_reporter();
+            let reporter_clone = Arc::clone(&reporter);
             let cancel_token_clone = Arc::clone(cancel_token);
 
-            // Format thread label like [01/20], [02/20], ..., [20/20]
-            let thread_prog_prefix = format!(
-                "   [{:0width$}/{}]",
-                thread_index + 1,
-                num_threads,
-                width = if num_threads >= 10 { 2 } else { 1 }
-            );
-
-            // Create a reusable progress indicator for this thread
-            let thread_prog = reporter.create(ProgressConfig {
-                style: ProgressStyle::Spinner,
-                prefix: thread_prog_prefix,
-                message: "".to_string(), // Initial message set via update_work below
-            });
-
             // Set initial idle state
-            reporter.update_work(thread_prog, WorkUpdate::Idle);
+            reporter.set_thread_idle(thread_index);
 
             // Worker thread: continuously receive and process tasks.
             pool.execute(move || {
@@ -408,14 +346,13 @@ impl Scanner {
                         &db,
                         &scan_copy,
                         analysis_item,
-                        analysis_prog,
-                        thread_prog,
+                        thread_index,
                         &reporter_clone,
                         &cancel_token_clone,
                         hash_func,
                     );
                 }
-                reporter_clone.finish_and_clear(thread_prog);
+                reporter_clone.set_thread_idle(thread_index);
             });
         }
 
@@ -468,7 +405,6 @@ impl Scanner {
             return Err(FsPulseError::ScanCancelled);
         }
 
-        reporter.finish_and_clear(analysis_prog);
         scan.set_state_completed(&mut db.lock().unwrap())
     }
 
@@ -477,9 +413,8 @@ impl Scanner {
         db: &Arc<Mutex<Database>>,
         scan: &Scan,
         analysis_item: AnalysisItem,
-        analysis_prog_id: ProgressId,
-        thread_prog_id: ProgressId,
-        reporter: &Arc<dyn ProgressReporter>,
+        thread_index: usize,
+        reporter: &Arc<ProgressReporter>,
         cancel_token: &Arc<AtomicBool>,
         hash_func: HashFunc,
     ) {
@@ -508,14 +443,7 @@ impl Scanner {
         let mut new_hash = None;
 
         if analysis_item.needs_hash() {
-            reporter.update_work(
-                thread_prog_id,
-                WorkUpdate::Hashing {
-                    file: display_path.to_string(),
-                },
-            );
-            reporter.set_position(thread_prog_id, 0); // reset in case left from previous
-            reporter.set_length(thread_prog_id, 0);
+            reporter.set_thread_hashing(thread_index, display_path.to_string());
 
             if cancel_token.load(Ordering::Acquire) {
                 info!("Cancellation detected before hashing: {path:?}");
@@ -523,7 +451,7 @@ impl Scanner {
             }
 
             new_hash =
-                match Hash::compute_hash(path, thread_prog_id, reporter, hash_func, cancel_token) {
+                match Hash::compute_hash(path, hash_func, cancel_token) {
                     Ok(hash_s) => Some(hash_s),
                     Err(error) => {
                         error!("Error hashing '{}': {}", &display_path, error);
@@ -547,18 +475,9 @@ impl Scanner {
             let validator = from_path(path);
             match validator {
                 Some(v) => {
-                    reporter.update_work(
-                        thread_prog_id,
-                        WorkUpdate::Validating {
-                            file: display_path.to_string(),
-                        },
-                    );
-                    let steady_tick = v.wants_steady_tick();
+                    reporter.set_thread_validating(thread_index, display_path.to_string());
 
-                    if steady_tick {
-                        reporter.enable_steady_tick(thread_prog_id, Duration::from_millis(250));
-                    }
-                    match v.validate(path, thread_prog_id, reporter, cancel_token) {
+                    match v.validate(path, cancel_token) {
                         Ok((res_validity_state, res_validation_error)) => {
                             new_val = res_validity_state;
                             new_val_error = res_validation_error;
@@ -569,9 +488,6 @@ impl Scanner {
                             new_val = ValidationState::Invalid;
                             new_val_error = Some(e_str);
                         }
-                    }
-                    if steady_tick {
-                        reporter.disable_steady_tick(thread_prog_id);
                     }
                 }
                 None => new_val = ValidationState::NoValidator,
@@ -593,10 +509,10 @@ impl Scanner {
             );
         }
 
-        reporter.inc(analysis_prog_id, 1);
+        reporter.increment_analysis_completed();
 
         // Set thread back to idle after completing work
-        reporter.update_work(thread_prog_id, WorkUpdate::Idle);
+        reporter.set_thread_idle(thread_index);
 
         info!("Done analyzing: {path:?}");
     }

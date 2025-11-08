@@ -5,7 +5,6 @@ use log::warn;
 use lopdf::{Document, Object};
 
 use crate::error::FsPulseError;
-use crate::progress::{ProgressId, ProgressReporter};
 use crate::try_invalid;
 use crate::validate::validator::Validator;
 
@@ -26,8 +25,6 @@ impl Validator for LopdfValidator {
     fn validate(
         &self,
         path: &Path,
-        _prog_id: ProgressId,
-        _reporter: &Arc<dyn ProgressReporter>,
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let doc = try_invalid!(Document::load(path));
@@ -46,10 +43,6 @@ impl Validator for LopdfValidator {
             }
         }
         Ok((ValidationState::Valid, None))
-    }
-
-    fn wants_steady_tick(&self) -> bool {
-        true
     }
 }
 
@@ -97,57 +90,16 @@ impl LopdfValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::progress::{ProgressConfig, ProgressReporter, WorkUpdate};
     use std::path::Path;
     use std::sync::Arc;
-
-    /// Simple mock reporter for testing
-    struct MockReporter;
-
-    impl ProgressReporter for MockReporter {
-        fn section_start(&self, _stage_index: u32, _message: &str) -> ProgressId {
-            ProgressId::new()
-        }
-        fn section_finish(&self, _id: ProgressId, _message: &str) {}
-        fn create(&self, _config: ProgressConfig) -> ProgressId {
-            ProgressId::new()
-        }
-        fn update_work(&self, _id: ProgressId, _work: WorkUpdate) {}
-        fn set_position(&self, _id: ProgressId, _position: u64) {}
-        fn set_length(&self, _id: ProgressId, _length: u64) {}
-        fn inc(&self, _id: ProgressId, _delta: u64) {}
-        fn enable_steady_tick(&self, _id: ProgressId, _interval: std::time::Duration) {}
-        fn disable_steady_tick(&self, _id: ProgressId) {}
-        fn finish_and_clear(&self, _id: ProgressId) {}
-        fn println(&self, _message: &str) -> Result<(), Box<dyn std::error::Error>> {
-            Ok(())
-        }
-        fn clone_reporter(&self) -> Arc<dyn ProgressReporter> {
-            Arc::new(MockReporter)
-        }
-    }
-
-    #[test]
-    fn test_lopdf_validator_new() {
-        let validator = LopdfValidator::new();
-        assert!(validator.wants_steady_tick());
-    }
-
-    #[test]
-    fn test_lopdf_validator_wants_steady_tick() {
-        let validator = LopdfValidator::new();
-        assert!(validator.wants_steady_tick());
-    }
 
     #[test]
     fn test_lopdf_validator_nonexistent_file() {
         let validator = LopdfValidator::new();
-        let reporter: Arc<dyn ProgressReporter> = Arc::new(MockReporter);
-        let prog_id = ProgressId::new();
         let nonexistent_path = Path::new("/this/path/does/not/exist.pdf");
         let cancel_token = Arc::new(AtomicBool::new(false));
 
-        let result = validator.validate(nonexistent_path, prog_id, &reporter, &cancel_token);
+        let result = validator.validate(nonexistent_path, &cancel_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
@@ -170,8 +122,6 @@ mod tests {
     #[test]
     fn test_lopdf_validator_invalid_file() {
         let validator = LopdfValidator::new();
-        let reporter: Arc<dyn ProgressReporter> = Arc::new(MockReporter);
-        let prog_id = ProgressId::new();
 
         // Create a temporary file with invalid PDF content
         use std::io::Write;
@@ -181,7 +131,7 @@ mod tests {
         temp_file.write_all(b"not a pdf file").expect("Failed to write temp file");
 
         let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = validator.validate(temp_file.path(), prog_id, &reporter, &cancel_token);
+        let result = validator.validate(temp_file.path(), &cancel_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
@@ -192,8 +142,6 @@ mod tests {
     #[test]
     fn test_lopdf_validator_empty_file() {
         let validator = LopdfValidator::new();
-        let reporter: Arc<dyn ProgressReporter> = Arc::new(MockReporter);
-        let prog_id = ProgressId::new();
 
         // Create a temporary empty file
         use tempfile::NamedTempFile;
@@ -201,7 +149,7 @@ mod tests {
         let temp_file = NamedTempFile::new().expect("Failed to create temp file");
 
         let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = validator.validate(temp_file.path(), prog_id, &reporter, &cancel_token);
+        let result = validator.validate(temp_file.path(), &cancel_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();

@@ -4,7 +4,6 @@ use std::{ffi::OsStr, fmt, path::Path, sync::Arc};
 use log::warn;
 
 use crate::error::FsPulseError;
-use crate::progress::{ProgressId, ProgressReporter};
 
 use super::{claxon::ClaxonValidator, image::ImageValidator, lopdf::LopdfValidator};
 
@@ -123,12 +122,8 @@ pub trait Validator {
     fn validate(
         &self,
         path: &Path,
-        prog_id: ProgressId,
-        reporter: &Arc<dyn ProgressReporter>,
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError>;
-
-    fn wants_steady_tick(&self) -> bool;
 }
 
 #[cfg(test)]

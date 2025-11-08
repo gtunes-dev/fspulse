@@ -115,10 +115,6 @@ export interface ThreadStateRaw {
   operation: ThreadOperation
 }
 
-export interface ScanPhaseInfo {
-  name: 'scanning' | 'sweeping' | 'analyzing'
-}
-
 export interface ScanningProgress {
   files_scanned: number
   directories_scanned: number
@@ -139,7 +135,7 @@ export interface ScanState {
   scan_id: number | null  // null when idle
   root_id?: number | null  // null when idle
   root_path: string  // empty when idle
-  current_phase?: ScanPhaseInfo
+  current_phase?: 'scanning' | 'sweeping' | 'analyzing'  // simplified from object to string
   completed_phases?: string[]
   scanning_progress?: ScanningProgress
   overall_progress?: OverallProgress

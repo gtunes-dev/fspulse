@@ -1,8 +1,6 @@
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::progress::state::{BroadcastMessage, ScanStatus};
-use crate::progress::web::WebProgressReporter;
-use crate::progress::ProgressReporter;
+use crate::progress::{BroadcastMessage, ProgressReporter, ScanStatus};
 use crate::roots::Root;
 use crate::scanner::Scanner;
 use crate::scans::{HashMode, Scan, ValidateMode};
@@ -37,7 +35,7 @@ struct ActiveScanInfo {
     root_id: i64,
     root_path: String,
     cancel_token: Arc<AtomicBool>,
-    reporter: Arc<WebProgressReporter>,
+    reporter: Arc<ProgressReporter>,
     #[allow(dead_code)]
     task_handle: Option<JoinHandle<()>>,
     #[allow(dead_code)]
@@ -167,9 +165,7 @@ impl ScanManager {
         let root_path = root.root_path().to_string();
 
         // Create progress reporter that maintains scan state
-        let web_reporter = WebProgressReporter::new(scan_id, root_id, root_path.clone());
-        let web_reporter = Arc::new(web_reporter);
-        let reporter: Arc<dyn ProgressReporter> = web_reporter.clone();
+        let reporter = Arc::new(ProgressReporter::new(scan_id, root_id, root_path.clone()));
         let cancel_token = Arc::new(AtomicBool::new(false));
 
         // Spawn per-scan broadcast thread
@@ -222,8 +218,8 @@ impl ScanManager {
             scan_id,
             root_id,
             root_path: root_path.clone(),
-            cancel_token: cancel_token.clone(),
-            reporter: web_reporter.clone(),
+            cancel_token: Arc::clone(&cancel_token),
+            reporter: Arc::clone(&reporter),
             task_handle: None,
             broadcast_handle: Some(broadcast_handle),
         });
@@ -248,31 +244,28 @@ impl ScanManager {
             // Handle result
             match scan_result {
                 Ok(()) => {
-                    let _ = reporter.println("Scan completed successfully");
-                    web_reporter.mark_completed();
+                    reporter.mark_completed();
                 }
                 Err(ref e) if matches!(e, FsPulseError::ScanCancelled) => {
                     info!("Scan {} was cancelled, rolling back changes", scan_id);
-                    let _ = reporter.println("Scan cancelled, rolling back changes...");
                     if let Err(stop_err) = scan.set_state_stopped(&mut db_mut) {
                         error!("Failed to stop scan {}: {}", scan_id, stop_err);
-                        web_reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
+                        reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
                     } else {
-                        web_reporter.mark_stopped();
+                        reporter.mark_stopped();
                     }
                 }
                 Err(e) => {
                     error!("Scan {} failed: {}", scan_id, e);
                     let error_msg = e.to_string();
-                    let _ = reporter.println(&format!("Scan error: {}", error_msg));
                     if let Err(stop_err) = Scan::stop_scan(&mut db_mut, &scan, Some(&error_msg)) {
                         error!("Failed to stop scan {} after error: {}", scan_id, stop_err);
-                        web_reporter.mark_error(format!(
+                        reporter.mark_error(format!(
                             "Scan error: {}; Failed to stop: {}",
                             error_msg, stop_err
                         ));
                     } else {
-                        web_reporter.mark_error(error_msg);
+                        reporter.mark_error(error_msg);
                     }
                 }
             }

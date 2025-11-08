@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Progress reporting simplification**: Removed all legacy CLI progress reporting infrastructure (progress bars, spinners, sections, tick-based updates). Progress module consolidated from 3 files to 1 with a minimal 14-method API focused solely on WebSocket state broadcasting. Validators are now pure validation functions with no progress awareness - Scanner tracks all progress at the higher level
 - **CLI scan removal**: Scanning can no longer be initiated from the command-line interface - **Breaking change**: the `scan` subcommand has been removed. All scanning operations must now be performed through the web UI (`fspulse serve`), which provides scan scheduling, manual scan initiation, and real-time progress monitoring. CLI commands for querying, reporting, and data exploration remain fully functional
 - **Query column renames**: Database schema v10 renames `file_size` → `size` (in items, changes tables) and `total_file_size` → `total_size` (in scans table) to reflect that directories now have stored sizes - **Breaking change**: queries using old column names (`file_size`, `total_file_size`) will fail after upgrade
 - **Recursive directory scanning**: Replaced queue-based directory traversal with depth-first recursive scanning to enable bottom-up folder size calculation during scan
