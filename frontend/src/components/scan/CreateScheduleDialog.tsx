@@ -44,7 +44,7 @@ export function CreateScheduleDialog({
   const [dayOfMonth, setDayOfMonth] = useState<number>(1)
   const [intervalValue, setIntervalValue] = useState<number>(2)
   const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('Hours')
-  const [hashMode, setHashMode] = useState<string>('All')
+  const [hashMode, setHashMode] = useState<string>('New or Changed')
   const [validateMode, setValidateMode] = useState<string>('New or Changed')
 
   const [loading, setLoading] = useState(true)
@@ -62,7 +62,7 @@ export function CreateScheduleDialog({
       setDayOfMonth(1)
       setIntervalValue(2)
       setIntervalUnit('Hours')
-      setHashMode('All')
+      setHashMode('New or Changed')
       setValidateMode('New or Changed')
       setError(null)
 
