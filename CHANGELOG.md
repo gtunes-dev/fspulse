@@ -7,63 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.0] - 2025-11-08
+
+### Breaking Changes
+
+**⚠️ CLI Scan Removal**
+- The `scan` subcommand has been removed. All scanning operations must now be performed through the web UI (`fspulse serve`)
+- CLI commands for querying, reporting, and data exploration remain fully functional
+
+**⚠️ Query Column Renames**
+- Database schema v10 renames `file_size` → `size` and `total_file_size` → `total_size` to reflect directory size support
+- Queries using old column names will fail after upgrade
+
+**⚠️ Query Language Updates**
+- Computed columns (`adds`, `modifies`, `deletes`) replaced with stored columns (`add_count`, `modify_count`, `delete_count`)
+- Queries using old column names will fail after upgrade
+
 ### Added
 
-- **Scheduled and recurring scans**: New scheduling system allows daily, weekly, monthly, and interval-based automatic scans with queue-based execution and database-backed persistence
-- **Browse page with detailed item view**: New Browse page allows navigation through filesystem hierarchy with detailed item cards showing file metadata, validation status, change history, and associated alerts in an elegant sliding panel interface
-- **Folder size calculation and storage**: Folder sizes are now computed during scan by recursive directory traversal and stored in the database. Scan resumption properly aggregates sizes from already-processed subdirectories. Database schema v10 generalizes size storage from files-only to all item types
-- **Dual-format file size display**: File sizes now show both decimal (KB/MB/GB) and binary (KiB/MiB/GiB) units for cross-platform clarity, e.g., "16.3 MB (15.54 MiB)"
-- **Unified filter toolbar design**: Introduced consistent elevated toolbar styling across Browse and Alerts pages with drop shadows, refined spacing, and reusable components (FilterToolbar, RootPicker, SearchFilter) for a polished, cohesive UI
-- **Browse page path search**: Added debounced search filter to Browse page for filtering items by path, with search icon inside input for modern iOS-inspired aesthetic
-- **Enhanced scan statistics**: Database schema v6 adds denormalized count columns to scans table (`total_size`, `alert_count`, `add_count`, `modify_count`, `delete_count`) for improved query performance and future charting capabilities
-- **Home page statistics display**: Added total file size and aggregate change count displays with color-coded visual indicators for adds (green), modifies (blue), and deletes (red)
-- **Scan Trends visualization**: New Insights tab with interactive charts showing historical scan data over time, including total file size, file/folder counts, change activity (adds/modifies/deletes), and alerts created. Features root selection, date range filtering, and human-readable formatting for large numbers and byte sizes
-- **Standalone Alerts page**: Moved Alerts from Insights tabs to dedicated top-level navigation page with context filtering by root or scan ID
-- **Preset time window selector**: Added quick-select time ranges (Last 7 Days, Last 30 Days, Last 3 Months, Last 6 Months, Last Year, Custom Range) with inline custom date pickers
-- **Smart baseline scan filtering**: Added "Exclude initial baseline scan" checkbox for Changes and New Alerts charts that automatically detects and filters the first scan (or first validating scan for alerts) when present in the time window
+**🗓️ Scheduled and Recurring Scans**
+- New scheduling system with daily, weekly, monthly, and interval-based automatic scans
+- Queue-based execution with database-backed persistence
+
+**📁 Browse Page with Item Detail View**
+- Navigate filesystem hierarchy with detailed item cards showing metadata, validation status, change history, and alerts
+- Elegant sliding panel interface for item inspection
+
+**📊 Scan Trends Visualization**
+- New Insights tab with interactive charts showing historical scan data
+- Track file size, file/folder counts, change activity, and alerts over time
+- Features root selection, date range filtering, and smart baseline exclusion
+
+**💾 Folder Size Calculation**
+- Folder sizes now computed during scan and stored in database
+- Dual-format display (decimal and binary units): e.g., "16.3 MB (15.54 MiB)"
+
+**🎯 Enhanced Scan Statistics**
+- Denormalized count columns in scans table for improved query performance
+- Home page displays total file size and color-coded change indicators
+
+**🔍 UI Enhancements**
+- Unified filter toolbar design across Browse and Alerts pages
+- Path search with debouncing on Browse page
+- Standalone Alerts page with context filtering
+- Preset time window selector with quick-select ranges
 
 ### Changed
 
-- **Progress reporting simplification**: Removed all legacy CLI progress reporting infrastructure (progress bars, spinners, sections, tick-based updates). Progress module consolidated from 3 files to 1 with a minimal 14-method API focused solely on WebSocket state broadcasting. Validators are now pure validation functions with no progress awareness - Scanner tracks all progress at the higher level
-- **CLI scan removal**: Scanning can no longer be initiated from the command-line interface - **Breaking change**: the `scan` subcommand has been removed. All scanning operations must now be performed through the web UI (`fspulse serve`), which provides scan scheduling, manual scan initiation, and real-time progress monitoring. CLI commands for querying, reporting, and data exploration remain fully functional
-- **Query column renames**: Database schema v10 renames `file_size` → `size` (in items, changes tables) and `total_file_size` → `total_size` (in scans table) to reflect that directories now have stored sizes - **Breaking change**: queries using old column names (`file_size`, `total_file_size`) will fail after upgrade
-- **Recursive directory scanning**: Replaced queue-based directory traversal with depth-first recursive scanning to enable bottom-up folder size calculation during scan
-- **UI design language overhaul**: Comprehensive visual redesign with card-based layouts, improved typography, refined spacing, and cohesive component styling across all pages
-- **Standardized database transaction pattern**: All explicit transaction wrappers now use IMMEDIATE transactions via a helper function for maximum safety and consistency. Eliminates lock upgrade failures and simplifies transaction management throughout the codebase
-- **Alerts page enhancements**: Added ITEM ID column (positioned between ROOT ID and SCAN ID), clickable file names with Info icon that open ItemDetailSheet for detailed item inspection
-- **Server-side path parsing**: File and directory names now parsed by backend using platform-aware Rust path utilities with `@name` format specifier, eliminating client-side path parsing concerns
-- **Browse page navigation priority**: Moved Browse page in sidebar navigation to appear between Scan and Alerts, reflecting its importance as a core feature
-- **Alerts page context filter**: Replaced manual root ID input with root picker dropdown when filtering by root, with automatic selection of first root for improved usability
-- **Consolidated Alerts filter UI**: Combined two-level filter controls (context + alert filters) into single unified toolbar with two rows for cleaner layout
-- **Root query sorting**: Fixed root picker to properly sort roots by path using natural path collation via ORDER BY clause
-- **Natural path sorting**: Database schema v8 implements natural, case-insensitive path sorting using the icu_collator crate. Paths now sort hierarchically (e.g., `/proj` and its children appear before `/proj-A`) with proper numeric ordering (e.g., `file2` before `file10`). Updated all queries and indexes to use the natural_path collation
-- **Integer-based enum storage**: Database schema v7 migrates all enums (item_type, change_type, alert_type, alert_status, validation state, scan_state) from single-character string storage to integer values for improved type safety and performance
-- **ChangeType enum reordering**: Changed ChangeType integer values to logical order (NoChange=0, Add=1, Modify=2, Delete=3) and updated all SQL queries, documentation, and tests accordingly
-- **Removed Default trait from enums**: Eliminated Default implementations from all enums to enforce explicit value handling
-- **Removed ScanState::Unknown variant**: Eliminated invalid Unknown state from ScanState enum
-- **Query column rename**: Renamed `state` column to `scan_state` in scans query domain
-- **Query language updates**: Replaced computed columns (`adds`, `modifies`, `deletes`) with stored columns (`add_count`, `modify_count`, `delete_count`) in scans queries - **Breaking change**: queries using old column names will fail after upgrade
-- **Complete React migration**: Replaced monolithic 5,800-line HTML template with modern React 19 + shadcn/ui component library, featuring improved responsiveness, accessibility, and maintainability
-- **Single-binary distribution**: Implemented embedded assets using rust-embed with conditional compilation - development builds serve from filesystem for fast iteration, release builds embed assets into binary for simplified deployment
-- **Build infrastructure updates**: Updated GitHub CI workflows and Dockerfile to build frontend before Rust compilation, ensuring embedded assets are included in release artifacts
-- **Web UI Scan page fit and finish**: Improved layout and spacing of Roots card header with repositioned "Add Root" button
-- **Chart visualization improvements**: Standardized chart titles to singular form, converted Items chart to stacked area visualization, Changes chart to stacked bars (single bar per scan), and New Alerts to bar chart for better clarity of discrete events
-- **Insights page redesign**: Improved visual hierarchy with prominent root selector and compact secondary time range controls, automatic selection of first root with 3-month default time range
-- **Integer-only Y-axes**: All count-based charts (Items, Changes, New Alerts) now enforce integer tick marks, preventing misleading decimal values
+**⚛️ Complete React Migration**
+- Replaced 5,800-line HTML template with React 19 + shadcn/ui
+- Improved responsiveness, accessibility, and maintainability
+
+**📦 Single-Binary Distribution**
+- Assets embedded using rust-embed with conditional compilation
+- Development builds serve from filesystem; release builds embed assets in binary
+
+**🎨 UI Design Language Overhaul**
+- Card-based layouts with refined typography and spacing
+- Consistent component styling across all pages
+
+**🔧 Progress Reporting Simplification**
+- Consolidated from 3 files to 1 with minimal 14-method API
+- Validators now pure validation functions; Scanner tracks progress
+
+**📂 Recursive Directory Scanning**
+- Replaced queue-based traversal with depth-first recursive scanning
+- Enables bottom-up folder size calculation
+
+**🔢 Natural Path Sorting**
+- Database schema v8 implements natural, case-insensitive path sorting
+- Hierarchical ordering (e.g., `/proj` before `/proj-A`) with proper numeric handling
+
+**⚡ Integer-Based Enum Storage**
+- Database schema v7 migrates enums to integer values for type safety and performance
+- ChangeType reordered to logical sequence (NoChange=0, Add=1, Modify=2, Delete=3)
+
+**🗄️ Standardized Transaction Pattern**
+- All transactions now use IMMEDIATE mode for consistency and safety
+
+**🖥️ Chart and Visualization Improvements**
+- Standardized chart titles, improved visualization types
+- Integer-only Y-axes for count-based charts
 
 ### Fixed
 
-- **Activity and Monitor page table refresh**: Tables now properly refresh when scan state changes, showing loading indicator only on initial load
-- **Monitor page button states**: Add Schedule buttons always enabled; Delete button only disabled for root with active scan
-- **Root deletion with schedules**: Deleting a root now properly removes all associated schedules and queue entries, and prevents deletion when an active scan is in progress
-
-- **Alert path formatting**: Fixed alerts query to respect `@name` format specifier by using `format_path()` instead of `format_string()`, enabling proper filename extraction
-- **ItemDetailSheet alerts loading**: Corrected alert query to use existing `val_error` column instead of non-existent `details` column, resolving 500 errors when viewing item details
-- **Tombstone exclusion**: Corrected `file_count` and `folder_count` computation to exclude tombstoned (deleted) items, fixing a bug where deleted items were incorrectly included in totals
-- **Schema migration corrections**: Fixed v6_to_v7 migration to use correct integer mappings for ValidationState, and corrected v5_to_v6 migration to use character values (not integers) when operating on pre-v7 database
-- **Invalid enum value logging**: Added warning logs when database contains invalid enum integer values, helping detect data corruption or migration issues while maintaining graceful degradation
-- **Comprehensive enum tests**: Added integer value and round-trip conversion tests for all enum types to prevent future mapping errors
-- **Null date display in Explore view**: Fixed DataExplorerView to check for null sentinel value ("-") before attempting to parse date columns, preventing "NaN-NaN-NaN" display for null dates
+- Activity and Monitor page table refresh with proper loading states
+- Monitor page button states (Add Schedule always enabled; Delete disabled during active scan)
+- Root deletion now properly removes associated schedules and queue entries
+- Alert path formatting using correct `@name` format specifier
+- ItemDetailSheet alerts loading corrected to use `val_error` column
+- Tombstone exclusion in file/folder counts
+- Schema migration corrections for ValidationState and enum mappings
+- Null date display in Explore view
 
 ## [v0.1.4] - 2025-10-25
 
