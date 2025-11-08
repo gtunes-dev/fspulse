@@ -35,8 +35,8 @@ import {
   ChartTooltipContent,
 } from '@/components/ui/chart'
 import {
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -630,7 +630,7 @@ export function ItemDetailSheet({
                         }}
                         className="aspect-auto h-[300px]"
                       >
-                        <AreaChart
+                        <LineChart
                           data={sizeHistory.map((point) => ({
                             date: format(new Date(point.scan_time * 1000), 'MMM dd'),
                             size: point.size,
@@ -663,15 +663,15 @@ export function ItemDetailSheet({
                             }}
                           />
                           <Legend />
-                          <Area
-                            type="monotone"
+                          <Line
+                            type="step"
                             dataKey="size"
                             stroke="var(--color-size)"
-                            fill="var(--color-size)"
-                            fillOpacity={0.6}
+                            strokeWidth={2}
+                            dot={false}
                             name="Size"
                           />
-                        </AreaChart>
+                        </LineChart>
                       </ChartContainer>
                     </div>
                   )}

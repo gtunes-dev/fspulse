@@ -25,6 +25,8 @@ import {
 import {
   AreaChart,
   Area,
+  LineChart,
+  Line,
   BarChart,
   Bar,
   XAxis,
@@ -402,7 +404,7 @@ export function ScanTrendsTab() {
                 }}
                 className="aspect-auto h-[300px]"
               >
-                <AreaChart
+                <LineChart
                   data={scanData.map((d) => ({
                     date: format(new Date(d.scan_time * 1000), 'MMM dd'),
                     total_size: d.total_size,
@@ -442,15 +444,15 @@ export function ScanTrendsTab() {
                     }}
                   />
                   <Legend />
-                  <Area
-                    type="monotone"
+                  <Line
+                    type="step"
                     dataKey="total_size"
                     stroke="var(--color-total_size)"
-                    fill="var(--color-total_size)"
-                    fillOpacity={0.6}
+                    strokeWidth={2}
+                    dot={false}
                     name="Total Size"
                   />
-                </AreaChart>
+                </LineChart>
               </ChartContainer>
             </CardContent>
           </Card>
