@@ -266,6 +266,7 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use tempfile::TempDir;
 
     /// Helper to set FSPULSE_DATA_DIR for a test and restore it afterward
@@ -291,6 +292,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_database_new_with_valid_path() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let _env = TestEnv::set_data_dir(temp_dir.path().to_str().unwrap());
@@ -303,6 +305,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_database_new_with_invalid_path() {
         let _env = TestEnv::set_data_dir("/nonexistent/path/that/does/not/exist");
 
@@ -318,6 +321,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_database_new_with_file_instead_of_directory() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let file_path = temp_dir.path().join("not_a_directory.txt");
@@ -329,6 +333,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_database_schema_creation() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let _env = TestEnv::set_data_dir(temp_dir.path().to_str().unwrap());
@@ -348,6 +353,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_database_tables_created() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let _env = TestEnv::set_data_dir(temp_dir.path().to_str().unwrap());
@@ -370,6 +376,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_conn_access() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let _env = TestEnv::set_data_dir(temp_dir.path().to_str().unwrap());
@@ -388,6 +395,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_conn_mut_access() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let _env = TestEnv::set_data_dir(temp_dir.path().to_str().unwrap());
@@ -417,6 +425,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_database_path_method() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let _env = TestEnv::set_data_dir(temp_dir.path().to_str().unwrap());
@@ -428,6 +437,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_database_new_defaults_to_home_dir() {
         // Clear FSPULSE_DATA_DIR to test default behavior
         let _env = TestEnv { old_value: env::var("FSPULSE_DATA_DIR").ok() };
@@ -452,6 +462,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_collation_registered() {
         // Test that the natural_path collation is registered and works correctly
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
