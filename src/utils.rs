@@ -22,13 +22,6 @@ impl Utils {
             .unwrap_or_else(|| path.to_owned())
     }
 
-    pub fn display_opt_i64(opt_i64: &Option<i64>) -> String {
-        match opt_i64 {
-            Some(i) => i.to_string(),
-            None => "-".into(),
-        }
-    }
-
     pub fn dir_sep_or_empty(is_dir: bool) -> &'static str {
         if is_dir {
             MAIN_SEPARATOR_STR
@@ -173,18 +166,6 @@ impl Utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_display_opt_i64_some() {
-        assert_eq!(Utils::display_opt_i64(&Some(42)), "42");
-        assert_eq!(Utils::display_opt_i64(&Some(-1)), "-1");
-        assert_eq!(Utils::display_opt_i64(&Some(0)), "0");
-    }
-
-    #[test]
-    fn test_display_opt_i64_none() {
-        assert_eq!(Utils::display_opt_i64(&None), "-");
-    }
 
     #[test]
     fn test_dir_sep_or_empty() {

@@ -23,16 +23,12 @@ use crate::config::{HashFunc, CONFIG};
 use crate::hash::Hash;
 use crate::items::{AnalysisItem, Item, ItemType};
 use crate::progress::{ProgressConfig, ProgressId, ProgressReporter, ProgressStyle, WorkUpdate};
-use crate::reports::Reports;
 use crate::roots::Root;
-use crate::scans::{AnalysisSpec, ScanState};
+use crate::scans::ScanState;
 use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
-use console::style;
 use crossbeam_channel::bounded;
-use dialoguer::theme::ColorfulTheme;
-use dialoguer::{MultiSelect, Select};
 use log::{error, info};
 use threadpool::ThreadPool;
 
@@ -56,199 +52,7 @@ struct ScanContext<'a> {
     items_processed: &'a mut i32,
 }
 
-enum ScanDecision {
-    NewScan,
-    ContinueExisting,
-    Exit,
-}
-
 impl Scanner {
-    pub fn do_interactive_scan(
-        db: &mut Database,
-        reporter: Arc<dyn ProgressReporter>,
-    ) -> Result<(), FsPulseError> {
-        let root = match Root::interact_choose_root(db, "Scan which root?")? {
-            Some(root) => root,
-            None => return Ok(()),
-        };
-
-        // look for an existing, incomplete scan
-        let mut existing_scan = Scan::get_latest_for_root(db, root.root_id())?
-            .filter(|s| s.state() != ScanState::Completed && s.state() != ScanState::Stopped);
-
-        // if a scan is found, ask the user if it should be stopped or resumed
-        let mut scan = match existing_scan.as_mut() {
-            Some(existing_scan) => {
-                match Scanner::stop_or_resume_scan(db, &root, existing_scan, true)? {
-                    ScanDecision::NewScan => Scanner::initiate_scan_interactive(db, &root)?,
-                    ScanDecision::ContinueExisting => existing_scan.clone(),
-                    ScanDecision::Exit => return Ok(()),
-                }
-            }
-            None => Scanner::initiate_scan_interactive(db, &root)?,
-        };
-
-        // CLI mode doesn't support cancellation - use a dummy token that's always false
-        let cancel_token = Arc::new(AtomicBool::new(false));
-
-        // Wrap scan execution with error handling
-        match Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token) {
-            Ok(()) => {
-                println!();
-                println!();
-                Reports::report_scan(db, &scan)?;
-                Ok(())
-            },
-            Err(e) => {
-                // Stop scan with error message
-                Scan::stop_scan(db, &scan, Some(&e.to_string()))?;
-                Err(e)
-            }
-        }
-    }
-
-    fn initiate_scan_interactive(db: &mut Database, root: &Root) -> Result<Scan, FsPulseError> {
-        let flags = vec!["No Hash", "Hash All", "No Validate", "Validate All"];
-
-        let analysis_spec = loop {
-            let selection = MultiSelect::new()
-                .with_prompt("Scan options (by default, all files are hashed and new/changed files are validated):")
-                .items(&flags)
-                .interact()
-                .unwrap();
-
-            let mut no_hash = false;
-            let mut hash_new = false;
-            let mut no_validate = false;
-            let mut validate_all = false;
-
-            for selected_flag in selection.iter() {
-                match selected_flag {
-                    0 => no_hash = true,
-                    1 => hash_new = true,
-                    2 => no_validate = true,
-                    3 => validate_all = true,
-                    _ => (),
-                }
-            }
-
-            if no_hash && hash_new {
-                println!(
-                    "{}",
-                    style("Conflicting selections: 'No Hash' and 'Hash New'").yellow()
-                );
-                continue;
-            }
-
-            if no_validate && validate_all {
-                println!(
-                    "{}",
-                    style("Conflicting selections: 'No Validate' and 'Validate All'").yellow()
-                );
-                continue;
-            }
-
-            break AnalysisSpec::new(no_hash, hash_new, no_validate, validate_all);
-        };
-
-        Scanner::initiate_scan(db, root, &analysis_spec)
-    }
-
-    pub fn do_scan_command(
-        db: &mut Database,
-        root_id: Option<u32>,
-        root_path: Option<String>,
-        last: bool,
-        analysis_spec: &AnalysisSpec,
-        reporter: Arc<dyn ProgressReporter>,
-    ) -> Result<(), FsPulseError> {
-        // If an incomplete scan exists, find it.
-        let (root, mut existing_scan) = match (root_id, root_path, last) {
-            (Some(root_id), _, _) => {
-                let root = Root::get_by_id(db.conn(), root_id.into())?
-                    .ok_or_else(|| FsPulseError::Error(format!("Root id {root_id} not found")))?;
-                // Look for an outstanding scan on the root
-                let scan = Scan::get_latest_for_root(db, root.root_id())?.filter(|s: &Scan| {
-                    s.state() != ScanState::Completed && s.state() != ScanState::Stopped
-                });
-                (root, scan)
-            }
-            (_, Some(root_path), _) => {
-                let root_path_buf = Root::validate_and_canonicalize_path(&root_path)?;
-                let root_path_str = root_path_buf.to_string_lossy().to_string();
-
-                let root = Root::get_by_path(db, &root_path_str)?;
-                match root {
-                    Some(root) => {
-                        // Found the root. Look for an outstanding scan
-                        let scan = Scan::get_latest_for_root(db, root.root_id())?.filter(|s| {
-                            s.state() != ScanState::Completed && s.state() != ScanState::Stopped
-                        });
-                        (root, scan)
-                    }
-                    None => {
-                        // Create the new root
-                        let new_root = Root::create(db, &root_path_str)?;
-                        (new_root, None)
-                    }
-                }
-            }
-            (_, _, true) => {
-                let scan = Scan::get_latest(db)?
-                    .ok_or_else(|| FsPulseError::Error("No latest scan found".to_string()))?;
-                let root = Root::get_by_id(db.conn(), scan.root_id())?.ok_or_else(|| {
-                    FsPulseError::Error(format!(
-                        "No root found for latest Scan Id {}",
-                        scan.scan_id()
-                    ))
-                })?;
-
-                let return_scan = if scan.state() != ScanState::Completed {
-                    Some(scan)
-                } else {
-                    None
-                };
-
-                (root, return_scan)
-            }
-            _ => {
-                return Err(FsPulseError::Error("Invalid arguments".into()));
-            }
-        };
-
-        // If scan is present, it is incomplete. Ask the user to decide if it should be resumed or stopped.
-        // Also allows the user to exit without making the choice now
-
-        let mut scan = match existing_scan.as_mut() {
-            Some(existing_scan) => {
-                match Scanner::stop_or_resume_scan(db, &root, existing_scan, false)? {
-                    ScanDecision::NewScan => Scanner::initiate_scan(db, &root, analysis_spec)?,
-                    ScanDecision::ContinueExisting => {
-                        reporter
-                            .println("Resuming scan")
-                            .map_err(|e| FsPulseError::Error(e.to_string()))?;
-                        existing_scan.clone()
-                    }
-                    ScanDecision::Exit => return Ok(()),
-                }
-            }
-            None => Scanner::initiate_scan(db, &root, analysis_spec)?,
-        };
-
-        // CLI mode doesn't support cancellation - use a dummy token that's always false
-        let cancel_token = Arc::new(AtomicBool::new(false));
-
-        // Wrap scan execution with error handling
-        match Scanner::do_scan_machine(db, &mut scan, &root, reporter, cancel_token) {
-            Ok(()) => Reports::report_scan(db, &scan),
-            Err(e) => {
-                // Stop scan with error message
-                Scan::stop_scan(db, &scan, Some(&e.to_string()))?;
-                Err(e)
-            }
-        }
-    }
-
     pub fn do_scan_machine(
         db: &mut Database,
         scan: &mut Scan,
@@ -354,64 +158,6 @@ impl Scanner {
         Ok(())
     }
 
-    fn stop_or_resume_scan(
-        db: &mut Database,
-        root: &Root,
-        scan: &mut Scan,
-        report: bool,
-    ) -> Result<ScanDecision, FsPulseError> {
-        let options = vec![
-            "Resume the scan",
-            "Stop & exit",
-            "Stop & start a new scan",
-            "Exit (decide later)",
-        ];
-
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!(
-                "Found in-progress scan on:'{}'\n\nWhat would you like to do?",
-                root.root_path()
-            ))
-            .default(0)
-            .items(&options)
-            .report(report)
-            .interact()
-            .unwrap();
-
-        let decision = match selection {
-            0 => match scan.state() {
-                ScanState::Scanning => ScanDecision::ContinueExisting,
-                ScanState::Sweeping => ScanDecision::ContinueExisting,
-                ScanState::Analyzing => ScanDecision::ContinueExisting,
-                _ => {
-                    return Err(FsPulseError::Error(format!(
-                        "Unexpected incomplete scan state: {}",
-                        scan.state()
-                    )))
-                }
-            },
-            1 => {
-                scan.set_state_stopped(db)?;
-                ScanDecision::Exit
-            }
-            2 => {
-                scan.set_state_stopped(db)?;
-                ScanDecision::NewScan
-            }
-            _ => ScanDecision::Exit, // exit
-        };
-
-        Ok(decision)
-    }
-
-    fn initiate_scan(
-        db: &mut Database,
-        root: &Root,
-        analysis_spec: &AnalysisSpec,
-    ) -> Result<Scan, FsPulseError> {
-        Scan::create(db.conn(), root, analysis_spec)
-    }
-
     fn scan_directory_recursive(
         ctx: &mut ScanContext,
         path: &Path,
@@ -507,14 +253,12 @@ impl Scanner {
             style: ProgressStyle::Spinner,
             prefix: "   ".to_string(),
             message: "Directory:".to_string(),
-            steady_tick: Some(Duration::from_millis(250)),
         });
 
         let item_prog = reporter.create(ProgressConfig {
             style: ProgressStyle::Spinner,
             prefix: "   ".to_string(),
             message: "File:".to_string(),
-            steady_tick: Some(Duration::from_millis(250)),
         });
 
         let mut items_processed: i32 = 100;
@@ -608,7 +352,6 @@ impl Scanner {
             },
             prefix: "   ".to_string(),
             message: "Files".to_string(),
-            steady_tick: None,
         });
 
         reporter.set_position(analysis_prog, analyze_done);
@@ -653,7 +396,6 @@ impl Scanner {
                 style: ProgressStyle::Spinner,
                 prefix: thread_prog_prefix,
                 message: "".to_string(), // Initial message set via update_work below
-                steady_tick: None,
             });
 
             // Set initial idle state

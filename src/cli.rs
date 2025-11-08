@@ -1,27 +1,21 @@
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use dialoguer::{theme::ColorfulTheme, BasicHistory, Input, Select};
-use indicatif::MultiProgress;
 use log::info;
-
-use std::sync::Arc;
 
 use crate::config::CONFIG;
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::explore::Explorer;
-use crate::progress::cli::CliProgressReporter;
 use crate::query::QueryProcessor;
 use crate::reports::{ReportFormat, Reports};
 use crate::roots::Root;
-use crate::scanner::Scanner;
-use crate::scans::AnalysisSpec;
 
-/// CLI for fspulse: A filesystem scan and reporting tool.
+/// CLI for fspulse: A filesystem reporting and query tool.
 #[derive(Parser)]
 #[command(
     name = "fspulse",
     version = "1.0",
-    about = "Filesystem Pulse Scanner and Reporter"
+    about = "FsPulse: Scanner, Reporter and Query Tool"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -34,66 +28,13 @@ pub enum Command {
     #[command(
         about = "Interactively select and run a command",
         long_about = r#"Launches interactive mode where you can choose from one of the main command types:
-Scan, Report, or Query.
+Explore, Report, or Query.
 
 Once a command type is selected, you'll be prompted to select from relevant existing items
 such as roots, scans, items, or changes. The selected command will then be run using your choices."#
     )]
     Interact,
 
-    #[command(
-        about = "Scan the filesystem and track changes",
-        long_about = r#"Performs a scan on a specified root path or root-id.
-
-If the root has been scanned before, it can be referenced by its root-id.
-Alternatively, use a root path. If the specified path matches an existing
-root, it will be reused; otherwise, a new root will be created.
-
-By default, scans will compute hashes for all files and will 
-'validate' files that have not been previously validated or have changed
-since the last validation. . Hashes are computed using SHA2. Validation
-is performed with type-specific logic using open source packages.
-Files are considered changed if their file size or modification
-date has changed since the last scan. Hashing behavior can be modified 
-with --no-hash or --hash-new. Validation behavior can be modified 
-with --no_validate or --validate-all."#
-    )]
-    Scan {
-        #[arg(long, conflicts_with_all = ["root_path", "last"], help = "Scan a previously recorded root by numeric ID")]
-        root_id: Option<u32>,
-
-        #[arg(long, conflicts_with_all = ["root_id", "last"], help = "Scan a known or new root by path (must be a directory)")]
-        root_path: Option<String>,
-
-        #[arg(long, conflicts_with_all = ["root_id", "root_path"], help = "Scan the most recently scanned root")]
-        last: bool,
-
-        #[arg(
-            long,
-            help = r#"Disable hashing for all files"#
-        )]
-        no_hash: bool,
-
-        #[arg(
-            long,
-            conflicts_with = "no_hash",
-            help = "Hash only files whose file size or modification date has changed"
-        )]
-        hash_new: bool,
-
-        #[arg(
-            long,
-            help = r#"Disable validation for all files"#
-        )]
-        no_validate: bool,
-
-        #[arg(
-            long,
-            conflicts_with = "no_validate",
-            help = "Validate all files, even if unchanged since last scan"
-        )]
-        validate_all: bool,
-    },
     #[command(
         about = "Interactive data explorer",
         long_about = "Interactive, terminal-ui based data exploration of Roots, Scans, Items, and Changes"
@@ -179,7 +120,6 @@ pub enum ReportType {
 
 #[derive(Copy, Clone)]
 enum CommandChoice {
-    Scan,
     QuerySimple,
     Explore,
     Report,
@@ -187,7 +127,6 @@ enum CommandChoice {
 }
 
 static COMMAND_CHOICES: &[(CommandChoice, &str)] = &[
-    (CommandChoice::Scan, "Scan"),
     (CommandChoice::QuerySimple, "Query"),
     (CommandChoice::Explore, "Explore"),
     (CommandChoice::Report, "Report"),
@@ -223,7 +162,7 @@ static ITEM_REPORT_CHOICES: &[(ItemReportChoice, &str)] = &[
 ];
 
 impl Cli {
-    pub fn handle_command_line(multi_prog: &mut MultiProgress) -> Result<(), FsPulseError> {
+    pub fn handle_command_line() -> Result<(), FsPulseError> {
         //let args = Cli::parse();
         let matches = Cli::command().term_width(0).get_matches();
 
@@ -234,35 +173,7 @@ impl Cli {
                 info!("Running interact");
                 let mut db = Database::new()?;
 
-                Cli::handle_interact(&mut db, multi_prog)
-            }
-            Command::Scan {
-                root_id,
-                root_path,
-                last,
-                no_hash,
-                hash_new,
-                no_validate,
-                validate_all,
-            } => {
-                info!(
-                    "Running scan with root_id: {root_id:?}, root_path: {root_path:?}, last: {last}, no_hash: {no_hash}, hash_new: {hash_new}, no_validate: {no_validate}, validate_all: {validate_all}"
-                );
-
-                let mut db = Database::new()?;
-                let analysis_spec = AnalysisSpec::new(no_hash, hash_new, no_validate, validate_all);
-
-                // Create CliProgressReporter from MultiProgress
-                let reporter = Arc::new(CliProgressReporter::new(std::mem::take(multi_prog)));
-
-                Scanner::do_scan_command(
-                    &mut db,
-                    root_id,
-                    root_path,
-                    last,
-                    &analysis_spec,
-                    reporter,
-                )
+                Cli::handle_interact(&mut db)
             }
             Command::Explore => {
                 info!("Initiating interactive explorer");
@@ -347,18 +258,12 @@ impl Cli {
 
     fn handle_interact(
         db: &mut Database,
-        multi_prog: &mut MultiProgress,
     ) -> Result<(), FsPulseError> {
         // Get the user's command choice.
         let command = Cli::choose_command();
 
         // Process the command.
         match command {
-            CommandChoice::Scan => {
-                // Create CliProgressReporter from MultiProgress
-                let reporter = Arc::new(CliProgressReporter::new(std::mem::take(multi_prog)));
-                Scanner::do_interactive_scan(db, reporter)?
-            }
             CommandChoice::QuerySimple => Cli::do_interactive_query(db, command)?,
             CommandChoice::Explore => Cli::do_interactive_explore(db)?,
             CommandChoice::Report => Cli::do_interactive_report(db)?,
@@ -469,19 +374,7 @@ impl Cli {
 mod tests {
     use super::*;
     use clap::Parser;
-    
-    #[test]
-    fn test_command_choice_copy_clone() {
-        let choice = CommandChoice::Scan;
-        let choice_copy = choice;
-        let choice_clone = choice;
-        
-        // All should be equal (testing Copy trait)
-        assert!(matches!(choice, CommandChoice::Scan));
-        assert!(matches!(choice_copy, CommandChoice::Scan));
-        assert!(matches!(choice_clone, CommandChoice::Scan));
-    }
-    
+
     #[test]
     fn test_report_choice_copy_clone() {
         let choice = ReportChoice::Items;
@@ -509,11 +402,10 @@ mod tests {
     #[test]
     fn test_command_choices_completeness() {
         // Verify all enum variants are represented in the static array
-        assert_eq!(COMMAND_CHOICES.len(), 5);
+        assert_eq!(COMMAND_CHOICES.len(), 4);
         
         // Verify each choice has a label
         let choices: Vec<CommandChoice> = COMMAND_CHOICES.iter().map(|(choice, _)| *choice).collect();
-        assert!(choices.iter().any(|c| matches!(c, CommandChoice::Scan)));
         assert!(choices.iter().any(|c| matches!(c, CommandChoice::QuerySimple)));
         assert!(choices.iter().any(|c| matches!(c, CommandChoice::Explore)));
         assert!(choices.iter().any(|c| matches!(c, CommandChoice::Report)));
@@ -563,11 +455,6 @@ mod tests {
     #[test]
     fn test_command_choices_labels() {
         // Test specific label mappings
-        let scan_label = COMMAND_CHOICES.iter()
-            .find(|(choice, _)| matches!(choice, CommandChoice::Scan))
-            .map(|(_, label)| *label);
-        assert_eq!(scan_label, Some("Scan"));
-        
         let query_label = COMMAND_CHOICES.iter()
             .find(|(choice, _)| matches!(choice, CommandChoice::QuerySimple))
             .map(|(_, label)| *label);
@@ -587,67 +474,6 @@ mod tests {
             .find(|(choice, _)| matches!(choice, CommandChoice::Exit))
             .map(|(_, label)| *label);
         assert_eq!(exit_label, Some("Exit"));
-    }
-    
-    #[test]
-    fn test_cli_scan_parsing_with_root_id() {
-        let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "123"]);
-        assert!(result.is_ok());
-        
-        let cli = result.unwrap();
-        if let Command::Scan { root_id, root_path, last, .. } = cli.command {
-            assert_eq!(root_id, Some(123));
-            assert_eq!(root_path, None);
-            assert!(!last);
-        } else {
-            panic!("Expected Scan command");
-        }
-    }
-    
-    #[test]
-    fn test_cli_scan_parsing_with_root_path() {
-        let result = Cli::try_parse_from(["fspulse", "scan", "--root-path", "/test/path"]);
-        assert!(result.is_ok());
-        
-        let cli = result.unwrap();
-        if let Command::Scan { root_id, root_path, last, .. } = cli.command {
-            assert_eq!(root_id, None);
-            assert_eq!(root_path, Some("/test/path".to_string()));
-            assert!(!last);
-        } else {
-            panic!("Expected Scan command");
-        }
-    }
-    
-    #[test]
-    fn test_cli_scan_parsing_with_last() {
-        let result = Cli::try_parse_from(["fspulse", "scan", "--last"]);
-        assert!(result.is_ok());
-        
-        let cli = result.unwrap();
-        if let Command::Scan { root_id, root_path, last, .. } = cli.command {
-            assert_eq!(root_id, None);
-            assert_eq!(root_path, None);
-            assert!(last);
-        } else {
-            panic!("Expected Scan command");
-        }
-    }
-    
-    #[test]
-    fn test_cli_scan_parsing_with_hash_options() {
-        let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "1", "--no-hash", "--validate-all"]);
-        assert!(result.is_ok());
-        
-        let cli = result.unwrap();
-        if let Command::Scan { no_hash, hash_new, no_validate, validate_all, .. } = cli.command {
-            assert!(no_hash);
-            assert!(!hash_new);
-            assert!(!no_validate);
-            assert!(validate_all);
-        } else {
-            panic!("Expected Scan command");
-        }
     }
     
     #[test]

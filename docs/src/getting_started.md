@@ -125,12 +125,7 @@ The web UI provides:
 
 ### Command-Line Interface
 
-Use FsPulse directly from the terminal:
-
-**Scan a directory:**
-```sh
-fspulse scan --root-path /some/directory
-```
+Use FsPulse directly from the terminal for data analysis:
 
 **Interactive exploration:**
 ```sh
@@ -138,14 +133,19 @@ fspulse interact  # Menu-driven interface
 fspulse explore   # Data explorer TUI
 ```
 
-**Query results:**
+**Query and report on scan results:**
 ```sh
 # Items whose path contains 'reports'
 fspulse query "items where item_path:('reports')"
 
 # Changes involving items detected as invalid
 fspulse query "changes where val_new:(I) show default, val_old, val_new order by change_id desc"
+
+# View recent scans
+fspulse report scans --last 5
 ```
+
+> **Note:** Scanning is performed through the web UI. The CLI provides powerful tools for querying and analyzing scan results.
 
 See the [Query Syntax](query.md) page for more examples and the [Command-Line Interface](cli.md) page for all available commands.
 

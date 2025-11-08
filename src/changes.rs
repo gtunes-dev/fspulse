@@ -1,9 +1,5 @@
 use log::warn;
-use rusqlite::params;
 use serde::{Deserialize, Serialize};
-
-use crate::database::Database;
-use crate::error::FsPulseError;
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -40,25 +36,6 @@ pub struct Change {
     // Additional non-entity fields
     pub item_type: String,
     pub item_path: String,
-}
-
-#[derive(Copy, Clone, Debug, Default)]
-pub struct ChangeCounts {
-    pub add_count: i64,
-    pub modify_count: i64,
-    pub delete_count: i64,
-    pub no_change_count: i64,
-}
-
-#[derive(Copy, Clone, Debug, Default)]
-pub struct ValidationTransitions {
-    pub unknown_to_valid: i32,
-    pub unknown_to_invalid: i32,
-    pub unknown_to_no_validator: i32,
-    pub valid_to_invalid: i32,
-    pub valid_to_no_validator: i32,
-    pub no_validator_to_valid: i32,
-    pub no_validator_to_invalid: i32,
 }
 
 #[repr(i64)]
@@ -149,108 +126,6 @@ impl Change {
     pub fn val_new(&self) -> Option<i64> {
         self.val_new
     }
-
-    pub fn get_validation_transitions_for_scan(
-        db: &Database,
-        scan_id: i64,
-    ) -> Result<ValidationTransitions, FsPulseError> {
-        let conn = db.conn();
-        // TODO: This is unnecessarily complex now that we have old and new validation states in the change record
-        let sql = "SELECT
-                COALESCE(SUM(CASE
-                    WHEN c.change_type IN (1,2)
-                        AND COALESCE(c.val_old, 0) = 0
-                        AND i.val = 1
-                    THEN 1 ELSE 0 END), 0) AS unknown_to_valid,
-                COALESCE(SUM(CASE
-                    WHEN c.change_type IN (1,2)
-                        AND COALESCE(c.val_old, 0) = 0
-                        AND i.val = 2
-                    THEN 1 ELSE 0 END), 0) AS unknown_to_invalid,
-                COALESCE(SUM(CASE
-                    WHEN c.change_type IN (1,2)
-                        AND COALESCE(c.val_old, 0) = 0
-                        AND i.val = 3
-                    THEN 1 ELSE 0 END), 0) AS unknown_to_no_validator,
-                COALESCE(SUM(CASE
-                    WHEN c.change_type IN (1,2)
-                        AND COALESCE(c.val_old, 0) = 1
-                        AND i.val = 2
-                    THEN 1 ELSE 0 END), 0) AS valid_to_invalid,
-                COALESCE(SUM(CASE
-                    WHEN c.change_type IN (1,2)
-                        AND COALESCE(c.val_old, 0) = 1
-                        AND i.val = 3
-                    THEN 1 ELSE 0 END), 0) AS valid_to_no_validator,
-                COALESCE(SUM(CASE
-                    WHEN c.change_type IN (1,2)
-                        AND COALESCE(c.val_old, 0) = 3
-                        AND i.val = 1
-                    THEN 1 ELSE 0 END), 0) AS no_validator_to_valid,
-                COALESCE(SUM(CASE
-                    WHEN c.change_type IN (1,2)
-                        AND COALESCE(c.val_old, 0) = 3
-                        AND i.val = 2
-                    THEN 1 ELSE 0 END), 0) AS no_validator_to_invalid
-            FROM changes c
-                JOIN items i ON c.item_id = i.item_id
-            WHERE c.scan_id = ?
-                AND i.item_type = 0
-                AND i.is_ts = 0";
-
-        let validation_transitions = conn.query_row(sql, params![scan_id], |row| {
-            Ok(ValidationTransitions {
-                unknown_to_valid: row.get(0)?,
-                unknown_to_invalid: row.get(1)?,
-                unknown_to_no_validator: row.get(2)?,
-                valid_to_invalid: row.get(3)?,
-                valid_to_no_validator: row.get(4)?,
-                no_validator_to_valid: row.get(5)?,
-                no_validator_to_invalid: row.get(6)?,
-            })
-        })?;
-
-        Ok(validation_transitions)
-    }
-}
-
-impl ChangeCounts {
-    pub fn get_by_scan_id(db: &Database, scan_id: i64) -> Result<Self, FsPulseError> {
-        let conn = db.conn();
-        let mut change_counts = ChangeCounts::default();
-
-        let mut stmt = conn.prepare(
-            "SELECT change_type, COUNT(*) FROM changes WHERE scan_id = ? GROUP BY change_type",
-        )?;
-
-        let mut rows = stmt.query([scan_id])?;
-
-        while let Some(row) = rows.next()? {
-            let change_type_value: i64 = row.get(0)?;
-            let count: i64 = row.get(1)?;
-
-            let change_type = ChangeType::from_i64(change_type_value);
-
-            match change_type {
-                ChangeType::NoChange => change_counts.set_count_of(ChangeType::NoChange, count),
-                ChangeType::Add => change_counts.set_count_of(ChangeType::Add, count),
-                ChangeType::Modify => change_counts.set_count_of(ChangeType::Modify, count),
-                ChangeType::Delete => change_counts.set_count_of(ChangeType::Delete, count),
-            }
-        }
-
-        Ok(change_counts)
-    }
-
-    pub fn set_count_of(&mut self, change_type: ChangeType, count: i64) {
-        let target = match change_type {
-            ChangeType::NoChange => &mut self.no_change_count,
-            ChangeType::Add => &mut self.add_count,
-            ChangeType::Modify => &mut self.modify_count,
-            ChangeType::Delete => &mut self.delete_count,
-        };
-        *target = count;
-    }
 }
 
 #[cfg(test)]
@@ -321,53 +196,6 @@ mod tests {
     }
     
     #[test]
-    fn test_change_counts_default() {
-        let counts = ChangeCounts::default();
-        
-        assert_eq!(counts.add_count, 0);
-        assert_eq!(counts.modify_count, 0);
-        assert_eq!(counts.delete_count, 0);
-        assert_eq!(counts.no_change_count, 0);
-    }
-    
-    #[test]
-    fn test_change_counts_set_count_of() {
-        let mut counts = ChangeCounts::default();
-        
-        // Test setting each count type
-        counts.set_count_of(ChangeType::Add, 10);
-        assert_eq!(counts.add_count, 10);
-        assert_eq!(counts.modify_count, 0); // Others unchanged
-        
-        counts.set_count_of(ChangeType::Delete, 5);
-        assert_eq!(counts.delete_count, 5);
-        assert_eq!(counts.add_count, 10); // Previous value preserved
-        
-        counts.set_count_of(ChangeType::Modify, 20);
-        assert_eq!(counts.modify_count, 20);
-        
-        counts.set_count_of(ChangeType::NoChange, 100);
-        assert_eq!(counts.no_change_count, 100);
-        
-        // Test overwriting existing values
-        counts.set_count_of(ChangeType::Add, 99);
-        assert_eq!(counts.add_count, 99);
-    }
-    
-    #[test]
-    fn test_validation_transitions_default() {
-        let transitions = ValidationTransitions::default();
-        
-        assert_eq!(transitions.unknown_to_valid, 0);
-        assert_eq!(transitions.unknown_to_invalid, 0);
-        assert_eq!(transitions.unknown_to_no_validator, 0);
-        assert_eq!(transitions.valid_to_invalid, 0);
-        assert_eq!(transitions.valid_to_no_validator, 0);
-        assert_eq!(transitions.no_validator_to_valid, 0);
-        assert_eq!(transitions.no_validator_to_invalid, 0);
-    }
-    
-    #[test]
     fn test_change_type_copy_clone() {
         let change_type = ChangeType::Add;
         let change_type_copy = change_type;
@@ -377,22 +205,5 @@ mod tests {
         assert_eq!(change_type, change_type_copy);
         assert_eq!(change_type, change_type_clone);
         assert_eq!(change_type_copy, change_type_clone);
-    }
-    
-    #[test]
-    fn test_change_counts_copy_clone() {
-        let counts = ChangeCounts {
-            add_count: 5,
-            modify_count: 10,
-            ..ChangeCounts::default()
-        };
-        
-        let counts_copy = counts;
-        let counts_clone = counts;
-        
-        // All should have the same values
-        assert_eq!(counts.add_count, counts_copy.add_count);
-        assert_eq!(counts.modify_count, counts_clone.modify_count);
-        assert_eq!(counts_copy.add_count, counts_clone.add_count);
     }
 }

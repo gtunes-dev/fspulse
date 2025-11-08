@@ -25,28 +25,12 @@ fspulse interact
 
 The interactive menu offers:
 
-- **Scan** — Re-scan a previously scanned root
 - **Query** — Run custom queries using the query language
+- **Explore** — Launch the visual data explorer
 - **Report** — View predefined summary reports
 - **Exit** — Close interactive mode
 
----
-
-## Scan
-
-This option lets you scan a folder that has already been scanned.
-
-> ⚠️ You must first perform a scan from the command line using:
-
-```sh
-fspulse scan --root-path /your/path
-```
-
-Once a root has been scanned at least once, it becomes available in the interactive menu.
-
-Interactive scans allow you to toggle:
-- **Hashing** — compute SHA2 file hashes
-- **Validation** — check file content integrity for supported types
+> **Note:** Scanning is performed exclusively through the web UI. Use `fspulse serve` to access the web interface where you can create and manage scans.
 
 ---
 
@@ -103,7 +87,7 @@ fspulse explore
 | **Interface** | Menu-driven prompts | Full-screen visual TUI |
 | **Navigation** | Text-based selection | Arrow keys, visual navigation |
 | **Data Display** | List-based output | Table/grid layout |
-| **Best For** | Quick scans and queries | Visual data exploration |
+| **Best For** | Quick queries and reports | Visual data exploration |
 
 ### Docker Usage
 

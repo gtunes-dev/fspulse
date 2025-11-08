@@ -55,19 +55,6 @@ impl Root {
         .map_err(FsPulseError::DatabaseError)
     }
 
-    pub fn get_by_path(db: &Database, root_path: &str) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
-
-        conn.query_row("SELECT root_id, root_path FROM roots WHERE root_path = ?", [root_path], |row| {
-            Ok(Root {
-                root_id: row.get(0)?,
-                root_path: row.get(1)?,
-            })
-        })
-        .optional()
-        .map_err(FsPulseError::DatabaseError)
-    }
-
     pub fn try_create(db: &Database, root_path: &str) -> Result<Self, FsPulseError> {
         let path_buf = Root::validate_and_canonicalize_path(root_path)?;
         let canon_root_path = path_buf.to_string_lossy().to_string();

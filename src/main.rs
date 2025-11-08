@@ -31,7 +31,6 @@ use cli::Cli;
 use config::{Config, CONFIG};
 use directories::ProjectDirs;
 use flexi_logger::{Cleanup, Criterion, FileSpec, Logger, Naming};
-use indicatif::MultiProgress;
 use log::{error, info};
 
 fn main() {
@@ -43,15 +42,13 @@ fn main() {
 
     setup_logging(&project_dirs);
 
-    let mut multi_prog = MultiProgress::new();
-
     // Mark the start time and log a timestamped message
     let start = Instant::now();
     let now = Local::now();
     info!("fspulse starting at {}", now.format("%Y-%m-%d %H:%M:%S"));
 
     // Run the command line handler
-    let result = Cli::handle_command_line(&mut multi_prog);
+    let result = Cli::handle_command_line();
 
     let duration = start.elapsed();
 

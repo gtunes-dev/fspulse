@@ -6,27 +6,19 @@ FsPulse scans are at the core of how it tracks changes to the file system over t
 
 ## Initiating a Scan
 
-You can start a scan in three ways:
+**Scans are initiated exclusively through the web UI:**
 
-- **Web UI (Server Mode):**
-  1. Start the server: `fspulse serve`
-  2. Open http://localhost:8080 in your browser
-  3. Navigate to **Manage Roots**
-  4. Select a root and click **Scan Root**
-  5. Monitor real-time progress in the web interface
+1. Start the server: `fspulse serve`
+2. Open http://localhost:8080 in your browser (or the custom port you've configured)
+3. Navigate to the scan management interface
+4. Configure scan options (hashing, validation)
+5. Start the scan and monitor real-time progress
 
-- **Command line:**
-  ```sh
-  fspulse scan --root-path /your/path
-  ```
+The web UI supports both scheduled automatic scans and manual on-demand scans. You can create scan schedules for recurring scans or initiate individual scans as needed.
 
-- **Interactive mode:** From the interactive menu, select **Scan** to re-scan a root path that has previously been scanned.
+Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.
 
-> **Note**: The web UI and command line support scanning both new and existing roots. Interactive mode (`fspulse interact`) only supports scanning previously scanned paths. To scan a new root for the first time, use the web UI or command line.
-
-Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on other roots can run independently.
-
-**Docker users**: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage scans, or use `docker exec` to run CLI commands. See the [Docker Deployment](docker.md) chapter for details.
+**Docker users**: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage and initiate scans. See the [Docker Deployment](docker.md) chapter for details.
 
 ---
 
@@ -97,13 +89,7 @@ An example of a query that displays validation state changes is:
 
 FsPulse is designed to be resilient to interruptions like system crashes or power loss. If a scan stops before completing, FsPulse saves its state so it can be resumed later.
 
-To resume or discard an in-progress scan:
-
-```sh
-fspulse scan --root-path /your/path
-```
-
-If a scan is in progress, FsPulse will prompt you to:
+When you attempt to start a new scan on a root that has an in-progress scan, the web UI will prompt you to:
 
 - **Resume** the scan from where it left off
 - **Stop** the scan and discard its partial results
@@ -152,7 +138,7 @@ Moved files appear as deletes and adds, as FsPulse does not yet track move opera
 
 ### 3. Analysis
 
-This phase runs only if the scan is started with `--hash` and/or `--validate`.
+This phase runs only if hashing and/or validation is enabled when configuring the scan in the web UI.
 
 - **Hashing** — Computes a SHA2 hash of file contents
 - **Validation** — Uses file-type-specific validators to check content integrity

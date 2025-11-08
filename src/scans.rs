@@ -71,21 +71,6 @@ pub struct AnalysisSpec {
 }
 
 impl AnalysisSpec {
-    pub fn new(no_hash: bool, hash_new: bool, no_val: bool, val_all: bool) -> Self {
-        AnalysisSpec {
-            hash_mode: match (no_hash, hash_new) {
-                (true, false) => HashMode::None,
-                (false, true) => HashMode::New,
-                _ => HashMode::All,
-            },
-            val_mode: match (no_val, val_all) {
-                (true, false) => ValidateMode::None,
-                (false, true) => ValidateMode::All,
-                _ => ValidateMode::New,
-            },
-        }
-    }
-
     pub fn from_modes(hash_mode: HashMode, val_mode: ValidateMode) -> Self {
         AnalysisSpec {
             hash_mode,
@@ -268,11 +253,6 @@ impl Scan {
             scan_time,
         );
         Ok(scan)
-    }
-
-    pub fn get_latest(db: &Database) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
-        Self::get_by_id_or_latest(conn, None, None)
     }
 
     pub fn get_latest_for_root(db: &Database, root_id: i64) -> Result<Option<Self>, FsPulseError> {
@@ -999,78 +979,6 @@ mod tests {
     }
 
     #[test]
-    fn test_analysis_spec_new_no_hash_no_val() {
-        let spec = AnalysisSpec::new(true, false, true, false);
-        assert!(!spec.is_hash());
-        assert!(!spec.hash_all());
-        assert!(!spec.is_val());
-        assert!(!spec.val_all());
-    }
-
-    #[test]
-    fn test_analysis_spec_new_hash_new() {
-        let spec = AnalysisSpec::new(false, true, false, false);
-        assert!(spec.is_hash());
-        assert!(!spec.hash_all());
-        assert!(spec.is_val()); // defaults to new when not disabled
-        assert!(!spec.val_all());
-    }
-
-    #[test]
-    fn test_analysis_spec_new_hash_all() {
-        let spec = AnalysisSpec::new(false, false, false, false);
-        assert!(spec.is_hash()); // defaults to all when not disabled or new
-        assert!(spec.hash_all());
-        assert!(spec.is_val()); // defaults to new when not disabled
-        assert!(!spec.val_all());
-    }
-
-    #[test]
-    fn test_analysis_spec_new_val_all() {
-        let spec = AnalysisSpec::new(false, false, false, true);
-        assert!(spec.is_hash()); // defaults to all
-        assert!(spec.hash_all());
-        assert!(spec.is_val());
-        assert!(spec.val_all());
-    }
-
-    #[test]
-    fn test_analysis_spec_all_combinations() {
-        // Test all 16 possible combinations of the 4 boolean flags
-        let test_cases = [
-            // (no_hash, hash_new, no_val, val_all) -> (expected is_hash, hash_all, is_val, val_all)
-            ((true, false, true, false), (false, false, false, false)),   // 0000
-            ((true, false, true, true), (false, false, true, false)),     // 0001 - no_val=true, val_all=true -> ValidateMode::New  
-            ((true, false, false, false), (false, false, true, false)),   // 0010
-            ((true, false, false, true), (false, false, true, true)),     // 0011
-            ((true, true, true, false), (true, true, false, false)),      // 0100 - (true,true) -> HashMode::All
-            ((true, true, true, true), (true, true, true, false)),        // 0101 - (true,true) -> HashMode::All, no_val=true, val_all=true -> ValidateMode::New
-            ((true, true, false, false), (true, true, true, false)),      // 0110 - (true,true) -> HashMode::All
-            ((true, true, false, true), (true, true, true, true)),        // 0111 - (true,true) -> HashMode::All
-            ((false, false, true, false), (true, true, false, false)),    // 1000
-            ((false, false, true, true), (true, true, true, false)),      // 1001 - no_val=true, val_all=true -> ValidateMode::New
-            ((false, false, false, false), (true, true, true, false)),    // 1010
-            ((false, false, false, true), (true, true, true, true)),      // 1011
-            ((false, true, true, false), (true, false, false, false)),    // 1100
-            ((false, true, true, true), (true, false, true, false)),      // 1101 - no_val=true, val_all=true -> ValidateMode::New
-            ((false, true, false, false), (true, false, true, false)),    // 1110
-            ((false, true, false, true), (true, false, true, true)),      // 1111
-        ];
-
-        for ((no_hash, hash_new, no_val, val_all), (exp_is_hash, exp_hash_all, exp_is_val, exp_val_all)) in test_cases {
-            let spec = AnalysisSpec::new(no_hash, hash_new, no_val, val_all);
-            assert_eq!(spec.is_hash(), exp_is_hash, 
-                "is_hash failed for ({no_hash}, {hash_new}, {no_val}, {val_all})");
-            assert_eq!(spec.hash_all(), exp_hash_all,
-                "hash_all failed for ({no_hash}, {hash_new}, {no_val}, {val_all})");
-            assert_eq!(spec.is_val(), exp_is_val,
-                "is_val failed for ({no_hash}, {hash_new}, {no_val}, {val_all})");
-            assert_eq!(spec.val_all(), exp_val_all,
-                "val_all failed for ({no_hash}, {hash_new}, {no_val}, {val_all})");
-        }
-    }
-
-    #[test]
     fn test_hash_mode_enum() {
         // Test that HashMode enum has expected variants
         let _none = HashMode::None;
@@ -1094,18 +1002,5 @@ mod tests {
         assert_eq!(ValidateMode::None, ValidateMode::None);
         assert_ne!(ValidateMode::None, ValidateMode::New);
         assert_ne!(ValidateMode::New, ValidateMode::All);
-    }
-
-    #[test]
-    fn test_analysis_spec_copy_clone() {
-        let spec = AnalysisSpec::new(false, true, false, false);
-        let spec_copy = spec;
-        let spec_clone = spec;
-        
-        // All should have the same behavior
-        assert_eq!(spec.is_hash(), spec_copy.is_hash());
-        assert_eq!(spec.is_hash(), spec_clone.is_hash());
-        assert_eq!(spec.hash_all(), spec_copy.hash_all());
-        assert_eq!(spec.hash_all(), spec_clone.hash_all());
     }
 }

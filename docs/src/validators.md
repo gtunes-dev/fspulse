@@ -1,10 +1,6 @@
 # Validators
 
-FsPulse can optionally validate file contents during the **analysis** phase of a scan. To enable validation, pass the `--validate` flag when initiating a scan.
-
-```sh
-fspulse scan --root-path /your/path --validate
-```
+FsPulse can optionally validate file contents during the **analysis** phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.
 
 Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.
 

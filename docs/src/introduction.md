@@ -36,7 +36,7 @@ FsPulse offers flexibility in how you interact with it:
 
 - **Web UI Mode**: Run `fspulse serve` to start the server and access the full web interface at http://127.0.0.1:8080. Great for visual data exploration, managing multiple roots, and real-time scan monitoring.
 
-- **Command-Line Mode**: Use direct terminal commands like `fspulse scan`, `fspulse query`, and `fspulse report` for automation, scripted workflows, and quick one-off operations.
+- **Command-Line Mode**: Use direct terminal commands like `fspulse query` and `fspulse report` for automation, scripted workflows, and quick data analysis operations.
 
 - **Interactive Terminal Mode**: Use `fspulse interact` for menu-driven navigation or `fspulse explore` for a full-screen data explorer TUI—perfect for terminal users who want visual feedback without leaving the command line.
 

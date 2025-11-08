@@ -1,4 +1,3 @@
-pub mod cli;
 pub mod web;
 pub mod state;
 
@@ -34,9 +33,15 @@ pub enum ProgressStyle {
 #[derive(Debug, Clone)]
 pub enum WorkUpdate {
     /// Scanning a directory
-    Directory { path: String },
+    Directory {
+        #[allow(dead_code)]
+        path: String,
+    },
     /// Scanning a file/item
-    File { path: String },
+    File {
+        #[allow(dead_code)]
+        path: String,
+    },
     /// Hashing a file
     Hashing { file: String },
     /// Validating a file
@@ -51,7 +56,6 @@ pub struct ProgressConfig {
     pub style: ProgressStyle,
     pub prefix: String,
     pub message: String,
-    pub steady_tick: Option<Duration>,
 }
 
 /// Thread-safe progress reporting abstraction
@@ -155,23 +159,9 @@ mod tests {
             style: ProgressStyle::Spinner,
             prefix: "   ".to_string(),
             message: "Processing...".to_string(),
-            steady_tick: Some(Duration::from_millis(250)),
         };
 
         assert_eq!(config.prefix, "   ");
         assert_eq!(config.message, "Processing...");
-        assert_eq!(config.steady_tick, Some(Duration::from_millis(250)));
-    }
-
-    #[test]
-    fn test_progress_config_no_tick() {
-        let config = ProgressConfig {
-            style: ProgressStyle::Bar { total: 50 },
-            prefix: "[1/3]".to_string(),
-            message: "Files".to_string(),
-            steady_tick: None,
-        };
-
-        assert!(config.steady_tick.is_none());
     }
 }
