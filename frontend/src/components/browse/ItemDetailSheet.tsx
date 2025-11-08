@@ -551,8 +551,7 @@ export function ItemDetailSheet({
             </Card>
 
             {/* Size History Section */}
-            {details.size !== null && (
-              <Card>
+            <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <CardTitle>Size History</CardTitle>
@@ -678,7 +677,6 @@ export function ItemDetailSheet({
                   )}
                 </CardContent>
               </Card>
-            )}
 
             {/* History Section */}
             <Card>
