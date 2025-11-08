@@ -208,7 +208,7 @@
 <p><strong>Web UI Mode</strong>: Run <code>fspulse serve</code> to start the server and access the full web interface at http://127.0.0.1:8080. Great for visual data exploration, managing multiple roots, and real-time scan monitoring.</p>
 </li>
 <li>
-<p><strong>Command-Line Mode</strong>: Use direct terminal commands like <code>fspulse scan</code>, <code>fspulse query</code>, and <code>fspulse report</code> for automation, scripted workflows, and quick one-off operations.</p>
+<p><strong>Command-Line Mode</strong>: Use direct terminal commands like <code>fspulse query</code> and <code>fspulse report</code> for automation, scripted workflows, and quick data analysis operations.</p>
 </li>
 <li>
 <p><strong>Interactive Terminal Mode</strong>: Use <code>fspulse interact</code> for menu-driven navigation or <code>fspulse explore</code> for a full-screen data explorer TUI—perfect for terminal users who want visual feedback without leaving the command line.</p>
@@ -300,21 +300,24 @@ cargo build --release
 <li>Powerful query interface</li>
 </ul>
 <h3 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h3>
-<p>Use FsPulse directly from the terminal:</p>
-<p><strong>Scan a directory:</strong></p>
-<pre><code class="language-sh">fspulse scan --root-path /some/directory
-</code></pre>
+<p>Use FsPulse directly from the terminal for data analysis:</p>
 <p><strong>Interactive exploration:</strong></p>
 <pre><code class="language-sh">fspulse interact  # Menu-driven interface
 fspulse explore   # Data explorer TUI
 </code></pre>
-<p><strong>Query results:</strong></p>
+<p><strong>Query and report on scan results:</strong></p>
 <pre><code class="language-sh"># Items whose path contains 'reports'
 fspulse query "items where item_path:('reports')"
 
 # Changes involving items detected as invalid
 fspulse query "changes where val_new:(I) show default, val_old, val_new order by change_id desc"
+
+# View recent scans
+fspulse report scans --last 5
 </code></pre>
+<blockquote>
+<p><strong>Note:</strong> Scanning is performed through the web UI. The CLI provides powerful tools for querying and analyzing scan results.</p>
+</blockquote>
 <p>See the <a href="query.html">Query Syntax</a> page for more examples and the <a href="cli.html">Command-Line Interface</a> page for all available commands.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="docker-deployment"><a class="header" href="#docker-deployment">Docker Deployment</a></h1>
 <p>The easiest way to run FsPulse is with Docker. The container runs FsPulse as a background service with the web UI accessible on port 8080. You can manage roots, initiate scans, query data, and view results—all from your browser.</p>
@@ -701,32 +704,17 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <p>FsPulse scans are at the core of how it tracks changes to the file system over time. A scan creates a snapshot of a root directory and analyzes changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
 <hr />
 <h2 id="initiating-a-scan"><a class="header" href="#initiating-a-scan">Initiating a Scan</a></h2>
-<p>You can start a scan in three ways:</p>
-<ul>
-<li>
-<p><strong>Web UI (Server Mode):</strong></p>
+<p><strong>Scans are initiated exclusively through the web UI:</strong></p>
 <ol>
 <li>Start the server: <code>fspulse serve</code></li>
-<li>Open http://localhost:8080 in your browser</li>
-<li>Navigate to <strong>Manage Roots</strong></li>
-<li>Select a root and click <strong>Scan Root</strong></li>
-<li>Monitor real-time progress in the web interface</li>
+<li>Open http://localhost:8080 in your browser (or the custom port you've configured)</li>
+<li>Navigate to the scan management interface</li>
+<li>Configure scan options (hashing, validation)</li>
+<li>Start the scan and monitor real-time progress</li>
 </ol>
-</li>
-<li>
-<p><strong>Command line:</strong></p>
-<pre><code class="language-sh">fspulse scan --root-path /your/path
-</code></pre>
-</li>
-<li>
-<p><strong>Interactive mode:</strong> From the interactive menu, select <strong>Scan</strong> to re-scan a root path that has previously been scanned.</p>
-</li>
-</ul>
-<blockquote>
-<p><strong>Note</strong>: The web UI and command line support scanning both new and existing roots. Interactive mode (<code>fspulse interact</code>) only supports scanning previously scanned paths. To scan a new root for the first time, use the web UI or command line.</p>
-</blockquote>
-<p>Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on other roots can run independently.</p>
-<p><strong>Docker users</strong>: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage scans, or use <code>docker exec</code> to run CLI commands. See the <a href="docker.html">Docker Deployment</a> chapter for details.</p>
+<p>The web UI supports both scheduled automatic scans and manual on-demand scans. You can create scan schedules for recurring scans or initiate individual scans as needed.</p>
+<p>Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.</p>
+<p><strong>Docker users</strong>: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage and initiate scans. See the <a href="docker.html">Docker Deployment</a> chapter for details.</p>
 <hr />
 <h2 id="hashing"><a class="header" href="#hashing">Hashing</a></h2>
 <p>Hashing is a key capabilities of FsPulse.</p>
@@ -775,10 +763,7 @@ is recorded.</p>
 <hr />
 <h2 id="in-progress-scans"><a class="header" href="#in-progress-scans">In-Progress Scans</a></h2>
 <p>FsPulse is designed to be resilient to interruptions like system crashes or power loss. If a scan stops before completing, FsPulse saves its state so it can be resumed later.</p>
-<p>To resume or discard an in-progress scan:</p>
-<pre><code class="language-sh">fspulse scan --root-path /your/path
-</code></pre>
-<p>If a scan is in progress, FsPulse will prompt you to:</p>
+<p>When you attempt to start a new scan on a root that has an in-progress scan, the web UI will prompt you to:</p>
 <ul>
 <li><strong>Resume</strong> the scan from where it left off</li>
 <li><strong>Stop</strong> the scan and discard its partial results</li>
@@ -834,7 +819,7 @@ is recorded.</p>
 <p>Moved files appear as deletes and adds, as FsPulse does not yet track move operations.</p>
 <hr />
 <h3 id="3-analysis"><a class="header" href="#3-analysis">3. Analysis</a></h3>
-<p>This phase runs only if the scan is started with <code>--hash</code> and/or <code>--validate</code>.</p>
+<p>This phase runs only if hashing and/or validation is enabled when configuring the scan in the web UI.</p>
 <ul>
 <li><strong>Hashing</strong> — Computes a SHA2 hash of file contents</li>
 <li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity</li>
@@ -1271,8 +1256,8 @@ scans show scan_id, file_count, total_size, add_count, modify_count, delete_coun
 fspulse &lt;command&gt; --help
 </code></pre>
 <p>For example:</p>
-<pre><code class="language-sh">fspulse scan --help
-fspulse report items --help
+<pre><code class="language-sh">fspulse report items --help
+fspulse query --help
 </code></pre>
 <hr />
 <h2 id="top-level-commands"><a class="header" href="#top-level-commands">Top-Level Commands</a></h2>
@@ -1299,9 +1284,9 @@ docker exec -it fspulse fspulse interact
 <pre><code class="language-sh">fspulse interact
 </code></pre>
 <ul>
-<li>Provides a guided menu for scanning and reporting</li>
+<li>Provides a guided menu for reporting and querying</li>
 <li>Allows interactive query mode with history</li>
-<li>Only usable for roots that have already been scanned</li>
+<li>Works with roots and scans created via the web UI</li>
 </ul>
 <p>See the <a href="interactive_mode.html">Interactive Mode</a> chapter for full details.</p>
 <hr />
@@ -1316,19 +1301,15 @@ docker exec -it fspulse fspulse interact
 </ul>
 <p>This is different from <code>interact</code> (which is menu-driven). The <code>explore</code> command provides a more visual, spreadsheet-like interface for exploring your data.</p>
 <hr />
-<h3 id="scan"><a class="header" href="#scan"><code>scan</code></a></h3>
-<p>Performs a filesystem scan.</p>
-<pre><code class="language-sh">fspulse scan [--root-id &lt;id&gt; | --root-path &lt;path&gt; | --last] [--hash] [--validate]
-</code></pre>
+<h2 id="scanning-1"><a class="header" href="#scanning-1">Scanning</a></h2>
+<p><strong>Scanning is performed exclusively through the web UI.</strong> Start the server with <code>fspulse serve</code> and access the web interface to:</p>
 <ul>
-<li><code>--root-id</code> — scan an existing root by ID</li>
-<li><code>--root-path</code> — scan a new or existing root by its path</li>
-<li><code>--last</code> — scan the most recently scanned root</li>
-<li><code>--hash</code> — compute SHA2 hashes on new or changed files</li>
-<li><code>--hash-all</code> — compute SHA2 hashes on all files (requires --hash)</li>
-<li><code>--validate</code> — validate new or changed files with known formats (see <a href="validators.html">Validators</a>)</li>
-<li><code>--validate-all</code> — validate all files (requires --validate)</li>
+<li>Create and manage scan schedules</li>
+<li>Initiate manual scans with real-time progress monitoring</li>
+<li>Configure scan options (hashing, validation)</li>
 </ul>
+<p>The CLI commands documented on this page provide access to data generated by scans, but cannot initiate scans themselves.</p>
+<hr />
 <h3 id="report"><a class="header" href="#report"><code>report</code></a></h3>
 <p>Generates prebuilt reports about roots, scans, items, or changes.</p>
 <pre><code class="language-sh">fspulse report &lt;subcommand&gt; [options]
@@ -1395,25 +1376,14 @@ docker exec -it fspulse fspulse interact
 <h3 id="available-options"><a class="header" href="#available-options">Available Options</a></h3>
 <p>The interactive menu offers:</p>
 <ul>
-<li><strong>Scan</strong> — Re-scan a previously scanned root</li>
 <li><strong>Query</strong> — Run custom queries using the query language</li>
+<li><strong>Explore</strong> — Launch the visual data explorer</li>
 <li><strong>Report</strong> — View predefined summary reports</li>
 <li><strong>Exit</strong> — Close interactive mode</li>
 </ul>
-<hr />
-<h2 id="scan-1"><a class="header" href="#scan-1">Scan</a></h2>
-<p>This option lets you scan a folder that has already been scanned.</p>
 <blockquote>
-<p>⚠️ You must first perform a scan from the command line using:</p>
+<p><strong>Note:</strong> Scanning is performed exclusively through the web UI. Use <code>fspulse serve</code> to access the web interface where you can create and manage scans.</p>
 </blockquote>
-<pre><code class="language-sh">fspulse scan --root-path /your/path
-</code></pre>
-<p>Once a root has been scanned at least once, it becomes available in the interactive menu.</p>
-<p>Interactive scans allow you to toggle:</p>
-<ul>
-<li><strong>Hashing</strong> — compute SHA2 file hashes</li>
-<li><strong>Validation</strong> — check file content integrity for supported types</li>
-</ul>
 <hr />
 <h2 id="query-1"><a class="header" href="#query-1">Query</a></h2>
 <p>Allows you to enter queries using FsPulse’s <a href="query.html">query syntax</a>.</p>
@@ -1456,7 +1426,7 @@ changes where val_new:(I) show default, val_old, val_new
 <tr><td><strong>Interface</strong></td><td>Menu-driven prompts</td><td>Full-screen visual TUI</td></tr>
 <tr><td><strong>Navigation</strong></td><td>Text-based selection</td><td>Arrow keys, visual navigation</td></tr>
 <tr><td><strong>Data Display</strong></td><td>List-based output</td><td>Table/grid layout</td></tr>
-<tr><td><strong>Best For</strong></td><td>Quick scans and queries</td><td>Visual data exploration</td></tr>
+<tr><td><strong>Best For</strong></td><td>Quick queries and reports</td><td>Visual data exploration</td></tr>
 </tbody></table>
 </div>
 <h3 id="docker-usage"><a class="header" href="#docker-usage">Docker Usage</a></h3>
@@ -1479,9 +1449,7 @@ docker exec -it fspulse fspulse explore
 </ul>
 <p>Choose the interface that best fits your workflow.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
-<p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, pass the <code>--validate</code> flag when initiating a scan.</p>
-<pre><code class="language-sh">fspulse scan --root-path /your/path --validate
-</code></pre>
+<p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
 <p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
 <hr />
 <h2 id="validation-status-codes"><a class="header" href="#validation-status-codes">Validation Status Codes</a></h2>
@@ -1526,7 +1494,7 @@ files and directories discovered. The details of scanning are explained in <a hr
 <li>You can scan a root multiple times over time.</li>
 </ul>
 <hr />
-<h2 id="scan-2"><a class="header" href="#scan-2">Scan</a></h2>
+<h2 id="scan"><a class="header" href="#scan">Scan</a></h2>
 <p>A <strong>scan</strong> is a snapshot of a root directory at a specific point in time.</p>
 <p>Each scan records metadata about:</p>
 <ul>
@@ -1560,7 +1528,7 @@ files and directories discovered. The details of scanning are explained in <a hr
 <hr />
 <h2 id="entity-flow"><a class="header" href="#entity-flow">Entity Flow</a></h2>
 <p>A simplified representation of how the entities relate:</p>
-<pre><code>Root
+<pre><code class="language-text">Root
  └── Scan (per run)
       └── Item (files and folders)
            └── Change (if the item changed)
@@ -1572,7 +1540,7 @@ files and directories discovered. The details of scanning are explained in <a hr
 <hr />
 <h2 id="database-name-and-location"><a class="header" href="#database-name-and-location">Database Name and Location</a></h2>
 <p>The database file is always named:</p>
-<pre><code>fspulse.db
+<pre><code class="language-text">fspulse.db
 </code></pre>
 <p>By default, FsPulse stores the database in the root of the user's home directory, as determined by the <a href="https://docs.rs/directories"><code>directories</code></a> crate.</p>
 <div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Base Location</th><th>Example</th></tr></thead><tbody>
@@ -1582,7 +1550,7 @@ files and directories discovered. The details of scanning are explained in <a hr
 </tbody></table>
 </div>
 <p>The full path might look like:</p>
-<pre><code>/home/alice/fspulse.db
+<pre><code class="language-text">/home/alice/fspulse.db
 </code></pre>
 <hr />
 <h2 id="custom-database-path"><a class="header" href="#custom-database-path">Custom Database Path</a></h2>

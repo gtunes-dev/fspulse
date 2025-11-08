@@ -258,21 +258,24 @@ cargo build --release
 <li>Powerful query interface</li>
 </ul>
 <h3 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h3>
-<p>Use FsPulse directly from the terminal:</p>
-<p><strong>Scan a directory:</strong></p>
-<pre><code class="language-sh">fspulse scan --root-path /some/directory
-</code></pre>
+<p>Use FsPulse directly from the terminal for data analysis:</p>
 <p><strong>Interactive exploration:</strong></p>
 <pre><code class="language-sh">fspulse interact  # Menu-driven interface
 fspulse explore   # Data explorer TUI
 </code></pre>
-<p><strong>Query results:</strong></p>
+<p><strong>Query and report on scan results:</strong></p>
 <pre><code class="language-sh"># Items whose path contains 'reports'
 fspulse query "items where item_path:('reports')"
 
 # Changes involving items detected as invalid
 fspulse query "changes where val_new:(I) show default, val_old, val_new order by change_id desc"
+
+# View recent scans
+fspulse report scans --last 5
 </code></pre>
+<blockquote>
+<p><strong>Note:</strong> Scanning is performed through the web UI. The CLI provides powerful tools for querying and analyzing scan results.</p>
+</blockquote>
 <p>See the <a href="query.html">Query Syntax</a> page for more examples and the <a href="cli.html">Command-Line Interface</a> page for all available commands.</p>
 
                     </main>

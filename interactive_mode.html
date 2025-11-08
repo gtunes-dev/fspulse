@@ -192,25 +192,14 @@
 <h3 id="available-options"><a class="header" href="#available-options">Available Options</a></h3>
 <p>The interactive menu offers:</p>
 <ul>
-<li><strong>Scan</strong> — Re-scan a previously scanned root</li>
 <li><strong>Query</strong> — Run custom queries using the query language</li>
+<li><strong>Explore</strong> — Launch the visual data explorer</li>
 <li><strong>Report</strong> — View predefined summary reports</li>
 <li><strong>Exit</strong> — Close interactive mode</li>
 </ul>
-<hr />
-<h2 id="scan"><a class="header" href="#scan">Scan</a></h2>
-<p>This option lets you scan a folder that has already been scanned.</p>
 <blockquote>
-<p>⚠️ You must first perform a scan from the command line using:</p>
+<p><strong>Note:</strong> Scanning is performed exclusively through the web UI. Use <code>fspulse serve</code> to access the web interface where you can create and manage scans.</p>
 </blockquote>
-<pre><code class="language-sh">fspulse scan --root-path /your/path
-</code></pre>
-<p>Once a root has been scanned at least once, it becomes available in the interactive menu.</p>
-<p>Interactive scans allow you to toggle:</p>
-<ul>
-<li><strong>Hashing</strong> — compute SHA2 file hashes</li>
-<li><strong>Validation</strong> — check file content integrity for supported types</li>
-</ul>
 <hr />
 <h2 id="query"><a class="header" href="#query">Query</a></h2>
 <p>Allows you to enter queries using FsPulse’s <a href="query.html">query syntax</a>.</p>
@@ -253,7 +242,7 @@ changes where val_new:(I) show default, val_old, val_new
 <tr><td><strong>Interface</strong></td><td>Menu-driven prompts</td><td>Full-screen visual TUI</td></tr>
 <tr><td><strong>Navigation</strong></td><td>Text-based selection</td><td>Arrow keys, visual navigation</td></tr>
 <tr><td><strong>Data Display</strong></td><td>List-based output</td><td>Table/grid layout</td></tr>
-<tr><td><strong>Best For</strong></td><td>Quick scans and queries</td><td>Visual data exploration</td></tr>
+<tr><td><strong>Best For</strong></td><td>Quick queries and reports</td><td>Visual data exploration</td></tr>
 </tbody></table>
 </div>
 <h3 id="docker-usage"><a class="header" href="#docker-usage">Docker Usage</a></h3>
