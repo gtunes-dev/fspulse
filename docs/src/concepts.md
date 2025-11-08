@@ -68,7 +68,7 @@ Each change is associated with both the scan and the item it affects.
 
 A simplified representation of how the entities relate:
 
-```
+```text
 Root
  └── Scan (per run)
       └── Item (files and folders)

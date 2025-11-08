@@ -8,7 +8,7 @@ FsPulse uses an embedded [SQLite](https://sqlite.org) database to store all scan
 
 The database file is always named:
 
-```
+```text
 fspulse.db
 ```
 
@@ -22,7 +22,7 @@ By default, FsPulse stores the database in the root of the user's home directory
 
 The full path might look like:
 
-```
+```text
 /home/alice/fspulse.db
 ```
 

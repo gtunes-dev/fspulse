@@ -25,20 +25,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache mdBook
-        id: cache-mdbook
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/mdbook
-          key: ${{ runner.os }}-mdbook-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mdbook-
-
-      - name: Install mdBook
-        if: steps.cache-mdbook.outputs.cache-hit != 'true'
-        run: |
-          cargo install mdbook --version ^0.4
-
       - name: Build the book
         run: mdbook build docs
 
