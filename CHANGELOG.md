@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.4] - 2025-11-09
+
 ### Added
 - Settings page with application version, build date, git commit, and git branch information
 - Links to GitHub, Documentation, crates.io, and Docker Hub on Settings page
