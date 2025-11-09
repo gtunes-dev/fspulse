@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Scanning - FsPulse</title>
+        <title>Scanning Concepts - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -179,29 +179,38 @@
 <p>FsPulse scans are at the core of how it tracks changes to the file system over time. A scan creates a snapshot of a root directory and analyzes changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
 <hr />
 <h2 id="initiating-a-scan"><a class="header" href="#initiating-a-scan">Initiating a Scan</a></h2>
-<p><strong>Scans are initiated exclusively through the web UI:</strong></p>
+<p><strong>FsPulse runs as a web service, and scans are initiated through the web UI:</strong></p>
 <ol>
 <li>Start the server: <code>fspulse serve</code></li>
 <li>Open http://localhost:8080 in your browser (or the custom port you've configured)</li>
-<li>Navigate to the scan management interface</li>
+<li>Navigate to the <strong>Monitor</strong> page</li>
 <li>Configure scan options (hashing, validation)</li>
-<li>Start the scan and monitor real-time progress</li>
+<li>Start the scan and monitor real-time progress on the <strong>Home</strong> page</li>
 </ol>
-<p>The web UI supports both scheduled automatic scans and manual on-demand scans. You can create scan schedules for recurring scans or initiate individual scans as needed.</p>
+<p>The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules (daily, weekly, monthly, or custom intervals) or initiate individual scans as needed. See <a href="web_ui/monitor.html">Monitor &amp; Scheduling</a> for details.</p>
 <p>Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.</p>
-<p><strong>Docker users</strong>: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage and initiate scans. See the <a href="docker.html">Docker Deployment</a> chapter for details.</p>
+<blockquote>
+<p><strong>Note</strong>: FsPulse is designed with the web UI as the primary interface for all users. A <a href="cli.html">command-line interface</a> is also available for expert users who prefer terminal workflows or need to integrate FsPulse into scripts and automation, but all functionality is accessible through the web UI.</p>
+</blockquote>
 <hr />
 <h2 id="hashing"><a class="header" href="#hashing">Hashing</a></h2>
 <p>Hashing is a key capabilities of FsPulse.</p>
 <p>FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents.
 The intent of hashing is to enable the detection of changes to file content in cases where the modification
-date and file size have not changed. One example of a case where this might occur is data decay. FsPulse
-can be used to create a hash baseline by scanning with the "hash" option. By default, a "hash" scan will
-compute hashes for items that have never been hashed or whose file size or modification date has changed.
-If the "hash-all" flag is passed along with the "hash" flag, FsPulse will hash all files, including those
-that have been previously hashed. If a hash is detected to have changed, a change record will be created.</p>
-<p>The query below, for example, will find and show changes where file metadata has not changed, but the
-file's hash has changed.</p>
+date and file size have not changed. One example of a case where this might occur is bit rot (data decay).</p>
+<p>When configuring a scan in the web UI, you can enable hashing with these options:</p>
+<ul>
+<li><strong>Hash changed items</strong> (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed</li>
+<li><strong>Hash all items</strong>: Hash all files, including those that have been previously hashed</li>
+</ul>
+<p>If a hash is detected to have changed, a change record is created and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>).</p>
+<h3 id="finding-hash-changes"><a class="header" href="#finding-hash-changes">Finding Hash Changes</a></h3>
+<p>You can investigate hash changes through the web UI:</p>
+<ul>
+<li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows suspicious hash changes where file metadata hasn't changed</li>
+<li><strong><a href="web_ui/explore.html">Explore Page</a></strong>: Run custom queries to analyze hash changes</li>
+</ul>
+<p>For CLI users or automation, use the query command:</p>
 <pre><code class="language-sh">fspulse query 'changes where meta_change:(F), hash_change:(T) show default, item_path order by change_id desc'
 </code></pre>
 <h2 id="validating"><a class="header" href="#validating">Validating</a></h2>
@@ -209,32 +218,38 @@ file's hash has changed.</p>
 <p>FsPulse uses community-contributed libraries to "validate" files. Validation is implemented as
 opening and reading or traversing the file. These community libraries raise a variety of "errors"
 when invalid content is encountered.</p>
-<p>FsPulse's ability to validate files is limited to the capabilities of the libraries that it uses
+<p>FsPulse's ability to validate files is limited to the capabilities of the libraries that it uses,
 and these libraries vary in terms of completeness and accuracy. In some cases, such as FsPulse's use
 of lopdf to validate PDF files, false positive "errors" may be detected as a consequence of lopdf
 encountering PDF file contents it does not yet understand. Despite these limitations, FsPulse
 offers a unique and effective view into potential validity issues in files.</p>
-<p>As with hash options, FsPulse has two command-line flags related to validation: "validate" and "validate-all".</p>
-<p>Passing "validate" will cause FsPulse to perform a validation pass on all files that have never been validated
-or have changed in terms of modification date or size. Passing "validate-all" will cause FsPulse to validate
-all files.</p>
+<p>See <a href="validators.html">Validators</a> for the complete list of supported file types.</p>
+<p>When configuring a scan in the web UI, you can enable validation with these options:</p>
+<ul>
+<li><strong>Validate changed items</strong> (default): Validate files that have never been validated or have changed in terms of modification date or size</li>
+<li><strong>Validate all items</strong>: Validate all files regardless of previous validation status</li>
+</ul>
+<h3 id="validation-states"><a class="header" href="#validation-states">Validation States</a></h3>
 <p>Validation states are stored in the database as:</p>
 <ul>
-<li>U: Unknown. No validation has been performed</li>
-<li>N: No Validator. No validator exists for this file type</li>
-<li>V: Valid. Validation was performed and no errors were encountered</li>
-<li>I: Invalid. Validation was performed and an error was encountered</li>
+<li><strong>U</strong>: Unknown. No validation has been performed</li>
+<li><strong>N</strong>: No Validator. No validator exists for this file type</li>
+<li><strong>V</strong>: Valid. Validation was performed and no errors were encountered</li>
+<li><strong>I</strong>: Invalid. Validation was performed and an error was encountered</li>
 </ul>
-<p>In the case of 'I', the validation error will be stored as val_error on the Item alongside the
-validation state, which is stored as val. When an item's validation state changes in any way,
-the change is recorded on a change record and the old and new states are both available on that
-record.</p>
-<p>If a validation pass produces an error which is identical to the previously seen error, no change
-is recorded.</p>
-<p>An example of a query that displays validation state changes is:</p>
+<p>In the case of 'I' (Invalid), the validation error message is stored alongside the validation state. When an item's validation state changes, the change is recorded and both old and new states are available for analysis.</p>
+<p>If a validation pass produces an error identical to a previously seen error, no new change is recorded.</p>
+<h3 id="finding-validation-issues"><a class="header" href="#finding-validation-issues">Finding Validation Issues</a></h3>
+<p>Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:</p>
+<ul>
+<li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows all items with validation failures, with filtering and status management</li>
+<li><strong><a href="web_ui/browse.html">Browse Page</a></strong>: Click any item to see its validation status and error details</li>
+<li><strong><a href="web_ui/explore.html">Explore Page</a></strong>: Run custom queries to analyze validation patterns</li>
+</ul>
+<p>For CLI users or automation, query validation state changes:</p>
 <pre><code class="language-sh"> fspulse query 'changes where val_change:(T) show default, item_path order by change_id desc'
 </code></pre>
-<p>Additional queries can be easily composed which filter on specific old and new validation states.</p>
+<p>Additional queries can filter on specific old and new validation states. See <a href="query.html">Query Syntax</a> for details.</p>
 <hr />
 <h2 id="in-progress-scans"><a class="header" href="#in-progress-scans">In-Progress Scans</a></h2>
 <p>FsPulse is designed to be resilient to interruptions like system crashes or power loss. If a scan stops before completing, FsPulse saves its state so it can be resumed later.</p>
@@ -294,17 +309,17 @@ is recorded.</p>
 <p>Moved files appear as deletes and adds, as FsPulse does not yet track move operations.</p>
 <hr />
 <h3 id="3-analysis"><a class="header" href="#3-analysis">3. Analysis</a></h3>
-<p>This phase runs only if hashing and/or validation is enabled when configuring the scan in the web UI.</p>
+<p>This phase runs only if hashing and/or validation is enabled when configuring the scan (see <a href="#hashing">Hashing</a> and <a href="#validating">Validating</a> above).</p>
 <ul>
 <li><strong>Hashing</strong> — Computes a SHA2 hash of file contents</li>
-<li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity</li>
+<li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity (see <a href="validators.html">Validators</a>)</li>
 </ul>
 <p>If either the hash or validation result changes:</p>
 <ul>
 <li>If an <strong>Add</strong> or <strong>Modify</strong> change already exists, the new data is attached to it</li>
 <li>Otherwise, a new <strong>Modify</strong> change is created</li>
 </ul>
-<p>Each change stores both the <strong>old</strong> and <strong>new</strong> values for comparison.</p>
+<p>Each change record stores both the <strong>old</strong> and <strong>new</strong> values for comparison, allowing you to track exactly what changed.</p>
 <hr />
 <h2 id="performance-and-threading"><a class="header" href="#performance-and-threading">Performance and Threading</a></h2>
 <p>The analysis phase runs in parallel:</p>
@@ -326,11 +341,11 @@ is recorded.</p>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="docker.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="getting_started/first_steps.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="configuration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="web_ui.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -340,11 +355,11 @@ is recorded.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="docker.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="getting_started/first_steps.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="configuration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="web_ui.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

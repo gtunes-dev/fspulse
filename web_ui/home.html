@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Roadmap - FsPulse</title>
+        <title>Home - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,7 +141,7 @@
                     <h1 class="menu-title">FsPulse</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
 
@@ -175,74 +175,52 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h1>
-<p>FsPulse is an actively evolving project. This roadmap outlines current priorities and areas under consideration for future development. Some features listed here are planned, while others are exploratory.</p>
-<hr />
-<h2 id="planned-enhancements"><a class="header" href="#planned-enhancements">Planned Enhancements</a></h2>
-<p>These areas are actively being developed or prioritized:</p>
-<h3 id="-expanded-query-capabilities"><a class="header" href="#-expanded-query-capabilities">🔍 Expanded Query Capabilities</a></h3>
+                        <h1 id="home"><a class="header" href="#home">Home</a></h1>
+<p>The Home page serves as your central dashboard, providing an at-a-glance view of scan activity and recent results.</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<h3 id="active-scan-monitoring"><a class="header" href="#active-scan-monitoring">Active Scan Monitoring</a></h3>
+<p>When a scan is running (manually initiated or scheduled), the Home page displays:</p>
 <ul>
-<li>Support for additional filter types and data expressions</li>
-<li>More flexible clause ordering and nesting</li>
-<li>Improved error reporting and suggestions</li>
-<li>Customizable output formats in the <code>show</code> clause</li>
+<li>Real-time progress indicators</li>
+<li>Current scan phase (Discovery, Hash, Validation, Analysis)</li>
+<li>Statistics: files/folders processed, sizes calculated, changes detected</li>
+<li>Live updates via WebSocket connection</li>
 </ul>
-<h3 id="-additional-validators"><a class="header" href="#-additional-validators">📂 Additional Validators</a></h3>
+<h3 id="recent-scan-results"><a class="header" href="#recent-scan-results">Recent Scan Results</a></h3>
+<p>For completed scans, the Home page shows:</p>
 <ul>
-<li>Add support for additional file types, such as:
+<li>Scan completion time</li>
+<li>Total items scanned</li>
+<li>Change summary (additions, modifications, deletions)</li>
+<li>Alert count (validation failures, suspicious hash changes)</li>
+<li>Storage metrics</li>
+</ul>
+<h3 id="quick-access"><a class="header" href="#quick-access">Quick Access</a></h3>
+<p>From the Home page, you can quickly navigate to:</p>
 <ul>
-<li>ZIP and archive formats</li>
-<li>Audio metadata (ID3, Vorbis Comments)</li>
-<li>Structured text formats (JSON, XML)</li>
+<li>Browse the scanned filesystem</li>
+<li>View detailed scan reports</li>
+<li>Investigate alerts</li>
+<li>Configure new scans</li>
 </ul>
-</li>
-<li>Improve clarity of validation errors</li>
-</ul>
-<hr />
-<h2 id="possible-future-directions"><a class="header" href="#possible-future-directions">Possible Future Directions</a></h2>
-<h3 id="-reporting-and-output"><a class="header" href="#-reporting-and-output">📊 Reporting and Output</a></h3>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <ul>
-<li>Saved or user-defined reports</li>
-<li>Aggregated summaries</li>
-<li>Export formats: CSV, JSON, GPX</li>
+<li><strong>Monitoring</strong>: Keep the Home page open to watch long-running scans</li>
+<li><strong>Status Check</strong>: Quick view of your most recent scan activity</li>
+<li><strong>Alert Awareness</strong>: Immediate visibility into any detected issues</li>
 </ul>
-<h3 id="-interactive-experience"><a class="header" href="#-interactive-experience">💻 Interactive Experience</a></h3>
-<ul>
-<li>Query bookmarks or saved history</li>
-<li>Persistent history across sessions</li>
-<li>Scrollable/full-screen output views</li>
-</ul>
-<h3 id="-integration--automation"><a class="header" href="#-integration--automation">🌐 Integration &amp; Automation</a></h3>
-<ul>
-<li>JSON export for pipelines and automation</li>
-<li>Integration with backup or monitoring systems</li>
-<li>CLI-friendly structured output</li>
-</ul>
-<h3 id="-ui-and-visualization-tools"><a class="header" href="#-ui-and-visualization-tools">🧰 UI and Visualization Tools</a></h3>
-<ul>
-<li>Optional terminal-based dashboard (TUI)</li>
-<li>Future possibility of a lightweight web viewer</li>
-</ul>
-<hr />
-<h2 id="community-involvement-future"><a class="header" href="#community-involvement-future">Community Involvement (Future)</a></h2>
-<p>While FsPulse is not currently accepting contributions, this may change. Potential areas for future help include:</p>
-<ul>
-<li>Adding validators for more file types</li>
-<li>Improving query engine features</li>
-<li>Translations and localization</li>
-<li>Performance optimization for large-scale scans</li>
-</ul>
-<hr />
-<p>If you have ideas, feature requests, or feedback, please open a GitHub issue — community input is welcome.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="development.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../web_ui.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
+                            <a rel="next prefetch" href="../web_ui/monitor.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -250,10 +228,13 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="development.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../web_ui.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
+                    <a rel="next prefetch" href="../web_ui/monitor.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>
@@ -266,13 +247,13 @@
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 

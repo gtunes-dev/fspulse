@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Validators - FsPulse</title>
+        <title>Query Command - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,7 +141,7 @@
                     <h1 class="menu-title">FsPulse</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
 
@@ -175,45 +175,87 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
-<p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
-<p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
-<hr />
-<h2 id="validation-status-codes"><a class="header" href="#validation-status-codes">Validation Status Codes</a></h2>
-<p>Each item in the database has an associated <strong>validation status</strong>:</p>
-<div class="table-wrapper"><table><thead><tr><th>Status Code</th><th>Meaning</th></tr></thead><tbody>
-<tr><td><code>U</code></td><td><strong>Unknown</strong> — item has never been included in a validation scan</td></tr>
-<tr><td><code>V</code></td><td><strong>Valid</strong> — most recent validation scan found no issues</td></tr>
-<tr><td><code>I</code></td><td><strong>Invalid</strong> — validation failed; see <code>validation_error</code> field</td></tr>
-<tr><td><code>N</code></td><td><strong>No Validator</strong> — FsPulse does not currently support this file type</td></tr>
-</tbody></table>
-</div>
-<blockquote>
-<p>The <code>validation_error</code> field contains the error message returned by the validator <strong>only if</strong> the item was marked invalid. This field is empty for valid items or items with no validator.</p>
-</blockquote>
-<p>Note: Some validation "errors" surfaced by the underlying libraries may not indicate corruption, but rather unsupported edge cases or metadata formatting. Always review the error messages before assuming a file is damaged.</p>
-<hr />
-<h2 id="supported-validators"><a class="header" href="#supported-validators">Supported Validators</a></h2>
-<p>FsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.</p>
-<div class="table-wrapper"><table><thead><tr><th>File Types</th><th>Crate</th><th>Link</th></tr></thead><tbody>
-<tr><td>FLAC audio (<code>.flac</code>)</td><td><code>claxon</code></td><td><a href="https://github.com/ruuda/claxon">claxon on GitHub</a></td></tr>
-<tr><td>Images (<code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, <code>.gif</code>, <code>.tiff</code>, <code>.bmp</code>)</td><td><code>image</code></td><td><a href="https://github.com/image-rs/image">image on GitHub</a></td></tr>
-<tr><td>PDF documents (<code>.pdf</code>)</td><td><code>lopdf</code></td><td><a href="https://github.com/J-F-Liu/lopdf">lopdf on GitHub</a></td></tr>
-</tbody></table>
-</div>
-<p>Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.</p>
-<hr />
-<p>$1 See the <a href="query.html">Query Syntax</a> page for full details on query clauses and supported filters.</p>
+                        <h1 id="query-command"><a class="header" href="#query-command">Query Command</a></h1>
+<p>The <code>fspulse query</code> command provides powerful data analysis capabilities from the command line.</p>
+<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
+<pre><code class="language-sh">fspulse query "&lt;query_string&gt;"
+</code></pre>
+<h2 id="query-syntax"><a class="header" href="#query-syntax">Query Syntax</a></h2>
+<p>Queries use an SQL-inspired syntax. See <a href="../query.html">Query Syntax</a> for complete documentation.</p>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="find-invalid-items"><a class="header" href="#find-invalid-items">Find Invalid Items</a></h3>
+<pre><code class="language-sh">fspulse query "items where val:(I)"
+</code></pre>
+<h3 id="large-directories"><a class="header" href="#large-directories">Large Directories</a></h3>
+<pre><code class="language-sh">fspulse query "items where size &gt; 10GB and item_type:(D)"
+</code></pre>
+<h3 id="recent-hash-changes"><a class="header" href="#recent-hash-changes">Recent Hash Changes</a></h3>
+<pre><code class="language-sh">fspulse query "changes where hash_change:(T) show item_path, hash_old, hash_new"
+</code></pre>
+<h3 id="scan-history"><a class="header" href="#scan-history">Scan History</a></h3>
+<pre><code class="language-sh">fspulse query "scans order by started_at desc limit 10"
+</code></pre>
+<h2 id="output-format"><a class="header" href="#output-format">Output Format</a></h2>
+<p>Results are displayed as formatted tables in the terminal using:</p>
+<ul>
+<li>Column alignment</li>
+<li>Header rows</li>
+<li>Truncation for long values</li>
+</ul>
+<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
+<h3 id="filtering-by-validation-status"><a class="header" href="#filtering-by-validation-status">Filtering by Validation Status</a></h3>
+<pre><code class="language-sh"># Invalid items only
+fspulse query "items where val:(I)"
+
+# Valid items only
+fspulse query "items where val:(V)"
+
+# Not validated
+fspulse query "items where val:(N)"
+</code></pre>
+<h3 id="size-queries"><a class="header" href="#size-queries">Size Queries</a></h3>
+<pre><code class="language-sh"># Files over 1GB
+fspulse query "items where size &gt; 1GB and item_type:(F)"
+
+# Total size of directories
+fspulse query "items where item_type:(D) show item_path, size order by size desc"
+</code></pre>
+<h3 id="change-tracking"><a class="header" href="#change-tracking">Change Tracking</a></h3>
+<pre><code class="language-sh"># All additions in last scan
+fspulse query "changes where change:(A)"
+
+# Modifications with hash changes
+fspulse query "changes where change:(M) and hash_change:(T)"
+
+# Deletions
+fspulse query "changes where change:(D)"
+</code></pre>
+<h2 id="integration"><a class="header" href="#integration">Integration</a></h2>
+<p>The query command is ideal for:</p>
+<ul>
+<li><strong>Scripting</strong>: Automate analysis workflows</li>
+<li><strong>CI/CD</strong>: Integrate with build pipelines</li>
+<li><strong>Monitoring</strong>: Generate alerts from query results</li>
+<li><strong>Reporting</strong>: Export data for external tools</li>
+</ul>
+<h2 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h2>
+<p>For an interactive query experience, use:</p>
+<pre><code class="language-sh">fspulse interact
+</code></pre>
+<p>Or for a full-screen TUI:</p>
+<pre><code class="language-sh">fspulse explore
+</code></pre>
+<p>See <a href="../interactive_mode.html">Interactive Mode</a> for details.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../cli.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="advanced.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../cli/reports.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -223,11 +265,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../cli.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="advanced.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../cli/reports.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -242,13 +284,13 @@
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 

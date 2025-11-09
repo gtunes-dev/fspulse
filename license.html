@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Validators - FsPulse</title>
+        <title>License - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -175,45 +175,43 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
-<p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
-<p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
-<hr />
-<h2 id="validation-status-codes"><a class="header" href="#validation-status-codes">Validation Status Codes</a></h2>
-<p>Each item in the database has an associated <strong>validation status</strong>:</p>
-<div class="table-wrapper"><table><thead><tr><th>Status Code</th><th>Meaning</th></tr></thead><tbody>
-<tr><td><code>U</code></td><td><strong>Unknown</strong> — item has never been included in a validation scan</td></tr>
-<tr><td><code>V</code></td><td><strong>Valid</strong> — most recent validation scan found no issues</td></tr>
-<tr><td><code>I</code></td><td><strong>Invalid</strong> — validation failed; see <code>validation_error</code> field</td></tr>
-<tr><td><code>N</code></td><td><strong>No Validator</strong> — FsPulse does not currently support this file type</td></tr>
-</tbody></table>
-</div>
-<blockquote>
-<p>The <code>validation_error</code> field contains the error message returned by the validator <strong>only if</strong> the item was marked invalid. This field is empty for valid items or items with no validator.</p>
-</blockquote>
-<p>Note: Some validation "errors" surfaced by the underlying libraries may not indicate corruption, but rather unsupported edge cases or metadata formatting. Always review the error messages before assuming a file is damaged.</p>
-<hr />
-<h2 id="supported-validators"><a class="header" href="#supported-validators">Supported Validators</a></h2>
-<p>FsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.</p>
-<div class="table-wrapper"><table><thead><tr><th>File Types</th><th>Crate</th><th>Link</th></tr></thead><tbody>
-<tr><td>FLAC audio (<code>.flac</code>)</td><td><code>claxon</code></td><td><a href="https://github.com/ruuda/claxon">claxon on GitHub</a></td></tr>
-<tr><td>Images (<code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, <code>.gif</code>, <code>.tiff</code>, <code>.bmp</code>)</td><td><code>image</code></td><td><a href="https://github.com/image-rs/image">image on GitHub</a></td></tr>
-<tr><td>PDF documents (<code>.pdf</code>)</td><td><code>lopdf</code></td><td><a href="https://github.com/J-F-Liu/lopdf">lopdf on GitHub</a></td></tr>
-</tbody></table>
-</div>
-<p>Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.</p>
-<hr />
-<p>$1 See the <a href="query.html">Query Syntax</a> page for full details on query clauses and supported filters.</p>
+                        <h1 id="license"><a class="header" href="#license">License</a></h1>
+<p>FsPulse is released under the <a href="https://opensource.org/licenses/MIT">MIT License</a>.</p>
+<p>You are free to use, modify, and distribute the software under the terms of this license.</p>
+<h2 id="full-license-text"><a class="header" href="#full-license-text">Full License Text</a></h2>
+<pre><code>MIT License
+
+Copyright (c) 2025 gtunes-dev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</code></pre>
+<p>See the full <a href="https://github.com/gtunes-dev/fspulse/blob/main/LICENSE">LICENSE</a> file in the repository.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="development.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="advanced.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="acknowledgements.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -223,11 +221,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="development.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="advanced.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="acknowledgements.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

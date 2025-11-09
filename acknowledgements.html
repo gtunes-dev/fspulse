@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Validators - FsPulse</title>
+        <title>Acknowledgements - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -175,47 +175,47 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
-<p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
-<p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
+                        <h1 id="acknowledgements"><a class="header" href="#acknowledgements">Acknowledgements</a></h1>
+<p>FsPulse relies on several open source Rust crates. We gratefully acknowledge the work of these maintainers, particularly for enabling file format validation.</p>
+<h2 id="file-format-validation"><a class="header" href="#file-format-validation">File Format Validation</a></h2>
+<p>The following libraries enable FsPulse's ability to detect corrupted files:</p>
+<ul>
+<li><a href="https://github.com/ruuda/claxon"><code>claxon</code></a> — FLAC audio decoding and validation</li>
+<li><a href="https://github.com/image-rs/image"><code>image</code></a> — Image format decoding for JPG, PNG, GIF, TIFF, BMP</li>
+<li><a href="https://github.com/J-F-Liu/lopdf"><code>lopdf</code></a> — PDF parsing and validation</li>
+</ul>
+<p>See <a href="validators.html">Validators</a> for the complete list of supported file types.</p>
+<h2 id="additional-dependencies"><a class="header" href="#additional-dependencies">Additional Dependencies</a></h2>
+<p>FsPulse wouldn't be possible without the incredible open source ecosystem it's built upon:</p>
+<p><strong>Web Interface:</strong></p>
+<ul>
+<li><a href="https://ui.shadcn.com">shadcn/ui</a> — Beautiful, accessible component library</li>
+<li><a href="https://www.radix-ui.com">Radix UI</a> — Unstyled, accessible UI primitives</li>
+<li><a href="https://tailwindcss.com">Tailwind CSS</a> — Utility-first CSS framework</li>
+<li><a href="https://lucide.dev">Lucide</a> — Clean, consistent icon set</li>
+<li><a href="https://react.dev">React</a> — UI framework</li>
+</ul>
+<p><strong>Backend &amp; CLI:</strong></p>
+<ul>
+<li><a href="https://github.com/rusqlite/rusqlite">rusqlite</a> — SQLite database interface</li>
+<li><a href="https://github.com/tokio-rs/axum">axum</a> — Web framework</li>
+<li><a href="https://tokio.rs">tokio</a> — Async runtime</li>
+<li><a href="https://github.com/clap-rs/clap">clap</a> — Command-line argument parsing</li>
+<li><a href="https://github.com/console-rs/dialoguer">dialoguer</a> — Interactive CLI prompts</li>
+<li><a href="https://ratatui.rs">ratatui</a> — Terminal UI framework</li>
+</ul>
+<p>The complete list of dependencies is available in the project's <a href="https://github.com/gtunes-dev/fspulse/blob/main/Cargo.toml"><code>Cargo.toml</code></a> and <a href="https://github.com/gtunes-dev/fspulse/blob/main/web/package.json"><code>package.json</code></a>.</p>
 <hr />
-<h2 id="validation-status-codes"><a class="header" href="#validation-status-codes">Validation Status Codes</a></h2>
-<p>Each item in the database has an associated <strong>validation status</strong>:</p>
-<div class="table-wrapper"><table><thead><tr><th>Status Code</th><th>Meaning</th></tr></thead><tbody>
-<tr><td><code>U</code></td><td><strong>Unknown</strong> — item has never been included in a validation scan</td></tr>
-<tr><td><code>V</code></td><td><strong>Valid</strong> — most recent validation scan found no issues</td></tr>
-<tr><td><code>I</code></td><td><strong>Invalid</strong> — validation failed; see <code>validation_error</code> field</td></tr>
-<tr><td><code>N</code></td><td><strong>No Validator</strong> — FsPulse does not currently support this file type</td></tr>
-</tbody></table>
-</div>
-<blockquote>
-<p>The <code>validation_error</code> field contains the error message returned by the validator <strong>only if</strong> the item was marked invalid. This field is empty for valid items or items with no validator.</p>
-</blockquote>
-<p>Note: Some validation "errors" surfaced by the underlying libraries may not indicate corruption, but rather unsupported edge cases or metadata formatting. Always review the error messages before assuming a file is damaged.</p>
-<hr />
-<h2 id="supported-validators"><a class="header" href="#supported-validators">Supported Validators</a></h2>
-<p>FsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.</p>
-<div class="table-wrapper"><table><thead><tr><th>File Types</th><th>Crate</th><th>Link</th></tr></thead><tbody>
-<tr><td>FLAC audio (<code>.flac</code>)</td><td><code>claxon</code></td><td><a href="https://github.com/ruuda/claxon">claxon on GitHub</a></td></tr>
-<tr><td>Images (<code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, <code>.gif</code>, <code>.tiff</code>, <code>.bmp</code>)</td><td><code>image</code></td><td><a href="https://github.com/image-rs/image">image on GitHub</a></td></tr>
-<tr><td>PDF documents (<code>.pdf</code>)</td><td><code>lopdf</code></td><td><a href="https://github.com/J-F-Liu/lopdf">lopdf on GitHub</a></td></tr>
-</tbody></table>
-</div>
-<p>Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.</p>
-<hr />
-<p>$1 See the <a href="query.html">Query Syntax</a> page for full details on query clauses and supported filters.</p>
+<p>Thank you to all the open source maintainers whose work makes FsPulse possible.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="license.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="advanced.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -223,13 +223,10 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="license.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="advanced.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
-                    </a>
             </nav>
 
         </div>

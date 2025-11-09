@@ -179,14 +179,21 @@
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="FsPulse logo" style="width: 100%; max-width: 600px;">
 <h2 id="what-is-fspulse"><a class="header" href="#what-is-fspulse">What is FsPulse?</a></h2>
-<p><strong>FsPulse is an essential filesystem integrity tool for system administrators, home-lab enthusiasts, and anyone who takes data preservation seriously.</strong> It runs as a background service that continuously monitors your critical directories, watching for the silent threats that traditional backup systems miss: <strong>bit rot, corruption, and unexpected tampering</strong>.</p>
-<p>Your files can change without you knowing. Hard drives degrade. Ransomware alters files while preserving timestamps. FsPulse catches these problems early through two powerful detection methods:</p>
+<p><strong>FsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. FsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.</strong></p>
+<p>Your filesystem is constantly evolving—files are added, modified, and deleted. Storage grows. But <strong>invisible problems</strong> hide beneath the surface: bit rot silently corrupts data, ransomware alters files while preserving timestamps, and you don't realize directories have bloated.</p>
+<p>FsPulse gives you <strong>continuous awareness</strong> of both the visible and invisible:</p>
+<p><strong>Monitor Change &amp; Growth:</strong></p>
 <ul>
-<li><strong>Content Hashing (SHA2)</strong>: Detects when file contents change even though filesystem metadata stays the same—the telltale sign of bit rot or sophisticated tampering</li>
-<li><strong>Format Validation</strong>: Uses open-source libraries to read and validate file structures, catching corruption in FLAC audio, JPEG/PNG images, PDFs, and more</li>
+<li>Track directory sizes and growth trends over time</li>
+<li>Visualize file additions, modifications, and deletions</li>
+<li>Understand what's changing and when across all scans</li>
 </ul>
-<p>Instead of waiting for a file to fail when you need it most, FsPulse gives you <strong>continuous awareness</strong>. Run manual scans when you want, or let scheduled scans (coming soon) monitor your data automatically. When issues are detected, FsPulse's alert system flags them immediately through an elegant web interface.</p>
-<p>Whether you're protecting family photos, managing media libraries, or maintaining production servers, FsPulse provides the peace of mind that comes from knowing your data is actually intact—not just backed up.</p>
+<p><strong>Detect Integrity Issues:</strong></p>
+<ul>
+<li><strong>Content Hashing (SHA2)</strong>: Catches when file contents change even though metadata stays the same—the signature of bit rot or tampering</li>
+<li><strong>Format Validation</strong>: Reads and validates file structures to detect corruption in FLAC, JPEG, PNG, PDF, and more</li>
+</ul>
+<p>Whether you're managing storage capacity, tracking project evolution, or ensuring data integrity, FsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.</p>
 <p align="center">
   <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-scan-progress.png" alt="FsPulse Web UI - Real-time Scan Monitoring" style="width: 90%; max-width: 900px;">
   <br>
@@ -194,12 +201,14 @@
 </p>
 <h2 id="key-capabilities"><a class="header" href="#key-capabilities">Key Capabilities</a></h2>
 <ul>
-<li><strong>Dual Interface</strong> — Run as a web service with elegant browser UI, or use the full-featured CLI with interactive terminal modes</li>
-<li><strong>Integrity Detection</strong> — SHA2 hashing catches content changes even when filesystem metadata stays the same; format validators detect corruption in supported file types</li>
-<li><strong>Change Tracking</strong> — Deep directory scanning captures all additions, modifications, and deletions across scan sessions</li>
-<li><strong>Alert System</strong> — Suspicious hash changes and validation failures are flagged immediately with status management (Open/Flagged/Dismissed)</li>
-<li><strong>Powerful Query Language</strong> — SQL-inspired syntax lets you filter, sort, and analyze your data with precision</li>
-<li><strong>Production Ready</strong> — Official Docker images (multi-architecture), comprehensive documentation, and native installers</li>
+<li><strong>Continuous Monitoring</strong> — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically</li>
+<li><strong>Size &amp; Growth Tracking</strong> — Monitor directory sizes and visualize storage trends over time with dual-format units</li>
+<li><strong>Change Detection</strong> — Track all file additions, modifications, and deletions with complete historical records</li>
+<li><strong>Integrity Verification</strong> — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types</li>
+<li><strong>Historical Analysis</strong> — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts</li>
+<li><strong>Alert System</strong> — Suspicious hash changes and validation failures flagged immediately with status management</li>
+<li><strong>Powerful Query Language</strong> — SQL-inspired syntax for filtering, sorting, and analyzing your filesystem data</li>
+<li><strong>Dual Interface</strong> — Elegant web UI for visual exploration, full-featured CLI for automation and scripting</li>
 </ul>
 <h2 id="usage-modes"><a class="header" href="#usage-modes">Usage Modes</a></h2>
 <p>FsPulse offers flexibility in how you interact with it:</p>
@@ -319,6 +328,34 @@ fspulse report scans --last 5
 <p><strong>Note:</strong> Scanning is performed through the web UI. The CLI provides powerful tools for querying and analyzing scan results.</p>
 </blockquote>
 <p>See the <a href="query.html">Query Syntax</a> page for more examples and the <a href="cli.html">Command-Line Interface</a> page for all available commands.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<p>FsPulse can be installed in several ways depending on your preferences and environment.</p>
+<h2 id="docker-hub-recommended"><a class="header" href="#docker-hub-recommended">Docker Hub (Recommended)</a></h2>
+<p>Pull the official image and run:</p>
+<pre><code class="language-sh">docker pull gtunesdev/fspulse:latest
+docker run -d --name fspulse -p 8080:8080 -v fspulse-data:/data gtunesdev/fspulse:latest
+</code></pre>
+<p>Multi-architecture support: <code>linux/amd64</code>, <code>linux/arm64</code></p>
+<p>See <a href="getting_started/../docker.html">Docker Deployment</a> for complete instructions.</p>
+<h2 id="cargo-cratesio"><a class="header" href="#cargo-cratesio">Cargo (crates.io)</a></h2>
+<p>Install via Rust's package manager:</p>
+<pre><code class="language-sh">cargo install fspulse
+</code></pre>
+<p>Requires Rust toolchain installed on your system.</p>
+<h2 id="pre-built-binaries"><a class="header" href="#pre-built-binaries">Pre-built Binaries</a></h2>
+<p>Download platform-specific binaries from <a href="https://github.com/gtunes-dev/fspulse/releases">GitHub Releases</a>.</p>
+<p>Available for: Linux, macOS, Windows</p>
+<p>macOS builds include both Intel (x86_64) and Apple Silicon (ARM64) binaries.</p>
+<p><strong>Note:</strong> All web UI assets are embedded in the binary—no external files or dependencies required.</p>
+<h2 id="build-from-source"><a class="header" href="#build-from-source">Build from Source</a></h2>
+<p>Clone and build with Cargo:</p>
+<pre><code class="language-sh">git clone https://github.com/gtunes-dev/fspulse.git
+cd fspulse
+cargo build --release
+./target/release/fspulse --help
+</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>After installation, proceed to <a href="getting_started/first_steps.html">First Steps</a> to configure and start using FsPulse.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="docker-deployment"><a class="header" href="#docker-deployment">Docker Deployment</a></h1>
 <p>The easiest way to run FsPulse is with Docker. The container runs FsPulse as a background service with the web UI accessible on port 8080. You can manage roots, initiate scans, query data, and view results—all from your browser.</p>
 <hr />
@@ -686,7 +723,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>linux/arm64</strong> - ARM processors (Apple Silicon, Raspberry Pi 4, ARM servers)</li>
 </ul>
 <hr />
-<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
 <ul>
 <li>Explore the <a href="configuration.html">Configuration</a> reference for all available settings</li>
 <li>Learn about <a href="query.html">Query Syntax</a> for advanced data filtering</li>
@@ -700,33 +737,90 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>Docker Hub</strong>: <a href="https://hub.docker.com/r/gtunesdev/fspulse">gtunesdev/fspulse</a></li>
 <li><strong>Documentation</strong>: <a href="https://gtunes-dev.github.io/fspulse/">FsPulse Book</a></li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="first-steps"><a class="header" href="#first-steps">First Steps</a></h1>
+<p>This guide walks you through your first scan and basic usage of FsPulse.</p>
+<h2 id="starting-the-web-interface"><a class="header" href="#starting-the-web-interface">Starting the Web Interface</a></h2>
+<p>Launch the FsPulse server:</p>
+<pre><code class="language-sh">fspulse serve
+</code></pre>
+<p>Open your browser to <strong>http://127.0.0.1:8080</strong></p>
+<h2 id="adding-your-first-scan-root"><a class="header" href="#adding-your-first-scan-root">Adding Your First Scan Root</a></h2>
+<ol>
+<li>Navigate to the <strong>Monitor</strong> page</li>
+<li>Click <strong>Add Root</strong></li>
+<li>Enter the path to the directory you want to monitor</li>
+<li>Configure initial scan settings</li>
+</ol>
+<h2 id="running-your-first-scan"><a class="header" href="#running-your-first-scan">Running Your First Scan</a></h2>
+<ol>
+<li>From the Monitor page, click <strong>Scan Now</strong> for your newly added root</li>
+<li>Watch the real-time progress on the <strong>Home</strong> page</li>
+<li>Once complete, explore the results</li>
+</ol>
+<h2 id="exploring-your-data"><a class="header" href="#exploring-your-data">Exploring Your Data</a></h2>
+<p>After your first scan completes:</p>
+<ul>
+<li><strong>Browse</strong> — Navigate your filesystem hierarchy</li>
+<li><strong>Insights</strong> — View charts and trends (requires multiple scans)</li>
+<li><strong>Alerts</strong> — Check for any validation issues detected</li>
+<li><strong>Explore</strong> — Run queries against your scan data</li>
+</ul>
+<h2 id="setting-up-scheduled-scans"><a class="header" href="#setting-up-scheduled-scans">Setting Up Scheduled Scans</a></h2>
+<ol>
+<li>Navigate to the <strong>Monitor</strong> page</li>
+<li>Click <strong>Add Schedule</strong></li>
+<li>Select your root and configure:
+<ul>
+<li>Schedule type (daily, weekly, monthly, interval)</li>
+<li>Time/day settings</li>
+<li>Scan options (hashing, validation)</li>
+</ul>
+</li>
+<li>Save the schedule</li>
+</ol>
+<p>Scheduled scans will run automatically based on your configuration.</p>
+<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
+<ul>
+<li>Learn about <a href="getting_started/../scanning.html">Scanning Concepts</a></li>
+<li>Explore the <a href="getting_started/../web_ui.html">Web Interface</a> features</li>
+<li>Understand the <a href="getting_started/../query.html">Query Syntax</a> for advanced analysis</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="scanning"><a class="header" href="#scanning">Scanning</a></h1>
 <p>FsPulse scans are at the core of how it tracks changes to the file system over time. A scan creates a snapshot of a root directory and analyzes changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
 <hr />
 <h2 id="initiating-a-scan"><a class="header" href="#initiating-a-scan">Initiating a Scan</a></h2>
-<p><strong>Scans are initiated exclusively through the web UI:</strong></p>
+<p><strong>FsPulse runs as a web service, and scans are initiated through the web UI:</strong></p>
 <ol>
 <li>Start the server: <code>fspulse serve</code></li>
 <li>Open http://localhost:8080 in your browser (or the custom port you've configured)</li>
-<li>Navigate to the scan management interface</li>
+<li>Navigate to the <strong>Monitor</strong> page</li>
 <li>Configure scan options (hashing, validation)</li>
-<li>Start the scan and monitor real-time progress</li>
+<li>Start the scan and monitor real-time progress on the <strong>Home</strong> page</li>
 </ol>
-<p>The web UI supports both scheduled automatic scans and manual on-demand scans. You can create scan schedules for recurring scans or initiate individual scans as needed.</p>
+<p>The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules (daily, weekly, monthly, or custom intervals) or initiate individual scans as needed. See <a href="web_ui/monitor.html">Monitor &amp; Scheduling</a> for details.</p>
 <p>Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.</p>
-<p><strong>Docker users</strong>: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage and initiate scans. See the <a href="docker.html">Docker Deployment</a> chapter for details.</p>
+<blockquote>
+<p><strong>Note</strong>: FsPulse is designed with the web UI as the primary interface for all users. A <a href="cli.html">command-line interface</a> is also available for expert users who prefer terminal workflows or need to integrate FsPulse into scripts and automation, but all functionality is accessible through the web UI.</p>
+</blockquote>
 <hr />
 <h2 id="hashing"><a class="header" href="#hashing">Hashing</a></h2>
 <p>Hashing is a key capabilities of FsPulse.</p>
 <p>FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents.
 The intent of hashing is to enable the detection of changes to file content in cases where the modification
-date and file size have not changed. One example of a case where this might occur is data decay. FsPulse
-can be used to create a hash baseline by scanning with the "hash" option. By default, a "hash" scan will
-compute hashes for items that have never been hashed or whose file size or modification date has changed.
-If the "hash-all" flag is passed along with the "hash" flag, FsPulse will hash all files, including those
-that have been previously hashed. If a hash is detected to have changed, a change record will be created.</p>
-<p>The query below, for example, will find and show changes where file metadata has not changed, but the
-file's hash has changed.</p>
+date and file size have not changed. One example of a case where this might occur is bit rot (data decay).</p>
+<p>When configuring a scan in the web UI, you can enable hashing with these options:</p>
+<ul>
+<li><strong>Hash changed items</strong> (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed</li>
+<li><strong>Hash all items</strong>: Hash all files, including those that have been previously hashed</li>
+</ul>
+<p>If a hash is detected to have changed, a change record is created and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>).</p>
+<h3 id="finding-hash-changes"><a class="header" href="#finding-hash-changes">Finding Hash Changes</a></h3>
+<p>You can investigate hash changes through the web UI:</p>
+<ul>
+<li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows suspicious hash changes where file metadata hasn't changed</li>
+<li><strong><a href="web_ui/explore.html">Explore Page</a></strong>: Run custom queries to analyze hash changes</li>
+</ul>
+<p>For CLI users or automation, use the query command:</p>
 <pre><code class="language-sh">fspulse query 'changes where meta_change:(F), hash_change:(T) show default, item_path order by change_id desc'
 </code></pre>
 <h2 id="validating"><a class="header" href="#validating">Validating</a></h2>
@@ -734,32 +828,38 @@ file's hash has changed.</p>
 <p>FsPulse uses community-contributed libraries to "validate" files. Validation is implemented as
 opening and reading or traversing the file. These community libraries raise a variety of "errors"
 when invalid content is encountered.</p>
-<p>FsPulse's ability to validate files is limited to the capabilities of the libraries that it uses
+<p>FsPulse's ability to validate files is limited to the capabilities of the libraries that it uses,
 and these libraries vary in terms of completeness and accuracy. In some cases, such as FsPulse's use
 of lopdf to validate PDF files, false positive "errors" may be detected as a consequence of lopdf
 encountering PDF file contents it does not yet understand. Despite these limitations, FsPulse
 offers a unique and effective view into potential validity issues in files.</p>
-<p>As with hash options, FsPulse has two command-line flags related to validation: "validate" and "validate-all".</p>
-<p>Passing "validate" will cause FsPulse to perform a validation pass on all files that have never been validated
-or have changed in terms of modification date or size. Passing "validate-all" will cause FsPulse to validate
-all files.</p>
+<p>See <a href="validators.html">Validators</a> for the complete list of supported file types.</p>
+<p>When configuring a scan in the web UI, you can enable validation with these options:</p>
+<ul>
+<li><strong>Validate changed items</strong> (default): Validate files that have never been validated or have changed in terms of modification date or size</li>
+<li><strong>Validate all items</strong>: Validate all files regardless of previous validation status</li>
+</ul>
+<h3 id="validation-states"><a class="header" href="#validation-states">Validation States</a></h3>
 <p>Validation states are stored in the database as:</p>
 <ul>
-<li>U: Unknown. No validation has been performed</li>
-<li>N: No Validator. No validator exists for this file type</li>
-<li>V: Valid. Validation was performed and no errors were encountered</li>
-<li>I: Invalid. Validation was performed and an error was encountered</li>
+<li><strong>U</strong>: Unknown. No validation has been performed</li>
+<li><strong>N</strong>: No Validator. No validator exists for this file type</li>
+<li><strong>V</strong>: Valid. Validation was performed and no errors were encountered</li>
+<li><strong>I</strong>: Invalid. Validation was performed and an error was encountered</li>
 </ul>
-<p>In the case of 'I', the validation error will be stored as val_error on the Item alongside the
-validation state, which is stored as val. When an item's validation state changes in any way,
-the change is recorded on a change record and the old and new states are both available on that
-record.</p>
-<p>If a validation pass produces an error which is identical to the previously seen error, no change
-is recorded.</p>
-<p>An example of a query that displays validation state changes is:</p>
+<p>In the case of 'I' (Invalid), the validation error message is stored alongside the validation state. When an item's validation state changes, the change is recorded and both old and new states are available for analysis.</p>
+<p>If a validation pass produces an error identical to a previously seen error, no new change is recorded.</p>
+<h3 id="finding-validation-issues"><a class="header" href="#finding-validation-issues">Finding Validation Issues</a></h3>
+<p>Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:</p>
+<ul>
+<li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows all items with validation failures, with filtering and status management</li>
+<li><strong><a href="web_ui/browse.html">Browse Page</a></strong>: Click any item to see its validation status and error details</li>
+<li><strong><a href="web_ui/explore.html">Explore Page</a></strong>: Run custom queries to analyze validation patterns</li>
+</ul>
+<p>For CLI users or automation, query validation state changes:</p>
 <pre><code class="language-sh"> fspulse query 'changes where val_change:(T) show default, item_path order by change_id desc'
 </code></pre>
-<p>Additional queries can be easily composed which filter on specific old and new validation states.</p>
+<p>Additional queries can filter on specific old and new validation states. See <a href="query.html">Query Syntax</a> for details.</p>
 <hr />
 <h2 id="in-progress-scans"><a class="header" href="#in-progress-scans">In-Progress Scans</a></h2>
 <p>FsPulse is designed to be resilient to interruptions like system crashes or power loss. If a scan stops before completing, FsPulse saves its state so it can be resumed later.</p>
@@ -819,17 +919,17 @@ is recorded.</p>
 <p>Moved files appear as deletes and adds, as FsPulse does not yet track move operations.</p>
 <hr />
 <h3 id="3-analysis"><a class="header" href="#3-analysis">3. Analysis</a></h3>
-<p>This phase runs only if hashing and/or validation is enabled when configuring the scan in the web UI.</p>
+<p>This phase runs only if hashing and/or validation is enabled when configuring the scan (see <a href="scanning.html#hashing">Hashing</a> and <a href="scanning.html#validating">Validating</a> above).</p>
 <ul>
 <li><strong>Hashing</strong> — Computes a SHA2 hash of file contents</li>
-<li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity</li>
+<li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity (see <a href="validators.html">Validators</a>)</li>
 </ul>
 <p>If either the hash or validation result changes:</p>
 <ul>
 <li>If an <strong>Add</strong> or <strong>Modify</strong> change already exists, the new data is attached to it</li>
 <li>Otherwise, a new <strong>Modify</strong> change is created</li>
 </ul>
-<p>Each change stores both the <strong>old</strong> and <strong>new</strong> values for comparison.</p>
+<p>Each change record stores both the <strong>old</strong> and <strong>new</strong> values for comparison, allowing you to track exactly what changed.</p>
 <hr />
 <h2 id="performance-and-threading"><a class="header" href="#performance-and-threading">Performance and Threading</a></h2>
 <p>The analysis phase runs in parallel:</p>
@@ -846,226 +946,654 @@ is recorded.</p>
 </tbody></table>
 </div>
 <p>Each scan provides a consistent view of the file system at a moment in time and captures important differences across revisions.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h1>
-<p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior, analysis settings, server configuration, and more.</p>
-<blockquote>
-<p><strong>📦 Docker Users</strong>: If you're running FsPulse in Docker, see the <a href="docker.html">Docker Deployment</a> chapter for Docker-specific configuration including environment variable overrides and volume management.</p>
-</blockquote>
-<hr />
-<h2 id="finding-configtoml"><a class="header" href="#finding-configtoml">Finding <code>config.toml</code></a></h2>
-<p>The location of <code>config.toml</code> depends on how you're running FsPulse:</p>
-<h3 id="docker-deployments"><a class="header" href="#docker-deployments">Docker Deployments</a></h3>
-<p>When running in Docker, the config file is located at <strong><code>/data/config.toml</code></strong> inside the container. FsPulse automatically creates this file with default settings on first run.</p>
-<p>To access it from your host machine:</p>
-<pre><code class="language-bash"># View the config
-docker exec fspulse cat /data/config.toml
-
-# Extract to edit
-docker exec fspulse cat /data/config.toml &gt; config.toml
+<div style="break-before: page; page-break-before: always;"></div><h1 id="web-interface"><a class="header" href="#web-interface">Web Interface</a></h1>
+<p>The FsPulse web interface provides a comprehensive visual environment for monitoring your filesystems, managing scans, analyzing trends, and investigating issues.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Access the web UI by running:</p>
+<pre><code class="language-sh">fspulse serve
 </code></pre>
-<p>See the <a href="docker.html#configuration">Docker Deployment</a> chapter for details on editing the config in Docker.</p>
-<h3 id="native-installations"><a class="header" href="#native-installations">Native Installations</a></h3>
-<p>FsPulse uses the <a href="https://docs.rs/directories">directories</a> crate to determine platform-specific locations:</p>
-<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Location Description</th><th>Example Path</th></tr></thead><tbody>
-<tr><td>Linux</td><td><code>$XDG_DATA_HOME</code></td><td><code>/home/alice/.local/share/fspulse</code></td></tr>
-<tr><td>macOS</td><td>Application Support</td><td><code>/Users/alice/Library/Application Support/fspulse</code></td></tr>
-<tr><td>Windows</td><td>Local AppData</td><td><code>C:\Users\Alice\AppData\Local\fspulse</code></td></tr>
-</tbody></table>
-</div>
-<p>On first run, FsPulse automatically creates this directory and writes a default <code>config.toml</code> if one doesn't exist.</p>
-<blockquote>
-<p><strong>Tip</strong>: You can delete <code>config.toml</code> at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.</p>
-</blockquote>
-<hr />
-<h2 id="configuration-settings"><a class="header" href="#configuration-settings">Configuration Settings</a></h2>
-<p>Here are the current available settings and their default values:</p>
-<pre><code class="language-toml">[logging]
-fspulse = "info"
-lopdf = "error"
-
-[server]
-port = 8080
-host = "127.0.0.1"
-
-[analysis]
-threads = 8
-hash = "sha2"
-</code></pre>
-<hr />
-<h2 id="logging"><a class="header" href="#logging">Logging</a></h2>
-<p>FsPulse uses the Rust <a href="https://docs.rs/log"><code>log</code></a> crate, and so does the PDF validation crate <code>lopdf</code>. You can configure logging levels independently for each subsystem in the <code>[logging]</code> section.</p>
-<h3 id="supported-log-levels"><a class="header" href="#supported-log-levels">Supported log levels:</a></h3>
+<p>By default, the interface is available at <strong>http://127.0.0.1:8080</strong>. You can customize the host and port through configuration or environment variables (see <a href="configuration.html">Configuration</a>).</p>
+<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
+<p>The web interface includes the following pages:</p>
 <ul>
-<li><code>error</code> – only critical errors</li>
-<li><code>warn</code> – warnings and errors</li>
-<li><code>info</code> – general status messages (default for FsPulse)</li>
-<li><code>debug</code> – verbose output for debugging</li>
-<li><code>trace</code> – extremely detailed logs</li>
+<li><strong><a href="web_ui/home.html">Home</a></strong> — Dashboard showing scan status and recent activity</li>
+<li><strong><a href="web_ui/monitor.html">Monitor &amp; Scheduling</a></strong> — Configure automatic scans and manage scan roots</li>
+<li><strong><a href="web_ui/browse.html">Browse</a></strong> — Navigate filesystem hierarchy with detailed item inspection</li>
+<li><strong><a href="web_ui/insights.html">Insights &amp; Trends</a></strong> — Visualize historical data with interactive charts</li>
+<li><strong><a href="web_ui/alerts.html">Alerts</a></strong> — Manage integrity issues and validation failures</li>
+<li><strong><a href="web_ui/explore.html">Explore</a></strong> — Query interface for advanced data analysis</li>
 </ul>
-<h3 id="log-file-behavior"><a class="header" href="#log-file-behavior">Log File Behavior</a></h3>
+<h2 id="live-updates"><a class="header" href="#live-updates">Live Updates</a></h2>
+<p>The web interface uses WebSocket connections to provide real-time updates during scan operations. When a scan is running (whether manually initiated or scheduled), you can watch progress updates, statistics, and phase transitions as they happen.</p>
+<h2 id="navigation"><a class="header" href="#navigation">Navigation</a></h2>
+<p>The left sidebar provides access to all major sections. On smaller screens, the sidebar collapses into a hamburger menu for better mobile experience.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="home"><a class="header" href="#home">Home</a></h1>
+<p>The Home page serves as your central dashboard, providing an at-a-glance view of scan activity and recent results.</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<h3 id="active-scan-monitoring"><a class="header" href="#active-scan-monitoring">Active Scan Monitoring</a></h3>
+<p>When a scan is running (manually initiated or scheduled), the Home page displays:</p>
 <ul>
-<li>Logs are written to a <code>logs/</code> folder inside the same local data directory as <code>config.toml</code></li>
-<li>Each run of FsPulse creates a new log file, named using the current date and time</li>
-<li>FsPulse retains up to <strong>100</strong> log files; older files are automatically deleted</li>
+<li>Real-time progress indicators</li>
+<li>Current scan phase (Discovery, Hash, Validation, Analysis)</li>
+<li>Statistics: files/folders processed, sizes calculated, changes detected</li>
+<li>Live updates via WebSocket connection</li>
 </ul>
-<hr />
-<h2 id="server-settings"><a class="header" href="#server-settings">Server Settings</a></h2>
-<p>The <code>[server]</code> section controls the web UI server behavior when running <code>fspulse serve</code>.</p>
+<h3 id="recent-scan-results"><a class="header" href="#recent-scan-results">Recent Scan Results</a></h3>
+<p>For completed scans, the Home page shows:</p>
 <ul>
-<li><code>host</code>: IP address to bind to (default: <code>127.0.0.1</code>)
+<li>Scan completion time</li>
+<li>Total items scanned</li>
+<li>Change summary (additions, modifications, deletions)</li>
+<li>Alert count (validation failures, suspicious hash changes)</li>
+<li>Storage metrics</li>
+</ul>
+<h3 id="quick-access"><a class="header" href="#quick-access">Quick Access</a></h3>
+<p>From the Home page, you can quickly navigate to:</p>
 <ul>
-<li><code>127.0.0.1</code> - Localhost only (secure, only accessible from same machine)</li>
-<li><code>0.0.0.0</code> - All interfaces (required for Docker, remote access)</li>
+<li>Browse the scanned filesystem</li>
+<li>View detailed scan reports</li>
+<li>Investigate alerts</li>
+<li>Configure new scans</li>
+</ul>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<ul>
+<li><strong>Monitoring</strong>: Keep the Home page open to watch long-running scans</li>
+<li><strong>Status Check</strong>: Quick view of your most recent scan activity</li>
+<li><strong>Alert Awareness</strong>: Immediate visibility into any detected issues</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="monitor--scheduling"><a class="header" href="#monitor--scheduling">Monitor &amp; Scheduling</a></h1>
+<p>The Monitor page is your control center for managing scan roots, scheduling automatic scans, and viewing the scan queue.</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-monitor-schedules.png" alt="Monitor Page" style="width: 90%; max-width: 900px;">
+</p>
+<h2 id="managing-scan-roots"><a class="header" href="#managing-scan-roots">Managing Scan Roots</a></h2>
+<h3 id="adding-a-root"><a class="header" href="#adding-a-root">Adding a Root</a></h3>
+<ol>
+<li>Click <strong>Add Root</strong></li>
+<li>Enter the full filesystem path to monitor</li>
+<li>Optionally provide a friendly name</li>
+<li>Save</li>
+</ol>
+<h3 id="managing-roots"><a class="header" href="#managing-roots">Managing Roots</a></h3>
+<ul>
+<li><strong>Scan Now</strong>: Trigger an immediate one-time scan</li>
+<li><strong>Delete</strong>: Remove the root (also removes associated schedules and queue entries)</li>
+<li>View root statistics and last scan time</li>
+</ul>
+<h2 id="scheduling-automatic-scans"><a class="header" href="#scheduling-automatic-scans">Scheduling Automatic Scans</a></h2>
+<p>FsPulse supports flexible scheduling options for automated monitoring:</p>
+<h3 id="schedule-types"><a class="header" href="#schedule-types">Schedule Types</a></h3>
+<ul>
+<li><strong>Daily</strong>: Run at a specific time each day</li>
+<li><strong>Weekly</strong>: Run on specific days of the week at a chosen time</li>
+<li><strong>Monthly</strong>: Run on a specific day of the month</li>
+<li><strong>Interval</strong>: Run every N hours/minutes</li>
+</ul>
+<h3 id="creating-a-schedule"><a class="header" href="#creating-a-schedule">Creating a Schedule</a></h3>
+<ol>
+<li>Click <strong>Add Schedule</strong></li>
+<li>Select the root to scan</li>
+<li>Choose schedule type and timing</li>
+<li>Configure scan options:
+<ul>
+<li>Enable hashing (default: all files)</li>
+<li>Enable validation (default: new/changed files)</li>
 </ul>
 </li>
-<li><code>port</code>: Port number to listen on (default: <code>8080</code>)</li>
-</ul>
-<p><strong>Note</strong>: In Docker deployments, the host should be <code>0.0.0.0</code> to allow access from outside the container. The Docker image sets this automatically via environment variable.</p>
-<hr />
-<h2 id="analysis-settings"><a class="header" href="#analysis-settings">Analysis Settings</a></h2>
-<p>The <code>[analysis]</code> section controls how many threads are used during the <strong>analysis phase</strong> of scanning (for hashing and validation).</p>
-<ul>
-<li><code>threads</code>: number of worker threads (default: <code>8</code>)</li>
-</ul>
-<p>You can adjust this based on your system's CPU count or performance needs.</p>
-<ul>
-<li><code>hash</code>: hash function to use when hashing files. Values can be <code>sha2</code> or <code>md5</code> (default: <code>sha2</code>)</li>
-</ul>
-<p>Sha2 is more secure but is slower. It is appropriate for most users.</p>
-<hr />
-<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
-<p>All configuration settings can be overridden using environment variables. This is particularly useful for:</p>
-<ul>
-<li><strong>Docker deployments</strong> where editing files is inconvenient</li>
-<li><strong>Different environments</strong> (development, staging, production) with different settings</li>
-<li><strong>NAS deployments</strong> (TrueNAS, Unraid) using web-based configuration UIs</li>
-<li><strong>CI/CD pipelines</strong> where configuration is managed externally</li>
-</ul>
-<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
-<p>Environment variables follow the pattern: <strong><code>FSPULSE_&lt;SECTION&gt;_&lt;FIELD&gt;</code></strong></p>
-<p>The <code>&lt;SECTION&gt;</code> corresponds to a section in <code>config.toml</code> (like <code>[server]</code>, <code>[logging]</code>, <code>[analysis]</code>), and <code>&lt;FIELD&gt;</code> is the setting name within that section.</p>
-<p><strong>Precedence</strong> (highest to lowest):</p>
-<ol>
-<li><strong>Environment variables</strong> - Override everything</li>
-<li><strong>config.toml</strong> - User-defined settings</li>
-<li><strong>Built-in defaults</strong> - Fallback values</li>
+<li>Save</li>
 </ol>
-<p>This allows you to set sensible defaults in <code>config.toml</code> and override them as needed per deployment.</p>
-<h3 id="complete-variable-reference"><a class="header" href="#complete-variable-reference">Complete Variable Reference</a></h3>
-<h4 id="server-settings-1"><a class="header" href="#server-settings-1">Server Settings</a></h4>
-<p>Control the web UI server behavior (when running <code>fspulse serve</code>):</p>
-<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>FSPULSE_SERVER_HOST</code></td><td><code>127.0.0.1</code></td><td>IP address</td><td>Bind address. Use <code>0.0.0.0</code> for Docker/remote access, <code>127.0.0.1</code> for localhost only</td></tr>
-<tr><td><code>FSPULSE_SERVER_PORT</code></td><td><code>8080</code></td><td>1-65535</td><td>Web UI port number</td></tr>
-</tbody></table>
-</div>
-<p><strong>Examples:</strong></p>
-<pre><code class="language-bash"># Native - serve only on localhost
-export FSPULSE_SERVER_HOST=127.0.0.1
-export FSPULSE_SERVER_PORT=8080
-fspulse serve
-
-# Docker - must bind to all interfaces
-docker run -e FSPULSE_SERVER_HOST=0.0.0.0 -e FSPULSE_SERVER_PORT=9090 -p 9090:9090 ...
-</code></pre>
-<h4 id="logging-settings"><a class="header" href="#logging-settings">Logging Settings</a></h4>
-<p>Configure log output verbosity:</p>
-<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>FSPULSE_LOGGING_FSPULSE</code></td><td><code>info</code></td><td><code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td><td>FsPulse application log level</td></tr>
-<tr><td><code>FSPULSE_LOGGING_LOPDF</code></td><td><code>error</code></td><td><code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td><td>PDF library (lopdf) log level</td></tr>
-</tbody></table>
-</div>
-<p><strong>Examples:</strong></p>
-<pre><code class="language-bash"># Enable debug logging
-export FSPULSE_LOGGING_FSPULSE=debug
-export FSPULSE_LOGGING_LOPDF=error
-
-# Docker
-docker run -e FSPULSE_LOGGING_FSPULSE=debug ...
-</code></pre>
-<h4 id="analysis-settings-1"><a class="header" href="#analysis-settings-1">Analysis Settings</a></h4>
-<p>Configure scan behavior, hashing, and validation:</p>
-<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-256</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
-<tr><td><code>FSPULSE_ANALYSIS_HASH</code></td><td><code>sha2</code></td><td><code>sha2</code>, <code>md5</code></td><td>Hash algorithm (sha2 is more secure, md5 is faster)</td></tr>
-</tbody></table>
-</div>
-<p><strong>Examples:</strong></p>
-<pre><code class="language-bash"># Use 16 threads with MD5 hashing
-export FSPULSE_ANALYSIS_THREADS=16
-export FSPULSE_ANALYSIS_HASH=md5
-
-# Docker
-docker run -e FSPULSE_ANALYSIS_THREADS=16 -e FSPULSE_ANALYSIS_HASH=md5 ...
-</code></pre>
-<h4 id="database-settings"><a class="header" href="#database-settings">Database Settings</a></h4>
-<p>Control database location (advanced):</p>
-<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>FSPULSE_DATA_DIR</code></td><td>Platform-specific</td><td>Directory path</td><td>Override entire data directory location</td></tr>
-<tr><td><code>FSPULSE_DATABASE_PATH</code></td><td><code>&lt;data_dir&gt;</code></td><td>Directory path</td><td>Override database directory (rarely needed)</td></tr>
-</tbody></table>
-</div>
-<p><strong>Note</strong>: Most users should use <code>FSPULSE_DATA_DIR</code> rather than <code>FSPULSE_DATABASE_PATH</code>. In Docker, this defaults to <code>/data</code>.</p>
-<h4 id="docker-specific-variables"><a class="header" href="#docker-specific-variables">Docker-Specific Variables</a></h4>
-<p>These variables are specific to Docker deployments:</p>
-<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>PUID</code></td><td><code>1000</code></td><td>UID number</td><td>User ID to run FsPulse as (for NAS permission matching)</td></tr>
-<tr><td><code>PGID</code></td><td><code>1000</code></td><td>GID number</td><td>Group ID to run FsPulse as (for NAS permission matching)</td></tr>
-<tr><td><code>TZ</code></td><td><code>UTC</code></td><td>Timezone string</td><td>Timezone for log timestamps and UI (e.g., <code>America/New_York</code>)</td></tr>
-</tbody></table>
-</div>
-<p>See <a href="docker.html#nas-deployments-truenas-unraid">Docker Deployment - NAS Deployments</a> for details on PUID/PGID usage.</p>
-<h3 id="usage-examples"><a class="header" href="#usage-examples">Usage Examples</a></h3>
-<p><strong>Native (Linux/macOS/Windows):</strong></p>
-<pre><code class="language-bash"># Set environment variables
-export FSPULSE_SERVER_PORT=9090
-export FSPULSE_LOGGING_FSPULSE=debug
-export FSPULSE_ANALYSIS_THREADS=16
-
-# Run FsPulse (uses env vars)
-fspulse serve
-</code></pre>
-<p><strong>Docker - Command Line:</strong></p>
-<pre><code class="language-bash">docker run -d \
-  --name fspulse \
-  -e FSPULSE_SERVER_PORT=9090 \
-  -e FSPULSE_LOGGING_FSPULSE=debug \
-  -e FSPULSE_ANALYSIS_THREADS=16 \
-  -p 9090:9090 \
-  -v fspulse-data:/data \
-  gtunesdev/fspulse:latest
-</code></pre>
-<p><strong>Docker Compose:</strong></p>
-<pre><code class="language-yaml">services:
-  fspulse:
-    image: gtunesdev/fspulse:latest
-    environment:
-      - FSPULSE_SERVER_PORT=9090
-      - FSPULSE_LOGGING_FSPULSE=debug
-      - FSPULSE_ANALYSIS_THREADS=16
-    ports:
-      - "9090:9090"
-</code></pre>
-<h3 id="verifying-environment-variables"><a class="header" href="#verifying-environment-variables">Verifying Environment Variables</a></h3>
-<p>To see what environment variables FsPulse is using:</p>
-<p><strong>Native:</strong></p>
-<pre><code class="language-bash">env | grep FSPULSE_
-</code></pre>
-<p><strong>Docker:</strong></p>
-<pre><code class="language-bash">docker exec fspulse env | grep FSPULSE_
-</code></pre>
-<hr />
-<h2 id="docker-configuration"><a class="header" href="#docker-configuration">Docker Configuration</a></h2>
-<p>When running FsPulse in Docker, configuration is managed slightly differently. The config file lives at <code>/data/config.toml</code> inside the container, and you have several options for customizing settings.</p>
-<p>For step-by-step instructions on configuring FsPulse in Docker, including editing config files and using environment variables, see the <a href="docker.html#configuration">Docker Deployment - Configuration</a> section.</p>
-<hr />
-<h2 id="new-settings-and-restoring-defaults"><a class="header" href="#new-settings-and-restoring-defaults">New Settings and Restoring Defaults</a></h2>
-<p>FsPulse may expand its configuration options over time. When new settings are introduced, they won't automatically appear in your existing <code>config.toml</code>. To take advantage of new options, either:</p>
+<h3 id="schedule-management"><a class="header" href="#schedule-management">Schedule Management</a></h3>
 <ul>
-<li>Manually add new settings to your config file</li>
-<li>Delete the file to allow FsPulse to regenerate it with all current defaults</li>
+<li><strong>Enable/Disable</strong>: Temporarily pause schedules without deleting them</li>
+<li><strong>Edit</strong>: Modify timing or scan options</li>
+<li><strong>Delete</strong>: Remove the schedule</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="query-syntax"><a class="header" href="#query-syntax">Query Syntax</a></h1>
+<h2 id="scan-queue"><a class="header" href="#scan-queue">Scan Queue</a></h2>
+<p>The queue shows:</p>
+<ul>
+<li>Pending scheduled scans waiting to execute</li>
+<li>Currently running scans</li>
+<li>Recent scan history</li>
+</ul>
+<p>Scans are queued and executed sequentially to prevent resource conflicts.</p>
+<h2 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h2>
+<p>Scheduling and queue behavior can be customized via <a href="web_ui/../configuration.html">Configuration</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="browse"><a class="header" href="#browse">Browse</a></h1>
+<p>The Browse page provides an intuitive interface for navigating your filesystem hierarchy and inspecting individual items in detail.</p>
+<h2 id="filesystem-tree"><a class="header" href="#filesystem-tree">Filesystem Tree</a></h2>
+<p>Navigate your scanned directories with a hierarchical tree view showing:</p>
+<ul>
+<li>Folders and files from your most recent scan</li>
+<li>Item counts and sizes</li>
+<li>Visual indicators for items with alerts</li>
+</ul>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-tree.png" alt="Browse Filesystem Tree" style="width: 90%; max-width: 900px;">
+</p>
+<h3 id="features-1"><a class="header" href="#features-1">Features</a></h3>
+<ul>
+<li><strong>Search</strong>: Filter items by path using the search box</li>
+<li><strong>Expand/Collapse</strong>: Navigate the folder structure</li>
+<li><strong>Sort</strong>: Order by name, size, or modification time</li>
+<li><strong>Root Selection</strong>: Switch between different scan roots</li>
+</ul>
+<h2 id="item-detail-panel"><a class="header" href="#item-detail-panel">Item Detail Panel</a></h2>
+<p>Click any item to open the detail panel, which provides comprehensive information:</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="Item Detail Panel" style="width: 90%; max-width: 900px;">
+</p>
+<h3 id="metadata"><a class="header" href="#metadata">Metadata</a></h3>
+<ul>
+<li>File/folder size (dual format: decimal and binary units)</li>
+<li>Modification time</li>
+<li>Item type</li>
+<li>Current hash (if hashed)</li>
+</ul>
+<h3 id="validation-status"><a class="header" href="#validation-status">Validation Status</a></h3>
+<ul>
+<li>Validation state (Valid, Invalid, NotValidated)</li>
+<li>Validation error details (if any)</li>
+<li>Last validation scan information</li>
+</ul>
+<h3 id="change-history"><a class="header" href="#change-history">Change History</a></h3>
+<ul>
+<li>Change type across scans (Add, Modify, Delete, NoChange)</li>
+<li>Hash changes detected</li>
+<li>Modification timeline</li>
+</ul>
+<h3 id="associated-alerts"><a class="header" href="#associated-alerts">Associated Alerts</a></h3>
+<ul>
+<li>Suspicious hash changes</li>
+<li>Validation failures</li>
+<li>Alert status and timestamps</li>
+</ul>
+<h2 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h2>
+<ul>
+<li><strong>Investigation</strong>: Drill down into specific files or folders when alerts are triggered</li>
+<li><strong>Verification</strong>: Check hash and validation status of critical files</li>
+<li><strong>Analysis</strong>: Understand what changed between scans</li>
+<li><strong>Navigation</strong>: Visual exploration of your monitored filesystems</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="insights--trends"><a class="header" href="#insights--trends">Insights &amp; Trends</a></h1>
+<p>The Insights page provides interactive visualizations showing how your data evolves over time across multiple scans.</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-insights-trends.png" alt="Insights Trend Charts" style="width: 90%; max-width: 900px;">
+</p>
+<h2 id="available-charts"><a class="header" href="#available-charts">Available Charts</a></h2>
+<h3 id="file-size-trends"><a class="header" href="#file-size-trends">File Size Trends</a></h3>
+<p>Track total storage usage over time:</p>
+<ul>
+<li>See growth or reduction in directory sizes</li>
+<li>Identify storage bloat</li>
+<li>Displayed in both decimal (GB) and binary (GiB) units</li>
+</ul>
+<h3 id="filefolder-count-trends"><a class="header" href="#filefolder-count-trends">File/Folder Count Trends</a></h3>
+<p>Monitor the number of items:</p>
+<ul>
+<li>Total files and folders over time</li>
+<li>Detect unexpected additions or deletions</li>
+<li>Separate trend lines for files vs. directories</li>
+</ul>
+<h3 id="change-activity"><a class="header" href="#change-activity">Change Activity</a></h3>
+<p>Visualize filesystem activity:</p>
+<ul>
+<li>Additions, modifications, and deletions per scan</li>
+<li>Identify periods of high change</li>
+<li>Understand modification patterns</li>
+</ul>
+<h3 id="alert-trends"><a class="header" href="#alert-trends">Alert Trends</a></h3>
+<p>Track integrity issues over time:</p>
+<ul>
+<li>Validation failures</li>
+<li>Suspicious hash changes</li>
+<li>Alert resolution patterns</li>
+</ul>
+<h2 id="features-2"><a class="header" href="#features-2">Features</a></h2>
+<h3 id="root-selection"><a class="header" href="#root-selection">Root Selection</a></h3>
+<p>Select which scan root to analyze from the dropdown. Each root maintains independent trend data.</p>
+<h3 id="date-range-filtering"><a class="header" href="#date-range-filtering">Date Range Filtering</a></h3>
+<p>Customize the time window:</p>
+<ul>
+<li>Last 7 days</li>
+<li>Last 30 days</li>
+<li>Last 90 days</li>
+<li>All time</li>
+<li>Custom range</li>
+</ul>
+<h3 id="baseline-exclusion"><a class="header" href="#baseline-exclusion">Baseline Exclusion</a></h3>
+<p>Toggle whether to include the initial (baseline) scan in trend calculations. Baseline scans often show large numbers of "additions" which can skew trend visualizations.</p>
+<h3 id="interactive-charts"><a class="header" href="#interactive-charts">Interactive Charts</a></h3>
+<ul>
+<li>Hover for detailed values</li>
+<li>Pan and zoom on time ranges</li>
+<li>Toggle data series on/off</li>
+</ul>
+<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
+<p>Trend analysis requires <strong>multiple scans</strong> of the same root. After your first scan, you'll see a message prompting you to run additional scans to generate trend data.</p>
+<h2 id="use-cases-2"><a class="header" href="#use-cases-2">Use Cases</a></h2>
+<ul>
+<li><strong>Capacity Planning</strong>: Monitor storage growth rates</li>
+<li><strong>Change Detection</strong>: Identify unusual modification patterns</li>
+<li><strong>Validation Monitoring</strong>: Track data integrity over time</li>
+<li><strong>Baseline Comparison</strong>: See how your filesystem evolves from initial state</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="alerts"><a class="header" href="#alerts">Alerts</a></h1>
+<p>The Alerts page provides a centralized view for managing integrity issues detected during scans.</p>
+<h2 id="alert-types"><a class="header" href="#alert-types">Alert Types</a></h2>
+<p>FsPulse generates two types of alerts:</p>
+<h3 id="suspicious-hash-changes"><a class="header" href="#suspicious-hash-changes">Suspicious Hash Changes</a></h3>
+<p>Triggered when:</p>
+<ul>
+<li>A file's hash changes between scans</li>
+<li>The file's modification time has NOT changed</li>
+</ul>
+<p>This pattern indicates potential:</p>
+<ul>
+<li>Bit rot (silent data corruption)</li>
+<li>Tampering or malicious modification</li>
+<li>Filesystem anomalies</li>
+</ul>
+<h3 id="invalid-items"><a class="header" href="#invalid-items">Invalid Items</a></h3>
+<p>Triggered when format validation fails:</p>
+<ul>
+<li>FLAC audio files with invalid structure</li>
+<li>JPEG/PNG images that fail format checks</li>
+<li>PDF files with corruption</li>
+<li>Other validated file types with detected issues</li>
+</ul>
+<p>See <a href="web_ui/../validators.html">Validators</a> for details on supported file types.</p>
+<h2 id="alert-status"><a class="header" href="#alert-status">Alert Status</a></h2>
+<p>Each alert can be in one of three states:</p>
+<ul>
+<li><strong>Open</strong>: New alert requiring attention</li>
+<li><strong>Flagged</strong>: Marked for follow-up or further investigation</li>
+<li><strong>Dismissed</strong>: Reviewed and determined to be non-critical</li>
+</ul>
+<h2 id="managing-alerts"><a class="header" href="#managing-alerts">Managing Alerts</a></h2>
+<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
+<p>Filter alerts by:</p>
+<ul>
+<li>Status (Open/Flagged/Dismissed)</li>
+<li>Alert type (Hash change/Validation failure)</li>
+<li>Root</li>
+<li>Time range</li>
+<li>Path search</li>
+</ul>
+<h3 id="status-actions"><a class="header" href="#status-actions">Status Actions</a></h3>
+<ul>
+<li><strong>Flag</strong>: Mark alert for follow-up</li>
+<li><strong>Dismiss</strong>: Acknowledge and close the alert</li>
+<li><strong>Reopen</strong>: Change dismissed alert back to open</li>
+</ul>
+<h3 id="batch-operations"><a class="header" href="#batch-operations">Batch Operations</a></h3>
+<p>Select multiple alerts to update status in bulk.</p>
+<h2 id="alert-details"><a class="header" href="#alert-details">Alert Details</a></h2>
+<p>Click an alert to view:</p>
+<ul>
+<li>Item path and metadata</li>
+<li>Alert timestamp</li>
+<li>Change details (for hash changes)</li>
+<li>Validation error message (for invalid items)</li>
+<li>Link to item in Browse view</li>
+</ul>
+<h2 id="integration-with-browse"><a class="header" href="#integration-with-browse">Integration with Browse</a></h2>
+<p>Alerts are also displayed in the <a href="web_ui/browse.html">Browse</a> page's item detail panel, providing context when investigating specific files.</p>
+<h2 id="workflow-recommendations"><a class="header" href="#workflow-recommendations">Workflow Recommendations</a></h2>
+<ol>
+<li><strong>Review Open Alerts</strong>: Check new alerts regularly</li>
+<li><strong>Investigate</strong>: Use Browse to examine affected items</li>
+<li><strong>Triage</strong>: Flag important issues, dismiss false positives</li>
+<li><strong>Restore</strong>: Use backups to restore corrupted files if needed</li>
+<li><strong>Track</strong>: Monitor alert trends in <a href="web_ui/insights.html">Insights</a></li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="explore-query-interface"><a class="header" href="#explore-query-interface">Explore (Query Interface)</a></h1>
+<p>The Explore page provides a full-featured query interface for advanced data analysis using FsPulse's query language.</p>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<p>Explore offers a terminal-like experience in the browser, allowing you to:</p>
+<ul>
+<li>Write queries using FsPulse's SQL-inspired syntax</li>
+<li>View results in formatted tables</li>
+<li>Save and load queries</li>
+<li>Export results</li>
+</ul>
+<h2 id="query-domains"><a class="header" href="#query-domains">Query Domains</a></h2>
+<p>You can query four different data types:</p>
+<ul>
+<li><strong><code>items</code></strong>: Files and folders from the most recent scan</li>
+<li><strong><code>changes</code></strong>: Change records across all scans</li>
+<li><strong><code>scans</code></strong>: Scan metadata and statistics</li>
+<li><strong><code>roots</code></strong>: Configured scan roots</li>
+<li><strong><code>alerts</code></strong>: Integrity issues and validation failures</li>
+</ul>
+<h2 id="basic-query-examples"><a class="header" href="#basic-query-examples">Basic Query Examples</a></h2>
+<h3 id="find-invalid-items"><a class="header" href="#find-invalid-items">Find Invalid Items</a></h3>
+<pre><code>items where val:(I)
+</code></pre>
+<h3 id="recent-large-files"><a class="header" href="#recent-large-files">Recent Large Files</a></h3>
+<pre><code>items where size &gt; 1GB and item_type:(F)
+</code></pre>
+<h3 id="hash-changes"><a class="header" href="#hash-changes">Hash Changes</a></h3>
+<pre><code>changes where hash_change:(T) show item_path, hash_old, hash_new
+</code></pre>
+<h3 id="failed-scans"><a class="header" href="#failed-scans">Failed Scans</a></h3>
+<pre><code>scans where state:(E) show root_path, error, started_at
+</code></pre>
+<h2 id="query-syntax"><a class="header" href="#query-syntax">Query Syntax</a></h2>
+<p>The Explore interface uses the same query language as the CLI. See <a href="web_ui/../query.html">Query Syntax</a> for complete documentation.</p>
+<h2 id="features-3"><a class="header" href="#features-3">Features</a></h2>
+<h3 id="column-management"><a class="header" href="#column-management">Column Management</a></h3>
+<ul>
+<li>Show/hide columns using the <code>show</code> clause</li>
+<li>Reorder columns with drag-and-drop (if supported)</li>
+<li>Auto-sized columns for readability</li>
+</ul>
+<h3 id="filtering-1"><a class="header" href="#filtering-1">Filtering</a></h3>
+<p>Combine filters with <code>and</code>/<code>or</code>:</p>
+<pre><code>items where size &gt; 100MB and val:(I) and item_path contains "photos"
+</code></pre>
+<h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
+<p>Use <code>order by</code>:</p>
+<pre><code>items where item_type:(F) order by size desc
+</code></pre>
+<h3 id="result-limits"><a class="header" href="#result-limits">Result Limits</a></h3>
+<p>Limit output rows:</p>
+<pre><code>items where item_type:(F) limit 50
+</code></pre>
+<h2 id="use-cases-3"><a class="header" href="#use-cases-3">Use Cases</a></h2>
+<ul>
+<li><strong>Advanced Analysis</strong>: Complex queries not available in other UI pages</li>
+<li><strong>Reporting</strong>: Generate custom reports for specific investigations</li>
+<li><strong>Debugging</strong>: Inspect raw data for troubleshooting</li>
+<li><strong>Learning</strong>: Understand the data model and available fields</li>
+</ul>
+<h2 id="tips"><a class="header" href="#tips">Tips</a></h2>
+<ul>
+<li>Start with simple queries and build complexity</li>
+<li>Use <code>show</code> to display only relevant columns</li>
+<li>Reference the <a href="web_ui/../query.html">Query Syntax</a> guide for field names and operators</li>
+<li>Save frequently-used queries for quick access</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="command-line-interface-1"><a class="header" href="#command-line-interface-1">Command-Line Interface</a></h1>
+<p>FsPulse is designed with the web UI as the primary interface for all users. However, the CLI provides powerful capabilities for expert users who prefer terminal workflows, automation, and scripting integration.</p>
+<h2 id="cli-purpose-and-limitations"><a class="header" href="#cli-purpose-and-limitations">CLI Purpose and Limitations</a></h2>
+<p><strong>What the CLI Provides:</strong></p>
+<ul>
+<li>Query and analyze scan data</li>
+<li>Generate formatted reports</li>
+<li>Automate data analysis workflows</li>
+<li>Integrate with scripts, cron jobs, and CI/CD pipelines</li>
+</ul>
+<p><strong>Important Limitation:</strong>
+All <strong>scanning operations</strong> must be performed through the web UI. Start the server with <code>fspulse serve</code> and use the <a href="web_ui.html">Web Interface</a> to configure and run scans. The CLI provides access to query and analyze data generated by scans, but cannot initiate scans.</p>
+<hr />
+<h2 id="available-commands"><a class="header" href="#available-commands">Available Commands</a></h2>
+<h3 id="data-analysis"><a class="header" href="#data-analysis">Data Analysis</a></h3>
+<ul>
+<li><strong><a href="cli/query.html">query</a></strong> — Execute SQL-inspired queries against scan data</li>
+<li><strong><a href="cli/reports.html">report</a></strong> — Generate prebuilt formatted reports</li>
+</ul>
+<h3 id="interactive-interfaces"><a class="header" href="#interactive-interfaces">Interactive Interfaces</a></h3>
+<ul>
+<li><strong><a href="interactive_mode.html">interact / explore</a></strong> — Menu-driven and full-screen TUI interfaces for terminal users</li>
+</ul>
+<h3 id="server"><a class="header" href="#server">Server</a></h3>
+<ul>
+<li><strong>serve</strong> — Start the FsPulse web service (default: <code>http://127.0.0.1:8080</code>)</li>
+</ul>
+<hr />
+<h2 id="getting-help-1"><a class="header" href="#getting-help-1">Getting Help</a></h2>
+<p>View available commands and options:</p>
+<pre><code class="language-sh">fspulse --help
+fspulse &lt;command&gt; --help
+</code></pre>
+<p>Examples:</p>
+<pre><code class="language-sh">fspulse query --help
+fspulse report scans --help
+</code></pre>
+<hr />
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><strong><a href="query.html">Query Syntax</a></strong> — Learn the query language used by the <code>query</code> command</li>
+<li><strong><a href="configuration.html">Configuration</a></strong> — Configure database location, server settings, and more</li>
+<li><strong><a href="web_ui.html">Web Interface</a></strong> — Primary interface for all users including scan management</li>
+<li><strong><a href="docker.html">Docker Deployment</a></strong> — Using CLI commands in Docker containers</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="query-command"><a class="header" href="#query-command">Query Command</a></h1>
+<p>The <code>fspulse query</code> command provides powerful data analysis capabilities from the command line.</p>
+<h2 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h2>
+<pre><code class="language-sh">fspulse query "&lt;query_string&gt;"
+</code></pre>
+<h2 id="query-syntax-1"><a class="header" href="#query-syntax-1">Query Syntax</a></h2>
+<p>Queries use an SQL-inspired syntax. See <a href="cli/../query.html">Query Syntax</a> for complete documentation.</p>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="find-invalid-items-1"><a class="header" href="#find-invalid-items-1">Find Invalid Items</a></h3>
+<pre><code class="language-sh">fspulse query "items where val:(I)"
+</code></pre>
+<h3 id="large-directories"><a class="header" href="#large-directories">Large Directories</a></h3>
+<pre><code class="language-sh">fspulse query "items where size &gt; 10GB and item_type:(D)"
+</code></pre>
+<h3 id="recent-hash-changes"><a class="header" href="#recent-hash-changes">Recent Hash Changes</a></h3>
+<pre><code class="language-sh">fspulse query "changes where hash_change:(T) show item_path, hash_old, hash_new"
+</code></pre>
+<h3 id="scan-history"><a class="header" href="#scan-history">Scan History</a></h3>
+<pre><code class="language-sh">fspulse query "scans order by started_at desc limit 10"
+</code></pre>
+<h2 id="output-format"><a class="header" href="#output-format">Output Format</a></h2>
+<p>Results are displayed as formatted tables in the terminal using:</p>
+<ul>
+<li>Column alignment</li>
+<li>Header rows</li>
+<li>Truncation for long values</li>
+</ul>
+<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
+<h3 id="filtering-by-validation-status"><a class="header" href="#filtering-by-validation-status">Filtering by Validation Status</a></h3>
+<pre><code class="language-sh"># Invalid items only
+fspulse query "items where val:(I)"
+
+# Valid items only
+fspulse query "items where val:(V)"
+
+# Not validated
+fspulse query "items where val:(N)"
+</code></pre>
+<h3 id="size-queries"><a class="header" href="#size-queries">Size Queries</a></h3>
+<pre><code class="language-sh"># Files over 1GB
+fspulse query "items where size &gt; 1GB and item_type:(F)"
+
+# Total size of directories
+fspulse query "items where item_type:(D) show item_path, size order by size desc"
+</code></pre>
+<h3 id="change-tracking"><a class="header" href="#change-tracking">Change Tracking</a></h3>
+<pre><code class="language-sh"># All additions in last scan
+fspulse query "changes where change:(A)"
+
+# Modifications with hash changes
+fspulse query "changes where change:(M) and hash_change:(T)"
+
+# Deletions
+fspulse query "changes where change:(D)"
+</code></pre>
+<h2 id="integration"><a class="header" href="#integration">Integration</a></h2>
+<p>The query command is ideal for:</p>
+<ul>
+<li><strong>Scripting</strong>: Automate analysis workflows</li>
+<li><strong>CI/CD</strong>: Integrate with build pipelines</li>
+<li><strong>Monitoring</strong>: Generate alerts from query results</li>
+<li><strong>Reporting</strong>: Export data for external tools</li>
+</ul>
+<h2 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h2>
+<p>For an interactive query experience, use:</p>
+<pre><code class="language-sh">fspulse interact
+</code></pre>
+<p>Or for a full-screen TUI:</p>
+<pre><code class="language-sh">fspulse explore
+</code></pre>
+<p>See <a href="cli/../interactive_mode.html">Interactive Mode</a> for details.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="report-commands"><a class="header" href="#report-commands">Report Commands</a></h1>
+<p>FsPulse provides CLI commands for generating formatted reports about scans, roots, and system status.</p>
+<h2 id="available-reports"><a class="header" href="#available-reports">Available Reports</a></h2>
+<h3 id="scans-report"><a class="header" href="#scans-report">Scans Report</a></h3>
+<p>View scan history and details:</p>
+<pre><code class="language-sh">fspulse report scans
+</code></pre>
+<p>Options:</p>
+<ul>
+<li><code>--last N</code>: Show only the N most recent scans</li>
+<li><code>--root-id ID</code>: Filter to specific root</li>
+<li><code>--state STATE</code>: Filter by scan state (Completed, Error, Stopped)</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-sh"># Last 5 scans
+fspulse report scans --last 5
+
+# Failed scans only
+fspulse report scans --state Error
+</code></pre>
+<h3 id="roots-report"><a class="header" href="#roots-report">Roots Report</a></h3>
+<p>List configured scan roots:</p>
+<pre><code class="language-sh">fspulse report roots
+</code></pre>
+<p>Shows:</p>
+<ul>
+<li>Root ID and path</li>
+<li>Friendly name (if set)</li>
+<li>Last scan time</li>
+<li>Scan count</li>
+</ul>
+<h3 id="scan-details"><a class="header" href="#scan-details">Scan Details</a></h3>
+<p>Get detailed information about a specific scan:</p>
+<pre><code class="language-sh">fspulse report scan-detail --scan-id &lt;ID&gt;
+</code></pre>
+<p>Shows:</p>
+<ul>
+<li>Scan metadata (start/end time, duration, state)</li>
+<li>Statistics (files/folders scanned, sizes, changes)</li>
+<li>Change breakdown (adds, modifies, deletes)</li>
+<li>Alert summary</li>
+<li>Error details (if scan failed)</li>
+</ul>
+<h2 id="output-format-1"><a class="header" href="#output-format-1">Output Format</a></h2>
+<p>Reports are formatted as tables with:</p>
+<ul>
+<li>Clear headers</li>
+<li>Aligned columns</li>
+<li>Color-coded status indicators (where supported)</li>
+</ul>
+<h2 id="use-cases-4"><a class="header" href="#use-cases-4">Use Cases</a></h2>
+<ul>
+<li><strong>Quick Status</strong>: Check recent scan activity</li>
+<li><strong>Debugging</strong>: Investigate failed scans</li>
+<li><strong>Auditing</strong>: Review scan history</li>
+<li><strong>Monitoring</strong>: Script periodic status checks</li>
+</ul>
+<h2 id="example-workflows"><a class="header" href="#example-workflows">Example Workflows</a></h2>
+<h3 id="check-for-failed-scans"><a class="header" href="#check-for-failed-scans">Check for Failed Scans</a></h3>
+<pre><code class="language-sh">fspulse report scans --state Error
+</code></pre>
+<h3 id="review-last-scan-results"><a class="header" href="#review-last-scan-results">Review Last Scan Results</a></h3>
+<pre><code class="language-sh"># Get the last scan ID
+LAST_SCAN=$(fspulse report scans --last 1 | grep -oE 'ID: [0-9]+' | cut -d' ' -f2)
+
+# Show details
+fspulse report scan-detail --scan-id $LAST_SCAN
+</code></pre>
+<h3 id="list-all-configured-roots"><a class="header" href="#list-all-configured-roots">List All Configured Roots</a></h3>
+<pre><code class="language-sh">fspulse report roots
+</code></pre>
+<h2 id="integration-with-queries"><a class="header" href="#integration-with-queries">Integration with Queries</a></h2>
+<p>For more complex analysis, use the <a href="cli/query.html">Query Command</a>:</p>
+<pre><code class="language-sh"># Custom scan query
+fspulse query "scans where duration_secs &gt; 3600 show root_path, duration_secs, started_at"
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="interactive-mode-1"><a class="header" href="#interactive-mode-1">Interactive Mode</a></h1>
+<p>FsPulse provides two terminal-based interactive interfaces for working with your data:</p>
+<ul>
+<li><strong><code>fspulse interact</code></strong> — Menu-driven interface (documented on this page)</li>
+<li><strong><code>fspulse explore</code></strong> — Visual data explorer TUI (see below)</li>
+</ul>
+<p>Both provide alternative ways to interact with FsPulse without needing the web UI.</p>
+<hr />
+<h2 id="interactive-menu-fspulse-interact"><a class="header" href="#interactive-menu-fspulse-interact">Interactive Menu (<code>fspulse interact</code>)</a></h2>
+<p>The <code>interact</code> command provides a menu-driven interface for common tasks.</p>
+<p>To launch:</p>
+<pre><code class="language-sh">fspulse interact
+</code></pre>
+<h3 id="available-options"><a class="header" href="#available-options">Available Options</a></h3>
+<p>The interactive menu offers:</p>
+<ul>
+<li><strong>Query</strong> — Run custom queries using the query language</li>
+<li><strong>Explore</strong> — Launch the visual data explorer</li>
+<li><strong>Report</strong> — View predefined summary reports</li>
+<li><strong>Exit</strong> — Close interactive mode</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> Scanning is performed exclusively through the web UI. Use <code>fspulse serve</code> to access the web interface where you can create and manage scans.</p>
+</blockquote>
+<hr />
+<h2 id="query"><a class="header" href="#query">Query</a></h2>
+<p>Allows you to enter queries using FsPulse’s <a href="query.html">query syntax</a>.</p>
+<ul>
+<li>Use full expressions like:
+<pre><code class="language-sh">items where item_path:('photos')
+changes where val_new:(I) show default, val_old, val_new
+</code></pre>
+</li>
+<li>Queries may be repeated until you type <code>q</code> or <code>exit</code></li>
+<li>Query errors provide detailed syntax feedback</li>
+<li>Use the ↑ and ↓ arrow keys to scroll through previous entries in your session</li>
+</ul>
+<hr />
+<h2 id="report"><a class="header" href="#report">Report</a></h2>
+<p>Provides quick access to common predefined reports:</p>
+<ul>
+<li>List all roots</li>
+<li>Show recent scans</li>
+<li>Display invalid items</li>
+<li>View changes from the latest scan</li>
+</ul>
+<p>Reports are internally implemented as saved queries and will expand over time.</p>
+<hr />
+<h2 id="data-explorer-fspulse-explore"><a class="header" href="#data-explorer-fspulse-explore">Data Explorer (<code>fspulse explore</code>)</a></h2>
+<p>The <code>explore</code> command provides a visual, terminal-based data explorer—a full-screen TUI for browsing your FsPulse data.</p>
+<p>To launch:</p>
+<pre><code class="language-sh">fspulse explore
+</code></pre>
+<h3 id="key-features-1"><a class="header" href="#key-features-1">Key Features</a></h3>
+<ul>
+<li><strong>Visual Interface</strong>: Spreadsheet-like display of roots, scans, items, and changes</li>
+<li><strong>Keyboard Navigation</strong>: Use arrow keys, Tab, and shortcuts to navigate</li>
+<li><strong>Entity Views</strong>: Switch between different data types (roots, scans, items, changes)</li>
+<li><strong>Filtering &amp; Sorting</strong>: Interactive controls for refining results</li>
+<li><strong>Full-Screen</strong>: Maximizes terminal space for data exploration</li>
+</ul>
+<h3 id="differences-from-interact"><a class="header" href="#differences-from-interact">Differences from <code>interact</code></a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th><code>interact</code></th><th><code>explore</code></th></tr></thead><tbody>
+<tr><td><strong>Interface</strong></td><td>Menu-driven prompts</td><td>Full-screen visual TUI</td></tr>
+<tr><td><strong>Navigation</strong></td><td>Text-based selection</td><td>Arrow keys, visual navigation</td></tr>
+<tr><td><strong>Data Display</strong></td><td>List-based output</td><td>Table/grid layout</td></tr>
+<tr><td><strong>Best For</strong></td><td>Quick queries and reports</td><td>Visual data exploration</td></tr>
+</tbody></table>
+</div>
+<h3 id="docker-usage"><a class="header" href="#docker-usage">Docker Usage</a></h3>
+<p>Both interactive modes work in Docker via <code>docker exec</code> with the <code>-it</code> flags:</p>
+<pre><code class="language-sh"># Interactive menu
+docker exec -it fspulse fspulse interact
+
+# Data explorer
+docker exec -it fspulse fspulse explore
+</code></pre>
+<p><strong>Important</strong>: The <code>-it</code> flags are required for proper terminal interaction.</p>
+<hr />
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>FsPulse offers multiple ways to interact with your data:</p>
+<ul>
+<li><strong>Web UI</strong> — Full-featured browser interface (via <code>fspulse serve</code>)</li>
+<li><strong>Interactive Menu</strong> — Quick access to common tasks (via <code>fspulse interact</code>)</li>
+<li><strong>Data Explorer</strong> — Visual terminal-based exploration (via <code>fspulse explore</code>)</li>
+<li><strong>Direct CLI</strong> — Scriptable commands for automation (see <a href="cli.html">Command-Line Interface</a>)</li>
+</ul>
+<p>Choose the interface that best fits your workflow.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="query-syntax-2"><a class="header" href="#query-syntax-2">Query Syntax</a></h1>
 <p>FsPulse provides a flexible, SQL-like query language for exploring scan results. This language supports filtering, custom column selection, ordering, and limiting the number of results.</p>
 <hr />
 <h2 id="query-structure"><a class="header" href="#query-structure">Query Structure</a></h2>
@@ -1226,7 +1754,7 @@ fspulse serve
 <pre><code class="language-text">items limit 50
 </code></pre>
 <hr />
-<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
 <pre><code class="language-text"># Items whose path contains 'reports'
 items where item_path:('reports')
 
@@ -1241,213 +1769,240 @@ scans show scan_id, file_count, total_size, add_count, modify_count, delete_coun
 </code></pre>
 <hr />
 <p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="validators.html">Validators</a> · <a href="configuration.html">Configuration</a></p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="command-line-interface-1"><a class="header" href="#command-line-interface-1">Command-Line Interface</a></h1>
-<p>FsPulse provides multiple modes of operation:</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="configuration-2"><a class="header" href="#configuration-2">Configuration</a></h1>
+<p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior, analysis settings, server configuration, and more.</p>
+<blockquote>
+<p><strong>📦 Docker Users</strong>: If you're running FsPulse in Docker, see the <a href="docker.html">Docker Deployment</a> chapter for Docker-specific configuration including environment variable overrides and volume management.</p>
+</blockquote>
+<hr />
+<h2 id="finding-configtoml"><a class="header" href="#finding-configtoml">Finding <code>config.toml</code></a></h2>
+<p>The location of <code>config.toml</code> depends on how you're running FsPulse:</p>
+<h3 id="docker-deployments"><a class="header" href="#docker-deployments">Docker Deployments</a></h3>
+<p>When running in Docker, the config file is located at <strong><code>/data/config.toml</code></strong> inside the container. FsPulse automatically creates this file with default settings on first run.</p>
+<p>To access it from your host machine:</p>
+<pre><code class="language-bash"># View the config
+docker exec fspulse cat /data/config.toml
+
+# Extract to edit
+docker exec fspulse cat /data/config.toml &gt; config.toml
+</code></pre>
+<p>See the <a href="docker.html#configuration">Docker Deployment</a> chapter for details on editing the config in Docker.</p>
+<h3 id="native-installations"><a class="header" href="#native-installations">Native Installations</a></h3>
+<p>FsPulse uses the <a href="https://docs.rs/directories">directories</a> crate to determine platform-specific locations:</p>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Location Description</th><th>Example Path</th></tr></thead><tbody>
+<tr><td>Linux</td><td><code>$XDG_DATA_HOME</code></td><td><code>/home/alice/.local/share/fspulse</code></td></tr>
+<tr><td>macOS</td><td>Application Support</td><td><code>/Users/alice/Library/Application Support/fspulse</code></td></tr>
+<tr><td>Windows</td><td>Local AppData</td><td><code>C:\Users\Alice\AppData\Local\fspulse</code></td></tr>
+</tbody></table>
+</div>
+<p>On first run, FsPulse automatically creates this directory and writes a default <code>config.toml</code> if one doesn't exist.</p>
+<blockquote>
+<p><strong>Tip</strong>: You can delete <code>config.toml</code> at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.</p>
+</blockquote>
+<hr />
+<h2 id="configuration-settings"><a class="header" href="#configuration-settings">Configuration Settings</a></h2>
+<p>Here are the current available settings and their default values:</p>
+<pre><code class="language-toml">[logging]
+fspulse = "info"
+lopdf = "error"
+
+[server]
+port = 8080
+host = "127.0.0.1"
+
+[analysis]
+threads = 8
+hash = "sha2"
+</code></pre>
+<hr />
+<h2 id="logging"><a class="header" href="#logging">Logging</a></h2>
+<p>FsPulse uses the Rust <a href="https://docs.rs/log"><code>log</code></a> crate, and so does the PDF validation crate <code>lopdf</code>. You can configure logging levels independently for each subsystem in the <code>[logging]</code> section.</p>
+<h3 id="supported-log-levels"><a class="header" href="#supported-log-levels">Supported log levels:</a></h3>
 <ul>
-<li><strong>Server mode</strong> — Run as a background service with web UI (see <code>serve</code> command)</li>
-<li><strong>Command-line interface</strong> (CLI) — Direct terminal commands documented on this page</li>
-<li><strong>Interactive modes</strong> — Menu-driven and data explorer interfaces (see <a href="interactive_mode.html">Interactive Mode</a>)</li>
+<li><code>error</code> – only critical errors</li>
+<li><code>warn</code> – warnings and errors</li>
+<li><code>info</code> – general status messages (default for FsPulse)</li>
+<li><code>debug</code> – verbose output for debugging</li>
+<li><code>trace</code> – extremely detailed logs</li>
 </ul>
-<p>This page documents the full CLI, including top-level commands, available subcommands, and commonly used options.</p>
-<hr />
-<h2 id="getting-help-1"><a class="header" href="#getting-help-1">Getting Help</a></h2>
-<p>At any time, you can get help from the CLI using:</p>
-<pre><code class="language-sh">fspulse --help
-fspulse &lt;command&gt; --help
-</code></pre>
-<p>For example:</p>
-<pre><code class="language-sh">fspulse report items --help
-fspulse query --help
-</code></pre>
-<hr />
-<h2 id="top-level-commands"><a class="header" href="#top-level-commands">Top-Level Commands</a></h2>
-<h3 id="serve"><a class="header" href="#serve"><code>serve</code></a></h3>
-<p>Start the FsPulse server to run as a background service with browser-based access.</p>
-<pre><code class="language-sh">fspulse serve
-</code></pre>
-<p>The server will start on the configured host and port (default: <code>http://127.0.0.1:8080</code>). Access the web UI to:</p>
+<h3 id="log-file-behavior"><a class="header" href="#log-file-behavior">Log File Behavior</a></h3>
 <ul>
-<li>Manage roots (create, view, delete)</li>
-<li>Initiate scans with real-time progress</li>
-<li>Query and explore data</li>
-<li>View scan results and changes</li>
-</ul>
-<p><strong>Configuration</strong>: Server host and port can be configured in <code>config.toml</code> under <code>[server]</code> section, or via environment variables <code>FSPULSE_SERVER_HOST</code> and <code>FSPULSE_SERVER_PORT</code>.</p>
-<p><strong>Docker users</strong>: The container automatically runs in serve mode. You can still access CLI commands via <code>docker exec</code>:</p>
-<pre><code class="language-sh">docker exec fspulse fspulse query "items limit 10"
-docker exec -it fspulse fspulse interact
-</code></pre>
-<p>See the <a href="docker.html">Docker Deployment</a> chapter for more details.</p>
-<hr />
-<h3 id="interact"><a class="header" href="#interact"><code>interact</code></a></h3>
-<p>Launches FsPulse in interactive menu mode.</p>
-<pre><code class="language-sh">fspulse interact
-</code></pre>
-<ul>
-<li>Provides a guided menu for reporting and querying</li>
-<li>Allows interactive query mode with history</li>
-<li>Works with roots and scans created via the web UI</li>
-</ul>
-<p>See the <a href="interactive_mode.html">Interactive Mode</a> chapter for full details.</p>
-<hr />
-<h3 id="explore"><a class="header" href="#explore"><code>explore</code></a></h3>
-<p>Launches an interactive, terminal-based data explorer.</p>
-<pre><code class="language-sh">fspulse explore
-</code></pre>
-<ul>
-<li>Browse roots, scans, items, and changes in a full-screen TUI</li>
-<li>Navigate between entity views using keyboard shortcuts</li>
-<li>Filter and sort data interactively</li>
-</ul>
-<p>This is different from <code>interact</code> (which is menu-driven). The <code>explore</code> command provides a more visual, spreadsheet-like interface for exploring your data.</p>
-<hr />
-<h2 id="scanning-1"><a class="header" href="#scanning-1">Scanning</a></h2>
-<p><strong>Scanning is performed exclusively through the web UI.</strong> Start the server with <code>fspulse serve</code> and access the web interface to:</p>
-<ul>
-<li>Create and manage scan schedules</li>
-<li>Initiate manual scans with real-time progress monitoring</li>
-<li>Configure scan options (hashing, validation)</li>
-</ul>
-<p>The CLI commands documented on this page provide access to data generated by scans, but cannot initiate scans themselves.</p>
-<hr />
-<h3 id="report"><a class="header" href="#report"><code>report</code></a></h3>
-<p>Generates prebuilt reports about roots, scans, items, or changes.</p>
-<pre><code class="language-sh">fspulse report &lt;subcommand&gt; [options]
-</code></pre>
-<p>Available subcommands:</p>
-<h4 id="roots"><a class="header" href="#roots"><code>roots</code></a></h4>
-<pre><code class="language-sh">fspulse report roots [--root-id &lt;id&gt; | --root-path &lt;path&gt;]
-</code></pre>
-<h4 id="scans"><a class="header" href="#scans"><code>scans</code></a></h4>
-<pre><code class="language-sh">fspulse report scans [--scan-id &lt;id&gt; | --last &lt;N&gt;]
-</code></pre>
-<h4 id="items"><a class="header" href="#items"><code>items</code></a></h4>
-<pre><code class="language-sh">fspulse report items [--item-id &lt;id&gt; | --item-path &lt;path&gt; | --root-id &lt;id&gt;] [--invalid]
-</code></pre>
-<h4 id="changes"><a class="header" href="#changes"><code>changes</code></a></h4>
-<pre><code class="language-sh">fspulse report changes [--change-id &lt;id&gt; | --item-id &lt;id&gt; | --scan-id &lt;id&gt;]
-</code></pre>
-<p>Notes:</p>
-<ul>
-<li><code>--invalid</code> on <code>items</code> requires <code>--root-id</code></li>
+<li>Logs are written to a <code>logs/</code> folder inside the same local data directory as <code>config.toml</code></li>
+<li>Each run of FsPulse creates a new log file, named using the current date and time</li>
+<li>FsPulse retains up to <strong>100</strong> log files; older files are automatically deleted</li>
 </ul>
 <hr />
-<h3 id="query"><a class="header" href="#query"><code>query</code></a></h3>
-<p>Executes a structured query using FsPulse's flexible syntax.</p>
-<pre><code class="language-sh">fspulse query "&lt;query string&gt;"
-</code></pre>
-<p>Example:</p>
-<pre><code class="language-sh">fspulse query "items where item_path:('docs') order by mod_date desc limit 10"
-</code></pre>
-<p>See <a href="query.html">Query Syntax</a> for full details.</p>
+<h2 id="server-settings"><a class="header" href="#server-settings">Server Settings</a></h2>
+<p>The <code>[server]</code> section controls the web UI server behavior when running <code>fspulse serve</code>.</p>
+<ul>
+<li><code>host</code>: IP address to bind to (default: <code>127.0.0.1</code>)
+<ul>
+<li><code>127.0.0.1</code> - Localhost only (secure, only accessible from same machine)</li>
+<li><code>0.0.0.0</code> - All interfaces (required for Docker, remote access)</li>
+</ul>
+</li>
+<li><code>port</code>: Port number to listen on (default: <code>8080</code>)</li>
+</ul>
+<p><strong>Note</strong>: In Docker deployments, the host should be <code>0.0.0.0</code> to allow access from outside the container. The Docker image sets this automatically via environment variable.</p>
 <hr />
-<h2 id="database-location"><a class="header" href="#database-location">Database Location</a></h2>
-<p>FsPulse automatically determines the database location using the following precedence:</p>
+<h2 id="analysis-settings"><a class="header" href="#analysis-settings">Analysis Settings</a></h2>
+<p>The <code>[analysis]</code> section controls how many threads are used during the <strong>analysis phase</strong> of scanning (for hashing and validation).</p>
+<ul>
+<li><code>threads</code>: number of worker threads (default: <code>8</code>)</li>
+</ul>
+<p>You can adjust this based on your system's CPU count or performance needs.</p>
+<ul>
+<li><code>hash</code>: hash function to use when hashing files. Values can be <code>sha2</code> or <code>md5</code> (default: <code>sha2</code>)</li>
+</ul>
+<p>Sha2 is more secure but is slower. It is appropriate for most users.</p>
+<hr />
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
+<p>All configuration settings can be overridden using environment variables. This is particularly useful for:</p>
+<ul>
+<li><strong>Docker deployments</strong> where editing files is inconvenient</li>
+<li><strong>Different environments</strong> (development, staging, production) with different settings</li>
+<li><strong>NAS deployments</strong> (TrueNAS, Unraid) using web-based configuration UIs</li>
+<li><strong>CI/CD pipelines</strong> where configuration is managed externally</li>
+</ul>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<p>Environment variables follow the pattern: <strong><code>FSPULSE_&lt;SECTION&gt;_&lt;FIELD&gt;</code></strong></p>
+<p>The <code>&lt;SECTION&gt;</code> corresponds to a section in <code>config.toml</code> (like <code>[server]</code>, <code>[logging]</code>, <code>[analysis]</code>), and <code>&lt;FIELD&gt;</code> is the setting name within that section.</p>
+<p><strong>Precedence</strong> (highest to lowest):</p>
+<ol>
+<li><strong>Environment variables</strong> - Override everything</li>
+<li><strong>config.toml</strong> - User-defined settings</li>
+<li><strong>Built-in defaults</strong> - Fallback values</li>
+</ol>
+<p>This allows you to set sensible defaults in <code>config.toml</code> and override them as needed per deployment.</p>
+<h3 id="complete-variable-reference"><a class="header" href="#complete-variable-reference">Complete Variable Reference</a></h3>
+<h4 id="server-settings-1"><a class="header" href="#server-settings-1">Server Settings</a></h4>
+<p>Control the web UI server behavior (when running <code>fspulse serve</code>):</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_SERVER_HOST</code></td><td><code>127.0.0.1</code></td><td>IP address</td><td>Bind address. Use <code>0.0.0.0</code> for Docker/remote access, <code>127.0.0.1</code> for localhost only</td></tr>
+<tr><td><code>FSPULSE_SERVER_PORT</code></td><td><code>8080</code></td><td>1-65535</td><td>Web UI port number</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Native - serve only on localhost
+export FSPULSE_SERVER_HOST=127.0.0.1
+export FSPULSE_SERVER_PORT=8080
+fspulse serve
+
+# Docker - must bind to all interfaces
+docker run -e FSPULSE_SERVER_HOST=0.0.0.0 -e FSPULSE_SERVER_PORT=9090 -p 9090:9090 ...
+</code></pre>
+<h4 id="logging-settings"><a class="header" href="#logging-settings">Logging Settings</a></h4>
+<p>Configure log output verbosity:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_LOGGING_FSPULSE</code></td><td><code>info</code></td><td><code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td><td>FsPulse application log level</td></tr>
+<tr><td><code>FSPULSE_LOGGING_LOPDF</code></td><td><code>error</code></td><td><code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code>, <code>trace</code></td><td>PDF library (lopdf) log level</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Enable debug logging
+export FSPULSE_LOGGING_FSPULSE=debug
+export FSPULSE_LOGGING_LOPDF=error
+
+# Docker
+docker run -e FSPULSE_LOGGING_FSPULSE=debug ...
+</code></pre>
+<h4 id="analysis-settings-1"><a class="header" href="#analysis-settings-1">Analysis Settings</a></h4>
+<p>Configure scan behavior, hashing, and validation:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-256</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
+<tr><td><code>FSPULSE_ANALYSIS_HASH</code></td><td><code>sha2</code></td><td><code>sha2</code>, <code>md5</code></td><td>Hash algorithm (sha2 is more secure, md5 is faster)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Use 16 threads with MD5 hashing
+export FSPULSE_ANALYSIS_THREADS=16
+export FSPULSE_ANALYSIS_HASH=md5
+
+# Docker
+docker run -e FSPULSE_ANALYSIS_THREADS=16 -e FSPULSE_ANALYSIS_HASH=md5 ...
+</code></pre>
+<h4 id="database-settings"><a class="header" href="#database-settings">Database Settings</a></h4>
+<p>Control database location (advanced):</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>FSPULSE_DATA_DIR</code></td><td>Platform-specific</td><td>Directory path</td><td>Override entire data directory location</td></tr>
+<tr><td><code>FSPULSE_DATABASE_PATH</code></td><td><code>&lt;data_dir&gt;</code></td><td>Directory path</td><td>Override database directory (rarely needed)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Note</strong>: Most users should use <code>FSPULSE_DATA_DIR</code> rather than <code>FSPULSE_DATABASE_PATH</code>. In Docker, this defaults to <code>/data</code>.</p>
+<p><strong>Database Location Precedence:</strong></p>
+<p>FsPulse determines the database location using the following order:</p>
 <ol>
 <li><code>FSPULSE_DATA_DIR</code> environment variable (if set)</li>
 <li><code>config.toml</code> <code>[database]</code> <code>path</code> setting (if configured)</li>
 <li>Platform-specific data directory (default):
 <ul>
-<li>Linux: <code>~/.local/share/fspulse/</code></li>
-<li>macOS: <code>~/Library/Application Support/fspulse/</code></li>
-<li>Windows: <code>%LOCALAPPDATA%\fspulse\</code></li>
+<li><strong>Linux</strong>: <code>~/.local/share/fspulse/</code></li>
+<li><strong>macOS</strong>: <code>~/Library/Application Support/fspulse/</code></li>
+<li><strong>Windows</strong>: <code>%LOCALAPPDATA%\fspulse\</code></li>
+<li><strong>Docker</strong>: <code>/data/</code></li>
 </ul>
 </li>
 </ol>
 <p>The database file is always named <code>fspulse.db</code> within the determined directory.</p>
-<p>For Docker deployments, the database is stored in <code>/data/fspulse.db</code> inside the container. See the <a href="docker.html">Docker Deployment</a> chapter for details.</p>
-<p>For more information on configuration, see the <a href="configuration.html">Configuration</a> chapter.</p>
-<hr />
-<p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="query.html">Query Syntax</a> · <a href="configuration.html">Configuration</a></p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="interactive-mode"><a class="header" href="#interactive-mode">Interactive Mode</a></h1>
-<p>FsPulse provides two terminal-based interactive interfaces for working with your data:</p>
-<ul>
-<li><strong><code>fspulse interact</code></strong> — Menu-driven interface (documented on this page)</li>
-<li><strong><code>fspulse explore</code></strong> — Visual data explorer TUI (see below)</li>
-</ul>
-<p>Both provide alternative ways to interact with FsPulse without needing the web UI.</p>
-<hr />
-<h2 id="interactive-menu-fspulse-interact"><a class="header" href="#interactive-menu-fspulse-interact">Interactive Menu (<code>fspulse interact</code>)</a></h2>
-<p>The <code>interact</code> command provides a menu-driven interface for common tasks.</p>
-<p><img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/interact.png" alt="Interactive menu" /></p>
-<p>To launch:</p>
-<pre><code class="language-sh">fspulse interact
-</code></pre>
-<h3 id="available-options"><a class="header" href="#available-options">Available Options</a></h3>
-<p>The interactive menu offers:</p>
-<ul>
-<li><strong>Query</strong> — Run custom queries using the query language</li>
-<li><strong>Explore</strong> — Launch the visual data explorer</li>
-<li><strong>Report</strong> — View predefined summary reports</li>
-<li><strong>Exit</strong> — Close interactive mode</li>
-</ul>
-<blockquote>
-<p><strong>Note:</strong> Scanning is performed exclusively through the web UI. Use <code>fspulse serve</code> to access the web interface where you can create and manage scans.</p>
-</blockquote>
-<hr />
-<h2 id="query-1"><a class="header" href="#query-1">Query</a></h2>
-<p>Allows you to enter queries using FsPulse’s <a href="query.html">query syntax</a>.</p>
-<ul>
-<li>Use full expressions like:
-<pre><code class="language-sh">items where item_path:('photos')
-changes where val_new:(I) show default, val_old, val_new
-</code></pre>
-</li>
-<li>Queries may be repeated until you type <code>q</code> or <code>exit</code></li>
-<li>Query errors provide detailed syntax feedback</li>
-<li>Use the ↑ and ↓ arrow keys to scroll through previous entries in your session</li>
-</ul>
-<hr />
-<h2 id="report-1"><a class="header" href="#report-1">Report</a></h2>
-<p>Provides quick access to common predefined reports:</p>
-<ul>
-<li>List all roots</li>
-<li>Show recent scans</li>
-<li>Display invalid items</li>
-<li>View changes from the latest scan</li>
-</ul>
-<p>Reports are internally implemented as saved queries and will expand over time.</p>
-<hr />
-<h2 id="data-explorer-fspulse-explore"><a class="header" href="#data-explorer-fspulse-explore">Data Explorer (<code>fspulse explore</code>)</a></h2>
-<p>The <code>explore</code> command provides a visual, terminal-based data explorer—a full-screen TUI for browsing your FsPulse data.</p>
-<p>To launch:</p>
-<pre><code class="language-sh">fspulse explore
-</code></pre>
-<h3 id="key-features"><a class="header" href="#key-features">Key Features</a></h3>
-<ul>
-<li><strong>Visual Interface</strong>: Spreadsheet-like display of roots, scans, items, and changes</li>
-<li><strong>Keyboard Navigation</strong>: Use arrow keys, Tab, and shortcuts to navigate</li>
-<li><strong>Entity Views</strong>: Switch between different data types (roots, scans, items, changes)</li>
-<li><strong>Filtering &amp; Sorting</strong>: Interactive controls for refining results</li>
-<li><strong>Full-Screen</strong>: Maximizes terminal space for data exploration</li>
-</ul>
-<h3 id="differences-from-interact"><a class="header" href="#differences-from-interact">Differences from <code>interact</code></a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Feature</th><th><code>interact</code></th><th><code>explore</code></th></tr></thead><tbody>
-<tr><td><strong>Interface</strong></td><td>Menu-driven prompts</td><td>Full-screen visual TUI</td></tr>
-<tr><td><strong>Navigation</strong></td><td>Text-based selection</td><td>Arrow keys, visual navigation</td></tr>
-<tr><td><strong>Data Display</strong></td><td>List-based output</td><td>Table/grid layout</td></tr>
-<tr><td><strong>Best For</strong></td><td>Quick queries and reports</td><td>Visual data exploration</td></tr>
+<h4 id="docker-specific-variables"><a class="header" href="#docker-specific-variables">Docker-Specific Variables</a></h4>
+<p>These variables are specific to Docker deployments:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>PUID</code></td><td><code>1000</code></td><td>UID number</td><td>User ID to run FsPulse as (for NAS permission matching)</td></tr>
+<tr><td><code>PGID</code></td><td><code>1000</code></td><td>GID number</td><td>Group ID to run FsPulse as (for NAS permission matching)</td></tr>
+<tr><td><code>TZ</code></td><td><code>UTC</code></td><td>Timezone string</td><td>Timezone for log timestamps and UI (e.g., <code>America/New_York</code>)</td></tr>
 </tbody></table>
 </div>
-<h3 id="docker-usage"><a class="header" href="#docker-usage">Docker Usage</a></h3>
-<p>Both interactive modes work in Docker via <code>docker exec</code> with the <code>-it</code> flags:</p>
-<pre><code class="language-sh"># Interactive menu
-docker exec -it fspulse fspulse interact
+<p>See <a href="docker.html#nas-deployments-truenas-unraid">Docker Deployment - NAS Deployments</a> for details on PUID/PGID usage.</p>
+<h3 id="usage-examples"><a class="header" href="#usage-examples">Usage Examples</a></h3>
+<p><strong>Native (Linux/macOS/Windows):</strong></p>
+<pre><code class="language-bash"># Set environment variables
+export FSPULSE_SERVER_PORT=9090
+export FSPULSE_LOGGING_FSPULSE=debug
+export FSPULSE_ANALYSIS_THREADS=16
 
-# Data explorer
-docker exec -it fspulse fspulse explore
+# Run FsPulse (uses env vars)
+fspulse serve
 </code></pre>
-<p><strong>Important</strong>: The <code>-it</code> flags are required for proper terminal interaction.</p>
+<p><strong>Docker - Command Line:</strong></p>
+<pre><code class="language-bash">docker run -d \
+  --name fspulse \
+  -e FSPULSE_SERVER_PORT=9090 \
+  -e FSPULSE_LOGGING_FSPULSE=debug \
+  -e FSPULSE_ANALYSIS_THREADS=16 \
+  -p 9090:9090 \
+  -v fspulse-data:/data \
+  gtunesdev/fspulse:latest
+</code></pre>
+<p><strong>Docker Compose:</strong></p>
+<pre><code class="language-yaml">services:
+  fspulse:
+    image: gtunesdev/fspulse:latest
+    environment:
+      - FSPULSE_SERVER_PORT=9090
+      - FSPULSE_LOGGING_FSPULSE=debug
+      - FSPULSE_ANALYSIS_THREADS=16
+    ports:
+      - "9090:9090"
+</code></pre>
+<h3 id="verifying-environment-variables"><a class="header" href="#verifying-environment-variables">Verifying Environment Variables</a></h3>
+<p>To see what environment variables FsPulse is using:</p>
+<p><strong>Native:</strong></p>
+<pre><code class="language-bash">env | grep FSPULSE_
+</code></pre>
+<p><strong>Docker:</strong></p>
+<pre><code class="language-bash">docker exec fspulse env | grep FSPULSE_
+</code></pre>
 <hr />
-<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
-<p>FsPulse offers multiple ways to interact with your data:</p>
+<h2 id="docker-configuration"><a class="header" href="#docker-configuration">Docker Configuration</a></h2>
+<p>When running FsPulse in Docker, configuration is managed slightly differently. The config file lives at <code>/data/config.toml</code> inside the container, and you have several options for customizing settings.</p>
+<p>For step-by-step instructions on configuring FsPulse in Docker, including editing config files and using environment variables, see the <a href="docker.html#configuration">Docker Deployment - Configuration</a> section.</p>
+<hr />
+<h2 id="new-settings-and-restoring-defaults"><a class="header" href="#new-settings-and-restoring-defaults">New Settings and Restoring Defaults</a></h2>
+<p>FsPulse may expand its configuration options over time. When new settings are introduced, they won't automatically appear in your existing <code>config.toml</code>. To take advantage of new options, either:</p>
 <ul>
-<li><strong>Web UI</strong> — Full-featured browser interface (via <code>fspulse serve</code>)</li>
-<li><strong>Interactive Menu</strong> — Quick access to common tasks (via <code>fspulse interact</code>)</li>
-<li><strong>Data Explorer</strong> — Visual terminal-based exploration (via <code>fspulse explore</code>)</li>
-<li><strong>Direct CLI</strong> — Scriptable commands for automation (see <a href="cli.html">Command-Line Interface</a>)</li>
+<li>Manually add new settings to your config file</li>
+<li>Delete the file to allow FsPulse to regenerate it with all current defaults</li>
 </ul>
-<p>Choose the interface that best fits your workflow.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
 <p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
 <p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
@@ -1477,10 +2032,18 @@ docker exec -it fspulse fspulse explore
 <p>Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.</p>
 <hr />
 <p>$1 See the <a href="query.html">Query Syntax</a> page for full details on query clauses and supported filters.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="advanced-topics-1"><a class="header" href="#advanced-topics-1">Advanced Topics</a></h1>
+<p>This section covers advanced concepts and technical details about FsPulse's internal operation.</p>
+<h2 id="contents"><a class="header" href="#contents">Contents</a></h2>
+<ul>
+<li><strong><a href="concepts.html">Concepts</a></strong> — Core concepts and terminology</li>
+<li><strong><a href="database.html">Database Schema</a></strong> — SQLite schema structure and migrations</li>
+</ul>
+<p>These topics are useful for developers, contributors, or users who want to understand FsPulse's architecture more deeply.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="concepts"><a class="header" href="#concepts">Concepts</a></h1>
 <p>FsPulse is centered around tracking and understanding the state of the file system over time. The core entities in FsPulse — roots, scans, items, and changes — represent a layered model of this information.</p>
 <hr />
-<h2 id="scans-1"><a class="header" href="#scans-1">Scans</a></h2>
+<h2 id="scans"><a class="header" href="#scans">Scans</a></h2>
 <p>Scans are the units of work performed by FsPulse. A scan is performed on a file system tree specified by
 a path. A scan deeply traverses the specified path and its children, recording information on the
 files and directories discovered. The details of scanning are explained in <a href="scanning.html">Scanning</a>.</p>
@@ -1583,86 +2146,76 @@ files and directories discovered. The details of scanning are explained in <a hr
 <p>FsPulse manages all internal data access automatically. Most users will not need to interact with the database directly.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="development"><a class="header" href="#development">Development</a></h1>
 <p>FsPulse is under active development, with regular improvements being made to both its functionality and documentation.</p>
-<p>At this time, FsPulse is <strong>not open for public contribution</strong>. This may change in the future as the project matures and its architecture stabilizes. If you're interested in the project, you're encouraged to:</p>
+<h2 id="contribution-policy"><a class="header" href="#contribution-policy">Contribution Policy</a></h2>
+<p>At this time, FsPulse is <strong>not open for public contribution</strong>. This may change in the future as the project matures and its architecture stabilizes.</p>
+<p>If you're interested in the project, you're encouraged to:</p>
 <ul>
-<li>Explore the source code</li>
+<li>Explore the source code on <a href="https://github.com/gtunes-dev/fspulse">GitHub</a></li>
 <li>Open GitHub issues to report bugs or request features</li>
 <li>Follow the project for updates</li>
 </ul>
 <p>Your interest and feedback are appreciated.</p>
 <hr />
-<h2 id="license"><a class="header" href="#license">License</a></h2>
-<p>FsPulse is released under the <a href="https://opensource.org/licenses/MIT">MIT License</a>. You are free to use, modify, and distribute the software under the terms of this license.</p>
-<hr />
-<h2 id="acknowledged-dependencies"><a class="header" href="#acknowledged-dependencies">Acknowledged Dependencies</a></h2>
-<p>FsPulse relies on several open source Rust crates. We gratefully acknowledge the work of these maintainers, particularly for enabling file format validation:</p>
+<p>If contribution opportunities open in the future, setup instructions and contribution guidelines will be added to this page.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="license"><a class="header" href="#license">License</a></h1>
+<p>FsPulse is released under the <a href="https://opensource.org/licenses/MIT">MIT License</a>.</p>
+<p>You are free to use, modify, and distribute the software under the terms of this license.</p>
+<h2 id="full-license-text"><a class="header" href="#full-license-text">Full License Text</a></h2>
+<pre><code>MIT License
+
+Copyright (c) 2025 gtunes-dev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</code></pre>
+<p>See the full <a href="https://github.com/gtunes-dev/fspulse/blob/main/LICENSE">LICENSE</a> file in the repository.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="acknowledgements"><a class="header" href="#acknowledgements">Acknowledgements</a></h1>
+<p>FsPulse relies on several open source Rust crates. We gratefully acknowledge the work of these maintainers, particularly for enabling file format validation.</p>
+<h2 id="file-format-validation"><a class="header" href="#file-format-validation">File Format Validation</a></h2>
+<p>The following libraries enable FsPulse's ability to detect corrupted files:</p>
 <ul>
-<li><a href="https://github.com/ruuda/claxon"><code>claxon</code></a> — FLAC audio decoding</li>
-<li><a href="https://github.com/image-rs/image"><code>image</code></a> — image decoding for JPG, PNG, GIF, TIFF, BMP</li>
+<li><a href="https://github.com/ruuda/claxon"><code>claxon</code></a> — FLAC audio decoding and validation</li>
+<li><a href="https://github.com/image-rs/image"><code>image</code></a> — Image format decoding for JPG, PNG, GIF, TIFF, BMP</li>
 <li><a href="https://github.com/J-F-Liu/lopdf"><code>lopdf</code></a> — PDF parsing and validation</li>
 </ul>
-<p>Additional dependencies are listed in the project’s <code>Cargo.toml</code>.</p>
+<p>See <a href="validators.html">Validators</a> for the complete list of supported file types.</p>
+<h2 id="additional-dependencies"><a class="header" href="#additional-dependencies">Additional Dependencies</a></h2>
+<p>FsPulse wouldn't be possible without the incredible open source ecosystem it's built upon:</p>
+<p><strong>Web Interface:</strong></p>
+<ul>
+<li><a href="https://ui.shadcn.com">shadcn/ui</a> — Beautiful, accessible component library</li>
+<li><a href="https://www.radix-ui.com">Radix UI</a> — Unstyled, accessible UI primitives</li>
+<li><a href="https://tailwindcss.com">Tailwind CSS</a> — Utility-first CSS framework</li>
+<li><a href="https://lucide.dev">Lucide</a> — Clean, consistent icon set</li>
+<li><a href="https://react.dev">React</a> — UI framework</li>
+</ul>
+<p><strong>Backend &amp; CLI:</strong></p>
+<ul>
+<li><a href="https://github.com/rusqlite/rusqlite">rusqlite</a> — SQLite database interface</li>
+<li><a href="https://github.com/tokio-rs/axum">axum</a> — Web framework</li>
+<li><a href="https://tokio.rs">tokio</a> — Async runtime</li>
+<li><a href="https://github.com/clap-rs/clap">clap</a> — Command-line argument parsing</li>
+<li><a href="https://github.com/console-rs/dialoguer">dialoguer</a> — Interactive CLI prompts</li>
+<li><a href="https://ratatui.rs">ratatui</a> — Terminal UI framework</li>
+</ul>
+<p>The complete list of dependencies is available in the project's <a href="https://github.com/gtunes-dev/fspulse/blob/main/Cargo.toml"><code>Cargo.toml</code></a> and <a href="https://github.com/gtunes-dev/fspulse/blob/main/web/package.json"><code>package.json</code></a>.</p>
 <hr />
-<p>If contribution opportunities open in the future, setup instructions and contribution guidelines will be added here.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h1>
-<p>FsPulse is an actively evolving project. This roadmap outlines current priorities and areas under consideration for future development. Some features listed here are planned, while others are exploratory.</p>
-<hr />
-<h2 id="planned-enhancements"><a class="header" href="#planned-enhancements">Planned Enhancements</a></h2>
-<p>These areas are actively being developed or prioritized:</p>
-<h3 id="-expanded-query-capabilities"><a class="header" href="#-expanded-query-capabilities">🔍 Expanded Query Capabilities</a></h3>
-<ul>
-<li>Support for additional filter types and data expressions</li>
-<li>More flexible clause ordering and nesting</li>
-<li>Improved error reporting and suggestions</li>
-<li>Customizable output formats in the <code>show</code> clause</li>
-</ul>
-<h3 id="-additional-validators"><a class="header" href="#-additional-validators">📂 Additional Validators</a></h3>
-<ul>
-<li>Add support for additional file types, such as:
-<ul>
-<li>ZIP and archive formats</li>
-<li>Audio metadata (ID3, Vorbis Comments)</li>
-<li>Structured text formats (JSON, XML)</li>
-</ul>
-</li>
-<li>Improve clarity of validation errors</li>
-</ul>
-<hr />
-<h2 id="possible-future-directions"><a class="header" href="#possible-future-directions">Possible Future Directions</a></h2>
-<h3 id="-reporting-and-output"><a class="header" href="#-reporting-and-output">📊 Reporting and Output</a></h3>
-<ul>
-<li>Saved or user-defined reports</li>
-<li>Aggregated summaries</li>
-<li>Export formats: CSV, JSON, GPX</li>
-</ul>
-<h3 id="-interactive-experience"><a class="header" href="#-interactive-experience">💻 Interactive Experience</a></h3>
-<ul>
-<li>Query bookmarks or saved history</li>
-<li>Persistent history across sessions</li>
-<li>Scrollable/full-screen output views</li>
-</ul>
-<h3 id="-integration--automation"><a class="header" href="#-integration--automation">🌐 Integration &amp; Automation</a></h3>
-<ul>
-<li>JSON export for pipelines and automation</li>
-<li>Integration with backup or monitoring systems</li>
-<li>CLI-friendly structured output</li>
-</ul>
-<h3 id="-ui-and-visualization-tools"><a class="header" href="#-ui-and-visualization-tools">🧰 UI and Visualization Tools</a></h3>
-<ul>
-<li>Optional terminal-based dashboard (TUI)</li>
-<li>Future possibility of a lightweight web viewer</li>
-</ul>
-<hr />
-<h2 id="community-involvement-future"><a class="header" href="#community-involvement-future">Community Involvement (Future)</a></h2>
-<p>While FsPulse is not currently accepting contributions, this may change. Potential areas for future help include:</p>
-<ul>
-<li>Adding validators for more file types</li>
-<li>Improving query engine features</li>
-<li>Translations and localization</li>
-<li>Performance optimization for large-scale scans</li>
-</ul>
-<hr />
-<p>If you have ideas, feature requests, or feedback, please open a GitHub issue — community input is welcome.</p>
+<p>Thank you to all the open source maintainers whose work makes FsPulse possible.</p>
 
                     </main>
 

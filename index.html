@@ -178,14 +178,21 @@
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="FsPulse logo" style="width: 100%; max-width: 600px;">
 <h2 id="what-is-fspulse"><a class="header" href="#what-is-fspulse">What is FsPulse?</a></h2>
-<p><strong>FsPulse is an essential filesystem integrity tool for system administrators, home-lab enthusiasts, and anyone who takes data preservation seriously.</strong> It runs as a background service that continuously monitors your critical directories, watching for the silent threats that traditional backup systems miss: <strong>bit rot, corruption, and unexpected tampering</strong>.</p>
-<p>Your files can change without you knowing. Hard drives degrade. Ransomware alters files while preserving timestamps. FsPulse catches these problems early through two powerful detection methods:</p>
+<p><strong>FsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. FsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.</strong></p>
+<p>Your filesystem is constantly evolving—files are added, modified, and deleted. Storage grows. But <strong>invisible problems</strong> hide beneath the surface: bit rot silently corrupts data, ransomware alters files while preserving timestamps, and you don't realize directories have bloated.</p>
+<p>FsPulse gives you <strong>continuous awareness</strong> of both the visible and invisible:</p>
+<p><strong>Monitor Change &amp; Growth:</strong></p>
 <ul>
-<li><strong>Content Hashing (SHA2)</strong>: Detects when file contents change even though filesystem metadata stays the same—the telltale sign of bit rot or sophisticated tampering</li>
-<li><strong>Format Validation</strong>: Uses open-source libraries to read and validate file structures, catching corruption in FLAC audio, JPEG/PNG images, PDFs, and more</li>
+<li>Track directory sizes and growth trends over time</li>
+<li>Visualize file additions, modifications, and deletions</li>
+<li>Understand what's changing and when across all scans</li>
 </ul>
-<p>Instead of waiting for a file to fail when you need it most, FsPulse gives you <strong>continuous awareness</strong>. Run manual scans when you want, or let scheduled scans (coming soon) monitor your data automatically. When issues are detected, FsPulse's alert system flags them immediately through an elegant web interface.</p>
-<p>Whether you're protecting family photos, managing media libraries, or maintaining production servers, FsPulse provides the peace of mind that comes from knowing your data is actually intact—not just backed up.</p>
+<p><strong>Detect Integrity Issues:</strong></p>
+<ul>
+<li><strong>Content Hashing (SHA2)</strong>: Catches when file contents change even though metadata stays the same—the signature of bit rot or tampering</li>
+<li><strong>Format Validation</strong>: Reads and validates file structures to detect corruption in FLAC, JPEG, PNG, PDF, and more</li>
+</ul>
+<p>Whether you're managing storage capacity, tracking project evolution, or ensuring data integrity, FsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.</p>
 <p align="center">
   <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-scan-progress.png" alt="FsPulse Web UI - Real-time Scan Monitoring" style="width: 90%; max-width: 900px;">
   <br>
@@ -193,12 +200,14 @@
 </p>
 <h2 id="key-capabilities"><a class="header" href="#key-capabilities">Key Capabilities</a></h2>
 <ul>
-<li><strong>Dual Interface</strong> — Run as a web service with elegant browser UI, or use the full-featured CLI with interactive terminal modes</li>
-<li><strong>Integrity Detection</strong> — SHA2 hashing catches content changes even when filesystem metadata stays the same; format validators detect corruption in supported file types</li>
-<li><strong>Change Tracking</strong> — Deep directory scanning captures all additions, modifications, and deletions across scan sessions</li>
-<li><strong>Alert System</strong> — Suspicious hash changes and validation failures are flagged immediately with status management (Open/Flagged/Dismissed)</li>
-<li><strong>Powerful Query Language</strong> — SQL-inspired syntax lets you filter, sort, and analyze your data with precision</li>
-<li><strong>Production Ready</strong> — Official Docker images (multi-architecture), comprehensive documentation, and native installers</li>
+<li><strong>Continuous Monitoring</strong> — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically</li>
+<li><strong>Size &amp; Growth Tracking</strong> — Monitor directory sizes and visualize storage trends over time with dual-format units</li>
+<li><strong>Change Detection</strong> — Track all file additions, modifications, and deletions with complete historical records</li>
+<li><strong>Integrity Verification</strong> — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types</li>
+<li><strong>Historical Analysis</strong> — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts</li>
+<li><strong>Alert System</strong> — Suspicious hash changes and validation failures flagged immediately with status management</li>
+<li><strong>Powerful Query Language</strong> — SQL-inspired syntax for filtering, sorting, and analyzing your filesystem data</li>
+<li><strong>Dual Interface</strong> — Elegant web UI for visual exploration, full-featured CLI for automation and scripting</li>
 </ul>
 <h2 id="usage-modes"><a class="header" href="#usage-modes">Usage Modes</a></h2>
 <p>FsPulse offers flexibility in how you interact with it:</p>

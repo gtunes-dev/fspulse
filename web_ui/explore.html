@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Validators - FsPulse</title>
+        <title>Explore (Query Interface) - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,7 +141,7 @@
                     <h1 class="menu-title">FsPulse</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
 
@@ -175,45 +175,83 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
-<p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
-<p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
-<hr />
-<h2 id="validation-status-codes"><a class="header" href="#validation-status-codes">Validation Status Codes</a></h2>
-<p>Each item in the database has an associated <strong>validation status</strong>:</p>
-<div class="table-wrapper"><table><thead><tr><th>Status Code</th><th>Meaning</th></tr></thead><tbody>
-<tr><td><code>U</code></td><td><strong>Unknown</strong> — item has never been included in a validation scan</td></tr>
-<tr><td><code>V</code></td><td><strong>Valid</strong> — most recent validation scan found no issues</td></tr>
-<tr><td><code>I</code></td><td><strong>Invalid</strong> — validation failed; see <code>validation_error</code> field</td></tr>
-<tr><td><code>N</code></td><td><strong>No Validator</strong> — FsPulse does not currently support this file type</td></tr>
-</tbody></table>
-</div>
-<blockquote>
-<p>The <code>validation_error</code> field contains the error message returned by the validator <strong>only if</strong> the item was marked invalid. This field is empty for valid items or items with no validator.</p>
-</blockquote>
-<p>Note: Some validation "errors" surfaced by the underlying libraries may not indicate corruption, but rather unsupported edge cases or metadata formatting. Always review the error messages before assuming a file is damaged.</p>
-<hr />
-<h2 id="supported-validators"><a class="header" href="#supported-validators">Supported Validators</a></h2>
-<p>FsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.</p>
-<div class="table-wrapper"><table><thead><tr><th>File Types</th><th>Crate</th><th>Link</th></tr></thead><tbody>
-<tr><td>FLAC audio (<code>.flac</code>)</td><td><code>claxon</code></td><td><a href="https://github.com/ruuda/claxon">claxon on GitHub</a></td></tr>
-<tr><td>Images (<code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, <code>.gif</code>, <code>.tiff</code>, <code>.bmp</code>)</td><td><code>image</code></td><td><a href="https://github.com/image-rs/image">image on GitHub</a></td></tr>
-<tr><td>PDF documents (<code>.pdf</code>)</td><td><code>lopdf</code></td><td><a href="https://github.com/J-F-Liu/lopdf">lopdf on GitHub</a></td></tr>
-</tbody></table>
-</div>
-<p>Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.</p>
-<hr />
-<p>$1 See the <a href="query.html">Query Syntax</a> page for full details on query clauses and supported filters.</p>
+                        <h1 id="explore-query-interface"><a class="header" href="#explore-query-interface">Explore (Query Interface)</a></h1>
+<p>The Explore page provides a full-featured query interface for advanced data analysis using FsPulse's query language.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Explore offers a terminal-like experience in the browser, allowing you to:</p>
+<ul>
+<li>Write queries using FsPulse's SQL-inspired syntax</li>
+<li>View results in formatted tables</li>
+<li>Save and load queries</li>
+<li>Export results</li>
+</ul>
+<h2 id="query-domains"><a class="header" href="#query-domains">Query Domains</a></h2>
+<p>You can query four different data types:</p>
+<ul>
+<li><strong><code>items</code></strong>: Files and folders from the most recent scan</li>
+<li><strong><code>changes</code></strong>: Change records across all scans</li>
+<li><strong><code>scans</code></strong>: Scan metadata and statistics</li>
+<li><strong><code>roots</code></strong>: Configured scan roots</li>
+<li><strong><code>alerts</code></strong>: Integrity issues and validation failures</li>
+</ul>
+<h2 id="basic-query-examples"><a class="header" href="#basic-query-examples">Basic Query Examples</a></h2>
+<h3 id="find-invalid-items"><a class="header" href="#find-invalid-items">Find Invalid Items</a></h3>
+<pre><code>items where val:(I)
+</code></pre>
+<h3 id="recent-large-files"><a class="header" href="#recent-large-files">Recent Large Files</a></h3>
+<pre><code>items where size &gt; 1GB and item_type:(F)
+</code></pre>
+<h3 id="hash-changes"><a class="header" href="#hash-changes">Hash Changes</a></h3>
+<pre><code>changes where hash_change:(T) show item_path, hash_old, hash_new
+</code></pre>
+<h3 id="failed-scans"><a class="header" href="#failed-scans">Failed Scans</a></h3>
+<pre><code>scans where state:(E) show root_path, error, started_at
+</code></pre>
+<h2 id="query-syntax"><a class="header" href="#query-syntax">Query Syntax</a></h2>
+<p>The Explore interface uses the same query language as the CLI. See <a href="../query.html">Query Syntax</a> for complete documentation.</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<h3 id="column-management"><a class="header" href="#column-management">Column Management</a></h3>
+<ul>
+<li>Show/hide columns using the <code>show</code> clause</li>
+<li>Reorder columns with drag-and-drop (if supported)</li>
+<li>Auto-sized columns for readability</li>
+</ul>
+<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
+<p>Combine filters with <code>and</code>/<code>or</code>:</p>
+<pre><code>items where size &gt; 100MB and val:(I) and item_path contains "photos"
+</code></pre>
+<h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
+<p>Use <code>order by</code>:</p>
+<pre><code>items where item_type:(F) order by size desc
+</code></pre>
+<h3 id="result-limits"><a class="header" href="#result-limits">Result Limits</a></h3>
+<p>Limit output rows:</p>
+<pre><code>items where item_type:(F) limit 50
+</code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<ul>
+<li><strong>Advanced Analysis</strong>: Complex queries not available in other UI pages</li>
+<li><strong>Reporting</strong>: Generate custom reports for specific investigations</li>
+<li><strong>Debugging</strong>: Inspect raw data for troubleshooting</li>
+<li><strong>Learning</strong>: Understand the data model and available fields</li>
+</ul>
+<h2 id="tips"><a class="header" href="#tips">Tips</a></h2>
+<ul>
+<li>Start with simple queries and build complexity</li>
+<li>Use <code>show</code> to display only relevant columns</li>
+<li>Reference the <a href="../query.html">Query Syntax</a> guide for field names and operators</li>
+<li>Save frequently-used queries for quick access</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../web_ui/alerts.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="advanced.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../cli.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -223,11 +261,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../web_ui/alerts.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="advanced.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../cli.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -242,13 +280,13 @@
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 

@@ -335,6 +335,21 @@ docker run -e FSPULSE_ANALYSIS_THREADS=16 -e FSPULSE_ANALYSIS_HASH=md5 ...
 </tbody></table>
 </div>
 <p><strong>Note</strong>: Most users should use <code>FSPULSE_DATA_DIR</code> rather than <code>FSPULSE_DATABASE_PATH</code>. In Docker, this defaults to <code>/data</code>.</p>
+<p><strong>Database Location Precedence:</strong></p>
+<p>FsPulse determines the database location using the following order:</p>
+<ol>
+<li><code>FSPULSE_DATA_DIR</code> environment variable (if set)</li>
+<li><code>config.toml</code> <code>[database]</code> <code>path</code> setting (if configured)</li>
+<li>Platform-specific data directory (default):
+<ul>
+<li><strong>Linux</strong>: <code>~/.local/share/fspulse/</code></li>
+<li><strong>macOS</strong>: <code>~/Library/Application Support/fspulse/</code></li>
+<li><strong>Windows</strong>: <code>%LOCALAPPDATA%\fspulse\</code></li>
+<li><strong>Docker</strong>: <code>/data/</code></li>
+</ul>
+</li>
+</ol>
+<p>The database file is always named <code>fspulse.db</code> within the determined directory.</p>
 <h4 id="docker-specific-variables"><a class="header" href="#docker-specific-variables">Docker-Specific Variables</a></h4>
 <p>These variables are specific to Docker deployments:</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
@@ -399,11 +414,11 @@ fspulse serve
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="scanning.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="query.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="query.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="validators.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -413,11 +428,11 @@ fspulse serve
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="scanning.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="query.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="query.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="validators.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Validators - FsPulse</title>
+        <title>Report Commands - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,7 +141,7 @@
                     <h1 class="menu-title">FsPulse</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
 
@@ -175,45 +175,92 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
-<p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
-<p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
-<hr />
-<h2 id="validation-status-codes"><a class="header" href="#validation-status-codes">Validation Status Codes</a></h2>
-<p>Each item in the database has an associated <strong>validation status</strong>:</p>
-<div class="table-wrapper"><table><thead><tr><th>Status Code</th><th>Meaning</th></tr></thead><tbody>
-<tr><td><code>U</code></td><td><strong>Unknown</strong> — item has never been included in a validation scan</td></tr>
-<tr><td><code>V</code></td><td><strong>Valid</strong> — most recent validation scan found no issues</td></tr>
-<tr><td><code>I</code></td><td><strong>Invalid</strong> — validation failed; see <code>validation_error</code> field</td></tr>
-<tr><td><code>N</code></td><td><strong>No Validator</strong> — FsPulse does not currently support this file type</td></tr>
-</tbody></table>
-</div>
-<blockquote>
-<p>The <code>validation_error</code> field contains the error message returned by the validator <strong>only if</strong> the item was marked invalid. This field is empty for valid items or items with no validator.</p>
-</blockquote>
-<p>Note: Some validation "errors" surfaced by the underlying libraries may not indicate corruption, but rather unsupported edge cases or metadata formatting. Always review the error messages before assuming a file is damaged.</p>
-<hr />
-<h2 id="supported-validators"><a class="header" href="#supported-validators">Supported Validators</a></h2>
-<p>FsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.</p>
-<div class="table-wrapper"><table><thead><tr><th>File Types</th><th>Crate</th><th>Link</th></tr></thead><tbody>
-<tr><td>FLAC audio (<code>.flac</code>)</td><td><code>claxon</code></td><td><a href="https://github.com/ruuda/claxon">claxon on GitHub</a></td></tr>
-<tr><td>Images (<code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, <code>.gif</code>, <code>.tiff</code>, <code>.bmp</code>)</td><td><code>image</code></td><td><a href="https://github.com/image-rs/image">image on GitHub</a></td></tr>
-<tr><td>PDF documents (<code>.pdf</code>)</td><td><code>lopdf</code></td><td><a href="https://github.com/J-F-Liu/lopdf">lopdf on GitHub</a></td></tr>
-</tbody></table>
-</div>
-<p>Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.</p>
-<hr />
-<p>$1 See the <a href="query.html">Query Syntax</a> page for full details on query clauses and supported filters.</p>
+                        <h1 id="report-commands"><a class="header" href="#report-commands">Report Commands</a></h1>
+<p>FsPulse provides CLI commands for generating formatted reports about scans, roots, and system status.</p>
+<h2 id="available-reports"><a class="header" href="#available-reports">Available Reports</a></h2>
+<h3 id="scans-report"><a class="header" href="#scans-report">Scans Report</a></h3>
+<p>View scan history and details:</p>
+<pre><code class="language-sh">fspulse report scans
+</code></pre>
+<p>Options:</p>
+<ul>
+<li><code>--last N</code>: Show only the N most recent scans</li>
+<li><code>--root-id ID</code>: Filter to specific root</li>
+<li><code>--state STATE</code>: Filter by scan state (Completed, Error, Stopped)</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-sh"># Last 5 scans
+fspulse report scans --last 5
+
+# Failed scans only
+fspulse report scans --state Error
+</code></pre>
+<h3 id="roots-report"><a class="header" href="#roots-report">Roots Report</a></h3>
+<p>List configured scan roots:</p>
+<pre><code class="language-sh">fspulse report roots
+</code></pre>
+<p>Shows:</p>
+<ul>
+<li>Root ID and path</li>
+<li>Friendly name (if set)</li>
+<li>Last scan time</li>
+<li>Scan count</li>
+</ul>
+<h3 id="scan-details"><a class="header" href="#scan-details">Scan Details</a></h3>
+<p>Get detailed information about a specific scan:</p>
+<pre><code class="language-sh">fspulse report scan-detail --scan-id &lt;ID&gt;
+</code></pre>
+<p>Shows:</p>
+<ul>
+<li>Scan metadata (start/end time, duration, state)</li>
+<li>Statistics (files/folders scanned, sizes, changes)</li>
+<li>Change breakdown (adds, modifies, deletes)</li>
+<li>Alert summary</li>
+<li>Error details (if scan failed)</li>
+</ul>
+<h2 id="output-format"><a class="header" href="#output-format">Output Format</a></h2>
+<p>Reports are formatted as tables with:</p>
+<ul>
+<li>Clear headers</li>
+<li>Aligned columns</li>
+<li>Color-coded status indicators (where supported)</li>
+</ul>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<ul>
+<li><strong>Quick Status</strong>: Check recent scan activity</li>
+<li><strong>Debugging</strong>: Investigate failed scans</li>
+<li><strong>Auditing</strong>: Review scan history</li>
+<li><strong>Monitoring</strong>: Script periodic status checks</li>
+</ul>
+<h2 id="example-workflows"><a class="header" href="#example-workflows">Example Workflows</a></h2>
+<h3 id="check-for-failed-scans"><a class="header" href="#check-for-failed-scans">Check for Failed Scans</a></h3>
+<pre><code class="language-sh">fspulse report scans --state Error
+</code></pre>
+<h3 id="review-last-scan-results"><a class="header" href="#review-last-scan-results">Review Last Scan Results</a></h3>
+<pre><code class="language-sh"># Get the last scan ID
+LAST_SCAN=$(fspulse report scans --last 1 | grep -oE 'ID: [0-9]+' | cut -d' ' -f2)
+
+# Show details
+fspulse report scan-detail --scan-id $LAST_SCAN
+</code></pre>
+<h3 id="list-all-configured-roots"><a class="header" href="#list-all-configured-roots">List All Configured Roots</a></h3>
+<pre><code class="language-sh">fspulse report roots
+</code></pre>
+<h2 id="integration-with-queries"><a class="header" href="#integration-with-queries">Integration with Queries</a></h2>
+<p>For more complex analysis, use the <a href="query.html">Query Command</a>:</p>
+<pre><code class="language-sh"># Custom scan query
+fspulse query "scans where duration_secs &gt; 3600 show root_path, duration_secs, started_at"
+</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="configuration.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../cli/query.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="advanced.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../interactive_mode.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -223,11 +270,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="configuration.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../cli/query.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="advanced.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../interactive_mode.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -242,13 +289,13 @@
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 
