@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- MD5 hash function removed from config and documentation (it was only partially supported)
+
 ## [v0.2.5] - 2025-11-09
 
 ### Added

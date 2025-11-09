@@ -72,45 +72,19 @@ impl LoggingConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum HashFunc {
-    MD5,
-    SHA2,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AnalysisConfig {
     threads: usize,
-    hash: String,
 }
 
 impl AnalysisConfig {
-    const HASH_FUNCS: [&str; 2] = ["md5", "sha2"];
-
-    const HASH_MD5: &str = "md5";
-    const HASH_SHA2: &str = "sha2";
-
     pub fn threads(&self) -> usize {
         self.threads
-    }
-
-    pub fn hash_func(&self) -> HashFunc {
-        // We can't easily pre-cache the enum because
-        // the classes here are serialized - this
-        // approach is fine - we should always have a valid
-        // value in "hash" so we just check for md5 and treat
-        // anything else like SHA2 which is the same as saying
-        // treat sha2 as sha2 but we really never want to panic
-        match self.hash.as_str() {
-            Self::HASH_MD5 => HashFunc::MD5,
-            _ => HashFunc::SHA2,
-        }
     }
 
     fn default() -> Self {
         AnalysisConfig {
             threads: 8,
-            hash: Self::HASH_SHA2.to_owned(),
         }
     }
 
@@ -120,23 +94,10 @@ impl AnalysisConfig {
                 self.threads = threads;
             }
         }
-        if let Ok(val) = env::var("FSPULSE_ANALYSIS_HASH") {
-            self.hash = val;
-        }
         self
     }
 
     fn ensure_valid(&mut self) {
-        let str_original = self.hash.clone();
-        self.hash = self.hash.trim().to_ascii_lowercase();
-        if !Self::HASH_FUNCS.contains(&self.hash.as_str()) {
-            eprintln!(
-                "Config error: hash of '{}' is invalid - using default of '{}'",
-                str_original,
-                Self::HASH_SHA2
-            );
-            self.hash = Self::HASH_SHA2.to_owned();
-        }
     }
 }
 
@@ -320,33 +281,11 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    #[test]
-    fn test_hash_func_enum() {
-        let config = AnalysisConfig {
-            threads: 4,
-            hash: "md5".to_string(),
-        };
-        assert!(matches!(config.hash_func(), HashFunc::MD5));
-
-        let config = AnalysisConfig {
-            threads: 4,
-            hash: "sha2".to_string(),
-        };
-        assert!(matches!(config.hash_func(), HashFunc::SHA2));
-
-        // Default to SHA2 for unknown values
-        let config = AnalysisConfig {
-            threads: 4,
-            hash: "unknown".to_string(),
-        };
-        assert!(matches!(config.hash_func(), HashFunc::SHA2));
-    }
 
     #[test]
     fn test_analysis_config_default() {
         let config = AnalysisConfig::default();
         assert_eq!(config.threads(), 8);
-        assert!(matches!(config.hash_func(), HashFunc::SHA2));
     }
 
     #[test]
@@ -382,20 +321,8 @@ mod tests {
     fn test_analysis_config_ensure_valid() {
         let mut config = AnalysisConfig {
             threads: 4,
-            hash: "  SHA2  ".to_string(),
         };
         config.ensure_valid();
-        assert_eq!(config.hash, "sha2");
-    }
-
-    #[test]
-    fn test_analysis_config_invalid_hash() {
-        let mut config = AnalysisConfig {
-            threads: 4,
-            hash: "invalid_hash".to_string(),
-        };
-        config.ensure_valid();
-        assert_eq!(config.hash, "sha2"); // Should default to HASH_SHA2
     }
 
     #[test]
@@ -407,7 +334,6 @@ mod tests {
             },
             analysis: AnalysisConfig {
                 threads: 16,
-                hash: "md5".to_string(),
             },
             server: ServerConfig {
                 port: 8080,
@@ -420,7 +346,6 @@ mod tests {
         assert!(toml_str.contains("fspulse = \"debug\""));
         assert!(toml_str.contains("lopdf = \"warn\""));
         assert!(toml_str.contains("threads = 16"));
-        assert!(toml_str.contains("hash = \"md5\""));
         // database should not be serialized when None
         assert!(!toml_str.contains("[database]"));
     }
@@ -434,7 +359,6 @@ lopdf = "info"
 
 [analysis]
 threads = 12
-hash = "sha2"
 
 [server]
 port = 8080
@@ -445,7 +369,6 @@ host = "127.0.0.1"
         assert_eq!(config.logging.fspulse, "trace");
         assert_eq!(config.logging.lopdf, "info");
         assert_eq!(config.analysis.threads, 12);
-        assert_eq!(config.analysis.hash, "sha2");
     }
 
     #[test]
@@ -486,7 +409,6 @@ lopdf = "warn"
 
 [analysis]
 threads = 12
-hash = "sha2"
 
 [server]
 port = 3000
@@ -513,7 +435,6 @@ lopdf = "warn"
 
 [analysis]
 threads = 6
-hash = "md5"
 
 [server]
 port = 9000
@@ -532,7 +453,6 @@ host = "localhost"
         assert_eq!(config.logging.fspulse, "info");
         assert_eq!(config.logging.lopdf, "error");
         assert_eq!(config.analysis.threads, 8);
-        assert!(matches!(config.analysis.hash_func(), HashFunc::SHA2));
         assert_eq!(config.server.port, 8080);
         assert_eq!(config.server.host, "127.0.0.1");
         assert!(config.database.is_none());
@@ -547,7 +467,6 @@ lopdf = "error"
 
 [analysis]
 threads = 8
-hash = "sha2"
 
 [server]
 port = 8080
@@ -597,16 +516,13 @@ path = "/custom/db/path"
     #[serial]
     fn test_analysis_config_env_overrides() {
         env::set_var("FSPULSE_ANALYSIS_THREADS", "16");
-        env::set_var("FSPULSE_ANALYSIS_HASH", "md5");
 
         let config = AnalysisConfig::default().with_env_overrides();
 
         assert_eq!(config.threads, 16);
-        assert_eq!(config.hash, "md5");
 
         // Clean up
         env::remove_var("FSPULSE_ANALYSIS_THREADS");
-        env::remove_var("FSPULSE_ANALYSIS_HASH");
     }
 
     #[test]

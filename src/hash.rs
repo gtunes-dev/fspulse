@@ -9,28 +9,15 @@ use std::{
 };
 
 use hex::encode;
-use md5::{Digest, Md5};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 use crate::{
-    config::HashFunc,
     error::FsPulseError,
 };
 
 pub struct Hash;
 
 impl Hash {
-    pub fn compute_hash(
-        path: &Path,
-        hash_func: HashFunc,
-        cancel_token: &Arc<AtomicBool>,
-    ) -> Result<String, FsPulseError> {
-        match hash_func {
-            HashFunc::MD5 => Self::compute_md5_hash(path, cancel_token),
-            HashFunc::SHA2 => Self::compute_sha2_256_hash(path, cancel_token),
-        }
-    }
-
     pub fn compute_sha2_256_hash(
         path: &Path,
         cancel_token: &Arc<AtomicBool>,
@@ -62,46 +49,6 @@ impl Hash {
 
         Ok(encode(hash))
     }
-
-    pub fn compute_md5_hash(
-        path: &Path,
-        cancel_token: &Arc<AtomicBool>,
-    ) -> Result<String, FsPulseError> {
-        let f = File::open(path)?;
-
-        let mut reader = BufReader::new(f);
-        let mut hasher = Md5::new();
-        let mut buffer = [0; 8192]; // Read in 8KB chunks
-
-        let mut loop_counter = 0;
-
-        loop {
-            loop_counter += 1;
-            // Every 256 loops, check for cancellation
-            if loop_counter % 256 == 0 && cancel_token.load(Ordering::Acquire) {
-                return Err(FsPulseError::ScanCancelled);
-            }
-
-            let bytes_read = reader.read(&mut buffer)?;
-            if bytes_read == 0 {
-                break;
-            }
-            hasher.update(&buffer[..bytes_read]);
-        }
-
-        let hash = hasher.finalize();
-
-        Ok(encode(hash))
-    }
-
-    /*
-    pub fn short_md5<'a>(hash: &Option<&'a str>) -> &'a str {
-        match hash {
-            Some(hash) => &hash[..hash.len().min(7)],
-            None => "-",
-        }
-    }
-    */
 }
 
 #[cfg(test)]
@@ -109,22 +56,6 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
-
-    #[test]
-    fn test_compute_md5_hash_empty_file() {
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file
-            .write_all(b"")
-            .expect("Failed to write to temp file");
-
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_md5_hash(temp_file.path(), &cancel_token);
-
-        assert!(result.is_ok());
-        let hash = result.unwrap();
-        // MD5 of empty string is d41d8cd98f00b204e9800998ecf8427e
-        assert_eq!(hash, "d41d8cd98f00b204e9800998ecf8427e");
-    }
 
     #[test]
     fn test_compute_sha2_256_hash_empty_file() {
@@ -144,22 +75,6 @@ mod tests {
             hash,
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
-    }
-
-    #[test]
-    fn test_compute_md5_hash_known_content() {
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file
-            .write_all(b"hello world")
-            .expect("Failed to write to temp file");
-
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_md5_hash(temp_file.path(), &cancel_token);
-
-        assert!(result.is_ok());
-        let hash = result.unwrap();
-        // MD5 of "hello world" is 5eb63bbbe01eeed093cb22bb8f5acdc3
-        assert_eq!(hash, "5eb63bbbe01eeed093cb22bb8f5acdc3");
     }
 
     #[test]
@@ -183,26 +98,6 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_hash_with_md5_func() {
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        temp_file
-            .write_all(b"test")
-            .expect("Failed to write to temp file");
-
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_hash(
-            temp_file.path(),
-            HashFunc::MD5,
-            &cancel_token,
-        );
-
-        assert!(result.is_ok());
-        let hash = result.unwrap();
-        // MD5 of "test" is 098f6bcd4621d373cade4e832627b4f6
-        assert_eq!(hash, "098f6bcd4621d373cade4e832627b4f6");
-    }
-
-    #[test]
     fn test_compute_hash_with_sha2_func() {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
         temp_file
@@ -210,9 +105,8 @@ mod tests {
             .expect("Failed to write to temp file");
 
         let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_hash(
+        let result = Hash::compute_sha2_256_hash(
             temp_file.path(),
-            HashFunc::SHA2,
             &cancel_token,
         );
 
@@ -230,31 +124,12 @@ mod tests {
         let nonexistent_path = std::path::Path::new("/this/path/does/not/exist.txt");
         let cancel_token = Arc::new(AtomicBool::new(false));
 
-        let result = Hash::compute_hash(
+        let result = Hash::compute_sha2_256_hash(
             nonexistent_path,
-            HashFunc::MD5,
             &cancel_token,
         );
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), FsPulseError::IoError(_)));
-    }
-
-    #[test]
-    fn test_compute_md5_hash_cancellation() {
-        // Create a large file to ensure cancellation check is triggered
-        // Need at least 256 * 8KB = 2MB to trigger the cancellation check
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        let large_data = vec![0u8; 3_000_000]; // 3MB
-        temp_file
-            .write_all(&large_data)
-            .expect("Failed to write to temp file");
-
-        let cancel_token = Arc::new(AtomicBool::new(true)); // Set to true to trigger cancellation
-
-        let result = Hash::compute_md5_hash(temp_file.path(), &cancel_token);
-
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), FsPulseError::ScanCancelled));
     }
 
     #[test]

@@ -19,7 +19,7 @@
 
 use crate::alerts::Alerts;
 use crate::changes::ChangeType;
-use crate::config::{HashFunc, CONFIG};
+use crate::config::CONFIG;
 use crate::hash::Hash;
 use crate::items::{AnalysisItem, Item, ItemType};
 use crate::progress::ProgressReporter;
@@ -146,10 +146,7 @@ impl Scanner {
         Ok(())
     }
 
-    fn scan_directory_recursive(
-        ctx: &mut ScanContext,
-        path: &Path,
-    ) -> Result<i64, FsPulseError> {
+    fn scan_directory_recursive(ctx: &mut ScanContext, path: &Path) -> Result<i64, FsPulseError> {
         // Check for cancellation every 100 items
         *ctx.items_processed += 1;
         if *ctx.items_processed % 100 == 0 && ctx.cancel_token.load(Ordering::Acquire) {
@@ -169,10 +166,7 @@ impl Scanner {
 
             if item_metadata.is_dir() {
                 // Recursively scan the subdirectory and get its size
-                let subdir_size = Scanner::scan_directory_recursive(
-                    ctx,
-                    &item.path(),
-                )?;
+                let subdir_size = Scanner::scan_directory_recursive(ctx, &item.path())?;
 
                 // Handle the subdirectory with its computed size
                 let returned_size = Scanner::handle_scan_item(
@@ -240,10 +234,7 @@ impl Scanner {
 
         // Recursively scan the root directory and get the total size
         // Note: We don't store the root directory itself as an item in the database
-        let total_size = Scanner::scan_directory_recursive(
-            &mut ctx,
-            &root_path_buf,
-        )?;
+        let total_size = Scanner::scan_directory_recursive(&mut ctx, &root_path_buf)?;
 
         // The total_size column is set on the scan row before advancing to the next phase
         // This means it doesn't have to be computed or set later in the scan, but it does need
@@ -317,13 +308,11 @@ impl Scanner {
         let items_remaining = analyze_total.saturating_sub(analyze_done); // avoids underflow
         let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
 
-        let (thread_count, hash_func) = {
-            let config = CONFIG.get().expect("Config not initialized");
-            let thread_count = config.analysis.threads();
-            let hash_func = config.analysis.hash_func();
-
-            (thread_count, hash_func)
-        };
+        let thread_count = CONFIG
+            .get()
+            .expect("Config not initialized")
+            .analysis
+            .threads();
 
         let num_threads = cmp::min(items_remaining_usize, thread_count);
         let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread
@@ -349,7 +338,6 @@ impl Scanner {
                         thread_index,
                         &reporter_clone,
                         &cancel_token_clone,
-                        hash_func,
                     );
                 }
                 reporter_clone.set_thread_idle(thread_index);
@@ -416,7 +404,6 @@ impl Scanner {
         thread_index: usize,
         reporter: &Arc<ProgressReporter>,
         cancel_token: &Arc<AtomicBool>,
-        hash_func: HashFunc,
     ) {
         // TODO: Improve the error handling for all analysis. Need to differentiate
         // between file system errors and actual content errors
@@ -450,17 +437,16 @@ impl Scanner {
                 return;
             }
 
-            new_hash =
-                match Hash::compute_hash(path, hash_func, cancel_token) {
-                    Ok(hash_s) => Some(hash_s),
-                    Err(error) => {
-                        error!("Error hashing '{}': {}", &display_path, error);
-                        // If hashing fails, we set the hash to the error string
-                        // This isn't great, but it allows us to have a string value when stopping a scan
-                        // and leaves an error artifact behind for investigation
-                        Some(error.to_string())
-                    }
-                };
+            new_hash = match Hash::compute_sha2_256_hash(path, cancel_token) {
+                Ok(hash_s) => Some(hash_s),
+                Err(error) => {
+                    error!("Error hashing '{}': {}", &display_path, error);
+                    // If hashing fails, we set the hash to the error string
+                    // This isn't great, but it allows us to have a string value when stopping a scan
+                    // and leaves an error artifact behind for investigation
+                    Some(error.to_string())
+                }
+            };
         }
 
         let mut new_val = ValidationState::Unknown;
@@ -552,8 +538,7 @@ impl Scanner {
                 return Ok(existing_item.size().unwrap_or(0));
             }
 
-            let meta_change =
-                existing_item.mod_date() != mod_date || existing_item.size() != size;
+            let meta_change = existing_item.mod_date() != mod_date || existing_item.size() != size;
 
             if existing_item.is_ts() {
                 // Rehydrate a tombstone

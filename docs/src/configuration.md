@@ -56,7 +56,6 @@ host = "127.0.0.1"
 
 [analysis]
 threads = 8
-hash = "sha2"
 ```
 
 ---
@@ -100,11 +99,7 @@ The `[analysis]` section controls how many threads are used during the **analysi
 
 - `threads`: number of worker threads (default: `8`)
 
-You can adjust this based on your system's CPU count or performance needs.
-
-- `hash`: hash function to use when hashing files. Values can be `sha2` or `md5` (default: `sha2`)
-
-Sha2 is more secure but is slower. It is appropriate for most users.
+You can adjust this based on your system's CPU count or performance needs. FsPulse uses SHA-256 for file hashing to detect content changes and verify integrity.
 
 ---
 
@@ -172,21 +167,19 @@ docker run -e FSPULSE_LOGGING_FSPULSE=debug ...
 
 #### Analysis Settings
 
-Configure scan behavior, hashing, and validation:
+Configure scan behavior and performance:
 
 | Variable | Default | Valid Values | Description |
 |----------|---------|--------------|-------------|
 | `FSPULSE_ANALYSIS_THREADS` | `8` | 1-256 | Number of worker threads for analysis phase (hashing/validation) |
-| `FSPULSE_ANALYSIS_HASH` | `sha2` | `sha2`, `md5` | Hash algorithm (sha2 is more secure, md5 is faster) |
 
 **Examples:**
 ```bash
-# Use 16 threads with MD5 hashing
+# Use 16 threads for faster scanning
 export FSPULSE_ANALYSIS_THREADS=16
-export FSPULSE_ANALYSIS_HASH=md5
 
 # Docker
-docker run -e FSPULSE_ANALYSIS_THREADS=16 -e FSPULSE_ANALYSIS_HASH=md5 ...
+docker run -e FSPULSE_ANALYSIS_THREADS=16 ...
 ```
 
 #### Database Settings
