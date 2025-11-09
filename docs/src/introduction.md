@@ -2,6 +2,12 @@
 
 <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="FsPulse logo" style="width: 100%; max-width: 600px;">
 
+> **Read-Only Guarantee.**
+> FsPulse **never modifies your files**. It requires only read access to the directories you configure for scanning. Write access is required only for FsPulse's own database, configuration files, and logs — never for your data.
+
+> **Local-Only Guarantee.**
+> FsPulse makes no outbound network requests. All functionality runs entirely on your local system, with no external dependencies or telemetry.
+
 ## What is FsPulse?
 
 **FsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. FsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.**

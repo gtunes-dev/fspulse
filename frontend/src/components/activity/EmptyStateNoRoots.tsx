@@ -18,6 +18,11 @@ export function EmptyStateNoRoots() {
             <Button size="lg" onClick={() => navigate('/monitor')}>
               Go to Monitor
             </Button>
+            <div className="mt-8 text-sm text-muted-foreground space-y-1">
+              <p>FsPulse never modifies your files</p>
+              <p>FsPulse makes no outbound requests</p>
+              <p>FsPulse only scans what you tell it to</p>
+            </div>
           </div>
         </CardContent>
       </Card>

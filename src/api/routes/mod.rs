@@ -5,3 +5,4 @@ pub mod scans;
 pub mod roots;
 pub mod schedules;
 pub mod items;
+pub mod database;

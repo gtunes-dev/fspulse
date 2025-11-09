@@ -20,6 +20,7 @@ static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
     Mutex::new(ScanManager {
         current_scan: None,
         broadcaster,
+        db_is_compacting: false,
     })
 });
 
@@ -27,6 +28,7 @@ static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
 pub struct ScanManager {
     current_scan: Option<ActiveScanInfo>,
     broadcaster: broadcast::Sender<BroadcastMessage>,
+    db_is_compacting: bool,
 }
 
 /// Information about the currently running scan
@@ -145,8 +147,8 @@ impl ScanManager {
     /// Called with mutex already held
     /// Updates self.current_scan if scan started
     fn try_start_next_scan(&mut self, db: &Database) -> Result<(), FsPulseError> {
-        // Already running?
-        if self.current_scan.is_some() {
+        // Already running or database compaction in progress?
+        if self.current_scan.is_some() || self.db_is_compacting {
             return Ok(());
         }
 
@@ -391,5 +393,27 @@ impl ScanManager {
             root_id: active.root_id,
             root_path: active.root_path.clone(),
         })
+    }
+
+    /// Compact the database
+    /// Returns error if a scan is currently running
+    /// Blocks until compaction is complete
+    pub fn compact_db(db: &mut Database) -> Result<(), String> {
+        // Acquire mutex and check state
+        let mut manager = Self::instance().lock().unwrap();
+        if manager.current_scan.is_some() {
+            return Err("Cannot compact: scan in progress".to_string());
+        }
+        manager.db_is_compacting = true;
+        drop(manager); // Release mutex before long operation
+
+        // Call compact directly
+        let result = db.compact();
+
+        // Set flag back (whether success or failure)
+        let mut manager = Self::instance().lock().unwrap();
+        manager.db_is_compacting = false;
+
+        result.map_err(|e| e.to_string())
     }
 }

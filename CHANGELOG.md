@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Database compaction feature in Settings page to reclaim wasted space from deleted data and migrations
+- Privacy guarantees prominently displayed in README and documentation (read-only and local-only)
+- Privacy guarantees shown on Activity page first-run experience for new users
+
 ### Fixed
 - CI workflow now sets environment variables for git metadata to ensure correct branch name in version info instead of "HEAD"
 

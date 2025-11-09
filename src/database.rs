@@ -261,6 +261,50 @@ impl Database {
         }
     }
 
+    /// Get database statistics including size and wasted space
+    pub fn get_stats(&self) -> Result<DbStats, FsPulseError> {
+        let conn = self.conn();
+
+        // Get SQLite page information
+        let page_count: i64 = conn
+            .pragma_query_value(None, "page_count", |row| row.get(0))
+            .map_err(FsPulseError::DatabaseError)?;
+        let page_size: i64 = conn
+            .pragma_query_value(None, "page_size", |row| row.get(0))
+            .map_err(FsPulseError::DatabaseError)?;
+        let freelist_count: i64 = conn
+            .pragma_query_value(None, "freelist_count", |row| row.get(0))
+            .map_err(FsPulseError::DatabaseError)?;
+
+        let total_size = (page_count * page_size) as u64;
+        let wasted_size = (freelist_count * page_size) as u64;
+
+        Ok(DbStats {
+            path: self.path.clone(),
+            total_size,
+            wasted_size,
+        })
+    }
+
+    /// Compact the database using VACUUM
+    /// This requires exclusive access and may take several minutes for large databases
+    pub fn compact(&mut self) -> Result<(), FsPulseError> {
+        info!("Starting database compaction");
+        self.conn_mut()
+            .execute("VACUUM", [])
+            .map_err(FsPulseError::DatabaseError)?;
+        info!("Database compaction completed");
+        Ok(())
+    }
+
+}
+
+/// Database statistics
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DbStats {
+    pub path: String,
+    pub total_size: u64,
+    pub wasted_size: u64,
 }
 
 #[cfg(test)]

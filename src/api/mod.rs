@@ -8,3 +8,4 @@ pub use routes::scans;
 pub use routes::roots;
 pub use routes::schedules;
 pub use routes::items;
+pub use routes::database;

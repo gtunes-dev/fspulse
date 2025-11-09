@@ -137,6 +137,10 @@ impl WebServer {
             // Item endpoints
             .route("/api/items/{item_id}/size-history", get(api::items::get_item_size_history))
 
+            // Database endpoints
+            .route("/api/database/stats", get(api::database::get_database_stats))
+            .route("/api/database/compact", post(api::database::compact_database))
+
             // WebSocket routes
             .route("/ws/scans/progress", get(api::scans::scan_progress_ws))
 
