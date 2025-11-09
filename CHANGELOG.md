@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- CI workflow now sets environment variables for git metadata to ensure correct branch name in version info instead of "HEAD"
+
 ## [v0.2.4] - 2025-11-09
 
 ### Added
