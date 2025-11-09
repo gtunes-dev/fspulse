@@ -35,17 +35,7 @@ macOS builds include both Intel (x86_64) and Apple Silicon (ARM64) binaries.
 
 **Note:** All web UI assets are embedded in the binary—no external files or dependencies required.
 
-## Build from Source
-
-Clone and build with Cargo:
-
-```sh
-git clone https://github.com/gtunes-dev/fspulse.git
-cd fspulse
-cargo build --release
-./target/release/fspulse --help
-```
-
 ## Next Steps
 
-After installation, proceed to [First Steps](first_steps.md) to configure and start using FsPulse.
+- **Want to build from source?** See [Building from Source](building.md)
+- **Ready to start using FsPulse?** Proceed to [First Steps](first_steps.md)

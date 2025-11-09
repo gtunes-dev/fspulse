@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Build script (`scripts/build.sh`) automates frontend and backend build process
+- Build-time validation in `build.rs` ensures frontend assets are built before Rust compilation
+- Comprehensive "Building from Source" documentation with troubleshooting guide
+
 ### Fixed
 - Activity page first-run UX: Manual Scan button now visible when roots are configured but no scans exist
 - Activity page now shows normal operational state when scans exist even if all roots have been deleted

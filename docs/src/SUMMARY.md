@@ -3,6 +3,7 @@
 - [Introduction](introduction.md)
 - [Getting Started](getting_started.md)
   - [Installation](getting_started/installation.md)
+  - [Building from Source](getting_started/building.md)
   - [Docker Deployment](docker.md)
   - [First Steps](getting_started/first_steps.md)
 - [Scanning Concepts](scanning.md)
