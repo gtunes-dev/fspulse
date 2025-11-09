@@ -10,6 +10,10 @@
 
 ---
 
+> **📖 FsPulse has comprehensive documentation.** [Jump straight to the docs →](https://gtunes-dev.github.io/fspulse/)
+
+---
+
 ## What is FsPulse?
 
 **FsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. FsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.**
