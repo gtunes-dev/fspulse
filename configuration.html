@@ -218,7 +218,6 @@ host = "127.0.0.1"
 
 [analysis]
 threads = 8
-hash = "sha2"
 </code></pre>
 <hr />
 <h2 id="logging"><a class="header" href="#logging">Logging</a></h2>
@@ -256,11 +255,7 @@ hash = "sha2"
 <ul>
 <li><code>threads</code>: number of worker threads (default: <code>8</code>)</li>
 </ul>
-<p>You can adjust this based on your system's CPU count or performance needs.</p>
-<ul>
-<li><code>hash</code>: hash function to use when hashing files. Values can be <code>sha2</code> or <code>md5</code> (default: <code>sha2</code>)</li>
-</ul>
-<p>Sha2 is more secure but is slower. It is appropriate for most users.</p>
+<p>You can adjust this based on your system's CPU count or performance needs. FsPulse uses SHA-256 for file hashing to detect content changes and verify integrity.</p>
 <hr />
 <h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
 <p>All configuration settings can be overridden using environment variables. This is particularly useful for:</p>
@@ -313,19 +308,17 @@ export FSPULSE_LOGGING_LOPDF=error
 docker run -e FSPULSE_LOGGING_FSPULSE=debug ...
 </code></pre>
 <h4 id="analysis-settings-1"><a class="header" href="#analysis-settings-1">Analysis Settings</a></h4>
-<p>Configure scan behavior, hashing, and validation:</p>
+<p>Configure scan behavior and performance:</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-256</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
-<tr><td><code>FSPULSE_ANALYSIS_HASH</code></td><td><code>sha2</code></td><td><code>sha2</code>, <code>md5</code></td><td>Hash algorithm (sha2 is more secure, md5 is faster)</td></tr>
 </tbody></table>
 </div>
 <p><strong>Examples:</strong></p>
-<pre><code class="language-bash"># Use 16 threads with MD5 hashing
+<pre><code class="language-bash"># Use 16 threads for faster scanning
 export FSPULSE_ANALYSIS_THREADS=16
-export FSPULSE_ANALYSIS_HASH=md5
 
 # Docker
-docker run -e FSPULSE_ANALYSIS_THREADS=16 -e FSPULSE_ANALYSIS_HASH=md5 ...
+docker run -e FSPULSE_ANALYSIS_THREADS=16 ...
 </code></pre>
 <h4 id="database-settings"><a class="header" href="#database-settings">Database Settings</a></h4>
 <p>Control database location (advanced):</p>
