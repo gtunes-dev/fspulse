@@ -6,19 +6,19 @@ FsPulse scans are at the core of how it tracks changes to the file system over t
 
 ## Initiating a Scan
 
-**Scans are initiated exclusively through the web UI:**
+**FsPulse runs as a web service, and scans are initiated through the web UI:**
 
 1. Start the server: `fspulse serve`
 2. Open http://localhost:8080 in your browser (or the custom port you've configured)
-3. Navigate to the scan management interface
+3. Navigate to the **Monitor** page
 4. Configure scan options (hashing, validation)
-5. Start the scan and monitor real-time progress
+5. Start the scan and monitor real-time progress on the **Home** page
 
-The web UI supports both scheduled automatic scans and manual on-demand scans. You can create scan schedules for recurring scans or initiate individual scans as needed.
+The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules (daily, weekly, monthly, or custom intervals) or initiate individual scans as needed. See [Monitor & Scheduling](web_ui/monitor.md) for details.
 
 Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.
 
-**Docker users**: When running FsPulse in Docker, the container runs in server mode by default. Access the web UI to manage and initiate scans. See the [Docker Deployment](docker.md) chapter for details.
+> **Note**: FsPulse is designed with the web UI as the primary interface for all users. A [command-line interface](cli.md) is also available for expert users who prefer terminal workflows or need to integrate FsPulse into scripts and automation, but all functionality is accessible through the web UI.
 
 ---
 
@@ -28,14 +28,21 @@ Hashing is a key capabilities of FsPulse.
 
 FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents.
 The intent of hashing is to enable the detection of changes to file content in cases where the modification
-date and file size have not changed. One example of a case where this might occur is data decay. FsPulse
-can be used to create a hash baseline by scanning with the "hash" option. By default, a "hash" scan will
-compute hashes for items that have never been hashed or whose file size or modification date has changed.
-If the "hash-all" flag is passed along with the "hash" flag, FsPulse will hash all files, including those
-that have been previously hashed. If a hash is detected to have changed, a change record will be created.
+date and file size have not changed. One example of a case where this might occur is bit rot (data decay).
 
-The query below, for example, will find and show changes where file metadata has not changed, but the
-file's hash has changed.
+When configuring a scan in the web UI, you can enable hashing with these options:
+- **Hash changed items** (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed
+- **Hash all items**: Hash all files, including those that have been previously hashed
+
+If a hash is detected to have changed, a change record is created and an alert is generated (see [Alerts](web_ui/alerts.md)).
+
+### Finding Hash Changes
+
+You can investigate hash changes through the web UI:
+- **[Alerts Page](web_ui/alerts.md)**: Shows suspicious hash changes where file metadata hasn't changed
+- **[Explore Page](web_ui/explore.md)**: Run custom queries to analyze hash changes
+
+For CLI users or automation, use the query command:
 
   ```sh
   fspulse query 'changes where meta_change:(F), hash_change:(T) show default, item_path order by change_id desc'
@@ -49,39 +56,44 @@ FsPulse uses community-contributed libraries to "validate" files. Validation is 
 opening and reading or traversing the file. These community libraries raise a variety of "errors"
 when invalid content is encountered.
 
-FsPulse's ability to validate files is limited to the capabilities of the libraries that it uses
+FsPulse's ability to validate files is limited to the capabilities of the libraries that it uses,
 and these libraries vary in terms of completeness and accuracy. In some cases, such as FsPulse's use
 of lopdf to validate PDF files, false positive "errors" may be detected as a consequence of lopdf
 encountering PDF file contents it does not yet understand. Despite these limitations, FsPulse
 offers a unique and effective view into potential validity issues in files.
 
-As with hash options, FsPulse has two command-line flags related to validation: "validate" and "validate-all".
+See [Validators](validators.md) for the complete list of supported file types.
 
-Passing "validate" will cause FsPulse to perform a validation pass on all files that have never been validated
-or have changed in terms of modification date or size. Passing "validate-all" will cause FsPulse to validate
-all files.
+When configuring a scan in the web UI, you can enable validation with these options:
+- **Validate changed items** (default): Validate files that have never been validated or have changed in terms of modification date or size
+- **Validate all items**: Validate all files regardless of previous validation status
+
+### Validation States
 
 Validation states are stored in the database as:
-- U: Unknown. No validation has been performed
-- N: No Validator. No validator exists for this file type
-- V: Valid. Validation was performed and no errors were encountered
-- I: Invalid. Validation was performed and an error was encountered
+- **U**: Unknown. No validation has been performed
+- **N**: No Validator. No validator exists for this file type
+- **V**: Valid. Validation was performed and no errors were encountered
+- **I**: Invalid. Validation was performed and an error was encountered
 
-In the case of 'I', the validation error will be stored as val_error on the Item alongside the
-validation state, which is stored as val. When an item's validation state changes in any way,
-the change is recorded on a change record and the old and new states are both available on that
-record. 
+In the case of 'I' (Invalid), the validation error message is stored alongside the validation state. When an item's validation state changes, the change is recorded and both old and new states are available for analysis.
 
-If a validation pass produces an error which is identical to the previously seen error, no change
-is recorded.
+If a validation pass produces an error identical to a previously seen error, no new change is recorded.
 
-An example of a query that displays validation state changes is:
+### Finding Validation Issues
+
+Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:
+- **[Alerts Page](web_ui/alerts.md)**: Shows all items with validation failures, with filtering and status management
+- **[Browse Page](web_ui/browse.md)**: Click any item to see its validation status and error details
+- **[Explore Page](web_ui/explore.md)**: Run custom queries to analyze validation patterns
+
+For CLI users or automation, query validation state changes:
 
  ```sh
   fspulse query 'changes where val_change:(T) show default, item_path order by change_id desc'
   ```
 
-  Additional queries can be easily composed which filter on specific old and new validation states.
+Additional queries can filter on specific old and new validation states. See [Query Syntax](query.md) for details.
 
 ---
 
@@ -138,17 +150,17 @@ Moved files appear as deletes and adds, as FsPulse does not yet track move opera
 
 ### 3. Analysis
 
-This phase runs only if hashing and/or validation is enabled when configuring the scan in the web UI.
+This phase runs only if hashing and/or validation is enabled when configuring the scan (see [Hashing](#hashing) and [Validating](#validating) above).
 
 - **Hashing** — Computes a SHA2 hash of file contents
-- **Validation** — Uses file-type-specific validators to check content integrity
+- **Validation** — Uses file-type-specific validators to check content integrity (see [Validators](validators.md))
 
 If either the hash or validation result changes:
 
 - If an **Add** or **Modify** change already exists, the new data is attached to it
 - Otherwise, a new **Modify** change is created
 
-Each change stores both the **old** and **new** values for comparison.
+Each change record stores both the **old** and **new** values for comparison, allowing you to track exactly what changed.
 
 ---
 

@@ -200,6 +200,20 @@ Control database location (advanced):
 
 **Note**: Most users should use `FSPULSE_DATA_DIR` rather than `FSPULSE_DATABASE_PATH`. In Docker, this defaults to `/data`.
 
+**Database Location Precedence:**
+
+FsPulse determines the database location using the following order:
+
+1. `FSPULSE_DATA_DIR` environment variable (if set)
+2. `config.toml` `[database]` `path` setting (if configured)
+3. Platform-specific data directory (default):
+   - **Linux**: `~/.local/share/fspulse/`
+   - **macOS**: `~/Library/Application Support/fspulse/`
+   - **Windows**: `%LOCALAPPDATA%\fspulse\`
+   - **Docker**: `/data/`
+
+The database file is always named `fspulse.db` within the determined directory.
+
 #### Docker-Specific Variables
 
 These variables are specific to Docker deployments:

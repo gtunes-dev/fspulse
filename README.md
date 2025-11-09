@@ -12,16 +12,22 @@
 
 ## What is FsPulse?
 
-**FsPulse is an essential filesystem integrity tool for system administrators, home-lab enthusiasts, and anyone who takes data preservation seriously.** It runs as a background service that continuously monitors your critical directories, watching for the silent threats that traditional backup systems miss: **bit rot, corruption, and unexpected tampering**.
+**FsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. FsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.**
 
-Your files can change without you knowing. Hard drives degrade. Ransomware alters files while preserving timestamps. FsPulse catches these problems early through two powerful detection methods:
+Your filesystem is constantly evolving—files are added, modified, and deleted. Storage grows. But **invisible problems** hide beneath the surface: bit rot silently corrupts data, ransomware alters files while preserving timestamps, and you don't realize directories have bloated.
 
-- **Content Hashing (SHA2)**: Detects when file contents change even though filesystem metadata stays the same—the telltale sign of bit rot or sophisticated tampering
-- **Format Validation**: Uses open-source libraries to read and validate file structures, catching corruption in FLAC audio, JPEG/PNG images, PDFs, and more
+FsPulse gives you **continuous awareness** of both the visible and invisible:
 
-Instead of waiting for a file to fail when you need it most, FsPulse gives you **continuous awareness**. Run manual scans when you want, or let scheduled scans (coming soon) monitor your data automatically. When issues are detected, FsPulse's alert system flags them immediately through an elegant web interface.
+**Monitor Change & Growth:**
+- Track directory sizes and growth trends over time
+- Visualize file additions, modifications, and deletions
+- Understand what's changing and when across all scans
 
-Whether you're protecting family photos, managing media libraries, or maintaining production servers, FsPulse provides the peace of mind that comes from knowing your data is actually intact—not just backed up.
+**Detect Integrity Issues:**
+- **Content Hashing (SHA2)**: Catches when file contents change even though metadata stays the same—the signature of bit rot or tampering
+- **Format Validation**: Reads and validates file structures to detect corruption in FLAC, JPEG, PNG, PDF, and more
+
+Whether you're managing storage capacity, tracking project evolution, or ensuring data integrity, FsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-scan-progress.png" alt="FsPulse Web UI - Real-time Scan Monitoring" width="90%" style="max-width: 900px;">
@@ -33,12 +39,14 @@ Whether you're protecting family photos, managing media libraries, or maintainin
 
 ## 🚀 Key Capabilities
 
-- **Dual Interface** — Run as a web service with elegant browser UI, or use the full-featured CLI with interactive terminal modes
-- **Integrity Detection** — SHA2 hashing catches content changes even when filesystem metadata stays the same; format validators detect corruption in supported file types
-- **Change Tracking** — Deep directory scanning captures all additions, modifications, and deletions across scan sessions
-- **Alert System** — Suspicious hash changes and validation failures are flagged immediately with status management (Open/Flagged/Dismissed)
-- **Powerful Query Language** — SQL-inspired syntax lets you filter, sort, and analyze your data with precision
-- **Production Ready** — Official Docker images (multi-architecture), comprehensive documentation, and native installers
+- **Continuous Monitoring** — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically
+- **Size & Growth Tracking** — Monitor directory sizes and visualize storage trends over time with dual-format units
+- **Change Detection** — Track all file additions, modifications, and deletions with complete historical records
+- **Integrity Verification** — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types
+- **Historical Analysis** — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts
+- **Alert System** — Suspicious hash changes and validation failures flagged immediately with status management
+- **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing your filesystem data
+- **Dual Interface** — Elegant web UI for visual exploration, full-featured CLI for automation and scripting
 
 ---
 
@@ -49,11 +57,11 @@ Quick start instructions are below, but full documentation is available in book 
 👉 **[FsPulse Documentation](https://gtunes-dev.github.io/fspulse/)**
 
 Key sections:
-- [Getting Started](https://gtunes-dev.github.io/fspulse/getting_started.html) — Installation options and first steps
-- [Docker Deployment](https://gtunes-dev.github.io/fspulse/docker.html) — Complete Docker guide with NAS setup
-- [Scanning](https://gtunes-dev.github.io/fspulse/scanning.html) — How scans work and what they detect
+- [Getting Started](https://gtunes-dev.github.io/fspulse/getting_started.html) — Installation, Docker deployment, and first steps
+- [Web Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Monitor, Browse, Insights, Alerts, and Explore pages
+- [Scanning Concepts](https://gtunes-dev.github.io/fspulse/scanning.html) — How scans work, hashing, and validation
 - [Query Syntax](https://gtunes-dev.github.io/fspulse/query.html) — Powerful filtering and data exploration
-- [Command-Line Interface](https://gtunes-dev.github.io/fspulse/cli.html) — All CLI commands and options
+- [Command-Line Interface](https://gtunes-dev.github.io/fspulse/cli.html) — CLI commands for automation and scripting
 - [Configuration](https://gtunes-dev.github.io/fspulse/configuration.html) — Customizing FsPulse behavior
 
 ---
@@ -98,9 +106,6 @@ Open **http://127.0.0.1:8080** in your browser to access the full web interface.
 Direct terminal commands for scripting and automation:
 
 ```sh
-# Run a scan
-fspulse scan --root-path /path/to/files --hash --validate
-
 # Query for invalid items
 fspulse query "items where val:(I)"
 
@@ -109,9 +114,14 @@ fspulse report scans --last 5
 
 # Find items with hash changes
 fspulse query "changes where hash_change:(T) show item_path, hash_old, hash_new"
+
+# Find directories over 10GB
+fspulse query "items where size > 10GB and item_type:(D)"
 ```
 
 **Great for:** Automation, scripted workflows, CI/CD integration, quick one-off operations
+
+**Note:** All scanning is performed through the web UI. The CLI provides powerful querying and reporting capabilities.
 
 ---
 
@@ -125,6 +135,42 @@ fspulse explore   # Full-screen data explorer
 ```
 
 **Great for:** Terminal users who want visual feedback without leaving the command line
+
+---
+
+### 🖥️ Web Interface Highlights
+
+The web UI provides powerful visual tools for monitoring and exploring your data:
+
+- **Monitor & Schedule** — Configure automatic scans with flexible scheduling options, view execution queue status, and manage scan roots
+- **Live Scan Progress** — Watch scan activity in real-time whether manually initiated or scheduled, with detailed phase-by-phase statistics
+- **Browse with Detail View** — Explore your filesystem hierarchy with elegant sliding panels showing item metadata, validation status, alerts, and complete change history
+- **Insights & Trends** — Interactive charts tracking file sizes, counts, change activity, and validation issues over time with customizable date ranges
+- **Alert Management** — Filter, flag, and dismiss integrity issues with context-aware views and status tracking
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-monitor-schedules.png" alt="FsPulse Monitor Page - Scheduled Scans" width="90%" style="max-width: 900px;">
+  <br>
+  <em>Monitor page showing scheduled scans and queue management</em>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-tree.png" alt="FsPulse Browse Page - Filesystem Tree" width="90%" style="max-width: 900px;">
+  <br>
+  <em>Browse page showing filesystem hierarchy navigation</em>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="FsPulse Browse Page - Item Detail Panel" width="90%" style="max-width: 900px;">
+  <br>
+  <em>Item detail panel showing metadata, validation status, and change history</em>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-insights-trends.png" alt="FsPulse Insights - Trend Analysis" width="90%" style="max-width: 900px;">
+  <br>
+  <em>Insights page with interactive charts for historical trend analysis</em>
+</p>
 
 ---
 
@@ -160,6 +206,10 @@ Requires Rust toolchain installed on your system.
 Download platform-specific binaries from [GitHub Releases](https://github.com/gtunes-dev/fspulse/releases).
 
 Available for: Linux, macOS, Windows
+
+macOS builds include both Intel (x86_64) and Apple Silicon (ARM64) binaries.
+
+**Note:** All web UI assets are embedded in the binary—no external files or dependencies required.
 
 ### Build from Source
 

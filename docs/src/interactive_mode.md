@@ -13,8 +13,6 @@ Both provide alternative ways to interact with FsPulse without needing the web U
 
 The `interact` command provides a menu-driven interface for common tasks.
 
-![Interactive menu](https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/interact.png)
-
 To launch:
 
 ```sh
