@@ -86,8 +86,8 @@ export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
   }
 
   // Helper to format file/folder counts
-  const formatCounts = (fileCount: number | undefined, folderCount: number | undefined): string => {
-    if (fileCount === undefined || folderCount === undefined) return ''
+  const formatCounts = (fileCount: number | null | undefined, folderCount: number | null | undefined): string => {
+    if (fileCount == null || folderCount == null) return ''
     return `${fileCount.toLocaleString()} files, ${folderCount.toLocaleString()} folders`
   }
 
@@ -203,7 +203,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
                           </button>
                           <div className="flex items-center gap-2">
                             <Badge variant="warning">Stopped</Badge>
-                            {scanInfo.file_count !== undefined && (
+                            {scanInfo.file_count != null && (
                               <span className="text-sm text-muted-foreground">
                                 {scanInfo.file_count.toLocaleString()} files scanned
                               </span>
