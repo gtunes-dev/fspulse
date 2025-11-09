@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { TreeNode } from './TreeNode'
 import { fetchQuery } from '@/lib/api'
+import { useScanManager } from '@/contexts/ScanManagerContext'
 import type { ColumnSpec } from '@/lib/types'
 import type { ItemData, TreeNodeData } from '@/lib/pathUtils'
 import { getImmediateChildren, itemToTreeNode, sortTreeItems } from '@/lib/pathUtils'
@@ -13,12 +14,23 @@ interface FileTreeViewProps {
 }
 
 export function FileTreeView({ rootId, rootPath, showTombstones, searchFilter }: FileTreeViewProps) {
+  const { activeScan } = useScanManager()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [allItems, setAllItems] = useState<ItemData[]>([])
   const [rootLevelNodes, setRootLevelNodes] = useState<TreeNodeData[]>([])
 
+  // Check if this root is currently being scanned
+  const isRootBeingScanned = activeScan?.root_path === rootPath
+
   useEffect(() => {
+    // Don't load items if the root is currently being scanned
+    if (isRootBeingScanned) {
+      setAllItems([])
+      setRootLevelNodes([])
+      return
+    }
+
     async function loadItems() {
       setLoading(true)
       setError(null)
@@ -48,7 +60,7 @@ export function FileTreeView({ rootId, rootPath, showTombstones, searchFilter }:
 
         const latestScanId = scanResponse.rows[0][0]
 
-        // Query all items from the latest scan
+        // Query all items from the latest completed scan
         const filters: Array<{ column: string; value: string }> = [
           { column: 'root_id', value: rootId.toString() },
           { column: 'last_scan', value: latestScanId },
@@ -106,7 +118,19 @@ export function FileTreeView({ rootId, rootPath, showTombstones, searchFilter }:
     }
 
     loadItems()
-  }, [rootId, rootPath, showTombstones, searchFilter])
+  }, [rootId, rootPath, showTombstones, searchFilter, isRootBeingScanned])
+
+  // Show message if root is currently being scanned
+  if (isRootBeingScanned) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <p className="text-lg mb-2">Scan in progress</p>
+          <p className="text-sm">Browse is unavailable while this root is being scanned</p>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
