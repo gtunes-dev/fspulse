@@ -1,3 +1,4 @@
+pub mod app;
 pub mod query;
 pub mod alerts;
 pub mod scans;

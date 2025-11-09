@@ -1,6 +1,7 @@
 pub mod routes;
 
 // Re-export route handlers for convenience
+pub use routes::app;
 pub use routes::query;
 pub use routes::alerts;
 pub use routes::scans;

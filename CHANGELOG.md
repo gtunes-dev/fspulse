@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Settings page with application version, build date, git commit, and git branch information
+- Links to GitHub, Documentation, crates.io, and Docker Hub on Settings page
+- API endpoint `/api/app-info` to expose build and version metadata
+- Build-time capture of git metadata with proper fallbacks for local, CI, and Docker builds
+
+### Fixed
+- Header progress bar click now correctly navigates to Activity page instead of broken `/scan` route
+
 ## [v0.2.3] - 2025-11-09
 
 ### Added

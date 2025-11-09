@@ -67,3 +67,4 @@ serial_test = "3.2"
 
 [build-dependencies]
 static_vcruntime = "2.0"
+chrono = { version = "0.4", features = ["clock"] }

@@ -6,12 +6,27 @@ FROM rust:bookworm AS builder
 
 WORKDIR /build
 
+# Accept build arguments for version info
+ARG GIT_COMMIT=unknown
+ARG GIT_BRANCH=unknown
+ARG GITHUB_SHA
+ARG GITHUB_REF_NAME
+
+# Set environment variables for build.rs to use
+ENV GIT_COMMIT=${GIT_COMMIT}
+ENV GIT_BRANCH=${GIT_BRANCH}
+ENV GITHUB_SHA=${GITHUB_SHA}
+ENV GITHUB_REF_NAME=${GITHUB_REF_NAME}
+
 # Install Node.js for frontend build
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs
 
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
+
+# Copy build script
+COPY build.rs ./
 
 # Copy frontend source
 COPY frontend ./frontend

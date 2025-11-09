@@ -100,6 +100,9 @@ impl WebServer {
             // Health check
             .route("/health", get(health_check))
 
+            // App info
+            .route("/api/app-info", get(api::app::get_app_info))
+
             // Home/Dashboard API
             .route("/api/home/last-scan-stats", get(api::scans::get_last_scan_stats))
 

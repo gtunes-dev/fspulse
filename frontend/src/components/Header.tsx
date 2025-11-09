@@ -74,7 +74,7 @@ export function Header() {
               className={`flex-1 ml-8 px-3 py-1 rounded-md cursor-pointer transition-colors hover:bg-primary/5 ${
                 isError ? '' : 'hover:bg-primary/5'
               }`}
-              onClick={() => navigate('/scan')}
+              onClick={() => navigate('/')}
             >
               <div className="flex flex-col gap-0.5">
                 {/* Line 1: Status and Path */}
