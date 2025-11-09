@@ -217,16 +217,18 @@ macOS builds include both Intel (x86_64) and Apple Silicon (ARM64) binaries.
 
 ### Build from Source
 
-Clone and build with Cargo:
+Clone the repository and use the build script:
 
 ```sh
 git clone https://github.com/gtunes-dev/fspulse.git
 cd fspulse
-cargo build --release
+./scripts/build.sh
 ./target/release/fspulse --help
 ```
 
-See the [Getting Started Guide](https://gtunes-dev.github.io/fspulse/getting_started.html) for detailed installation instructions for all methods.
+**Prerequisites:** Node.js (with npm) and Rust (via rustup) must be installed.
+
+See the [Building from Source Guide](https://gtunes-dev.github.io/fspulse/building.html) for detailed build instructions including manual steps and troubleshooting.
 
 ---
 
