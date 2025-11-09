@@ -347,15 +347,133 @@ docker run -d --name fspulse -p 8080:8080 -v fspulse-data:/data gtunesdev/fspuls
 <p>Available for: Linux, macOS, Windows</p>
 <p>macOS builds include both Intel (x86_64) and Apple Silicon (ARM64) binaries.</p>
 <p><strong>Note:</strong> All web UI assets are embedded in the binary—no external files or dependencies required.</p>
-<h2 id="build-from-source"><a class="header" href="#build-from-source">Build from Source</a></h2>
-<p>Clone and build with Cargo:</p>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><strong>Want to build from source?</strong> See <a href="getting_started/building.html">Building from Source</a></li>
+<li><strong>Ready to start using FsPulse?</strong> Proceed to <a href="getting_started/first_steps.html">First Steps</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="building-from-source"><a class="header" href="#building-from-source">Building from Source</a></h1>
+<p>This guide covers building FsPulse from source code, which is useful for development, customization, or running on platforms without pre-built binaries.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>Before building FsPulse, ensure you have the following installed:</p>
+<h3 id="required-tools"><a class="header" href="#required-tools">Required Tools</a></h3>
+<ol>
+<li>
+<p><strong>Rust</strong> (latest stable version)</p>
+<ul>
+<li>Install via <a href="https://rustup.rs/">rustup</a></li>
+<li>Verify: <code>cargo --version</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Node.js</strong> (v18 or later) with npm</p>
+<ul>
+<li>Install from <a href="https://nodejs.org/">nodejs.org</a></li>
+<li>Verify: <code>node --version</code> and <code>npm --version</code></li>
+</ul>
+</li>
+</ol>
+<h3 id="platform-specific-requirements"><a class="header" href="#platform-specific-requirements">Platform-Specific Requirements</a></h3>
+<p><strong>Windows:</strong></p>
+<ul>
+<li>Visual Studio Build Tools or Visual Studio with C++ development tools</li>
+<li>Required for SQLite compilation</li>
+</ul>
+<p><strong>Linux:</strong></p>
+<ul>
+<li>Build essentials: <code>build-essential</code> (Ubuntu/Debian) or <code>base-devel</code> (Arch)</li>
+<li>May need <code>pkg-config</code> and <code>libsqlite3-dev</code> depending on distribution</li>
+</ul>
+<p><strong>macOS:</strong></p>
+<ul>
+<li>Xcode Command Line Tools: <code>xcode-select --install</code></li>
+</ul>
+<h2 id="quick-build-recommended"><a class="header" href="#quick-build-recommended">Quick Build (Recommended)</a></h2>
+<p>The easiest way to build FsPulse is using the provided build script:</p>
 <pre><code class="language-sh">git clone https://github.com/gtunes-dev/fspulse.git
 cd fspulse
-cargo build --release
-./target/release/fspulse --help
+./scripts/build.sh
 </code></pre>
-<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
-<p>After installation, proceed to <a href="getting_started/first_steps.html">First Steps</a> to configure and start using FsPulse.</p>
+<p>The script will:</p>
+<ol>
+<li>Check for required tools</li>
+<li>Install frontend dependencies</li>
+<li>Build the React frontend</li>
+<li>Compile the Rust binary with embedded assets</li>
+</ol>
+<p>The resulting binary will be at: <code>./target/release/fspulse</code></p>
+<h2 id="manual-build"><a class="header" href="#manual-build">Manual Build</a></h2>
+<p>If you prefer to run each step manually or need more control:</p>
+<h3 id="step-1-clone-the-repository"><a class="header" href="#step-1-clone-the-repository">Step 1: Clone the Repository</a></h3>
+<pre><code class="language-sh">git clone https://github.com/gtunes-dev/fspulse.git
+cd fspulse
+</code></pre>
+<h3 id="step-2-build-the-frontend"><a class="header" href="#step-2-build-the-frontend">Step 2: Build the Frontend</a></h3>
+<pre><code class="language-sh">cd frontend
+npm install
+npm run build
+cd ..
+</code></pre>
+<p>This creates the <code>frontend/dist/</code> directory containing the compiled React application.</p>
+<h3 id="step-3-build-the-rust-binary"><a class="header" href="#step-3-build-the-rust-binary">Step 3: Build the Rust Binary</a></h3>
+<pre><code class="language-sh">cargo build --release
+</code></pre>
+<p>The binary will be at: <code>./target/release/fspulse</code></p>
+<blockquote>
+<p><strong>Important:</strong> The frontend <strong>must</strong> be built before compiling the Rust binary. The web UI assets are embedded into the binary at compile time via RustEmbed. If <code>frontend/dist/</code> doesn't exist, the build will fail with a helpful error message.</p>
+</blockquote>
+<h2 id="development-builds"><a class="header" href="#development-builds">Development Builds</a></h2>
+<p>For development, you can skip the release optimization:</p>
+<pre><code class="language-sh"># Frontend (development mode with hot reload)
+cd frontend
+npm run dev
+
+# Backend (in a separate terminal)
+cargo run -- serve
+</code></pre>
+<p>In development mode, the backend serves frontend files directly from <code>frontend/dist/</code> rather than using embedded assets, allowing for faster iteration.</p>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="frontend-assets-not-found"><a class="header" href="#frontend-assets-not-found">"Frontend assets not found"</a></h3>
+<p><strong>Error:</strong></p>
+<pre><code>❌ ERROR: Frontend assets not found at 'frontend/dist/'
+</code></pre>
+<p><strong>Solution:</strong> Build the frontend first:</p>
+<pre><code class="language-sh">cd frontend
+npm install
+npm run build
+cd ..
+</code></pre>
+<h3 id="windows-linkexe-not-found"><a class="header" href="#windows-linkexe-not-found">Windows: "link.exe not found"</a></h3>
+<p><strong>Error:</strong> Missing Visual Studio Build Tools</p>
+<p><strong>Solution:</strong> Install Visual Studio Build Tools with C++ development tools from <a href="https://visualstudio.microsoft.com/downloads/">visualstudio.microsoft.com</a></p>
+<h3 id="linux-cannot-find--lsqlite3"><a class="header" href="#linux-cannot-find--lsqlite3">Linux: "cannot find -lsqlite3"</a></h3>
+<p><strong>Error:</strong> Missing SQLite development libraries</p>
+<p><strong>Solution:</strong> Install platform-specific package:</p>
+<ul>
+<li>Ubuntu/Debian: <code>sudo apt-get install libsqlite3-dev</code></li>
+<li>Fedora: <code>sudo dnf install sqlite-devel</code></li>
+<li>Arch: <code>sudo pacman -S sqlite</code></li>
+</ul>
+<h3 id="npm-install-fails"><a class="header" href="#npm-install-fails">npm install fails</a></h3>
+<p><strong>Error:</strong> Network or permission issues with npm</p>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Clear npm cache: <code>npm cache clean --force</code></li>
+<li>Check Node.js version: <code>node --version</code> (should be v18+)</li>
+<li>Try with sudo (not recommended) or fix npm permissions</li>
+</ul>
+<h2 id="running-your-build"><a class="header" href="#running-your-build">Running Your Build</a></h2>
+<p>After building, run FsPulse:</p>
+<pre><code class="language-sh">./target/release/fspulse --help
+./target/release/fspulse serve
+</code></pre>
+<p>Access the web UI at: <strong>http://localhost:8080</strong></p>
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<ul>
+<li><a href="getting_started/first_steps.html">First Steps</a> - Configure and start using FsPulse</li>
+<li><a href="getting_started/../configuration.html">Configuration</a> - Customize FsPulse behavior</li>
+<li><a href="getting_started/../development.html">Development</a> - Contributing to FsPulse</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="docker-deployment"><a class="header" href="#docker-deployment">Docker Deployment</a></h1>
 <p>The easiest way to run FsPulse is with Docker. The container runs FsPulse as a background service with the web UI accessible on port 8080. You can manage roots, initiate scans, query data, and view results—all from your browser.</p>
 <hr />
@@ -594,7 +712,7 @@ docker run -d \
 </ul>
 <p><strong>Trade-off</strong>: You need to manage permissions yourself (use PUID/PGID if needed).</p>
 <hr />
-<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h2 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h2>
 <h3 id="cannot-access-web-ui"><a class="header" href="#cannot-access-web-ui">Cannot Access Web UI</a></h3>
 <p><strong>Problem</strong>: http://localhost:8080 doesn't respond</p>
 <p><strong>Solutions:</strong></p>
@@ -723,7 +841,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>linux/arm64</strong> - ARM processors (Apple Silicon, Raspberry Pi 4, ARM servers)</li>
 </ul>
 <hr />
-<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
 <ul>
 <li>Explore the <a href="configuration.html">Configuration</a> reference for all available settings</li>
 <li>Learn about <a href="query.html">Query Syntax</a> for advanced data filtering</li>
@@ -779,7 +897,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li>Save the schedule</li>
 </ol>
 <p>Scheduled scans will run automatically based on your configuration.</p>
-<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
+<h2 id="next-steps-3"><a class="header" href="#next-steps-3">Next Steps</a></h2>
 <ul>
 <li>Learn about <a href="getting_started/../scanning.html">Scanning Concepts</a></li>
 <li>Explore the <a href="getting_started/../web_ui.html">Web Interface</a> features</li>
