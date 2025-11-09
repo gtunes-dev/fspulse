@@ -46,10 +46,10 @@ export function ActivityPage() {
         })
         setRootCount(rootsCount.count)
 
-        // Count completed scans
+        // Count all scans (including in-progress)
         const scansCount = await countQuery('scans', {
           columns: [{ name: 'scan_id', visible: true, sort_direction: 'none', position: 0 }],
-          filters: [{ column: 'scan_state', value: 'C,P,E' }],
+          filters: [],
         })
         setScanCount(scansCount.count)
       } catch (err) {
