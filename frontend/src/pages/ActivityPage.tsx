@@ -93,14 +93,15 @@ export function ActivityPage() {
     return (
       <div className="flex flex-col gap-6">
         <h1 className="text-2xl font-semibold">Activity</h1>
+        <ScansCard />
         <EmptyStateNoScans rootCount={rootCount || 2} />
       </div>
     )
   }
 
   // Normal logic based on actual counts
-  // Empty state: No roots configured
-  if (rootCount === 0) {
+  // Empty state: No roots configured and no scans in history
+  if (rootCount === 0 && scanCount === 0) {
     return (
       <div className="flex flex-col gap-6">
         <h1 className="text-2xl font-semibold">Activity</h1>
@@ -110,10 +111,12 @@ export function ActivityPage() {
   }
 
   // Empty state: Has roots but no scans
+  // Show the Scans card so they can start a manual scan
   if (scanCount === 0) {
     return (
       <div className="flex flex-col gap-6">
         <h1 className="text-2xl font-semibold">Activity</h1>
+        <ScansCard />
         <EmptyStateNoScans rootCount={rootCount} />
       </div>
     )

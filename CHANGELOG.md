@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Activity page first-run UX: Manual Scan button now visible when roots are configured but no scans exist
+- Activity page now shows normal operational state when scans exist even if all roots have been deleted
+- Empty state messaging improved with more actionable guidance for new users
+
 ## [v0.2.2] - 2025-11-09
 
 ### Fixed

@@ -15,10 +15,9 @@ export function EmptyStateNoScans({ rootCount }: EmptyStateNoScansProps) {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <h3 className="text-xl font-semibold mb-3">Ready to scan</h3>
+            <h3 className="text-xl font-semibold mb-3">Ready to scan?</h3>
             <p className="text-base text-muted-foreground mb-6 max-w-md">
-              You have {rootCount} {rootCount === 1 ? 'root' : 'roots'} configured.
-              Start scanning to monitor your files.
+              You've configured {rootCount === 1 ? 'a root' : 'roots'}! Use the Manual Scan button above to start scanning, or visit Monitor to add more roots and configure schedules.
             </p>
             <Button size="lg" onClick={() => navigate('/monitor')}>
               Go to Monitor
