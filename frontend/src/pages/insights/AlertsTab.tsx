@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { RefreshCw, Info } from 'lucide-react'
+import { Info } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { SearchFilter } from '@/components/ui/SearchFilter'
-import { RootPicker } from '@/components/ui/RootPicker'
+import { RootCard } from '@/components/ui/RootCard'
 import { ItemDetailSheet } from '@/components/browse/ItemDetailSheet'
 import {
   Select,
@@ -21,10 +20,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Card, CardContent } from '@/components/ui/card'
 import { updateAlertStatus, fetchMetadata } from '@/lib/api'
 import { formatTimeAgo } from '@/lib/dateUtils'
-import type { AlertStatusValue, AlertTypeValue, ContextFilterType, ColumnState } from '@/lib/types'
+import type { AlertStatusValue, AlertTypeValue, ColumnState } from '@/lib/types'
 
 interface Root {
   root_id: number
@@ -32,11 +30,9 @@ interface Root {
 }
 
 interface AlertsTabProps {
-  contextFilter: ContextFilterType
-  contextValue: string
+  selectedRootId: string
+  onRootChange: (rootId: string) => void
   roots: Root[]
-  onContextFilterChange: (value: ContextFilterType) => void
-  onContextValueChange: (value: string) => void
 }
 
 interface AlertRow {
@@ -56,7 +52,7 @@ interface AlertRow {
 
 const ITEMS_PER_PAGE = 25
 
-export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterChange, onContextValueChange }: AlertsTabProps) {
+export function AlertsTab({ selectedRootId, onRootChange, roots }: AlertsTabProps) {
   const [columns, setColumns] = useState<ColumnState[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('O') // Default to "Open"
   const [typeFilter, setTypeFilter] = useState<string>('all')
@@ -120,13 +116,9 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
       // Build filters array
       const filters: Array<{ column: string; value: string }> = []
 
-      // Add context filter if applicable
-      if (contextFilter !== 'all' && contextValue.trim()) {
-        if (contextFilter === 'root') {
-          filters.push({ column: 'root_id', value: contextValue.trim() })
-        } else if (contextFilter === 'scan') {
-          filters.push({ column: 'scan_id', value: contextValue.trim() })
-        }
+      // Add root filter if not "all"
+      if (selectedRootId !== 'all') {
+        filters.push({ column: 'root_id', value: selectedRootId })
       }
 
       // Add status filter
@@ -226,7 +218,7 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
     } finally {
       setLoading(false)
     }
-  }, [columns, contextFilter, contextValue, statusFilter, typeFilter, pathSearch, currentPage])
+  }, [columns, selectedRootId, statusFilter, typeFilter, pathSearch, currentPage])
 
   // Load alerts when filters or page changes
   useEffect(() => {
@@ -236,7 +228,7 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [statusFilter, typeFilter, pathSearch, contextFilter, contextValue])
+  }, [statusFilter, typeFilter, pathSearch, selectedRootId])
 
   // Debounce path search
   const handlePathSearchChange = (value: string) => {
@@ -296,109 +288,64 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
   const end = Math.min(start + ITEMS_PER_PAGE - 1, totalCount)
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Combined Filter Toolbar - Two Rows */}
-      <div className="mb-4">
-        <div className="flex flex-col gap-4 px-6 py-4 bg-background rounded-xl border-2 border-border/60 shadow-lg shadow-black/5 dark:shadow-black/20">
-          {/* First Row - Context Filter */}
-          <div className="flex items-center gap-5">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-muted-foreground/80">Context:</span>
-              <Select value={contextFilter} onValueChange={onContextFilterChange}>
-                <SelectTrigger className="w-[180px] shadow-sm ring-1 ring-border/50 hover:ring-border transition-all">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Data</SelectItem>
-                  <SelectItem value="root">By Root</SelectItem>
-                  <SelectItem value="scan">By Scan ID</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {contextFilter === 'root' && (
-              <RootPicker
-                roots={roots}
-                value={contextValue}
-                onChange={onContextValueChange}
-                placeholder="Select a root"
-              />
-            )}
-
-            {contextFilter === 'scan' && (
-              <Input
-                type="text"
-                value={contextValue}
-                onChange={(e) => onContextValueChange(e.target.value)}
-                placeholder="Enter scan ID..."
-                className="flex-1 max-w-md shadow-sm ring-1 ring-border/50 hover:ring-border transition-all"
-              />
-            )}
+    <>
+    <RootCard
+      roots={roots}
+      selectedRootId={selectedRootId}
+      onRootChange={onRootChange}
+      allowAll={true}
+      actionBar={
+        <>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-muted-foreground">Status:</span>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="O">Open</SelectItem>
+                <SelectItem value="F">Flagged</SelectItem>
+                <SelectItem value="D">Dismissed</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Second Row - Alert Filters */}
-          <div className="flex items-center gap-5">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-muted-foreground/80">Status:</span>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px] shadow-sm ring-1 ring-border/50 hover:ring-border transition-all">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="O">Open</SelectItem>
-                  <SelectItem value="F">Flagged</SelectItem>
-                  <SelectItem value="D">Dismissed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-muted-foreground/80">Type:</span>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[180px] shadow-sm ring-1 ring-border/50 hover:ring-border transition-all">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="H">Suspicious Hash</SelectItem>
-                  <SelectItem value="I">Invalid Item</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <SearchFilter
-              value={pathSearch}
-              onChange={handlePathSearchChange}
-            />
-
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => loadAlerts()}
-              title="Refresh"
-              className="shadow-sm ring-1 ring-border/50 hover:ring-border transition-all"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-muted-foreground">Type:</span>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="H">Suspicious Hash</SelectItem>
+                <SelectItem value="I">Invalid Item</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        </div>
-      </div>
 
-      {/* Alerts Table */}
-      <Card>
-        <CardContent className="p-0">
+          <SearchFilter
+            value={pathSearch}
+            onChange={handlePathSearchChange}
+          />
+        </>
+      }
+    >
+      {/* Bordered Table */}
+      <div className="border border-border rounded-lg">
+        <div className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-center w-[120px]">STATUS</TableHead>
-                <TableHead className="text-center w-[180px]">ALERT TYPE</TableHead>
-                <TableHead className="text-center w-[80px]">ROOT ID</TableHead>
-                <TableHead className="text-center w-[80px]">ITEM ID</TableHead>
-                <TableHead className="text-center w-[80px]">SCAN ID</TableHead>
-                <TableHead className="w-[250px]">FILE</TableHead>
-                <TableHead className="text-center">DETAILS</TableHead>
-                <TableHead className="text-center w-[110px]">CREATED</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[120px]">Status</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[180px]">Alert Type</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[80px]">Root ID</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[80px]">Item ID</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[80px]">Scan ID</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide bg-muted w-[250px]">File</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide bg-muted text-center">Details</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[110px]">Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -467,46 +414,47 @@ export function AlertsTab({ contextFilter, contextValue, roots, onContextFilterC
               )}
             </TableBody>
           </Table>
+        </div>
+      </div>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between px-4 py-3 border-t">
-            <div className="text-sm text-muted-foreground">
-              Showing {totalCount > 0 ? start : 0} - {end} of {totalCount} alerts
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => prev - 1)}
-                disabled={currentPage === 1 || loading}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((prev) => prev + 1)}
-                disabled={end >= totalCount || loading}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground whitespace-nowrap">
+          Showing {totalCount > 0 ? start : 0} - {end} of {totalCount} alerts
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((prev) => prev - 1)}
+            disabled={currentPage === 1 || loading}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((prev) => prev + 1)}
+            disabled={end >= totalCount || loading}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
+    </RootCard>
 
-      {/* Item Detail Sheet */}
-      {selectedItem && (
-        <ItemDetailSheet
-          itemId={selectedItem.itemId}
-          itemPath={selectedItem.itemPath}
-          itemType="F"
-          isTombstone={false}
-          rootId={selectedItem.rootId}
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-        />
-      )}
-    </div>
+    {/* Item Detail Sheet */}
+    {selectedItem && (
+      <ItemDetailSheet
+        itemId={selectedItem.itemId}
+        itemPath={selectedItem.itemPath}
+        itemType="F"
+        isTombstone={false}
+        rootId={selectedItem.rootId}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+      />
+    )}
+    </>
   )
 }

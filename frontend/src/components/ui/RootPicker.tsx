@@ -18,6 +18,8 @@ interface RootPickerProps {
   placeholder?: string
   /** Visual variant - 'default' for form-like appearance, 'title' for CardTitle appearance */
   variant?: 'default' | 'title'
+  /** Allow selecting "All Roots" as an option */
+  allowAll?: boolean
 }
 
 export function RootPicker({
@@ -25,9 +27,11 @@ export function RootPicker({
   value,
   onChange,
   placeholder = 'Select a root',
-  variant = 'default'
+  variant = 'default',
+  allowAll = false
 }: RootPickerProps) {
   const selectedRoot = roots.find(r => r.root_id.toString() === value)
+  const isAllSelected = allowAll && value === 'all'
 
   // Title variant: looks like CardTitle (text-2xl font-semibold, no border)
   // Everything flows as one cohesive title with subtle dropdown affordance
@@ -49,11 +53,14 @@ export function RootPicker({
         <div className={contentClassName}>
           <span className={labelClassName}>Root:</span>
           <SelectValue>
-            {selectedRoot ? selectedRoot.root_path : placeholder}
+            {isAllSelected ? 'All Roots' : selectedRoot ? selectedRoot.root_path : placeholder}
           </SelectValue>
         </div>
       </SelectTrigger>
       <SelectContent align="start" className="max-w-2xl">
+        {allowAll && (
+          <SelectItem value="all">All Roots</SelectItem>
+        )}
         {roots.map((root) => (
           <SelectItem key={root.root_id} value={root.root_id.toString()}>
             {root.root_path}

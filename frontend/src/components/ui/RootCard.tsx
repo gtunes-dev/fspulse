@@ -20,6 +20,8 @@ interface RootCardProps {
   children: ReactNode
   /** Optional className for the card */
   className?: string
+  /** Allow selecting "All Roots" as an option */
+  allowAll?: boolean
 }
 
 /**
@@ -56,6 +58,7 @@ export function RootCard({
   actionBar,
   children,
   className,
+  allowAll = false,
 }: RootCardProps) {
   return (
     <Card className={className}>
@@ -65,6 +68,7 @@ export function RootCard({
           value={selectedRootId}
           onChange={onRootChange}
           variant="title"
+          allowAll={allowAll}
         />
       </CardHeader>
       <CardContent className="space-y-4">

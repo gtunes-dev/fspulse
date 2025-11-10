@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { AlertsTab } from './insights/AlertsTab'
 import { fetchQuery } from '@/lib/api'
-import type { ContextFilterType, ColumnSpec } from '@/lib/types'
+import type { ColumnSpec } from '@/lib/types'
 
 interface Root {
   root_id: number
@@ -9,12 +9,11 @@ interface Root {
 }
 
 export function AlertsPage() {
-  const [contextFilter, setContextFilter] = useState<ContextFilterType>('all')
-  const [contextValue, setContextValue] = useState('')
+  const [selectedRootId, setSelectedRootId] = useState<string>('all')
   const [roots, setRoots] = useState<Root[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Load roots for context filter
+  // Load roots
   useEffect(() => {
     async function loadRoots() {
       try {
@@ -47,16 +46,6 @@ export function AlertsPage() {
     loadRoots()
   }, [])
 
-  const handleContextFilterChange = (value: ContextFilterType) => {
-    setContextFilter(value)
-    if (value === 'root' && roots.length > 0) {
-      // Auto-select first root when switching to root context
-      setContextValue(roots[0].root_id.toString())
-    } else {
-      setContextValue('')
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -71,11 +60,9 @@ export function AlertsPage() {
 
       <div className="flex-1">
         <AlertsTab
-          contextFilter={contextFilter}
-          contextValue={contextValue}
+          selectedRootId={selectedRootId}
+          onRootChange={setSelectedRootId}
           roots={roots}
-          onContextFilterChange={handleContextFilterChange}
-          onContextValueChange={setContextValue}
         />
       </div>
     </div>

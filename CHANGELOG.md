@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Improved
+- Explore page redesigned with card-based layout and styled tab navigation for better visual hierarchy
+- Alerts page updated to use consistent RootCard component with improved filter controls
+
 ### Fixed
 - MD5 hash function removed from config and documentation (it was only partially supported)
 
