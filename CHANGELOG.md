@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.6] - 2025-11-10
+
 ### Improved
 - Explore page redesigned with card-based layout and styled tab navigation for better visual hierarchy
 - Alerts page updated to use consistent RootCard component with improved filter controls
 
 ### Fixed
+- Docker container permissions issue impacting Synology users
 - MD5 hash function removed from config and documentation (it was only partially supported)
 
 ## [v0.2.5] - 2025-11-09
