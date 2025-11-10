@@ -22,13 +22,14 @@ if [ "$PUID" != "1000" ] || [ "$PGID" != "1000" ]; then
 
     # Modify user
     usermod -o -u "$PUID" fspulse 2>/dev/null || true
+fi
 
-    # Fix ownership of /data directory (only if it exists and we can write to it)
-    if [ -d "${FSPULSE_DATA_DIR}" ]; then
-        echo "Updating ownership of ${FSPULSE_DATA_DIR}..."
-        chown -R fspulse:fspulse "${FSPULSE_DATA_DIR}" 2>/dev/null || \
-            echo "Warning: Could not change ownership of ${FSPULSE_DATA_DIR} (may already be correct)"
-    fi
+# Always ensure /data directory has correct ownership
+# (This is needed even with default UID/GID, in case the volume was created by root)
+if [ -d "${FSPULSE_DATA_DIR}" ]; then
+    echo "Ensuring ${FSPULSE_DATA_DIR} is owned by fspulse user..."
+    chown -R fspulse:fspulse "${FSPULSE_DATA_DIR}" 2>/dev/null || \
+        echo "Warning: Could not change ownership of ${FSPULSE_DATA_DIR} (may already be correct)"
 fi
 
 # Check if this is first run (no config file)
