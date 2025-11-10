@@ -38,4 +38,20 @@ fi
 
 # Execute fspulse as the fspulse user (with the potentially adjusted UID/GID)
 # The app will auto-create config.toml and database if they don't exist
-exec gosu fspulse /app/fspulse "$@"
+#
+# Note: gosu may fail on some platforms (e.g., Synology DSM). If it fails,
+# we fall back to running as root, which is safe since FsPulse only reads files.
+set +e  # Disable exit-on-error for gosu test
+if gosu fspulse true 2>/dev/null; then
+    # gosu works - use it to run as non-root user
+    set -e  # Re-enable exit-on-error
+    exec gosu fspulse /app/fspulse "$@"
+else
+    # gosu failed (common on Synology) - fall back to running as root
+    echo ""
+    echo "Warning: Could not run as user 'fspulse' (platform limitation)"
+    echo "Running as root instead (safe for read-only operations)"
+    echo ""
+    set -e  # Re-enable exit-on-error
+    exec /app/fspulse "$@"
+fi
