@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Frontend: Reorganized component structure with co-located page-specific components for improved maintainability
 
+### Fixed
+- CI: Migrated from deprecated macos-13 to macos-15-intel for Intel builds and macos-latest for ARM builds
+
 ## [v0.2.7] - 2025-11-11
 
 ### Improved
