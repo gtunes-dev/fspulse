@@ -103,6 +103,11 @@ interface SizeHistoryPoint {
   size: number
 }
 
+interface ChildrenCounts {
+  file_count: number
+  directory_count: number
+}
+
 type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
 const CHANGES_PER_PAGE = 20
@@ -192,6 +197,10 @@ export function ItemDetailSheet({
   const [fromDate, setFromDate] = useState<Date | undefined>()
   const [toDate, setToDate] = useState<Date | undefined>()
   const [loadingSizeHistory, setLoadingSizeHistory] = useState(false)
+
+  // Children counts state (for directories)
+  const [childrenCounts, setChildrenCounts] = useState<ChildrenCounts | null>(null)
+  const [loadingChildrenCounts, setLoadingChildrenCounts] = useState(false)
 
   // Extract file/folder name from path
   const itemName = itemPath.split('/').filter(Boolean).pop() || itemPath
@@ -411,6 +420,38 @@ export function ItemDetailSheet({
     loadSizeHistory()
   }, [loadSizeHistory])
 
+  // Load children counts for directories
+  useEffect(() => {
+    async function loadChildrenCounts() {
+      if (!open || itemType !== 'D' || isTombstone) {
+        setChildrenCounts(null)
+        return
+      }
+
+      setLoadingChildrenCounts(true)
+      try {
+        const response = await fetch(`/api/items/${itemId}/children-counts`)
+
+        if (!response.ok) {
+          throw new Error('Failed to load children counts')
+        }
+
+        const data = await response.json()
+        setChildrenCounts({
+          file_count: data.file_count,
+          directory_count: data.directory_count,
+        })
+      } catch (error) {
+        console.error('Error loading children counts:', error)
+        setChildrenCounts(null)
+      } finally {
+        setLoadingChildrenCounts(false)
+      }
+    }
+
+    loadChildrenCounts()
+  }, [open, itemId, itemType, isTombstone])
+
   const getChangeTypeBadge = (type: string) => {
     switch (type) {
       case 'A':
@@ -547,6 +588,36 @@ export function ItemDetailSheet({
                     </div>
                   )}
                 </div>
+
+                {/* Children counts for directories */}
+                {details.item_type === 'D' && !isTombstone && (
+                  <div className="col-span-2 mt-4 pt-4 border-t">
+                    {loadingChildrenCounts ? (
+                      <div className="flex items-center justify-center py-4">
+                        <p className="text-sm text-muted-foreground">Loading...</p>
+                      </div>
+                    ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
+                      <div className="flex items-center justify-center gap-6">
+                        <div className="flex items-center gap-2">
+                          <Folder className="h-4 w-4" style={{ color: 'hsl(142 71% 45%)' }} />
+                          <span className="text-base font-semibold">
+                            {childrenCounts.directory_count.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <File className="h-4 w-4" style={{ color: 'hsl(221 83% 53%)' }} />
+                          <span className="text-base font-semibold">
+                            {childrenCounts.file_count.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center py-4">
+                        <p className="text-sm text-muted-foreground">No items in this directory</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

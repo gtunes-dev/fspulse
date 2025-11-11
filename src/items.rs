@@ -1,6 +1,7 @@
 use log::warn;
 use rusqlite::{self, params, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::path::MAIN_SEPARATOR_STR;
 
 use crate::{
     database::Database,
@@ -548,6 +549,68 @@ impl Item {
 
         Ok(history)
     }
+
+    /// Get counts of children (files and directories) for a directory item
+    /// Returns counts of non-tombstone files and directories that are direct or nested children
+    pub fn get_children_counts(
+        db: &Database,
+        item_id: i64,
+    ) -> Result<ChildrenCounts, FsPulseError> {
+        // First get the path and root_id of the parent directory
+        let parent_sql = "SELECT item_path, root_id FROM items WHERE item_id = ?";
+        let conn = db.conn();
+        let (parent_path, root_id): (String, i64) = conn
+            .query_row(parent_sql, params![item_id], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .optional()?
+            .ok_or_else(|| FsPulseError::Error(format!("Item not found: item_id={}", item_id)))?;
+
+        // Count children by type
+        // Children are items whose path starts with parent_path/
+        // We need to ensure the path comparison is correct
+        let sql = r#"
+            SELECT
+                item_type,
+                COUNT(*) as count
+            FROM items
+            WHERE root_id = ?
+              AND is_ts = 0
+              AND item_path LIKE ? || '%'
+              AND item_path != ?
+              AND (item_type = 0 OR item_type = 1)
+            GROUP BY item_type"#;
+
+        let mut stmt = conn.prepare(sql)?;
+        let path_prefix = if parent_path == MAIN_SEPARATOR_STR {
+            MAIN_SEPARATOR_STR.to_string()
+        } else {
+            format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
+        };
+
+        let rows = stmt.query_map(params![root_id, path_prefix, parent_path], |row| {
+            let item_type: i64 = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            Ok((item_type, count))
+        })?;
+
+        let mut file_count = 0;
+        let mut directory_count = 0;
+
+        for row in rows {
+            let (item_type, count) = row?;
+            match ItemType::from_i64(item_type) {
+                ItemType::File => file_count = count,
+                ItemType::Directory => directory_count = count,
+                _ => {}
+            }
+        }
+
+        Ok(ChildrenCounts {
+            file_count,
+            directory_count,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -565,6 +628,12 @@ impl SizeHistoryPoint {
             size: row.get(2)?,
         })
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChildrenCounts {
+    pub file_count: i64,
+    pub directory_count: i64,
 }
 
 #[cfg(test)]
