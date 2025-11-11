@@ -49,7 +49,7 @@ scan_state_filter_EOI   = { WS* ~ scan_state_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" | "prev_hash_scan" }
+id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
 
 id_show = { id_col }
 
@@ -61,7 +61,7 @@ id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
 id               =  { WS* ~ ASCII_DIGIT+ }
 
 // Date Columns
-date_col = { "scan_time" | "mod_date_old" | "mod_date_new" | "mod_date" | "created_at" | "updated_at" }
+date_col = { "started_at" | "ended_at" | "mod_date_old" | "mod_date_new" | "mod_date" | "created_at" | "updated_at" | "deleted_at" }
 
 date_show             =  { date_col ~ date_display_modifier? }
 date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }
@@ -75,7 +75,7 @@ date_range         =  { date ~ WS* ~ DOTDOT ~ date }
 date               =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
-bool_col = { "is_undelete" | "is_hash" | "hash_all" | "is_val" | "val_all" | "hash_change" | "meta_change" | "val_change" | "is_ts" }
+bool_col = { "is_undelete" | "is_hash" | "hash_all" | "is_val" | "val_all" | "hash_change" | "meta_change" | "val_change" | "is_ts" | "was_restarted" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }

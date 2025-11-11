@@ -45,7 +45,7 @@ interface Root {
 
 interface ScanData {
   scan_id: number
-  scan_time: number // Unix timestamp
+  started_at: number // Unix timestamp
   file_count: number
   folder_count: number
   total_size: number
@@ -224,14 +224,14 @@ export function InsightsPage() {
       if (fromDate || toDate) {
         const fromStr = fromDate ? format(fromDate, 'yyyy-MM-dd') : '1970-01-01'
         const toStr = toDate ? format(toDate, 'yyyy-MM-dd') : '2099-12-31'
-        filters.push({ column: 'scan_time', value: `${fromStr}..${toStr}` })  // No () !
+        filters.push({ column: 'started_at', value: `${fromStr}..${toStr}` })  // No () !
       }
 
       // Query for scan data with all the fields we need
-      // Start simple - just scan_id and scan_time to test
+      // Start simple - just scan_id and started_at to test
       const columns: ColumnSpec[] = [
         { name: 'scan_id', visible: true, sort_direction: 'none', position: 0 },
-        { name: 'scan_time', visible: true, sort_direction: 'asc', position: 1 },
+        { name: 'started_at', visible: true, sort_direction: 'asc', position: 1 },
         { name: 'file_count', visible: true, sort_direction: 'none', position: 2 },
         { name: 'folder_count', visible: true, sort_direction: 'none', position: 3 },
         { name: 'total_size', visible: true, sort_direction: 'none', position: 4 },
@@ -250,7 +250,7 @@ export function InsightsPage() {
 
       const data: ScanData[] = response.rows.map((row) => ({
         scan_id: parseInt(row[0]),
-        scan_time: parseInt(row[1]), // Position 1 now (scan_id is position 0)
+        started_at: parseInt(row[1]), // Position 1 now (scan_id is position 0)
         file_count: parseInt(row[2]) || 0,
         folder_count: parseInt(row[3]) || 0,
         total_size: parseInt(row[4]) || 0,
@@ -408,7 +408,7 @@ export function InsightsPage() {
                 >
                   <LineChart
                     data={scanData.map((d) => ({
-                      date: format(new Date(d.scan_time * 1000), 'MMM dd'),
+                      date: format(new Date(d.started_at * 1000), 'MMM dd'),
                       total_size: d.total_size,
                     }))}
                   >
@@ -480,7 +480,7 @@ export function InsightsPage() {
                 >
                   <AreaChart
                     data={scanData.map((d) => ({
-                      date: format(new Date(d.scan_time * 1000), 'MMM dd'),
+                      date: format(new Date(d.started_at * 1000), 'MMM dd'),
                       file_count: d.file_count,
                       folder_count: d.folder_count,
                     }))}
@@ -558,7 +558,7 @@ export function InsightsPage() {
                   >
                     <BarChart
                       data={changeCountData.map((d) => ({
-                        date: format(new Date(d.scan_time * 1000), 'MMM dd'),
+                        date: format(new Date(d.started_at * 1000), 'MMM dd'),
                         add_count: d.add_count,
                         modify_count: d.modify_count,
                         delete_count: d.delete_count,
@@ -611,7 +611,7 @@ export function InsightsPage() {
                   >
                     <BarChart
                       data={alertsData.map((d) => ({
-                        date: format(new Date(d.scan_time * 1000), 'MMM dd'),
+                        date: format(new Date(d.started_at * 1000), 'MMM dd'),
                         alert_count: d.alert_count,
                       }))}
                     >

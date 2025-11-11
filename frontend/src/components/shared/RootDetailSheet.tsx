@@ -29,7 +29,7 @@ interface RootDetails {
 
 interface Scan {
   scan_id: number
-  scan_time: number
+  started_at: number
   scan_state: string // 'C' = Completed, 'P' = Stopped, 'E' = Error
   add_count: number
   modify_count: number
@@ -45,7 +45,7 @@ const SCANS_PER_PAGE = 20
 // Column specifications
 const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'scan_id', visible: true, sort_direction: 'desc', position: 0 },
-  { name: 'scan_time', visible: true, sort_direction: 'none', position: 1 },
+  { name: 'started_at', visible: true, sort_direction: 'none', position: 1 },
   { name: 'scan_state', visible: true, sort_direction: 'none', position: 2 },
   { name: 'add_count', visible: true, sort_direction: 'none', position: 3 },
   { name: 'modify_count', visible: true, sort_direction: 'none', position: 4 },
@@ -60,7 +60,7 @@ const SCAN_COLUMNS: ColumnSpec[] = [
 function parseScanRow(row: string[]): Scan {
   return {
     scan_id: parseInt(row[0]),
-    scan_time: parseInt(row[1]),
+    started_at: parseInt(row[1]),
     scan_state: row[2],
     add_count: parseInt(row[3]) || 0,
     modify_count: parseInt(row[4]) || 0,
@@ -242,7 +242,7 @@ export function RootDetailSheet({
                         Last Scan
                       </p>
                       <p className="text-base font-semibold mt-1">
-                        {formatDateFull(scans[0].scan_time)}
+                        {formatDateFull(scans[0].started_at)}
                       </p>
                     </div>
                   )}
@@ -286,7 +286,7 @@ export function RootDetailSheet({
                                     </p>
                                   </div>
                                   <p className="text-xs text-muted-foreground">
-                                    {formatDateFull(scan.scan_time)}
+                                    {formatDateFull(scan.started_at)}
                                   </p>
                                 </div>
 

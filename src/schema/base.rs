@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '10');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '11');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -21,21 +21,25 @@ CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (root_path COLLATE natural_pa
 CREATE TABLE IF NOT EXISTS scans (
     scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,          -- Links scan to a root path
+    schedule_id INTEGER DEFAULT NULL,  -- Links scan to schedule (NULL for manual scans)
+    started_at INTEGER NOT NULL,       -- Timestamp when scan started (UTC)
+    ended_at INTEGER DEFAULT NULL,     -- Timestamp when scan completed (UTC, NULL if in progress or incomplete)
+    was_restarted BOOLEAN NOT NULL DEFAULT 0,  -- True if scan was interrupted and resumed
     state INTEGER NOT NULL,            -- The state of the scan (1 = Scanning, 2 = Sweeping, 3 = Analyzing, 4 = Completed, 5 = Stopped, 6 = Error)
-    is_hash BOOLEAN NOT NULL,     -- Hash new or changed files
-    hash_all BOOLEAN NOT NULL,       -- Hash all items including unchanged and previously hashed
-    is_val BOOLEAN NOT NULL,      -- Validate the contents of files
-    val_all BOOLEAN NOT NULL,        -- Validate all items including unchanged and previously validated
-    scan_time INTEGER NOT NULL,        -- Timestamp of when scan was performed (UTC)
+    is_hash BOOLEAN NOT NULL,          -- Hash new or changed files
+    hash_all BOOLEAN NOT NULL,         -- Hash all items including unchanged and previously hashed
+    is_val BOOLEAN NOT NULL,           -- Validate the contents of files
+    val_all BOOLEAN NOT NULL,          -- Validate all items including unchanged and previously validated
     file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
     folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
-    total_size INTEGER DEFAULT NULL, -- Total size of all items (files and directories) seen in the scan
+    total_size INTEGER DEFAULT NULL,   -- Total size of all items (files and directories) seen in the scan
     alert_count INTEGER DEFAULT NULL,  -- Count of alerts created during the scan
     add_count INTEGER DEFAULT NULL,    -- Count of items added in the scan
     modify_count INTEGER DEFAULT NULL, -- Count of items modified in the scan
     delete_count INTEGER DEFAULT NULL, -- Count of items deleted in the scan
     error TEXT DEFAULT NULL,           -- Error message if scan failed
-    FOREIGN KEY (root_id) REFERENCES roots(root_id)
+    FOREIGN KEY (root_id) REFERENCES roots(root_id),
+    FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id)
 );
 
 -- Items table tracks files and directories discovered during scans
@@ -146,11 +150,13 @@ CREATE TABLE IF NOT EXISTS scan_schedules (
     validate_mode INTEGER NOT NULL CHECK(validate_mode IN (0, 1, 2)),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
+    deleted_at INTEGER DEFAULT NULL,                                    -- Soft delete timestamp (NULL for active schedules)
     FOREIGN KEY (root_id) REFERENCES roots(root_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_scan_schedules_enabled ON scan_schedules(enabled);
 CREATE INDEX IF NOT EXISTS idx_scan_schedules_root ON scan_schedules(root_id);
+CREATE INDEX IF NOT EXISTS idx_scan_schedules_deleted ON scan_schedules(deleted_at);
 
 -- Scan queue table stores active work items (both scheduled and manual scans)
 CREATE TABLE IF NOT EXISTS scan_queue (

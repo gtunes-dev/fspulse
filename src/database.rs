@@ -1,7 +1,7 @@
 use crate::{
     config::CONFIG,
     error::FsPulseError,
-    schema::{CREATE_SCHEMA_SQL, UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL, UPGRADE_6_TO_7_SQL, UPGRADE_7_TO_8_SQL, UPGRADE_8_TO_9_SQL, UPGRADE_9_TO_10_SQL},
+    schema::{CREATE_SCHEMA_SQL, UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL, UPGRADE_6_TO_7_SQL, UPGRADE_7_TO_8_SQL, UPGRADE_8_TO_9_SQL, UPGRADE_9_TO_10_SQL, UPGRADE_10_TO_11_SQL},
     sort::compare_paths,
 };
 use directories::BaseDirs;
@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 10;
+const CURRENT_SCHEMA_VERSION: u32 = 11;
 
 /// Register custom collations on a database connection.
 /// This must be called on every new connection.
@@ -191,6 +191,7 @@ impl Database {
                     7 => self.upgrade_schema(db_version, UPGRADE_7_TO_8_SQL)?,
                     8 => self.upgrade_schema(db_version, UPGRADE_8_TO_9_SQL)?,
                     9 => self.upgrade_schema(db_version, UPGRADE_9_TO_10_SQL)?,
+                    10 => self.upgrade_schema(db_version, UPGRADE_10_TO_11_SQL)?,
                     _ => {
                         return Err(FsPulseError::Error(
                             "No valid database update available".to_string(),

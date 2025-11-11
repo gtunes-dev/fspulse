@@ -892,8 +892,16 @@ impl QueueEntry {
 
             if let Some(scan_id) = running_scan_id {
                 // Resume case: return existing incomplete scan
+                // prior to loading - mark it restarted
+                conn.execute(
+                    "UPDATE scans SET was_restarted = 1 WHERE scan_id = ?",
+                    rusqlite::params![scan_id]
+                    )
+                    .map_err(FsPulseError::DatabaseError)?;
+
                 let scan = Scan::get_by_id_or_latest(conn, Some(scan_id), None)?
                     .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?;
+
                 return Ok(Some(scan));
             }
 

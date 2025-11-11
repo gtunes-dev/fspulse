@@ -206,7 +206,7 @@ pub async fn get_last_scan_stats() -> Result<Json<Value>, StatusCode> {
             "root_id": stats.root_id,
             "root_path": stats.root_path,
             "scan_state": format!("{:?}", stats.state),
-            "scan_time": stats.scan_time,
+            "started_at": stats.started_at,
             "total_files": stats.total_files,
             "total_folders": stats.total_folders,
             "total_size": stats.total_size,

@@ -1,5 +1,5 @@
 use log::{error, info};
-use pest::{iterators::Pairs, Parser};
+use pest::{Parser, iterators::Pairs};
 use rusqlite::{Row, Statement, ToSql};
 use tabled::{
     builder::Builder,
@@ -518,12 +518,15 @@ impl ScansQuery {
             let col_string = match col.display_col {
                 "scan_id" => Format::format_i64(scan.scan_id),
                 "root_id" => Format::format_i64(scan.root_id),
+                "schedule_id" => Format::format_opt_i64(scan.schedule_id),
+                "started_at" => Format::format_i64(scan.started_at),
+                "ended_at" => Format::format_opt_i64(scan.ended_at),
+                "was_restarted" => Format::format_bool(scan.was_restarted, col.format)?, 
                 "scan_state" => Format::format_scan_state(scan.state, col.format)?,
                 "is_hash" => Format::format_bool(scan.is_hash, col.format)?,
                 "hash_all" => Format::format_bool(scan.hash_all, col.format)?,
                 "is_val" => Format::format_bool(scan.is_val, col.format)?,
                 "val_all" => Format::format_bool(scan.val_all, col.format)?,
-                "scan_time" => Format::format_date(scan.scan_time, col.format)?,
                 "file_count" => Format::format_opt_i64(scan.file_count),
                 "folder_count" => Format::format_opt_i64(scan.folder_count),
                 "total_size" => Format::format_opt_i64(scan.total_size),
@@ -809,12 +812,15 @@ impl ChangesQueryRow {
 pub struct ScansQueryRow {
     scan_id: i64,
     root_id: i64,
+    schedule_id: Option<i64>,
+    started_at: i64,
+    ended_at: Option<i64>,
+    was_restarted: bool,
     state: ScanState,
     is_hash: bool,
     hash_all: bool,
     is_val: bool,
     val_all: bool,
-    scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
     total_size: Option<i64>,
@@ -827,24 +833,27 @@ pub struct ScansQueryRow {
 
 impl ScansQueryRow {
     pub fn from_row(row: &Row) -> rusqlite::Result<Self> {
-        let state_i64: i64 = row.get(2)?;
+        let state_i64: i64 = row.get(6)?;
         Ok(ScansQueryRow {
             scan_id: row.get(0)?,
             root_id: row.get(1)?,
+            schedule_id: row.get(2)?,
+            started_at: row.get(3)?,
+            ended_at: row.get(4)?,
+            was_restarted: row.get(5)?,
             state: ScanState::from_i64(state_i64),
-            is_hash: row.get(3)?,
-            hash_all: row.get(4)?,
-            is_val: row.get(5)?,
-            val_all: row.get(6)?,
-            scan_time: row.get(7)?,
-            file_count: row.get(8)?,
-            folder_count: row.get(9)?,
-            total_size: row.get(10)?,
-            alert_count: row.get(11)?,
-            add_count: row.get(12)?,
-            modify_count: row.get(13)?,
-            delete_count: row.get(14)?,
-            error: row.get(15)?,
+            is_hash: row.get(7)?,
+            hash_all: row.get(8)?,
+            is_val: row.get(9)?,
+            val_all: row.get(10)?,
+            file_count: row.get(11)?,
+            folder_count: row.get(12)?,
+            total_size: row.get(13)?,
+            alert_count: row.get(14)?,
+            add_count: row.get(15)?,
+            modify_count: row.get(16)?,
+            delete_count: row.get(17)?,
+            error: row.get(18)?,
         })
     }
 }

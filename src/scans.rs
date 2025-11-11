@@ -7,12 +7,12 @@ use rusqlite::{params, OptionalExtension, Result};
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
+    "SELECT scan_id, root_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, state, is_hash, hash_all, is_val, val_all, scan_time, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
+    "SELECT scan_id, root_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -100,10 +100,14 @@ pub struct Scan {
     // Schema fields
     scan_id: i64,
     root_id: i64,
+    #[allow(dead_code)]
+    started_at: i64,
+    #[allow(dead_code)]
+    ended_at: Option<i64>,
+    #[allow(dead_code)]
+    was_restarted: bool,
     state: ScanState,
     analysis_spec: AnalysisSpec,
-    #[allow(dead_code)]
-    scan_time: i64,
     file_count: Option<i64>,
     folder_count: Option<i64>,
     total_size: Option<i64>,
@@ -206,14 +210,16 @@ impl Scan {
         root_id: i64,
         state: i64,
         analysis_spec: AnalysisSpec,
-        scan_time: i64,
+        started_at: i64,
     ) -> Self {
         Scan {
             scan_id,
             root_id,
+            started_at,
+            ended_at: None,
+            was_restarted: false,
             state: ScanState::from_i64(state),
             analysis_spec,
-            scan_time,
             file_count: None,
             folder_count: None,
             total_size: None,
@@ -230,10 +236,10 @@ impl Scan {
         root: &Root,
         analysis_spec: &AnalysisSpec,
     ) -> Result<Self, FsPulseError> {
-        let (scan_id, scan_time): (i64, i64) = conn.query_row(
-            "INSERT INTO scans (root_id, state, is_hash, hash_all, is_val, val_all, scan_time) 
-             VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc')) 
-             RETURNING scan_id, scan_time",
+        let (scan_id, started_at): (i64, i64) = conn.query_row(
+            "INSERT INTO scans (root_id, state, is_hash, hash_all, is_val, val_all, started_at)
+             VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc'))
+             RETURNING scan_id, started_at",
             [
                 root.root_id(),
                 ScanState::Scanning.as_i64(),
@@ -250,7 +256,7 @@ impl Scan {
             root.root_id(),
             ScanState::Scanning.as_i64(),
             *analysis_spec,
-            scan_time,
+            started_at,
         );
         Ok(scan)
     }
@@ -276,16 +282,16 @@ impl Scan {
         // load the specified scan
         let scan_row: Option<Scan> = conn
             .query_row(query, params![query_param], |row| {
-                let is_hash = row.get(3)?;
-                let hash_all = row.get(4)?;
+                let is_hash = row.get(6)?;
+                let hash_all = row.get(7)?;
                 let hash_mode = match (is_hash, hash_all) {
                     (false, _) => HashMode::None,
                     (_, true) => HashMode::All,
                     _ => HashMode::New,
                 };
 
-                let is_val = row.get(5)?;
-                let val_all = row.get(6)?;
+                let is_val = row.get(8)?;
+                let val_all = row.get(9)?;
 
                 let val_mode = match (is_val, val_all) {
                     (false, _) => ValidateMode::None,
@@ -296,20 +302,22 @@ impl Scan {
                 Ok(Scan {
                     scan_id: row.get(0)?,
                     root_id: row.get(1)?,
-                    state: ScanState::from_i64(row.get(2)?),
+                    started_at: row.get(2)?,
+                    ended_at: row.get(3)?,
+                    was_restarted: row.get(4)?,
+                    state: ScanState::from_i64(row.get(5)?),
                     analysis_spec: AnalysisSpec {
                         hash_mode,
                         val_mode,
                     },
-                    scan_time: row.get(7)?,
-                    file_count: row.get(8)?,
-                    folder_count: row.get(9)?,
-                    total_size: row.get(10)?,
-                    alert_count: row.get(11)?,
-                    add_count: row.get(12)?,
-                    modify_count: row.get(13)?,
-                    delete_count: row.get(14)?,
-                    error: row.get(15)?,
+                    file_count: row.get(10)?,
+                    folder_count: row.get(11)?,
+                    total_size: row.get(12)?,
+                    alert_count: row.get(13)?,
+                    add_count: row.get(14)?,
+                    modify_count: row.get(15)?,
+                    delete_count: row.get(16)?,
+                    error: row.get(17)?,
                 })
             })
             .optional()?;
@@ -333,8 +341,8 @@ impl Scan {
         &self.analysis_spec
     }
 
-    pub fn scan_time(&self) -> i64 {
-        self.scan_time
+    pub fn started_at(&self) -> i64 {
+        self.started_at
     }
 
     pub fn error(&self) -> Option<&str> {
@@ -702,88 +710,6 @@ impl Scan {
             Ok(())
         })
     }
-
-    // TODO: This was used for reports and isn't currently used but don't want to
-    // commit to throwing it away yet
-    #[allow(dead_code)]
-    pub fn for_each_scan<F>(db: &Database, last: u32, mut func: F) -> Result<(), FsPulseError>
-    where
-        F: FnMut(&Database, &Scan) -> Result<(), FsPulseError>,
-    {
-        if last == 0 {
-            return Ok(());
-        }
-
-        let mut stmt = db.conn().prepare(
-            "SELECT
-                s.scan_id,
-                s.root_id,
-                s.state,
-                s.is_hash,
-                s.hash_all,
-                s.is_val,
-                s.val_all,
-                s.scan_time,
-                s.file_count,
-                s.folder_count,
-                s.total_size,
-                s.alert_count,
-                s.add_count,
-                s.modify_count,
-                s.delete_count,
-                s.error
-            FROM scans s
-            LEFT JOIN changes c ON s.scan_id = c.scan_id
-            GROUP BY s.scan_id, s.root_id, s.state, s.is_hash, s.hash_all, s.is_val, s.val_all, s.scan_time, s.file_count, s.folder_count, s.total_size, s.alert_count, s.add_count, s.modify_count, s.delete_count, s.error
-            ORDER BY s.scan_id DESC
-            LIMIT ?"
-        )?;
-
-        let rows = stmt.query_map([last], |row| {
-            let is_hash = row.get::<_, bool>(3)?;
-            let hash_all = row.get::<_, bool>(4)?; // Hash or re-hash everything
-
-            let hash_mode = match (is_hash, hash_all) {
-                (_, true) => HashMode::All,
-                (false, false) => HashMode::None,
-                _ => HashMode::New
-            };
-
-            let is_val = row.get::<_, bool>(5)?;   // val new or changed;
-            let val_all = row.get::<_, bool>(6)?;  // Val or  re-val everything
-            let val_mode = match (is_val, val_all) {
-                (_, true) => ValidateMode::All,
-                (false, false) => ValidateMode::None,
-                _ => ValidateMode::New,
-            };
-
-            Ok(Scan {
-                scan_id: row.get::<_, i64>(0)?,
-                root_id: row.get::<_, i64>(1)?,
-                state: ScanState::from_i64(row.get::<_, i64>(2)?),
-                analysis_spec: AnalysisSpec {
-                    hash_mode,
-                    val_mode,
-                },
-                scan_time: row.get::<_, i64>(7)?,
-                file_count: row.get::<_, Option<i64>>(8)?,
-                folder_count: row.get::<_, Option<i64>>(9)?,
-                total_size: row.get::<_, Option<i64>>(10)?,
-                alert_count: row.get::<_, Option<i64>>(11)?,
-                add_count: row.get::<_, Option<i64>>(12)?,
-                modify_count: row.get::<_, Option<i64>>(13)?,
-                delete_count: row.get::<_, Option<i64>>(14)?,
-                error: row.get::<_, Option<String>>(15)?,
-            })
-        })?;
-
-        for row in rows {
-            let scan = row?;
-            func(db, &scan)?;
-        }
-
-        Ok(())
-    }
 }
 
 /// Statistics for a completed or in-progress scan
@@ -793,7 +719,7 @@ pub struct ScanStats {
     pub root_id: i64,
     pub root_path: String,
     pub state: ScanState,
-    pub scan_time: i64,
+    pub started_at: i64,
 
     // Total counts from scans table
     pub total_files: i64,
@@ -880,7 +806,7 @@ impl ScanStats {
             root_id: scan.root_id(),
             root_path: root.root_path().to_string(),
             state: scan.state(),
-            scan_time: scan.scan_time(),
+            started_at: scan.started_at(),
             total_files: scan.file_count().unwrap_or(0),
             total_folders: scan.folder_count().unwrap_or(0),
             total_size: scan.total_size().unwrap_or(0),

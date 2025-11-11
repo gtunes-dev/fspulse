@@ -159,14 +159,14 @@ export interface ScanData {
 export interface CurrentScanInfo {
   scan_id: number
   root_path: string
-  scan_time: string
+  started_at: string
 }
 
 // Root with Scan Info (for Scan page)
 export interface LastScanInfo {
   scan_id: number
   state: string // 'Pending' | 'Scanning' | 'Sweeping' | 'Analyzing' | 'Completed' | 'Error' | 'Stopped'
-  scan_time: number  // Unix timestamp (seconds) for client-side formatting
+  started_at: number  // Unix timestamp (seconds) for client-side formatting
   file_count?: number
   folder_count?: number
   error?: string

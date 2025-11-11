@@ -99,7 +99,7 @@ interface Alert {
 
 interface SizeHistoryPoint {
   scan_id: number
-  scan_time: number
+  started_at: number
   size: number
 }
 
@@ -703,7 +703,7 @@ export function ItemDetailSheet({
                       >
                         <LineChart
                           data={sizeHistory.map((point) => ({
-                            date: format(new Date(point.scan_time * 1000), 'MMM dd'),
+                            date: format(new Date(point.started_at * 1000), 'MMM dd'),
                             size: point.size,
                           }))}
                         >

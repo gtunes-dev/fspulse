@@ -17,7 +17,7 @@ import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 interface ScanRow {
   scan_id: number
   root_id: number
-  scan_time: number // Unix timestamp
+  started_at: number // Unix timestamp
   add_count: number
   modify_count: number
   delete_count: number
@@ -72,7 +72,7 @@ export function RecentScansTable() {
           columns: [
             { name: 'scan_id', visible: true, sort_direction: 'none', position: 0 },
             { name: 'root_id', visible: true, sort_direction: 'none', position: 1 },
-            { name: 'scan_time', visible: true, sort_direction: 'desc', position: 2 }, // Sort desc
+            { name: 'started_at', visible: true, sort_direction: 'desc', position: 2 }, // Sort desc
             { name: 'add_count', visible: true, sort_direction: 'none', position: 3 },
             { name: 'modify_count', visible: true, sort_direction: 'none', position: 4 },
             { name: 'delete_count', visible: true, sort_direction: 'none', position: 5 },
@@ -88,7 +88,7 @@ export function RecentScansTable() {
         const scanData: ScanRow[] = scansResponse.rows.map((row) => ({
           scan_id: parseInt(row[0]),
           root_id: parseInt(row[1]),
-          scan_time: parseInt(row[2]),
+          started_at: parseInt(row[2]),
           add_count: parseInt(row[3]),
           modify_count: parseInt(row[4]),
           delete_count: parseInt(row[5]),
@@ -223,7 +223,7 @@ export function RecentScansTable() {
                 className="cursor-pointer hover:bg-muted/50"
               >
                 <TableCell className="font-medium">
-                  {formatTimeAgo(scan.scan_time)}
+                  {formatTimeAgo(scan.started_at)}
                 </TableCell>
                 <TableCell
                   className="max-w-[200px] truncate"

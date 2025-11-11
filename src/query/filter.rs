@@ -155,8 +155,8 @@ impl Filter for DateFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            // $TODO: We used to sort of support filtering Changes on "scan_time" with:
-            //      (scan_id IN (SELECT scan_id FROM scans WHERE scan_time BETWEEN ? AND ?))
+            // $TODO: We used to sort of support filtering Changes on "started_at" with:
+            //      (scan_id IN (SELECT scan_id FROM scans WHERE started_at BETWEEN ? AND ?))
             // At present, filtering is limited to actual date columns. Need to revisit the
             // idea of join columns
 

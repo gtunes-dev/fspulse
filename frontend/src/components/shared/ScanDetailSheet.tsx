@@ -23,7 +23,7 @@ interface ScanDetails {
   scan_id: number
   root_id: number
   root_path: string
-  scan_time: number
+  started_at: number
   scan_state: string // 'C' = Completed, 'P' = Stopped, 'E' = Error, etc.
   add_count: number
   modify_count: number
@@ -38,7 +38,7 @@ interface ScanDetails {
 const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'scan_id', visible: true, sort_direction: 'none', position: 0 },
   { name: 'root_id', visible: true, sort_direction: 'none', position: 1 },
-  { name: 'scan_time', visible: true, sort_direction: 'none', position: 2 },
+  { name: 'started_at', visible: true, sort_direction: 'none', position: 2 },
   { name: 'scan_state', visible: true, sort_direction: 'none', position: 3 },
   { name: 'add_count', visible: true, sort_direction: 'none', position: 4 },
   { name: 'modify_count', visible: true, sort_direction: 'none', position: 5 },
@@ -102,7 +102,7 @@ export function ScanDetailSheet({
           scan_id: parseInt(row[0]),
           root_id: rootId,
           root_path: rootPath,
-          scan_time: parseInt(row[2]),
+          started_at: parseInt(row[2]),
           scan_state: row[3],
           add_count: parseInt(row[4]) || 0,
           modify_count: parseInt(row[5]) || 0,
@@ -209,7 +209,7 @@ export function ScanDetailSheet({
                         Scan Time
                       </p>
                       <p className="text-base font-semibold mt-1">
-                        {formatDateFull(details.scan_time)}
+                        {formatDateFull(details.started_at)}
                       </p>
                     </div>
                   </div>

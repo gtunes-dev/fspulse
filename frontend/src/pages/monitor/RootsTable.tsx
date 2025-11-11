@@ -148,8 +148,8 @@ export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
                       <span className="text-muted-foreground">Never scanned</span>
                     )
                   } else {
-                    const staleness = getStalenessIndicator(scanInfo.scan_time)
-                    const dateText = formatDateRelative(scanInfo.scan_time)
+                    const staleness = getStalenessIndicator(scanInfo.started_at)
+                    const dateText = formatDateRelative(scanInfo.started_at)
                     const dateWithStaleness = staleness ? `${dateText} ${staleness}` : dateText
 
                     if (scanInfo.state === 'Completed') {

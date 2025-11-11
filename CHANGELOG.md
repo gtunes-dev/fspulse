@@ -9,12 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Directory contents visualization in ItemDetailSheet showing file and folder counts with colored icons
+- Database schema v11: Added `started_at`, `ended_at`, `was_restarted`, and `schedule_id` columns to scans table for tracking scan timing and restart status
+- Database schema v11: Added `deleted_at` column to scan_schedules table for soft delete support (tombstoning)
+- Scan restart detection: automatically marks scans as restarted when resumed after application restart
 
 ### Changed
 - Frontend: Reorganized component structure with co-located page-specific components for improved maintainability
 
 ### Fixed
 - CI: Migrated from deprecated macos-13 to macos-15-intel for Intel builds and macos-latest for ARM builds
+
+### Breaking Changes
+- **FsPulse Query Model**: The `scan_time` column has been renamed to `started_at` in the scans table. Queries using `scan_time` must be updated to use `started_at`
 
 ## [v0.2.7] - 2025-11-11
 
