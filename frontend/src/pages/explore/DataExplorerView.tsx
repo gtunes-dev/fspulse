@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { GripVertical, Plus, X } from 'lucide-react'
 import { fetchMetadata, countQuery, fetchQuery } from '@/lib/api'
-import { FilterModal } from '@/components/data-table/FilterModal'
+import { FilterModal } from './FilterModal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatDateFull } from '@/lib/dateUtils'

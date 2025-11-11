@@ -2,12 +2,12 @@ import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { RootsView } from './explore/RootsView'
-import { ScansView } from './explore/ScansView'
-import { ItemsView } from './explore/ItemsView'
-import { ChangesView } from './explore/ChangesView'
-import { AlertsView } from './explore/AlertsView'
-import { QueryView } from './explore/QueryView'
+import { RootsView } from './RootsView'
+import { ScansView } from './ScansView'
+import { ItemsView } from './ItemsView'
+import { ChangesView } from './ChangesView'
+import { AlertsView } from './AlertsView'
+import { QueryView } from './QueryView'
 
 const VALID_TABS = ['roots', 'scans', 'items', 'changes', 'alerts', 'query'] as const
 type TabValue = typeof VALID_TABS[number]

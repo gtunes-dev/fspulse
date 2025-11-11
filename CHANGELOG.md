@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Frontend: Reorganized component structure with co-located page-specific components for improved maintainability
+
 ## [v0.2.7] - 2025-11-11
 
 ### Improved

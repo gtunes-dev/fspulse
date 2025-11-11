@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { RootCard } from '@/components/ui/RootCard'
-import { SearchFilter } from '@/components/ui/SearchFilter'
-import { FileTreeView } from '@/components/browse/FileTreeView'
+import { RootCard } from '@/components/shared/RootCard'
+import { SearchFilter } from '@/components/shared/SearchFilter'
+import { FileTreeView } from './FileTreeView'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 

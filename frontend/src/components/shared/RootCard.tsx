@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { RootPicker } from '@/components/ui/RootPicker'
+import { RootPicker } from '@/components/shared/RootPicker'
 
 interface Root {
   root_id: number

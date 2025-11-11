@@ -1,4 +1,4 @@
-import { DataExplorerView } from '@/components/data-table/DataExplorerView'
+import { DataExplorerView } from './DataExplorerView'
 
 export function ItemsView() {
   return <DataExplorerView domain="items" />

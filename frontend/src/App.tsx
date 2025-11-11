@@ -1,14 +1,14 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ScanManagerProvider } from './contexts/ScanManagerContext'
-import { Header } from './components/Header'
-import { Sidebar } from './components/Sidebar'
-import { ActivityPage } from './pages/ActivityPage'
-import { MonitorPage } from './pages/MonitorPage'
-import { ExplorePage } from './pages/ExplorePage'
-import { AlertsPage } from './pages/AlertsPage'
-import { InsightsPage } from './pages/InsightsPage'
-import { BrowsePage } from './pages/BrowsePage'
-import { SettingsPage } from './pages/SettingsPage'
+import { Header } from './components/layout/Header'
+import { Sidebar } from './components/layout/Sidebar'
+import { ActivityPage } from './pages/activity/ActivityPage'
+import { MonitorPage } from './pages/monitor/MonitorPage'
+import { ExplorePage } from './pages/explore/ExplorePage'
+import { AlertsPage } from './pages/alerts/AlertsPage'
+import { InsightsPage } from './pages/insights/InsightsPage'
+import { BrowsePage } from './pages/browse/BrowsePage'
+import { SettingsPage } from './pages/settings/SettingsPage'
 
 function App() {
   return (

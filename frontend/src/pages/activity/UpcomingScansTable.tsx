@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/table'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import { Clock, Calendar } from 'lucide-react'
-import { RootDetailSheet } from '@/components/browse/RootDetailSheet'
+import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 
 interface UpcomingScan {
   queue_id: number

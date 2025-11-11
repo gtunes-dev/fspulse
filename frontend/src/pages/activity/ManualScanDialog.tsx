@@ -8,8 +8,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { RootPicker } from '@/components/ui/RootPicker'
-import { ScanOptionsFields } from './ScanOptionsFields'
+import { RootPicker } from '@/components/shared/RootPicker'
+import { ScanOptionsFields } from '@/components/shared/ScanOptionsFields'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import { fetchQuery } from '@/lib/api'
 import { Loader2 } from 'lucide-react'

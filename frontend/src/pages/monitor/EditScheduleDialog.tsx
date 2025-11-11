@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScanOptionsFields } from './ScanOptionsFields'
+import { ScanOptionsFields } from '@/components/shared/ScanOptionsFields'
 import { Loader2 } from 'lucide-react'
 import type { ScheduleWithRoot, ScheduleType, IntervalUnit } from '@/lib/types'
 

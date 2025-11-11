@@ -1,6 +1,6 @@
-import { RootsTable } from '@/components/scan/RootsTable'
-import { SchedulesTable } from '@/components/scan/SchedulesTable'
-import { AddRootDialog } from '@/components/scan/AddRootDialog'
+import { RootsTable } from './RootsTable'
+import { SchedulesTable } from './SchedulesTable'
+import { AddRootDialog } from './AddRootDialog'
 import { useState, useRef } from 'react'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 

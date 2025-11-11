@@ -5,7 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ItemDetailSheet } from './ItemDetailSheet'
+import { ItemDetailSheet } from '@/components/shared/ItemDetailSheet'
 import type { TreeNodeData, ItemData } from '@/lib/pathUtils'
 import { getImmediateChildren, itemToTreeNode, sortTreeItems } from '@/lib/pathUtils'
 import { fetchQuery } from '@/lib/api'

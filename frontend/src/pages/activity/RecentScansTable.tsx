@@ -12,7 +12,7 @@ import { fetchQuery } from '@/lib/api'
 import { formatTimeAgo } from '@/lib/dateUtils'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
-import { RootDetailSheet } from '@/components/browse/RootDetailSheet'
+import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 
 interface ScanRow {
   scan_id: number
