@@ -26,6 +26,10 @@ pub enum FsPulseError {
 
     #[error("Scan cancelled")]
     ScanCancelled,
+
+    #[error("Shutting down")]
+    ShuttingDown,
+
 }
 
 #[cfg(test)]

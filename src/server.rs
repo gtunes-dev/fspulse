@@ -21,6 +21,7 @@ use axum::{
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio::sync::broadcast;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
@@ -61,24 +62,37 @@ impl WebServer {
         #[cfg(not(debug_assertions))]
         println!("   Running in PRODUCTION mode - serving embedded assets");
 
-        // Start background queue processor
-        tokio::spawn(async {
+        // Create shutdown channel for background tasks
+        let (shutdown_tx, _) = broadcast::channel::<()>(1);
+
+        // Start background queue processor with shutdown handling
+        let shutdown_rx = shutdown_tx.subscribe();
+        tokio::spawn(async move {
             println!("   Starting background queue processor (polling every 20 seconds)");
             let mut interval = tokio::time::interval(Duration::from_secs(20));
+            let mut shutdown_rx = shutdown_rx;
 
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = interval.tick() => {
+                        let db = match Database::new() {
+                            Ok(db) => db,
+                            Err(e) => {
+                                log::error!("Queue processor: Failed to open database: {}", e);
+                                continue;
+                            }
+                        };
 
-                let db = match Database::new() {
-                    Ok(db) => db,
-                    Err(e) => {
-                        log::error!("Queue processor: Failed to open database: {}", e);
-                        continue;
+                        if let Err(e) = ScanManager::poll_queue(&db) {
+                            log::error!("Queue processor error: {}", e);
+                        }
                     }
-                };
-
-                if let Err(e) = ScanManager::poll_queue(&db) {
-                    log::error!("Queue processor error: {}", e);
+                    _ = shutdown_rx.recv() => {
+                        log::info!("Background queue processor shutting down gracefully");
+                        ScanManager::do_shutdown().await;
+                        println!("   Background queue processor stopped");
+                        break;
+                    }
                 }
             }
         });
@@ -86,7 +100,28 @@ impl WebServer {
         let listener = TcpListener::bind(addr).await
             .map_err(|e| FsPulseError::Error(format!("Failed to bind to {}: {}", addr, e)))?;
 
-        axum::serve(listener, app).await
+        // Set up graceful shutdown handling
+        let shutdown_signal = shutdown_signal();
+
+        log::info!("Server ready to handle requests");
+
+        // Start the server with graceful shutdown
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async move {
+                shutdown_signal.await;
+                log::info!("Shutdown signal received, stopping background tasks...");
+                println!("\n🛑 Shutdown signal received - stopping server gracefully...");
+
+                // Signal background tasks to stop
+                let _ = shutdown_tx.send(());
+
+                // Give background tasks a moment to finish
+                tokio::time::sleep(Duration::from_secs(2)).await;
+
+                log::info!("Server shutdown complete");
+                println!("   Server stopped");
+            })
+            .await
             .map_err(|e| FsPulseError::Error(format!("Server error: {}", e)))?;
 
         Ok(())
@@ -239,4 +274,35 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
         .status(StatusCode::NOT_FOUND)
         .body(Body::from("404 Not Found"))
         .unwrap()
+}
+
+/// Waits for a shutdown signal (SIGTERM or SIGINT)
+async fn shutdown_signal() {
+    use tokio::signal;
+
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {
+            log::info!("Received SIGINT (Ctrl+C)");
+        },
+        _ = terminate => {
+            log::info!("Received SIGTERM");
+        },
+    }
 }

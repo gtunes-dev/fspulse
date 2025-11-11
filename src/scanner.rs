@@ -46,7 +46,6 @@ struct ScanContext<'a> {
     scan: &'a Scan,
     reporter: &'a Arc<ProgressReporter>,
     cancel_token: &'a Arc<AtomicBool>,
-    items_processed: &'a mut i32,
 }
 
 impl Scanner {
@@ -59,7 +58,7 @@ impl Scanner {
     ) -> Result<(), FsPulseError> {
         // NOTE: We check for cancellation at appropriate points in the scanner code with:
         //
-        //   if cancel_token.load(Ordering::Relaxed) {
+        //   if cancel_token.load(Ordering::Acquire) {
         //       return Err(FsPulseError::ScanCancelled);
         //   }
         //
@@ -79,9 +78,7 @@ impl Scanner {
             }
 
             // Check for cancellation at the top of the loop
-            if cancel_token.load(Ordering::Acquire) {
-                return Err(FsPulseError::ScanCancelled);
-            }
+            Scanner::check_cancelled(&cancel_token)?;
 
             match loop_state {
                 ScanState::Scanning => {
@@ -100,7 +97,7 @@ impl Scanner {
                 ScanState::Sweeping => {
                     reporter.start_sweeping_phase();
                     if scan.state() == ScanState::Sweeping {
-                        Scanner::do_state_sweeping(db, scan)?;
+                        Scanner::do_state_sweeping(db, scan, &cancel_token)?;
                     }
                     loop_state = ScanState::Analyzing;
                 }
@@ -147,11 +144,7 @@ impl Scanner {
     }
 
     fn scan_directory_recursive(ctx: &mut ScanContext, path: &Path) -> Result<i64, FsPulseError> {
-        // Check for cancellation every 100 items
-        *ctx.items_processed += 1;
-        if *ctx.items_processed % 100 == 0 && ctx.cancel_token.load(Ordering::Acquire) {
-            return Err(FsPulseError::ScanCancelled);
-        }
+        Scanner::check_cancelled(ctx.cancel_token)?;
 
         ctx.reporter.increment_directories_scanned();
 
@@ -180,6 +173,8 @@ impl Scanner {
 
                 total_size += returned_size;
             } else {
+                Scanner::check_cancelled(ctx.cancel_token)?;
+
                 // Handle files, symlinks, and other items
                 let item_type = if item_metadata.is_file() {
                     ItemType::File
@@ -220,16 +215,12 @@ impl Scanner {
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let root_path_buf = PathBuf::from(root.root_path());
-
-        let mut items_processed: i32 = 100;
-
         // Create scanning context
         let mut ctx = ScanContext {
             db,
             scan,
             reporter: &reporter,
             cancel_token,
-            items_processed: &mut items_processed,
         };
 
         // Recursively scan the root directory and get the total size
@@ -244,7 +235,13 @@ impl Scanner {
         scan.set_state_sweeping(db)
     }
 
-    fn do_state_sweeping(db: &mut Database, scan: &mut Scan) -> Result<(), FsPulseError> {
+    fn do_state_sweeping(
+        db: &mut Database,
+        scan: &mut Scan,
+        cancel_token: &Arc<AtomicBool>,
+    ) -> Result<(), FsPulseError> {
+        Scanner::check_cancelled(cancel_token)?;
+
         db.immediate_transaction(|conn| {
             // Insert deletion records into changes
             conn.execute(
@@ -287,6 +284,7 @@ impl Scanner {
         // If the scan doesn't hash or validate, then the scan
         // can be marked complete and we just return
         if !is_hash && !is_val {
+            Scanner::check_cancelled(cancel_token)?;
             scan.set_state_completed(&mut db.lock().unwrap())?;
             return Ok(());
         }
@@ -294,9 +292,6 @@ impl Scanner {
         //let file_count = scan.file_count().unwrap_or_default().max(0) as u64; // scan.file_count is the total # of files in the scan
         let (analyze_total, analyze_done) =
             Item::get_analysis_counts(&db.lock().unwrap(), scan.scan_id(), scan.analysis_spec())?;
-
-        //let analyzed_items =
-        //    Item::count_analyzed_items(&db.lock().unwrap(), scan.scan_id())?.max(0) as u64; // may be resuming the scan
 
         reporter.start_analyzing_phase(analyze_total, analyze_done);
 
@@ -389,10 +384,7 @@ impl Scanner {
         // Because we may have detected the cancellation and aborted or never started
         // some hashing or validation operations, we have to be careful to not allow it to
         // appear complete
-        if cancel_token.load(Ordering::Acquire) {
-            return Err(FsPulseError::ScanCancelled);
-        }
-
+        Scanner::check_cancelled(cancel_token)?;
         scan.set_state_completed(&mut db.lock().unwrap())
     }
 
@@ -429,14 +421,10 @@ impl Scanner {
 
         let mut new_hash = None;
 
-        if analysis_item.needs_hash() {
+        if analysis_item.needs_hash() && !Scanner::is_cancelled(cancel_token) {
             reporter.set_thread_hashing(thread_index, display_path.to_string());
 
-            if cancel_token.load(Ordering::Acquire) {
-                info!("Cancellation detected before hashing: {path:?}");
-                return;
-            }
-
+            // The hash function checks for cancellation at its start and periodically
             new_hash = match Hash::compute_sha2_256_hash(path, cancel_token) {
                 Ok(hash_s) => Some(hash_s),
                 Err(error) => {
@@ -452,12 +440,7 @@ impl Scanner {
         let mut new_val = ValidationState::Unknown;
         let mut new_val_error = None;
 
-        if analysis_item.needs_val() {
-            if cancel_token.load(Ordering::Acquire) {
-                info!("Cancellation detected before validation: {path:?}");
-                return;
-            }
-
+        if analysis_item.needs_val() && !Scanner::is_cancelled(cancel_token) {
             let validator = from_path(path);
             match validator {
                 Some(v) => {
@@ -480,19 +463,22 @@ impl Scanner {
             }
         }
 
-        if let Err(error) = Scanner::update_item_analysis(
-            db,
-            scan,
-            &analysis_item,
-            new_hash,
-            new_val,
-            new_val_error,
-        ) {
-            let e_str = error.to_string();
-            error!(
-                "Error updating item analysis '{}': {}",
-                &display_path, e_str
-            );
+        if !Scanner::is_cancelled(cancel_token) {
+            if let Err(error) = Scanner::update_item_analysis(
+                db,
+                scan,
+                &analysis_item,
+                new_hash,
+                new_val,
+                new_val_error,
+                cancel_token,
+            ) {
+                let e_str = error.to_string();
+                error!(
+                    "Error updating item analysis '{}': {}",
+                    &display_path, e_str
+                );
+            }
         }
 
         reporter.increment_analysis_completed();
@@ -684,6 +670,7 @@ impl Scanner {
         new_hash: Option<String>,
         new_val: ValidationState,
         new_val_error: Option<String>,
+        cancel_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let mut update_changes = false;
 
@@ -764,6 +751,8 @@ impl Scanner {
             i_last_val_scan = Some(scan.scan_id());
         }
 
+        Scanner::check_cancelled(cancel_token)?;
+        
         let db_guard = db.lock().unwrap();
 
         // Use IMMEDIATE transaction for read-then-write pattern
@@ -870,5 +859,19 @@ impl Scanner {
         })?;
 
         Ok(())
+    }
+
+    /// Check if scan has been cancelled, returning error if so
+    fn check_cancelled(cancel_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
+        if cancel_token.load(Ordering::Acquire) {
+            Err(FsPulseError::ScanCancelled)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Check if scan has been cancelled
+    fn is_cancelled(cancel_token: &Arc<AtomicBool>) -> bool {
+        cancel_token.load(Ordering::Acquire)
     }
 }

@@ -11,9 +11,7 @@ use std::{
 use hex::encode;
 use sha2::{Digest, Sha256};
 
-use crate::{
-    error::FsPulseError,
-};
+use crate::error::FsPulseError;
 
 pub struct Hash;
 
@@ -22,6 +20,12 @@ impl Hash {
         path: &Path,
         cancel_token: &Arc<AtomicBool>,
     ) -> Result<String, FsPulseError> {
+
+        // Check for cancellation before doing any work
+        if cancel_token.load(Ordering::Acquire) {
+            return Err(FsPulseError::ScanCancelled);
+        }
+
         let f = File::open(path)?;
 
         let mut hasher = Sha256::new();
@@ -65,8 +69,7 @@ mod tests {
             .expect("Failed to write to temp file");
 
         let cancel_token = Arc::new(AtomicBool::new(false));
-        let result =
-            Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -85,8 +88,7 @@ mod tests {
             .expect("Failed to write to temp file");
 
         let cancel_token = Arc::new(AtomicBool::new(false));
-        let result =
-            Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -105,10 +107,7 @@ mod tests {
             .expect("Failed to write to temp file");
 
         let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_sha2_256_hash(
-            temp_file.path(),
-            &cancel_token,
-        );
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -124,10 +123,7 @@ mod tests {
         let nonexistent_path = std::path::Path::new("/this/path/does/not/exist.txt");
         let cancel_token = Arc::new(AtomicBool::new(false));
 
-        let result = Hash::compute_sha2_256_hash(
-            nonexistent_path,
-            &cancel_token,
-        );
+        let result = Hash::compute_sha2_256_hash(nonexistent_path, &cancel_token);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), FsPulseError::IoError(_)));
     }
@@ -144,8 +140,7 @@ mod tests {
 
         let cancel_token = Arc::new(AtomicBool::new(true)); // Set to true to trigger cancellation
 
-        let result =
-            Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), FsPulseError::ScanCancelled));

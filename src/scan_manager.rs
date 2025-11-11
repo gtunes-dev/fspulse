@@ -21,6 +21,7 @@ static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
         current_scan: None,
         broadcaster,
         db_is_compacting: false,
+        is_shutting_down: false,
     })
 });
 
@@ -29,6 +30,7 @@ pub struct ScanManager {
     current_scan: Option<ActiveScanInfo>,
     broadcaster: broadcast::Sender<BroadcastMessage>,
     db_is_compacting: bool,
+    is_shutting_down: bool,
 }
 
 /// Information about the currently running scan
@@ -38,9 +40,7 @@ struct ActiveScanInfo {
     root_path: String,
     cancel_token: Arc<AtomicBool>,
     reporter: Arc<ProgressReporter>,
-    #[allow(dead_code)]
     task_handle: Option<JoinHandle<()>>,
-    #[allow(dead_code)]
     broadcast_handle: Option<JoinHandle<()>>,
 }
 
@@ -71,6 +71,8 @@ impl ScanManager {
         // Hold mutex for entire operation to avoid race
         let mut manager = Self::instance().lock().unwrap();
 
+        manager.check_shutting_down_locked()?;
+
         // Create queue entry atomically with root existence check
         db.immediate_transaction(|conn| {
             QueueEntry::create_manual(conn, root_id, hash_mode, validate_mode)
@@ -78,7 +80,7 @@ impl ScanManager {
 
         // Try to start immediately (while still holding mutex)
         // Whether it starts or not, scheduling succeeded
-        manager.try_start_next_scan(db)?;
+        manager.try_start_next_scan_locked(db)?;
 
         Ok(())
     }
@@ -91,7 +93,9 @@ impl ScanManager {
         params: crate::schedules::CreateScheduleParams,
     ) -> Result<Schedule, FsPulseError> {
         // Hold mutex to prevent queue modifications during schedule creation
-        let _manager = Self::instance().lock().unwrap();
+        let manager = Self::instance().lock().unwrap();
+
+        manager.check_shutting_down_locked()?;
 
         // Create schedule and queue entry in transaction
         db.immediate_transaction(|conn| Schedule::create_and_queue(conn, params))
@@ -101,7 +105,9 @@ impl ScanManager {
     /// Updates schedule and recalculates next_scan_time atomically
     pub fn update_schedule(db: &Database, schedule: &Schedule) -> Result<(), FsPulseError> {
         // Hold mutex to prevent queue modifications during schedule update
-        let _manager = Self::instance().lock().unwrap();
+        let manager = Self::instance().lock().unwrap();
+
+        manager.check_shutting_down_locked()?;
 
         // Update schedule in transaction
         db.immediate_transaction(|conn| schedule.update(conn))
@@ -112,7 +118,9 @@ impl ScanManager {
     /// Fails if a scan is currently running for this schedule
     pub fn delete_schedule(db: &Database, schedule_id: i64) -> Result<(), FsPulseError> {
         // Hold mutex to prevent queue modifications during schedule deletion
-        let _manager = Self::instance().lock().unwrap();
+        let manager = Self::instance().lock().unwrap();
+
+        manager.check_shutting_down_locked()?;
 
         // Delete schedule in transaction
         db.immediate_transaction(|conn| Schedule::delete(conn, schedule_id))
@@ -127,7 +135,9 @@ impl ScanManager {
         enabled: bool,
     ) -> Result<(), FsPulseError> {
         // Hold mutex to prevent queue modifications during enable/disable
-        let _manager = Self::instance().lock().unwrap();
+        let manager = Self::instance().lock().unwrap();
+
+        manager.check_shutting_down_locked()?;
 
         // set_enabled already creates its own transaction
         Schedule::set_enabled(db, schedule_id, enabled)
@@ -138,17 +148,57 @@ impl ScanManager {
         let mut manager = Self::instance().lock().unwrap();
 
         // Try to start next scan - it's fine if nothing happens
-        manager.try_start_next_scan(db)?;
+        manager.try_start_next_scan_locked(db)?;
 
         Ok(())
+    }
+
+    pub async fn do_shutdown() {
+        // Extract handles in a separate scope to ensure mutex is released
+        let (task_handle, broadcast_handle) = {
+            let mut manager = Self::instance().lock().unwrap();
+
+            // setting this to true will prevent additional scans from starting
+            manager.is_shutting_down = true;
+
+            // Signal cancellation and extract task handle
+            if let Some(active) = &mut manager.current_scan {
+                active.cancel_token.store(true, Ordering::Release);
+                let task_handle = active.task_handle.take();  // Move the task handle out, leaving None
+                let broadcast_handle = active.broadcast_handle.take(); // Move the broadcast handle out, leaving none
+                (task_handle, broadcast_handle)
+            } else {
+                (None, None)
+            }
+            // MutexGuard drops here at end of block
+        };
+
+        // Wait for scan task to complete
+        if let Some(handle) = task_handle {
+            log::info!("Waiting for active scan to complete...");
+            // Await the task completion
+            let _ = handle.await;
+            log::info!("Active scan completed");
+        }
+
+        if let Some(handle) = broadcast_handle {
+            log::info!("Waiting for active broadcast thread to complete...");
+            let _ = handle.await;
+            log::info!("Broadcast thread completed");
+        }
+    }
+
+    pub fn is_shutting_down() -> bool {
+        let manager = Self::instance().lock().unwrap();
+        manager.is_shutting_down
     }
 
     /// Shared logic: Find and start next scan
     /// Called with mutex already held
     /// Updates self.current_scan if scan started
-    fn try_start_next_scan(&mut self, db: &Database) -> Result<(), FsPulseError> {
-        // Already running or database compaction in progress?
-        if self.current_scan.is_some() || self.db_is_compacting {
+    fn try_start_next_scan_locked(&mut self, db: &Database) -> Result<(), FsPulseError> {
+        // Already running a scan, compacting the database, or shutting down?
+        if self.current_scan.is_some() || self.db_is_compacting || self.is_shutting_down {
             return Ok(());
         }
 
@@ -215,19 +265,12 @@ impl ScanManager {
             }
         });
 
-        // Store active scan state
-        self.current_scan = Some(ActiveScanInfo {
-            scan_id,
-            root_id,
-            root_path: root_path.clone(),
-            cancel_token: Arc::clone(&cancel_token),
-            reporter: Arc::clone(&reporter),
-            task_handle: None,
-            broadcast_handle: Some(broadcast_handle),
-        });
+        // Clone references we need to keep after moving into spawn_blocking
+        let cancel_token_for_storage = Arc::clone(&cancel_token);
+        let reporter_for_storage = Arc::clone(&reporter);
 
         // Spawn scan task
-        tokio::task::spawn_blocking(move || {
+        let task_handle = tokio::task::spawn_blocking(move || {
             let db = Database::new().expect("Failed to open database");
             let root = Root::get_by_id(db.conn(), root_id)
                 .expect("Failed to get root")
@@ -249,12 +292,18 @@ impl ScanManager {
                     reporter.mark_completed();
                 }
                 Err(ref e) if matches!(e, FsPulseError::ScanCancelled) => {
-                    info!("Scan {} was cancelled, rolling back changes", scan_id);
-                    if let Err(stop_err) = scan.set_state_stopped(&mut db_mut) {
-                        error!("Failed to stop scan {}: {}", scan_id, stop_err);
-                        reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
-                    } else {
-                        reporter.mark_stopped();
+                    // If the scan is shuttind down, we always treat ScanCancelled as if it's a result
+                    // of the shutdown. There's a chance that the user was trying to cancel the scan
+                    // and if that's the case, the scan will unexpectedly resume the next time the 
+                    // process starts. We accept that.
+                    if !ScanManager::is_shutting_down() {
+                        info!("Scan {} was cancelled, rolling back changes", scan_id);
+                        if let Err(stop_err) = scan.set_state_stopped(&mut db_mut) {
+                            error!("Failed to stop scan {}: {}", scan_id, stop_err);
+                            reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
+                        } else {
+                            reporter.mark_stopped();
+                        }
                     }
                 }
                 Err(e) => {
@@ -278,6 +327,17 @@ impl ScanManager {
             }
         });
 
+        // Store active scan state with task handle
+        self.current_scan = Some(ActiveScanInfo {
+            scan_id,
+            root_id,
+            root_path: root_path.clone(),
+            cancel_token: cancel_token_for_storage,
+            reporter: reporter_for_storage,
+            task_handle: Some(task_handle),
+            broadcast_handle: Some(broadcast_handle),
+        });
+
         Ok(())
     }
 
@@ -288,7 +348,11 @@ impl ScanManager {
         let mut manager = Self::instance().lock().unwrap();
 
         // Clean up queue (verifies state, deletes/clears entry)
-        QueueEntry::complete_work(db, scan_id)?;
+        // If we're shutting down, we don't clear the queue entry. It will be taken care
+        // of on the next run
+        if !manager.is_shutting_down {
+            QueueEntry::complete_work(db, scan_id)?;
+        }
 
         if let Some(active) = &manager.current_scan {
             if active.scan_id == scan_id {
@@ -303,7 +367,7 @@ impl ScanManager {
                 // messages are enough to get it into a corrected state
                 manager.broadcast_current_state_locked(true);
                 manager.current_scan = None;
-                log::info!("Scan {} completed, ScanManager now idle", scan_id);
+                log::info!("Scan {} completed or exited, ScanManager now idle", scan_id);
             }
         }
 
@@ -312,10 +376,14 @@ impl ScanManager {
 
     /// Request cancellation of the current scan
     pub fn request_cancellation(scan_id: i64) -> Result<(), String> {
-        let manager = Self::instance().lock().unwrap();
+        let manager: std::sync::MutexGuard<'_, ScanManager> = Self::instance().lock().unwrap();
 
         match &manager.current_scan {
             Some(active) if active.scan_id == scan_id => {
+                if manager.is_shutting_down {
+                    return Err("Shutting down".to_string());
+                }
+
                 let current_status = active.reporter.get_status();
 
                 match current_status {
@@ -358,6 +426,11 @@ impl ScanManager {
     /// Called on WebSocket connection and by broadcast thread
     /// Thread-safe: acquires mutex to read current state
     pub fn broadcast_current_state_locked(&self, allow_send_terminal: bool) {
+        // if shutting down, don't broadcast
+        if self.is_shutting_down {
+            return;
+        }
+
         if let Some(active) = &self.current_scan {
             let scan_progress_status = active.reporter.get_current_state();
             let scan_status = active.reporter.get_current_state().status;
@@ -416,4 +489,15 @@ impl ScanManager {
 
         result.map_err(|e| e.to_string())
     }
+
+    /// Check if the process is shutting down, returning error if so
+    /// Must be called with the scan manager mutiex
+    fn check_shutting_down_locked(&self) -> Result<(), FsPulseError> {
+        if self.is_shutting_down {
+            Err(FsPulseError::ShuttingDown)
+        } else {
+            Ok(())
+        }
+    }
+
 }
