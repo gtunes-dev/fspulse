@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.7] - 2025-11-11
+
 ### Improved
 - Graceful shutdown handling: server now waits for active scans to complete before exiting, preventing data corruption and allowing scan resumption on restart
 
