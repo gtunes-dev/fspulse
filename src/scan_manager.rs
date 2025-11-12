@@ -164,7 +164,7 @@ impl ScanManager {
             // Signal cancellation and extract task handle
             if let Some(active) = &mut manager.current_scan {
                 active.cancel_token.store(true, Ordering::Release);
-                let task_handle = active.task_handle.take();  // Move the task handle out, leaving None
+                let task_handle = active.task_handle.take(); // Move the task handle out, leaving None
                 let broadcast_handle = active.broadcast_handle.take(); // Move the broadcast handle out, leaving none
                 (task_handle, broadcast_handle)
             } else {
@@ -271,10 +271,28 @@ impl ScanManager {
 
         // Spawn scan task
         let task_handle = tokio::task::spawn_blocking(move || {
-            let db = Database::new().expect("Failed to open database");
-            let root = Root::get_by_id(db.conn(), root_id)
-                .expect("Failed to get root")
-                .expect("Root not found");
+            let db = match Database::new() {
+                Ok(db) => db,
+                Err(e) => {
+                    error!("Failed to open database in scan task: {}", e);
+                    reporter.mark_error(format!("Failed to open database: {}", e));
+                    return;
+                }
+            };
+
+            let root = match Root::get_by_id(db.conn(), root_id) {
+                Ok(Some(root)) => root,
+                Ok(None) => {
+                error!("Root {} not found", root_id);
+                    reporter.mark_error(format!("Root {} not found", root_id));
+                    return;
+                }
+                Err(e) => {
+                    error!("Failed to get root {}: {}", root_id, e);
+                    reporter.mark_error(format!("Failed to get root: {}", e));
+                    return;
+                }
+            };
 
             // Run scan
             let mut db_mut = db;
@@ -294,7 +312,7 @@ impl ScanManager {
                 Err(ref e) if matches!(e, FsPulseError::ScanCancelled) => {
                     // If the scan is shuttind down, we always treat ScanCancelled as if it's a result
                     // of the shutdown. There's a chance that the user was trying to cancel the scan
-                    // and if that's the case, the scan will unexpectedly resume the next time the 
+                    // and if that's the case, the scan will unexpectedly resume the next time the
                     // process starts. We accept that.
                     if !ScanManager::is_shutting_down() {
                         info!("Scan {} was cancelled, rolling back changes", scan_id);
@@ -499,5 +517,4 @@ impl ScanManager {
             Ok(())
         }
     }
-
 }

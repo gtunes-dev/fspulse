@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- When initiating a scan, failure to open the database or find the specified root could panic
+
 ## [v0.2.9] - 2025-11-11
 
 ### Critical Fix
