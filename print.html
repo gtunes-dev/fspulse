@@ -1757,7 +1757,9 @@ docker exec -it fspulse fspulse explore
 <tr><td><code>hash_all</code></td><td>Boolean</td><td>Hash all items including unchanged</td></tr>
 <tr><td><code>is_val</code></td><td>Boolean</td><td>Validate new or changed files</td></tr>
 <tr><td><code>val_all</code></td><td>Boolean</td><td>Validate all items including unchanged</td></tr>
-<tr><td><code>scan_time</code></td><td>Date</td><td>Timestamp when scan was performed</td></tr>
+<tr><td><code>started_at</code></td><td>Date</td><td>Timestamp when scan started</td></tr>
+<tr><td><code>ended_at</code></td><td>Date</td><td>Timestamp when scan ended (null if incomplete)</td></tr>
+<tr><td><code>was_restarted</code></td><td>Boolean</td><td>True if scan was resumed after restart</td></tr>
 <tr><td><code>file_count</code></td><td>Integer</td><td>Count of files found in the scan</td></tr>
 <tr><td><code>folder_count</code></td><td>Integer</td><td>Count of directories found in the scan</td></tr>
 <tr><td><code>total_size</code></td><td>Integer</td><td>Total size in bytes of all files in the scan</td></tr>
@@ -1840,7 +1842,7 @@ docker exec -it fspulse fspulse explore
 <h2 id="combining-filters"><a class="header" href="#combining-filters">Combining Filters</a></h2>
 <p>When specifying multiple values within a single filter, the match is logically <strong>OR</strong>. When specifying multiple filters across different columns, the match is logically <strong>AND</strong>.</p>
 <p>For example:</p>
-<pre><code class="language-text">scans where scan_time:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), hashing:(T)
+<pre><code class="language-text">scans where started_at:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), hashing:(T)
 </code></pre>
 <p>This query matches scans that:</p>
 <ul>
@@ -1888,10 +1890,10 @@ items where item_path:('reports')
 changes where val_new:(I) show default, val_old, val_new order by change_id desc
 
 # Scans with timestamp for programmatic processing
-scans show scan_id, scan_time@timestamp, file_count order by scan_time desc limit 10
+scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10
 
 # Scans with changes and alerts
-scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by scan_time desc
+scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by started_at desc
 </code></pre>
 <hr />
 <p>See also: <a href="interactive_mode.html">Interactive Mode</a> · <a href="validators.html">Validators</a> · <a href="configuration.html">Configuration</a></p>
@@ -2184,7 +2186,7 @@ files and directories discovered. The details of scanning are explained in <a hr
 <li>Whether hashing and validation were enabled</li>
 <li>The collection of items (files and folders) found during the scan</li>
 </ul>
-<p>Scans are always tied to a root via <code>root_id</code>, and are ordered chronologically by <code>scan_time</code>.</p>
+<p>Scans are always tied to a root via <code>root_id</code>, and are ordered chronologically by <code>started_at</code>.</p>
 <hr />
 <h2 id="item"><a class="header" href="#item">Item</a></h2>
 <p>An <strong>item</strong> represents a single file or folder discovered during a scan.</p>
