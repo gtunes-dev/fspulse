@@ -625,7 +625,7 @@ impl Schedule {
                 hash_mode = ?,
                 validate_mode = ?,
                 updated_at = ?
-            WHERE schedule_id = ?",
+            WHERE schedule_id = ? AND deleted_at IS NULL",
             rusqlite::params![
                 self.schedule_name,
                 self.schedule_type.as_i32(),
@@ -680,7 +680,7 @@ impl Schedule {
         db.immediate_transaction(|conn| {
             // Update the schedule
             let rows_affected = conn.execute(
-                "UPDATE scan_schedules SET enabled = ?, updated_at = ? WHERE schedule_id = ?",
+                "UPDATE scan_schedules SET enabled = ?, updated_at = ? WHERE schedule_id = ? AND deleted_at IS NULL",
                 rusqlite::params![enabled, now, schedule_id],
             )
             .map_err(FsPulseError::DatabaseError)?;
@@ -747,10 +747,12 @@ impl Schedule {
     }
 
     /// Delete a schedule and its associated queue entry
+    /// Soft deletes a schedule by setting deleted_at timestamp
+    ///
     /// Fails if a scan is currently running for this schedule
     ///
     /// IMPORTANT: Caller must hold an immediate transaction
-    pub fn delete(conn: &rusqlite::Connection, schedule_id: i64) -> Result<(), FsPulseError> {
+    pub fn delete_immediate(conn: &rusqlite::Connection, schedule_id: i64) -> Result<(), FsPulseError> {
         // Check if scan is currently running for this schedule
         let scan_id: Option<Option<i64>> = conn.query_row(
             "SELECT scan_id FROM scan_queue WHERE schedule_id = ?",
@@ -776,16 +778,17 @@ impl Schedule {
         )
         .map_err(FsPulseError::DatabaseError)?;
 
-        // Delete the schedule itself
+        // Soft delete the schedule by setting deleted_at timestamp
         let rows_affected = conn.execute(
-            "DELETE FROM scan_schedules WHERE schedule_id = ?",
+            "UPDATE scan_schedules SET deleted_at = strftime('%s', 'now', 'utc')
+             WHERE schedule_id = ? AND deleted_at IS NULL",
             [schedule_id]
         )
         .map_err(FsPulseError::DatabaseError)?;
 
         if rows_affected == 0 {
             return Err(FsPulseError::Error(format!(
-                "Schedule with id {} not found",
+                "Schedule with id {} not found or already deleted",
                 schedule_id
             )));
         }
@@ -1089,7 +1092,7 @@ pub fn count_schedules_for_root(db: &Database, root_id: i64) -> Result<i64, FsPu
     let conn = db.conn();
 
     let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM scan_schedules WHERE root_id = ? AND enabled = 1",
+        "SELECT COUNT(*) FROM scan_schedules WHERE root_id = ? AND enabled = 1 AND deleted_at IS NULL",
         [root_id],
         |row| row.get(0)
     )
@@ -1160,9 +1163,10 @@ pub fn delete_schedules_for_root_immediate(
     )
     .map_err(FsPulseError::DatabaseError)?;
 
-    // Delete schedules
+    // Soft delete schedules by setting deleted_at timestamp
     conn.execute(
-        "DELETE FROM scan_schedules WHERE root_id = ?",
+        "UPDATE scan_schedules SET deleted_at = strftime('%s', 'now', 'utc')
+         WHERE root_id = ? AND deleted_at IS NULL",
         [root_id]
     )
     .map_err(FsPulseError::DatabaseError)?;
@@ -1181,6 +1185,70 @@ pub struct UpcomingScan {
     pub next_scan_time: i64,  // Unix timestamp
     pub source: SourceType,
     pub is_queued: bool,  // true if next_scan_time <= now (waiting to start)
+}
+
+/// Schedule with root path and next scan time
+#[derive(Debug, Serialize)]
+pub struct ScheduleWithRoot {
+    #[serde(flatten)]
+    pub schedule: Schedule,
+    pub root_path: String,
+    pub next_scan_time: Option<i64>,
+}
+
+/// List all schedules with root information and next scan time
+/// Only returns non-deleted schedules, ordered by schedule name
+pub fn list_schedules(db: &Database) -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
+    let conn = db.conn();
+
+    let mut stmt = conn.prepare(
+        "SELECT
+            s.schedule_id, s.root_id, s.enabled, s.schedule_name, s.schedule_type,
+            s.time_of_day, s.days_of_week, s.day_of_month,
+            s.interval_value, s.interval_unit,
+            s.hash_mode, s.validate_mode,
+            s.created_at, s.updated_at,
+            r.root_path,
+            q.next_scan_time
+        FROM scan_schedules s
+        INNER JOIN roots r ON s.root_id = r.root_id
+        LEFT JOIN scan_queue q ON s.schedule_id = q.schedule_id
+        WHERE s.deleted_at IS NULL
+        ORDER BY s.schedule_name COLLATE NOCASE ASC"
+    )?;
+
+    let schedules = stmt.query_map([], |row| {
+        Ok(ScheduleWithRoot {
+            schedule: Schedule {
+                schedule_id: row.get(0)?,
+                root_id: row.get(1)?,
+                enabled: row.get(2)?,
+                schedule_name: row.get(3)?,
+                schedule_type: ScheduleType::from_i32(row.get(4)?)
+                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(4, "schedule_type".to_string(), rusqlite::types::Type::Integer))?,
+                time_of_day: row.get(5)?,
+                days_of_week: row.get(6)?,
+                day_of_month: row.get(7)?,
+                interval_value: row.get(8)?,
+                interval_unit: row.get::<_, Option<i32>>(9)?
+                    .map(|v| IntervalUnit::from_i32(v).ok_or_else(||
+                        rusqlite::Error::InvalidColumnType(9, "interval_unit".to_string(), rusqlite::types::Type::Integer)
+                    ))
+                    .transpose()?,
+                hash_mode: HashMode::from_i32(row.get(10)?)
+                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(10, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
+                validate_mode: ValidateMode::from_i32(row.get(11)?)
+                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(11, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
+            },
+            root_path: row.get(14)?,
+            next_scan_time: row.get(15)?,
+        })
+    })?;
+
+    let results: Result<Vec<_>, _> = schedules.collect();
+    results.map_err(FsPulseError::DatabaseError)
 }
 
 #[cfg(test)]

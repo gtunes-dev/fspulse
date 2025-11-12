@@ -3,11 +3,11 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use crate::database::Database;
 use crate::scan_manager::ScanManager;
-use crate::schedules::{CreateScheduleParams, QueueEntry, Schedule, ScheduleType, IntervalUnit};
+use crate::schedules::{CreateScheduleParams, QueueEntry, Schedule, ScheduleType, ScheduleWithRoot, IntervalUnit};
 use crate::scans::{HashMode, ValidateMode};
 
 /// Request body for creating a schedule
@@ -192,15 +192,6 @@ pub async fn get_upcoming_scans() -> Result<Json<Value>, StatusCode> {
     Ok(Json(json!({ "upcoming_scans": scans })))
 }
 
-/// Response body for schedule with root information
-#[derive(Debug, Serialize)]
-pub struct ScheduleWithRoot {
-    #[serde(flatten)]
-    pub schedule: Schedule,
-    pub root_path: String,
-    pub next_scan_time: Option<i64>,
-}
-
 /// GET /api/schedules
 /// List all schedules with their root information and next scan time
 pub async fn list_schedules() -> Result<Json<Vec<ScheduleWithRoot>>, StatusCode> {
@@ -210,65 +201,11 @@ pub async fn list_schedules() -> Result<Json<Vec<ScheduleWithRoot>>, StatusCode>
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let conn = db.conn();
+    let schedules = crate::schedules::list_schedules(&db)
+        .map_err(|e| {
+            log::error!("Failed to list schedules: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    // Query all schedules with root information and next_scan_time from queue
-    let mut stmt = conn.prepare(
-        "SELECT
-            s.schedule_id, s.root_id, s.enabled, s.schedule_name, s.schedule_type,
-            s.time_of_day, s.days_of_week, s.day_of_month,
-            s.interval_value, s.interval_unit,
-            s.hash_mode, s.validate_mode,
-            s.created_at, s.updated_at,
-            r.root_path,
-            q.next_scan_time
-        FROM scan_schedules s
-        INNER JOIN roots r ON s.root_id = r.root_id
-        LEFT JOIN scan_queue q ON s.schedule_id = q.schedule_id
-        ORDER BY s.schedule_name COLLATE NOCASE ASC"
-    ).map_err(|e| {
-        log::error!("Failed to prepare query: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let schedules = stmt.query_map([], |row| {
-        Ok(ScheduleWithRoot {
-            schedule: Schedule {
-                schedule_id: row.get(0)?,
-                root_id: row.get(1)?,
-                enabled: row.get(2)?,
-                schedule_name: row.get(3)?,
-                schedule_type: ScheduleType::from_i32(row.get(4)?)
-                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(4, "schedule_type".to_string(), rusqlite::types::Type::Integer))?,
-                time_of_day: row.get(5)?,
-                days_of_week: row.get(6)?,
-                day_of_month: row.get(7)?,
-                interval_value: row.get(8)?,
-                interval_unit: row.get::<_, Option<i32>>(9)?
-                    .map(|v| IntervalUnit::from_i32(v).ok_or_else(||
-                        rusqlite::Error::InvalidColumnType(9, "interval_unit".to_string(), rusqlite::types::Type::Integer)
-                    ))
-                    .transpose()?,
-                hash_mode: HashMode::from_i32(row.get(10)?)
-                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(10, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
-                validate_mode: ValidateMode::from_i32(row.get(11)?)
-                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(11, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-            },
-            root_path: row.get(14)?,
-            next_scan_time: row.get(15)?,
-        })
-    }).map_err(|e| {
-        log::error!("Failed to execute query: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let results: Result<Vec<_>, _> = schedules.collect();
-    let schedules_vec = results.map_err(|e| {
-        log::error!("Failed to collect schedules: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    Ok(Json(schedules_vec))
+    Ok(Json(schedules))
 }

@@ -123,7 +123,7 @@ impl ScanManager {
         manager.check_shutting_down_locked()?;
 
         // Delete schedule in transaction
-        db.immediate_transaction(|conn| Schedule::delete(conn, schedule_id))
+        db.immediate_transaction(|conn| Schedule::delete_immediate(conn, schedule_id))
     }
 
     /// Set schedule enabled/disabled state

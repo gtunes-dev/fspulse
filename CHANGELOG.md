@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Schedule deletion now uses soft delete (tombstoning) to maintain referential integrity with scans
+- Deleted schedules are properly filtered from UI lists and count queries
+- Historical scan data preserves schedule names even after schedule deletion
+
 ## [v0.2.8] - 2025-11-12
 
 ### Added
