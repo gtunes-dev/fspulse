@@ -7,12 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- Schedule deletion now uses soft delete (tombstoning) to maintain referential integrity with scans
-- Deleted schedules are properly filtered from UI lists and count queries
-- Historical scan data preserves schedule names even after schedule deletion
+## [v0.2.9] - 2025-11-11
+
+### Critical Fix
+- **Schedule Deletion**: Schedules can now be deleted from the UI without database errors. Deletion uses soft delete (tombstoning) to maintain referential integrity with scans that reference deleted schedules. Historical scan data preserves schedule names even after schedule deletion.
+
+### Highlights from v0.2.8
+This release includes all features from v0.2.8:
+- **Scan History Table**: Full pagination (25 per page) with Schedule and Duration columns showing scan source and execution time
+- **Root Filtering**: Filter scan history by specific root or view all roots
+- **Database Schema v11**: Scan timing fields (`started_at`, `ended_at`, `was_restarted`, `schedule_id`)
+- **Directory Contents Visualization**: ItemDetailSheet shows file and folder counts
+- **Breaking Change**: `scan_time` renamed to `started_at` in FsPulse Query Language
 
 ## [v0.2.8] - 2025-11-12
+
+**Note**: v0.2.8 had a critical bug preventing schedule deletion. Please use v0.2.9 or later.
 
 ### Added
 - Scan History table with full pagination (25 per page), replacing limited Recent Scans view
