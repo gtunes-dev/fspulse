@@ -7,29 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.8] - 2025-11-12
+
 ### Added
-- Directory contents visualization in ItemDetailSheet showing file and folder counts with colored icons
-- Database schema v11: Added `started_at`, `ended_at`, `was_restarted`, and `schedule_id` columns to scans table for tracking scan timing and restart status
-- Database schema v11: Added `deleted_at` column to scan_schedules table for soft delete support (tombstoning)
-- Scan restart detection: automatically marks scans as restarted when resumed after application restart
-- Scan History table on Activity page: replaces Recent Scans with full paginated history (25 per page)
-- Scan History: New "Schedule" column showing schedule name (with calendar icon) or "Manual Scan" (with play icon)
-- Scan History: New "Duration" column displaying scan execution time in human-readable format
-- Scan History: Root filter dropdown to view scans for specific roots or all roots
+- Scan History table with full pagination (25 per page), replacing limited Recent Scans view
+- Schedule and Duration columns showing scan source and execution time with visual indicators
+- Root filter dropdown for viewing scan history by specific root or all roots
+- Directory contents visualization in ItemDetailSheet with file and folder counts
+- Database schema v11: scan timing fields (`started_at`, `ended_at`, `was_restarted`, `schedule_id`)
+- Scan restart detection for tracking scans resumed after application restart
 
 ### Changed
-- Frontend: Reorganized component structure with co-located page-specific components for improved maintainability
-- Scans: `ended_at` timestamp is now set when scans complete successfully
-- Activity page: "Recent Scans" renamed to "Scan History" with full pagination support
-- Scan History: Filters to show only completed, stopped, or error state scans (excludes in-progress scans)
+- Scan History displays only terminal states (Completed, Error, Stopped)
+- Frontend component structure reorganized for improved maintainability
 
 ### Fixed
-- CI: Migrated from deprecated macos-13 to macos-15-intel for Intel builds and macos-latest for ARM builds
-- Database queries: Fixed table name from `schedules` to `scan_schedules` in scan history joins
-- Tests: Updated schema version assertion from v10 to v11
+- CI migrated from deprecated macOS 13 to macOS 15 Intel and latest ARM builds
 
 ### Breaking Changes
-- **FsPulse Query Model**: The `scan_time` column has been renamed to `started_at` in the scans table. Queries using `scan_time` must be updated to use `started_at`
+- **FsPulse Query Language**: `scan_time` renamed to `started_at` in scans table. Update existing queries accordingly.
 
 ## [v0.2.7] - 2025-11-11
 
