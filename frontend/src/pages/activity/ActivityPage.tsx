@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ActiveScanCard } from './ActiveScanCard'
 import { ScansCard } from './ManualScanCard'
-import { RecentScansTable } from './RecentScansTable'
+import { ScanHistoryTable } from './ScanHistoryTable'
 import { UpcomingScansTable } from './UpcomingScansTable'
 import { EmptyStateNoRoots } from './EmptyStateNoRoots'
 import { EmptyStateNoScans } from './EmptyStateNoScans'
@@ -136,8 +136,8 @@ export function ActivityPage() {
       {/* Upcoming Scans */}
       <UpcomingScansTable />
 
-      {/* Recent Scans */}
-      <RecentScansTable />
+      {/* Scan History */}
+      <ScanHistoryTable />
     </div>
   )
 }

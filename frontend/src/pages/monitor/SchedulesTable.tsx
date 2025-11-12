@@ -9,18 +9,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DeleteScheduleDialog } from './DeleteScheduleDialog'
 import { EditScheduleDialog } from './EditScheduleDialog'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
+import { RootFilter } from '@/components/shared/RootFilter'
 import { formatDateRelative } from '@/lib/dateUtils'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import type { ScheduleWithRoot } from '@/lib/types'
@@ -171,24 +165,11 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Root Filter */}
-          {uniqueRoots.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Filter by root:</span>
-              <Select value={selectedRootId} onValueChange={setSelectedRootId}>
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Roots</SelectItem>
-                  {uniqueRoots.map(root => (
-                    <SelectItem key={root.id} value={root.id.toString()}>
-                      {root.path}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <RootFilter
+            roots={uniqueRoots}
+            selectedRootId={selectedRootId}
+            onRootChange={setSelectedRootId}
+          />
 
           {paginatedSchedules.length === 0 ? (
             <div className="border border-border rounded-lg">

@@ -55,7 +55,9 @@ scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 | `hash_all`        | Boolean  | Hash all items including unchanged             |
 | `is_val`          | Boolean  | Validate new or changed files                  |
 | `val_all`         | Boolean  | Validate all items including unchanged         |
-| `scan_time`       | Date     | Timestamp when scan was performed              |
+| `started_at`      | Date     | Timestamp when scan started                    |
+| `ended_at`        | Date     | Timestamp when scan ended (null if incomplete) |
+| `was_restarted`   | Boolean  | True if scan was resumed after restart         |
 | `file_count`      | Integer  | Count of files found in the scan               |
 | `folder_count`    | Integer  | Count of directories found in the scan         |
 | `total_size`      | Integer  | Total size in bytes of all files in the scan   |
@@ -158,7 +160,7 @@ When specifying multiple values within a single filter, the match is logically *
 For example:
 
 ```text
-scans where scan_time:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), hashing:(T)
+scans where started_at:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), hashing:(T)
 ```
 
 This query matches scans that:
@@ -228,10 +230,10 @@ items where item_path:('reports')
 changes where val_new:(I) show default, val_old, val_new order by change_id desc
 
 # Scans with timestamp for programmatic processing
-scans show scan_id, scan_time@timestamp, file_count order by scan_time desc limit 10
+scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10
 
 # Scans with changes and alerts
-scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by scan_time desc
+scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by started_at desc
 ```
 
 ---

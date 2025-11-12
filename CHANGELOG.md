@@ -12,13 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Database schema v11: Added `started_at`, `ended_at`, `was_restarted`, and `schedule_id` columns to scans table for tracking scan timing and restart status
 - Database schema v11: Added `deleted_at` column to scan_schedules table for soft delete support (tombstoning)
 - Scan restart detection: automatically marks scans as restarted when resumed after application restart
+- Scan History table on Activity page: replaces Recent Scans with full paginated history (25 per page)
+- Scan History: New "Schedule" column showing schedule name (with calendar icon) or "Manual Scan" (with play icon)
+- Scan History: New "Duration" column displaying scan execution time in human-readable format
+- Scan History: Root filter dropdown to view scans for specific roots or all roots
 
 ### Changed
 - Frontend: Reorganized component structure with co-located page-specific components for improved maintainability
 - Scans: `ended_at` timestamp is now set when scans complete successfully
+- Activity page: "Recent Scans" renamed to "Scan History" with full pagination support
+- Scan History: Filters to show only completed, stopped, or error state scans (excludes in-progress scans)
 
 ### Fixed
 - CI: Migrated from deprecated macos-13 to macos-15-intel for Intel builds and macos-latest for ARM builds
+- Database queries: Fixed table name from `schedules` to `scan_schedules` in scan history joins
+- Tests: Updated schema version assertion from v10 to v11
 
 ### Breaking Changes
 - **FsPulse Query Model**: The `scan_time` column has been renamed to `started_at` in the scans table. Queries using `scan_time` must be updated to use `started_at`

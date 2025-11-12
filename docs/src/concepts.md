@@ -32,7 +32,7 @@ Each scan records metadata about:
 - Whether hashing and validation were enabled
 - The collection of items (files and folders) found during the scan
 
-Scans are always tied to a root via `root_id`, and are ordered chronologically by `scan_time`.
+Scans are always tied to a root via `root_id`, and are ordered chronologically by `started_at`.
 
 ---
 

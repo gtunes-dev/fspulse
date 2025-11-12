@@ -3,16 +3,17 @@ use crate::error::FsPulseError;
 use crate::roots::Root;
 
 use rusqlite::{params, OptionalExtension, Result};
+use serde::Serialize;
 
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -100,6 +101,8 @@ pub struct Scan {
     // Schema fields
     scan_id: i64,
     root_id: i64,
+    #[allow(dead_code)]
+    schedule_id: Option<i64>,
     #[allow(dead_code)]
     started_at: i64,
     #[allow(dead_code)]
@@ -208,13 +211,15 @@ impl Scan {
     fn new_for_scan(
         scan_id: i64,
         root_id: i64,
+        schedule_id: Option<i64>,
+        started_at: i64,
         state: i64,
         analysis_spec: AnalysisSpec,
-        started_at: i64,
     ) -> Self {
         Scan {
             scan_id,
             root_id,
+            schedule_id,
             started_at,
             ended_at: None,
             was_restarted: false,
@@ -234,14 +239,16 @@ impl Scan {
     pub fn create(
         conn: &rusqlite::Connection,
         root: &Root,
+        schedule_id: Option<i64>,
         analysis_spec: &AnalysisSpec,
     ) -> Result<Self, FsPulseError> {
         let (scan_id, started_at): (i64, i64) = conn.query_row(
-            "INSERT INTO scans (root_id, state, is_hash, hash_all, is_val, val_all, started_at)
-             VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc'))
+            "INSERT INTO scans (root_id, schedule_id, state, is_hash, hash_all, is_val, val_all, started_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc'))
              RETURNING scan_id, started_at",
-            [
+            params![
                 root.root_id(),
+                schedule_id,
                 ScanState::Scanning.as_i64(),
                 analysis_spec.is_hash() as i64,
                 analysis_spec.hash_all() as i64,
@@ -254,9 +261,10 @@ impl Scan {
         let scan = Scan::new_for_scan(
             scan_id,
             root.root_id(),
+            schedule_id,
+            started_at,
             ScanState::Scanning.as_i64(),
             *analysis_spec,
-            started_at,
         );
         Ok(scan)
     }
@@ -282,16 +290,16 @@ impl Scan {
         // load the specified scan
         let scan_row: Option<Scan> = conn
             .query_row(query, params![query_param], |row| {
-                let is_hash = row.get(6)?;
-                let hash_all = row.get(7)?;
+                let is_hash = row.get(7)?;
+                let hash_all = row.get(8)?;
                 let hash_mode = match (is_hash, hash_all) {
                     (false, _) => HashMode::None,
                     (_, true) => HashMode::All,
                     _ => HashMode::New,
                 };
 
-                let is_val = row.get(8)?;
-                let val_all = row.get(9)?;
+                let is_val = row.get(9)?;
+                let val_all = row.get(10)?;
 
                 let val_mode = match (is_val, val_all) {
                     (false, _) => ValidateMode::None,
@@ -302,22 +310,23 @@ impl Scan {
                 Ok(Scan {
                     scan_id: row.get(0)?,
                     root_id: row.get(1)?,
-                    started_at: row.get(2)?,
-                    ended_at: row.get(3)?,
-                    was_restarted: row.get(4)?,
-                    state: ScanState::from_i64(row.get(5)?),
+                    schedule_id: row.get(2)?,
+                    started_at: row.get(3)?,
+                    ended_at: row.get(4)?,
+                    was_restarted: row.get(5)?,
+                    state: ScanState::from_i64(row.get(6)?),
                     analysis_spec: AnalysisSpec {
                         hash_mode,
                         val_mode,
                     },
-                    file_count: row.get(10)?,
-                    folder_count: row.get(11)?,
-                    total_size: row.get(12)?,
-                    alert_count: row.get(13)?,
-                    add_count: row.get(14)?,
-                    modify_count: row.get(15)?,
-                    delete_count: row.get(16)?,
-                    error: row.get(17)?,
+                    file_count: row.get(11)?,
+                    folder_count: row.get(12)?,
+                    total_size: row.get(13)?,
+                    alert_count: row.get(14)?,
+                    add_count: row.get(15)?,
+                    modify_count: row.get(16)?,
+                    delete_count: row.get(17)?,
+                    error: row.get(18)?,
                 })
             })
             .optional()?;
@@ -841,6 +850,148 @@ impl ScanStats {
 
         Self::get_for_scan(db, scan.scan_id())
     }
+}
+
+/// Scan history row for the scan history table
+#[derive(Debug, Clone, Serialize)]
+pub struct ScanHistoryRow {
+    pub scan_id: i64,
+    pub root_id: i64,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
+    pub was_restarted: bool,
+    pub schedule_id: Option<i64>,
+    pub schedule_name: Option<String>,
+    pub add_count: Option<i64>,
+    pub modify_count: Option<i64>,
+    pub delete_count: Option<i64>,
+    pub state: i64,
+}
+
+/// Get count of scan history entries (completed, stopped, or error states)
+/// Optionally filtered by root_id
+pub fn get_scan_history_count(
+    db: &Database,
+    root_id: Option<i64>,
+) -> Result<i64, FsPulseError> {
+    let conn = db.conn();
+
+    let count: i64 = if let Some(root_id) = root_id {
+        conn.query_row(
+            "SELECT COUNT(*) FROM scans
+             WHERE state IN (4, 5, 6) AND root_id = ?",
+            [root_id],
+            |row| row.get(0),
+        )?
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM scans
+             WHERE state IN (4, 5, 6)",
+            [],
+            |row| row.get(0),
+        )?
+    };
+
+    Ok(count)
+}
+
+/// Get paginated scan history with schedule information
+/// Only includes completed, stopped, or error states
+/// Optionally filtered by root_id
+/// Ordered by scan_id DESC
+pub fn get_scan_history(
+    db: &Database,
+    root_id: Option<i64>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<ScanHistoryRow>, FsPulseError> {
+    let conn = db.conn();
+
+    let mut result = Vec::new();
+
+    if let Some(root_id) = root_id {
+        let mut stmt = conn.prepare(
+            "SELECT
+                s.scan_id,
+                s.root_id,
+                s.started_at,
+                s.ended_at,
+                s.was_restarted,
+                s.schedule_id,
+                sch.schedule_name,
+                s.add_count,
+                s.modify_count,
+                s.delete_count,
+                s.state
+            FROM scans s
+            LEFT JOIN scan_schedules sch ON s.schedule_id = sch.schedule_id
+            WHERE s.state IN (4, 5, 6) AND s.root_id = ?
+            ORDER BY s.scan_id DESC
+            LIMIT ? OFFSET ?"
+        )?;
+
+        let rows = stmt.query_map(params![root_id, limit, offset], |row| {
+            Ok(ScanHistoryRow {
+                scan_id: row.get(0)?,
+                root_id: row.get(1)?,
+                started_at: row.get(2)?,
+                ended_at: row.get(3)?,
+                was_restarted: row.get(4)?,
+                schedule_id: row.get(5)?,
+                schedule_name: row.get(6)?,
+                add_count: row.get(7)?,
+                modify_count: row.get(8)?,
+                delete_count: row.get(9)?,
+                state: row.get(10)?,
+            })
+        })?;
+
+        for row in rows {
+            result.push(row?);
+        }
+    } else {
+        let mut stmt = conn.prepare(
+            "SELECT
+                s.scan_id,
+                s.root_id,
+                s.started_at,
+                s.ended_at,
+                s.was_restarted,
+                s.schedule_id,
+                sch.schedule_name,
+                s.add_count,
+                s.modify_count,
+                s.delete_count,
+                s.state
+            FROM scans s
+            LEFT JOIN scan_schedules sch ON s.schedule_id = sch.schedule_id
+            WHERE s.state IN (4, 5, 6)
+            ORDER BY s.scan_id DESC
+            LIMIT ? OFFSET ?"
+        )?;
+
+        let rows = stmt.query_map(params![limit, offset], |row| {
+            Ok(ScanHistoryRow {
+                scan_id: row.get(0)?,
+                root_id: row.get(1)?,
+                started_at: row.get(2)?,
+                ended_at: row.get(3)?,
+                was_restarted: row.get(4)?,
+                schedule_id: row.get(5)?,
+                schedule_name: row.get(6)?,
+                add_count: row.get(7)?,
+                modify_count: row.get(8)?,
+                delete_count: row.get(9)?,
+                state: row.get(10)?,
+            })
+        })?;
+
+        for row in rows {
+            result.push(row?);
+        }
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]

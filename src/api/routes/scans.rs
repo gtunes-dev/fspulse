@@ -1,17 +1,17 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        Path, Query, State,
     },
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use log::error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use crate::database::Database;
-use crate::scans::{ScanStats};
+use crate::scans::{ScanStats, ScanHistoryRow};
 
 /// Shared application state
 /// ScanManager is now a global singleton, so AppState is empty
@@ -234,4 +234,66 @@ pub async fn get_last_scan_stats() -> Result<Json<Value>, StatusCode> {
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
+}
+
+/// Query parameters for scan history count endpoint
+#[derive(Debug, Deserialize)]
+pub struct ScanHistoryCountParams {
+    pub root_id: Option<i64>,
+}
+
+/// Response structure for scan history count
+#[derive(Debug, Serialize)]
+pub struct ScanHistoryCountResponse {
+    pub count: i64,
+}
+
+/// Query parameters for scan history fetch endpoint
+#[derive(Debug, Deserialize)]
+pub struct ScanHistoryFetchParams {
+    pub root_id: Option<i64>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+/// Response structure for scan history fetch
+#[derive(Debug, Serialize)]
+pub struct ScanHistoryFetchResponse {
+    pub scans: Vec<ScanHistoryRow>,
+}
+
+/// GET /api/scans/scan_history/count?root_id=X
+/// Returns count of scan history entries (completed, stopped, or error states)
+/// Optionally filtered by root_id
+pub async fn get_scan_history_count(
+    Query(params): Query<ScanHistoryCountParams>,
+) -> Result<Json<ScanHistoryCountResponse>, StatusCode> {
+    let db = Database::new()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let count = crate::scans::get_scan_history_count(&db, params.root_id)
+        .map_err(|e| {
+            error!("Failed to get scan history count: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(ScanHistoryCountResponse { count }))
+}
+
+/// GET /api/scans/scan_history/fetch?root_id=X&limit=25&offset=0
+/// Returns paginated scan history with schedule information
+/// Optionally filtered by root_id
+pub async fn get_scan_history_fetch(
+    Query(params): Query<ScanHistoryFetchParams>,
+) -> Result<Json<ScanHistoryFetchResponse>, StatusCode> {
+    let db = Database::new()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let scans = crate::scans::get_scan_history(&db, params.root_id, params.limit, params.offset)
+        .map_err(|e| {
+            error!("Failed to get scan history: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(ScanHistoryFetchResponse { scans }))
 }

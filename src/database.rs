@@ -394,7 +394,7 @@ mod tests {
             )
             .expect("Should be able to query schema version");
 
-        assert_eq!(version, "10", "Schema version should be 10");
+        assert_eq!(version, "11", "Schema version should be 11");
     }
 
     #[test]

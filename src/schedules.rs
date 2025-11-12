@@ -943,7 +943,7 @@ impl QueueEntry {
 
             // Step 4: Create analysis spec and scan
             let analysis_spec = AnalysisSpec::from_modes(hash_mode, validate_mode);
-            let scan = Scan::create(conn, &root, &analysis_spec)?;
+            let scan = Scan::create(conn, &root, schedule_id, &analysis_spec)?;
 
             // Step 5: Update queue entry with scan_id
             conn.execute(
