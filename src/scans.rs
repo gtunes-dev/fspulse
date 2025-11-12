@@ -469,7 +469,8 @@ impl Scan {
                                 add_count = ?,
                                 modify_count = ?,
                                 delete_count = ?,
-                                state = ?
+                                state = ?,
+                                ended_at = strftime('%s', 'now', 'utc')
                             WHERE scan_id = ?",
                             (
                                 file_count,
