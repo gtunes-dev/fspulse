@@ -307,7 +307,8 @@ impl Scanner {
             .get()
             .expect("Config not initialized")
             .analysis
-            .threads();
+            .threads
+            .value;
 
         let num_threads = cmp::min(items_remaining_usize, thread_count);
         let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread

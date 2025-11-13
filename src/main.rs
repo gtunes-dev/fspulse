@@ -69,7 +69,7 @@ pub fn setup_logging(project_dirs: &ProjectDirs) {
     let config = CONFIG.get().expect("Config not initialized");
     let log_levels = format!(
         "fspulse={}, lopdf={}",
-        config.logging.fspulse, config.logging.lopdf
+        config.logging.fspulse.value, config.logging.lopdf.value
     );
 
     // Check for Docker/custom data directory via environment variable

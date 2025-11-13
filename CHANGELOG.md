@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Configuration system refactored to use two-phase merge with fail-fast validation. Configuration values are normalized before validation, and all errors include contextual information (e.g., field path and source). Invalid configuration now causes immediate application exit with clear error messages.
+
 ### Fixed
 - When initiating a scan, failure to open the database or find the specified root could panic
 

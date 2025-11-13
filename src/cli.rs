@@ -242,14 +242,14 @@ impl Cli {
             Command::Serve => {
                 let config = CONFIG.get().expect("Config not initialized");
 
-                info!("Starting server on {}:{}", config.server.host, config.server.port);
+                info!("Starting server on {}:{}", config.server.host.value, config.server.port.value);
 
                 // Start the async runtime for the web server
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| FsPulseError::Error(format!("Failed to create runtime: {}", e)))?;
 
                 rt.block_on(async {
-                    let web_server = crate::server::WebServer::new(config.server.host.clone(), config.server.port);
+                    let web_server = crate::server::WebServer::new(config.server.host.value.clone(), config.server.port.value);
                     web_server.start().await
                 })
             }

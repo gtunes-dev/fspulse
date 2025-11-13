@@ -179,6 +179,10 @@ impl WebServer {
             .route("/api/database/stats", get(api::database::get_database_stats))
             .route("/api/database/compact", post(api::database::compact_database))
 
+            // Settings endpoints
+            .route("/api/settings", get(api::settings::get_settings))
+            .route("/api/settings", put(api::settings::update_settings))
+
             // WebSocket routes
             .route("/ws/scans/progress", get(api::scans::scan_progress_ws))
 
