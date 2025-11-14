@@ -8,10 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Configuration system refactored to use two-phase merge with fail-fast validation. Configuration values are normalized before validation, and all errors include contextual information (e.g., field path and source). Invalid configuration now causes immediate application exit with clear error messages.
+- **Configuration system refactoring**: Complete overhaul with improved architecture
+  - Data directory (`FSPULSE_DATA_DIR`) now resolved before loading config file to prevent fossilization
+  - Default config file now written as commented template instead of actual values
+  - `Config::load_config()` returns `Result` instead of calling `exit()`, improving testability
+  - All configuration locks hidden inside config module for better encapsulation
+  - Main function now returns `Result<(), Box<dyn Error>>` for idiomatic error handling
+- **Database directory resolution**: Empty `database.dir` now uses data directory as fallback (previous behavior required explicit path or used home directory)
 
 ### Fixed
-- When initiating a scan, failure to open the database or find the specified root could panic
+- Configuration values from `FSPULSE_DATA_DIR` no longer fossilized in config.toml on first run
+- Scan initiation no longer panics when database cannot be opened or specified root not found
+
+### Breaking Changes
+- **Environment variable renamed**: `FSPULSE_DATABASE_PATH` → `FSPULSE_DATABASE_DIR` (reflects that it's a directory, not a file path)
+- **Configuration field renamed**: `database.path` → `database.dir` in config.toml
 
 ## [v0.2.9] - 2025-11-11
 

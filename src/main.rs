@@ -22,23 +22,21 @@ mod sort;
 mod utils;
 mod validate;
 
-use std::env;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use chrono::Local;
 use cli::Cli;
-use config::{Config, CONFIG};
+use config::Config;
 use directories::ProjectDirs;
 use flexi_logger::{Cleanup, Criterion, FileSpec, Logger, Naming};
 use log::{error, info};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let project_dirs =
         ProjectDirs::from("", "", "fspulse").expect("Could not determine project directories");
 
-    let config = Config::load_config(&project_dirs);
-    CONFIG.set(config).expect("Config already set!");
+    Config::load_config(&project_dirs)?;
 
     setup_logging(&project_dirs);
 
@@ -55,29 +53,25 @@ fn main() {
     match result {
         Ok(()) => {
             info!("fspulse completed successfully in {duration:.2?}");
+            Ok(())
         }
         Err(err) => {
             error!("fspulse exited with error in {duration:.2?}");
             error!("{err:?}");
             eprint!("{err}");
-            std::process::exit(1);
+            Err(err.into())
         }
     }
 }
 
-pub fn setup_logging(project_dirs: &ProjectDirs) {
-    let config = CONFIG.get().expect("Config not initialized");
+pub fn setup_logging(_project_dirs: &ProjectDirs) {
     let log_levels = format!(
         "fspulse={}, lopdf={}",
-        config.logging.fspulse.value, config.logging.lopdf.value
+        Config::get_logging_fspulse(), Config::get_logging_lopdf()
     );
 
-    // Check for Docker/custom data directory via environment variable
-    let log_dir = if let Ok(data_dir) = env::var("FSPULSE_DATA_DIR") {
-        PathBuf::from(data_dir).join("logs")
-    } else {
-        project_dirs.data_local_dir().join("logs")
-    };
+    // Use data directory from config (already resolved from FSPULSE_DATA_DIR or default)
+    let log_dir = PathBuf::from(Config::get_data_dir()).join("logs");
 
     Logger::try_with_str(log_levels)
         .unwrap()

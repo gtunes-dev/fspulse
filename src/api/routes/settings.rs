@@ -1,9 +1,8 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
-use std::env;
 use directories::ProjectDirs;
 
-use crate::config::{self, CONFIG};
+use crate::config::{self, MIN_ANALYSIS_THREADS, MAX_ANALYSIS_THREADS};
 use crate::api::scans::AppState;
 
 /// Represents a single configuration setting with its source information
@@ -25,11 +24,25 @@ pub struct ConfigSetting<T> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SettingsResponse {
     pub analysis: AnalysisSettings,
+    pub logging: LoggingSettings,
+    pub server: ServerSettings,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AnalysisSettings {
     pub threads: ConfigSetting<usize>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LoggingSettings {
+    pub fspulse: ConfigSetting<String>,
+    pub lopdf: ConfigSetting<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ServerSettings {
+    pub host: ConfigSetting<String>,
+    pub port: ConfigSetting<u16>,
 }
 
 /// Request structure for PUT /api/settings
@@ -46,58 +59,82 @@ pub struct AnalysisUpdateRequest {
 /// GET /api/settings
 /// Returns current configuration settings with source information
 pub async fn get_settings() -> Result<Json<SettingsResponse>, (StatusCode, String)> {
-    let config = CONFIG.get().ok_or_else(|| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Configuration not initialized".to_string(),
-        )
-    })?;
+    // Helper to compute effective source
+    fn get_effective_source<T>(config_value: &crate::config::ConfigValue<T>) -> &str {
+        if config_value.env_value.is_some() {
+            "environment"
+        } else if config_value.active_file_value.is_some() {
+            "config"
+        } else if config_value.file_value.is_some() {
+            "config"
+        } else {
+            "default"
+        }
+    }
 
-    // The runtime config has provenance information built-in
-    let threads_env_var = "FSPULSE_ANALYSIS_THREADS";
-    let is_from_env = config.analysis.threads.source == crate::config::ConfigSource::Environment;
+    // No locks visible here - all hidden in config module!
 
-    // If value is from environment, load the file to get the config_value
-    // Otherwise, the effective value IS the config value
-    let config_value = if is_from_env {
-        // Load TOML to get the config file value (not the env override)
-        let project_dirs = ProjectDirs::from("", "", "fspulse").ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to determine config directory".to_string(),
-            )
-        })?;
-        let config_path = config::get_config_path(&project_dirs);
-        let toml_value = config::load_toml_only(&config_path).map_err(|e| {
-            (StatusCode::INTERNAL_SERVER_ERROR, e)
-        })?;
-
-        // Extract threads from TOML, or use default if not present
-        toml_value
-            .get("analysis")
-            .and_then(|a| a.get("threads"))
-            .and_then(|t| t.as_integer())
-            .map(|t| t as usize)
-            .unwrap_or_else(|| config::AnalysisConfig::default().threads.value)
-    } else {
-        config.analysis.threads.value
+    // Analysis Threads
+    let threads_value = config::Config::get_analysis_threads_value();
+    let threads_setting = ConfigSetting {
+        config_value: threads_value.file_value.unwrap_or(threads_value.default_value),
+        effective_value: *threads_value.get(),
+        source: get_effective_source(&threads_value).to_string(),
+        env_var: "FSPULSE_ANALYSIS_THREADS".to_string(),
+        editable: threads_value.env_value.is_none(),
     };
 
-    let source_str = match config.analysis.threads.source {
-        crate::config::ConfigSource::Environment => "environment",
-        crate::config::ConfigSource::ConfigFile => "config",
-        crate::config::ConfigSource::Default => "default",
+    // Logging FsPulse
+    let fspulse_value = config::Config::get_logging_fspulse_value();
+    let fspulse_setting = ConfigSetting {
+        config_value: fspulse_value.file_value.clone().unwrap_or_else(|| fspulse_value.default_value.clone()),
+        effective_value: fspulse_value.get().clone(),
+        source: get_effective_source(&fspulse_value).to_string(),
+        env_var: "FSPULSE_LOGGING_FSPULSE".to_string(),
+        editable: fspulse_value.env_value.is_none(),
+    };
+
+    // Logging LoPDF
+    let lopdf_value = config::Config::get_logging_lopdf_value();
+    let lopdf_setting = ConfigSetting {
+        config_value: lopdf_value.file_value.clone().unwrap_or_else(|| lopdf_value.default_value.clone()),
+        effective_value: lopdf_value.get().clone(),
+        source: get_effective_source(&lopdf_value).to_string(),
+        env_var: "FSPULSE_LOGGING_LOPDF".to_string(),
+        editable: lopdf_value.env_value.is_none(),
+    };
+
+    // Server Host
+    let host_value = config::Config::get_server_host_value();
+    let host_setting = ConfigSetting {
+        config_value: host_value.file_value.clone().unwrap_or_else(|| host_value.default_value.clone()),
+        effective_value: host_value.get().clone(),
+        source: get_effective_source(&host_value).to_string(),
+        env_var: "FSPULSE_SERVER_HOST".to_string(),
+        editable: host_value.env_value.is_none(),
+    };
+
+    // Server Port
+    let port_value = config::Config::get_server_port_value();
+    let port_setting = ConfigSetting {
+        config_value: port_value.file_value.unwrap_or(port_value.default_value),
+        effective_value: *port_value.get(),
+        source: get_effective_source(&port_value).to_string(),
+        env_var: "FSPULSE_SERVER_PORT".to_string(),
+        editable: port_value.env_value.is_none(),
     };
 
     let response = SettingsResponse {
         analysis: AnalysisSettings {
-            threads: ConfigSetting {
-                config_value,
-                effective_value: config.analysis.threads.value,
-                source: source_str.to_string(),
-                env_var: threads_env_var.to_string(),
-                editable: !is_from_env,
-            },
+            threads: threads_setting,
+        },
+        logging: LoggingSettings {
+            fspulse: fspulse_setting,
+            lopdf: lopdf_setting,
+        },
+        server: ServerSettings {
+            host: host_setting,
+            port: port_setting,
         },
     };
 
@@ -110,7 +147,7 @@ pub async fn update_settings(
     State(_state): State<AppState>,
     Json(request): Json<SettingsUpdateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    // Get the config file path using helper from config.rs
+    // Get project dirs
     let project_dirs = ProjectDirs::from("", "", "fspulse").ok_or_else(|| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -118,62 +155,27 @@ pub async fn update_settings(
         )
     })?;
 
-    let config_path = config::get_config_path(&project_dirs);
-
-    // Load existing TOML file using helper from config.rs
-    let mut file_toml = config::load_toml_only(&config_path).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, e)
-    })?;
-
-    // Apply updates
-    let mut updated = false;
-
+    // Update analysis threads if provided
     if let Some(analysis_update) = request.analysis {
         if let Some(threads) = analysis_update.threads {
             // Validate threads value
-            if threads < 1 || threads > 24 {
+            if threads < MIN_ANALYSIS_THREADS || threads > MAX_ANALYSIS_THREADS {
                 return Err((
                     StatusCode::BAD_REQUEST,
-                    "Threads must be between 1 and 24".to_string(),
+                    format!("Threads must be between {} and {}", MIN_ANALYSIS_THREADS, MAX_ANALYSIS_THREADS),
                 ));
             }
 
-            // Check if this setting is overridden by environment variable
-            if env::var("FSPULSE_ANALYSIS_THREADS").is_ok() {
-                return Err((
-                    StatusCode::CONFLICT,
-                    "Cannot update analysis.threads: overridden by environment variable FSPULSE_ANALYSIS_THREADS".to_string(),
-                ));
-            }
+            // No locks visible - all hidden in config module!
+            let (_took_effect, message) = config::Config::set_analysis_threads(threads, &project_dirs)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-            // Update the TOML value
-            if let toml::Value::Table(ref mut table) = file_toml {
-                let analysis_table = table
-                    .entry("analysis".to_string())
-                    .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
-
-                if let toml::Value::Table(ref mut analysis) = analysis_table {
-                    analysis.insert("threads".to_string(), toml::Value::Integer(threads as i64));
-                }
-            }
-            updated = true;
+            return Ok((StatusCode::OK, message));
         }
     }
 
-    if !updated {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "No valid settings provided to update".to_string(),
-        ));
-    }
-
-    // Write updated config back to file using helper from config.rs
-    config::write_toml(&config_path, &file_toml).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, e)
-    })?;
-
-    Ok((
-        StatusCode::OK,
-        "Configuration updated successfully. Restart required for changes to take effect.",
+    Err((
+        StatusCode::BAD_REQUEST,
+        "No valid settings provided to update".to_string(),
     ))
 }

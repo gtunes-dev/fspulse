@@ -19,7 +19,6 @@
 
 use crate::alerts::Alerts;
 use crate::changes::ChangeType;
-use crate::config::CONFIG;
 use crate::hash::Hash;
 use crate::items::{AnalysisItem, Item, ItemType};
 use crate::progress::ProgressReporter;
@@ -303,12 +302,7 @@ impl Scanner {
         let items_remaining = analyze_total.saturating_sub(analyze_done); // avoids underflow
         let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
 
-        let thread_count = CONFIG
-            .get()
-            .expect("Config not initialized")
-            .analysis
-            .threads
-            .value;
+        let thread_count = crate::config::Config::get_analysis_threads();
 
         let num_threads = cmp::min(items_remaining_usize, thread_count);
         let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread

@@ -1,15 +1,16 @@
 use crate::{
-    config::CONFIG,
+    config::Config,
     error::FsPulseError,
     schema::{CREATE_SCHEMA_SQL, UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL, UPGRADE_6_TO_7_SQL, UPGRADE_7_TO_8_SQL, UPGRADE_8_TO_9_SQL, UPGRADE_9_TO_10_SQL, UPGRADE_10_TO_11_SQL},
     sort::compare_paths,
 };
-use directories::BaseDirs;
 use log::info;
 use rusqlite::{Connection, OptionalExtension, Result};
-use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+#[cfg(test)]
+use std::env;
 
 const DB_FILENAME: &str = "fspulse.db";
 const CURRENT_SCHEMA_VERSION: u32 = 11;
@@ -42,12 +43,15 @@ impl Database {
     }
 
     pub fn new() -> Result<Self, FsPulseError> {
-        // Database directory precedence:
-        // 1. FSPULSE_DATA_DIR environment variable (Docker / explicit override)
-        // 2. Config file database.path (user's persistent choice)
-        // 3. BaseDirs home directory (native default)
+        // Get database directory from config
+        let db_dir_str = Config::get_database_dir();
 
-        let db_dir = Self::determine_database_directory()?;
+        // Empty string means use data directory
+        let db_dir = if db_dir_str.is_empty() {
+            PathBuf::from(Config::get_data_dir())
+        } else {
+            PathBuf::from(db_dir_str)
+        };
 
         // Validate directory exists and is writable
         Self::validate_directory(&db_dir)?;
@@ -81,32 +85,6 @@ impl Database {
         Ok(db)
     }
 
-    fn determine_database_directory() -> Result<PathBuf, FsPulseError> {
-        // 1. Check FSPULSE_DATA_DIR environment variable
-        if let Ok(data_dir) = env::var("FSPULSE_DATA_DIR") {
-            info!("Using database directory from FSPULSE_DATA_DIR: {}", data_dir);
-            return Ok(PathBuf::from(data_dir));
-        }
-
-        // 2. Check config file for database.path
-        if let Some(config) = CONFIG.get() {
-            if let Some(ref database_config) = config.database {
-                if let Some(path) = database_config.get_path() {
-                    info!("Using database directory from config file: {}", path);
-                    return Ok(PathBuf::from(path));
-                }
-            }
-        }
-
-        // 3. Fall back to home directory (native default)
-        BaseDirs::new()
-            .map(|base| {
-                let path = base.home_dir().to_path_buf();
-                info!("Using home directory for database: {}", path.display());
-                path
-            })
-            .ok_or_else(|| FsPulseError::Error("Could not determine database directory".to_string()))
-    }
 
     fn validate_directory(path: &Path) -> Result<(), FsPulseError> {
         // Check if directory exists

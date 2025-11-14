@@ -2,7 +2,7 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use dialoguer::{theme::ColorfulTheme, BasicHistory, Input, Select};
 use log::info;
 
-use crate::config::CONFIG;
+use crate::config::Config;
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::explore::Explorer;
@@ -240,16 +240,17 @@ impl Cli {
                 QueryProcessor::execute_query_and_print(&db, &query)
             }
             Command::Serve => {
-                let config = CONFIG.get().expect("Config not initialized");
+                info!("Starting server on {}:{}", Config::get_server_host(), Config::get_server_port());
 
-                info!("Starting server on {}:{}", config.server.host.value, config.server.port.value);
+                let host = Config::get_server_host();
+                let port = Config::get_server_port();
 
                 // Start the async runtime for the web server
                 let rt = tokio::runtime::Runtime::new()
                     .map_err(|e| FsPulseError::Error(format!("Failed to create runtime: {}", e)))?;
 
                 rt.block_on(async {
-                    let web_server = crate::server::WebServer::new(config.server.host.value.clone(), config.server.port.value);
+                    let web_server = crate::server::WebServer::new(host, port);
                     web_server.start().await
                 })
             }
