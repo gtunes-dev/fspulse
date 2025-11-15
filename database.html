@@ -182,22 +182,53 @@
 <p>The database file is always named:</p>
 <pre><code class="language-text">fspulse.db
 </code></pre>
-<p>By default, FsPulse stores the database in the root of the user's home directory, as determined by the <a href="https://docs.rs/directories"><code>directories</code></a> crate.</p>
-<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Base Location</th><th>Example</th></tr></thead><tbody>
-<tr><td>Linux</td><td><code>$HOME</code></td><td><code>/home/alice</code></td></tr>
-<tr><td>macOS</td><td><code>$HOME</code></td><td><code>/Users/Alice</code></td></tr>
-<tr><td>Windows</td><td><code>{FOLDERID_Profile}</code></td><td><code>C:\Users\Alice</code></td></tr>
+<h3 id="data-directory"><a class="header" href="#data-directory">Data Directory</a></h3>
+<p>FsPulse uses a <strong>data directory</strong> to store application data including configuration, logs, and (by default) the database. The data directory location is determined by:</p>
+<ol>
+<li><strong><code>FSPULSE_DATA_DIR</code> environment variable</strong> (if set) - overrides the default location</li>
+<li><strong>Platform-specific default</strong> - uses the <a href="https://docs.rs/directories"><code>directories</code></a> crate's project local directory:</li>
+</ol>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Value</th><th>Example</th></tr></thead><tbody>
+<tr><td>Linux</td><td><code>$XDG_DATA_HOME/fspulse</code> or <code>$HOME/.local/share/fspulse</code></td><td><code>/home/alice/.local/share/fspulse</code></td></tr>
+<tr><td>macOS</td><td><code>$HOME/Library/Application Support/fspulse</code></td><td><code>/Users/Alice/Library/Application Support/fspulse</code></td></tr>
+<tr><td>Windows</td><td><code>{FOLDERID_LocalAppData}\fspulse\data</code></td><td><code>C:\Users\Alice\AppData\Local\fspulse\data</code></td></tr>
+<tr><td>Docker</td><td><code>/data</code></td><td><code>/data</code></td></tr>
 </tbody></table>
 </div>
-<p>The full path might look like:</p>
-<pre><code class="language-text">/home/alice/fspulse.db
+<p><strong>What's stored in the data directory:</strong></p>
+<ul>
+<li>Configuration file (<code>config.toml</code>)</li>
+<li>Log files (<code>logs/</code>)</li>
+<li>Database file (<code>fspulse.db</code>) - by default</li>
+</ul>
+<p><strong>Note for Docker users:</strong> The data directory defaults to <code>/data</code> and can be overridden with <code>FSPULSE_DATA_DIR</code>, but this is generally <strong>not recommended</strong> since you can map any host directory or Docker volume to <code>/data</code> instead.</p>
+<h3 id="default-database-location"><a class="header" href="#default-database-location">Default Database Location</a></h3>
+<p>By default, the database is stored in the data directory:</p>
+<pre><code class="language-text">&lt;data_dir&gt;/fspulse.db
+</code></pre>
+<p>For example:</p>
+<pre><code class="language-text">/home/alice/.local/share/fspulse/fspulse.db
 </code></pre>
 <hr />
-<h2 id="custom-database-path"><a class="header" href="#custom-database-path">Custom Database Path</a></h2>
-<p>You can override the default location using the <code>--db-path</code> option:</p>
-<pre><code class="language-sh">fspulse --db-path /some/other/folder
+<h2 id="custom-database-location"><a class="header" href="#custom-database-location">Custom Database Location</a></h2>
+<p>If you need to store the database <strong>outside</strong> the data directory (for example, on a different volume or network share), you can override the database directory specifically:</p>
+<p><strong>Environment Variable:</strong></p>
+<pre><code class="language-sh">export FSPULSE_DATABASE_DIR=/path/to/custom/directory
+fspulse serve
 </code></pre>
-<p>In this case, FsPulse will look for (or create) a file named <code>fspulse.db</code> inside the specified folder. The filename cannot be changed — only the directory is configurable.</p>
+<p><strong>Config File (<code>config.toml</code>):</strong></p>
+<pre><code class="language-toml">[database]
+dir = "/path/to/custom/directory"
+</code></pre>
+<p>In both cases, FsPulse will store the database as <code>fspulse.db</code> inside the specified directory. <strong>The filename cannot be changed</strong> — only the directory is configurable.</p>
+<p><strong>Database Location Precedence:</strong></p>
+<ol>
+<li><code>FSPULSE_DATABASE_DIR</code> environment variable (highest priority)</li>
+<li><code>[database].dir</code> in config.toml</li>
+<li>Data directory (from <code>FSPULSE_DATA_DIR</code> or platform default)</li>
+</ol>
+<p><strong>Important:</strong> Configuration and logs always remain in the data directory, even when the database is moved to a custom location.</p>
+<p>See the <a href="configuration.html#database-settings">Configuration - Database Settings</a> section for more details.</p>
 <hr />
 <h2 id="schema-overview"><a class="header" href="#schema-overview">Schema Overview</a></h2>
 <p>The database schema is implemented using Rust and reflects the same logical structure used by the query interface:</p>
