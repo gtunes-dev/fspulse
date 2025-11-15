@@ -7,22 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- **Configuration system refactoring**: Complete overhaul with improved architecture
-  - Data directory (`FSPULSE_DATA_DIR`) now resolved before loading config file to prevent fossilization
-  - Default config file now written as commented template instead of actual values
-  - `Config::load_config()` returns `Result` instead of calling `exit()`, improving testability
-  - All configuration locks hidden inside config module for better encapsulation
-  - Main function now returns `Result<(), Box<dyn Error>>` for idiomatic error handling
-- **Database directory resolution**: Empty `database.dir` now uses data directory as fallback (previous behavior required explicit path or used home directory)
+### Added
+- **Configuration UI**: New Settings page provides full configuration management through the web UI
+  - View all configuration settings with their current values, sources (environment, config file, or default), and precedence
+  - Edit settings directly in the UI with validation
+  - See which settings require restart and track pending changes
+  - Delete settings from config file to revert to defaults
+  - Visual indicators show which value is currently active
 
-### Fixed
-- Configuration values from `FSPULSE_DATA_DIR` no longer fossilized in config.toml on first run
-- Scan initiation no longer panics when database cannot be opened or specified root not found
+### Changed
+- Deprecated configuration keys now emit warnings at startup instead of causing errors: `FSPULSE_ANALYSIS_HASH` (environment variable) and `analysis.hash` (config.toml)
 
 ### Breaking Changes
 - **Environment variable renamed**: `FSPULSE_DATABASE_PATH` → `FSPULSE_DATABASE_DIR` (reflects that it's a directory, not a file path)
 - **Configuration field renamed**: `database.path` → `database.dir` in config.toml
+- **Default data directory location changed** (native installations only, Docker unaffected):
+  - **Old location**: Home directory (`/home/alice/fspulse.db`)
+  - **New location**: Platform-specific data directory:
+    - Linux: `~/.local/share/fspulse/fspulse.db`
+    - macOS: `~/Library/Application Support/fspulse/fspulse.db`
+    - Windows: `%LOCALAPPDATA%\fspulse\data\fspulse.db`
+
+  **Migration options** (choose one):
+
+  1. **Move database to new location** (recommended):
+     ```bash
+     # Linux/macOS
+     mkdir -p ~/.local/share/fspulse
+     mv ~/fspulse.db ~/.local/share/fspulse/
+     mv ~/config.toml ~/.local/share/fspulse/
+     ```
+
+  2. **Set database directory to old location** via environment variable:
+     ```bash
+     export FSPULSE_DATABASE_DIR=$HOME
+     fspulse serve
+     ```
+
+  3. **Set database directory in config file**:
+     ```toml
+     [database]
+     dir = "/home/alice"  # Use your home directory path
+     ```
 
 ## [v0.2.9] - 2025-11-11
 

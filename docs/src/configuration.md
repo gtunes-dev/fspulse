@@ -8,11 +8,11 @@ FsPulse supports persistent, user-defined configuration through a file named `co
 
 ## Finding `config.toml`
 
-The location of `config.toml` depends on how you're running FsPulse:
+The `config.toml` file is stored in FsPulse's **data directory**. The location depends on how you're running FsPulse:
 
 ### Docker Deployments
 
-When running in Docker, the config file is located at **`/data/config.toml`** inside the container. FsPulse automatically creates this file with default settings on first run.
+When running in Docker, the data directory is **`/data`**, so the config file is located at **`/data/config.toml`** inside the container. FsPulse automatically creates this file with default settings on first run.
 
 To access it from your host machine:
 ```bash
@@ -27,17 +27,21 @@ See the [Docker Deployment](docker.md#configuration) chapter for details on edit
 
 ### Native Installations
 
-FsPulse uses the [directories](https://docs.rs/directories) crate to determine platform-specific locations:
+FsPulse uses the [directories](https://docs.rs/directories) crate to determine the platform-specific data directory location:
 
-| Platform | Location Description     | Example Path                                                  |
-|----------|---------------------------|---------------------------------------------------------------|
-| Linux    | `$XDG_DATA_HOME`          | `/home/alice/.local/share/fspulse`                           |
-| macOS    | Application Support       | `/Users/alice/Library/Application Support/fspulse`           |
-| Windows  | Local AppData             | `C:\Users\Alice\AppData\Local\fspulse`                   |
+| Platform | Data Directory Location | Example Path                                      |
+|----------|-------------------------|---------------------------------------------------|
+| Linux    | `$XDG_DATA_HOME/fspulse` or `$HOME/.local/share/fspulse` | `/home/alice/.local/share/fspulse`   |
+| macOS    | `$HOME/Library/Application Support/fspulse`             | `/Users/alice/Library/Application Support/fspulse` |
+| Windows  | `%LOCALAPPDATA%\fspulse\data`                           | `C:\Users\Alice\AppData\Local\fspulse\data`       |
 
-On first run, FsPulse automatically creates this directory and writes a default `config.toml` if one doesn't exist.
+The config file is located at `<data_dir>/config.toml`.
+
+On first run, FsPulse automatically creates the data directory and writes a default `config.toml` if one doesn't exist.
 
 > **Tip**: You can delete `config.toml` at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.
+>
+> **Override**: The data directory location can be overridden using the `FSPULSE_DATA_DIR` environment variable. See [Data Directory and Database Settings](#data-directory-and-database-settings) for details.
 
 ---
 
@@ -74,7 +78,7 @@ FsPulse uses the Rust [`log`](https://docs.rs/log) crate, and so does the PDF va
 
 ### Log File Behavior
 
-- Logs are written to a `logs/` folder inside the same local data directory as `config.toml`
+- Logs are written to `<data_dir>/logs/`
 - Each run of FsPulse creates a new log file, named using the current date and time
 - FsPulse retains up to **100** log files; older files are automatically deleted
 
@@ -182,30 +186,39 @@ export FSPULSE_ANALYSIS_THREADS=16
 docker run -e FSPULSE_ANALYSIS_THREADS=16 ...
 ```
 
-#### Database Settings
+#### Data Directory and Database Settings
 
-Control database location (advanced):
+Control where FsPulse stores its data:
 
 | Variable | Default | Valid Values | Description |
 |----------|---------|--------------|-------------|
-| `FSPULSE_DATA_DIR` | Platform-specific | Directory path | Override entire data directory location |
-| `FSPULSE_DATABASE_PATH` | `<data_dir>` | Directory path | Override database directory (rarely needed) |
+| `FSPULSE_DATA_DIR` | Platform-specific | Directory path | Override the data directory location. Contains config, logs, and database (by default). Cannot be set in config.toml. |
+| `FSPULSE_DATABASE_DIR` | `<data_dir>` | Directory path | Override database directory only (advanced). Stores the database outside the data directory. This is a directory path, not a file path - the database file is always named `fspulse.db` |
 
-**Note**: Most users should use `FSPULSE_DATA_DIR` rather than `FSPULSE_DATABASE_PATH`. In Docker, this defaults to `/data`.
+**Data Directory:**
 
-**Database Location Precedence:**
-
-FsPulse determines the database location using the following order:
+The data directory contains configuration (`config.toml`), logs (`logs/`), and the database (`fspulse.db`) by default. It is determined by:
 
 1. `FSPULSE_DATA_DIR` environment variable (if set)
-2. `config.toml` `[database]` `path` setting (if configured)
-3. Platform-specific data directory (default):
-   - **Linux**: `~/.local/share/fspulse/`
-   - **macOS**: `~/Library/Application Support/fspulse/`
-   - **Windows**: `%LOCALAPPDATA%\fspulse\`
-   - **Docker**: `/data/`
+2. Platform-specific project local directory (default):
+   - **Linux**: `$XDG_DATA_HOME/fspulse` or `$HOME/.local/share/fspulse`
+   - **macOS**: `$HOME/Library/Application Support/fspulse`
+   - **Windows**: `%LOCALAPPDATA%\fspulse\data`
+   - **Docker**: `/data`
 
-The database file is always named `fspulse.db` within the determined directory.
+**Database Location:**
+
+By default, the database is stored in the data directory as `fspulse.db`. You can override this to store the database separately:
+
+**Database Directory Precedence:**
+1. `FSPULSE_DATABASE_DIR` environment variable (if set) - highest priority
+2. `config.toml` `[database]` `dir` setting (if configured)
+3. Data directory (from `FSPULSE_DATA_DIR` or platform default)
+
+**Important Notes:**
+- The database file is always named **`fspulse.db`** within the determined directory
+- Configuration and logs always remain in the data directory, even if the database is moved
+- For Docker: it's recommended to use volume/bind mounts to `/data` rather than overriding `FSPULSE_DATA_DIR`
 
 #### Docker-Specific Variables
 

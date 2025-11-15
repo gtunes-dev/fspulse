@@ -458,17 +458,39 @@ fn check_for_unknown_keys(
     toml_map: &toml::Table,
     env_map: &toml::Table,
 ) -> Result<(), FsPulseError> {
+    // List of deprecated configuration keys that should warn but not fail
+    // Format: (section, field)
+    const DEPRECATED_KEYS: &[(&str, &str)] = &[
+        ("analysis", "hash"), // Was FSPULSE_ANALYSIS_HASH, deprecated
+    ];
+
+    // Helper to check if a key is deprecated
+    let is_deprecated = |section: &str, field: &str| -> bool {
+        DEPRECATED_KEYS.iter().any(|(s, f)| *s == section && *f == field)
+    };
+
     // Check TOML map for unknown sections or keys
     for (section, value) in toml_map {
         if let Some(table) = value.as_table() {
             if !table.is_empty() {
-                // There are leftover keys in this section
-                let keys: Vec<String> = table.keys().cloned().collect();
-                return Err(FsPulseError::ConfigError(format!(
-                    "Unknown configuration keys in section '{}': {}",
-                    section,
-                    keys.join(", ")
-                )));
+                // Filter out deprecated keys and warn about them
+                let mut unknown_keys = Vec::new();
+                for key in table.keys() {
+                    if is_deprecated(section, key) {
+                        eprintln!("Warning: Configuration key '{}.{}' in config.toml is deprecated and will be ignored", section, key);
+                    } else {
+                        unknown_keys.push(key.clone());
+                    }
+                }
+
+                // Error only if there are truly unknown keys
+                if !unknown_keys.is_empty() {
+                    return Err(FsPulseError::ConfigError(format!(
+                        "Unknown configuration keys in section '{}': {}",
+                        section,
+                        unknown_keys.join(", ")
+                    )));
+                }
             }
         } else {
             // Unknown section entirely
@@ -483,13 +505,27 @@ fn check_for_unknown_keys(
     for (section, value) in env_map {
         if let Some(table) = value.as_table() {
             if !table.is_empty() {
-                let keys: Vec<String> = table.keys().cloned().collect();
-                return Err(FsPulseError::ConfigError(format!(
-                    "Unknown environment variables in section '{}': FSPULSE_{}_{}",
-                    section,
-                    section.to_uppercase(),
-                    keys.join(", ")
-                )));
+                // Filter out deprecated keys and warn about them
+                let mut unknown_keys = Vec::new();
+                for key in table.keys() {
+                    if is_deprecated(section, key) {
+                        eprintln!("Warning: Environment variable 'FSPULSE_{}_{}'  is deprecated and will be ignored",
+                            section.to_uppercase(),
+                            key.to_uppercase());
+                    } else {
+                        unknown_keys.push(key.clone());
+                    }
+                }
+
+                // Error only if there are truly unknown keys
+                if !unknown_keys.is_empty() {
+                    return Err(FsPulseError::ConfigError(format!(
+                        "Unknown environment variables in section '{}': FSPULSE_{}_{}",
+                        section,
+                        section.to_uppercase(),
+                        unknown_keys.join(", ")
+                    )));
+                }
             }
         }
     }

@@ -184,7 +184,7 @@ export function SettingsPage() {
       setSaveMessage(null)
 
       // Build request based on which setting is being edited
-      let requestBody: any = {}
+      let requestBody: Record<string, string | number> = {}
 
       if (editingSetting === 'analysis_threads') {
         const threads = parseInt(editValue, 10)
@@ -304,13 +304,28 @@ export function SettingsPage() {
   }: {
     name: string
     description: string
-    setting: ConfigSetting<any>
+    setting: ConfigSetting<string | number>
     defaultValue: string | number
     settingKey: string
   }) => {
-    // Determine which value is active based on precedence (Environment > Config File > Default)
-    const foundActive = setting.env_value !== null ||
-                        setting.file_value_original !== null
+    // Define which field is currently active (exactly one will be active)
+    type ActiveField = 'environment' | 'file_value' | 'file_value_original' | 'default'
+
+    // Helper to check if a value is set (non-null and non-empty)
+    const isSet = (value: unknown): boolean => value !== null && value !== ''
+
+    // Determine which field is active based on precedence (Environment > File Original > File > Default)
+    let activeField: ActiveField
+
+    if (isSet(setting.env_value)) {
+      activeField = 'environment'
+    } else if (isSet(setting.file_value_original) && setting.file_value_original !== setting.file_value) {
+      activeField = 'file_value_original'
+    } else if (isSet(setting.file_value) && setting.file_value === setting.file_value_original) {
+      activeField = 'file_value'
+    } else {
+      activeField = 'default'
+    }
 
     return (
       <tr className="hover:bg-muted/20">
@@ -328,7 +343,7 @@ export function SettingsPage() {
         <td className="px-4 py-4 border-r border-border">
           <div className="flex justify-center">
             <div className={`inline-flex items-center justify-center px-3 py-1.5 rounded-full ${
-              !foundActive && defaultValue !== null && defaultValue !== undefined && defaultValue !== ''
+              activeField === 'default' && isSet(defaultValue)
                 ? 'bg-green-100 dark:bg-green-950 border border-green-500'
                 : ''
             }`}>
@@ -344,7 +359,11 @@ export function SettingsPage() {
               // Single line case
               <div className="flex items-center justify-center gap-2">
                 {setting.file_value !== null ? (
-                  <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-950 border border-green-500">
+                  <div className={`inline-flex items-center justify-center px-3 py-1.5 rounded-full ${
+                    activeField === 'file_value'
+                      ? 'bg-green-100 dark:bg-green-950 border border-green-500'
+                      : ''
+                  }`}>
                     <ValueDisplay value={setting.file_value} />
                   </div>
                 ) : (
@@ -354,7 +373,7 @@ export function SettingsPage() {
                 )}
                 <Button
                   size="sm"
-                  onClick={() => handleEditSetting(settingKey, setting.file_value ?? defaultValue)}
+                  onClick={() => handleEditSetting(settingKey, setting.file_value ?? '')}
                   className="h-7 px-2 text-xs"
                 >
                   Edit
@@ -374,7 +393,7 @@ export function SettingsPage() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => handleEditSetting(settingKey, setting.file_value ?? defaultValue)}
+                    onClick={() => handleEditSetting(settingKey, setting.file_value ?? '')}
                     className="h-7 px-2 text-xs"
                   >
                     Edit
@@ -383,7 +402,11 @@ export function SettingsPage() {
                 {setting.file_value_original !== null && (
                   <div className="flex items-center gap-1.5 text-xs">
                     <span className="text-muted-foreground">Current:</span>
-                    <div className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-950 border border-green-500">
+                    <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full ${
+                      activeField === 'file_value_original'
+                        ? 'bg-green-100 dark:bg-green-950 border border-green-500'
+                        : ''
+                    }`}>
                       <span className="font-mono text-xs">{String(setting.file_value_original)}</span>
                     </div>
                   </div>
@@ -397,7 +420,11 @@ export function SettingsPage() {
         <td className="px-4 py-4">
           <div className="flex justify-center">
             {setting.env_value !== null ? (
-              <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-950 border border-green-500">
+              <div className={`inline-flex items-center justify-center px-3 py-1.5 rounded-full ${
+                activeField === 'environment'
+                  ? 'bg-green-100 dark:bg-green-950 border border-green-500'
+                  : ''
+              }`}>
                 <span className="font-mono text-sm font-medium">{String(setting.env_value)}</span>
               </div>
             ) : (
