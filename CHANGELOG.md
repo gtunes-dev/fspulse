@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.10] - 2025-11-15
+
 ### Added
 - **Configuration UI**: New Settings page provides full configuration management through the web UI
   - View all configuration settings with their current values, sources (environment, config file, or default), and precedence
