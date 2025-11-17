@@ -1082,7 +1082,7 @@ offers a unique and effective view into potential validity issues in files.</p>
 <h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
 <p>The web interface includes the following pages:</p>
 <ul>
-<li><strong><a href="web_ui/home.html">Home</a></strong> — Dashboard showing scan status and recent activity</li>
+<li><strong><a href="web_ui/scans.html">Scans</a></strong> — Dashboard showing scan status and history</li>
 <li><strong><a href="web_ui/monitor.html">Monitor &amp; Scheduling</a></strong> — Configure automatic scans and manage scan roots</li>
 <li><strong><a href="web_ui/browse.html">Browse</a></strong> — Navigate filesystem hierarchy with detailed item inspection</li>
 <li><strong><a href="web_ui/insights.html">Insights &amp; Trends</a></strong> — Visualize historical data with interactive charts</li>
@@ -1093,11 +1093,11 @@ offers a unique and effective view into potential validity issues in files.</p>
 <p>The web interface uses WebSocket connections to provide real-time updates during scan operations. When a scan is running (whether manually initiated or scheduled), you can watch progress updates, statistics, and phase transitions as they happen.</p>
 <h2 id="navigation"><a class="header" href="#navigation">Navigation</a></h2>
 <p>The left sidebar provides access to all major sections. On smaller screens, the sidebar collapses into a hamburger menu for better mobile experience.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="home"><a class="header" href="#home">Home</a></h1>
-<p>The Home page serves as your central dashboard, providing an at-a-glance view of scan activity and recent results.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="scans"><a class="header" href="#scans">Scans</a></h1>
+<p>The Scans page serves as your central dashboard, providing an at-a-glance view of scan status and history.</p>
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
 <h3 id="active-scan-monitoring"><a class="header" href="#active-scan-monitoring">Active Scan Monitoring</a></h3>
-<p>When a scan is running (manually initiated or scheduled), the Home page displays:</p>
+<p>When a scan is running (manually initiated or scheduled), the Scans page displays:</p>
 <ul>
 <li>Real-time progress indicators</li>
 <li>Current scan phase (Discovery, Hash, Validation, Analysis)</li>
@@ -1105,7 +1105,7 @@ offers a unique and effective view into potential validity issues in files.</p>
 <li>Live updates via WebSocket connection</li>
 </ul>
 <h3 id="recent-scan-results"><a class="header" href="#recent-scan-results">Recent Scan Results</a></h3>
-<p>For completed scans, the Home page shows:</p>
+<p>For completed scans, the Scans page shows:</p>
 <ul>
 <li>Scan completion time</li>
 <li>Total items scanned</li>
@@ -2177,7 +2177,7 @@ fspulse serve
 <div style="break-before: page; page-break-before: always;"></div><h1 id="concepts"><a class="header" href="#concepts">Concepts</a></h1>
 <p>FsPulse is centered around tracking and understanding the state of the file system over time. The core entities in FsPulse — roots, scans, items, and changes — represent a layered model of this information.</p>
 <hr />
-<h2 id="scans"><a class="header" href="#scans">Scans</a></h2>
+<h2 id="scans-1"><a class="header" href="#scans-1">Scans</a></h2>
 <p>Scans are the units of work performed by FsPulse. A scan is performed on a file system tree specified by
 a path. A scan deeply traverses the specified path and its children, recording information on the
 files and directories discovered. The details of scanning are explained in <a href="scanning.html">Scanning</a>.</p>
