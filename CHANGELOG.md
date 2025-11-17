@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.11] - 2025-11-17
+
 ### Added
 - **Global Pause Feature**: Temporarily pause all scanning activity with flexible duration options
   - Pause for 5 minutes, 15 minutes, 1 hour, 24 hours, until tomorrow (12am), or indefinitely
@@ -35,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Upcoming Scans display**: First queued scan now correctly shows "When unpaused" when global pause is active
 - **Monitor page Roots table**: Now refreshes automatically when scans complete, scans are scheduled, or new roots are added
+
+### Highlights from v0.2.10
+This release includes all features from v0.2.10:
+- **Configuration UI**: Full configuration management through Settings page with validation and visual indicators
+- **Default data directory changed**: Database now stored in platform-specific data directory (see v0.2.10 for migration options)
+- **Environment variable renamed**: `FSPULSE_DATABASE_PATH` → `FSPULSE_DATABASE_DIR`
 
 ## [v0.2.10] - 2025-11-15
 
