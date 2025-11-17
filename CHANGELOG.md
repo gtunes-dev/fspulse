@@ -18,16 +18,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Real-time WebSocket updates ensure all UI components reflect current pause state
 
 ### Changed
-- **Activity page redesign**: Unified scan control interface with improved visual hierarchy and design consistency
+- **Scans page** (formerly "Activity"): Renamed to better reflect its purpose as the main dashboard for scan status and history
+  - Unified scan control interface with improved visual hierarchy and design consistency
   - Manual Scan and Pause controls always visible in a single action bar
   - Pause button turns purple when system is paused for better visibility
   - Global pause banner appears prominently at top of page when scanning is paused
+  - Pause banner now shows friendly duration (e.g., "for 3 hours") in addition to the end time
   - Streamlined active scan display with reduced redundancy
+- **Monitor page improvements**: Better visual feedback and real-time updates
+  - In-progress scans now show green "In Progress" badge instead of blue for better visibility
+  - Incomplete scans show purple "Paused" badge when system is globally paused, making pause state more obvious
+  - Roots table now updates immediately when scans complete, scans are scheduled, or roots are added
 - **Build optimizations**: Changed from global `codegen-units=1` to per-package optimization for performance-critical dependencies (claxon, sha2, md-5, image, png, lopdf). This significantly reduces compilation time while maintaining runtime performance for file validation and hashing operations.
 - **UI color consistency**: Queued scans now use purple icons instead of orange, reserving orange for warnings
 
 ### Fixed
 - **Upcoming Scans display**: First queued scan now correctly shows "When unpaused" when global pause is active
+- **Monitor page Roots table**: Now refreshes automatically when scans complete, scans are scheduled, or new roots are added
 
 ## [v0.2.10] - 2025-11-15
 

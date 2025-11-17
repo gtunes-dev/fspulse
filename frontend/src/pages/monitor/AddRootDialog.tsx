@@ -12,9 +12,10 @@ import { Input } from '@/components/ui/input'
 interface AddRootDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }
 
-export function AddRootDialog({ open, onOpenChange }: AddRootDialogProps) {
+export function AddRootDialog({ open, onOpenChange, onSuccess }: AddRootDialogProps) {
   const [path, setPath] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -44,6 +45,8 @@ export function AddRootDialog({ open, onOpenChange }: AddRootDialogProps) {
 
       if (response.ok) {
         setSuccess(`Root added successfully: ${data.root_path}`)
+        // Notify parent of success
+        onSuccess?.()
         // Close modal after a short delay
         setTimeout(() => {
           onOpenChange(false)

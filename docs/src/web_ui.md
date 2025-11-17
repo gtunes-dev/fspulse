@@ -16,7 +16,7 @@ By default, the interface is available at **http://127.0.0.1:8080**. You can cus
 
 The web interface includes the following pages:
 
-- **[Home](web_ui/home.md)** — Dashboard showing scan status and recent activity
+- **[Scans](web_ui/scans.md)** — Dashboard showing scan status and history
 - **[Monitor & Scheduling](web_ui/monitor.md)** — Configure automatic scans and manage scan roots
 - **[Browse](web_ui/browse.md)** — Navigate filesystem hierarchy with detailed item inspection
 - **[Insights & Trends](web_ui/insights.md)** — Visualize historical data with interactive charts

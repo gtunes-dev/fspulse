@@ -6,7 +6,7 @@ export function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(false)
 
   const mainNavItems = [
-    { icon: Activity, label: 'Activity', to: '/', end: true },
+    { icon: Activity, label: 'Scans', to: '/', end: true },
     { icon: Radar, label: 'Monitor', to: '/monitor', end: false },
     { icon: FolderTree, label: 'Browse', to: '/browse', end: true },
     { icon: TriangleAlert, label: 'Alerts', to: '/alerts', end: true },

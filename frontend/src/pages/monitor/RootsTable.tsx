@@ -22,12 +22,13 @@ import type { RootWithScan } from '@/lib/types'
 interface RootsTableProps {
   onAddRoot: () => void
   onScheduleCreated?: () => void
+  externalReloadTrigger?: number
 }
 
 const ITEMS_PER_PAGE = 25
 
-export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
-  const { currentScanId, lastScanCompletedAt } = useScanManager()
+export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger }: RootsTableProps) {
+  const { currentScanId, lastScanCompletedAt, lastScanScheduledAt, isPaused } = useScanManager()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -39,7 +40,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
   const [scanSheetOpen, setScanSheetOpen] = useState(false)
   const [createScheduleDialogOpen, setCreateScheduleDialogOpen] = useState(false)
   const [preselectedRootId, setPreselectedRootId] = useState<number | undefined>(undefined)
-  const [reloadTrigger, setReloadTrigger] = useState(0)
+  const [internalReloadTrigger, setInternalReloadTrigger] = useState(0)
   const isInitialLoad = useRef(true)
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
     }
 
     loadRoots()
-  }, [lastScanCompletedAt, reloadTrigger])
+  }, [currentScanId, lastScanCompletedAt, lastScanScheduledAt, internalReloadTrigger, externalReloadTrigger])
 
   // Pagination
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -229,7 +230,14 @@ export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
                           <div className="flex items-center gap-2">
                             {isActiveScan ? (
                               <>
-                                <Badge variant="default">In Progress</Badge>
+                                <Badge variant="success">In Progress</Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {scanInfo.state} phase
+                                </span>
+                              </>
+                            ) : isPaused ? (
+                              <>
+                                <Badge variant="info-alternate">Paused</Badge>
                                 <span className="text-sm text-muted-foreground">
                                   {scanInfo.state} phase
                                 </span>
@@ -367,7 +375,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
       rootId={selectedRoot?.id ?? null}
       rootPath={selectedRoot?.path ?? ''}
       onDeleteSuccess={() => {
-        setReloadTrigger(prev => prev + 1)
+        setInternalReloadTrigger(prev => prev + 1)
         setSelectedRoot(null)
       }}
     />
@@ -378,7 +386,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated }: RootsTableProps) {
       onOpenChange={setCreateScheduleDialogOpen}
       preselectedRootId={preselectedRootId}
       onSuccess={() => {
-        setReloadTrigger(prev => prev + 1)
+        setInternalReloadTrigger(prev => prev + 1)
         setPreselectedRootId(undefined)
         onScheduleCreated?.()
       }}

@@ -13,7 +13,7 @@ import { useScanManager } from '@/contexts/ScanManagerContext'
 import { countQuery } from '@/lib/api'
 
 /**
- * Activity Page - Main landing page showing scan activity and status
+ * Scans Page - Main landing page showing scan status and history
  *
  * DEVELOPMENT/TESTING URL PARAMETERS:
  * ------------------------------------
@@ -28,7 +28,7 @@ import { countQuery } from '@/lib/api'
  *
  * Without any parameter, the page uses actual database counts to determine state.
  */
-export function ActivityPage() {
+export function ScansPage() {
   const [searchParams] = useSearchParams()
   const { isPaused, pauseUntil } = useScanManager()
   const [loading, setLoading] = useState(true)
@@ -44,7 +44,25 @@ export function ActivityPage() {
     if (!isPaused) return ''
     if (pauseUntil === -1) return 'indefinitely'
     if (pauseUntil !== null) {
-      return `until ${new Date(pauseUntil * 1000).toLocaleString()}`
+      // Calculate friendly duration
+      const now = Date.now() / 1000  // Convert to seconds
+      const diff = pauseUntil - now
+
+      const minutes = Math.floor(diff / 60)
+      const hours = Math.floor(diff / 3600)
+      const days = Math.floor(diff / 86400)
+
+      let duration = ''
+      if (minutes < 60) {
+        duration = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+      } else if (hours < 24) {
+        duration = `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+      } else {
+        duration = `${days} ${days === 1 ? 'day' : 'days'}`
+      }
+
+      const untilDate = new Date(pauseUntil * 1000).toLocaleString()
+      return `for ${duration} (until ${untilDate})`
     }
     return ''
   }
@@ -81,7 +99,7 @@ export function ActivityPage() {
   if (loading && !stateOverride) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Activity</h1>
+        <h1 className="text-2xl font-semibold">Scans</h1>
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground text-center py-8">
@@ -98,7 +116,7 @@ export function ActivityPage() {
   if (stateOverride === 'no-roots') {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Activity</h1>
+        <h1 className="text-2xl font-semibold">Scans</h1>
         <EmptyStateNoRoots />
       </div>
     )
@@ -107,7 +125,7 @@ export function ActivityPage() {
   if (stateOverride === 'no-scans') {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Activity</h1>
+        <h1 className="text-2xl font-semibold">Scans</h1>
         <ScanCard />
         <EmptyStateNoScans rootCount={rootCount || 2} />
       </div>
@@ -119,7 +137,7 @@ export function ActivityPage() {
   if (rootCount === 0 && scanCount === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Activity</h1>
+        <h1 className="text-2xl font-semibold">Scans</h1>
         <EmptyStateNoRoots />
       </div>
     )
@@ -130,7 +148,7 @@ export function ActivityPage() {
   if (scanCount === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Activity</h1>
+        <h1 className="text-2xl font-semibold">Scans</h1>
         <ScanCard />
         <EmptyStateNoScans rootCount={rootCount} />
       </div>
@@ -140,7 +158,7 @@ export function ActivityPage() {
   // Normal operational state
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Activity</h1>
+      <h1 className="text-2xl font-semibold">Scans</h1>
 
       {/* Global Pause Banner - Only when paused */}
       {isPaused && (

@@ -173,7 +173,7 @@ pub async fn toggle_schedule(
 }
 
 /// GET /api/schedules/upcoming
-/// Get upcoming scans for display in Activity page
+/// Get upcoming scans for display in Scans page
 /// Returns list of upcoming scans (excludes currently running scan unless paused)
 pub async fn get_upcoming_scans() -> Result<Json<Value>, StatusCode> {
     use crate::scan_manager::ScanManager;

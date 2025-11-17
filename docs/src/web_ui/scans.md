@@ -1,12 +1,12 @@
-# Home
+# Scans
 
-The Home page serves as your central dashboard, providing an at-a-glance view of scan activity and recent results.
+The Scans page serves as your central dashboard, providing an at-a-glance view of scan status and history.
 
 ## Features
 
 ### Active Scan Monitoring
 
-When a scan is running (manually initiated or scheduled), the Home page displays:
+When a scan is running (manually initiated or scheduled), the Scans page displays:
 - Real-time progress indicators
 - Current scan phase (Discovery, Hash, Validation, Analysis)
 - Statistics: files/folders processed, sizes calculated, changes detected
@@ -14,7 +14,7 @@ When a scan is running (manually initiated or scheduled), the Home page displays
 
 ### Recent Scan Results
 
-For completed scans, the Home page shows:
+For completed scans, the Scans page shows:
 - Scan completion time
 - Total items scanned
 - Change summary (additions, modifications, deletions)
