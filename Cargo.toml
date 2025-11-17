@@ -68,3 +68,25 @@ serial_test = "3.2"
 [build-dependencies]
 static_vcruntime = "2.0"
 chrono = { version = "0.4", features = ["clock"] }
+
+# Performance optimizations for computation-heavy dependencies
+# codegen-units=1 enables better cross-function optimization at the cost of slower compilation
+# These crates have hot loops and benefit significantly from aggressive inlining
+
+[profile.release.package.claxon]
+codegen-units = 1  # FLAC decoder - documented 45% performance improvement
+
+[profile.release.package.sha2]
+codegen-units = 1  # SHA-256 hashing - critical path for file analysis
+
+[profile.release.package.md-5]
+codegen-units = 1  # MD5 hashing
+
+[profile.release.package.image]
+codegen-units = 1  # Image decoding/validation
+
+[profile.release.package.png]
+codegen-units = 1  # PNG decoder (used by image crate)
+
+[profile.release.package.lopdf]
+codegen-units = 1  # PDF parsing - slow in this application's usage pattern
