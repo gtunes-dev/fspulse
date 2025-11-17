@@ -21,13 +21,13 @@ impl Validator for ImageValidator {
     fn validate(
         &self,
         path: &Path,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError> {
 
-        // Check for cancellation before starting. Because of how this validator works,
+        // Check for interrupt before starting. Because of how this validator works,
         // this is the only test we can do
-        if cancel_token.load(Ordering::Acquire) {
-            return Err(FsPulseError::ScanCancelled);
+        if interrupt_token.load(Ordering::Acquire) {
+            return Err(FsPulseError::ScanInterrupted);
         }
 
         let open_result = ImageReader::open(path);
@@ -59,9 +59,9 @@ mod tests {
     fn test_image_validator_nonexistent_file() {
         let validator = ImageValidator::new();
         let nonexistent_path = Path::new("/this/path/does/not/exist.jpg");
-        let cancel_token = Arc::new(AtomicBool::new(false));
+        let interrupt_token = Arc::new(AtomicBool::new(false));
 
-        let result = validator.validate(nonexistent_path, &cancel_token);
+        let result = validator.validate(nonexistent_path, &interrupt_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
@@ -92,8 +92,8 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
         temp_file.write_all(b"not an image file").expect("Failed to write temp file");
 
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = validator.validate(temp_file.path(), &cancel_token);
+        let interrupt_token = Arc::new(AtomicBool::new(false));
+        let result = validator.validate(temp_file.path(), &interrupt_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();
@@ -110,8 +110,8 @@ mod tests {
 
         let temp_file = NamedTempFile::new().expect("Failed to create temp file");
 
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = validator.validate(temp_file.path(), &cancel_token);
+        let interrupt_token = Arc::new(AtomicBool::new(false));
+        let result = validator.validate(temp_file.path(), &interrupt_token);
         assert!(result.is_ok());
         
         let (state, error_msg) = result.unwrap();

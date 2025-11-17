@@ -276,6 +276,40 @@ impl Database {
         Ok(())
     }
 
+    /// Get a value from the meta table by key.
+    /// Returns None if the key doesn't exist.
+    /// This function expects to be called within a transaction (connection lock held).
+    pub fn get_meta_value_locked(conn: &Connection, key: &str) -> Result<Option<String>, FsPulseError> {
+        conn.query_row(
+                "SELECT value FROM meta WHERE key = ?",
+                [key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(FsPulseError::DatabaseError)
+    }
+
+    /// Set a value in the meta table by key.
+    /// Creates the key if it doesn't exist, updates if it does.
+    /// This function expects to be called within a transaction (connection lock held).
+    pub fn set_meta_value_locked(conn: &Connection, key: &str, value: &str) -> Result<(), FsPulseError> {
+        conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                [key, value],
+            )
+            .map_err(FsPulseError::DatabaseError)?;
+        Ok(())
+    }
+
+    /// Delete a key from the meta table.
+    /// No error if the key doesn't exist.
+    /// This function expects to be called within a transaction (connection lock held).
+    pub fn delete_meta_locked(conn: &Connection, key: &str) -> Result<(), FsPulseError> {
+        conn.execute("DELETE FROM meta WHERE key = ?", [key])
+            .map_err(FsPulseError::DatabaseError)?;
+        Ok(())
+    }
+
 }
 
 /// Database statistics

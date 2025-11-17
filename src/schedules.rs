@@ -1039,11 +1039,21 @@ impl QueueEntry {
     /// Get upcoming scans for display in UI (excludes currently running scan)
     /// Returns queue entries with root_path and schedule_name joined
     /// Limited to next 10 upcoming scans, ordered by priority (manual first, then by time)
-    pub fn get_upcoming_scans(db: &Database, limit: i64) -> Result<Vec<UpcomingScan>, FsPulseError> {
+    /// If scans_are_paused is true, includes the in-progress scan (with scan_id) as first row
+    pub fn get_upcoming_scans(db: &Database, limit: i64, scans_are_paused: bool) -> Result<Vec<UpcomingScan>, FsPulseError> {
         let now = chrono::Utc::now().timestamp();
         let conn = db.conn();
 
-        let mut stmt = conn.prepare(
+        // Build WHERE clause based on pause state
+        let where_clause = if scans_are_paused {
+            // Include all entries with next_scan_time (paused scan has scan_id, others don't)
+            "WHERE q.next_scan_time IS NOT NULL"
+        } else {
+            // Exclude the active scan (scan_id IS NOT NULL)
+            "WHERE q.scan_id IS NULL AND q.next_scan_time IS NOT NULL"
+        };
+
+        let query = format!(
             "SELECT
                 q.queue_id,
                 q.root_id,
@@ -1051,16 +1061,19 @@ impl QueueEntry {
                 q.schedule_id,
                 s.schedule_name,
                 q.next_scan_time,
-                q.source
+                q.source,
+                q.scan_id
              FROM scan_queue q
              INNER JOIN roots r ON q.root_id = r.root_id
              LEFT JOIN scan_schedules s ON q.schedule_id = s.schedule_id
-             WHERE q.scan_id IS NULL
-               AND q.next_scan_time IS NOT NULL
-             ORDER BY q.source ASC, q.next_scan_time ASC, q.queue_id ASC
-             LIMIT ?"
-        )
-        .map_err(FsPulseError::DatabaseError)?;
+             {}
+             ORDER BY q.scan_id DESC, q.source ASC, q.next_scan_time ASC, q.queue_id ASC
+             LIMIT ?",
+            where_clause
+        );
+
+        let mut stmt = conn.prepare(&query)
+            .map_err(FsPulseError::DatabaseError)?;
 
         let scans = stmt.query_map([limit], |row| {
             let next_scan_time: i64 = row.get(5)?;
@@ -1076,6 +1089,7 @@ impl QueueEntry {
                 source: SourceType::from_i32(source)
                     .ok_or_else(|| rusqlite::Error::InvalidColumnType(6, "source".to_string(), rusqlite::types::Type::Integer))?,
                 is_queued: next_scan_time <= now,
+                scan_id: row.get(7)?,
             })
         })
         .map_err(FsPulseError::DatabaseError)?
@@ -1185,6 +1199,7 @@ pub struct UpcomingScan {
     pub next_scan_time: i64,  // Unix timestamp
     pub source: SourceType,
     pub is_queued: bool,  // true if next_scan_time <= now (waiting to start)
+    pub scan_id: Option<i64>,  // Non-null if this is an in-progress scan that is paused
 }
 
 /// Schedule with root path and next scan time

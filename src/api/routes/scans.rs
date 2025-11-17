@@ -163,21 +163,66 @@ async fn handle_scan_progress(mut socket: WebSocket) {
     // WebSocket will close automatically when dropped
 }
 
-/// POST /api/scans/{scan_id}/cancel
-/// Request cancellation of a running scan
-pub async fn cancel_scan(
+/// POST /api/scans/{scan_id}/stop
+/// Request stop of a running scan
+pub async fn stop_scan(
     State(_state): State<AppState>,
     Path(scan_id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
     use crate::scan_manager::ScanManager;
 
-    ScanManager::request_cancellation(scan_id).map_err(|e| {
-        error!("Failed to cancel scan {}: {}", scan_id, e);
+    ScanManager::request_stop(scan_id).map_err(|e| {
+        error!("Failed to stop scan {}: {}", scan_id, e);
         StatusCode::NOT_FOUND
     })?;
 
-    log::info!("Cancellation requested for scan {}", scan_id);
-    Ok(StatusCode::ACCEPTED) // 202 Accepted - cancellation requested, will complete async
+    log::info!("Stop requested for scan {}", scan_id);
+    Ok(StatusCode::ACCEPTED) // 202 Accepted - stop requested, will complete async
+}
+
+/// Request structure for setting pause
+#[derive(Debug, Deserialize)]
+pub struct PauseRequest {
+    pub duration_seconds: i64,  // -1 for indefinite
+}
+
+/// POST /api/pause
+/// Set pause with duration - stops current scan and prevents new scans
+pub async fn set_pause(
+    State(_state): State<AppState>,
+    Json(req): Json<PauseRequest>,
+) -> Result<StatusCode, StatusCode> {
+    use crate::scan_manager::ScanManager;
+
+    let db = Database::new()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    ScanManager::set_pause(&db, req.duration_seconds).map_err(|e| {
+        error!("Failed to set pause: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    log::info!("Pause set for {} seconds", req.duration_seconds);
+    Ok(StatusCode::OK)
+}
+
+/// DELETE /api/pause
+/// Clear pause - allows scanning to resume
+pub async fn clear_pause(
+    State(_state): State<AppState>,
+) -> Result<StatusCode, StatusCode> {
+    use crate::scan_manager::ScanManager;
+
+    let db = Database::new()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    ScanManager::clear_pause(&db).map_err(|e| {
+        error!("Failed to clear pause: {}", e);
+        StatusCode::BAD_REQUEST  // 400 - likely tried to unpause while scan unwinding
+    })?;
+
+    log::info!("Pause cleared");
+    Ok(StatusCode::OK)
 }
 
 /// GET /api/scans/current

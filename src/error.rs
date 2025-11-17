@@ -27,8 +27,8 @@ pub enum FsPulseError {
     #[error("Configuration error: {0}")]
     ConfigError(String),
 
-    #[error("Scan cancelled")]
-    ScanCancelled,
+    #[error("Scan interrupted")]
+    ScanInterrupted,
 
     #[error("Shutting down")]
     ShuttingDown,

@@ -86,12 +86,13 @@ export interface ValidateFilterResponse {
 
 // Scan Manager Types
 
-export type ScanStatus = 'running' | 'cancelling' | 'stopped' | 'completed' | 'error'
+export type ScanStatus = 'running' | 'pausing' | 'stopping' | 'stopped' | 'completed' | 'error'
 
 // Broadcast message types from WebSocket
 export type BroadcastMessage =
   | { type: 'active_scan'; scan: ScanState }
   | { type: 'no_active_scan' }
+  | { type: 'paused'; pause_until: number }
 
 export interface ScanProgress {
   current: number
@@ -142,6 +143,16 @@ export interface ScanState {
   thread_states?: ThreadStateRaw[]
   status?: ScanStatusInfo
   error?: string
+}
+
+// Pause-related types
+export interface PauseState {
+  paused: boolean
+  pauseUntil: number  // -1 for indefinite, or unix timestamp
+}
+
+export interface PauseRequest {
+  duration_seconds: number  // -1 for indefinite
 }
 
 export interface ScanData {

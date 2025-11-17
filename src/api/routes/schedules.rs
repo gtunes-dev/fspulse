@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use crate::database::Database;
 use crate::scan_manager::ScanManager;
-use crate::schedules::{CreateScheduleParams, QueueEntry, Schedule, ScheduleType, ScheduleWithRoot, IntervalUnit};
+use crate::schedules::{CreateScheduleParams, Schedule, ScheduleType, ScheduleWithRoot, IntervalUnit};
 use crate::scans::{HashMode, ValidateMode};
 
 /// Request body for creating a schedule
@@ -174,16 +174,18 @@ pub async fn toggle_schedule(
 
 /// GET /api/schedules/upcoming
 /// Get upcoming scans for display in Activity page
-/// Returns list of upcoming scans (excludes currently running scan)
+/// Returns list of upcoming scans (excludes currently running scan unless paused)
 pub async fn get_upcoming_scans() -> Result<Json<Value>, StatusCode> {
+    use crate::scan_manager::ScanManager;
+
     let db = Database::new()
         .map_err(|e| {
             log::error!("Database error: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    // Get next 10 upcoming scans
-    let scans = QueueEntry::get_upcoming_scans(&db, 10)
+    // Get next 10 upcoming scans via ScanManager (synchronized with pause state)
+    let scans = ScanManager::get_upcoming_scans(&db, 10)
         .map_err(|e| {
             log::error!("Error fetching upcoming scans: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR

@@ -680,7 +680,7 @@ impl Scan {
 
             // Mark the scan as stopped (state=5) or error (state=6)
             // Null the total_size that may have been set at the end of the scanning phase - it's not reliable in the
-            // context of a cancellation or error
+            // context of a stop or error
             let final_state = if error_message.is_some() { 6 } else { 5 };
 
             conn.execute(

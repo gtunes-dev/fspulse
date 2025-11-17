@@ -30,7 +30,7 @@ export function Header() {
 
   if (currentScan) {
     const statusValue = currentScan.status?.status || 'running'
-    scanStatus = statusValue === 'running' ? 'Scanning' : statusValue === 'cancelling' ? 'Cancelling' : 'Processing'
+    scanStatus = statusValue === 'running' ? 'Scanning' : statusValue === 'pausing' ? 'Pausing' : statusValue === 'stopping' ? 'Stopping' : 'Processing'
     scanPath = shortenPath(currentScan.root_path)
 
     const phaseNames = ['Scanning Files', 'Tombstoning Deletes', 'Analyzing']

@@ -18,12 +18,12 @@ pub struct Hash;
 impl Hash {
     pub fn compute_sha2_256_hash(
         path: &Path,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) -> Result<String, FsPulseError> {
 
-        // Check for cancellation before doing any work
-        if cancel_token.load(Ordering::Acquire) {
-            return Err(FsPulseError::ScanCancelled);
+        // Check for interrupt before doing any work
+        if interrupt_token.load(Ordering::Acquire) {
+            return Err(FsPulseError::ScanInterrupted);
         }
 
         let f = File::open(path)?;
@@ -37,9 +37,9 @@ impl Hash {
 
         loop {
             loop_counter += 1;
-            // Every 256 loops, check for cancellation
-            if loop_counter % 256 == 0 && cancel_token.load(Ordering::Acquire) {
-                return Err(FsPulseError::ScanCancelled);
+            // Every 256 loops, check for interrupt
+            if loop_counter % 256 == 0 && interrupt_token.load(Ordering::Acquire) {
+                return Err(FsPulseError::ScanInterrupted);
             }
 
             let bytes_read = reader.read(&mut buffer)?;
@@ -68,8 +68,8 @@ mod tests {
             .write_all(b"")
             .expect("Failed to write to temp file");
 
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
+        let interrupt_token = Arc::new(AtomicBool::new(false));
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), &interrupt_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -87,8 +87,8 @@ mod tests {
             .write_all(b"hello world")
             .expect("Failed to write to temp file");
 
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
+        let interrupt_token = Arc::new(AtomicBool::new(false));
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), &interrupt_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -106,8 +106,8 @@ mod tests {
             .write_all(b"test")
             .expect("Failed to write to temp file");
 
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
+        let interrupt_token = Arc::new(AtomicBool::new(false));
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), &interrupt_token);
 
         assert!(result.is_ok());
         let hash = result.unwrap();
@@ -121,28 +121,28 @@ mod tests {
     #[test]
     fn test_compute_hash_nonexistent_file() {
         let nonexistent_path = std::path::Path::new("/this/path/does/not/exist.txt");
-        let cancel_token = Arc::new(AtomicBool::new(false));
+        let interrupt_token = Arc::new(AtomicBool::new(false));
 
-        let result = Hash::compute_sha2_256_hash(nonexistent_path, &cancel_token);
+        let result = Hash::compute_sha2_256_hash(nonexistent_path, &interrupt_token);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), FsPulseError::IoError(_)));
     }
 
     #[test]
-    fn test_compute_sha2_256_hash_cancellation() {
-        // Create a large file to ensure cancellation check is triggered
-        // Need at least 256 * 8KB = 2MB to trigger the cancellation check
+    fn test_compute_sha2_256_hash_interrupt() {
+        // Create a large file to ensure interrrupt check is triggered
+        // Need at least 256 * 8KB = 2MB to trigger the interrupt check
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
         let large_data = vec![0u8; 3_000_000]; // 3MB
         temp_file
             .write_all(&large_data)
             .expect("Failed to write to temp file");
 
-        let cancel_token = Arc::new(AtomicBool::new(true)); // Set to true to trigger cancellation
+        let interrupt_token = Arc::new(AtomicBool::new(true)); // Set to true to trigger interrupt
 
-        let result = Hash::compute_sha2_256_hash(temp_file.path(), &cancel_token);
+        let result = Hash::compute_sha2_256_hash(temp_file.path(), &interrupt_token);
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), FsPulseError::ScanCancelled));
+        assert!(matches!(result.unwrap_err(), FsPulseError::ScanInterrupted));
     }
 }

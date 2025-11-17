@@ -85,19 +85,21 @@ impl ScanProgressState {
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum ScanStatus {
     Running,    // Scan is actively running
-    Cancelling, // Scan cancellation requested
+    Stopping, // Scan stop requested
     Stopped,    // Scan was stopped
+    Pausing,
     Completed,  // Scan completed successfully
     Error { message: String }, // Scan failed with error
 }
 
 /// Broadcast message type for WebSocket protocol
-/// Represents either an active scan or no active scan
+/// Represents the current system state: active scan, paused, or idle
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BroadcastMessage {
     ActiveScan { scan: Box<ScanProgressState> },
     NoActiveScan,
+    Paused { pause_until: i64 },  // -1 for indefinite pause, or timestamp when pause expires
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -296,16 +298,22 @@ impl ProgressReporter {
         state.status = ScanStatus::Error { message };
     }
 
-    /// Mark scan as cancelling (user requested stop, scanner hasn't detected yet)
-    pub fn mark_cancelling(&self) {
+    /// Mark scan as interrupting (user requested stop, scanner hasn't detected yet)
+    pub fn mark_stopping(&self) {
         let mut state = self.state.lock().unwrap();
-        state.status = ScanStatus::Cancelling;
+        state.status = ScanStatus::Stopping;
     }
 
-    /// Mark scan as stopped (scanner detected cancellation and rolled back)
+    /// Mark scan as stopped (scanner detected interrupt and rolled back)
     pub fn mark_stopped(&self) {
         let mut state = self.state.lock().unwrap();
         state.status = ScanStatus::Stopped;
+    }
+
+    /// Mark scan as pausing
+    pub fn mark_pausing(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.status = ScanStatus::Pausing;        
     }
 
     // ========================================================================

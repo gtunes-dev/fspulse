@@ -122,7 +122,7 @@ pub trait Validator {
     fn validate(
         &self,
         path: &Path,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError>;
 }
 

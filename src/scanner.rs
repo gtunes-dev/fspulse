@@ -44,7 +44,7 @@ struct ScanContext<'a> {
     db: &'a mut Database,
     scan: &'a Scan,
     reporter: &'a Arc<ProgressReporter>,
-    cancel_token: &'a Arc<AtomicBool>,
+    interrupt_token: &'a Arc<AtomicBool>,
 }
 
 impl Scanner {
@@ -53,31 +53,33 @@ impl Scanner {
         scan: &mut Scan,
         root: &Root,
         reporter: Arc<ProgressReporter>,
-        cancel_token: Arc<AtomicBool>,
+        interrupt_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
-        // NOTE: We check for cancellation at appropriate points in the scanner code with:
+        // NOTE: We check for interrupt at appropriate points in the scanner code with:
         //
-        //   if cancel_token.load(Ordering::Acquire) {
-        //       return Err(FsPulseError::ScanCancelled);
+        //   if interrupt_token.load(Ordering::Acquire) {
+        //       return Err(FsPulseError::ScanInterrupted);
         //   }
         //
-        //
-        // After detecting cancellation and returning the error, the calling code will
-        // invoke Scan::set_state_stopped() to atomically rollback all changes.
+        // Interrupt may be signaled because the user explicitly stopped this scan,
+        // paused all scanning, or because the process is shutting down. This module
+        // does not differentiate between the reasons for interrupting a scan -
+        // it exits cleanly with the scan, and database, in a resumable state
+        // independent of the reason the interrupt was triggered
 
         // Loop through all states, even if resuming, to allow progress updates
         let mut loop_state = ScanState::Scanning;
 
         loop {
             // When the state is completed, the scan is done. We check this before checking
-            // for cancellation because a complete scan should not be treated as a successfully
-            // cancelled scan
+            // for interrupt because a complete scan should not be treated as a successfully
+            // interrupted scan
             if loop_state == ScanState::Completed {
                 break;
             }
 
-            // Check for cancellation at the top of the loop
-            Scanner::check_cancelled(&cancel_token)?;
+            // Check for interrupt at the top of the loop
+            Scanner::check_interrupted(&interrupt_token)?;
 
             match loop_state {
                 ScanState::Scanning => {
@@ -88,7 +90,7 @@ impl Scanner {
                             root,
                             scan,
                             reporter.clone(),
-                            &cancel_token,
+                            &interrupt_token,
                         )?;
                     }
                     loop_state = ScanState::Sweeping;
@@ -96,7 +98,7 @@ impl Scanner {
                 ScanState::Sweeping => {
                     reporter.start_sweeping_phase();
                     if scan.state() == ScanState::Sweeping {
-                        Scanner::do_state_sweeping(db, scan, &cancel_token)?;
+                        Scanner::do_state_sweeping(db, scan, &interrupt_token)?;
                     }
                     loop_state = ScanState::Analyzing;
                 }
@@ -115,7 +117,7 @@ impl Scanner {
                             db_arc.clone(),
                             scan,
                             reporter.clone(),
-                            &cancel_token,
+                            &interrupt_token,
                         );
 
                         // recover the database from the Arc
@@ -143,7 +145,7 @@ impl Scanner {
     }
 
     fn scan_directory_recursive(ctx: &mut ScanContext, path: &Path) -> Result<i64, FsPulseError> {
-        Scanner::check_cancelled(ctx.cancel_token)?;
+        Scanner::check_interrupted(ctx.interrupt_token)?;
 
         ctx.reporter.increment_directories_scanned();
 
@@ -172,7 +174,7 @@ impl Scanner {
 
                 total_size += returned_size;
             } else {
-                Scanner::check_cancelled(ctx.cancel_token)?;
+                Scanner::check_interrupted(ctx.interrupt_token)?;
 
                 // Handle files, symlinks, and other items
                 let item_type = if item_metadata.is_file() {
@@ -211,7 +213,7 @@ impl Scanner {
         root: &Root,
         scan: &mut Scan,
         reporter: Arc<ProgressReporter>,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let root_path_buf = PathBuf::from(root.root_path());
         // Create scanning context
@@ -219,7 +221,7 @@ impl Scanner {
             db,
             scan,
             reporter: &reporter,
-            cancel_token,
+            interrupt_token,
         };
 
         // Recursively scan the root directory and get the total size
@@ -237,9 +239,9 @@ impl Scanner {
     fn do_state_sweeping(
         db: &mut Database,
         scan: &mut Scan,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
-        Scanner::check_cancelled(cancel_token)?;
+        Scanner::check_interrupted(interrupt_token)?;
 
         db.immediate_transaction(|conn| {
             // Insert deletion records into changes
@@ -275,7 +277,7 @@ impl Scanner {
         db: Arc<Mutex<Database>>,
         scan: &mut Scan,
         reporter: Arc<ProgressReporter>,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let is_hash = scan.analysis_spec().is_hash();
         let is_val = scan.analysis_spec().is_val();
@@ -283,7 +285,7 @@ impl Scanner {
         // If the scan doesn't hash or validate, then the scan
         // can be marked complete and we just return
         if !is_hash && !is_val {
-            Scanner::check_cancelled(cancel_token)?;
+            Scanner::check_interrupted(interrupt_token)?;
             scan.set_state_completed(&mut db.lock().unwrap())?;
             return Ok(());
         }
@@ -313,7 +315,7 @@ impl Scanner {
             let db = Arc::clone(&db);
             let scan_copy = scan.clone();
             let reporter_clone = Arc::clone(&reporter);
-            let cancel_token_clone = Arc::clone(cancel_token);
+            let interrupt_token_clone = Arc::clone(interrupt_token);
 
             // Set initial idle state
             reporter.set_thread_idle(thread_index);
@@ -327,7 +329,7 @@ impl Scanner {
                         analysis_item,
                         thread_index,
                         &reporter_clone,
-                        &cancel_token_clone,
+                        &interrupt_token_clone,
                     );
                 }
                 reporter_clone.set_thread_idle(thread_index);
@@ -337,7 +339,7 @@ impl Scanner {
         let mut last_item_id = 0;
 
         loop {
-            if cancel_token.load(Ordering::Acquire) {
+            if interrupt_token.load(Ordering::Acquire) {
                 break;
             }
 
@@ -373,13 +375,13 @@ impl Scanner {
         // Wait for all tasks to complete.
         pool.join();
 
-        // It is critical that we check for completion and return the cancellation error
+        // It is critical that we check for completion and return the interrupt error
         // without marking the scan completed. Once the scan is marked completed, attempting to
         // "stop" the scan will be a no-op and the scan will remain in a completed state.
-        // Because we may have detected the cancellation and aborted or never started
+        // Because we may have detected the interrupt and correctly interrupted or never started
         // some hashing or validation operations, we have to be careful to not allow it to
         // appear complete
-        Scanner::check_cancelled(cancel_token)?;
+        Scanner::check_interrupted(interrupt_token)?;
         scan.set_state_completed(&mut db.lock().unwrap())
     }
 
@@ -390,20 +392,19 @@ impl Scanner {
         analysis_item: AnalysisItem,
         thread_index: usize,
         reporter: &Arc<ProgressReporter>,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) {
         // TODO: Improve the error handling for all analysis. Need to differentiate
         // between file system errors and actual content errors
 
         // This function is the entry point for each worker thread to process an item.
         // It performs hashing and/or validation as needed and updates the database.
-        // It does not return errors, but it does need to check for cancellation.
-        // If cancellation is detected, it should exit promptly without updating
+        // It does not return errors, but it does need to check for interruption.
+        // If an interrupt is detected, it should exit promptly without updating
         // the database. The hashing and validation processes exit when detecting
-        // cancellation and may return a cancellation error, but we ignore that here.
-        // The calling code will always check for cancellation and will ensure that
-        // the scan operation is rolled back to the "stoped" stated which means that
-        // it doesn't matter what state is written to the database for this particular item
+        // interrupt and may return an interrupt error, but we ignore that here.
+        // The calling code will always check for interrupt and do the right thing
+        // depending on why the interrupt was generated
 
         let path = Path::new(analysis_item.item_path());
 
@@ -416,11 +417,11 @@ impl Scanner {
 
         let mut new_hash = None;
 
-        if analysis_item.needs_hash() && !Scanner::is_cancelled(cancel_token) {
+        if analysis_item.needs_hash() && !Scanner::is_interrupted(interrupt_token) {
             reporter.set_thread_hashing(thread_index, display_path.to_string());
 
-            // The hash function checks for cancellation at its start and periodically
-            new_hash = match Hash::compute_sha2_256_hash(path, cancel_token) {
+            // The hash function checks for interrupt at its start and periodically
+            new_hash = match Hash::compute_sha2_256_hash(path, interrupt_token) {
                 Ok(hash_s) => Some(hash_s),
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
@@ -435,13 +436,13 @@ impl Scanner {
         let mut new_val = ValidationState::Unknown;
         let mut new_val_error = None;
 
-        if analysis_item.needs_val() && !Scanner::is_cancelled(cancel_token) {
+        if analysis_item.needs_val() && !Scanner::is_interrupted(interrupt_token) {
             let validator = from_path(path);
             match validator {
                 Some(v) => {
                     reporter.set_thread_validating(thread_index, display_path.to_string());
 
-                    match v.validate(path, cancel_token) {
+                    match v.validate(path, interrupt_token) {
                         Ok((res_validity_state, res_validation_error)) => {
                             new_val = res_validity_state;
                             new_val_error = res_validation_error;
@@ -458,7 +459,7 @@ impl Scanner {
             }
         }
 
-        if !Scanner::is_cancelled(cancel_token) {
+        if !Scanner::is_interrupted(interrupt_token) {
             if let Err(error) = Scanner::update_item_analysis(
                 db,
                 scan,
@@ -466,7 +467,7 @@ impl Scanner {
                 new_hash,
                 new_val,
                 new_val_error,
-                cancel_token,
+                interrupt_token,
             ) {
                 let e_str = error.to_string();
                 error!(
@@ -665,7 +666,7 @@ impl Scanner {
         new_hash: Option<String>,
         new_val: ValidationState,
         new_val_error: Option<String>,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let mut update_changes = false;
 
@@ -746,7 +747,7 @@ impl Scanner {
             i_last_val_scan = Some(scan.scan_id());
         }
 
-        Scanner::check_cancelled(cancel_token)?;
+        Scanner::check_interrupted(interrupt_token)?;
         
         let db_guard = db.lock().unwrap();
 
@@ -856,17 +857,17 @@ impl Scanner {
         Ok(())
     }
 
-    /// Check if scan has been cancelled, returning error if so
-    fn check_cancelled(cancel_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
-        if cancel_token.load(Ordering::Acquire) {
-            Err(FsPulseError::ScanCancelled)
+    /// Check if scan has been interrupted, returning error if so
+    fn check_interrupted(interrupt_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
+        if interrupt_token.load(Ordering::Acquire) {
+            Err(FsPulseError::ScanInterrupted)
         } else {
             Ok(())
         }
     }
 
-    /// Check if scan has been cancelled
-    fn is_cancelled(cancel_token: &Arc<AtomicBool>) -> bool {
-        cancel_token.load(Ordering::Acquire)
+    /// Check if scan has been interrupted
+    fn is_interrupted(interrupt_token: &Arc<AtomicBool>) -> bool {
+        interrupt_token.load(Ordering::Acquire)
     }
 }

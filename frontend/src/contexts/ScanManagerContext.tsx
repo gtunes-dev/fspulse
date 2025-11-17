@@ -2,15 +2,20 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import type {
   BroadcastMessage,
   ScanData,
+  PauseState,
 } from '@/lib/types'
 
 interface ScanManagerContextType {
   activeScan: ScanData | null
   currentScanId: number | null
   isScanning: boolean
+  isPaused: boolean
+  pauseUntil: number | null
   lastScanCompletedAt: number | null
   lastScanScheduledAt: number | null
   stopScan: (scanId: number) => Promise<void>
+  pauseScan: (durationSeconds: number) => Promise<void>
+  unpauseScan: () => Promise<void>
   notifyScanScheduled: () => void
 }
 
@@ -18,6 +23,7 @@ const ScanManagerContext = createContext<ScanManagerContextType | null>(null)
 
 export function ScanManagerProvider({ children }: { children: React.ReactNode }) {
   const [activeScan, setActiveScan] = useState<ScanData | null>(null)
+  const [pauseState, setPauseState] = useState<PauseState | null>(null)
   const [lastScanCompletedAt, setLastScanCompletedAt] = useState<number | null>(null)
   const [lastScanScheduledAt, setLastScanScheduledAt] = useState<number | null>(null)
 
@@ -28,9 +34,19 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
   // Derived state
   const currentScanId = activeScan?.scan_id ?? null
   const isScanning = activeScan !== null
+  const isPaused = pauseState?.paused ?? false
+  const pauseUntil = pauseState?.pauseUntil ?? null
 
   // Process broadcast messages received from backend via WebSocket
   const handleBroadcastMessage = useCallback((message: BroadcastMessage) => {
+    // Handle paused message
+    if (message.type === 'paused') {
+      console.log('[ScanManager] Received paused message:', message.pause_until)
+      setPauseState({ paused: true, pauseUntil: message.pause_until })
+      setActiveScan(null)  // Clear any active scan when paused
+      return
+    }
+
     // Handle no_active_scan message
     if (message.type === 'no_active_scan') {
       setActiveScan(prevScan => {
@@ -46,6 +62,8 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
         lastProcessedState.current = { scan_id: null, status: null }
         return null
       })
+      // Clear pause state when going to idle
+      setPauseState(null)
       return
     }
 
@@ -234,6 +252,43 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
     }
   }, [])
 
+  // Pause scanning
+  const pauseScan = useCallback(async (durationSeconds: number) => {
+    try {
+      const response = await fetch('/api/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration_seconds: durationSeconds })
+      })
+
+      if (!response.ok) {
+        console.error('Failed to pause:', response.statusText)
+        throw new Error('Failed to pause')
+      }
+    } catch (error) {
+      console.error('Error pausing:', error)
+      throw error
+    }
+  }, [])
+
+  // Unpause scanning
+  const unpauseScan = useCallback(async () => {
+    try {
+      const response = await fetch('/api/pause', {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        console.error('Failed to unpause:', text)
+        throw new Error(text || 'Failed to unpause')
+      }
+    } catch (error) {
+      console.error('Error unpausing:', error)
+      throw error
+    }
+  }, [])
+
   // Notify that a scan was scheduled (triggers refresh in UpcomingScansTable)
   const notifyScanScheduled = useCallback(() => {
     setLastScanScheduledAt(Date.now())
@@ -257,9 +312,13 @@ export function ScanManagerProvider({ children }: { children: React.ReactNode })
     activeScan,
     currentScanId,
     isScanning,
+    isPaused,
+    pauseUntil,
     lastScanCompletedAt,
     lastScanScheduledAt,
     stopScan,
+    pauseScan,
+    unpauseScan,
     notifyScanScheduled,
   }
 

@@ -62,6 +62,10 @@ impl WebServer {
         #[cfg(not(debug_assertions))]
         println!("   Running in PRODUCTION mode - serving embedded assets");
 
+        // Initialize pause state from database
+        let db = Database::new()?;
+        ScanManager::init_pause_state(&db)?;
+
         // Create shutdown channel for background tasks
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
@@ -154,9 +158,13 @@ impl WebServer {
             // Scan endpoints
             .route("/api/scans/schedule", post(api::scans::schedule_scan))
             .route("/api/scans/current", get(api::scans::get_current_scan))
-            .route("/api/scans/{scan_id}/cancel", post(api::scans::cancel_scan))
+            .route("/api/scans/{scan_id}/cancel", post(api::scans::stop_scan))
             .route("/api/scans/scan_history/count", get(api::scans::get_scan_history_count))
             .route("/api/scans/scan_history/fetch", get(api::scans::get_scan_history_fetch))
+
+            // Pause endpoints
+            .route("/api/pause", post(api::scans::set_pause))
+            .route("/api/pause", delete(api::scans::clear_pause))
 
             // Root endpoints
             .route("/api/roots", post(api::roots::create_root))

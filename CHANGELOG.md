@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Global Pause Feature**: Temporarily pause all scanning activity with flexible duration options
+  - Pause for 5 minutes, 15 minutes, 1 hour, 24 hours, until tomorrow (12am), or indefinitely
+  - Edit pause duration or unpause early through the unified pause management dialog
+  - In-progress scans are gracefully stopped and resume automatically when unpaused
+  - Pause state persists across application restarts
+  - Visual indicators throughout the UI show pause status and resume timing
+  - Paused scans appear in Upcoming Scans table with "Paused" status until they resume
+  - Real-time WebSocket updates ensure all UI components reflect current pause state
+
 ## [v0.2.10] - 2025-11-15
 
 ### Added

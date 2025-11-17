@@ -22,6 +22,8 @@ static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
         broadcaster,
         db_is_compacting: false,
         is_shutting_down: false,
+        is_paused: false,
+        pause_until: None,
     })
 });
 
@@ -31,6 +33,8 @@ pub struct ScanManager {
     broadcaster: broadcast::Sender<BroadcastMessage>,
     db_is_compacting: bool,
     is_shutting_down: bool,
+    is_paused: bool,
+    pause_until: Option<i64>,
 }
 
 /// Information about the currently running scan
@@ -38,7 +42,7 @@ struct ActiveScanInfo {
     scan_id: i64,
     root_id: i64,
     root_path: String,
-    cancel_token: Arc<AtomicBool>,
+    interrupt_token: Arc<AtomicBool>,
     reporter: Arc<ProgressReporter>,
     task_handle: Option<JoinHandle<()>>,
     broadcast_handle: Option<JoinHandle<()>>,
@@ -56,6 +60,40 @@ impl ScanManager {
     /// Get the global singleton instance
     pub fn instance() -> &'static Mutex<ScanManager> {
         &SCAN_MANAGER
+    }
+
+    /// Initialize pause state from database
+    /// Should be called once at server startup
+    pub fn init_pause_state(db: &Database) -> Result<(), FsPulseError> {
+        let mut manager = Self::instance().lock().unwrap();
+
+        // Read pause state from database
+        let pause_until_opt = db.immediate_transaction(|conn| {
+            Database::get_meta_value_locked(conn, "pause_until")
+        })?;
+
+        match pause_until_opt {
+            Some(s) => {
+                let timestamp = s.parse::<i64>()
+                    .map_err(|_| FsPulseError::Error("Invalid pause_until value in database".into()))?;
+
+                manager.is_paused = true;
+                manager.pause_until = Some(timestamp);
+
+                if timestamp == -1 {
+                    info!("Initialized: system is paused indefinitely");
+                } else {
+                    info!("Initialized: system is paused until timestamp {}", timestamp);
+                }
+            }
+            None => {
+                manager.is_paused = false;
+                manager.pause_until = None;
+                info!("Initialized: system is not paused");
+            }
+        }
+
+        Ok(())
     }
 
     /// Entry point 1: Manual scan from UI
@@ -161,9 +199,9 @@ impl ScanManager {
             // setting this to true will prevent additional scans from starting
             manager.is_shutting_down = true;
 
-            // Signal cancellation and extract task handle
+            // Signal interrupt and extract task handle
             if let Some(active) = &mut manager.current_scan {
-                active.cancel_token.store(true, Ordering::Release);
+                active.interrupt_token.store(true, Ordering::Release);
                 let task_handle = active.task_handle.take(); // Move the task handle out, leaving None
                 let broadcast_handle = active.broadcast_handle.take(); // Move the broadcast handle out, leaving none
                 (task_handle, broadcast_handle)
@@ -193,12 +231,22 @@ impl ScanManager {
         manager.is_shutting_down
     }
 
+    pub fn is_paused() -> bool {
+        let manager = Self::instance().lock().unwrap();
+        manager.is_paused
+    }
+
     /// Shared logic: Find and start next scan
     /// Called with mutex already held
     /// Updates self.current_scan if scan started
     fn try_start_next_scan_locked(&mut self, db: &Database) -> Result<(), FsPulseError> {
         // Already running a scan, compacting the database, or shutting down?
         if self.current_scan.is_some() || self.db_is_compacting || self.is_shutting_down {
+            return Ok(());
+        }
+
+        // If paused, check to see if the pause has expired
+        if self.is_paused && !self.clear_pause_if_expired_locked(db)? {
             return Ok(());
         }
 
@@ -218,7 +266,7 @@ impl ScanManager {
 
         // Create progress reporter that maintains scan state
         let reporter = Arc::new(ProgressReporter::new(scan_id, root_id, root_path.clone()));
-        let cancel_token = Arc::new(AtomicBool::new(false));
+        let interrupt_token = Arc::new(AtomicBool::new(false));
 
         // Spawn per-scan broadcast thread
         // This thread polls state every 250ms and broadcasts to all connected clients
@@ -266,7 +314,7 @@ impl ScanManager {
         });
 
         // Clone references we need to keep after moving into spawn_blocking
-        let cancel_token_for_storage = Arc::clone(&cancel_token);
+        let interrupt_token_for_storage = Arc::clone(&interrupt_token);
         let reporter_for_storage = Arc::clone(&reporter);
 
         // Spawn scan task
@@ -301,7 +349,7 @@ impl ScanManager {
                 &mut scan,
                 &root,
                 reporter.clone(),
-                cancel_token,
+                interrupt_token,
             );
 
             // Handle result
@@ -309,19 +357,27 @@ impl ScanManager {
                 Ok(()) => {
                     reporter.mark_completed();
                 }
-                Err(ref e) if matches!(e, FsPulseError::ScanCancelled) => {
-                    // If the scan is shuttind down, we always treat ScanCancelled as if it's a result
-                    // of the shutdown. There's a chance that the user was trying to cancel the scan
+                Err(ref e) if matches!(e, FsPulseError::ScanInterrupted) => {
+                    // If the scan is shutting down, we always treat ScanInterrupted as if it's a result
+                    // of the shutdown. There's a chance that the user was trying to stop the scan
                     // and if that's the case, the scan will unexpectedly resume the next time the
                     // process starts. We accept that.
                     if !ScanManager::is_shutting_down() {
-                        info!("Scan {} was cancelled, rolling back changes", scan_id);
-                        if let Err(stop_err) = scan.set_state_stopped(&mut db_mut) {
-                            error!("Failed to stop scan {}: {}", scan_id, stop_err);
-                            reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
+                        // For the purpose of reporting to the web ui, when a scan is interrrupted
+                        // and the app is pausing, we don't bother to differentiate between an
+                        // explicit stop and a pause - we just treat it like a pause.
+                        if ScanManager::is_paused() {
+                            info!("Scan {} was paused", scan_id);
+                            reporter.mark_completed();
                         } else {
-                            reporter.mark_stopped();
-                        }
+                            info!("Scan {} was stopped, rolling back changes", scan_id);
+                            if let Err(stop_err) = scan.set_state_stopped(&mut db_mut) {
+                                error!("Failed to stop scan {}: {}", scan_id, stop_err);
+                                reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
+                            } else {
+                                reporter.mark_stopped();
+                            }
+                        }      
                     }
                 }
                 Err(e) => {
@@ -350,7 +406,7 @@ impl ScanManager {
             scan_id,
             root_id,
             root_path: root_path.clone(),
-            cancel_token: cancel_token_for_storage,
+            interrupt_token: interrupt_token_for_storage,
             reporter: reporter_for_storage,
             task_handle: Some(task_handle),
             broadcast_handle: Some(broadcast_handle),
@@ -368,7 +424,7 @@ impl ScanManager {
         // Clean up queue (verifies state, deletes/clears entry)
         // If we're shutting down, we don't clear the queue entry. It will be taken care
         // of on the next run
-        if !manager.is_shutting_down {
+        if !manager.is_shutting_down && !manager.is_paused{
             QueueEntry::complete_work(db, scan_id)?;
         }
 
@@ -392,8 +448,8 @@ impl ScanManager {
         Ok(())
     }
 
-    /// Request cancellation of the current scan
-    pub fn request_cancellation(scan_id: i64) -> Result<(), String> {
+    /// Request interrupt of the current scan
+    pub fn request_stop(scan_id: i64) -> Result<(), String> {
         let manager: std::sync::MutexGuard<'_, ScanManager> = Self::instance().lock().unwrap();
 
         match &manager.current_scan {
@@ -406,12 +462,13 @@ impl ScanManager {
 
                 match current_status {
                     ScanStatus::Running => {
-                        active.reporter.mark_cancelling();
-                        active.cancel_token.store(true, Ordering::Release);
+                        active.reporter.mark_stopping();
+                        active.interrupt_token.store(true, Ordering::Release);
                         Ok(())
                     }
-                    ScanStatus::Cancelling => Err("Scan is already cancelling".to_string()),
+                    ScanStatus::Stopping => Err("Scan is already stopping".to_string()),
                     ScanStatus::Stopped => Err("Scan has already been stopped".to_string()),
+                    ScanStatus::Pausing => Err("Scan is currently pausing".to_string()),
                     ScanStatus::Completed => Err("Scan has already completed".to_string()),
                     ScanStatus::Error { .. } => Err("Scan has already errored".to_string()),
                 }
@@ -422,6 +479,126 @@ impl ScanManager {
             )),
             None => Err("No scan is currently running".to_string()),
         }
+    }
+
+    /// Set pause state with duration
+    /// duration_seconds: -1 for indefinite, positive value for timed pause
+    /// If a scan is currently running, it will be interrupted
+    pub fn set_pause(db: &Database, duration_seconds: i64) -> Result<(), FsPulseError> {
+        let mut manager = Self::instance().lock().unwrap();
+
+        // Cannot pause during shutdown or database compaction
+        if manager.is_shutting_down {
+            return Err(FsPulseError::Error("Cannot pause during shutdown".to_string()));
+        }
+        if manager.db_is_compacting {
+            return Err(FsPulseError::Error("Cannot pause during database compaction".to_string()));
+        }
+
+        // Calculate pause_until timestamp
+        let pause_until = if duration_seconds == -1 {
+            -1
+        } else {
+            chrono::Utc::now().timestamp() + duration_seconds
+        };
+
+        // Update database
+        db.immediate_transaction(|conn| {
+            Database::set_meta_value_locked(conn, "pause_until", &pause_until.to_string())
+        })?;
+
+        // always update the pause_intil time
+        manager.pause_until = Some(pause_until);
+
+        // If already paused, there's no need to do any additional work
+        if !manager.is_paused {
+            manager.is_paused = true;
+
+            // Interrupt current scan if running
+            if let Some(active) = &manager.current_scan {
+                let current_status = active.reporter.get_status();
+                if matches!(current_status, ScanStatus::Running) {
+                    active.reporter.mark_pausing();
+                    active.interrupt_token.store(true, Ordering::Release);
+                }
+            }
+        }
+
+        manager.broadcast_current_state_locked(false);
+
+        info!("Pause set until: {}", if pause_until == -1 { "indefinite".to_string() } else { pause_until.to_string() });
+
+        Ok(())
+    }
+
+    /// Clear pause state
+    pub fn clear_pause(db: &Database) -> Result<(), FsPulseError> {
+        let mut manager = Self::instance().lock().unwrap();
+
+        if !manager.is_paused {
+            info!("Clear pause requested when not paused");
+            return Ok(());
+        }
+
+        // Cannot pause during shutdown or database compaction
+        if manager.is_shutting_down {
+            return Err(FsPulseError::Error("Cannot clear pause during shutdown".to_string()));
+        }
+        if manager.db_is_compacting {
+            return Err(FsPulseError::Error("Cannot clear pause during database compaction".to_string()));
+        }
+
+        // if a pause was requested, and there is an active scan, that scan is going
+        // to be in the process of unwinding. We need to let that complete before
+        // allowing the user to unpause
+        if manager.current_scan.is_some() {
+            info!("Clear pause requested while pausing an in-progress scan");
+             return Err(FsPulseError::Error("Can't unpause when pausing an active scan".into()));
+        }
+
+        // Update database
+        db.immediate_transaction(|conn| {
+            Database::delete_meta_locked(conn, "pause_until")
+        })?;
+
+        // Update local state
+        manager.is_paused = false;
+        manager.pause_until = None;
+
+        manager.broadcast_current_state_locked(false);
+
+        manager.try_start_next_scan_locked(db)?;
+
+        info!("Pause cleared");
+
+        Ok(())
+    }
+
+    /// Check if pause has expired and clear it if so
+    /// Returns true if pause was cleared (became unpaused)
+    /// This function expects to be called with the ScanManager mutex already held
+    fn clear_pause_if_expired_locked(&mut self, db: &Database) -> Result<bool, FsPulseError> {
+        // If pause_until is -1, still paused indefinitely
+        if self.pause_until == Some(-1) {
+            return Ok(false); // Still paused
+        }
+
+        // If we have a timestamp, check if it's passed
+        if let Some(until) = self.pause_until {
+            let now = chrono::Utc::now().timestamp();
+            if until <= now {
+                // Expired, clear it
+                db.immediate_transaction(|conn| {
+                    Database::delete_meta_locked(conn, "pause_until")
+                })?;
+                self.is_paused = false;
+                self.pause_until = None;
+                info!("Pause expired and cleared");
+                return Ok(true); // Just became unpaused
+            }
+        }
+
+        Ok(false) // Still paused
     }
 
     /// Subscribe to scan state updates
@@ -471,8 +648,15 @@ impl ScanManager {
                 }
             }
         } else {
-            // No active scan → broadcast as before.
-            let _ = self.broadcaster.send(BroadcastMessage::NoActiveScan);
+            // No active scan → check if paused or idle
+            if self.is_paused {
+                // System is paused
+                let pause_until = self.pause_until.unwrap_or(-1);
+                let _ = self.broadcaster.send(BroadcastMessage::Paused { pause_until });
+            } else {
+                // System is idle
+                let _ = self.broadcaster.send(BroadcastMessage::NoActiveScan);
+            }
         }
     }
 
@@ -484,6 +668,16 @@ impl ScanManager {
             root_id: active.root_id,
             root_path: active.root_path.clone(),
         })
+    }
+
+    /// Get upcoming scans, synchronized with scan manager state
+    /// If paused, includes the in-progress scan as first entry
+    pub fn get_upcoming_scans(db: &Database, limit: i64) -> Result<Vec<crate::schedules::UpcomingScan>, FsPulseError> {
+        let manager = Self::instance().lock().unwrap();
+        let scans_are_paused = manager.is_paused;
+
+        // Call schedules method while holding mutex to synchronize with try_start_next_scan
+        QueueEntry::get_upcoming_scans(db, limit, scans_are_paused)
     }
 
     /// Compact the database

@@ -21,7 +21,7 @@ impl Validator for ClaxonValidator {
     fn validate(
         &self,
         path: &Path,
-        cancel_token: &Arc<AtomicBool>,
+        interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(ValidationState, Option<String>), FsPulseError> {
         let mut reader = match FlacReader::open(path) {
             Ok(reader) => reader,
@@ -38,9 +38,9 @@ impl Validator for ClaxonValidator {
                     block = next_block;
                     block_count += 1;
 
-                    // Check for cancellation every 256 blocks
-                    if block_count % 256 == 0 && cancel_token.load(Ordering::Acquire) {
-                        return Err(FsPulseError::ScanCancelled);
+                    // Check for interrupt every 256 blocks
+                    if block_count % 256 == 0 && interrupt_token.load(Ordering::Acquire) {
+                        return Err(FsPulseError::ScanInterrupted);
                     }
                 }
                 Ok(None) => break, // EOF.
@@ -62,9 +62,9 @@ mod tests {
     fn test_claxon_validator_nonexistent_file() {
         let validator = ClaxonValidator::new();
         let nonexistent_path = Path::new("/this/path/does/not/exist.flac");
-        let cancel_token = Arc::new(AtomicBool::new(false));
+        let interrupt_token = Arc::new(AtomicBool::new(false));
 
-        let result = validator.validate(nonexistent_path, &cancel_token);
+        let result = validator.validate(nonexistent_path, &interrupt_token);
         assert!(result.is_ok());
 
         let (state, error_msg) = result.unwrap();
@@ -97,8 +97,8 @@ mod tests {
             .write_all(b"not a flac file")
             .expect("Failed to write temp file");
 
-        let cancel_token = Arc::new(AtomicBool::new(false));
-        let result = validator.validate(temp_file.path(), &cancel_token);
+        let interrupt_token = Arc::new(AtomicBool::new(false));
+        let result = validator.validate(temp_file.path(), &interrupt_token);
         assert!(result.is_ok());
 
         let (state, error_msg) = result.unwrap();

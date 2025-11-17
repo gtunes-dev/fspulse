@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, CirclePause, Pencil } from 'lucide-react'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { PauseScanDialog } from './PauseScanDialog'
 
 export function ActiveScanCard() {
-  const { activeScan, currentScanId, stopScan } = useScanManager()
+  const { activeScan, currentScanId, isPaused, pauseUntil, stopScan } = useScanManager()
   const [detailsExpanded, setDetailsExpanded] = useState(() => {
     // Load from localStorage
     return localStorage.getItem('fspulse.scan.details.expanded') === 'true'
   })
   const [stopping, setStopping] = useState(false)
   const [breadcrumbs, setBreadcrumbs] = useState<string[]>([])
+  const [showPauseDialog, setShowPauseDialog] = useState(false)
 
   const currentScan = activeScan
 
@@ -38,6 +41,9 @@ export function ActiveScanCard() {
   let itemsText = ''
   let showPercentage = false
   let isPhase1 = false
+  let showPauseButton = false
+  let pauseButtonText = 'Pause'
+  let pauseButtonDisabled = false
   let showStopButton = false
   let stopButtonText = 'Stop'
   let stopButtonDisabled = false
@@ -74,20 +80,35 @@ export function ActiveScanCard() {
       }
     }
 
-    // Determine stop button display based on status
+    // Determine pause and stop button display based on status
     if (statusValue === 'running') {
+      showPauseButton = true
+      pauseButtonText = 'Pause'
+      pauseButtonDisabled = false
       showStopButton = true
       stopButtonText = 'Stop'
       stopButtonDisabled = false
-    } else if (statusValue === 'cancelling') {
+    } else if (statusValue === 'pausing') {
+      showPauseButton = true
+      pauseButtonText = 'Pausing'
+      pauseButtonDisabled = true
+      showStopButton = true
+      stopButtonText = 'Stop'
+      stopButtonDisabled = true
+    } else if (statusValue === 'stopping') {
+      showPauseButton = true
+      pauseButtonText = 'Pause'
+      pauseButtonDisabled = true
       showStopButton = true
       stopButtonText = 'Stopping'
       stopButtonDisabled = true
     } else if (statusValue === 'stopped') {
+      showPauseButton = false
       showStopButton = true
       stopButtonText = 'Stopped'
       stopButtonDisabled = true
     } else if (statusValue === 'completed') {
+      showPauseButton = false
       // Check if we were stopping (race condition)
       if (stopping) {
         showStopButton = true
@@ -122,9 +143,46 @@ export function ActiveScanCard() {
         {/* Bordered content box - similar to table containers */}
         <div className="border border-border rounded-lg p-4">
           {!currentScan ? (
-            <p className="text-sm text-muted-foreground text-center">
-              No scan in progress
-            </p>
+            // No active scan - show pause/unpause controls
+            <div className="flex items-center min-h-[100px]">
+              {/* Left half - Pause/Edit button */}
+              <div className="flex-1 flex items-center justify-center">
+                {isPaused ? (
+                  <Button onClick={() => setShowPauseDialog(true)} size="lg">
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Pause
+                  </Button>
+                ) : (
+                  <Button onClick={() => setShowPauseDialog(true)} size="lg">
+                    <CirclePause className="h-4 w-4 mr-2" />
+                    Pause Scanning
+                  </Button>
+                )}
+              </div>
+
+              {/* Vertical separator */}
+              <div className="h-16 w-px bg-border" />
+
+              {/* Right half - Status message */}
+              <div className="flex-1 flex items-center justify-center">
+                {isPaused ? (
+                  <div className="text-center">
+                    <div className="text-sm font-semibold mb-1">System Paused</div>
+                    <p className="text-xs text-muted-foreground">
+                      {pauseUntil === -1
+                        ? 'Paused indefinitely'
+                        : pauseUntil !== null
+                        ? `Until ${new Date(pauseUntil * 1000).toLocaleString()}`
+                        : 'Paused'}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No scan in progress
+                  </p>
+                )}
+              </div>
+            </div>
           ) : (
             <>
               {/* Header */}
@@ -134,15 +192,25 @@ export function ActiveScanCard() {
                     Scanning: {currentScan.root_path}
                   </div>
                 </div>
-                {showStopButton && (
-                  <button
-                    onClick={handleStop}
-                    disabled={stopButtonDisabled}
-                    className="px-4 py-2 rounded-md text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {stopButtonText}
-                  </button>
-                )}
+                <div className="flex gap-2">
+                  {showPauseButton && (
+                    <Button
+                      onClick={() => setShowPauseDialog(true)}
+                      disabled={pauseButtonDisabled}
+                    >
+                      {pauseButtonText}
+                    </Button>
+                  )}
+                  {showStopButton && (
+                    <button
+                      onClick={handleStop}
+                      disabled={stopButtonDisabled}
+                      className="px-4 py-2 rounded-md text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {stopButtonText}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Breadcrumbs - Completed Phases */}
@@ -256,6 +324,12 @@ export function ActiveScanCard() {
           )}
         </div>
       </CardContent>
+
+      {/* Pause Dialog */}
+      <PauseScanDialog
+        open={showPauseDialog}
+        onOpenChange={setShowPauseDialog}
+      />
     </Card>
   )
 }

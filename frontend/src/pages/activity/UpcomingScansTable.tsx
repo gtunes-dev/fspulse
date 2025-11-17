@@ -9,7 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useScanManager } from '@/contexts/ScanManagerContext'
-import { Clock, Calendar } from 'lucide-react'
+import { Clock, Calendar, CirclePause } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 
 interface UpcomingScan {
@@ -21,6 +21,7 @@ interface UpcomingScan {
   next_scan_time: number  // Unix timestamp
   source: string  // "Manual" or "Scheduled"
   is_queued: boolean  // true if waiting to start (next_scan_time <= now)
+  scan_id: number | null  // Non-null if this is an in-progress scan that is paused
 }
 
 export function UpcomingScansTable() {
@@ -182,7 +183,12 @@ export function UpcomingScansTable() {
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {scan.is_queued ? (
+                          {scan.scan_id !== null ? (
+                            <>
+                              <CirclePause className="h-4 w-4 text-purple-500" />
+                              <span className="text-sm">Paused</span>
+                            </>
+                          ) : scan.is_queued ? (
                             <>
                               <Clock className="h-4 w-4 text-orange-500" />
                               <span className="text-sm">Queued</span>
@@ -196,7 +202,7 @@ export function UpcomingScansTable() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatNextRun(scan.next_scan_time, scan.is_queued, queuePosition)}
+                        {scan.scan_id !== null ? 'When unpaused' : formatNextRun(scan.next_scan_time, scan.is_queued, queuePosition)}
                       </TableCell>
                     </TableRow>
                   )
