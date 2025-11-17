@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Real-time WebSocket updates ensure all UI components reflect current pause state
 
 ### Changed
+- **Activity page redesign**: Unified scan control interface with improved visual hierarchy and design consistency
+  - Manual Scan and Pause controls always visible in a single action bar
+  - Pause button turns purple when system is paused for better visibility
+  - Global pause banner appears prominently at top of page when scanning is paused
+  - Streamlined active scan display with reduced redundancy
 - **Build optimizations**: Changed from global `codegen-units=1` to per-package optimization for performance-critical dependencies (claxon, sha2, md-5, image, png, lopdf). This significantly reduces compilation time while maintaining runtime performance for file validation and hashing operations.
 - **UI color consistency**: Queued scans now use purple icons instead of orange, reserving orange for warnings
 

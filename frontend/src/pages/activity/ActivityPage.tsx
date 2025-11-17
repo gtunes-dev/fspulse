@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ActiveScanCard } from './ActiveScanCard'
-import { ScansCard } from './ManualScanCard'
+import { CirclePause } from 'lucide-react'
+import { ScanCard } from './ScanCard'
 import { ScanHistoryTable } from './ScanHistoryTable'
 import { UpcomingScansTable } from './UpcomingScansTable'
 import { EmptyStateNoRoots } from './EmptyStateNoRoots'
 import { EmptyStateNoScans } from './EmptyStateNoScans'
+import { PauseScanDialog } from './PauseScanDialog'
 import { Card, CardContent } from '@/components/ui/card'
+import { InfoBar } from '@/components/shared/InfoBar'
+import { useScanManager } from '@/contexts/ScanManagerContext'
 import { countQuery } from '@/lib/api'
 
 /**
@@ -27,12 +30,24 @@ import { countQuery } from '@/lib/api'
  */
 export function ActivityPage() {
   const [searchParams] = useSearchParams()
+  const { isPaused, pauseUntil } = useScanManager()
   const [loading, setLoading] = useState(true)
   const [rootCount, setRootCount] = useState(0)
   const [scanCount, setScanCount] = useState(0)
+  const [showPauseDialog, setShowPauseDialog] = useState(false)
 
   // Check for state override parameter (for testing/development)
   const stateOverride = searchParams.get('state')
+
+  // Format pause duration for banner
+  const getPauseDuration = () => {
+    if (!isPaused) return ''
+    if (pauseUntil === -1) return 'indefinitely'
+    if (pauseUntil !== null) {
+      return `until ${new Date(pauseUntil * 1000).toLocaleString()}`
+    }
+    return ''
+  }
 
   useEffect(() => {
     async function loadCounts() {
@@ -93,7 +108,7 @@ export function ActivityPage() {
     return (
       <div className="flex flex-col gap-6">
         <h1 className="text-2xl font-semibold">Activity</h1>
-        <ScansCard />
+        <ScanCard />
         <EmptyStateNoScans rootCount={rootCount || 2} />
       </div>
     )
@@ -116,7 +131,7 @@ export function ActivityPage() {
     return (
       <div className="flex flex-col gap-6">
         <h1 className="text-2xl font-semibold">Activity</h1>
-        <ScansCard />
+        <ScanCard />
         <EmptyStateNoScans rootCount={rootCount} />
       </div>
     )
@@ -127,17 +142,33 @@ export function ActivityPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Activity</h1>
 
-      {/* Scans Action Card - Always visible */}
-      <ScansCard />
+      {/* Global Pause Banner - Only when paused */}
+      {isPaused && (
+        <InfoBar variant="warning" icon={CirclePause}>
+          <span className="font-semibold">System Paused</span>
+          {' — '}
+          Scanning paused {getPauseDuration()}
+          {' • '}
+          <button
+            onClick={() => setShowPauseDialog(true)}
+            className="underline hover:text-purple-800 dark:hover:text-purple-200"
+          >
+            Edit Pause
+          </button>
+        </InfoBar>
+      )}
 
-      {/* Active Scan Status Card - Always visible, handles both states internally */}
-      <ActiveScanCard />
+      {/* Unified Scan Card - Always visible, handles both active and idle states */}
+      <ScanCard />
 
       {/* Upcoming Scans */}
       <UpcomingScansTable />
 
       {/* Scan History */}
       <ScanHistoryTable />
+
+      {/* Pause Dialog */}
+      <PauseScanDialog open={showPauseDialog} onOpenChange={setShowPauseDialog} />
     </div>
   )
 }
