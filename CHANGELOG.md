@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Build optimizations**: Changed from global `codegen-units=1` to per-package optimization for performance-critical dependencies (claxon, sha2, md-5, image, png, lopdf). This significantly reduces compilation time while maintaining runtime performance for file validation and hashing operations.
+- **UI color consistency**: Queued scans now use purple icons instead of orange, reserving orange for warnings
+
+### Fixed
+- **Upcoming Scans display**: First queued scan now correctly shows "When unpaused" when global pause is active
 
 ## [v0.2.10] - 2025-11-15
 

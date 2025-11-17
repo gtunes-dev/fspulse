@@ -25,7 +25,7 @@ interface UpcomingScan {
 }
 
 export function UpcomingScansTable() {
-  const { currentScanId, lastScanCompletedAt, lastScanScheduledAt } = useScanManager()
+  const { currentScanId, lastScanCompletedAt, lastScanScheduledAt, isPaused } = useScanManager()
   const [scans, setScans] = useState<UpcomingScan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -190,7 +190,7 @@ export function UpcomingScansTable() {
                             </>
                           ) : scan.is_queued ? (
                             <>
-                              <Clock className="h-4 w-4 text-orange-500" />
+                              <Clock className="h-4 w-4 text-purple-500" />
                               <span className="text-sm">Queued</span>
                             </>
                           ) : (
@@ -202,7 +202,12 @@ export function UpcomingScansTable() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {scan.scan_id !== null ? 'When unpaused' : formatNextRun(scan.next_scan_time, scan.is_queued, queuePosition)}
+                        {scan.scan_id !== null
+                          ? 'When unpaused'
+                          : (scan.is_queued && queuePosition === 0 && isPaused)
+                            ? 'When unpaused'
+                            : formatNextRun(scan.next_scan_time, scan.is_queued, queuePosition)
+                        }
                       </TableCell>
                     </TableRow>
                   )
