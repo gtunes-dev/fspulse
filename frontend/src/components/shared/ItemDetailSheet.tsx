@@ -824,7 +824,7 @@ export function ItemDetailSheet({
                                         {change.meta_change && change.mod_date_old !== change.mod_date_new && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 flex items-center gap-1">
-                                              <Calendar className="h-3 w-3" />
+                                              <CalendarIcon className="h-3 w-3" />
                                               Modification Date
                                             </p>
                                             <div className="flex items-center gap-2">

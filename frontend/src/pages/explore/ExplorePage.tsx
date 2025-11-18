@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { RootsView } from './RootsView'
 import { ScansView } from './ScansView'
@@ -67,29 +67,30 @@ export function ExplorePage() {
           </CardHeader>
 
           <CardContent className="flex-1 flex flex-col px-6 pb-6 pt-4">
-            <TabsContent value="roots" className="flex-1 mt-0">
+            {/* Keep all tabs mounted for instant switching - use CSS hiding */}
+            <div className={`flex-1 flex flex-col ${currentTab === 'roots' ? '' : 'hidden'}`}>
               <RootsView />
-            </TabsContent>
+            </div>
 
-            <TabsContent value="scans" className="flex-1 mt-0">
+            <div className={`flex-1 flex flex-col ${currentTab === 'scans' ? '' : 'hidden'}`}>
               <ScansView />
-            </TabsContent>
+            </div>
 
-            <TabsContent value="items" className="flex-1 mt-0">
+            <div className={`flex-1 flex flex-col ${currentTab === 'items' ? '' : 'hidden'}`}>
               <ItemsView />
-            </TabsContent>
+            </div>
 
-            <TabsContent value="changes" className="flex-1 mt-0">
+            <div className={`flex-1 flex flex-col ${currentTab === 'changes' ? '' : 'hidden'}`}>
               <ChangesView />
-            </TabsContent>
+            </div>
 
-            <TabsContent value="alerts" className="flex-1 mt-0">
+            <div className={`flex-1 flex flex-col ${currentTab === 'alerts' ? '' : 'hidden'}`}>
               <AlertsView />
-            </TabsContent>
+            </div>
 
-            <TabsContent value="query" className="flex-1 mt-0">
+            <div className={`flex-1 flex flex-col ${currentTab === 'query' ? '' : 'hidden'}`}>
               <QueryView />
-            </TabsContent>
+            </div>
           </CardContent>
         </Tabs>
       </Card>

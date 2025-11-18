@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { GripVertical, Plus, X } from 'lucide-react'
+import { GripVertical, ListRestart, Plus, X } from 'lucide-react'
 import { fetchMetadata, countQuery, fetchQuery } from '@/lib/api'
 import { FilterModal } from './FilterModal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { formatDateFull } from '@/lib/dateUtils'
 import type {
   ColumnState,
@@ -30,6 +31,7 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
   const [isDraggingDown, setIsDraggingDown] = useState(false)
   const [filterModalColumn, setFilterModalColumn] = useState<ColumnState | null>(null)
   const lastFilterKeyRef = useRef<string>('')
+  const originalMetadataRef = useRef<ColumnState[]>([])
 
   // Load column metadata on mount
   useEffect(() => {
@@ -46,6 +48,8 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
           position: index,
         }))
 
+        // Store a deep copy for reset functionality
+        originalMetadataRef.current = JSON.parse(JSON.stringify(columnState))
         setColumns(columnState)
         setError(null)
       } catch (err) {
@@ -193,6 +197,15 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
     setCurrentPage(1)
   }
 
+  const handleResetColumns = () => {
+    if (originalMetadataRef.current.length > 0) {
+      // Create a deep copy to reset all column state
+      setColumns(JSON.parse(JSON.stringify(originalMetadataRef.current)))
+      setFilters([])
+      setCurrentPage(1)
+    }
+  }
+
   if (loading && columns.length === 0) {
     return <div className="p-4">Loading metadata...</div>
   }
@@ -209,7 +222,17 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-muted">
               <tr className="border-b border-border">
-                <th className="text-center font-medium py-2 px-2 w-8"></th>
+                <th className="text-center font-medium py-2 px-2 w-8">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleResetColumns}
+                    className="w-6 h-6"
+                    title="Reset columns"
+                  >
+                    <ListRestart className="w-4 h-4 text-blue-500" />
+                  </Button>
+                </th>
                 <th className="text-center font-medium py-2 px-2 w-8"></th>
                 <th className="text-center font-medium py-2 uppercase text-xs tracking-wide">COLUMN</th>
                 <th className="text-center font-medium py-2 w-16 uppercase text-xs tracking-wide">SORT</th>

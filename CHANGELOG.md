@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Explore page**: Tab state is now preserved when switching between tabs (filters, sort, column visibility/order, pagination)
+  - Added reset button to restore columns to default settings
+
+### Fixed
+- **Item detail sheet**: Fixed calendar widget appearing over modification date entries in History card
+
 ## [v0.2.12] - 2025-11-17
 
 ### Changed
