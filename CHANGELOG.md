@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.12] - 2025-11-17
+
 ### Changed
 - **Browse page rewrite**: Completely redesigned to support extremely large file trees (100k-1M+ items)
   - Tree view now uses virtualization and lazy loading for fast performance at any scale
