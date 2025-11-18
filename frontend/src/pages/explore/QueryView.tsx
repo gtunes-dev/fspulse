@@ -17,6 +17,8 @@ interface QueryResult {
   alignments: Alignment[]
 }
 
+const ITEMS_PER_PAGE = 25
+
 const SAMPLE_QUERIES = [
   {
     label: 'Basic',
@@ -58,6 +60,30 @@ export function QueryView() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<QueryResult | null>(null)
+  const [totalCount, setTotalCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [executedQuery, setExecutedQuery] = useState('')
+
+  const fetchPage = async (queryStr: string, page: number) => {
+    const response = await fetch('/api/query/fetch_override', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: queryStr,
+        limit_override: ITEMS_PER_PAGE,
+        offset_add: (page - 1) * ITEMS_PER_PAGE,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(errorText || 'Query execution failed')
+    }
+
+    return response.json()
+  }
 
   const handleExecuteQuery = async () => {
     if (!query.trim()) {
@@ -69,7 +95,8 @@ export function QueryView() {
     setError(null)
 
     try {
-      const response = await fetch('/api/query/execute', {
+      // Get count first
+      const countResponse = await fetch('/api/query/count_raw', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -77,16 +104,40 @@ export function QueryView() {
         body: JSON.stringify({ query: query.trim() }),
       })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || 'Query execution failed')
+      if (!countResponse.ok) {
+        const errorText = await countResponse.text()
+        throw new Error(errorText || 'Count query failed')
       }
 
-      const data = await response.json()
+      const countData = await countResponse.json()
+      setTotalCount(countData.count)
+      setExecutedQuery(query.trim())
+      setCurrentPage(1)
+
+      // Fetch first page
+      const data = await fetchPage(query.trim(), 1)
       setResult(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute query')
       setResult(null)
+      setTotalCount(0)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePageChange = async (newPage: number) => {
+    if (!executedQuery) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const data = await fetchPage(executedQuery, newPage)
+      setResult(data)
+      setCurrentPage(newPage)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch page')
     } finally {
       setLoading(false)
     }
@@ -96,6 +147,8 @@ export function QueryView() {
     setQuery(sampleQuery)
     setError(null)
     setResult(null)
+    setTotalCount(0)
+    setCurrentPage(1)
   }
 
   return (
@@ -178,35 +231,69 @@ export function QueryView() {
       {result && (
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-auto">
-              <table className="w-full border-collapse">
-                <thead className="bg-muted sticky top-0">
-                  <tr>
-                    {result.columns.map((col, index) => (
-                      <th
-                        key={index}
-                        className="border border-border px-4 py-2 font-medium text-center uppercase text-xs tracking-wide"
-                      >
-                        {col}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.rows.map((row, rowIndex) => (
-                    <tr key={rowIndex} className="hover:bg-muted/50">
-                      {row.map((cell, cellIndex) => (
-                        <td
-                          key={cellIndex}
-                          className={`border border-border px-4 py-2 ${getAlignmentClass(result.alignments[cellIndex])}`}
-                        >
-                          {cell}
-                        </td>
+            <div className="flex flex-col h-full">
+              {result.rows.length > 0 ? (
+                <div className="overflow-auto">
+                  <table className="w-full border-collapse">
+                    <thead className="bg-muted sticky top-0">
+                      <tr>
+                        {result.columns.map((col, index) => (
+                          <th
+                            key={index}
+                            className="border border-border px-4 py-2 font-medium text-center uppercase text-xs tracking-wide"
+                          >
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.rows.map((row, rowIndex) => (
+                        <tr key={rowIndex} className="hover:bg-muted/50">
+                          {row.map((cell, cellIndex) => (
+                            <td
+                              key={cellIndex}
+                              className={`border border-border px-4 py-2 ${getAlignmentClass(result.alignments[cellIndex])}`}
+                            >
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
                       ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-8 text-center text-muted-foreground">
+                  No results found
+                </div>
+              )}
+
+              {/* Pagination */}
+              {totalCount > 0 && (
+                <div className="flex items-center justify-between p-4 border-t border-border">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {((currentPage - 1) * ITEMS_PER_PAGE + 1).toLocaleString()} to{' '}
+                    {Math.min(currentPage * ITEMS_PER_PAGE, totalCount).toLocaleString()} of {totalCount.toLocaleString()}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1 || loading}
+                      className="px-3 py-1.5 border border-border rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => currentPage * ITEMS_PER_PAGE < totalCount && handlePageChange(currentPage + 1)}
+                      disabled={currentPage * ITEMS_PER_PAGE >= totalCount || loading}
+                      className="px-3 py-1.5 border border-border rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

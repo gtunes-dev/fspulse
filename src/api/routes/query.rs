@@ -67,10 +67,18 @@ pub struct MetadataResponse {
     pub columns: Vec<ColumnMetadata>,
 }
 
+/// Request structure for raw query count (for Query tab)
+#[derive(Debug, Deserialize)]
+pub struct RawCountRequest {
+    pub query: String,
+}
+
 /// Request structure for raw query execution (for Query tab)
 #[derive(Debug, Deserialize)]
 pub struct RawQueryRequest {
     pub query: String,
+    pub limit_override: i64,
+    pub offset_add: i64,
 }
 
 /// Response structure for raw query results
@@ -215,9 +223,9 @@ pub async fn fetch_query(
     }
 }
 
-/// POST /api/query/execute
-/// Accepts raw FsPulse query text and executes it (for Query tab)
-pub async fn execute_raw_query(
+/// POST /api/query/fetch_override
+/// Accepts raw FsPulse query text and executes it with limit/offset overrides (for Query tab)
+pub async fn fetch_override_query(
     Json(req): Json<RawQueryRequest>,
 ) -> Result<Json<RawQueryResponse>, (StatusCode, String)> {
     let db = Database::new().map_err(|e| {
@@ -225,9 +233,10 @@ pub async fn execute_raw_query(
         (StatusCode::INTERNAL_SERVER_ERROR, "Database connection failed".to_string())
     })?;
 
-    debug!("Executing raw query: {}", req.query);
+    debug!("Executing raw query: {} (limit_override: {}, offset_add: {})",
+           req.query, req.limit_override, req.offset_add);
 
-    match QueryProcessor::execute_query(&db, &req.query) {
+    match QueryProcessor::execute_query_override(&db, &req.query, req.limit_override, req.offset_add) {
         Ok((rows, column_headers, alignments)) => {
             Ok(Json(RawQueryResponse {
                 columns: column_headers,
@@ -238,6 +247,28 @@ pub async fn execute_raw_query(
         Err(e) => {
             let error_msg = e.to_string();
             error!("Raw query execution failed: {}", error_msg);
+            Err((StatusCode::BAD_REQUEST, error_msg))
+        }
+    }
+}
+
+/// POST /api/query/count_raw
+/// Returns count for a raw FsPulse query (for Query tab)
+pub async fn count_raw_query(
+    Json(req): Json<RawCountRequest>,
+) -> Result<Json<CountResponse>, (StatusCode, String)> {
+    let db = Database::new().map_err(|e| {
+        error!("Database connection failed: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Database connection failed".to_string())
+    })?;
+
+    debug!("Counting raw query: {}", req.query);
+
+    match QueryProcessor::execute_query_count(&db, &req.query) {
+        Ok(count) => Ok(Json(CountResponse { count })),
+        Err(e) => {
+            let error_msg = e.to_string();
+            error!("Raw count query failed: {}", error_msg);
             Err((StatusCode::BAD_REQUEST, error_msg))
         }
     }

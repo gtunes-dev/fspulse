@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Query tab pagination**: Added pagination support to the Explore > Query tab to prevent browser crashes from large result sets
+  - Results are now paginated with 25 rows per page
+  - User-specified LIMIT and OFFSET clauses are respected when paginating through results
+  - Count queries correctly account for user's limit/offset to show accurate total counts
+  - Empty result sets display "No results found" message
+
 ### Changed
 - **Explore page**: Tab state is now preserved when switching between tabs (filters, sort, column visibility/order, pagination)
   - Added reset button to restore columns to default settings
+- **Number formatting**: Large numbers in pagination displays now show thousand separators (e.g., "1,205,980" instead of "1205980")
+  - Applied consistently across all paginated views: Explore tabs, Alerts, Scan History, Search Results, Roots, and Schedules
 
 ### Fixed
 - **Item detail sheet**: Fixed calendar widget appearing over modification date entries in History card

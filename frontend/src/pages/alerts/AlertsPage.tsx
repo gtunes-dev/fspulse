@@ -460,7 +460,7 @@ export function AlertsPage() {
           {/* Pagination */}
           <div className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground whitespace-nowrap">
-              Showing {totalCount > 0 ? start : 0} - {end} of {totalCount} alerts
+              Showing {(totalCount > 0 ? start : 0).toLocaleString()} - {end.toLocaleString()} of {totalCount.toLocaleString()} alerts
             </div>
             <div className="flex gap-2">
               <Button

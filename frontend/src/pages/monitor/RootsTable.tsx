@@ -341,7 +341,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger
           {totalCount > ITEMS_PER_PAGE && (
             <div className="flex items-center justify-between pt-4">
               <div className="text-sm text-muted-foreground">
-                Showing {startIndex + 1} - {endIndex} of {totalCount} roots
+                Showing {(startIndex + 1).toLocaleString()} - {endIndex.toLocaleString()} of {totalCount.toLocaleString()} roots
               </div>
               <div className="flex items-center gap-2">
                 <Button

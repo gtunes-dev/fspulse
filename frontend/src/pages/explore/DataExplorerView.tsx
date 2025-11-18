@@ -414,8 +414,8 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
               {/* Pagination */}
               <div className="flex items-center justify-between p-4 border-t border-border">
                 <div className="text-sm text-muted-foreground">
-                  Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to{' '}
-                  {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} of {totalCount}
+                  Showing {((currentPage - 1) * ITEMS_PER_PAGE + 1).toLocaleString()} to{' '}
+                  {Math.min(currentPage * ITEMS_PER_PAGE, totalCount).toLocaleString()} of {totalCount.toLocaleString()}
                 </div>
                 <div className="flex items-center gap-2">
                   <button

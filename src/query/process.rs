@@ -1,5 +1,5 @@
 use log::{error, info};
-use pest::{Parser, iterators::Pairs};
+use pest::{iterators::Pairs, Parser};
 use rusqlite::{Row, Statement, ToSql};
 use tabled::{
     builder::Builder,
@@ -17,13 +17,21 @@ use super::{
 };
 //use tablestream::{Column, Stream};
 
-use crate::{alerts::{AlertStatus, AlertType}, changes::ChangeType, database::Database, error::FsPulseError, items::ItemType, scans::ScanState, validate::validator::ValidationState};
+use crate::{
+    alerts::{AlertStatus, AlertType},
+    changes::ChangeType,
+    database::Database,
+    error::FsPulseError,
+    items::ItemType,
+    scans::ScanState,
+    validate::validator::ValidationState,
+};
 
 use super::{
+    columns::ColAlign,
     filter::{DateFilter, Filter, IdFilter, PathFilter, StringFilter},
     order::Order,
     QueryParser, Rule,
-    columns::ColAlign,
 };
 
 /// Query result type: (rows, column headers, column alignments)
@@ -91,7 +99,8 @@ impl QueryResult for QueryResultVector {
     }
     fn finalize(&mut self, show: &mut Show) {
         // Extract column headers and alignments from Show after columns are finalized
-        self.column_headers = show.get_column_headers()
+        self.column_headers = show
+            .get_column_headers()
             .into_iter()
             .map(|s| s.to_string())
             .collect();
@@ -161,7 +170,7 @@ pub trait Query {
     /// Executes a count query using COUNT(*) SQL
     /// This is more efficient than loading all rows and counting them
     fn prepare_and_execute_count(&self, db: &Database) -> Result<i64, FsPulseError> {
-        let (sql, params_vec) = self.build_sql(true);
+        let (sql, params_vec) = self.build_sql(true, None, None);
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
         let mut sql_statement = db.conn().prepare(&sql)?;
 
@@ -170,9 +179,15 @@ pub trait Query {
         Ok(count)
     }
 
-    /// Builds the SQL query string with optional count mode
-    /// When count_only=true, uses COUNT(*) and omits ORDER BY, LIMIT, OFFSET
-    fn build_sql(&self, count_only: bool) -> (String, Vec<Box<dyn ToSql>>) {
+    /// Builds the SQL query string with optional count mode and limit/offset overrides
+    /// When count_only=true, wraps query in subquery for COUNT(*) and omits ORDER BY
+    /// When limit_override/offset_add are provided, adjusts pagination accordingly
+    fn build_sql(
+        &self,
+        count_only: bool,
+        limit_override: Option<i64>,
+        offset_add: Option<i64>,
+    ) -> (String, Vec<Box<dyn ToSql>>) {
         // Build SELECT clause
         let select_list = if count_only {
             "COUNT(*)".to_string()
@@ -210,33 +225,52 @@ pub trait Query {
             }
         };
 
-        let limit_clause = if count_only {
-            String::new()
-        } else {
-            match &self.query_impl().limit {
-                Some(limit) => format!("\nLIMIT {limit}"),
-                None => String::new(),
+        let limit_clause = match (self.query_impl().limit, limit_override) {
+            (Some(user_limit), Some(override_limit)) => {
+                // Calculate remaining rows within user's limit
+                let offset = offset_add.unwrap_or(0);
+                let remaining = user_limit - offset;
+                let effective = remaining.min(override_limit).max(0);
+                format!("\nLIMIT {effective}")
             }
+            (None, Some(override_limit)) => format!("\nLIMIT {override_limit}"),
+            (Some(limit), None) => format!("\nLIMIT {limit}"),
+            (None, None) => String::new(),
         };
 
-        let offset_clause = if count_only {
-            String::new()
-        } else {
-            match &self.query_impl().offset {
-                Some(offset) => format!("\nOFFSET {offset}"),
-                None => String::new(),
-            }
+        let final_offset = match (self.query_impl().offset, offset_add) {
+            (None, None) => None,
+            (Some(o), None) => Some(o),
+            (None, Some(a)) => Some(a),
+            (Some(o), Some(a)) => Some(o + a),
         };
+
+        let offset_clause = final_offset
+            .map(|o| format!("\nOFFSET {o}"))
+            .unwrap_or_default();
 
         // Assemble final SQL
-        let sql = self
-            .query_impl()
-            .sql_template
-            .replace("{select_list}", &select_list)
-            .replace("{where_clause}", &where_clause)
-            .replace("{order_clause}", &order_clause)
-            .replace("{limit_clause}", &limit_clause)
-            .replace("{offset_clause}", &offset_clause);
+        let sql = if count_only {
+            // For count queries, use subquery to correctly count with limit/offset
+            let inner_sql = self
+                .query_impl()
+                .sql_template
+                .replace("{select_list}", "1")
+                .replace("{where_clause}", &where_clause)
+                .replace("{order_clause}", "")
+                .replace("{limit_clause}", &limit_clause)
+                .replace("{offset_clause}", &offset_clause);
+
+            format!("SELECT COUNT(*) FROM ({}) AS subquery", inner_sql)
+        } else {
+            self.query_impl()
+                .sql_template
+                .replace("{select_list}", &select_list)
+                .replace("{where_clause}", &where_clause)
+                .replace("{order_clause}", &order_clause)
+                .replace("{limit_clause}", &limit_clause)
+                .replace("{offset_clause}", &offset_clause)
+        };
 
         (sql, params_vec)
     }
@@ -246,7 +280,23 @@ pub trait Query {
         db: &Database,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
-        let (sql, params_vec) = self.build_sql(false);
+        let (sql, params_vec) = self.build_sql(false, None, None);
+        let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
+        let mut sql_statement = db.conn().prepare(&sql)?;
+
+        self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
+
+        Ok(())
+    }
+
+    fn prepare_and_execute_override(
+        &mut self,
+        db: &Database,
+        limit_override: i64,
+        offset_add: i64,
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let (sql, params_vec) = self.build_sql(false, Some(limit_override), Some(offset_add));
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
         let mut sql_statement = db.conn().prepare(&sql)?;
 
@@ -263,9 +313,12 @@ fn make_query(query_type: &str, count_only: bool) -> Box<dyn Query> {
         }),
         ("scans", false) => Box::new(ScansQuery {
             imp: QueryImpl::new(QueryImpl::SCANS_SQL_QUERY, ColSet::new(&SCANS_QUERY_COLS)),
-        }),        
+        }),
         ("scans", true) => Box::new(ScansQuery {
-            imp: QueryImpl::new(QueryImpl::SCANS_SQL_QUERY_COUNT, ColSet::new(&SCANS_QUERY_COLS)),
+            imp: QueryImpl::new(
+                QueryImpl::SCANS_SQL_QUERY_COUNT,
+                ColSet::new(&SCANS_QUERY_COLS),
+            ),
         }),
         ("items", _) => Box::new(ItemsQuery {
             imp: QueryImpl::new(QueryImpl::ITEMS_SQL_QUERY, ColSet::new(&ITEMS_QUERY_COLS)),
@@ -521,7 +574,7 @@ impl ScansQuery {
                 "schedule_id" => Format::format_opt_i64(scan.schedule_id),
                 "started_at" => Format::format_i64(scan.started_at),
                 "ended_at" => Format::format_opt_i64(scan.ended_at),
-                "was_restarted" => Format::format_bool(scan.was_restarted, col.format)?, 
+                "was_restarted" => Format::format_bool(scan.was_restarted, col.format)?,
                 "scan_state" => Format::format_scan_state(scan.state, col.format)?,
                 "is_hash" => Format::format_bool(scan.is_hash, col.format)?,
                 "hash_all" => Format::format_bool(scan.hash_all, col.format)?,
@@ -609,8 +662,14 @@ impl ChangesQuery {
                 "hash_new" => Format::format_opt_string(&change.hash_new),
                 "val_change" => Format::format_opt_bool(change.val_change, col.format)?,
                 "last_val_scan_old" => Format::format_opt_i64(change.last_val_scan_old),
-                "val_old" => Format::format_opt_val(change.val_old.map(ValidationState::from_i64), col.format)?,
-                "val_new" => Format::format_opt_val(change.val_new.map(ValidationState::from_i64), col.format)?,
+                "val_old" => Format::format_opt_val(
+                    change.val_old.map(ValidationState::from_i64),
+                    col.format,
+                )?,
+                "val_new" => Format::format_opt_val(
+                    change.val_new.map(ValidationState::from_i64),
+                    col.format,
+                )?,
                 "val_error_old" => Format::format_opt_string(&change.val_error_old),
                 "val_error_new" => Format::format_opt_string(&change.val_error_new),
                 _ => {
@@ -901,6 +960,17 @@ impl QueryProcessor {
         Ok((qrv.row_vec, qrv.column_headers, qrv.column_alignments))
     }
 
+    pub fn execute_query_override(
+        db: &Database,
+        query_str: &str,
+        limit_override: i64,
+        offset_add: i64,
+    ) -> Result<QueryResultData, FsPulseError> {
+        let mut qrv = QueryResultVector::new();
+        Self::process_query_override(db, query_str, limit_override, offset_add, &mut qrv)?;
+        Ok((qrv.row_vec, qrv.column_headers, qrv.column_alignments))
+    }
+
     pub fn execute_query_count(db: &Database, query_str: &str) -> Result<i64, FsPulseError> {
         Self::process_query_count(db, query_str)
     }
@@ -964,10 +1034,36 @@ impl QueryProcessor {
         Ok(())
     }
 
-    fn process_query_count(
+    fn process_query_override(
         db: &Database,
         query_str: &str,
-    ) -> Result<i64, FsPulseError> {
+        limit_override: i64,
+        offset_add: i64,
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        info!("Parsing query with overrides: {query_str}");
+
+        let mut parsed_query = QueryParser::parse(Rule::query, query_str)
+            .map_err(|err| FsPulseError::ParsingError(Box::new(err)))?;
+
+        info!("Parsed query: {parsed_query}");
+
+        let query_pair = parsed_query.next().unwrap();
+        let mut query_iter = query_pair.into_inner();
+
+        let query_type_pair = query_iter.next().unwrap();
+
+        let mut query = make_query(query_type_pair.as_str(), false);
+
+        QueryProcessor::build(&mut *query, &mut query_iter)?;
+
+        query.prepare_and_execute_override(db, limit_override, offset_add, query_result)?;
+        query_result.finalize(&mut query.query_impl_mut().show);
+
+        Ok(())
+    }
+
+    fn process_query_count(db: &Database, query_str: &str) -> Result<i64, FsPulseError> {
         info!("Parsing count query: {query_str}");
 
         let mut parsed_query = QueryParser::parse(Rule::query, query_str)

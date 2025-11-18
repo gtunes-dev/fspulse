@@ -146,10 +146,11 @@ impl WebServer {
             .route("/api/home/last-scan-stats", get(api::scans::get_last_scan_stats))
 
             // Query endpoints
+            .route("/api/query/fetch_override", post(api::query::fetch_override_query))
+            .route("/api/query/count_raw", post(api::query::count_raw_query))
             .route("/api/query/{domain}/metadata", get(api::query::get_metadata))
             .route("/api/query/{domain}/count", post(api::query::count_query))
             .route("/api/query/{domain}/fetch", post(api::query::fetch_query))
-            .route("/api/query/execute", post(api::query::execute_raw_query))
             .route("/api/validate-filter", post(api::query::validate_filter))
 
             // Alert endpoints

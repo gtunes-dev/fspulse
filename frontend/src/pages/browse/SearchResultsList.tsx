@@ -159,7 +159,7 @@ export function SearchResultsList({ rootId, searchQuery, showTombstones }: Searc
       {/* Results count and pagination info */}
       <div className="flex items-center justify-between px-4 py-2 text-sm text-muted-foreground border-b">
         <span>
-          {totalCount} result{totalCount !== 1 ? 's' : ''} found
+          {totalCount.toLocaleString()} result{totalCount !== 1 ? 's' : ''} found
         </span>
         {totalPages > 1 && (
           <span>

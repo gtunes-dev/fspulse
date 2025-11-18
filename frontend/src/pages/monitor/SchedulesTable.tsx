@@ -307,7 +307,7 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
               {totalCount > ITEMS_PER_PAGE && (
                 <div className="flex items-center justify-between pt-4">
                   <div className="text-sm text-muted-foreground">
-                    Showing {startIndex + 1} - {endIndex} of {totalCount} schedules
+                    Showing {(startIndex + 1).toLocaleString()} - {endIndex.toLocaleString()} of {totalCount.toLocaleString()} schedules
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
