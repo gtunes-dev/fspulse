@@ -1,0 +1,86 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Server (Debug)",
+            "preLaunchTask": "Prepare Dev Environment",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=fspulse",
+                    "--package=fspulse"
+                ],
+                "filter": {
+                    "name": "fspulse",
+                    "kind": "bin"
+                }
+            },
+            "args": ["serve"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "attach",
+            "name": "Attach to Server (Debug)",
+            "program": "${workspaceFolder}/target/debug/fspulse",
+            "waitFor": true
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Interact (Debug)",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=fspulse",
+                    "--package=fspulse"
+                ],
+                "filter": {
+                    "name": "fspulse",
+                    "kind": "bin"
+                }
+            },
+            "args": ["interact"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "CLI (Debug)",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=fspulse",
+                    "--package=fspulse"
+                ],
+                "filter": {
+                    "name": "fspulse",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Unit Tests (Debug)",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=fspulse",
+                    "--package=fspulse"
+                ],
+                "filter": {
+                    "name": "fspulse",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

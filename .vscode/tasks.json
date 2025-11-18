@@ -1,0 +1,93 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Clippy",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "clippy",
+                "--all-targets",
+                "--all-features"
+            ],
+            "group": "build",
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Build (Release)",
+            "type": "shell",
+            "command": "cargo",
+            "args": [
+                "build",
+                "--release"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Test: All",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["test"],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Test: Verbose",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["test", "--", "--nocapture"],
+            "group": "test",
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Vite Dev Server",
+            "type": "shell",
+            "command": "npm",
+            "args": ["run", "dev"],
+            "options": {
+                "cwd": "${workspaceFolder}/frontend"
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Frontend: Lint",
+            "type": "shell",
+            "command": "npm",
+            "args": ["run", "lint"],
+            "options": {
+                "cwd": "${workspaceFolder}/frontend"
+            },
+            "problemMatcher": ["$eslint-stylish"]
+        },
+        {
+            "label": "Frontend: Build",
+            "type": "shell",
+            "command": "npm",
+            "args": ["run", "build"],
+            "options": {
+                "cwd": "${workspaceFolder}/frontend"
+            },
+            "problemMatcher": ["$tsc"]
+        },
+        {
+            "label": "Frontend: Check",
+            "dependsOn": ["Frontend: Lint", "Frontend: Build"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Prepare Dev Environment",
+            "type": "shell",
+            "command": "pkill -f 'target/debug/fspulse' || true",
+            "problemMatcher": []
+        }
+    ]
+}
