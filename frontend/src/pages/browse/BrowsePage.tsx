@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { RootCard } from '@/components/shared/RootCard'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { FileTreeView } from './FileTreeView'
+import { SearchResultsList } from './SearchResultsList'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 
@@ -17,7 +18,7 @@ export function BrowsePage() {
   const [selectedRootId, setSelectedRootId] = useState<string>('')
   const [showTombstones, setShowTombstones] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
-  const [searchDebounce, setSearchDebounce] = useState<number | null>(null)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -65,14 +66,19 @@ export function BrowsePage() {
   // Handle search filter with debouncing
   const handleSearchChange = (value: string) => {
     setSearchFilter(value)
-    if (searchDebounce) {
-      clearTimeout(searchDebounce)
-    }
-    const timeout = setTimeout(() => {
-      // Trigger reload via useEffect in FileTreeView
-    }, 500)
-    setSearchDebounce(timeout)
   }
+
+  // Debounce search input
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearch(searchFilter)
+    }, 300)
+
+    return () => clearTimeout(timeout)
+  }, [searchFilter])
+
+  // Determine if we should show search results
+  const hasSearchQuery = debouncedSearch.trim().length > 0
 
   if (loading) {
     return (
@@ -128,17 +134,29 @@ export function BrowsePage() {
           </>
         }
       >
-        {/* Bordered Tree */}
-        <div className="border border-border rounded-lg">
-          {selectedRoot && (
-            <FileTreeView
-              rootId={selectedRoot.root_id}
-              rootPath={selectedRoot.root_path}
-              showTombstones={showTombstones}
-              searchFilter={searchFilter}
-            />
-          )}
+        {/* Tree View - hidden when searching */}
+        <div style={{ display: hasSearchQuery ? 'none' : 'block' }}>
+          <div className="border border-border rounded-lg">
+            {selectedRoot && (
+              <FileTreeView
+                rootId={selectedRoot.root_id}
+                rootPath={selectedRoot.root_path}
+                showTombstones={showTombstones}
+              />
+            )}
+          </div>
         </div>
+
+        {/* Search Results - shown when searching */}
+        {hasSearchQuery && selectedRoot && (
+          <div className="border border-border rounded-lg">
+            <SearchResultsList
+              rootId={selectedRoot.root_id}
+              searchQuery={debouncedSearch}
+              showTombstones={showTombstones}
+            />
+          </div>
+        )}
       </RootCard>
     </div>
   )

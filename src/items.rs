@@ -550,6 +550,53 @@ impl Item {
         Ok(history)
     }
 
+    /// Get immediate children (one level deep) of a directory
+    /// Returns only the direct children, not nested descendants
+    /// Always includes tombstones - filtering should be done client-side
+    pub fn get_immediate_children(
+        db: &Database,
+        root_id: i64,
+        parent_path: &str,
+    ) -> Result<Vec<Item>, FsPulseError> {
+        let conn = db.conn();
+
+        // Build the path prefix for matching
+        // Handle root path specially - if parent is "/" then children are like "/folder", not "//folder"
+        let path_prefix = if parent_path == MAIN_SEPARATOR_STR {
+            MAIN_SEPARATOR_STR.to_string()
+        } else {
+            format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
+        };
+
+        // SQL to get immediate children:
+        // 1. Match items whose path starts with parent_path/
+        // 2. Exclude items that have additional slashes after the parent prefix
+        //    (by checking that the remainder of the path contains no slashes)
+        // Note: Always includes tombstones - client-side filtering provides better UX
+        let sql = format!(
+            "SELECT {}
+             FROM items
+             WHERE root_id = ?
+               AND item_path LIKE ? || '%'
+               AND item_path != ?
+               AND SUBSTR(item_path, LENGTH(?) + 1) NOT LIKE '%{}%'
+             ORDER BY item_path COLLATE natural_path ASC",
+            Item::ITEM_COLUMNS,
+            MAIN_SEPARATOR_STR
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+
+        let rows = stmt.query_map(
+            params![root_id, &path_prefix, parent_path, &path_prefix],
+            Item::from_row,
+        )?;
+
+        let items: Vec<Item> = rows.collect::<Result<Vec<_>, _>>()?;
+
+        Ok(items)
+    }
+
     /// Get counts of children (files and directories) for a directory item
     /// Returns counts of non-tombstone files and directories that are direct or nested children
     pub fn get_children_counts(

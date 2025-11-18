@@ -182,6 +182,7 @@ impl WebServer {
             // Item endpoints
             .route("/api/items/{item_id}/size-history", get(api::items::get_item_size_history))
             .route("/api/items/{item_id}/children-counts", get(api::items::get_children_counts))
+            .route("/api/items/immediate-children", get(api::items::get_immediate_children))
 
             // Database endpoints
             .route("/api/database/stats", get(api::database::get_database_stats))

@@ -69,6 +69,11 @@ export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) 
       }))
 
       setRoots(rootData)
+
+      // Auto-select if there's exactly one root
+      if (rootData.length === 1) {
+        setSelectedRootId(rootData[0].root_id.toString())
+      }
     } catch (err) {
       console.error('Error loading roots:', err)
       setError(err instanceof Error ? err.message : 'Failed to load roots')

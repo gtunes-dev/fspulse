@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Browse page rewrite**: Completely redesigned to support extremely large file trees (100k-1M+ items)
+  - Tree view now uses virtualization and lazy loading for fast performance at any scale
+  - Directories load children on-demand when expanded
+  - Search displays results as a flat, paginated list with path tooltips instead of a tree
+  - "Show deleted" toggle works instantly without reloading data
+- **Manual Scan dialog**: Auto-selects root directory when only one root is configured
+
 ## [v0.2.11] - 2025-11-17
 
 ### Added

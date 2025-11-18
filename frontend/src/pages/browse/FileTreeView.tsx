@@ -1,42 +1,75 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
 import { fetchQuery } from '@/lib/api'
 import { useScanManager } from '@/contexts/ScanManagerContext'
 import type { ColumnSpec } from '@/lib/types'
-import type { ItemData, TreeNodeData } from '@/lib/pathUtils'
-import { getImmediateChildren, itemToTreeNode, sortTreeItems } from '@/lib/pathUtils'
+import type { TreeNodeData } from '@/lib/pathUtils'
+import { sortTreeItems } from '@/lib/pathUtils'
+import { useVirtualTree } from '@/hooks/useVirtualTree'
 
 interface FileTreeViewProps {
   rootId: number
   rootPath: string
   showTombstones: boolean
-  searchFilter?: string
 }
 
-export function FileTreeView({ rootId, rootPath, showTombstones, searchFilter }: FileTreeViewProps) {
+export function FileTreeView({ rootId, rootPath, showTombstones }: FileTreeViewProps) {
   const { activeScan } = useScanManager()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [allItems, setAllItems] = useState<ItemData[]>([])
-  const [rootLevelNodes, setRootLevelNodes] = useState<TreeNodeData[]>([])
+
+  const parentRef = useRef<HTMLDivElement>(null)
+
+  // Track what we've loaded to prevent duplicate fetches
+  const loadedRootRef = useRef<string | null>(null)
 
   // Check if this root is currently being scanned
   const isRootBeingScanned = activeScan?.root_path === rootPath
 
+  // Virtual tree hook - NO allItems, always load on demand
+  const { flatItems, initializeTree, toggleNode, isLoading: isNodeLoading } = useVirtualTree({
+    rootId,
+  })
+
+  // Filter tombstones client-side based on showTombstones toggle
+  const visibleItems = showTombstones
+    ? flatItems
+    : flatItems.filter(item => !item.is_ts)
+
+  // TanStack Virtual virtualizer
+  const virtualizer = useVirtualizer({
+    count: visibleItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36, // Fixed row height in pixels
+    overscan: 5,
+  })
+
   useEffect(() => {
     // Don't load items if the root is currently being scanned
     if (isRootBeingScanned) {
-      setAllItems([])
-      setRootLevelNodes([])
+      loadedRootRef.current = null // Reset so we reload when scan finishes
+      initializeTree([])
       return
     }
 
-    async function loadItems() {
+    // Create a unique key for this root
+    const rootKey = `${rootId}:${rootPath}`
+
+    // Skip if we've already started loading this root
+    if (loadedRootRef.current === rootKey) {
+      return
+    }
+
+    // Mark as loading IMMEDIATELY to prevent Strict Mode duplicates
+    loadedRootRef.current = rootKey
+
+    async function loadRootLevelItems() {
       setLoading(true)
       setError(null)
 
       try {
-        // First, get the latest completed scan for this root
+        // First, check if there are any completed scans for this root
         const scanColumns: ColumnSpec[] = [
           { name: 'scan_id', visible: true, sort_direction: 'desc', position: 0 }
         ]
@@ -53,72 +86,58 @@ export function FileTreeView({ rootId, rootPath, showTombstones, searchFilter }:
 
         if (scanResponse.rows.length === 0) {
           setError('No completed scans found for this root')
-          setAllItems([])
-          setRootLevelNodes([])
+          initializeTree([])
           return
         }
 
-        const latestScanId = scanResponse.rows[0][0]
-
-        // Query all items from the latest completed scan
-        const filters: Array<{ column: string; value: string }> = [
-          { column: 'root_id', value: rootId.toString() },
-          { column: 'last_scan', value: latestScanId },
-        ]
-
-        if (!showTombstones) {
-          filters.push({ column: 'is_ts', value: 'false' })
-        }
-
-        // Add search filter if provided
-        if (searchFilter && searchFilter.trim()) {
-          filters.push({ column: 'item_path', value: `'${searchFilter.trim()}'` })
-        }
-
-        const columns: ColumnSpec[] = [
-          { name: 'item_id', visible: true, sort_direction: 'none', position: 0 },
-          { name: 'item_path', visible: true, sort_direction: 'asc', position: 1 },
-          { name: 'item_path@name', visible: true, sort_direction: 'none', position: 2 },
-          { name: 'item_type', visible: true, sort_direction: 'none', position: 3 },
-          { name: 'is_ts', visible: true, sort_direction: 'none', position: 4 },
-        ]
-
-        const response = await fetchQuery('items', {
-          columns,
-          filters,
-          limit: 50000, // Generous limit
-          offset: 0,
+        // Load ONLY root-level items using the new endpoint
+        // Backend always returns tombstones - we filter client-side
+        const params = new URLSearchParams({
+          root_id: rootId.toString(),
+          parent_path: rootPath,
         })
 
-        // Transform response to ItemData
-        const items: ItemData[] = response.rows.map(row => ({
-          item_id: parseInt(row[0]),
-          item_path: row[1],
-          item_name: row[2],
-          item_type: row[3] as 'F' | 'D' | 'S' | 'O',
-          is_ts: row[4] === 'true',
-        }))
+        const response = await fetch(`/api/items/immediate-children?${params}`)
+        if (!response.ok) {
+          throw new Error(`Failed to fetch root items: ${response.statusText}`)
+        }
 
-        setAllItems(items)
+        const items = await response.json() as Array<{
+          item_id: number
+          item_path: string
+          item_type: string
+          is_ts: boolean
+        }>
 
-        // Filter to root-level items (immediate children of root path)
-        const rootLevelItems = getImmediateChildren(items, rootPath)
+        // Transform to TreeNodeData
+        const nodes: TreeNodeData[] = items.map(item => {
+          const itemName = item.item_path.split('/').filter(Boolean).pop() || item.item_path
+          return {
+            item_id: item.item_id,
+            item_path: item.item_path,
+            item_name: itemName,
+            item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
+            is_ts: item.is_ts,
+            name: itemName,
+          }
+        })
 
-        // Transform to TreeNodeData and sort
-        const nodes = rootLevelItems.map(itemToTreeNode)
         const sortedNodes = sortTreeItems(nodes)
 
-        setRootLevelNodes(sortedNodes)
+        // Initialize virtual tree with root nodes
+        initializeTree(sortedNodes)
       } catch (err) {
+        // Reset on error to allow retry
+        loadedRootRef.current = null
         setError(err instanceof Error ? err.message : 'Failed to load items')
-        console.error('Error loading items:', err)
+        console.error('Error loading root items:', err)
       } finally {
         setLoading(false)
       }
     }
 
-    loadItems()
-  }, [rootId, rootPath, showTombstones, searchFilter, isRootBeingScanned])
+    loadRootLevelItems()
+  }, [rootId, rootPath, isRootBeingScanned, initializeTree])
 
   // Show message if root is currently being scanned
   if (isRootBeingScanned) {
@@ -148,7 +167,7 @@ export function FileTreeView({ rootId, rootPath, showTombstones, searchFilter }:
     )
   }
 
-  if (rootLevelNodes.length === 0) {
+  if (visibleItems.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         No items found in this root
@@ -157,17 +176,42 @@ export function FileTreeView({ rootId, rootPath, showTombstones, searchFilter }:
   }
 
   return (
-    <div className="border border-border rounded-lg p-4 overflow-auto">
-      {rootLevelNodes.map(node => (
-        <TreeNode
-          key={node.item_id}
-          node={node}
-          rootId={rootId}
-          level={0}
-          showTombstones={showTombstones}
-          allItems={allItems}
-        />
-      ))}
+    <div
+      ref={parentRef}
+      className="border border-border rounded-lg p-4 overflow-auto"
+      style={{ height: '600px' }}
+    >
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map(virtualItem => {
+          const item = visibleItems[virtualItem.index]
+          return (
+            <div
+              key={item.item_id}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: `${virtualItem.size}px`,
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              <TreeNode
+                item={item}
+                rootId={rootId}
+                onToggle={toggleNode}
+                isLoading={isNodeLoading(item.item_id)}
+              />
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

@@ -29,6 +29,22 @@ pub struct ChildrenCountsResponse {
     pub directory_count: i64,
 }
 
+/// Query parameters for getting immediate children
+#[derive(Debug, Deserialize)]
+pub struct ImmediateChildrenParams {
+    pub root_id: i64,
+    pub parent_path: String,
+}
+
+/// Item data for API response
+#[derive(Debug, Serialize)]
+pub struct ItemResponse {
+    pub item_id: i64,
+    pub item_path: String,
+    pub item_type: String,
+    pub is_ts: bool,
+}
+
 /// GET /api/items/:item_id/size-history?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
 /// Returns size history for an item within a date range based on scan times
 pub async fn get_item_size_history(
@@ -72,6 +88,43 @@ pub async fn get_children_counts(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to get children counts: {}", e),
+            ))
+        }
+    }
+}
+
+/// GET /api/items/immediate-children?root_id=X&parent_path=/path
+/// Returns immediate children (one level deep) of the specified directory path
+/// Always includes tombstones - filtering should be done client-side
+pub async fn get_immediate_children(
+    Query(params): Query<ImmediateChildrenParams>,
+) -> Result<Json<Vec<ItemResponse>>, (StatusCode, String)> {
+    let db = Database::new().map_err(|e| {
+        error!("Failed to open database: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e))
+    })?;
+
+    match Item::get_immediate_children(&db, params.root_id, &params.parent_path) {
+        Ok(items) => {
+            let response: Vec<ItemResponse> = items
+                .iter()
+                .map(|item| ItemResponse {
+                    item_id: item.item_id(),
+                    item_path: item.item_path().to_string(),
+                    item_type: item.item_type().short_name().to_string(),
+                    is_ts: item.is_ts(),
+                })
+                .collect();
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!(
+                "Failed to get immediate children for root_id={}, parent_path={}: {}",
+                params.root_id, params.parent_path, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get immediate children: {}", e),
             ))
         }
     }
