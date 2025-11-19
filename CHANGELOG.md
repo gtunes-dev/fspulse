@@ -7,21 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.0] - 2025-11-18
+
 ### Added
-- **Query tab pagination**: Added pagination support to the Explore > Query tab to prevent browser crashes from large result sets
-  - Results are now paginated with 25 rows per page
-  - User-specified LIMIT and OFFSET clauses are respected when paginating through results
-  - Count queries correctly account for user's limit/offset to show accurate total counts
+- **Query tab pagination**: Pagination support for Explore > Query tab to prevent browser crashes from large result sets
+  - Results paginated with 25 rows per page
+  - User-specified LIMIT/OFFSET clauses respected when paginating
   - Empty result sets display "No results found" message
 
 ### Changed
-- **Explore page**: Tab state is now preserved when switching between tabs (filters, sort, column visibility/order, pagination)
-  - Added reset button to restore columns to default settings
-- **Number formatting**: Large numbers in pagination displays now show thousand separators (e.g., "1,205,980" instead of "1205980")
-  - Applied consistently across all paginated views: Explore tabs, Alerts, Scan History, Search Results, Roots, and Schedules
+- **Explore page**: Tab state preserved when switching between tabs (filters, sort, column visibility/order, pagination)
+  - Reset button restores columns to default settings
+- **Number formatting**: Large numbers in pagination displays now show thousand separators (e.g., "1,205,980")
 
 ### Fixed
-- **Item detail sheet**: Fixed calendar widget appearing over modification date entries in History card
+- **Item detail sheet**: Calendar widget no longer appears over modification date entries in History card
+
+### Highlights from v0.2.x
+
+This release includes all features from the v0.2 series:
+
+- **Browse page**: Virtualized tree view supporting 100k-1M+ items with lazy loading and efficient search
+- **Global pause**: Pause all scanning with flexible durations; scans resume automatically
+- **Configuration UI**: Full settings management through web UI with validation and visual indicators
+- **Scan scheduling**: Daily, weekly, monthly, and interval-based recurring scans
+- **Scan history**: Paginated history table with duration, schedule source, and root filtering
+- **Insights**: Interactive charts showing file size, counts, changes, and alerts over time
+- **Item detail view**: Sliding panel with metadata, validation status, change history, and alerts
+- **Folder sizes**: Directory sizes computed during scan with dual-format display
+- **Database compaction**: Reclaim space from deleted data via Settings page
+- **Graceful shutdown**: Server waits for active scans to complete before exiting
+- **Platform data directories**: Database stored in standard OS locations (Linux/macOS/Windows)
 
 ## [v0.2.12] - 2025-11-17
 
