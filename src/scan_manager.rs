@@ -5,7 +5,8 @@ use crate::roots::Root;
 use crate::scanner::Scanner;
 use crate::scans::{HashMode, Scan, ValidateMode};
 use crate::schedules::{QueueEntry, Schedule};
-use log::{error, info};
+use log::{error, info, Level};
+use logging_timer::timer;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -183,6 +184,7 @@ impl ScanManager {
 
     /// Entry point 2: Background polling (every 5 seconds)
     pub fn poll_queue(db: &Database) -> Result<(), FsPulseError> {
+        let _tmr = timer!(Level::Trace; "ScanManager::poll_queue mutex");
         let mut manager = Self::instance().lock().unwrap();
 
         // Try to start next scan - it's fine if nothing happens
@@ -419,6 +421,7 @@ impl ScanManager {
     /// Cleans up queue and clears active scan
     pub fn on_scan_complete(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
         // Clear active scan
+        let _tmr = timer!(Level::Trace; "ScanManager::on_scan_complete mutex");
         let mut manager = Self::instance().lock().unwrap();
 
         // Clean up queue (verifies state, deletes/clears entry)
@@ -612,6 +615,7 @@ impl ScanManager {
     /// Called on WebSocket connection and by broadcast thread
     /// Thread-safe: acquires mutex to read current state
     pub fn broadcast_current_state(allow_send_terminal: bool) {
+        let _tmr = timer!(Level::Trace; "ScanManager::broadcast_current_state mutex");
         let manager = Self::instance().lock().unwrap();
 
         manager.broadcast_current_state_locked(allow_send_terminal);

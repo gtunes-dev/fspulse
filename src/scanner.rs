@@ -28,7 +28,8 @@ use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
 use crossbeam_channel::bounded;
-use log::{error, info};
+use log::{error, info, Level};
+use logging_timer::timer;
 use threadpool::ThreadPool;
 
 use std::fs::Metadata;
@@ -145,29 +146,38 @@ impl Scanner {
     }
 
     fn scan_directory_recursive(ctx: &mut ScanContext, path: &Path) -> Result<i64, FsPulseError> {
+        let _tmr = timer!(Level::Trace; "scan_directory_recursive", "{}", path.display());
+
         Scanner::check_interrupted(ctx.interrupt_token)?;
 
         ctx.reporter.increment_directories_scanned();
 
-        let items = fs::read_dir(path)?;
+        let items = {
+            let _tmr = timer!(Level::Trace; "fs::read_dir", "{}", path.display());
+            fs::read_dir(path)?
+        };
         let mut total_size: i64 = 0;
 
         for item in items {
             let item = item?;
-            let item_metadata = fs::symlink_metadata(item.path())?;
+            let item_path = item.path();
+            let item_metadata = {
+                let _tmr = timer!(Level::Trace; "fs::symlink_metadata", "{}", item_path.display());
+                fs::symlink_metadata(&item_path)?
+            };
 
             ctx.reporter.increment_files_scanned();
 
             if item_metadata.is_dir() {
                 // Recursively scan the subdirectory and get its size
-                let subdir_size = Scanner::scan_directory_recursive(ctx, &item.path())?;
+                let subdir_size = Scanner::scan_directory_recursive(ctx, &item_path)?;
 
                 // Handle the subdirectory with its computed size
                 let returned_size = Scanner::handle_scan_item(
                     ctx.db,
                     ctx.scan,
                     ItemType::Directory,
-                    &item.path(),
+                    &item_path,
                     &item_metadata,
                     Some(subdir_size),
                 )?;
@@ -196,7 +206,7 @@ impl Scanner {
                     ctx.db,
                     ctx.scan,
                     item_type,
-                    &item.path(),
+                    &item_path,
                     &item_metadata,
                     item_size,
                 )?;
@@ -493,11 +503,14 @@ impl Scanner {
         metadata: &Metadata,
         computed_size: Option<i64>,
     ) -> Result<i64, FsPulseError> {
-        //let conn = &mut db.conn;
+        let _tmr = timer!(Level::Trace; "handle_scan_item", "{}", path.display());
 
         // load the item
         let path_str = path.to_string_lossy();
-        let existing_item = Item::get_by_root_path_type(db, scan.root_id(), &path_str, item_type)?;
+        let existing_item = {
+            let _tmr = timer!(Level::Trace; "db::get_by_root_path_type", "{}", path_str);
+            Item::get_by_root_path_type(db, scan.root_id(), &path_str, item_type)?
+        };
 
         let mod_date = metadata
             .modified()
@@ -524,6 +537,7 @@ impl Scanner {
 
             if existing_item.is_ts() {
                 // Rehydrate a tombstone
+                let _tmr = timer!(Level::Trace; "db::immediate_transaction rehydrate_tombstone", "{}", path_str);
                 db.immediate_transaction(|conn| {
                     let rows_updated = conn.execute(
                         "UPDATE items SET
@@ -586,6 +600,7 @@ impl Scanner {
                     Ok(())
                 })?;
             } else if meta_change {
+                let _tmr = timer!(Level::Trace; "db::immediate_transaction meta_change", "{}", path_str);
                 db.immediate_transaction(|conn| {
                     let rows_updated = conn.execute(
                         "UPDATE items SET
@@ -628,6 +643,7 @@ impl Scanner {
                 })?;
             } else {
                 // No change - just update last_scan
+                let _tmr = timer!(Level::Trace; "db::update_last_scan", "{}", path_str);
                 let rows_updated = db.conn().execute(
                     "UPDATE items SET last_scan = ? WHERE item_id = ?",
                     (scan.scan_id(), existing_item.item_id()),
@@ -642,6 +658,7 @@ impl Scanner {
             }
         } else {
             // Item is new, insert into items and changes tables
+            let _tmr = timer!(Level::Trace; "db::immediate_transaction new_item", "{}", path_str);
             db.immediate_transaction(|conn| {
                 conn.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (scan.root_id(), &path_str, item_type.as_i64(), mod_date, size, ValidationState::Unknown.as_i64(), scan.scan_id()))?;

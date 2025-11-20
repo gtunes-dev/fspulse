@@ -29,8 +29,23 @@ use chrono::Local;
 use cli::Cli;
 use config::Config;
 use directories::ProjectDirs;
-use flexi_logger::{Cleanup, Criterion, FileSpec, Logger, Naming};
+use flexi_logger::{Cleanup, Criterion, DeferredNow, FileSpec, Logger, Naming, Record};
 use log::{error, info};
+
+/// Custom log format with microsecond timestamps for performance analysis
+fn perf_format(
+    w: &mut dyn std::io::Write,
+    now: &mut DeferredNow,
+    record: &Record,
+) -> std::io::Result<()> {
+    write!(
+        w,
+        "{} [{}] {}",
+        now.format("%Y-%m-%d %H:%M:%S%.6f"),
+        record.level(),
+        record.args()
+    )
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let project_dirs =
@@ -66,8 +81,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 pub fn setup_logging(_project_dirs: &ProjectDirs) {
     let log_levels = format!(
-        "fspulse={}, lopdf={}",
-        Config::get_logging_fspulse(), Config::get_logging_lopdf()
+        "fspulse={}, lopdf={}, logging_timer={}, TimerFinished={}, TimerStarting={}, TimerExecuting={}",
+        Config::get_logging_fspulse(), Config::get_logging_lopdf(), Config::get_logging_fspulse(), Config::get_logging_fspulse(), Config::get_logging_fspulse(), Config::get_logging_fspulse(),
     );
 
     // Use data directory from config (already resolved from FSPULSE_DATA_DIR or default)
@@ -75,6 +90,7 @@ pub fn setup_logging(_project_dirs: &ProjectDirs) {
 
     Logger::try_with_str(log_levels)
         .unwrap()
+        .format(perf_format)
         .log_to_file(FileSpec::default().directory(log_dir))
         .rotate(
             Criterion::Size(u64::MAX),  // Effectively disables size-based rotation
