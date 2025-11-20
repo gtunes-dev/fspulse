@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Settings page**: Active configuration values now readable in light mode with proper background colors
+
 ## [v0.3.0] - 2025-11-18
 
 ### Added
