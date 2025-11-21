@@ -709,14 +709,13 @@ impl ScanManager {
         manager.db_is_compacting = true;
         drop(manager); // Release mutex before long operation
 
-        // Call compact directly
         let result = Database::compact();
 
         // Set flag back (whether success or failure)
         let mut manager = Self::instance().lock().unwrap();
         manager.db_is_compacting = false;
 
-        result.map_err(|e| e.to_string())
+        result.map_err(|e| format!("Compaction failed: {}", e))
     }
 
     /// Check if the process is shutting down, returning error if so

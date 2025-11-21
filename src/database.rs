@@ -184,28 +184,32 @@ impl Database {
     }
 
     /// Compact the database using VACUUM.
-    /// This requires exclusive access and may take several minutes for large databases.
-    ///
-    /// Note: This creates a direct connection outside the pool because VACUUM requires
-    /// exclusive database access, which cannot be obtained from a pooled connection.
     pub fn compact() -> Result<(), FsPulseError> {
-        let db_path = Self::get_path()?;
+        // Get stats before compaction
+        let stats_before = Self::get_stats()?;
+        info!(
+            "Database before compaction: total={} bytes, wasted={} bytes",
+            stats_before.total_size, stats_before.wasted_size
+        );
 
-        info!("Starting database compaction");
+        let conn = Self::get_connection()?;
 
-        // Create a direct connection outside the pool for exclusive access
-        // VACUUM requires exclusive access which pooled connections cannot provide
-        let conn = Connection::open(&db_path)
-            .map_err(FsPulseError::DatabaseError)?;
-
-        // Set a longer timeout for VACUUM operations which can take time
-        conn.busy_timeout(Duration::from_secs(60))
-            .map_err(FsPulseError::DatabaseError)?;
-
+        info!("Starting database compaction (VACUUM)");
+        let vacuum_start = std::time::Instant::now();
         conn.execute("VACUUM", [])
             .map_err(FsPulseError::DatabaseError)?;
+        let vacuum_duration = vacuum_start.elapsed();
+        info!("Database compaction (VACUUM) completed in {:?}", vacuum_duration);
 
-        info!("Database compaction completed");
+        // Get stats after compaction
+        let stats_after = Self::get_stats()?;
+        info!(
+            "Database after compaction: total={} bytes, wasted={} bytes, reclaimed={} bytes",
+            stats_after.total_size,
+            stats_after.wasted_size,
+            stats_before.total_size.saturating_sub(stats_after.total_size)
+        );
+
         Ok(())
     }
 
