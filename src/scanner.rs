@@ -40,12 +40,79 @@ use std::{cmp, fs};
 
 pub struct Scanner {}
 
+/// Batch size for database write operations during scanning
+const SCAN_BATCH_SIZE: usize = 100;
+
 /// Context passed through recursive directory scanning to avoid large parameter lists
 struct ScanContext<'a> {
     conn: &'a Connection,
     scan: &'a Scan,
     reporter: &'a Arc<ProgressReporter>,
     interrupt_token: &'a Arc<AtomicBool>,
+    batch_count: usize,
+}
+
+impl<'a> ScanContext<'a> {
+    fn new(
+        conn: &'a Connection,
+        scan: &'a Scan,
+        reporter: &'a Arc<ProgressReporter>,
+        interrupt_token: &'a Arc<AtomicBool>,
+    ) -> Self {
+        Self {
+            conn,
+            scan,
+            reporter,
+            interrupt_token,
+            batch_count: 0,
+        }
+    }
+
+    fn execute_batch_write<F, T>(&mut self, f: F) -> Result<T, FsPulseError>
+    where
+        F: FnOnce(&Connection) -> Result<T, FsPulseError>,
+    {
+        // Start transaction on first write
+        if self.batch_count == 0 {
+            self.conn
+                .execute("BEGIN IMMEDIATE", [])
+                .map_err(FsPulseError::DatabaseError)?;
+        }
+
+        let result = f(self.conn)?;
+        self.batch_count += 1;
+
+        // Auto-flush at batch size
+        if self.batch_count >= SCAN_BATCH_SIZE {
+            self.flush()?;
+        }
+
+        Ok(result)
+    }
+
+    fn flush(&mut self) -> Result<(), FsPulseError> {
+        if self.batch_count > 0 {
+            self.conn
+                .execute("COMMIT", [])
+                .map_err(FsPulseError::DatabaseError)?;
+            self.batch_count = 0;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> Drop for ScanContext<'a> {
+    fn drop(&mut self) {
+        // If we still have unflushed writes, we're in an error scenario
+        // (normal path explicitly calls flush()). Rollback to maintain data integrity.
+        if self.batch_count > 0 {
+            error!(
+                "ScanContext dropped with {} unflushed writes - rolling back transaction",
+                self.batch_count
+            );
+            let _ = self.conn.execute("ROLLBACK", []);
+        }
+    }
 }
 
 impl Scanner {
@@ -146,8 +213,7 @@ impl Scanner {
 
                 // Handle the subdirectory with its computed size
                 let returned_size = Scanner::handle_scan_item(
-                    ctx.conn,
-                    ctx.scan,
+                    ctx,
                     ItemType::Directory,
                     &item.path(),
                     &item_metadata,
@@ -175,8 +241,7 @@ impl Scanner {
                 };
 
                 let returned_size = Scanner::handle_scan_item(
-                    ctx.conn,
-                    ctx.scan,
+                    ctx,
                     item_type,
                     &item.path(),
                     &item_metadata,
@@ -200,16 +265,17 @@ impl Scanner {
         let root_path_buf = PathBuf::from(root.root_path());
 
         // Create scanning context
-        let mut ctx = ScanContext {
-            conn: &conn,
-            scan,
-            reporter: &reporter,
-            interrupt_token,
-        };
+        let mut ctx = ScanContext::new(&conn, scan, &reporter, interrupt_token);
 
         // Recursively scan the root directory and get the total size
         // Note: We don't store the root directory itself as an item in the database
         let total_size = Scanner::scan_directory_recursive(&mut ctx, &root_path_buf)?;
+
+        // Flush any remaining batched writes
+        ctx.flush()?;
+
+        // Drop ctx to release the immutable borrow of scan before we mutably borrow it
+        drop(ctx);
 
         // The total_size column is set on the scan row before advancing to the next phase
         // This means it doesn't have to be computed or set later in the scan, but it does need
@@ -466,8 +532,7 @@ impl Scanner {
     }
 
     fn handle_scan_item(
-        conn: &Connection,
-        scan: &Scan,
+        ctx: &mut ScanContext,
         item_type: ItemType,
         path: &Path,
         metadata: &Metadata,
@@ -475,7 +540,7 @@ impl Scanner {
     ) -> Result<i64, FsPulseError> {
         // load the item
         let path_str = path.to_string_lossy();
-        let existing_item = Item::get_by_root_path_type(conn, scan.root_id(), &path_str, item_type)?;
+        let existing_item = Item::get_by_root_path_type(ctx.conn, ctx.scan.root_id(), &path_str, item_type)?;
 
         let mod_date = metadata
             .modified()
@@ -494,7 +559,7 @@ impl Scanner {
             // such as when an item was seen as a file, the scan was resumed and the item has
             // changed into a directory. In this case, we'll still traverse the children within
             // the resumed scan and a tree report will look odd.
-            if existing_item.last_scan() == scan.scan_id() {
+            if existing_item.last_scan() == ctx.scan.scan_id() {
                 return Ok(existing_item.size().unwrap_or(0));
             }
 
@@ -502,7 +567,7 @@ impl Scanner {
 
             if existing_item.is_ts() {
                 // Rehydrate a tombstone
-                Database::immediate_transaction(conn, |c| {
+                ctx.execute_batch_write(|c| {
                     let rows_updated = c.execute(
                         "UPDATE items SET
                                 is_ts = 0,
@@ -519,7 +584,7 @@ impl Scanner {
                             mod_date,
                             size,
                             ValidationState::Unknown.as_i64(),
-                            scan.scan_id(),
+                            ctx.scan.scan_id(),
                             existing_item.item_id(),
                         ),
                     )?;
@@ -548,7 +613,7 @@ impl Scanner {
                         VALUES
                             (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
                         (
-                            scan.scan_id(),
+                            ctx.scan.scan_id(),
                             existing_item.item_id(),
                             ChangeType::Add.as_i64(),
                             existing_item.mod_date(),
@@ -564,14 +629,14 @@ impl Scanner {
                     Ok(())
                 })?;
             } else if meta_change {
-                Database::immediate_transaction(conn, |c| {
+                ctx.execute_batch_write(|c| {
                     let rows_updated = c.execute(
                         "UPDATE items SET
                             mod_date = ?,
                             size = ?,
                             last_scan = ?
                         WHERE item_id = ?",
-                        (mod_date, size, scan.scan_id(), existing_item.item_id()),
+                        (mod_date, size, ctx.scan.scan_id(), existing_item.item_id()),
                     )?;
                     if rows_updated == 0 {
                         return Err(FsPulseError::Error(format!(
@@ -592,7 +657,7 @@ impl Scanner {
                                     size_new)
                                 VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
                         (
-                            scan.scan_id(),
+                            ctx.scan.scan_id(),
                             existing_item.item_id(),
                             ChangeType::Modify.as_i64(),
                             meta_change.then_some(existing_item.mod_date()),
@@ -606,28 +671,31 @@ impl Scanner {
                 })?;
             } else {
                 // No change - just update last_scan
-                let rows_updated = conn.execute(
-                    "UPDATE items SET last_scan = ? WHERE item_id = ?",
-                    (scan.scan_id(), existing_item.item_id()),
-                )?;
+                ctx.execute_batch_write(|c| {
+                    let rows_updated = c.execute(
+                        "UPDATE items SET last_scan = ? WHERE item_id = ?",
+                        (ctx.scan.scan_id(), existing_item.item_id()),
+                    )?;
 
-                if rows_updated == 0 {
-                    return Err(FsPulseError::Error(format!(
-                        "Item Id {} not found for update",
-                        existing_item.item_id()
-                    )));
-                }
+                    if rows_updated == 0 {
+                        return Err(FsPulseError::Error(format!(
+                            "Item Id {} not found for update",
+                            existing_item.item_id()
+                        )));
+                    }
+                    Ok(())
+                })?;
             }
         } else {
             // Item is new, insert into items and changes tables
-            Database::immediate_transaction(conn, |c| {
+            ctx.execute_batch_write(|c| {
                 c.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (scan.root_id(), &path_str, item_type.as_i64(), mod_date, size, ValidationState::Unknown.as_i64(), scan.scan_id()))?;
+                    (ctx.scan.root_id(), &path_str, item_type.as_i64(), mod_date, size, ValidationState::Unknown.as_i64(), ctx.scan.scan_id()))?;
 
                 let item_id: i64 = c.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
                 c.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
-                    (scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, size))?;
+                    (ctx.scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, size))?;
 
                 Ok(())
             })?;
