@@ -3,7 +3,6 @@ use dialoguer::{theme::ColorfulTheme, BasicHistory, Input, Select};
 use log::info;
 
 use crate::config::Config;
-use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::explore::Explorer;
 use crate::query::QueryProcessor;
@@ -71,10 +70,18 @@ Example query: items where scan:(5) order by path limit 10"#
 pub enum ReportType {
     #[command(about = "Report on known root paths")]
     Roots {
-        #[arg(long, conflicts_with = "root_path", help = "Show details for the root with the specified ID")]
+        #[arg(
+            long,
+            conflicts_with = "root_path",
+            help = "Show details for the root with the specified ID"
+        )]
         root_id: Option<u32>,
 
-        #[arg(long, conflicts_with = "root_id", help = "Show details for the root with the specified path")]
+        #[arg(
+            long,
+            conflicts_with = "root_id",
+            help = "Show details for the root with the specified path"
+        )]
         root_path: Option<String>,
     },
 
@@ -83,7 +90,12 @@ pub enum ReportType {
         #[arg(long, conflicts_with = "last", help = "Filter by specific scan ID")]
         scan_id: Option<u32>,
 
-        #[arg(long, default_value_t = 10, conflicts_with = "scan_id", help = "Show last N scans (default: 10)")]
+        #[arg(
+            long,
+            default_value_t = 10,
+            conflicts_with = "scan_id",
+            help = "Show last N scans (default: 10)"
+        )]
         last: u32,
     },
 
@@ -98,7 +110,11 @@ pub enum ReportType {
         #[arg(long, conflicts_with_all = ["item_id", "item_path"], help = "Show all items under the specific root")]
         root_id: Option<u32>,
 
-        #[arg(long, requires = "root_id", help = "Show all invalid items under the specified root")]
+        #[arg(
+            long,
+            requires = "root_id",
+            help = "Show all invalid items under the specified root"
+        )]
         invalid: bool,
 
         #[arg(long, default_value = "table", value_parser = ["table", "tree"], help = "Report format (table or tree)")]
@@ -171,40 +187,27 @@ impl Cli {
         match args.command {
             Command::Interact => {
                 info!("Running interact");
-                let mut db = Database::new()?;
 
-                Cli::handle_interact(&mut db)
+                Cli::handle_interact()
             }
             Command::Explore => {
                 info!("Initiating interactive explorer");
 
-                let db = Database::new()?;
                 let mut explorer = Explorer::new();
-                explorer.explore(&db)
-
+                explorer.explore()
             }
             Command::Report { report_type } => match report_type {
-                ReportType::Roots {
-                    root_id,
-                    root_path,
-                } => {
+                ReportType::Roots { root_id, root_path } => {
                     info!(
                         "Generating roots report with root_id: {root_id:?}, root_path: {root_path:?}",
                     );
-                    let db = Database::new()?;
 
-                    Reports::report_roots(&db, root_id, root_path)
+                    Reports::report_roots(root_id, root_path)
                 }
-                ReportType::Scans {
-                    scan_id,
-                    last,
-                } => {
-                    info!(
-                        "Generating scans report with scan_id: {scan_id:?}, last: {last}",
-                    );
-                    let db = Database::new()?;
+                ReportType::Scans { scan_id, last } => {
+                    info!("Generating scans report with scan_id: {scan_id:?}, last: {last}",);
 
-                    Reports::report_scans(&db, scan_id, last)
+                    Reports::report_scans(scan_id, last)
                 }
                 ReportType::Items {
                     item_id,
@@ -216,10 +219,9 @@ impl Cli {
                     info!(
                         "Generating items report with item_id: {item_id:?}, item_path: {item_path:?}, root_id: {root_id:?}, format: {format}"
                     );
-                    let db = Database::new()?;
                     let format: ReportFormat = format.parse()?;
 
-                    Reports::report_items(&db, item_id, item_path, root_id, invalid, format)
+                    Reports::report_items(item_id, item_path, root_id, invalid, format)
                 }
                 ReportType::Changes {
                     change_id,
@@ -229,18 +231,20 @@ impl Cli {
                     info!(
                         "Generating changes report with change_id: {change_id:?}, item_id: {item_id:?}, scan_id: {scan_id:?}",
                     );
-                    let db = Database::new()?;
 
-                    Reports::report_changes(&db, change_id, item_id, scan_id)
+                    Reports::report_changes(change_id, item_id, scan_id)
                 }
             },
             Command::Query { query } => {
                 info!("Processing query: '{query}'");
-                let db = Database::new()?;
-                QueryProcessor::execute_query_and_print(&db, &query)
+                QueryProcessor::execute_query_and_print(&query)
             }
             Command::Serve => {
-                info!("Starting server on {}:{}", Config::get_server_host(), Config::get_server_port());
+                info!(
+                    "Starting server on {}:{}",
+                    Config::get_server_host(),
+                    Config::get_server_port()
+                );
 
                 let host = Config::get_server_host();
                 let port = Config::get_server_port();
@@ -257,17 +261,15 @@ impl Cli {
         }
     }
 
-    fn handle_interact(
-        db: &mut Database,
-    ) -> Result<(), FsPulseError> {
+    fn handle_interact() -> Result<(), FsPulseError> {
         // Get the user's command choice.
         let command = Cli::choose_command();
 
         // Process the command.
         match command {
-            CommandChoice::QuerySimple => Cli::do_interactive_query(db, command)?,
-            CommandChoice::Explore => Cli::do_interactive_explore(db)?,
-            CommandChoice::Report => Cli::do_interactive_report(db)?,
+            CommandChoice::QuerySimple => Cli::do_interactive_query(command)?,
+            CommandChoice::Explore => Cli::do_interactive_explore()?,
+            CommandChoice::Report => Cli::do_interactive_report()?,
             CommandChoice::Exit => {}
         }
         Ok(())
@@ -288,7 +290,7 @@ impl Cli {
         COMMAND_CHOICES[selection].0
     }
 
-    fn do_interactive_query(db: &Database, choice: CommandChoice) -> Result<(), FsPulseError> {
+    fn do_interactive_query(choice: CommandChoice) -> Result<(), FsPulseError> {
         match choice {
             CommandChoice::QuerySimple => {
                 let mut history = BasicHistory::new().max_entries(8).no_duplicates(true);
@@ -310,7 +312,7 @@ impl Cli {
                     }
 
                     // All interactive objects are dropped at this point
-                    QueryProcessor::execute_query_and_print(db, &query)?;
+                    QueryProcessor::execute_query_and_print(&query)?;
                 }
             }
             _ => unreachable!(),
@@ -319,12 +321,12 @@ impl Cli {
         Ok(())
     }
 
-    fn do_interactive_explore(db: &Database) -> Result<(), FsPulseError> {
+    fn do_interactive_explore() -> Result<(), FsPulseError> {
         let mut explorer = Explorer::new();
-        explorer.explore(db)
+        explorer.explore()
     }
 
-    fn do_interactive_report(db: &Database) -> Result<(), FsPulseError> {
+    fn do_interactive_report() -> Result<(), FsPulseError> {
         let labels: Vec<&str> = REPORT_CHOICES.iter().map(|&(_, label)| label).collect();
 
         let selection = Select::with_theme(&ColorfulTheme::default())
@@ -338,12 +340,12 @@ impl Cli {
         match REPORT_CHOICES[selection].0 {
             ReportChoice::Roots => Ok(()),
             ReportChoice::Changes => Ok(()),
-            ReportChoice::Items => Cli::do_interactive_report_items(db),
+            ReportChoice::Items => Cli::do_interactive_report_items(),
             _ => Ok(()),
         }
     }
 
-    fn do_interactive_report_items(db: &Database) -> Result<(), FsPulseError> {
+    fn do_interactive_report_items() -> Result<(), FsPulseError> {
         let labels: Vec<&str> = ITEM_REPORT_CHOICES
             .iter()
             .map(|&(_, label)| label)
@@ -358,10 +360,10 @@ impl Cli {
 
         match ITEM_REPORT_CHOICES[selection].0 {
             ItemReportChoice::InvalidItems => {
-                let root = Root::interact_choose_root(db, "Invalid items for which root?")?;
+                let root = Root::interact_choose_root("Invalid items for which root?")?;
                 if let Some(root) = root {
                     let root_id_32: u32 = root.root_id().try_into().unwrap();
-                    Reports::report_items(db, None, None, Some(root_id_32), true, ReportFormat::Table)
+                    Reports::report_items(None, None, Some(root_id_32), true, ReportFormat::Table)
                 } else {
                     Ok(())
                 }
@@ -381,48 +383,54 @@ mod tests {
         let choice = ReportChoice::Items;
         let choice_copy = choice;
         let choice_clone = choice;
-        
+
         // All should be equal (testing Copy trait)
         assert!(matches!(choice, ReportChoice::Items));
         assert!(matches!(choice_copy, ReportChoice::Items));
         assert!(matches!(choice_clone, ReportChoice::Items));
     }
-    
+
     #[test]
     fn test_item_report_choice_copy_clone() {
         let choice = ItemReportChoice::InvalidItems;
         let choice_copy = choice;
         let choice_clone = choice;
-        
+
         // All should be equal (testing Copy trait)
         assert!(matches!(choice, ItemReportChoice::InvalidItems));
         assert!(matches!(choice_copy, ItemReportChoice::InvalidItems));
         assert!(matches!(choice_clone, ItemReportChoice::InvalidItems));
     }
-    
+
     #[test]
     fn test_command_choices_completeness() {
         // Verify all enum variants are represented in the static array
         assert_eq!(COMMAND_CHOICES.len(), 4);
-        
+
         // Verify each choice has a label
-        let choices: Vec<CommandChoice> = COMMAND_CHOICES.iter().map(|(choice, _)| *choice).collect();
-        assert!(choices.iter().any(|c| matches!(c, CommandChoice::QuerySimple)));
+        let choices: Vec<CommandChoice> =
+            COMMAND_CHOICES.iter().map(|(choice, _)| *choice).collect();
+        assert!(choices
+            .iter()
+            .any(|c| matches!(c, CommandChoice::QuerySimple)));
         assert!(choices.iter().any(|c| matches!(c, CommandChoice::Explore)));
         assert!(choices.iter().any(|c| matches!(c, CommandChoice::Report)));
         assert!(choices.iter().any(|c| matches!(c, CommandChoice::Exit)));
-        
+
         // Verify labels are not empty
         for (_, label) in COMMAND_CHOICES {
-            assert!(!label.is_empty(), "Command choice label should not be empty");
+            assert!(
+                !label.is_empty(),
+                "Command choice label should not be empty"
+            );
         }
     }
-    
+
     #[test]
     fn test_report_choices_completeness() {
         // Verify all enum variants are represented in the static array
         assert_eq!(REPORT_CHOICES.len(), 5);
-        
+
         // Verify each choice has a label
         let choices: Vec<ReportChoice> = REPORT_CHOICES.iter().map(|(choice, _)| *choice).collect();
         assert!(choices.iter().any(|c| matches!(c, ReportChoice::Roots)));
@@ -430,53 +438,65 @@ mod tests {
         assert!(choices.iter().any(|c| matches!(c, ReportChoice::Items)));
         assert!(choices.iter().any(|c| matches!(c, ReportChoice::Changes)));
         assert!(choices.iter().any(|c| matches!(c, ReportChoice::Exit)));
-        
+
         // Verify labels are not empty
         for (_, label) in REPORT_CHOICES {
             assert!(!label.is_empty(), "Report choice label should not be empty");
         }
     }
-    
+
     #[test]
     fn test_item_report_choices_completeness() {
         // Verify all enum variants are represented in the static array
         assert_eq!(ITEM_REPORT_CHOICES.len(), 2);
-        
+
         // Verify each choice has a label
-        let choices: Vec<ItemReportChoice> = ITEM_REPORT_CHOICES.iter().map(|(choice, _)| *choice).collect();
-        assert!(choices.iter().any(|c| matches!(c, ItemReportChoice::InvalidItems)));
+        let choices: Vec<ItemReportChoice> = ITEM_REPORT_CHOICES
+            .iter()
+            .map(|(choice, _)| *choice)
+            .collect();
+        assert!(choices
+            .iter()
+            .any(|c| matches!(c, ItemReportChoice::InvalidItems)));
         assert!(choices.iter().any(|c| matches!(c, ItemReportChoice::Exit)));
-        
+
         // Verify labels are not empty
         for (_, label) in ITEM_REPORT_CHOICES {
-            assert!(!label.is_empty(), "Item report choice label should not be empty");
+            assert!(
+                !label.is_empty(),
+                "Item report choice label should not be empty"
+            );
         }
     }
-    
+
     #[test]
     fn test_command_choices_labels() {
         // Test specific label mappings
-        let query_label = COMMAND_CHOICES.iter()
+        let query_label = COMMAND_CHOICES
+            .iter()
             .find(|(choice, _)| matches!(choice, CommandChoice::QuerySimple))
             .map(|(_, label)| *label);
         assert_eq!(query_label, Some("Query"));
-        
-        let explore_label = COMMAND_CHOICES.iter()
+
+        let explore_label = COMMAND_CHOICES
+            .iter()
             .find(|(choice, _)| matches!(choice, CommandChoice::Explore))
             .map(|(_, label)| *label);
         assert_eq!(explore_label, Some("Explore"));
-        
-        let report_label = COMMAND_CHOICES.iter()
+
+        let report_label = COMMAND_CHOICES
+            .iter()
             .find(|(choice, _)| matches!(choice, CommandChoice::Report))
             .map(|(_, label)| *label);
         assert_eq!(report_label, Some("Report"));
-        
-        let exit_label = COMMAND_CHOICES.iter()
+
+        let exit_label = COMMAND_CHOICES
+            .iter()
             .find(|(choice, _)| matches!(choice, CommandChoice::Exit))
             .map(|(_, label)| *label);
         assert_eq!(exit_label, Some("Exit"));
     }
-    
+
     #[test]
     fn test_cli_interact_parsing() {
         let result = Cli::try_parse_from(["fspulse", "interact"]);
@@ -502,15 +522,18 @@ mod tests {
             panic!("Expected Query command");
         }
     }
-    
+
     #[test]
     fn test_cli_report_roots_parsing() {
         let result = Cli::try_parse_from(["fspulse", "report", "roots", "--root-id", "42"]);
         assert!(result.is_ok());
-        
+
         let cli = result.unwrap();
         if let Command::Report { report_type } = cli.command {
-            if let ReportType::Roots { root_id, root_path, .. } = report_type {
+            if let ReportType::Roots {
+                root_id, root_path, ..
+            } = report_type
+            {
                 assert_eq!(root_id, Some(42));
                 assert_eq!(root_path, None);
             } else {
@@ -520,15 +543,30 @@ mod tests {
             panic!("Expected Report command");
         }
     }
-    
+
     #[test]
     fn test_cli_report_items_parsing() {
-        let result = Cli::try_parse_from(["fspulse", "report", "items", "--root-id", "1", "--invalid", "--format", "tree"]);
+        let result = Cli::try_parse_from([
+            "fspulse",
+            "report",
+            "items",
+            "--root-id",
+            "1",
+            "--invalid",
+            "--format",
+            "tree",
+        ]);
         assert!(result.is_ok());
-        
+
         let cli = result.unwrap();
         if let Command::Report { report_type } = cli.command {
-            if let ReportType::Items { root_id, invalid, format, .. } = report_type {
+            if let ReportType::Items {
+                root_id,
+                invalid,
+                format,
+                ..
+            } = report_type
+            {
                 assert_eq!(root_id, Some(1));
                 assert!(invalid);
                 assert_eq!(format, "tree");
@@ -539,29 +577,47 @@ mod tests {
             panic!("Expected Report command");
         }
     }
-    
+
     #[test]
     fn test_cli_parsing_conflicts() {
         // Test that conflicting arguments are properly rejected
-        let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "1", "--root-path", "/test"]);
-        assert!(result.is_err(), "Should reject conflicting root-id and root-path");
-        
+        let result =
+            Cli::try_parse_from(["fspulse", "scan", "--root-id", "1", "--root-path", "/test"]);
+        assert!(
+            result.is_err(),
+            "Should reject conflicting root-id and root-path"
+        );
+
         let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "1", "--last"]);
-        assert!(result.is_err(), "Should reject conflicting root-id and last");
-        
-        let result = Cli::try_parse_from(["fspulse", "report", "roots", "--root-id", "1", "--root-path", "/test"]);
-        assert!(result.is_err(), "Should reject conflicting root-id and root-path in reports");
+        assert!(
+            result.is_err(),
+            "Should reject conflicting root-id and last"
+        );
+
+        let result = Cli::try_parse_from([
+            "fspulse",
+            "report",
+            "roots",
+            "--root-id",
+            "1",
+            "--root-path",
+            "/test",
+        ]);
+        assert!(
+            result.is_err(),
+            "Should reject conflicting root-id and root-path in reports"
+        );
     }
-    
+
     #[test]
     fn test_cli_parsing_invalid_arguments() {
         // Test various invalid argument combinations
         let result = Cli::try_parse_from(["fspulse", "nonexistent-command"]);
         assert!(result.is_err(), "Should reject unknown commands");
-        
+
         let result = Cli::try_parse_from(["fspulse", "scan", "--invalid-flag"]);
         assert!(result.is_err(), "Should reject unknown flags");
-        
+
         let result = Cli::try_parse_from(["fspulse", "scan", "--root-id", "not-a-number"]);
         assert!(result.is_err(), "Should reject non-numeric root ID");
     }

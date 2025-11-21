@@ -1,8 +1,4 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::Path, http::StatusCode, response::Json};
 use log::error;
 use serde::{Deserialize, Serialize};
 
@@ -33,9 +29,9 @@ pub async fn update_alert_status(
     Path(alert_id): Path<i64>,
     Json(req): Json<UpdateAlertStatusRequest>,
 ) -> Result<(StatusCode, Json<UpdateAlertStatusResponse>), (StatusCode, Json<ErrorResponse>)> {
-    // Open database connection
-    let db = Database::new().map_err(|e| {
-        error!("Failed to open database: {}", e);
+    // Get database connection
+    let conn = Database::get_connection().map_err(|e| {
+        error!("Failed to get database connection: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -60,7 +56,7 @@ pub async fn update_alert_status(
     };
 
     // Update the alert status
-    Alerts::set_alert_status(&db, alert_id, new_status).map_err(|e| {
+    Alerts::set_alert_status(&conn, alert_id, new_status).map_err(|e| {
         error!("Failed to update alert status: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,

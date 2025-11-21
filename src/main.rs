@@ -28,6 +28,7 @@ use std::time::Instant;
 use chrono::Local;
 use cli::Cli;
 use config::Config;
+use database::Database;
 use directories::ProjectDirs;
 use flexi_logger::{Cleanup, Criterion, FileSpec, Logger, Naming};
 use log::{error, info};
@@ -39,6 +40,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Config::load_config(&project_dirs)?;
 
     setup_logging(&project_dirs);
+
+    // Initialize database connection pool
+    Database::init()?;
 
     // Mark the start time and log a timestamped message
     let start = Instant::now();
@@ -67,7 +71,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 pub fn setup_logging(_project_dirs: &ProjectDirs) {
     let log_levels = format!(
         "fspulse={}, lopdf={}",
-        Config::get_logging_fspulse(), Config::get_logging_lopdf()
+        Config::get_logging_fspulse(),
+        Config::get_logging_lopdf()
     );
 
     // Use data directory from config (already resolved from FSPULSE_DATA_DIR or default)

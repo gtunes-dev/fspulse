@@ -33,7 +33,7 @@ pub struct RootWithScan {
     pub root_id: i64,
     pub root_path: String,
     pub last_scan: Option<ScanInfo>,
-    pub schedule_count: i64,  // Number of active schedules for this root
+    pub schedule_count: i64, // Number of active schedules for this root
 }
 
 /// Scan information subset for display
@@ -41,7 +41,7 @@ pub struct RootWithScan {
 pub struct ScanInfo {
     pub scan_id: i64,
     pub state: String,
-    pub started_at: i64,  // Raw Unix timestamp for client-side formatting
+    pub started_at: i64, // Raw Unix timestamp for client-side formatting
     pub file_count: Option<i64>,
     pub folder_count: Option<i64>,
     pub error: Option<String>,
@@ -52,21 +52,14 @@ pub struct ScanInfo {
 pub async fn create_root(
     Json(req): Json<CreateRootRequest>,
 ) -> Result<(StatusCode, Json<CreateRootResponse>), (StatusCode, Json<ErrorResponse>)> {
-    // Open database connection
-    let db = Database::new().map_err(|e| {
-        error!("Failed to open database: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "Database connection error".to_string(),
-            }),
-        )
-    })?;
-
     // Attempt to create the root using Root::try_create
-    match Root::try_create(&db, &req.path) {
+    match Root::try_create(&req.path) {
         Ok(root) => {
-            log::info!("Created new root: {} (id: {})", root.root_path(), root.root_id());
+            log::info!(
+                "Created new root: {} (id: {})",
+                root.root_path(),
+                root.root_id()
+            );
             Ok((
                 StatusCode::CREATED,
                 Json(CreateRootResponse {
@@ -143,17 +136,23 @@ pub async fn create_root(
                 }
             };
 
-            Err((status_code, Json(ErrorResponse { error: error_message })))
+            Err((
+                status_code,
+                Json(ErrorResponse {
+                    error: error_message,
+                }),
+            ))
         }
     }
 }
 
 /// GET /api/roots/with-scans
 /// Fetches all roots with their last scan information
-pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCode, Json<ErrorResponse>)> {
-    // Open database connection
-    let db = Database::new().map_err(|e| {
-        error!("Failed to open database: {}", e);
+pub async fn get_roots_with_scans(
+) -> Result<Json<Vec<RootWithScan>>, (StatusCode, Json<ErrorResponse>)> {
+    // Get database connection
+    let conn = Database::get_connection().map_err(|e| {
+        error!("Failed to get database connection: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -163,7 +162,6 @@ pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCo
     })?;
 
     // Query all roots
-    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT root_id, root_path FROM roots ORDER BY root_path COLLATE natural_path")
         .map_err(|e| {
@@ -204,11 +202,11 @@ pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCo
         })?;
 
         // Fetch last scan for this root
-        let last_scan = match Scan::get_latest_for_root(&db, root_id) {
+        let last_scan = match Scan::get_latest_for_root(root_id) {
             Ok(Some(scan)) => Some(ScanInfo {
                 scan_id: scan.scan_id(),
                 state: scan.state().to_string(),
-                started_at: scan.started_at(),  // Return raw Unix timestamp
+                started_at: scan.started_at(), // Return raw Unix timestamp
                 file_count: scan.file_count(),
                 folder_count: scan.folder_count(),
                 error: scan.error().map(|s| s.to_string()),
@@ -221,11 +219,10 @@ pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCo
         };
 
         // Count active schedules for this root
-        let schedule_count = schedules::count_schedules_for_root(&db, root_id)
-            .unwrap_or_else(|e| {
-                error!("Failed to count schedules for root {}: {}", root_id, e);
-                0 // Continue with 0 count rather than failing
-            });
+        let schedule_count = schedules::count_schedules_for_root(root_id).unwrap_or_else(|e| {
+            error!("Failed to count schedules for root {}: {}", root_id, e);
+            0 // Continue with 0 count rather than failing
+        });
 
         results.push(RootWithScan {
             root_id,
@@ -243,19 +240,8 @@ pub async fn get_roots_with_scans() -> Result<Json<Vec<RootWithScan>>, (StatusCo
 pub async fn delete_root(
     Path(root_id): Path<i64>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    // Open database connection
-    let db = Database::new().map_err(|e| {
-        error!("Failed to open database: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: "Database connection error".to_string(),
-            }),
-        )
-    })?;
-
     // Attempt to delete the root
-    match Root::delete_root(&db, root_id) {
+    match Root::delete_root(root_id) {
         Ok(()) => {
             log::info!("Deleted root with id: {}", root_id);
             Ok(StatusCode::NO_CONTENT)
@@ -263,9 +249,10 @@ pub async fn delete_root(
         Err(e) => {
             // Map FsPulseError to user-friendly error messages
             let (status_code, error_message) = match &e {
-                FsPulseError::Error(msg) if msg.contains("not found") => {
-                    (StatusCode::NOT_FOUND, format!("Root with id {} not found", root_id))
-                }
+                FsPulseError::Error(msg) if msg.contains("not found") => (
+                    StatusCode::NOT_FOUND,
+                    format!("Root with id {} not found", root_id),
+                ),
                 FsPulseError::DatabaseError(db_err) => {
                     error!("Database error deleting root: {}", db_err);
                     (
@@ -282,7 +269,12 @@ pub async fn delete_root(
                 }
             };
 
-            Err((status_code, Json(ErrorResponse { error: error_message })))
+            Err((
+                status_code,
+                Json(ErrorResponse {
+                    error: error_message,
+                }),
+            ))
         }
     }
 }

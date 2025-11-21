@@ -6,8 +6,8 @@ use dialoguer::Select;
 
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::schedules::{root_has_active_scan_immediate, delete_schedules_for_root_immediate};
-use rusqlite::OptionalExtension;
+use crate::schedules::{delete_schedules_for_root_immediate, root_has_active_scan_immediate};
+use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -19,8 +19,9 @@ pub struct Root {
 }
 
 impl Root {
-    pub fn interact_choose_root(db: &Database, prompt: &str) -> Result<Option<Root>, FsPulseError> {
-        let mut roots = Root::roots_as_vec(db)?;
+    pub fn interact_choose_root(prompt: &str) -> Result<Option<Root>, FsPulseError> {
+        let conn = Database::get_connection()?;
+        let mut roots = Root::roots_as_vec(&conn)?;
         if roots.is_empty() {
             print!("No roots in database");
             return Ok(None);
@@ -44,26 +45,29 @@ impl Root {
         }
     }
 
-    pub fn get_by_id(conn: &rusqlite::Connection, root_id: i64) -> Result<Option<Self>, FsPulseError> {
-        conn.query_row("SELECT root_path FROM roots WHERE root_id = ?", [root_id], |row| {
-            Ok(Root {
-                root_id,
-                root_path: row.get(0)?,
-            })
-        })
+    pub fn get_by_id(conn: &Connection, root_id: i64) -> Result<Option<Self>, FsPulseError> {
+        conn.query_row(
+            "SELECT root_path FROM roots WHERE root_id = ?",
+            [root_id],
+            |row| {
+                Ok(Root {
+                    root_id,
+                    root_path: row.get(0)?,
+                })
+            },
+        )
         .optional()
         .map_err(FsPulseError::DatabaseError)
     }
 
-    pub fn try_create(db: &Database, root_path: &str) -> Result<Self, FsPulseError> {
+    pub fn try_create(root_path: &str) -> Result<Self, FsPulseError> {
         let path_buf = Root::validate_and_canonicalize_path(root_path)?;
         let canon_root_path = path_buf.to_string_lossy().to_string();
-        Root::create(db, &canon_root_path)
+        let conn = Database::get_connection()?;
+        Root::create(&conn, &canon_root_path)
     }
 
-    pub fn create(db: &Database, root_path: &str) -> Result<Self, FsPulseError> {
-        let conn = db.conn();
-
+    pub fn create(conn: &Connection, root_path: &str) -> Result<Self, FsPulseError> {
         let root_id: i64 = conn.query_row(
             "INSERT INTO roots (root_path) VALUES (?) RETURNING root_id",
             [root_path],
@@ -84,10 +88,10 @@ impl Root {
         &self.root_path
     }
 
-    pub fn roots_as_vec(db: &Database) -> Result<Vec<Root>, FsPulseError> {
+    pub fn roots_as_vec(conn: &Connection) -> Result<Vec<Root>, FsPulseError> {
         let mut roots: Vec<Root> = Vec::new();
 
-        Root::for_each_root(db, |root| {
+        Root::for_each_root(conn, |root| {
             roots.push(root.clone());
             Ok(())
         })?;
@@ -95,11 +99,11 @@ impl Root {
         Ok(roots)
     }
 
-    pub fn for_each_root<F>(db: &Database, mut func: F) -> Result<(), FsPulseError>
+    pub fn for_each_root<F>(conn: &Connection, mut func: F) -> Result<(), FsPulseError>
     where
         F: FnMut(&Root) -> Result<(), FsPulseError>,
     {
-        let mut stmt = db.conn().prepare(
+        let mut stmt = conn.prepare(
             "SELECT root_id, root_path
             FROM roots
             ORDER BY root_id ASC",
@@ -107,7 +111,7 @@ impl Root {
 
         let rows = stmt.query_map([], |row| {
             Ok(Root {
-                root_id: row.get::<_, i64>(0)?,      
+                root_id: row.get::<_, i64>(0)?,
                 root_path: row.get::<_, String>(1)?,
             })
         })?;
@@ -123,17 +127,18 @@ impl Root {
     /// Delete a root and all associated data (scans, items, changes, alerts, schedules).
     /// This operation is performed within a transaction to ensure atomicity.
     /// Returns Ok(()) if successful, or an error if the root doesn't exist, has an active scan, or deletion fails.
-    pub fn delete_root(db: &Database, root_id: i64) -> Result<(), FsPulseError> {
-        db.immediate_transaction(|conn| {
+    pub fn delete_root(root_id: i64) -> Result<(), FsPulseError> {
+        let conn = Database::get_connection()?;
+        Database::immediate_transaction(&conn, |c| {
             // First, check if root has an active scan
-            if root_has_active_scan_immediate(conn, root_id)? {
+            if root_has_active_scan_immediate(c, root_id)? {
                 return Err(FsPulseError::Error(
                     "Cannot delete root because it has an active scan in progress. Please wait for the scan to complete or stop it first.".to_string()
                 ));
             }
 
             // Delete schedules and queue entries for this root
-            delete_schedules_for_root_immediate(conn, root_id)?;
+            delete_schedules_for_root_immediate(c, root_id)?;
 
             // Delete in order based on foreign key constraints:
             // 1. alerts (references scan_id and item_id)
@@ -143,28 +148,31 @@ impl Root {
             // 5. root itself
 
             // Delete alerts for all scans of this root
-            conn.execute(
+            c.execute(
                 "DELETE FROM alerts WHERE scan_id IN (SELECT scan_id FROM scans WHERE root_id = ?)",
-                [root_id]
+                [root_id],
             )?;
 
             // Delete changes for all scans of this root
-            conn.execute(
+            c.execute(
                 "DELETE FROM changes WHERE scan_id IN (SELECT scan_id FROM scans WHERE root_id = ?)",
                 [root_id]
             )?;
 
             // Delete items for this root
-            conn.execute("DELETE FROM items WHERE root_id = ?", [root_id])?;
+            c.execute("DELETE FROM items WHERE root_id = ?", [root_id])?;
 
             // Delete scans for this root
-            conn.execute("DELETE FROM scans WHERE root_id = ?", [root_id])?;
+            c.execute("DELETE FROM scans WHERE root_id = ?", [root_id])?;
 
             // Finally, delete the root itself
-            let rows_affected = conn.execute("DELETE FROM roots WHERE root_id = ?", [root_id])?;
+            let rows_affected = c.execute("DELETE FROM roots WHERE root_id = ?", [root_id])?;
 
             if rows_affected == 0 {
-                return Err(FsPulseError::Error(format!("Root with id {} not found", root_id)));
+                return Err(FsPulseError::Error(format!(
+                    "Root with id {} not found",
+                    root_id
+                )));
             }
 
             Ok(())
@@ -218,8 +226,8 @@ impl Root {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_root_getters() {
@@ -235,7 +243,7 @@ mod tests {
     #[test]
     fn test_root_default() {
         let root = Root::default();
-        
+
         assert_eq!(root.root_id(), 0);
         assert_eq!(root.root_path(), "");
     }
@@ -277,10 +285,10 @@ mod tests {
     fn test_validate_and_canonicalize_path_valid_temp_dir() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let temp_path = temp_dir.path().to_str().unwrap();
-        
+
         let result = Root::validate_and_canonicalize_path(temp_path);
         assert!(result.is_ok());
-        
+
         let canonical_path = result.unwrap();
         assert!(canonical_path.exists());
         assert!(canonical_path.is_dir());
@@ -291,7 +299,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let file_path = temp_dir.path().join("test_file.txt");
         fs::write(&file_path, "test content").expect("Failed to write test file");
-        
+
         let result = Root::validate_and_canonicalize_path(file_path.to_str().unwrap());
         assert!(result.is_err());
         if let Err(FsPulseError::Error(msg)) = result {
@@ -306,7 +314,7 @@ mod tests {
         // Use current directory as a relative path (should work)
         let result = Root::validate_and_canonicalize_path(".");
         assert!(result.is_ok());
-        
+
         let canonical_path = result.unwrap();
         assert!(canonical_path.exists());
         assert!(canonical_path.is_dir());
@@ -318,10 +326,10 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let temp_path = temp_dir.path().to_str().unwrap();
         let path_with_whitespace = format!("  {temp_path}  ");
-        
+
         let result = Root::validate_and_canonicalize_path(&path_with_whitespace);
         assert!(result.is_ok());
-        
+
         let canonical_path = result.unwrap();
         assert!(canonical_path.exists());
         assert!(canonical_path.is_dir());
@@ -333,10 +341,10 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let special_dir = temp_dir.path().join("test-dir_with.special.chars");
         fs::create_dir(&special_dir).expect("Failed to create special dir");
-        
+
         let result = Root::validate_and_canonicalize_path(special_dir.to_str().unwrap());
         assert!(result.is_ok());
-        
+
         let canonical_path = result.unwrap();
         assert!(canonical_path.exists());
         assert!(canonical_path.is_dir());
@@ -346,11 +354,11 @@ mod tests {
     fn test_validate_absolute_vs_relative() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let temp_path = temp_dir.path();
-        
+
         // Test absolute path
         let result_abs = Root::validate_and_canonicalize_path(temp_path.to_str().unwrap());
         assert!(result_abs.is_ok());
-        
+
         // Both should result in the same canonical path
         let canonical_abs = result_abs.unwrap();
         assert!(canonical_abs.is_absolute());
@@ -363,17 +371,17 @@ mod tests {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let subdir = temp_dir.path().join("subdir");
         fs::create_dir(&subdir).expect("Failed to create subdir");
-        
+
         // Create a path with .. components
         let complex_path = format!("{}/subdir/../subdir", temp_dir.path().display());
-        
+
         let result = Root::validate_and_canonicalize_path(&complex_path);
         assert!(result.is_ok());
-        
+
         let canonical_path = result.unwrap();
         assert!(canonical_path.exists());
         assert!(canonical_path.is_dir());
-        
+
         // The canonical path should not contain .. components
         let path_str = canonical_path.to_string_lossy();
         assert!(!path_str.contains(".."));

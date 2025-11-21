@@ -334,8 +334,7 @@ impl Explorer {
                 format!("{} Hidden", self.model.current_filters().len())
             };
 
-            let p =
-                Paragraph::new(format!("Filters - {count_str} (ctrl-f to expand)")).centered();
+            let p = Paragraph::new(format!("Filters - {count_str} (ctrl-f to expand)")).centered();
             f.render_widget(p, area);
         } else {
             let filter_frame_view = FilterFrameView::new(
@@ -347,7 +346,7 @@ impl Explorer {
         }
     }
 
-    pub fn explore(&mut self, db: &Database) -> Result<(), FsPulseError> {
+    pub fn explore(&mut self) -> Result<(), FsPulseError> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -356,7 +355,7 @@ impl Explorer {
 
         loop {
             if self.needs_query_refresh {
-                self.refresh_query(db);
+                self.refresh_query();
             }
             self.draw(&mut terminal)?;
 
@@ -417,7 +416,7 @@ impl Explorer {
                             self.focus = self.prev_focus(self.focus);
                         }
                         _ => {
-                            self.dispatch_key_to_active_frame(db, key);
+                            self.dispatch_key_to_active_frame(key);
                         }
                     }
                 }
@@ -494,7 +493,7 @@ impl Explorer {
         handled
     }
 
-    fn dispatch_key_to_active_frame(&mut self, db: &Database, key: KeyEvent) {
+    fn dispatch_key_to_active_frame(&mut self, key: KeyEvent) {
         let action = match self.focus {
             Focus::Tabs => self.handle_tab_section_key(key),
             Focus::Limit => LimitWidget::handle_key(key),
@@ -540,7 +539,7 @@ impl Explorer {
                     }
                 }
                 ExplorerAction::SetAlertStatus(new_status) => {
-                    self.set_alert_status(db, new_status);
+                    self.set_alert_status(new_status);
                 }
                 _ => unreachable!(),
             }
@@ -691,8 +690,8 @@ impl Explorer {
         Ok((query, cols))
     }
 
-    fn refresh_query(&mut self, db: &Database) {
-        match self.refresh_query_impl(db) {
+    fn refresh_query(&mut self) {
+        match self.refresh_query_impl() {
             Ok(()) => {}
             Err(err) => self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
                 MessageBoxType::Error,
@@ -704,10 +703,10 @@ impl Explorer {
         self.query_resets_selection = false;
     }
 
-    fn refresh_query_impl(&mut self, db: &Database) -> Result<(), FsPulseError> {
+    fn refresh_query_impl(&mut self) -> Result<(), FsPulseError> {
         let (query_str, columns) = self.build_query_and_columns()?;
 
-        match QueryProcessor::execute_query(db, &query_str) {
+        match QueryProcessor::execute_query(&query_str) {
             Ok((rows, _column_headers, _alignments)) => {
                 // Note: We use columns from build_query_and_columns, not _column_headers or _alignments
                 // because TUI needs full column metadata, not just display names and alignments
@@ -812,7 +811,7 @@ impl Explorer {
         self.query_resets_selection = true;
     }
 
-    fn set_alert_status(&mut self, db: &Database, new_status: AlertStatus) {
+    fn set_alert_status(&mut self, new_status: AlertStatus) {
         let Some(alert_index) = self.grid_frame.table_state.selected() else {
             return;
         };
@@ -847,7 +846,18 @@ impl Explorer {
             return;
         };
 
-        match Alerts::set_alert_status(db, alert_id, new_status) {
+        let conn = match Database::get_connection() {
+            Ok(c) => c,
+            Err(e) => {
+                self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
+                    MessageBoxType::Error,
+                    format!("Database Error: Failed to get database connection: {}", e),
+                )));
+                return;
+            }
+        };
+
+        match Alerts::set_alert_status(&conn, alert_id, new_status) {
             Ok(()) => row[status_col] = new_status.short_name().to_owned(),
             Err(err) => self.popups_push(ActivePopup::MessageBox(MessageBoxState::new(
                 MessageBoxType::Error,

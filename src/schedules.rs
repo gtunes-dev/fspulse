@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::scans::{AnalysisSpec, HashMode, Scan, ValidateMode};
 use crate::roots::Root;
-use rusqlite::OptionalExtension;
+use crate::scans::{AnalysisSpec, HashMode, Scan, ValidateMode};
+use rusqlite::{Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 
 /// Schedule type: Daily, Weekly, Interval, or Monthly
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -131,8 +131,8 @@ pub struct Schedule {
     pub validate_mode: ValidateMode,
 
     // Metadata
-    pub created_at: i64,  // Unix timestamp (UTC)
-    pub updated_at: i64,  // Unix timestamp (UTC)
+    pub created_at: i64, // Unix timestamp (UTC)
+    pub updated_at: i64, // Unix timestamp (UTC)
 }
 
 impl Schedule {
@@ -233,7 +233,10 @@ impl Schedule {
     fn validate_time_of_day(&self, time: &str) -> Result<(), String> {
         let parts: Vec<&str> = time.split(':').collect();
         if parts.len() != 2 {
-            return Err(format!("time_of_day must be in HH:MM format, got: {}", time));
+            return Err(format!(
+                "time_of_day must be in HH:MM format, got: {}",
+                time
+            ));
         }
 
         let hours: u32 = parts[0]
@@ -281,32 +284,43 @@ impl Schedule {
     pub fn calculate_next_scan_time(&self, from_time: i64) -> Result<i64, String> {
         match self.schedule_type {
             ScheduleType::Interval => {
-                let unit = self.interval_unit
+                let unit = self
+                    .interval_unit
                     .ok_or("Interval schedule missing interval_unit")?;
-                let value = self.interval_value
+                let value = self
+                    .interval_value
                     .ok_or("Interval schedule missing interval_value")?;
                 let seconds = unit.to_seconds(value);
                 Ok(from_time + seconds)
             }
 
             ScheduleType::Daily => {
-                let time_str = self.time_of_day.as_ref()
+                let time_str = self
+                    .time_of_day
+                    .as_ref()
                     .ok_or("Daily schedule missing time_of_day")?;
                 self.calculate_next_daily(from_time, time_str)
             }
 
             ScheduleType::Weekly => {
-                let time_str = self.time_of_day.as_ref()
+                let time_str = self
+                    .time_of_day
+                    .as_ref()
                     .ok_or("Weekly schedule missing time_of_day")?;
-                let days_str = self.days_of_week.as_ref()
+                let days_str = self
+                    .days_of_week
+                    .as_ref()
                     .ok_or("Weekly schedule missing days_of_week")?;
                 self.calculate_next_weekly(from_time, time_str, days_str)
             }
 
             ScheduleType::Monthly => {
-                let time_str = self.time_of_day.as_ref()
+                let time_str = self
+                    .time_of_day
+                    .as_ref()
                     .ok_or("Monthly schedule missing time_of_day")?;
-                let day = self.day_of_month
+                let day = self
+                    .day_of_month
                     .ok_or("Monthly schedule missing day_of_month")?;
                 self.calculate_next_monthly(from_time, time_str, day)
             }
@@ -319,21 +333,29 @@ impl Schedule {
 
         // Parse HH:MM
         let parts: Vec<&str> = time_of_day.split(':').collect();
-        let hours: u32 = parts[0].parse()
+        let hours: u32 = parts[0]
+            .parse()
             .map_err(|_| format!("Invalid hours: {}", parts[0]))?;
-        let minutes: u32 = parts[1].parse()
+        let minutes: u32 = parts[1]
+            .parse()
             .map_err(|_| format!("Invalid minutes: {}", parts[1]))?;
 
         // Get current time in local timezone
-        let from_local = Local.timestamp_opt(from_time, 0).single()
+        let from_local = Local
+            .timestamp_opt(from_time, 0)
+            .single()
             .ok_or("Invalid timestamp")?;
 
         // Try today at the scheduled time
         let today_at_time = from_local
-            .with_hour(hours).ok_or("Invalid hour")?
-            .with_minute(minutes).ok_or("Invalid minute")?
-            .with_second(0).ok_or("Failed to set seconds")?
-            .with_nanosecond(0).ok_or("Failed to set nanoseconds")?;
+            .with_hour(hours)
+            .ok_or("Invalid hour")?
+            .with_minute(minutes)
+            .ok_or("Invalid minute")?
+            .with_second(0)
+            .ok_or("Failed to set seconds")?
+            .with_nanosecond(0)
+            .ok_or("Failed to set nanoseconds")?;
 
         // If that time has already passed today, use tomorrow
         let next_occurrence = if today_at_time.timestamp() > from_time {
@@ -346,14 +368,21 @@ impl Schedule {
     }
 
     /// Calculate next weekly occurrence
-    fn calculate_next_weekly(&self, from_time: i64, time_of_day: &str, days_of_week: &str) -> Result<i64, String> {
+    fn calculate_next_weekly(
+        &self,
+        from_time: i64,
+        time_of_day: &str,
+        days_of_week: &str,
+    ) -> Result<i64, String> {
         use chrono::{Datelike, Local, TimeZone, Timelike, Weekday};
 
         // Parse HH:MM
         let parts: Vec<&str> = time_of_day.split(':').collect();
-        let hours: u32 = parts[0].parse()
+        let hours: u32 = parts[0]
+            .parse()
             .map_err(|_| format!("Invalid hours: {}", parts[0]))?;
-        let minutes: u32 = parts[1].parse()
+        let minutes: u32 = parts[1]
+            .parse()
             .map_err(|_| format!("Invalid minutes: {}", parts[1]))?;
 
         // Parse days_of_week JSON
@@ -361,7 +390,8 @@ impl Schedule {
             .map_err(|e| format!("Invalid JSON in days_of_week: {}", e))?;
 
         // Map day names to Weekday enum
-        let target_weekdays: Vec<Weekday> = day_names.iter()
+        let target_weekdays: Vec<Weekday> = day_names
+            .iter()
             .map(|name| match name.as_str() {
                 "Mon" => Ok(Weekday::Mon),
                 "Tue" => Ok(Weekday::Tue),
@@ -379,17 +409,24 @@ impl Schedule {
         }
 
         // Get current time in local timezone
-        let from_local = Local.timestamp_opt(from_time, 0).single()
+        let from_local = Local
+            .timestamp_opt(from_time, 0)
+            .single()
             .ok_or("Invalid timestamp")?;
 
         // Check today first
         let today_at_time = from_local
-            .with_hour(hours).ok_or("Invalid hour")?
-            .with_minute(minutes).ok_or("Invalid minute")?
-            .with_second(0).ok_or("Failed to set seconds")?
-            .with_nanosecond(0).ok_or("Failed to set nanoseconds")?;
+            .with_hour(hours)
+            .ok_or("Invalid hour")?
+            .with_minute(minutes)
+            .ok_or("Invalid minute")?
+            .with_second(0)
+            .ok_or("Failed to set seconds")?
+            .with_nanosecond(0)
+            .ok_or("Failed to set nanoseconds")?;
 
-        if target_weekdays.contains(&from_local.weekday()) && today_at_time.timestamp() > from_time {
+        if target_weekdays.contains(&from_local.weekday()) && today_at_time.timestamp() > from_time
+        {
             return Ok(today_at_time.timestamp());
         }
 
@@ -398,10 +435,14 @@ impl Schedule {
             let candidate = from_local + chrono::Duration::days(days_ahead);
             if target_weekdays.contains(&candidate.weekday()) {
                 let next_occurrence = candidate
-                    .with_hour(hours).ok_or("Invalid hour")?
-                    .with_minute(minutes).ok_or("Invalid minute")?
-                    .with_second(0).ok_or("Failed to set seconds")?
-                    .with_nanosecond(0).ok_or("Failed to set nanoseconds")?;
+                    .with_hour(hours)
+                    .ok_or("Invalid hour")?
+                    .with_minute(minutes)
+                    .ok_or("Invalid minute")?
+                    .with_second(0)
+                    .ok_or("Failed to set seconds")?
+                    .with_nanosecond(0)
+                    .ok_or("Failed to set nanoseconds")?;
                 return Ok(next_occurrence.timestamp());
             }
         }
@@ -410,7 +451,12 @@ impl Schedule {
     }
 
     /// Calculate next monthly occurrence
-    fn calculate_next_monthly(&self, from_time: i64, time_of_day: &str, day_of_month: i64) -> Result<i64, String> {
+    fn calculate_next_monthly(
+        &self,
+        from_time: i64,
+        time_of_day: &str,
+        day_of_month: i64,
+    ) -> Result<i64, String> {
         use chrono::{Datelike, Local, TimeZone};
 
         if !(1..=31).contains(&day_of_month) {
@@ -419,13 +465,17 @@ impl Schedule {
 
         // Parse HH:MM
         let parts: Vec<&str> = time_of_day.split(':').collect();
-        let hours: u32 = parts[0].parse()
+        let hours: u32 = parts[0]
+            .parse()
             .map_err(|_| format!("Invalid hours: {}", parts[0]))?;
-        let minutes: u32 = parts[1].parse()
+        let minutes: u32 = parts[1]
+            .parse()
             .map_err(|_| format!("Invalid minutes: {}", parts[1]))?;
 
         // Get current time in local timezone
-        let from_local = Local.timestamp_opt(from_time, 0).single()
+        let from_local = Local
+            .timestamp_opt(from_time, 0)
+            .single()
             .ok_or("Invalid timestamp")?;
 
         // Try to find next occurrence within the next 12 months
@@ -439,14 +489,16 @@ impl Schedule {
             let target_month = ((total_months - 1) % 12) + 1;
 
             // Try to create a date with the target day
-            let candidate_date = Local.with_ymd_and_hms(
-                target_year,
-                target_month as u32,
-                day_of_month as u32,
-                hours,
-                minutes,
-                0
-            ).single();
+            let candidate_date = Local
+                .with_ymd_and_hms(
+                    target_year,
+                    target_month as u32,
+                    day_of_month as u32,
+                    hours,
+                    minutes,
+                    0,
+                )
+                .single();
 
             if let Some(candidate) = candidate_date {
                 // Check if this is in the future
@@ -457,7 +509,10 @@ impl Schedule {
             // If day doesn't exist in this month (e.g., Feb 31), skip to next month
         }
 
-        Err(format!("Failed to find next monthly occurrence for day {}", day_of_month))
+        Err(format!(
+            "Failed to find next monthly occurrence for day {}",
+            day_of_month
+        ))
     }
 
     // ========================================
@@ -479,7 +534,7 @@ impl Schedule {
         let schedule = Schedule {
             schedule_id: 0, // Will be set by database
             root_id: params.root_id,
-            enabled: true,  // Always create as enabled
+            enabled: true, // Always create as enabled
             schedule_name: params.schedule_name,
             schedule_type: params.schedule_type,
             time_of_day: params.time_of_day,
@@ -494,18 +549,21 @@ impl Schedule {
         };
 
         // Validate schedule fields
-        schedule.validate()
+        schedule
+            .validate()
             .map_err(|e| FsPulseError::Error(format!("Invalid schedule: {}", e)))?;
 
         // Calculate next_scan_time BEFORE database operations
         // This ensures we fail fast if calculation fails
-        let next_scan_time = schedule.calculate_next_scan_time(now)
-            .map_err(|e| FsPulseError::Error(format!("Failed to calculate next scan time: {}", e)))?;
+        let next_scan_time = schedule.calculate_next_scan_time(now).map_err(|e| {
+            FsPulseError::Error(format!("Failed to calculate next scan time: {}", e))
+        })?;
 
         // Perform database operations (caller holds transaction)
         // Insert schedule
-        let schedule_id: i64 = conn.query_row(
-            "INSERT INTO scan_schedules (
+        let schedule_id: i64 = conn
+            .query_row(
+                "INSERT INTO scan_schedules (
                 root_id, enabled, schedule_name, schedule_type,
                 time_of_day, days_of_week, day_of_month,
                 interval_value, interval_unit,
@@ -513,24 +571,24 @@ impl Schedule {
                 created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING schedule_id",
-            rusqlite::params![
-                schedule.root_id,
-                schedule.enabled,
-                schedule.schedule_name,
-                schedule.schedule_type.as_i32(),
-                schedule.time_of_day,
-                schedule.days_of_week,
-                schedule.day_of_month,
-                schedule.interval_value,
-                schedule.interval_unit.map(|u| u.as_i32()),
-                schedule.hash_mode.as_i32(),
-                schedule.validate_mode.as_i32(),
-                schedule.created_at,
-                schedule.updated_at,
-            ],
-            |row| row.get(0),
-        )
-        .map_err(FsPulseError::DatabaseError)?;
+                rusqlite::params![
+                    schedule.root_id,
+                    schedule.enabled,
+                    schedule.schedule_name,
+                    schedule.schedule_type.as_i32(),
+                    schedule.time_of_day,
+                    schedule.days_of_week,
+                    schedule.day_of_month,
+                    schedule.interval_value,
+                    schedule.interval_unit.map(|u| u.as_i32()),
+                    schedule.hash_mode.as_i32(),
+                    schedule.validate_mode.as_i32(),
+                    schedule.created_at,
+                    schedule.updated_at,
+                ],
+                |row| row.get(0),
+            )
+            .map_err(FsPulseError::DatabaseError)?;
 
         // Insert queue entry (schedule is enabled by default)
         conn.execute(
@@ -557,7 +615,10 @@ impl Schedule {
     }
 
     /// Get a schedule by ID
-    pub fn get_by_id(conn: &rusqlite::Connection, schedule_id: i64) -> Result<Option<Self>, FsPulseError> {
+    pub fn get_by_id(
+        conn: &rusqlite::Connection,
+        schedule_id: i64,
+    ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
             "SELECT
                 schedule_id, root_id, enabled, schedule_name, schedule_type,
@@ -574,21 +635,43 @@ impl Schedule {
                     root_id: row.get(1)?,
                     enabled: row.get(2)?,
                     schedule_name: row.get(3)?,
-                    schedule_type: ScheduleType::from_i32(row.get(4)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(4, "schedule_type".to_string(), rusqlite::types::Type::Integer))?,
+                    schedule_type: ScheduleType::from_i32(row.get(4)?).ok_or_else(|| {
+                        rusqlite::Error::InvalidColumnType(
+                            4,
+                            "schedule_type".to_string(),
+                            rusqlite::types::Type::Integer,
+                        )
+                    })?,
                     time_of_day: row.get(5)?,
                     days_of_week: row.get(6)?,
                     day_of_month: row.get(7)?,
                     interval_value: row.get(8)?,
-                    interval_unit: row.get::<_, Option<i32>>(9)?
-                        .map(|v| IntervalUnit::from_i32(v).ok_or_else(||
-                            rusqlite::Error::InvalidColumnType(9, "interval_unit".to_string(), rusqlite::types::Type::Integer)
-                        ))
+                    interval_unit: row
+                        .get::<_, Option<i32>>(9)?
+                        .map(|v| {
+                            IntervalUnit::from_i32(v).ok_or_else(|| {
+                                rusqlite::Error::InvalidColumnType(
+                                    9,
+                                    "interval_unit".to_string(),
+                                    rusqlite::types::Type::Integer,
+                                )
+                            })
+                        })
                         .transpose()?,
-                    hash_mode: HashMode::from_i32(row.get(10)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(10, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
-                    validate_mode: ValidateMode::from_i32(row.get(11)?)
-                        .ok_or_else(|| rusqlite::Error::InvalidColumnType(11, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
+                    hash_mode: HashMode::from_i32(row.get(10)?).ok_or_else(|| {
+                        rusqlite::Error::InvalidColumnType(
+                            10,
+                            "hash_mode".to_string(),
+                            rusqlite::types::Type::Integer,
+                        )
+                    })?,
+                    validate_mode: ValidateMode::from_i32(row.get(11)?).ok_or_else(|| {
+                        rusqlite::Error::InvalidColumnType(
+                            11,
+                            "validate_mode".to_string(),
+                            rusqlite::types::Type::Integer,
+                        )
+                    })?,
                     created_at: row.get(12)?,
                     updated_at: row.get(13)?,
                 })
@@ -610,11 +693,13 @@ impl Schedule {
         let now = chrono::Utc::now().timestamp();
 
         // Calculate next_scan_time BEFORE database operations
-        let next_scan_time = self.calculate_next_scan_time(now)
-            .map_err(|e| FsPulseError::Error(format!("Failed to calculate next scan time: {}", e)))?;
+        let next_scan_time = self.calculate_next_scan_time(now).map_err(|e| {
+            FsPulseError::Error(format!("Failed to calculate next scan time: {}", e))
+        })?;
         // Update schedule
-        let rows_affected = conn.execute(
-            "UPDATE scan_schedules SET
+        let rows_affected = conn
+            .execute(
+                "UPDATE scan_schedules SET
                 schedule_name = ?,
                 schedule_type = ?,
                 time_of_day = ?,
@@ -626,21 +711,21 @@ impl Schedule {
                 validate_mode = ?,
                 updated_at = ?
             WHERE schedule_id = ? AND deleted_at IS NULL",
-            rusqlite::params![
-                self.schedule_name,
-                self.schedule_type.as_i32(),
-                self.time_of_day,
-                self.days_of_week,
-                self.day_of_month,
-                self.interval_value,
-                self.interval_unit.map(|u| u.as_i32()),
-                self.hash_mode.as_i32(),
-                self.validate_mode.as_i32(),
-                now,
-                self.schedule_id,
-            ],
-        )
-        .map_err(FsPulseError::DatabaseError)?;
+                rusqlite::params![
+                    self.schedule_name,
+                    self.schedule_type.as_i32(),
+                    self.time_of_day,
+                    self.days_of_week,
+                    self.day_of_month,
+                    self.interval_value,
+                    self.interval_unit.map(|u| u.as_i32()),
+                    self.hash_mode.as_i32(),
+                    self.validate_mode.as_i32(),
+                    now,
+                    self.schedule_id,
+                ],
+            )
+            .map_err(FsPulseError::DatabaseError)?;
 
         if rows_affected == 0 {
             return Err(FsPulseError::Error(format!(
@@ -662,24 +747,27 @@ impl Schedule {
     /// Enable or disable a schedule
     /// When disabling: sets next_scan_time to NULL in queue (running scan completes normally)
     /// When re-enabling: recalculates and sets next_scan_time
-    pub fn set_enabled(db: &Database, schedule_id: i64, enabled: bool) -> Result<(), FsPulseError> {
+    pub fn set_enabled(schedule_id: i64, enabled: bool) -> Result<(), FsPulseError> {
+        let conn = Database::get_connection()?;
         let now = chrono::Utc::now().timestamp();
 
         // If enabling, we need to recalculate next_scan_time
         // Get the schedule to calculate next_scan_time BEFORE transaction
         let next_scan_time = if enabled {
-            let schedule = Self::get_by_id(db.conn(), schedule_id)?
-                .ok_or_else(|| FsPulseError::Error(format!("Schedule {} not found", schedule_id)))?;
+            let schedule = Self::get_by_id(&conn, schedule_id)?.ok_or_else(|| {
+                FsPulseError::Error(format!("Schedule {} not found", schedule_id))
+            })?;
 
-            Some(schedule.calculate_next_scan_time(now)
-                .map_err(|e| FsPulseError::Error(format!("Failed to calculate next scan time: {}", e)))?)
+            Some(schedule.calculate_next_scan_time(now).map_err(|e| {
+                FsPulseError::Error(format!("Failed to calculate next scan time: {}", e))
+            })?)
         } else {
             None
         };
 
-        db.immediate_transaction(|conn| {
+        Database::immediate_transaction(&conn, |c| {
             // Update the schedule
-            let rows_affected = conn.execute(
+            let rows_affected = c.execute(
                 "UPDATE scan_schedules SET enabled = ?, updated_at = ? WHERE schedule_id = ? AND deleted_at IS NULL",
                 rusqlite::params![enabled, now, schedule_id],
             )
@@ -695,17 +783,18 @@ impl Schedule {
             // Update queue entry based on enabled state
             if enabled {
                 // Re-enabling: create queue entry if it doesn't exist, or update next_scan_time
-                let queue_exists: bool = conn.query_row(
-                    "SELECT COUNT(*) FROM scan_queue WHERE schedule_id = ?",
-                    [schedule_id],
-                    |row| row.get::<_, i64>(0),
-                )
-                .map(|count| count > 0)
-                .map_err(FsPulseError::DatabaseError)?;
+                let queue_exists: bool = c
+                    .query_row(
+                        "SELECT COUNT(*) FROM scan_queue WHERE schedule_id = ?",
+                        [schedule_id],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .map(|count| count > 0)
+                    .map_err(FsPulseError::DatabaseError)?;
 
                 if queue_exists {
                     // Update existing queue entry
-                    conn.execute(
+                    c.execute(
                         "UPDATE scan_queue SET next_scan_time = ? WHERE schedule_id = ?",
                         rusqlite::params![next_scan_time.unwrap(), schedule_id],
                     )
@@ -713,10 +802,11 @@ impl Schedule {
                 } else {
                     // Create new queue entry (shouldn't normally happen, but handle it)
                     // Need to get schedule details
-                    let schedule = Self::get_by_id(conn, schedule_id)?
-                        .ok_or_else(|| FsPulseError::Error(format!("Schedule {} not found", schedule_id)))?;
+                    let schedule = Self::get_by_id(c, schedule_id)?.ok_or_else(|| {
+                        FsPulseError::Error(format!("Schedule {} not found", schedule_id))
+                    })?;
 
-                    conn.execute(
+                    c.execute(
                         "INSERT INTO scan_queue (
                             root_id, schedule_id, scan_id, next_scan_time,
                             hash_mode, validate_mode, source, created_at
@@ -735,9 +825,9 @@ impl Schedule {
                 }
             } else {
                 // Disabling: set next_scan_time to NULL
-                conn.execute(
+                c.execute(
                     "UPDATE scan_queue SET next_scan_time = NULL WHERE schedule_id = ?",
-                    [schedule_id]
+                    [schedule_id],
                 )
                 .map_err(FsPulseError::DatabaseError)?;
             }
@@ -752,39 +842,45 @@ impl Schedule {
     /// Fails if a scan is currently running for this schedule
     ///
     /// IMPORTANT: Caller must hold an immediate transaction
-    pub fn delete_immediate(conn: &rusqlite::Connection, schedule_id: i64) -> Result<(), FsPulseError> {
+    pub fn delete_immediate(
+        conn: &rusqlite::Connection,
+        schedule_id: i64,
+    ) -> Result<(), FsPulseError> {
         // Check if scan is currently running for this schedule
-        let scan_id: Option<Option<i64>> = conn.query_row(
-            "SELECT scan_id FROM scan_queue WHERE schedule_id = ?",
-            [schedule_id],
-            |row| row.get(0)
-        )
-        .optional()
-        .map_err(FsPulseError::DatabaseError)?;
+        let scan_id: Option<Option<i64>> = conn
+            .query_row(
+                "SELECT scan_id FROM scan_queue WHERE schedule_id = ?",
+                [schedule_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?;
 
         // scan_id is Some(Some(id)) if queue entry exists with a running scan
         // scan_id is Some(None) if queue entry exists but no scan running
         // scan_id is None if no queue entry exists
         if let Some(Some(_)) = scan_id {
             return Err(FsPulseError::Error(
-                "Cannot delete schedule while scan is in progress. Stop the scan first.".to_string()
+                "Cannot delete schedule while scan is in progress. Stop the scan first."
+                    .to_string(),
             ));
         }
 
         // Delete queue entry first (references schedule_id)
         conn.execute(
             "DELETE FROM scan_queue WHERE schedule_id = ?",
-            [schedule_id]
+            [schedule_id],
         )
         .map_err(FsPulseError::DatabaseError)?;
 
         // Soft delete the schedule by setting deleted_at timestamp
-        let rows_affected = conn.execute(
-            "UPDATE scan_schedules SET deleted_at = strftime('%s', 'now', 'utc')
+        let rows_affected = conn
+            .execute(
+                "UPDATE scan_schedules SET deleted_at = strftime('%s', 'now', 'utc')
              WHERE schedule_id = ? AND deleted_at IS NULL",
-            [schedule_id]
-        )
-        .map_err(FsPulseError::DatabaseError)?;
+                [schedule_id],
+            )
+            .map_err(FsPulseError::DatabaseError)?;
 
         if rows_affected == 0 {
             return Err(FsPulseError::Error(format!(
@@ -795,7 +891,6 @@ impl Schedule {
 
         Ok(())
     }
-
 }
 
 /// A scan queue entry
@@ -803,8 +898,8 @@ impl Schedule {
 pub struct QueueEntry {
     pub queue_id: i64,
     pub root_id: i64,
-    pub schedule_id: Option<i64>,  // NULL for manual scans
-    pub scan_id: Option<i64>,      // NULL until scan starts, set by ScanManager
+    pub schedule_id: Option<i64>, // NULL for manual scans
+    pub scan_id: Option<i64>,     // NULL until scan starts, set by ScanManager
 
     // When this work should run (Unix timestamp, UTC)
     // NULL when schedule is disabled
@@ -818,9 +913,8 @@ pub struct QueueEntry {
     pub source: SourceType,
 
     // Metadata
-    pub created_at: i64,  // Unix timestamp (UTC)
+    pub created_at: i64, // Unix timestamp (UTC)
 }
-
 
 impl QueueEntry {
     // ========================================
@@ -838,13 +932,12 @@ impl QueueEntry {
         let now = chrono::Utc::now().timestamp();
 
         // Verify root exists (within same transaction)
-        let root_exists = conn.query_row(
-            "SELECT 1 FROM roots WHERE root_id = ?",
-            [root_id],
-            |_| Ok(())
-        )
-        .optional()
-        .map_err(FsPulseError::DatabaseError)?;
+        let root_exists = conn
+            .query_row("SELECT 1 FROM roots WHERE root_id = ?", [root_id], |_| {
+                Ok(())
+            })
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?;
 
         if root_exists.is_none() {
             return Err(FsPulseError::Error(format!("Root {} not found", root_id)));
@@ -858,7 +951,7 @@ impl QueueEntry {
             ) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?)",
             rusqlite::params![
                 root_id,
-                now,  // Manual scans run immediately
+                now, // Manual scans run immediately
                 hash_mode.as_i32(),
                 validate_mode.as_i32(),
                 SourceType::Manual.as_i32(),
@@ -880,29 +973,30 @@ impl QueueEntry {
     /// 5. For scheduled scans: calculates next_scan_time (fail-fast before crashes)
     ///
     /// Returns the Scan object ready to be executed, or None if no work available.
-    pub fn get_next_scan(db: &Database) -> Result<Option<Scan>, FsPulseError> {
+    pub fn get_next_scan(conn: &Connection) -> Result<Option<Scan>, FsPulseError> {
         let now = chrono::Utc::now().timestamp();
 
-        db.immediate_transaction(|conn| {
+        Database::immediate_transaction(conn, |c| {
             // Step 1: Check if ANY scan is currently running (resume case)
-            let running_scan_id = conn.query_row(
-                "SELECT scan_id FROM scan_queue WHERE scan_id IS NOT NULL LIMIT 1",
-                [],
-                |row| row.get::<_, i64>(0)
-            )
-            .optional()
-            .map_err(FsPulseError::DatabaseError)?;
+            let running_scan_id = c
+                .query_row(
+                    "SELECT scan_id FROM scan_queue WHERE scan_id IS NOT NULL LIMIT 1",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .map_err(FsPulseError::DatabaseError)?;
 
             if let Some(scan_id) = running_scan_id {
                 // Resume case: return existing incomplete scan
                 // prior to loading - mark it restarted
-                conn.execute(
+                c.execute(
                     "UPDATE scans SET was_restarted = 1 WHERE scan_id = ?",
-                    rusqlite::params![scan_id]
-                    )
-                    .map_err(FsPulseError::DatabaseError)?;
+                    rusqlite::params![scan_id],
+                )
+                .map_err(FsPulseError::DatabaseError)?;
 
-                let scan = Scan::get_by_id_or_latest(conn, Some(scan_id), None)?
+                let scan = Scan::get_by_id_or_latest(c, Some(scan_id), None)?
                     .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?;
 
                 return Ok(Some(scan));
@@ -911,27 +1005,38 @@ impl QueueEntry {
             // Step 2: Find highest priority work (manual first, then scheduled due)
             // Single query with priority: manual scans (source=0) always first,
             // then scheduled scans (source=1) only if due
-            let work = conn.query_row(
-                "SELECT queue_id, root_id, schedule_id, hash_mode, validate_mode
+            let work = c
+                .query_row(
+                    "SELECT queue_id, root_id, schedule_id, hash_mode, validate_mode
                  FROM scan_queue
                  WHERE scan_id IS NULL AND (source = ? OR next_scan_time <= ?)
                  ORDER BY source ASC, next_scan_time ASC, queue_id ASC
                  LIMIT 1",
-                rusqlite::params![SourceType::Manual.as_i32(), now],
-                |row| {
-                    Ok((
-                        row.get::<_, i64>(0)?,  // queue_id
-                        row.get::<_, i64>(1)?,  // root_id
-                        row.get::<_, Option<i64>>(2)?,  // schedule_id
-                        HashMode::from_i32(row.get(3)?)
-                            .ok_or_else(|| rusqlite::Error::InvalidColumnType(3, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
-                        ValidateMode::from_i32(row.get(4)?)
-                            .ok_or_else(|| rusqlite::Error::InvalidColumnType(4, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
-                    ))
-                }
-            )
-            .optional()
-            .map_err(FsPulseError::DatabaseError)?;
+                    rusqlite::params![SourceType::Manual.as_i32(), now],
+                    |row| {
+                        Ok((
+                            row.get::<_, i64>(0)?,         // queue_id
+                            row.get::<_, i64>(1)?,         // root_id
+                            row.get::<_, Option<i64>>(2)?, // schedule_id
+                            HashMode::from_i32(row.get(3)?).ok_or_else(|| {
+                                rusqlite::Error::InvalidColumnType(
+                                    3,
+                                    "hash_mode".to_string(),
+                                    rusqlite::types::Type::Integer,
+                                )
+                            })?,
+                            ValidateMode::from_i32(row.get(4)?).ok_or_else(|| {
+                                rusqlite::Error::InvalidColumnType(
+                                    4,
+                                    "validate_mode".to_string(),
+                                    rusqlite::types::Type::Integer,
+                                )
+                            })?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(FsPulseError::DatabaseError)?;
 
             let work = match work {
                 Some(w) => w,
@@ -941,31 +1046,33 @@ impl QueueEntry {
             let (queue_id, root_id, schedule_id, hash_mode, validate_mode) = work;
 
             // Step 3: Get root for scan creation
-            let root = Root::get_by_id(conn, root_id)?
+            let root = Root::get_by_id(c, root_id)?
                 .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", root_id)))?;
 
             // Step 4: Create analysis spec and scan
             let analysis_spec = AnalysisSpec::from_modes(hash_mode, validate_mode);
-            let scan = Scan::create(conn, &root, schedule_id, &analysis_spec)?;
+            let scan = Scan::create(c, &root, schedule_id, &analysis_spec)?;
 
             // Step 5: Update queue entry with scan_id
-            conn.execute(
+            c.execute(
                 "UPDATE scan_queue SET scan_id = ? WHERE queue_id = ?",
-                rusqlite::params![scan.scan_id(), queue_id]
+                rusqlite::params![scan.scan_id(), queue_id],
             )
             .map_err(FsPulseError::DatabaseError)?;
 
             // Step 6: For scheduled scans, calculate and set next_scan_time NOW
             if let Some(schedule_id) = schedule_id {
-                let schedule = Schedule::get_by_id(conn, schedule_id)?
-                    .ok_or_else(|| FsPulseError::Error(format!("Schedule {} not found", schedule_id)))?;
+                let schedule = Schedule::get_by_id(c, schedule_id)?.ok_or_else(|| {
+                    FsPulseError::Error(format!("Schedule {} not found", schedule_id))
+                })?;
 
-                let next_time = schedule.calculate_next_scan_time(now)
-                    .map_err(|e| FsPulseError::Error(format!("Failed to calculate next scan time: {}", e)))?;
+                let next_time = schedule.calculate_next_scan_time(now).map_err(|e| {
+                    FsPulseError::Error(format!("Failed to calculate next scan time: {}", e))
+                })?;
 
-                conn.execute(
+                c.execute(
                     "UPDATE scan_queue SET next_scan_time = ? WHERE queue_id = ?",
-                    rusqlite::params![next_time, queue_id]
+                    rusqlite::params![next_time, queue_id],
                 )
                 .map_err(FsPulseError::DatabaseError)?;
             }
@@ -976,12 +1083,12 @@ impl QueueEntry {
 
     /// Complete work and clean up queue entry
     /// Verifies scan is in final state before updating queue
-    pub fn complete_work(db: &Database, scan_id: i64) -> Result<(), FsPulseError> {
+    pub fn complete_work(conn: &Connection, scan_id: i64) -> Result<(), FsPulseError> {
         use crate::scans::ScanState;
 
-        db.immediate_transaction(|conn| {
+        Database::immediate_transaction(conn, |c| {
             // 1. Get scan and verify state
-            let scan = Scan::get_by_id_or_latest(conn, Some(scan_id), None)?
+            let scan = Scan::get_by_id_or_latest(c, Some(scan_id), None)?
                 .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?;
 
             let is_final = matches!(
@@ -1003,33 +1110,44 @@ impl QueueEntry {
             }
 
             // 2. Find queue entry
-            let queue_entry = conn.query_row(
-                "SELECT queue_id, source FROM scan_queue WHERE scan_id = ?",
-                [scan_id],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?))
-            )
-            .optional()
-            .map_err(FsPulseError::DatabaseError)?;
+            let queue_entry = c
+                .query_row(
+                    "SELECT queue_id, source FROM scan_queue WHERE scan_id = ?",
+                    [scan_id],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?)),
+                )
+                .optional()
+                .map_err(FsPulseError::DatabaseError)?;
 
             let (queue_id, source) = match queue_entry {
                 Some(e) => e,
                 None => {
-                    log::warn!("No queue entry found for scan {} during completion", scan_id);
+                    log::warn!(
+                        "No queue entry found for scan {} during completion",
+                        scan_id
+                    );
                     return Ok(()); // Not fatal - maybe already cleaned up
                 }
             };
 
             // 3. Clean up based on source
             if source == SourceType::Manual.as_i32() {
-                conn.execute("DELETE FROM scan_queue WHERE queue_id = ?", [queue_id])
+                c.execute("DELETE FROM scan_queue WHERE queue_id = ?", [queue_id])
                     .map_err(FsPulseError::DatabaseError)?;
                 log::debug!("Deleted manual scan queue entry {}", queue_id);
             } else if source == SourceType::Scheduled.as_i32() {
-                conn.execute("UPDATE scan_queue SET scan_id = NULL WHERE queue_id = ?", [queue_id])
-                    .map_err(FsPulseError::DatabaseError)?;
+                c.execute(
+                    "UPDATE scan_queue SET scan_id = NULL WHERE queue_id = ?",
+                    [queue_id],
+                )
+                .map_err(FsPulseError::DatabaseError)?;
                 log::debug!("Cleared scan_id for scheduled queue entry {}", queue_id);
             } else {
-                log::error!("Unknown source type {} for queue entry {}", source, queue_id);
+                log::error!(
+                    "Unknown source type {} for queue entry {}",
+                    source,
+                    queue_id
+                );
             }
 
             Ok(())
@@ -1040,9 +1158,12 @@ impl QueueEntry {
     /// Returns queue entries with root_path and schedule_name joined
     /// Limited to next 10 upcoming scans, ordered by priority (manual first, then by time)
     /// If scans_are_paused is true, includes the in-progress scan (with scan_id) as first row
-    pub fn get_upcoming_scans(db: &Database, limit: i64, scans_are_paused: bool) -> Result<Vec<UpcomingScan>, FsPulseError> {
+    pub fn get_upcoming_scans(
+        limit: i64,
+        scans_are_paused: bool,
+    ) -> Result<Vec<UpcomingScan>, FsPulseError> {
         let now = chrono::Utc::now().timestamp();
-        let conn = db.conn();
+        let conn = Database::get_connection()?;
 
         // Build WHERE clause based on pause state
         let where_clause = if scans_are_paused {
@@ -1072,29 +1193,34 @@ impl QueueEntry {
             where_clause
         );
 
-        let mut stmt = conn.prepare(&query)
-            .map_err(FsPulseError::DatabaseError)?;
+        let mut stmt = conn.prepare(&query).map_err(FsPulseError::DatabaseError)?;
 
-        let scans = stmt.query_map([limit], |row| {
-            let next_scan_time: i64 = row.get(5)?;
-            let source: i32 = row.get(6)?;
+        let scans = stmt
+            .query_map([limit], |row| {
+                let next_scan_time: i64 = row.get(5)?;
+                let source: i32 = row.get(6)?;
 
-            Ok(UpcomingScan {
-                queue_id: row.get(0)?,
-                root_id: row.get(1)?,
-                root_path: row.get(2)?,
-                schedule_id: row.get(3)?,
-                schedule_name: row.get(4)?,
-                next_scan_time,
-                source: SourceType::from_i32(source)
-                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(6, "source".to_string(), rusqlite::types::Type::Integer))?,
-                is_queued: next_scan_time <= now,
-                scan_id: row.get(7)?,
+                Ok(UpcomingScan {
+                    queue_id: row.get(0)?,
+                    root_id: row.get(1)?,
+                    root_path: row.get(2)?,
+                    schedule_id: row.get(3)?,
+                    schedule_name: row.get(4)?,
+                    next_scan_time,
+                    source: SourceType::from_i32(source).ok_or_else(|| {
+                        rusqlite::Error::InvalidColumnType(
+                            6,
+                            "source".to_string(),
+                            rusqlite::types::Type::Integer,
+                        )
+                    })?,
+                    is_queued: next_scan_time <= now,
+                    scan_id: row.get(7)?,
+                })
             })
-        })
-        .map_err(FsPulseError::DatabaseError)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(FsPulseError::DatabaseError)?;
+            .map_err(FsPulseError::DatabaseError)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(FsPulseError::DatabaseError)?;
 
         Ok(scans)
     }
@@ -1102,8 +1228,8 @@ impl QueueEntry {
 
 /// Count active schedules for a specific root
 /// Returns the number of enabled schedules for the given root
-pub fn count_schedules_for_root(db: &Database, root_id: i64) -> Result<i64, FsPulseError> {
-    let conn = db.conn();
+pub fn count_schedules_for_root(root_id: i64) -> Result<i64, FsPulseError> {
+    let conn = Database::get_connection()?;
 
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM scan_schedules WHERE root_id = ? AND enabled = 1 AND deleted_at IS NULL",
@@ -1136,13 +1262,14 @@ pub fn root_has_active_scan_immediate(
     conn: &rusqlite::Connection,
     root_id: i64,
 ) -> Result<bool, FsPulseError> {
-    let has_active_scan: bool = conn.query_row(
-        "SELECT COUNT(*) FROM scan_queue WHERE root_id = ? AND scan_id IS NOT NULL",
-        [root_id],
-        |row| row.get::<_, i64>(0)
-    )
-    .map(|count| count > 0)
-    .map_err(FsPulseError::DatabaseError)?;
+    let has_active_scan: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM scan_queue WHERE root_id = ? AND scan_id IS NOT NULL",
+            [root_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|count| count > 0)
+        .map_err(FsPulseError::DatabaseError)?;
 
     Ok(has_active_scan)
 }
@@ -1171,17 +1298,14 @@ pub fn delete_schedules_for_root_immediate(
     root_id: i64,
 ) -> Result<(), FsPulseError> {
     // Delete queue entries first (they reference schedule_id)
-    conn.execute(
-        "DELETE FROM scan_queue WHERE root_id = ?",
-        [root_id]
-    )
-    .map_err(FsPulseError::DatabaseError)?;
+    conn.execute("DELETE FROM scan_queue WHERE root_id = ?", [root_id])
+        .map_err(FsPulseError::DatabaseError)?;
 
     // Soft delete schedules by setting deleted_at timestamp
     conn.execute(
         "UPDATE scan_schedules SET deleted_at = strftime('%s', 'now', 'utc')
          WHERE root_id = ? AND deleted_at IS NULL",
-        [root_id]
+        [root_id],
     )
     .map_err(FsPulseError::DatabaseError)?;
 
@@ -1195,11 +1319,11 @@ pub struct UpcomingScan {
     pub root_id: i64,
     pub root_path: String,
     pub schedule_id: Option<i64>,
-    pub schedule_name: Option<String>,  // NULL for manual scans
-    pub next_scan_time: i64,  // Unix timestamp
+    pub schedule_name: Option<String>, // NULL for manual scans
+    pub next_scan_time: i64,           // Unix timestamp
     pub source: SourceType,
-    pub is_queued: bool,  // true if next_scan_time <= now (waiting to start)
-    pub scan_id: Option<i64>,  // Non-null if this is an in-progress scan that is paused
+    pub is_queued: bool,      // true if next_scan_time <= now (waiting to start)
+    pub scan_id: Option<i64>, // Non-null if this is an in-progress scan that is paused
 }
 
 /// Schedule with root path and next scan time
@@ -1213,8 +1337,8 @@ pub struct ScheduleWithRoot {
 
 /// List all schedules with root information and next scan time
 /// Only returns non-deleted schedules, ordered by schedule name
-pub fn list_schedules(db: &Database) -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
-    let conn = db.conn();
+pub fn list_schedules() -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
+    let conn = Database::get_connection()?;
 
     let mut stmt = conn.prepare(
         "SELECT
@@ -1229,7 +1353,7 @@ pub fn list_schedules(db: &Database) -> Result<Vec<ScheduleWithRoot>, FsPulseErr
         INNER JOIN roots r ON s.root_id = r.root_id
         LEFT JOIN scan_queue q ON s.schedule_id = q.schedule_id
         WHERE s.deleted_at IS NULL
-        ORDER BY s.schedule_name COLLATE NOCASE ASC"
+        ORDER BY s.schedule_name COLLATE NOCASE ASC",
     )?;
 
     let schedules = stmt.query_map([], |row| {
@@ -1239,21 +1363,43 @@ pub fn list_schedules(db: &Database) -> Result<Vec<ScheduleWithRoot>, FsPulseErr
                 root_id: row.get(1)?,
                 enabled: row.get(2)?,
                 schedule_name: row.get(3)?,
-                schedule_type: ScheduleType::from_i32(row.get(4)?)
-                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(4, "schedule_type".to_string(), rusqlite::types::Type::Integer))?,
+                schedule_type: ScheduleType::from_i32(row.get(4)?).ok_or_else(|| {
+                    rusqlite::Error::InvalidColumnType(
+                        4,
+                        "schedule_type".to_string(),
+                        rusqlite::types::Type::Integer,
+                    )
+                })?,
                 time_of_day: row.get(5)?,
                 days_of_week: row.get(6)?,
                 day_of_month: row.get(7)?,
                 interval_value: row.get(8)?,
-                interval_unit: row.get::<_, Option<i32>>(9)?
-                    .map(|v| IntervalUnit::from_i32(v).ok_or_else(||
-                        rusqlite::Error::InvalidColumnType(9, "interval_unit".to_string(), rusqlite::types::Type::Integer)
-                    ))
+                interval_unit: row
+                    .get::<_, Option<i32>>(9)?
+                    .map(|v| {
+                        IntervalUnit::from_i32(v).ok_or_else(|| {
+                            rusqlite::Error::InvalidColumnType(
+                                9,
+                                "interval_unit".to_string(),
+                                rusqlite::types::Type::Integer,
+                            )
+                        })
+                    })
                     .transpose()?,
-                hash_mode: HashMode::from_i32(row.get(10)?)
-                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(10, "hash_mode".to_string(), rusqlite::types::Type::Integer))?,
-                validate_mode: ValidateMode::from_i32(row.get(11)?)
-                    .ok_or_else(|| rusqlite::Error::InvalidColumnType(11, "validate_mode".to_string(), rusqlite::types::Type::Integer))?,
+                hash_mode: HashMode::from_i32(row.get(10)?).ok_or_else(|| {
+                    rusqlite::Error::InvalidColumnType(
+                        10,
+                        "hash_mode".to_string(),
+                        rusqlite::types::Type::Integer,
+                    )
+                })?,
+                validate_mode: ValidateMode::from_i32(row.get(11)?).ok_or_else(|| {
+                    rusqlite::Error::InvalidColumnType(
+                        11,
+                        "validate_mode".to_string(),
+                        rusqlite::types::Type::Integer,
+                    )
+                })?,
                 created_at: row.get(12)?,
                 updated_at: row.get(13)?,
             },
@@ -1269,11 +1415,12 @@ pub fn list_schedules(db: &Database) -> Result<Vec<ScheduleWithRoot>, FsPulseErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{TimeZone, Local};
+    use chrono::{Local, TimeZone};
 
     // Base time for all tests: Wednesday, January 15, 2025, 10:30:00 local time
     fn base_time() -> i64 {
-        Local.with_ymd_and_hms(2025, 1, 15, 10, 30, 0)
+        Local
+            .with_ymd_and_hms(2025, 1, 15, 10, 30, 0)
             .single()
             .unwrap()
             .timestamp()
@@ -1325,7 +1472,7 @@ mod tests {
             enabled: true,
             schedule_name: "Daily scan".to_string(),
             schedule_type: ScheduleType::Daily,
-            time_of_day: None,  // Missing!
+            time_of_day: None, // Missing!
             days_of_week: None,
             day_of_month: None,
             interval_value: None,
@@ -1369,7 +1516,7 @@ mod tests {
             enabled: true,
             schedule_name: "Daily scan".to_string(),
             schedule_type: ScheduleType::Daily,
-            time_of_day: Some("25:00".to_string()),  // Invalid hour
+            time_of_day: Some("25:00".to_string()), // Invalid hour
             days_of_week: None,
             day_of_month: None,
             interval_value: None,
@@ -1437,7 +1584,7 @@ mod tests {
             schedule_type: ScheduleType::Monthly,
             time_of_day: Some("02:00".to_string()),
             days_of_week: None,
-            day_of_month: Some(32),  // Invalid day
+            day_of_month: Some(32), // Invalid day
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::New,
@@ -1552,7 +1699,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be today at 14:00
-        let expected = Local.with_ymd_and_hms(2025, 1, 15, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 15, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1584,7 +1732,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be tomorrow at 09:00
-        let expected = Local.with_ymd_and_hms(2025, 1, 16, 9, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 16, 9, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1616,7 +1765,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be today (Wednesday) at 14:00
-        let expected = Local.with_ymd_and_hms(2025, 1, 15, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 15, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1648,7 +1798,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be next Wednesday (Jan 22) at 09:00
-        let expected = Local.with_ymd_and_hms(2025, 1, 22, 9, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 22, 9, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1680,7 +1831,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be next Monday (Jan 20) at 14:00
-        let expected = Local.with_ymd_and_hms(2025, 1, 20, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 20, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1712,7 +1864,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be today (Wednesday) at 14:00 since time hasn't passed
-        let expected = Local.with_ymd_and_hms(2025, 1, 15, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 15, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1744,7 +1897,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be next Monday (Jan 20) at 14:00
-        let expected = Local.with_ymd_and_hms(2025, 1, 20, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 20, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1776,7 +1930,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be January 20, 2025 at 14:00
-        let expected = Local.with_ymd_and_hms(2025, 1, 20, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 20, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1808,7 +1963,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be February 10, 2025 at 14:00
-        let expected = Local.with_ymd_and_hms(2025, 2, 10, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 2, 10, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1840,7 +1996,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should be January 31, 2025 at 14:00 (Jan has 31 days)
-        let expected = Local.with_ymd_and_hms(2025, 1, 31, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 1, 31, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1852,7 +2009,8 @@ mod tests {
         // Base: Wed Feb 12, 2025 10:30 (mid-February)
         // Schedule: Monthly on day 31 at 14:00
         // Should skip February (only 28 days) and return March 31
-        let base = Local.with_ymd_and_hms(2025, 2, 12, 10, 30, 0)
+        let base = Local
+            .with_ymd_and_hms(2025, 2, 12, 10, 30, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1877,7 +2035,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should skip Feb and be March 31, 2025 at 14:00
-        let expected = Local.with_ymd_and_hms(2025, 3, 31, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 3, 31, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1889,7 +2048,8 @@ mod tests {
         // Base: Wed Feb 12, 2025 10:30
         // Schedule: Monthly on day 30 at 14:00
         // Should skip February and return March 30
-        let base = Local.with_ymd_and_hms(2025, 2, 12, 10, 30, 0)
+        let base = Local
+            .with_ymd_and_hms(2025, 2, 12, 10, 30, 0)
             .single()
             .unwrap()
             .timestamp();
@@ -1914,7 +2074,8 @@ mod tests {
         let next = schedule.calculate_next_scan_time(base).unwrap();
 
         // Should skip Feb and be March 30, 2025 at 14:00
-        let expected = Local.with_ymd_and_hms(2025, 3, 30, 14, 0, 0)
+        let expected = Local
+            .with_ymd_and_hms(2025, 3, 30, 14, 0, 0)
             .single()
             .unwrap()
             .timestamp();

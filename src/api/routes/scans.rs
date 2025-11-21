@@ -1,3 +1,5 @@
+use crate::database::Database;
+use crate::scans::{ScanHistoryRow, ScanStats};
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -10,14 +12,11 @@ use axum::{
 use log::error;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use crate::database::Database;
-use crate::scans::{ScanStats, ScanHistoryRow};
 
 /// Shared application state
 /// ScanManager is now a global singleton, so AppState is empty
 #[derive(Clone)]
-pub struct AppState {
-}
+pub struct AppState {}
 
 impl AppState {
     pub fn new() -> Self {
@@ -29,7 +28,7 @@ impl AppState {
 #[derive(Debug, Deserialize)]
 pub struct ScheduleScanRequest {
     pub root_id: i64,
-    pub hash_mode: String,    // "None", "New", "All"
+    pub hash_mode: String,     // "None", "New", "All"
     pub validate_mode: String, // "None", "New", "All"
 }
 
@@ -44,8 +43,7 @@ pub async fn schedule_scan(
     use crate::scan_manager::ScanManager;
     use crate::scans::{HashMode, ValidateMode};
 
-    let db = Database::new()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Parse scan options
     let hash_mode = match req.hash_mode.as_str() {
@@ -69,15 +67,16 @@ pub async fn schedule_scan(
     };
 
     // Schedule manual scan (creates queue entry and tries to start it)
-    ScanManager::schedule_manual_scan(&db, req.root_id, hash_mode, validate_mode)
-        .map_err(|e| {
+    ScanManager::schedule_manual_scan(&conn, req.root_id, hash_mode, validate_mode).map_err(
+        |e| {
             error!("Failed to schedule manual scan: {}", e);
             if e.to_string().contains("Root not found") {
                 StatusCode::NOT_FOUND
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
-        })?;
+        },
+    )?;
 
     log::info!("Manual scan scheduled for root {}", req.root_id);
 
@@ -104,8 +103,8 @@ async fn handle_scan_progress(mut socket: WebSocket) {
     // Send initial state to client immediately upon connection
     // This is the handshake that ensures clients always know the current state
     log::info!("[WS] Broadcasting current state to new client");
-    
-    // Immediately broadcast status. Terminal status is only sent from 
+
+    // Immediately broadcast status. Terminal status is only sent from
     ScanManager::broadcast_current_state(false);
 
     // Stream broadcast messages (ActiveScan or NoActiveScan)
@@ -183,7 +182,7 @@ pub async fn stop_scan(
 /// Request structure for setting pause
 #[derive(Debug, Deserialize)]
 pub struct PauseRequest {
-    pub duration_seconds: i64,  // -1 for indefinite
+    pub duration_seconds: i64, // -1 for indefinite
 }
 
 /// POST /api/pause
@@ -194,10 +193,9 @@ pub async fn set_pause(
 ) -> Result<StatusCode, StatusCode> {
     use crate::scan_manager::ScanManager;
 
-    let db = Database::new()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    ScanManager::set_pause(&db, req.duration_seconds).map_err(|e| {
+    ScanManager::set_pause(&conn, req.duration_seconds).map_err(|e| {
         error!("Failed to set pause: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -208,17 +206,14 @@ pub async fn set_pause(
 
 /// DELETE /api/pause
 /// Clear pause - allows scanning to resume
-pub async fn clear_pause(
-    State(_state): State<AppState>,
-) -> Result<StatusCode, StatusCode> {
+pub async fn clear_pause(State(_state): State<AppState>) -> Result<StatusCode, StatusCode> {
     use crate::scan_manager::ScanManager;
 
-    let db = Database::new()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    ScanManager::clear_pause(&db).map_err(|e| {
+    ScanManager::clear_pause(&conn).map_err(|e| {
         error!("Failed to clear pause: {}", e);
-        StatusCode::BAD_REQUEST  // 400 - likely tried to unpause while scan unwinding
+        StatusCode::BAD_REQUEST // 400 - likely tried to unpause while scan unwinding
     })?;
 
     log::info!("Pause cleared");
@@ -239,12 +234,12 @@ pub async fn get_current_scan(
 /// GET /api/home/last-scan-stats
 /// Get statistics for the most recent scan (used by Home page dashboard)
 pub async fn get_last_scan_stats() -> Result<Json<Value>, StatusCode> {
-    let db = Database::new().map_err(|e| {
+    let conn = Database::get_connection().map_err(|e| {
         eprintln!("Database error: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    match ScanStats::get_latest(&db) {
+    match ScanStats::get_latest(&conn) {
         Ok(Some(stats)) => Ok(Json(json!({
             "state": "last_scan",
             "scan_id": stats.scan_id,
@@ -313,14 +308,12 @@ pub struct ScanHistoryFetchResponse {
 pub async fn get_scan_history_count(
     Query(params): Query<ScanHistoryCountParams>,
 ) -> Result<Json<ScanHistoryCountResponse>, StatusCode> {
-    let db = Database::new()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let count = crate::scans::get_scan_history_count(&db, params.root_id)
-        .map_err(|e| {
-            error!("Failed to get scan history count: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let count = crate::scans::get_scan_history_count(&conn, params.root_id).map_err(|e| {
+        error!("Failed to get scan history count: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(ScanHistoryCountResponse { count }))
 }
@@ -331,10 +324,9 @@ pub async fn get_scan_history_count(
 pub async fn get_scan_history_fetch(
     Query(params): Query<ScanHistoryFetchParams>,
 ) -> Result<Json<ScanHistoryFetchResponse>, StatusCode> {
-    let db = Database::new()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let scans = crate::scans::get_scan_history(&db, params.root_id, params.limit, params.offset)
+    let scans = crate::scans::get_scan_history(&conn, params.root_id, params.limit, params.offset)
         .map_err(|e| {
             error!("Failed to get scan history: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR

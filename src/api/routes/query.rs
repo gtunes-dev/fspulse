@@ -2,9 +2,11 @@ use axum::{extract::Path, http::StatusCode, Json};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 
-use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::query::columns::{ALERTS_QUERY_COLS, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS, ColMap, ColSpec, ColType};
+use crate::query::columns::{
+    ColMap, ColSpec, ColType, ALERTS_QUERY_COLS, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS,
+    ROOTS_QUERY_COLS, SCANS_QUERY_COLS,
+};
 use crate::query::{ColAlign, QueryProcessor};
 
 /// Request structure for count/fetch endpoints
@@ -164,8 +166,6 @@ pub async fn count_query(
     Path(domain): Path<String>,
     Json(req): Json<QueryRequest>,
 ) -> Result<Json<CountResponse>, StatusCode> {
-    let db = Database::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
     // Build count query (just domain + filters, no SHOW/ORDER/LIMIT/OFFSET)
     let count_query_str = match build_count_query_string(&domain, &req) {
         Ok(s) => s,
@@ -178,7 +178,7 @@ pub async fn count_query(
     debug!("Count query: {}", count_query_str);
 
     // Execute count query
-    let count = match QueryProcessor::execute_query_count(&db, &count_query_str) {
+    let count = match QueryProcessor::execute_query_count(&count_query_str) {
         Ok(count) => count,
         Err(e) => {
             error!("Count query failed: {}", e);
@@ -195,8 +195,6 @@ pub async fn fetch_query(
     Path(domain): Path<String>,
     Json(req): Json<QueryRequest>,
 ) -> Result<Json<FetchResponse>, StatusCode> {
-    let db = Database::new().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
     // Build full query with SHOW/ORDER/LIMIT/OFFSET
     let query_str = match build_query_string(&domain, &req) {
         Ok(s) => s,
@@ -209,13 +207,11 @@ pub async fn fetch_query(
     debug!("Fetch query: {}", query_str);
 
     // Execute fetch query
-    match QueryProcessor::execute_query(&db, &query_str) {
-        Ok((rows, column_headers, _alignments)) => {
-            Ok(Json(FetchResponse {
-                columns: column_headers,
-                rows,
-            }))
-        }
+    match QueryProcessor::execute_query(&query_str) {
+        Ok((rows, column_headers, _alignments)) => Ok(Json(FetchResponse {
+            columns: column_headers,
+            rows,
+        })),
         Err(e) => {
             error!("Fetch query failed: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -228,22 +224,17 @@ pub async fn fetch_query(
 pub async fn fetch_override_query(
     Json(req): Json<RawQueryRequest>,
 ) -> Result<Json<RawQueryResponse>, (StatusCode, String)> {
-    let db = Database::new().map_err(|e| {
-        error!("Database connection failed: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "Database connection failed".to_string())
-    })?;
+    debug!(
+        "Executing raw query: {} (limit_override: {}, offset_add: {})",
+        req.query, req.limit_override, req.offset_add
+    );
 
-    debug!("Executing raw query: {} (limit_override: {}, offset_add: {})",
-           req.query, req.limit_override, req.offset_add);
-
-    match QueryProcessor::execute_query_override(&db, &req.query, req.limit_override, req.offset_add) {
-        Ok((rows, column_headers, alignments)) => {
-            Ok(Json(RawQueryResponse {
-                columns: column_headers,
-                rows,
-                alignments,
-            }))
-        }
+    match QueryProcessor::execute_query_override(&req.query, req.limit_override, req.offset_add) {
+        Ok((rows, column_headers, alignments)) => Ok(Json(RawQueryResponse {
+            columns: column_headers,
+            rows,
+            alignments,
+        })),
         Err(e) => {
             let error_msg = e.to_string();
             error!("Raw query execution failed: {}", error_msg);
@@ -257,14 +248,9 @@ pub async fn fetch_override_query(
 pub async fn count_raw_query(
     Json(req): Json<RawCountRequest>,
 ) -> Result<Json<CountResponse>, (StatusCode, String)> {
-    let db = Database::new().map_err(|e| {
-        error!("Database connection failed: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, "Database connection failed".to_string())
-    })?;
-
     debug!("Counting raw query: {}", req.query);
 
-    match QueryProcessor::execute_query_count(&db, &req.query) {
+    match QueryProcessor::execute_query_count(&req.query) {
         Ok(count) => Ok(Json(CountResponse { count })),
         Err(e) => {
             let error_msg = e.to_string();
@@ -342,7 +328,8 @@ fn get_col_map(domain: &str) -> Option<&'static ColMap> {
 
 /// Check if a column is a date type
 fn is_date_column(col_map: &ColMap, col_name: &str) -> bool {
-    col_map.get(col_name)
+    col_map
+        .get(col_name)
         .map(|spec| matches!(spec.col_type, ColType::Date))
         .unwrap_or(false)
 }
@@ -352,8 +339,8 @@ fn build_query_string(domain: &str, req: &QueryRequest) -> Result<String, FsPuls
     let mut query = domain.to_lowercase();
 
     // Get column map for checking date columns
-    let col_map = get_col_map(domain)
-        .ok_or_else(|| FsPulseError::Error("Invalid domain".into()))?;
+    let col_map =
+        get_col_map(domain).ok_or_else(|| FsPulseError::Error("Invalid domain".into()))?;
 
     // Build WHERE clause from filters
     if !req.filters.is_empty() {
@@ -370,11 +357,7 @@ fn build_query_string(domain: &str, req: &QueryRequest) -> Result<String, FsPuls
     }
 
     // Build SHOW clause from visible columns
-    let mut visible_columns: Vec<&ColumnSpec> = req
-        .columns
-        .iter()
-        .filter(|c| c.visible)
-        .collect();
+    let mut visible_columns: Vec<&ColumnSpec> = req.columns.iter().filter(|c| c.visible).collect();
     visible_columns.sort_by_key(|c| c.position);
 
     if !visible_columns.is_empty() {

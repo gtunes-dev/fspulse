@@ -23,10 +23,10 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
+use crate::api;
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::scan_manager::ScanManager;
-use crate::api;
 
 // Embed static files in release builds
 #[cfg(not(debug_assertions))]
@@ -63,8 +63,8 @@ impl WebServer {
         println!("   Running in PRODUCTION mode - serving embedded assets");
 
         // Initialize pause state from database
-        let db = Database::new()?;
-        ScanManager::init_pause_state(&db)?;
+        let conn = Database::get_connection()?;
+        ScanManager::init_pause_state(&conn)?;
 
         // Create shutdown channel for background tasks
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
@@ -79,15 +79,15 @@ impl WebServer {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        let db = match Database::new() {
-                            Ok(db) => db,
+                        let conn = match Database::get_connection() {
+                            Ok(conn) => conn,
                             Err(e) => {
-                                log::error!("Queue processor: Failed to open database: {}", e);
+                                log::error!("Queue processor: Failed to get database connection: {}", e);
                                 continue;
                             }
                         };
 
-                        if let Err(e) = ScanManager::poll_queue(&db) {
+                        if let Err(e) = ScanManager::poll_queue(&conn) {
                             log::error!("Queue processor error: {}", e);
                         }
                     }
@@ -101,7 +101,8 @@ impl WebServer {
             }
         });
 
-        let listener = TcpListener::bind(addr).await
+        let listener = TcpListener::bind(addr)
+            .await
             .map_err(|e| FsPulseError::Error(format!("Failed to bind to {}: {}", addr, e)))?;
 
         // Set up graceful shutdown handling
@@ -138,65 +139,97 @@ impl WebServer {
         let app = Router::new()
             // Health check
             .route("/health", get(health_check))
-
             // App info
             .route("/api/app-info", get(api::app::get_app_info))
-
             // Home/Dashboard API
-            .route("/api/home/last-scan-stats", get(api::scans::get_last_scan_stats))
-
+            .route(
+                "/api/home/last-scan-stats",
+                get(api::scans::get_last_scan_stats),
+            )
             // Query endpoints
-            .route("/api/query/fetch_override", post(api::query::fetch_override_query))
+            .route(
+                "/api/query/fetch_override",
+                post(api::query::fetch_override_query),
+            )
             .route("/api/query/count_raw", post(api::query::count_raw_query))
-            .route("/api/query/{domain}/metadata", get(api::query::get_metadata))
+            .route(
+                "/api/query/{domain}/metadata",
+                get(api::query::get_metadata),
+            )
             .route("/api/query/{domain}/count", post(api::query::count_query))
             .route("/api/query/{domain}/fetch", post(api::query::fetch_query))
             .route("/api/validate-filter", post(api::query::validate_filter))
-
             // Alert endpoints
-            .route("/api/alerts/{alert_id}/status", put(api::alerts::update_alert_status))
-
+            .route(
+                "/api/alerts/{alert_id}/status",
+                put(api::alerts::update_alert_status),
+            )
             // Scan endpoints
             .route("/api/scans/schedule", post(api::scans::schedule_scan))
             .route("/api/scans/current", get(api::scans::get_current_scan))
             .route("/api/scans/{scan_id}/cancel", post(api::scans::stop_scan))
-            .route("/api/scans/scan_history/count", get(api::scans::get_scan_history_count))
-            .route("/api/scans/scan_history/fetch", get(api::scans::get_scan_history_fetch))
-
+            .route(
+                "/api/scans/scan_history/count",
+                get(api::scans::get_scan_history_count),
+            )
+            .route(
+                "/api/scans/scan_history/fetch",
+                get(api::scans::get_scan_history_fetch),
+            )
             // Pause endpoints
             .route("/api/pause", post(api::scans::set_pause))
             .route("/api/pause", delete(api::scans::clear_pause))
-
             // Root endpoints
             .route("/api/roots", post(api::roots::create_root))
-            .route("/api/roots/with-scans", get(api::roots::get_roots_with_scans))
+            .route(
+                "/api/roots/with-scans",
+                get(api::roots::get_roots_with_scans),
+            )
             .route("/api/roots/{root_id}", delete(api::roots::delete_root))
-
             // Schedule endpoints
             .route("/api/schedules", get(api::schedules::list_schedules))
             .route("/api/schedules", post(api::schedules::create_schedule))
             .route("/api/schedules/{id}", put(api::schedules::update_schedule))
-            .route("/api/schedules/{id}", delete(api::schedules::delete_schedule))
-            .route("/api/schedules/{id}/toggle", patch(api::schedules::toggle_schedule))
-            .route("/api/schedules/upcoming", get(api::schedules::get_upcoming_scans))
-
+            .route(
+                "/api/schedules/{id}",
+                delete(api::schedules::delete_schedule),
+            )
+            .route(
+                "/api/schedules/{id}/toggle",
+                patch(api::schedules::toggle_schedule),
+            )
+            .route(
+                "/api/schedules/upcoming",
+                get(api::schedules::get_upcoming_scans),
+            )
             // Item endpoints
-            .route("/api/items/{item_id}/size-history", get(api::items::get_item_size_history))
-            .route("/api/items/{item_id}/children-counts", get(api::items::get_children_counts))
-            .route("/api/items/immediate-children", get(api::items::get_immediate_children))
-
+            .route(
+                "/api/items/{item_id}/size-history",
+                get(api::items::get_item_size_history),
+            )
+            .route(
+                "/api/items/{item_id}/children-counts",
+                get(api::items::get_children_counts),
+            )
+            .route(
+                "/api/items/immediate-children",
+                get(api::items::get_immediate_children),
+            )
             // Database endpoints
-            .route("/api/database/stats", get(api::database::get_database_stats))
-            .route("/api/database/compact", post(api::database::compact_database))
-
+            .route(
+                "/api/database/stats",
+                get(api::database::get_database_stats),
+            )
+            .route(
+                "/api/database/compact",
+                post(api::database::compact_database),
+            )
             // Settings endpoints
             .route("/api/settings", get(api::settings::get_settings))
             .route("/api/settings", put(api::settings::update_settings))
             .route("/api/settings", delete(api::settings::delete_settings))
-
             // WebSocket routes
             .route("/ws/scans/progress", get(api::scans::scan_progress_ws))
-
             // Add state for handlers
             .with_state(app_state);
 

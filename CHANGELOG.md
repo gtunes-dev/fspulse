@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Database connection handling**: Refactored to use R2D2 connection pool for improved concurrency and resource management
+
 ### Fixed
 - **Settings page**: Active configuration values now readable in light mode with proper background colors
 

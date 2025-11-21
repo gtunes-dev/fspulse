@@ -33,22 +33,17 @@ pub struct Reports {
 }
 
 impl Reports {
-    pub fn report_scans(
-        db: &Database,
-        scan_id: Option<u32>,
-        last: u32,
-    ) -> Result<(), FsPulseError> {
+    pub fn report_scans(scan_id: Option<u32>, last: u32) -> Result<(), FsPulseError> {
         let query = match scan_id {
             Some(scan_id) => &format!("scans where scan_id:({scan_id})"),
             None => &format!("scans order by scan_id desc limit {last}"),
         };
 
         //println!(">> Generated query: {}", query);
-        QueryProcessor::execute_query_and_print(db, query)
+        QueryProcessor::execute_query_and_print(query)
     }
 
     pub fn report_roots(
-        db: &Database,
         root_id: Option<u32>,
         root_path: Option<String>,
     ) -> Result<(), FsPulseError> {
@@ -59,13 +54,12 @@ impl Reports {
         };
 
         //println!("Query: {query}");
-        QueryProcessor::execute_query_and_print(db, query)?;
+        QueryProcessor::execute_query_and_print(query)?;
 
         Ok(())
     }
 
     pub fn report_items(
-        db: &Database,
         item_id: Option<u32>,
         item_path: Option<String>,
         root_id: Option<u32>,
@@ -85,24 +79,24 @@ impl Reports {
                 _ => return Err(FsPulseError::Error("Item reports require additional parameters".into()))
             };
 
-            QueryProcessor::execute_query_and_print(db, query)?;
+            QueryProcessor::execute_query_and_print(query)?;
         } else if let Some(root_id) = root_id {
             // TODO: Does this even make sense???
-            let root = Root::get_by_id(db.conn(), root_id.into())?
+            let conn = Database::get_connection()?;
+            let root = Root::get_by_id(&conn, root_id.into())?
                 .ok_or_else(|| FsPulseError::Error(format!("Root Id {root_id} not found")))?;
 
-            let scan = Scan::get_latest_for_root(db, root.root_id())?.ok_or_else(|| {
+            let scan = Scan::get_latest_for_root(root.root_id())?.ok_or_else(|| {
                 FsPulseError::Error(format!("No latest scan found for Root Id {root_id}"))
             })?;
 
-            Self::print_last_seen_scan_items_as_tree(db, &scan, &root)?;
+            Self::print_last_seen_scan_items_as_tree(&scan, &root)?;
         }
 
         Ok(())
     }
 
     pub fn report_changes(
-        db: &Database,
         change_id: Option<u32>,
         item_id: Option<u32>,
         scan_id: Option<u32>,
@@ -115,10 +109,14 @@ impl Reports {
             (None, None, Some(scan_id)) => {
                 format!("changes where scan_id:({scan_id}) order_by change_id asc")
             }
-            _ => return Err(FsPulseError::Error("Change reports require additional parameters".into()))
+            _ => {
+                return Err(FsPulseError::Error(
+                    "Change reports require additional parameters".into(),
+                ))
+            }
         };
 
-        QueryProcessor::execute_query_and_print(db, &query)?;
+        QueryProcessor::execute_query_and_print(&query)?;
 
         Ok(())
     }
@@ -248,11 +246,7 @@ impl Reports {
     }
     */
 
-    fn print_last_seen_scan_items_as_tree(
-        db: &Database,
-        scan: &Scan,
-        root: &Root,
-    ) -> Result<(), FsPulseError> {
+    fn print_last_seen_scan_items_as_tree(scan: &Scan, root: &Root) -> Result<(), FsPulseError> {
         let title = format!(
             "Items (Root Id: {}, Root Path: '{}'",
             root.root_id(),
@@ -268,7 +262,7 @@ impl Reports {
         let mut path_stack: Vec<PathBuf> = Vec::new();
         let mut item_count = 0;
 
-        Item::for_each_item_in_latest_scan(db, scan.scan_id(), |item| {
+        Item::for_each_item_in_latest_scan(scan.scan_id(), |item| {
             let is_dir = item.item_type() == ItemType::Directory;
 
             let (indent_level, new_path) =
@@ -316,24 +310,36 @@ impl Reports {
 mod tests {
     use super::*;
     use std::path::PathBuf;
-    
+
     #[test]
     fn test_report_format_from_str_valid_cases() {
         assert_eq!("tree".parse::<ReportFormat>().unwrap(), ReportFormat::Tree);
-        assert_eq!("table".parse::<ReportFormat>().unwrap(), ReportFormat::Table);
+        assert_eq!(
+            "table".parse::<ReportFormat>().unwrap(),
+            ReportFormat::Table
+        );
     }
-    
+
     #[test]
     fn test_report_format_from_str_case_insensitive() {
         assert_eq!("TREE".parse::<ReportFormat>().unwrap(), ReportFormat::Tree);
         assert_eq!("Tree".parse::<ReportFormat>().unwrap(), ReportFormat::Tree);
         assert_eq!("tReE".parse::<ReportFormat>().unwrap(), ReportFormat::Tree);
-        
-        assert_eq!("TABLE".parse::<ReportFormat>().unwrap(), ReportFormat::Table);
-        assert_eq!("Table".parse::<ReportFormat>().unwrap(), ReportFormat::Table);
-        assert_eq!("tAbLe".parse::<ReportFormat>().unwrap(), ReportFormat::Table);
+
+        assert_eq!(
+            "TABLE".parse::<ReportFormat>().unwrap(),
+            ReportFormat::Table
+        );
+        assert_eq!(
+            "Table".parse::<ReportFormat>().unwrap(),
+            ReportFormat::Table
+        );
+        assert_eq!(
+            "tAbLe".parse::<ReportFormat>().unwrap(),
+            ReportFormat::Table
+        );
     }
-    
+
     #[test]
     fn test_report_format_from_str_invalid_cases() {
         assert!("invalid".parse::<ReportFormat>().is_err());
@@ -343,7 +349,7 @@ mod tests {
         assert!("Tree ".parse::<ReportFormat>().is_err()); // trailing space should fail
         assert!(" tree".parse::<ReportFormat>().is_err()); // leading space should fail
     }
-    
+
     #[test]
     fn test_report_format_from_str_error_message() {
         let result = "invalid".parse::<ReportFormat>();
@@ -354,82 +360,85 @@ mod tests {
             panic!("Expected FsPulseError::Error");
         }
     }
-    
+
     #[test]
     fn test_report_format_traits() {
         let tree = ReportFormat::Tree;
         let table = ReportFormat::Table;
-        
+
         // Test PartialEq
         assert_eq!(tree, ReportFormat::Tree);
         assert_eq!(table, ReportFormat::Table);
         assert_ne!(tree, table);
-        
+
         // Test Copy
         let tree_copy = tree;
         assert_eq!(tree, tree_copy);
-        
+
         // Test Clone
         let table_clone = table;
         assert_eq!(table, table_clone);
-        
+
         // Test Debug (just ensure it doesn't panic)
         let debug_str = format!("{tree:?}");
         assert!(debug_str.contains("Tree"));
     }
-    
+
     #[test]
     fn test_get_tree_path_root_level_file() {
         let mut path_stack = Vec::new();
         let root_path = Path::new("/test/root");
         let path = "/test/root/file.txt";
-        
-        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
-        
+
+        let (indent_level, processed_path) =
+            Reports::get_tree_path(&mut path_stack, root_path, path, false);
+
         assert_eq!(indent_level, 0);
         assert_eq!(processed_path, PathBuf::from("file.txt"));
         assert!(path_stack.is_empty()); // Files don't get pushed to stack
     }
-    
+
     #[test]
     fn test_get_tree_path_root_level_directory() {
         let mut path_stack = Vec::new();
         let root_path = Path::new("/test/root");
         let path = "/test/root/subdir";
-        
-        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, true);
-        
+
+        let (indent_level, processed_path) =
+            Reports::get_tree_path(&mut path_stack, root_path, path, true);
+
         assert_eq!(indent_level, 0);
         assert_eq!(processed_path, PathBuf::from("subdir"));
         assert_eq!(path_stack.len(), 1); // Directory gets pushed to stack
         assert_eq!(path_stack[0], PathBuf::from("subdir"));
     }
-    
+
     #[test]
     fn test_get_tree_path_nested_file_in_directory() {
         let mut path_stack = vec![PathBuf::from("subdir")];
         let root_path = Path::new("/test/root");
         let path = "/test/root/subdir/file.txt";
-        
-        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
-        
+
+        let (indent_level, processed_path) =
+            Reports::get_tree_path(&mut path_stack, root_path, path, false);
+
         assert_eq!(indent_level, 1);
         assert_eq!(processed_path, PathBuf::from("file.txt"));
         assert_eq!(path_stack.len(), 1); // Stack unchanged for files
     }
-    
+
     #[test]
     fn test_get_tree_path_nested_directory_structure() {
         let mut path_stack = Vec::new();
         let root_path = Path::new("/test/root");
-        
+
         // Add first level directory
         let path1 = "/test/root/level1";
         let (indent1, processed1) = Reports::get_tree_path(&mut path_stack, root_path, path1, true);
         assert_eq!(indent1, 0);
         assert_eq!(processed1, PathBuf::from("level1"));
         assert_eq!(path_stack.len(), 1);
-        
+
         // Add second level directory
         let path2 = "/test/root/level1/level2";
         let (indent2, processed2) = Reports::get_tree_path(&mut path_stack, root_path, path2, true);
@@ -437,7 +446,7 @@ mod tests {
         assert_eq!(processed2, PathBuf::from("level2"));
         assert_eq!(path_stack.len(), 2);
     }
-    
+
     #[test]
     fn test_get_tree_path_stack_pruning() {
         let mut path_stack = vec![
@@ -446,47 +455,50 @@ mod tests {
             PathBuf::from("dir1/subdir1/deep"),
         ];
         let root_path = Path::new("/test/root");
-        
+
         // Access a file in dir1/subdir2 (sibling of subdir1)
         // This should prune the stack back to dir1 level
         let path = "/test/root/dir1/subdir2/file.txt";
-        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
-        
+        let (indent_level, processed_path) =
+            Reports::get_tree_path(&mut path_stack, root_path, path, false);
+
         assert_eq!(indent_level, 2); // After adding subdir2 to stack
         assert_eq!(processed_path, PathBuf::from("file.txt"));
         assert_eq!(path_stack.len(), 2); // Should have pruned to [dir1, dir1/subdir2]
     }
-    
+
     #[test]
     fn test_get_tree_path_complex_nested_file() {
         let mut path_stack = Vec::new();
         let root_path = Path::new("/test/root");
-        
+
         // Test a file deeply nested in directory structure
         let path = "/test/root/level1/level2/level3/file.txt";
-        let (_indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
-        
+        let (_indent_level, processed_path) =
+            Reports::get_tree_path(&mut path_stack, root_path, path, false);
+
         // Should create directory structure and return file
         assert_eq!(processed_path, PathBuf::from("file.txt"));
         // Should have added the parent directory path to stack
         assert_eq!(path_stack.len(), 1);
         assert_eq!(path_stack[0], PathBuf::from("level1/level2/level3"));
     }
-    
-    #[test] 
+
+    #[test]
     fn test_get_tree_path_empty_stack_behavior() {
         let mut path_stack = Vec::new();
         let root_path = Path::new("/root");
-        
+
         // Test with completely empty stack
         let path = "/root/file.txt";
-        let (indent_level, processed_path) = Reports::get_tree_path(&mut path_stack, root_path, path, false);
-        
+        let (indent_level, processed_path) =
+            Reports::get_tree_path(&mut path_stack, root_path, path, false);
+
         assert_eq!(indent_level, 0);
         assert_eq!(processed_path, PathBuf::from("file.txt"));
         assert!(path_stack.is_empty());
     }
-    
+
     #[test]
     fn test_hr_functionality() {
         // This test verifies hr() doesn't panic - actual output testing would require capturing stdout
@@ -495,7 +507,7 @@ mod tests {
         Reports::hr(100);
         // If we get here without panicking, the test passes
     }
-    
+
     #[test]
     fn test_print_center_functionality() {
         // This test verifies print_center() doesn't panic - actual output testing would require capturing stdout
@@ -505,7 +517,7 @@ mod tests {
         Reports::print_center(0, "");
         // If we get here without panicking, the test passes
     }
-    
+
     #[test]
     fn test_print_center_padding_logic() {
         // We can't easily test the actual output, but we can test the padding calculation logic
@@ -515,13 +527,13 @@ mod tests {
         let padding = width - value.len();
         let lpad = padding / 2;
         let rpad = lpad + (padding % 2);
-        
+
         assert_eq!(padding, 16); // 20 - 4 = 16
-        assert_eq!(lpad, 8);      // 16 / 2 = 8
-        assert_eq!(rpad, 8);      // 8 + (16 % 2) = 8 + 0 = 8
+        assert_eq!(lpad, 8); // 16 / 2 = 8
+        assert_eq!(rpad, 8); // 8 + (16 % 2) = 8 + 0 = 8
         assert_eq!(lpad + value.len() + rpad, width); // Total should equal width
     }
-    
+
     #[test]
     fn test_print_center_odd_padding() {
         // Test with odd padding to ensure rpad gets the extra character
@@ -530,10 +542,10 @@ mod tests {
         let padding = width - value.len();
         let lpad = padding / 2;
         let rpad = lpad + (padding % 2);
-        
+
         assert_eq!(padding, 17); // 21 - 4 = 17
-        assert_eq!(lpad, 8);      // 17 / 2 = 8
-        assert_eq!(rpad, 9);      // 8 + (17 % 2) = 8 + 1 = 9
+        assert_eq!(lpad, 8); // 17 / 2 = 8
+        assert_eq!(rpad, 9); // 8 + (17 % 2) = 8 + 1 = 9
         assert_eq!(lpad + value.len() + rpad, width); // Total should equal width
     }
 }

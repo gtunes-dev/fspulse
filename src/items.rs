@@ -1,13 +1,10 @@
 use log::warn;
-use rusqlite::{self, params, OptionalExtension};
+use rusqlite::{self, params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::MAIN_SEPARATOR_STR;
 
 use crate::{
-    database::Database,
-    error::FsPulseError,
-    scans::AnalysisSpec,
-    utils::Utils,
+    database::Database, error::FsPulseError, scans::AnalysisSpec, utils::Utils,
     validate::validator::ValidationState,
 };
 
@@ -102,7 +99,10 @@ impl ItemType {
             2 => ItemType::Symlink,
             3 => ItemType::Other,
             _ => {
-                warn!("Invalid ItemType value in database: {}, defaulting to Other", value);
+                warn!(
+                    "Invalid ItemType value in database: {}, defaulting to Other",
+                    value
+                );
                 ItemType::Other
             }
         }
@@ -141,7 +141,6 @@ impl ItemType {
             _ => None,
         }
     }
-
 }
 
 impl std::fmt::Display for ItemType {
@@ -220,17 +219,8 @@ impl Item {
         })
     }
 
-    #[allow(dead_code)]
-    pub fn get_by_id(db: &Database, id: i64) -> Result<Option<Self>, FsPulseError> {
-        let query = format!("SELECT {} FROM ITEMS WHERE item_id = ?", Item::ITEM_COLUMNS);
-        db.conn()
-            .query_row(&query, params![id], Item::from_row)
-            .optional()
-            .map_err(FsPulseError::DatabaseError)
-    }
-
     pub fn get_by_root_path_type(
-        db: &Database,
+        conn: &Connection,
         root_id: i64,
         path: &str,
         item_type: ItemType,
@@ -240,14 +230,13 @@ impl Item {
             Item::ITEM_COLUMNS
         );
 
-        db.conn()
-            .query_row(
-                &query,
-                params![root_id, path, item_type.as_i64()],
-                Item::from_row,
-            )
-            .optional()
-            .map_err(FsPulseError::DatabaseError)
+        conn.query_row(
+            &query,
+            params![root_id, path, item_type.as_i64()],
+            Item::from_row,
+        )
+        .optional()
+        .map_err(FsPulseError::DatabaseError)
     }
 
     pub fn item_id(&self) -> i64 {
@@ -302,13 +291,13 @@ impl Item {
     }
 
     pub fn get_analysis_counts(
-        db: &Database,
+        conn: &Connection,
         scan_id: i64,
         analysis_spec: &AnalysisSpec,
     ) -> Result<(u64, u64), FsPulseError> {
         let sql = r#"
             WITH candidates AS (
-            SELECT 
+            SELECT
                 i.item_id,
                 i.last_hash_scan,
                 i.file_hash,
@@ -340,13 +329,12 @@ impl Item {
         )
         SELECT
             COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
-            COALESCE(SUM(CASE 
-                WHEN (needs_hash = 1 AND last_hash_scan = $3) 
+            COALESCE(SUM(CASE
+                WHEN (needs_hash = 1 AND last_hash_scan = $3)
                 OR (needs_val = 1 AND last_val_scan = $3)
                 THEN 1 ELSE 0 END), 0) AS total_done
         FROM candidates"#;
 
-        let conn = db.conn();
         let mut stmt = conn.prepare(sql)?;
         let mut rows = stmt.query(params![
             analysis_spec.is_hash() as i64,
@@ -381,7 +369,7 @@ impl Item {
     */
 
     pub fn fetch_next_analysis_batch(
-        db: &Database,
+        conn: &Connection,
         scan_id: i64,
         analysis_spec: &AnalysisSpec,
         last_item_id: i64,
@@ -439,7 +427,7 @@ impl Item {
         LIMIT {limit}"
         );
 
-        let mut stmt = db.conn().prepare(&query)?;
+        let mut stmt = conn.prepare(&query)?;
 
         let rows = stmt.query_map(
             [
@@ -458,44 +446,11 @@ impl Item {
         Ok(analysis_items)
     }
 
-    /*
-    pub fn for_each_invalid_item_in_root<F>(
-        db: &Database,
-        root_id: i64,
-        mut func: F,
-    ) -> Result<(), FsPulseError>
+    pub fn for_each_item_in_latest_scan<F>(scan_id: i64, mut func: F) -> Result<(), FsPulseError>
     where
         F: FnMut(&Item) -> Result<(), FsPulseError>,
     {
-        let sql = format!(
-            "SELECT {}
-             FROM items
-             WHERE root_id = ? AND is_ts = 0 AND val = 2
-             ORDER BY item_path COLLATE natural_path ASC",
-            Item::ITEM_COLUMNS
-        );
-
-        let mut stmt = db.conn().prepare(&sql)?;
-
-        let rows = stmt.query_map([root_id], Item::from_row)?;
-
-        for row in rows {
-            let item = row?;
-            func(&item)?;
-        }
-
-        Ok(())
-    }
-    */
-
-    pub fn for_each_item_in_latest_scan<F>(
-        db: &Database,
-        scan_id: i64,
-        mut func: F,
-    ) -> Result<(), FsPulseError>
-    where
-        F: FnMut(&Item) -> Result<(), FsPulseError>,
-    {
+        let conn = Database::get_connection()?;
         let sql = format!(
             "SELECT {}
              FROM items
@@ -504,7 +459,7 @@ impl Item {
             Item::ITEM_COLUMNS
         );
 
-        let mut stmt = db.conn().prepare(&sql)?;
+        let mut stmt = conn.prepare(&sql)?;
 
         let rows = stmt.query_map([scan_id], Item::from_row)?;
 
@@ -520,10 +475,9 @@ impl Item {
     /// filtered by scan date range. Only includes changes where size_new is not NULL.
     /// Date strings should be in format "yyyy-MM-dd" (e.g., "2025-11-07")
     pub fn get_size_history(
-        db: &Database,
         item_id: i64,
-        from_date_str: &str,  // Date string in format "yyyy-MM-dd"
-        to_date_str: &str,    // Date string in format "yyyy-MM-dd"
+        from_date_str: &str, // Date string in format "yyyy-MM-dd"
+        to_date_str: &str,   // Date string in format "yyyy-MM-dd"
     ) -> Result<Vec<SizeHistoryPoint>, FsPulseError> {
         // Use the same date bounds logic as FsPulse queries
         // This ensures full-day inclusivity (start at 00:00:00, end at 23:59:59)
@@ -538,9 +492,12 @@ impl Item {
               AND s.started_at BETWEEN ? AND ?
             ORDER BY s.started_at ASC"#;
 
-        let conn = db.conn();
+        let conn = Database::get_connection()?;
         let mut stmt = conn.prepare(sql)?;
-        let rows = stmt.query_map(params![item_id, from_timestamp, to_timestamp], SizeHistoryPoint::from_row)?;
+        let rows = stmt.query_map(
+            params![item_id, from_timestamp, to_timestamp],
+            SizeHistoryPoint::from_row,
+        )?;
 
         let mut history = Vec::new();
         for row in rows {
@@ -554,11 +511,10 @@ impl Item {
     /// Returns only the direct children, not nested descendants
     /// Always includes tombstones - filtering should be done client-side
     pub fn get_immediate_children(
-        db: &Database,
         root_id: i64,
         parent_path: &str,
     ) -> Result<Vec<Item>, FsPulseError> {
-        let conn = db.conn();
+        let conn = Database::get_connection()?;
 
         // Build the path prefix for matching
         // Handle root path specially - if parent is "/" then children are like "/folder", not "//folder"
@@ -599,13 +555,10 @@ impl Item {
 
     /// Get counts of children (files and directories) for a directory item
     /// Returns counts of non-tombstone files and directories that are direct or nested children
-    pub fn get_children_counts(
-        db: &Database,
-        item_id: i64,
-    ) -> Result<ChildrenCounts, FsPulseError> {
+    pub fn get_children_counts(item_id: i64) -> Result<ChildrenCounts, FsPulseError> {
         // First get the path and root_id of the parent directory
         let parent_sql = "SELECT item_path, root_id FROM items WHERE item_id = ?";
-        let conn = db.conn();
+        let conn = Database::get_connection()?;
         let (parent_path, root_id): (String, i64) = conn
             .query_row(parent_sql, params![item_id], |row| {
                 Ok((row.get(0)?, row.get(1)?))
@@ -787,12 +740,16 @@ mod tests {
     #[test]
     fn test_item_type_enum_all_variants() {
         // Test that all enum variants work correctly
-        let types = [ItemType::File, ItemType::Directory, ItemType::Symlink, ItemType::Other];
+        let types = [
+            ItemType::File,
+            ItemType::Directory,
+            ItemType::Symlink,
+            ItemType::Other,
+        ];
         let expected = ["F", "D", "S", "O"];
 
         for (i, item_type) in types.iter().enumerate() {
             assert_eq!(item_type.short_name(), expected[i]);
         }
     }
-
 }
