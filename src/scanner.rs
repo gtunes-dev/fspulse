@@ -92,6 +92,7 @@ impl<'a> ScanContext<'a> {
     }
 
     fn flush(&mut self) -> Result<(), FsPulseError> {
+        let _tmr = timer!(Level::Trace; "ScanContext.flush", "{}", self.batch_count);
         if self.batch_count > 0 {
             self.conn
                 .execute("COMMIT", [])
@@ -153,12 +154,7 @@ impl Scanner {
                 ScanState::Scanning => {
                     reporter.start_scanning_phase();
                     if scan.state() == ScanState::Scanning {
-                        Scanner::do_state_scanning(
-                            root,
-                            scan,
-                            reporter.clone(),
-                            &interrupt_token,
-                        )?;
+                        Scanner::do_state_scanning(root, scan, reporter.clone(), &interrupt_token)?;
                     }
                     loop_state = ScanState::Sweeping;
                 }
@@ -171,11 +167,7 @@ impl Scanner {
                 }
                 ScanState::Analyzing => {
                     let analysis_result = if scan.state() == ScanState::Analyzing {
-                        Scanner::do_state_analyzing(
-                            scan,
-                            reporter.clone(),
-                            &interrupt_token,
-                        )
+                        Scanner::do_state_analyzing(scan, reporter.clone(), &interrupt_token)
                     } else {
                         Ok(())
                     };
@@ -202,7 +194,8 @@ impl Scanner {
         ctx.reporter.increment_directories_scanned();
 
         let items = {
-            let _tmr = timer!(Level::Trace; "fs::read_dir", "{}", path.display());
+            // Uncomment for granular perf investigations
+            // let _tmr = timer!(Level::Trace; "fs::read_dir", "{}", path.display());
             fs::read_dir(path)?
         };
         let mut total_size: i64 = 0;
@@ -211,7 +204,8 @@ impl Scanner {
             let item = item?;
             let item_path = item.path();
             let item_metadata = {
-                let _tmr = timer!(Level::Trace; "fs::symlink_metadata", "{}", item_path.display());
+                // Uncomment for granular perf investigations
+                // let _tmr = timer!(Level::Trace; "fs::symlink_metadata", "{}", item_path.display());
                 fs::symlink_metadata(&item_path)?
             };
 
@@ -552,7 +546,8 @@ impl Scanner {
 
         // load the item
         let path_str = path.to_string_lossy();
-        let existing_item = Item::get_by_root_path_type(ctx.conn, ctx.scan.root_id(), &path_str, item_type)?;
+        let existing_item =
+            Item::get_by_root_path_type(ctx.conn, ctx.scan.root_id(), &path_str, item_type)?;
 
         let mod_date = metadata
             .modified()
@@ -641,7 +636,6 @@ impl Scanner {
                     Ok(())
                 })?;
             } else if meta_change {
-                let _tmr = timer!(Level::Trace; "db::immediate_transaction meta_change", "{}", path_str);
                 ctx.execute_batch_write(|c| {
                     let rows_updated = c.execute(
                         "UPDATE items SET
@@ -701,7 +695,6 @@ impl Scanner {
             }
         } else {
             // Item is new, insert into items and changes tables
-            let _tmr = timer!(Level::Trace; "db::immediate_transaction new_item", "{}", path_str);
             ctx.execute_batch_write(|c| {
                 c.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (ctx.scan.root_id(), &path_str, item_type.as_i64(), mod_date, size, ValidationState::Unknown.as_i64(), ctx.scan.scan_id()))?;
