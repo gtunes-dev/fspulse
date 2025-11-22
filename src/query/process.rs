@@ -169,10 +169,11 @@ pub trait Query {
 
     /// Executes a count query using COUNT(*) SQL
     /// This is more efficient than loading all rows and counting them
-    fn prepare_and_execute_count(&self, db: &Database) -> Result<i64, FsPulseError> {
+    fn prepare_and_execute_count(&self) -> Result<i64, FsPulseError> {
+        let conn = Database::get_connection()?;
         let (sql, params_vec) = self.build_sql(true, None, None);
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
-        let mut sql_statement = db.conn().prepare(&sql)?;
+        let mut sql_statement = conn.prepare(&sql)?;
 
         let count: i64 = sql_statement.query_row(&sql_params[..], |row| row.get(0))?;
 
@@ -277,12 +278,12 @@ pub trait Query {
 
     fn prepare_and_execute(
         &mut self,
-        db: &Database,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
+        let conn = Database::get_connection()?;
         let (sql, params_vec) = self.build_sql(false, None, None);
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
-        let mut sql_statement = db.conn().prepare(&sql)?;
+        let mut sql_statement = conn.prepare(&sql)?;
 
         self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
 
@@ -291,14 +292,14 @@ pub trait Query {
 
     fn prepare_and_execute_override(
         &mut self,
-        db: &Database,
         limit_override: i64,
         offset_add: i64,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
+        let conn = Database::get_connection()?;
         let (sql, params_vec) = self.build_sql(false, Some(limit_override), Some(offset_add));
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
-        let mut sql_statement = db.conn().prepare(&sql)?;
+        let mut sql_statement = conn.prepare(&sql)?;
 
         self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
 
@@ -954,31 +955,30 @@ impl AlertsQueryRow {
 }
 
 impl QueryProcessor {
-    pub fn execute_query(db: &Database, query_str: &str) -> Result<QueryResultData, FsPulseError> {
+    pub fn execute_query(query_str: &str) -> Result<QueryResultData, FsPulseError> {
         let mut qrv = QueryResultVector::new();
-        Self::process_query(db, query_str, &mut qrv)?;
+        Self::process_query(query_str, &mut qrv)?;
         Ok((qrv.row_vec, qrv.column_headers, qrv.column_alignments))
     }
 
     pub fn execute_query_override(
-        db: &Database,
         query_str: &str,
         limit_override: i64,
         offset_add: i64,
     ) -> Result<QueryResultData, FsPulseError> {
         let mut qrv = QueryResultVector::new();
-        Self::process_query_override(db, query_str, limit_override, offset_add, &mut qrv)?;
+        Self::process_query_override(query_str, limit_override, offset_add, &mut qrv)?;
         Ok((qrv.row_vec, qrv.column_headers, qrv.column_alignments))
     }
 
-    pub fn execute_query_count(db: &Database, query_str: &str) -> Result<i64, FsPulseError> {
-        Self::process_query_count(db, query_str)
+    pub fn execute_query_count(query_str: &str) -> Result<i64, FsPulseError> {
+        Self::process_query_count(query_str)
     }
 
-    pub fn execute_query_and_print(db: &Database, query_str: &str) -> Result<(), FsPulseError> {
+    pub fn execute_query_and_print(query_str: &str) -> Result<(), FsPulseError> {
         let mut qrb = QueryResultBuilder::new();
 
-        match Self::process_query(db, query_str, &mut qrb) {
+        match Self::process_query(query_str, &mut qrb) {
             Ok(()) => {}
             Err(err) => match err {
                 FsPulseError::ParsingError(inner) => {
@@ -1008,7 +1008,6 @@ impl QueryProcessor {
     }
 
     fn process_query(
-        db: &Database,
         query_str: &str,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
@@ -1028,14 +1027,13 @@ impl QueryProcessor {
 
         QueryProcessor::build(&mut *query, &mut query_iter)?;
 
-        query.prepare_and_execute(db, query_result)?;
+        query.prepare_and_execute(query_result)?;
         query_result.finalize(&mut query.query_impl_mut().show);
 
         Ok(())
     }
 
     fn process_query_override(
-        db: &Database,
         query_str: &str,
         limit_override: i64,
         offset_add: i64,
@@ -1057,13 +1055,13 @@ impl QueryProcessor {
 
         QueryProcessor::build(&mut *query, &mut query_iter)?;
 
-        query.prepare_and_execute_override(db, limit_override, offset_add, query_result)?;
+        query.prepare_and_execute_override(limit_override, offset_add, query_result)?;
         query_result.finalize(&mut query.query_impl_mut().show);
 
         Ok(())
     }
 
-    fn process_query_count(db: &Database, query_str: &str) -> Result<i64, FsPulseError> {
+    fn process_query_count(query_str: &str) -> Result<i64, FsPulseError> {
         info!("Parsing count query: {query_str}");
 
         let mut parsed_query = QueryParser::parse(Rule::query, query_str)
@@ -1081,7 +1079,7 @@ impl QueryProcessor {
         QueryProcessor::build(&mut *query, &mut query_iter)?;
 
         // Use the count execution path - access directly through dyn Query
-        let count = (*query).prepare_and_execute_count(db)?;
+        let count = (*query).prepare_and_execute_count()?;
 
         Ok(count)
     }

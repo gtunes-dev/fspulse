@@ -344,7 +344,7 @@ export function SettingsPage() {
           <div className="flex justify-center">
             <div className={`inline-flex items-center justify-center px-3 py-1.5 rounded-full ${
               activeField === 'default' && isSet(defaultValue)
-                ? 'bg-green-100 dark:bg-green-950 border border-green-500'
+                ? 'bg-card text-card-foreground border border-emerald-500'
                 : ''
             }`}>
               <ValueDisplay value={defaultValue} />
@@ -361,7 +361,7 @@ export function SettingsPage() {
                 {setting.file_value !== null ? (
                   <div className={`inline-flex items-center justify-center px-3 py-1.5 rounded-full ${
                     activeField === 'file_value'
-                      ? 'bg-green-100 dark:bg-green-950 border border-green-500'
+                      ? 'bg-card text-card-foreground border border-emerald-500'
                       : ''
                   }`}>
                     <ValueDisplay value={setting.file_value} />
@@ -383,10 +383,10 @@ export function SettingsPage() {
               // Two line case (pending restart)
               <>
                 <div className="flex items-center justify-center gap-2">
-                  <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full gap-1.5 bg-blue-100 dark:bg-blue-950 border border-blue-500">
+                  <div className="inline-flex items-center justify-center px-3 py-1.5 rounded-full gap-1.5 bg-card text-card-foreground border border-blue-500">
                     <RefreshCw className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                     {setting.file_value !== null ? (
-                      <ValueDisplay value={setting.file_value} />
+                      <span className="font-mono text-sm">{String(setting.file_value)}</span>
                     ) : (
                       <CircleDashed className="w-4 h-4 text-muted-foreground" />
                     )}
@@ -404,7 +404,7 @@ export function SettingsPage() {
                     <span className="text-muted-foreground">Current:</span>
                     <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full ${
                       activeField === 'file_value_original'
-                        ? 'bg-green-100 dark:bg-green-950 border border-green-500'
+                        ? 'bg-card text-card-foreground border border-emerald-500'
                         : ''
                     }`}>
                       <span className="font-mono text-xs">{String(setting.file_value_original)}</span>
@@ -422,7 +422,7 @@ export function SettingsPage() {
             {setting.env_value !== null ? (
               <div className={`inline-flex items-center justify-center px-3 py-1.5 rounded-full ${
                 activeField === 'environment'
-                  ? 'bg-green-100 dark:bg-green-950 border border-green-500'
+                  ? 'bg-card text-card-foreground border border-emerald-500'
                   : ''
               }`}>
                 <span className="font-mono text-sm font-medium">{String(setting.env_value)}</span>
@@ -528,7 +528,7 @@ export function SettingsPage() {
                 {/* Legend */}
                 <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-green-100 dark:bg-green-950 border border-green-500" />
+                    <div className="w-4 h-4 rounded-full bg-card border border-emerald-500" />
                     <span>Active value (currently in use)</span>
                   </div>
                   <div className="flex items-center gap-2">

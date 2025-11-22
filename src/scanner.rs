@@ -30,27 +30,94 @@ use crate::{database::Database, error::FsPulseError, scans::Scan};
 use crossbeam_channel::bounded;
 use log::{error, info, Level};
 use logging_timer::timer;
+use rusqlite::Connection;
 use threadpool::ThreadPool;
 
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{cmp, fs};
 
 pub struct Scanner {}
 
+/// Batch size for database write operations during scanning
+const SCAN_BATCH_SIZE: usize = 100;
+
 /// Context passed through recursive directory scanning to avoid large parameter lists
 struct ScanContext<'a> {
-    db: &'a mut Database,
+    conn: &'a Connection,
     scan: &'a Scan,
     reporter: &'a Arc<ProgressReporter>,
     interrupt_token: &'a Arc<AtomicBool>,
+    batch_count: usize,
+}
+
+impl<'a> ScanContext<'a> {
+    fn new(
+        conn: &'a Connection,
+        scan: &'a Scan,
+        reporter: &'a Arc<ProgressReporter>,
+        interrupt_token: &'a Arc<AtomicBool>,
+    ) -> Self {
+        Self {
+            conn,
+            scan,
+            reporter,
+            interrupt_token,
+            batch_count: 0,
+        }
+    }
+
+    fn execute_batch_write<F, T>(&mut self, f: F) -> Result<T, FsPulseError>
+    where
+        F: FnOnce(&Connection) -> Result<T, FsPulseError>,
+    {
+        // Start transaction on first write
+        if self.batch_count == 0 {
+            self.conn
+                .execute("BEGIN IMMEDIATE", [])
+                .map_err(FsPulseError::DatabaseError)?;
+        }
+
+        let result = f(self.conn)?;
+        self.batch_count += 1;
+
+        // Auto-flush at batch size
+        if self.batch_count >= SCAN_BATCH_SIZE {
+            self.flush()?;
+        }
+
+        Ok(result)
+    }
+
+    fn flush(&mut self) -> Result<(), FsPulseError> {
+        if self.batch_count > 0 {
+            self.conn
+                .execute("COMMIT", [])
+                .map_err(FsPulseError::DatabaseError)?;
+            self.batch_count = 0;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> Drop for ScanContext<'a> {
+    fn drop(&mut self) {
+        // If we still have unflushed writes, we're in an error scenario
+        // (normal path explicitly calls flush()). Rollback to maintain data integrity.
+        if self.batch_count > 0 {
+            error!(
+                "ScanContext dropped with {} unflushed writes - rolling back transaction",
+                self.batch_count
+            );
+            let _ = self.conn.execute("ROLLBACK", []);
+        }
+    }
 }
 
 impl Scanner {
     pub fn do_scan_machine(
-        db: &mut Database,
         scan: &mut Scan,
         root: &Root,
         reporter: Arc<ProgressReporter>,
@@ -87,7 +154,6 @@ impl Scanner {
                     reporter.start_scanning_phase();
                     if scan.state() == ScanState::Scanning {
                         Scanner::do_state_scanning(
-                            db,
                             root,
                             scan,
                             reporter.clone(),
@@ -99,39 +165,22 @@ impl Scanner {
                 ScanState::Sweeping => {
                     reporter.start_sweeping_phase();
                     if scan.state() == ScanState::Sweeping {
-                        Scanner::do_state_sweeping(db, scan, &interrupt_token)?;
+                        Scanner::do_state_sweeping(scan, &interrupt_token)?;
                     }
                     loop_state = ScanState::Analyzing;
                 }
                 ScanState::Analyzing => {
-                    let mut analysis_result = Ok(());
-                    // Should never get here in a situation in which scan.state() isn't Analyzing
-                    // but we protect against it just in case
-
-                    if scan.state() == ScanState::Analyzing {
-                        // This is a boundary - we'll take ownership of the database and progress
-                        // bars here and then restore them when we're done
-                        let owned_db = std::mem::take(db);
-                        let db_arc = Arc::new(Mutex::new(owned_db));
-
-                        analysis_result = Scanner::do_state_analyzing(
-                            db_arc.clone(),
+                    let analysis_result = if scan.state() == ScanState::Analyzing {
+                        Scanner::do_state_analyzing(
                             scan,
                             reporter.clone(),
                             &interrupt_token,
-                        );
-
-                        // recover the database from the Arc
-                        let recovered_db = Arc::try_unwrap(db_arc)
-                            .expect("No additional clones should exist")
-                            .into_inner()
-                            .expect("Mutex isn't poisoned");
-
-                        *db = recovered_db;
-                    }
+                        )
+                    } else {
+                        Ok(())
+                    };
 
                     analysis_result?;
-
                     loop_state = ScanState::Completed;
                 }
                 unexpected => {
@@ -174,8 +223,7 @@ impl Scanner {
 
                 // Handle the subdirectory with its computed size
                 let returned_size = Scanner::handle_scan_item(
-                    ctx.db,
-                    ctx.scan,
+                    ctx,
                     ItemType::Directory,
                     &item_path,
                     &item_metadata,
@@ -203,8 +251,7 @@ impl Scanner {
                 };
 
                 let returned_size = Scanner::handle_scan_item(
-                    ctx.db,
-                    ctx.scan,
+                    ctx,
                     item_type,
                     &item_path,
                     &item_metadata,
@@ -219,43 +266,46 @@ impl Scanner {
     }
 
     fn do_state_scanning(
-        db: &mut Database,
         root: &Root,
         scan: &mut Scan,
         reporter: Arc<ProgressReporter>,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
+        let conn = Database::get_connection()?;
         let root_path_buf = PathBuf::from(root.root_path());
+
         // Create scanning context
-        let mut ctx = ScanContext {
-            db,
-            scan,
-            reporter: &reporter,
-            interrupt_token,
-        };
+        let mut ctx = ScanContext::new(&conn, scan, &reporter, interrupt_token);
 
         // Recursively scan the root directory and get the total size
         // Note: We don't store the root directory itself as an item in the database
         let total_size = Scanner::scan_directory_recursive(&mut ctx, &root_path_buf)?;
 
+        // Flush any remaining batched writes
+        ctx.flush()?;
+
+        // Drop ctx to release the immutable borrow of scan before we mutably borrow it
+        drop(ctx);
+
         // The total_size column is set on the scan row before advancing to the next phase
         // This means it doesn't have to be computed or set later in the scan, but it does need
         // to be set to NULL if the scan ends in stoppage or error
-        scan.set_total_size(db, total_size)?;
+        scan.set_total_size(&conn, total_size)?;
 
-        scan.set_state_sweeping(db)
+        scan.set_state_sweeping(&conn)
     }
 
     fn do_state_sweeping(
-        db: &mut Database,
         scan: &mut Scan,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         Scanner::check_interrupted(interrupt_token)?;
 
-        db.immediate_transaction(|conn| {
+        let conn = Database::get_connection()?;
+
+        Database::immediate_transaction(&conn, |c| {
             // Insert deletion records into changes
-            conn.execute(
+            c.execute(
                 "INSERT INTO changes (scan_id, item_id, change_type)
                     SELECT ?, item_id, ?
                     FROM items
@@ -269,7 +319,7 @@ impl Scanner {
             )?;
 
             // Mark unseen items as tombstones
-            conn.execute(
+            c.execute(
                 "UPDATE items SET
                     is_ts = 1,
                     last_scan = ?
@@ -280,15 +330,17 @@ impl Scanner {
             Ok(())
         })?;
 
-        scan.set_state_analyzing(db)
+        scan.set_state_analyzing(&conn)
     }
 
     fn do_state_analyzing(
-        db: Arc<Mutex<Database>>,
         scan: &mut Scan,
         reporter: Arc<ProgressReporter>,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
+        // Get a single connection for this entire phase
+        let conn = Database::get_connection()?;
+
         let is_hash = scan.analysis_spec().is_hash();
         let is_val = scan.analysis_spec().is_val();
 
@@ -296,13 +348,12 @@ impl Scanner {
         // can be marked complete and we just return
         if !is_hash && !is_val {
             Scanner::check_interrupted(interrupt_token)?;
-            scan.set_state_completed(&mut db.lock().unwrap())?;
+            scan.set_state_completed(&conn)?;
             return Ok(());
         }
 
-        //let file_count = scan.file_count().unwrap_or_default().max(0) as u64; // scan.file_count is the total # of files in the scan
         let (analyze_total, analyze_done) =
-            Item::get_analysis_counts(&db.lock().unwrap(), scan.scan_id(), scan.analysis_spec())?;
+            Item::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec())?;
 
         reporter.start_analyzing_phase(analyze_total, analyze_done);
 
@@ -310,7 +361,6 @@ impl Scanner {
         let (sender, receiver) = bounded::<AnalysisItem>(100);
 
         // Initialize the thread pool
-
         let items_remaining = analyze_total.saturating_sub(analyze_done); // avoids underflow
         let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
 
@@ -322,7 +372,6 @@ impl Scanner {
         for thread_index in 0..num_threads {
             // Clone shared resources for each worker thread.
             let receiver = receiver.clone();
-            let db = Arc::clone(&db);
             let scan_copy = scan.clone();
             let reporter_clone = Arc::clone(&reporter);
             let interrupt_token_clone = Arc::clone(interrupt_token);
@@ -331,10 +380,10 @@ impl Scanner {
             reporter.set_thread_idle(thread_index);
 
             // Worker thread: continuously receive and process tasks.
+            // Each thread gets its own connection from the pool!
             pool.execute(move || {
                 while let Ok(analysis_item) = receiver.recv() {
                     Scanner::process_item_async(
-                        &db,
                         &scan_copy,
                         analysis_item,
                         thread_index,
@@ -354,7 +403,7 @@ impl Scanner {
             }
 
             let analysis_items = Item::fetch_next_analysis_batch(
-                &db.lock().unwrap(),
+                &conn,
                 scan.scan_id(),
                 scan.analysis_spec(),
                 last_item_id,
@@ -392,12 +441,10 @@ impl Scanner {
         // some hashing or validation operations, we have to be careful to not allow it to
         // appear complete
         Scanner::check_interrupted(interrupt_token)?;
-        scan.set_state_completed(&mut db.lock().unwrap())
+        scan.set_state_completed(&conn)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn process_item_async(
-        db: &Arc<Mutex<Database>>,
         scan: &Scan,
         analysis_item: AnalysisItem,
         thread_index: usize,
@@ -471,7 +518,6 @@ impl Scanner {
 
         if !Scanner::is_interrupted(interrupt_token) {
             if let Err(error) = Scanner::update_item_analysis(
-                db,
                 scan,
                 &analysis_item,
                 new_hash,
@@ -496,8 +542,7 @@ impl Scanner {
     }
 
     fn handle_scan_item(
-        db: &mut Database,
-        scan: &Scan,
+        ctx: &mut ScanContext,
         item_type: ItemType,
         path: &Path,
         metadata: &Metadata,
@@ -507,10 +552,7 @@ impl Scanner {
 
         // load the item
         let path_str = path.to_string_lossy();
-        let existing_item = {
-            let _tmr = timer!(Level::Trace; "db::get_by_root_path_type", "{}", path_str);
-            Item::get_by_root_path_type(db, scan.root_id(), &path_str, item_type)?
-        };
+        let existing_item = Item::get_by_root_path_type(ctx.conn, ctx.scan.root_id(), &path_str, item_type)?;
 
         let mod_date = metadata
             .modified()
@@ -529,7 +571,7 @@ impl Scanner {
             // such as when an item was seen as a file, the scan was resumed and the item has
             // changed into a directory. In this case, we'll still traverse the children within
             // the resumed scan and a tree report will look odd.
-            if existing_item.last_scan() == scan.scan_id() {
+            if existing_item.last_scan() == ctx.scan.scan_id() {
                 return Ok(existing_item.size().unwrap_or(0));
             }
 
@@ -537,9 +579,8 @@ impl Scanner {
 
             if existing_item.is_ts() {
                 // Rehydrate a tombstone
-                let _tmr = timer!(Level::Trace; "db::immediate_transaction rehydrate_tombstone", "{}", path_str);
-                db.immediate_transaction(|conn| {
-                    let rows_updated = conn.execute(
+                ctx.execute_batch_write(|c| {
+                    let rows_updated = c.execute(
                         "UPDATE items SET
                                 is_ts = 0,
                                 mod_date = ?,
@@ -555,7 +596,7 @@ impl Scanner {
                             mod_date,
                             size,
                             ValidationState::Unknown.as_i64(),
-                            scan.scan_id(),
+                            ctx.scan.scan_id(),
                             existing_item.item_id(),
                         ),
                     )?;
@@ -566,7 +607,7 @@ impl Scanner {
                         )));
                     }
 
-                    conn.execute(
+                    c.execute(
                         "INSERT INTO changes
                             (
                                 scan_id,
@@ -584,7 +625,7 @@ impl Scanner {
                         VALUES
                             (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
                         (
-                            scan.scan_id(),
+                            ctx.scan.scan_id(),
                             existing_item.item_id(),
                             ChangeType::Add.as_i64(),
                             existing_item.mod_date(),
@@ -601,14 +642,14 @@ impl Scanner {
                 })?;
             } else if meta_change {
                 let _tmr = timer!(Level::Trace; "db::immediate_transaction meta_change", "{}", path_str);
-                db.immediate_transaction(|conn| {
-                    let rows_updated = conn.execute(
+                ctx.execute_batch_write(|c| {
+                    let rows_updated = c.execute(
                         "UPDATE items SET
                             mod_date = ?,
                             size = ?,
                             last_scan = ?
                         WHERE item_id = ?",
-                        (mod_date, size, scan.scan_id(), existing_item.item_id()),
+                        (mod_date, size, ctx.scan.scan_id(), existing_item.item_id()),
                     )?;
                     if rows_updated == 0 {
                         return Err(FsPulseError::Error(format!(
@@ -616,7 +657,7 @@ impl Scanner {
                             existing_item.item_id()
                         )));
                     }
-                    conn.execute(
+                    c.execute(
                         "INSERT INTO changes
                                 (
                                     scan_id,
@@ -629,7 +670,7 @@ impl Scanner {
                                     size_new)
                                 VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
                         (
-                            scan.scan_id(),
+                            ctx.scan.scan_id(),
                             existing_item.item_id(),
                             ChangeType::Modify.as_i64(),
                             meta_change.then_some(existing_item.mod_date()),
@@ -643,30 +684,32 @@ impl Scanner {
                 })?;
             } else {
                 // No change - just update last_scan
-                let _tmr = timer!(Level::Trace; "db::update_last_scan", "{}", path_str);
-                let rows_updated = db.conn().execute(
-                    "UPDATE items SET last_scan = ? WHERE item_id = ?",
-                    (scan.scan_id(), existing_item.item_id()),
-                )?;
+                ctx.execute_batch_write(|c| {
+                    let rows_updated = c.execute(
+                        "UPDATE items SET last_scan = ? WHERE item_id = ?",
+                        (ctx.scan.scan_id(), existing_item.item_id()),
+                    )?;
 
-                if rows_updated == 0 {
-                    return Err(FsPulseError::Error(format!(
-                        "Item Id {} not found for update",
-                        existing_item.item_id()
-                    )));
-                }
+                    if rows_updated == 0 {
+                        return Err(FsPulseError::Error(format!(
+                            "Item Id {} not found for update",
+                            existing_item.item_id()
+                        )));
+                    }
+                    Ok(())
+                })?;
             }
         } else {
             // Item is new, insert into items and changes tables
             let _tmr = timer!(Level::Trace; "db::immediate_transaction new_item", "{}", path_str);
-            db.immediate_transaction(|conn| {
-                conn.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (scan.root_id(), &path_str, item_type.as_i64(), mod_date, size, ValidationState::Unknown.as_i64(), scan.scan_id()))?;
+            ctx.execute_batch_write(|c| {
+                c.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (ctx.scan.root_id(), &path_str, item_type.as_i64(), mod_date, size, ValidationState::Unknown.as_i64(), ctx.scan.scan_id()))?;
 
-                let item_id: i64 = conn.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
+                let item_id: i64 = c.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
 
-                conn.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
-                    (scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, size))?;
+                c.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
+                    (ctx.scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, size))?;
 
                 Ok(())
             })?;
@@ -677,7 +720,6 @@ impl Scanner {
     }
 
     pub fn update_item_analysis(
-        db: &Arc<Mutex<Database>>,
         scan: &Scan,
         analysis_item: &AnalysisItem,
         new_hash: Option<String>,
@@ -765,21 +807,21 @@ impl Scanner {
         }
 
         Scanner::check_interrupted(interrupt_token)?;
-        
-        let db_guard = db.lock().unwrap();
+
+        let conn = Database::get_connection()?;
 
         // Use IMMEDIATE transaction for read-then-write pattern
-        db_guard.immediate_transaction(|conn| {
+        Database::immediate_transaction(&conn, |c| {
             if alert_possible_hash {
                 if let Some(last_hash_scan) = analysis_item.last_hash_scan() {
                     if !Alerts::meta_changed_between(
-                        conn,
+                        c,
                         analysis_item.item_id(),
                         last_hash_scan,
                         scan.scan_id(),
                     )? {
                         Alerts::add_suspicious_hash_alert(
-                            conn,
+                            c,
                             scan.scan_id(),
                             analysis_item.item_id(),
                             analysis_item.last_hash_scan(),
@@ -792,7 +834,7 @@ impl Scanner {
 
             if alert_invalid_item {
                 Alerts::add_invalid_item_alert(
-                    conn,
+                    c,
                     scan.scan_id(),
                     analysis_item.item_id(),
                     c_val_error_new.unwrap(),
@@ -801,7 +843,7 @@ impl Scanner {
 
             // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
             if update_changes {
-                conn.execute(
+                c.execute(
                     "INSERT INTO changes (
                             scan_id,
                             item_id,
@@ -849,7 +891,7 @@ impl Scanner {
             }
 
             // Step 2: Update `items` table
-            conn.execute(
+            c.execute(
                 "UPDATE items
                 SET
                     file_hash = ?,

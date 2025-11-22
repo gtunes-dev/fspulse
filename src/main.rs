@@ -28,6 +28,7 @@ use std::time::Instant;
 use chrono::Local;
 use cli::Cli;
 use config::Config;
+use database::Database;
 use directories::ProjectDirs;
 use flexi_logger::{Cleanup, Criterion, DeferredNow, FileSpec, Logger, Naming, Record};
 use log::{error, info};
@@ -54,6 +55,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Config::load_config(&project_dirs)?;
 
     setup_logging(&project_dirs);
+
+    // Initialize database connection pool
+    Database::init()?;
 
     // Mark the start time and log a timestamped message
     let start = Instant::now();

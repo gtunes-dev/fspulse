@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Database connection handling**: Refactored to use R2D2 connection pool for improved concurrency and resource management
+- **Batch updates during scan phase of scans**: Now transacting in batches rather than for each item
+
+### Fixed
+- **Settings page**: Active configuration values now readable in light mode with proper background colors
+
 ## [v0.3.0] - 2025-11-18
 
 ### Added

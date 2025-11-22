@@ -2,7 +2,7 @@ use log::warn;
 use rusqlite::{named_params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::{database::Database, error::FsPulseError};
+use crate::error::FsPulseError;
 
 #[repr(i64)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,7 +29,10 @@ impl AlertType {
             0 => AlertType::SuspiciousHash,
             1 => AlertType::InvalidItem,
             _ => {
-                warn!("Invalid AlertType value in database: {}, defaulting to SuspiciousHash", value);
+                warn!(
+                    "Invalid AlertType value in database: {}, defaulting to SuspiciousHash",
+                    value
+                );
                 AlertType::SuspiciousHash
             }
         }
@@ -85,7 +88,10 @@ impl AlertStatus {
             1 => AlertStatus::Flagged,
             2 => AlertStatus::Dismissed,
             _ => {
-                warn!("Invalid AlertStatus value in database: {}, defaulting to Open", value);
+                warn!(
+                    "Invalid AlertStatus value in database: {}, defaulting to Open",
+                    value
+                );
                 AlertStatus::Open
             }
         }
@@ -120,7 +126,6 @@ impl AlertStatus {
             _ => None,
         }
     }
-
 }
 
 impl std::fmt::Display for AlertStatus {
@@ -254,7 +259,7 @@ impl Alerts {
     }
 
     pub fn set_alert_status(
-        db: &Database,
+        conn: &Connection,
         alert_id: i64,
         new_status: AlertStatus,
     ) -> Result<(), FsPulseError> {
@@ -264,7 +269,7 @@ impl Alerts {
                 updated_at = strftime('%s', 'now', 'utc')
             WHERE alert_id = :alert_id"#;
 
-        db.conn().execute(
+        conn.execute(
             sql,
             named_params! {
                 ":alert_status":    new_status.as_i64(),
@@ -279,7 +284,7 @@ impl Alerts {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_alert_type_integer_values() {
         // Verify the integer values match the expected order
@@ -309,30 +314,30 @@ mod tests {
         assert_eq!(AlertType::SuspiciousHash.full_name(), "Suspicious Hash");
         assert_eq!(AlertType::InvalidItem.full_name(), "Invalid Item");
     }
-    
+
     #[test]
     fn test_alert_type_traits() {
         let suspicious = AlertType::SuspiciousHash;
         let invalid = AlertType::InvalidItem;
-        
+
         // Test PartialEq
         assert_eq!(suspicious, AlertType::SuspiciousHash);
         assert_eq!(invalid, AlertType::InvalidItem);
         assert_ne!(suspicious, invalid);
-        
+
         // Test Copy
         let suspicious_copy = suspicious;
         assert_eq!(suspicious, suspicious_copy);
-        
+
         // Test Clone
         let invalid_clone = invalid;
         assert_eq!(invalid, invalid_clone);
-        
+
         // Test Debug (just ensure it doesn't panic)
         let debug_str = format!("{suspicious:?}");
         assert!(debug_str.contains("SuspiciousHash"));
     }
-    
+
     #[test]
     fn test_alert_status_integer_values() {
         // Verify the integer values match the expected order
@@ -366,13 +371,13 @@ mod tests {
         assert_eq!(AlertStatus::Flagged.full_name(), "Flagged");
         assert_eq!(AlertStatus::Dismissed.full_name(), "Dismissed");
     }
-    
+
     #[test]
     fn test_alert_status_traits() {
         let open = AlertStatus::Open;
         let flagged = AlertStatus::Flagged;
         let dismissed = AlertStatus::Dismissed;
-        
+
         // Test PartialEq
         assert_eq!(open, AlertStatus::Open);
         assert_eq!(flagged, AlertStatus::Flagged);
@@ -380,20 +385,20 @@ mod tests {
         assert_ne!(open, flagged);
         assert_ne!(flagged, dismissed);
         assert_ne!(open, dismissed);
-        
+
         // Test Copy
         let open_copy = open;
         assert_eq!(open, open_copy);
-        
+
         // Test Clone
         let flagged_clone = flagged;
         assert_eq!(flagged, flagged_clone);
-        
+
         // Test Debug (just ensure it doesn't panic)
         let debug_str = format!("{dismissed:?}");
         assert!(debug_str.contains("Dismissed"));
     }
-    
+
     #[test]
     fn test_alert_type_completeness() {
         // Verify we can convert all enum variants to strings
@@ -402,7 +407,11 @@ mod tests {
         for alert_type in all_types {
             let short_str = alert_type.short_name();
             assert!(!short_str.is_empty(), "Short string should not be empty");
-            assert_eq!(short_str.len(), 1, "Short string should be single character");
+            assert_eq!(
+                short_str.len(),
+                1,
+                "Short string should be single character"
+            );
 
             let full_str = alert_type.full_name();
             assert!(!full_str.is_empty(), "Full string should not be empty");
@@ -412,12 +421,20 @@ mod tests {
     #[test]
     fn test_alert_status_completeness() {
         // Verify we can convert all enum variants to strings
-        let all_statuses = [AlertStatus::Open, AlertStatus::Flagged, AlertStatus::Dismissed];
+        let all_statuses = [
+            AlertStatus::Open,
+            AlertStatus::Flagged,
+            AlertStatus::Dismissed,
+        ];
 
         for status in all_statuses {
             let short_str = status.short_name();
             assert!(!short_str.is_empty(), "Short string should not be empty");
-            assert_eq!(short_str.len(), 1, "Short string should be single character");
+            assert_eq!(
+                short_str.len(),
+                1,
+                "Short string should be single character"
+            );
 
             let full_str = status.full_name();
             assert!(!full_str.is_empty(), "Full string should not be empty");

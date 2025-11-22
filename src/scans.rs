@@ -2,7 +2,7 @@ use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 
-use rusqlite::{params, OptionalExtension, Result};
+use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::Serialize;
 
 use std::fmt;
@@ -269,9 +269,9 @@ impl Scan {
         Ok(scan)
     }
 
-    pub fn get_latest_for_root(db: &Database, root_id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
-        Self::get_by_id_or_latest(conn, None, Some(root_id))
+    pub fn get_latest_for_root(root_id: i64) -> Result<Option<Self>, FsPulseError> {
+        let conn = Database::get_connection()?;
+        Self::get_by_id_or_latest(&conn, None, Some(root_id))
     }
 
     pub fn get_by_id_or_latest(
@@ -386,9 +386,7 @@ impl Scan {
         self.delete_count
     }
 
-    pub fn set_total_size(&mut self, db: &mut Database, total_size: i64) -> Result<(), FsPulseError> {
-        let conn = &mut db.conn_mut();
-
+    pub fn set_total_size(&mut self, conn: &Connection, total_size: i64) -> Result<(), FsPulseError> {
         let rows_updated = conn.execute(
             "UPDATE scans SET total_size = ? WHERE scan_id = ?",
             [total_size, self.scan_id],
@@ -407,9 +405,9 @@ impl Scan {
         Ok(())
     }
 
-    pub fn set_state_sweeping(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+    pub fn set_state_sweeping(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::Scanning => self.set_state(db, ScanState::Sweeping),
+            ScanState::Scanning => self.set_state(conn, ScanState::Sweeping),
             _ => Err(FsPulseError::Error(format!(
                 "Can't set Scan Id {} to state sweeping from state {}",
                 self.scan_id(),
@@ -418,9 +416,9 @@ impl Scan {
         }
     }
 
-    pub fn set_state_analyzing(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+    pub fn set_state_analyzing(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::Sweeping => self.set_state(db, ScanState::Analyzing),
+            ScanState::Sweeping => self.set_state(conn, ScanState::Analyzing),
             _ => Err(FsPulseError::Error(format!(
                 "Can't set Scan Id {} to state analyzing from state {}",
                 self.scan_id(),
@@ -429,14 +427,14 @@ impl Scan {
         }
     }
 
-    pub fn set_state_completed(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+    pub fn set_state_completed(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Analyzing => {
                 // Use IMMEDIATE transaction for read-then-write pattern
                 let (file_count, folder_count, alert_count, add_count, modify_count, delete_count) =
-                    db.immediate_transaction(|conn| {
+                    Database::immediate_transaction(conn, |c| {
                         // Compute file_count and folder_count (exclude tombstones)
-                        let (file_count, folder_count): (i64, i64) = conn
+                        let (file_count, folder_count): (i64, i64) = c
                             .query_row(
                                 "SELECT
                                 SUM(CASE WHEN item_type = 0 THEN 1 ELSE 0 END) AS file_count,
@@ -448,7 +446,7 @@ impl Scan {
                             .unwrap_or((0, 0));
 
                         // Compute alert_count
-                        let alert_count: i64 = conn
+                        let alert_count: i64 = c
                             .query_row(
                                 "SELECT COUNT(*) FROM alerts WHERE scan_id = ?",
                                 [self.scan_id],
@@ -457,7 +455,7 @@ impl Scan {
                             .unwrap_or(0);
 
                         // Compute add_count, modify_count, delete_count
-                        let (add_count, modify_count, delete_count): (i64, i64, i64) = conn
+                        let (add_count, modify_count, delete_count): (i64, i64, i64) = c
                             .query_row(
                                 "SELECT
                                 COUNT(*) FILTER (WHERE change_type = 1),
@@ -470,7 +468,7 @@ impl Scan {
                             .unwrap_or((0, 0, 0));
 
                         // Update the scan with all counts and set state to Completed in one operation
-                        conn.execute(
+                        c.execute(
                             "UPDATE scans SET
                                 file_count = ?,
                                 folder_count = ?,
@@ -515,10 +513,10 @@ impl Scan {
         }
     }
 
-    pub fn set_state_stopped(&mut self, db: &mut Database) -> Result<(), FsPulseError> {
+    pub fn set_state_stopped(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
-                Scan::stop_scan(db, self, None)?;
+                Scan::stop_scan(conn, self, None)?;
                 self.state = ScanState::Stopped;
                 Ok(())
             }
@@ -529,9 +527,7 @@ impl Scan {
         }
     }
 
-    fn set_state(&mut self, db: &mut Database, new_state: ScanState) -> Result<(), FsPulseError> {
-        let conn = &mut db.conn_mut();
-
+    fn set_state(&mut self, conn: &Connection, new_state: ScanState) -> Result<(), FsPulseError> {
         let rows_updated = conn.execute(
             "UPDATE scans SET state = ? WHERE scan_id = ?",
             [new_state.as_i64(), self.scan_id],
@@ -550,12 +546,12 @@ impl Scan {
         Ok(())
     }
 
-    pub fn stop_scan(db: &mut Database, scan: &Scan, error_message: Option<&str>) -> Result<(), FsPulseError> {
-        db.immediate_transaction(|conn| {
+    pub fn stop_scan(conn: &Connection, scan: &Scan, error_message: Option<&str>) -> Result<(), FsPulseError> {
+        Database::immediate_transaction(conn, |c| {
             // Find the id of the last scan on this root to not be stopped
             // We'll restore this scan_id to all partially updated by the
             // scan being stopped
-            let prev_scan_id: i64 = conn.query_row(
+            let prev_scan_id: i64 = c.query_row(
                 "SELECT COALESCE(
                     (SELECT MAX(scan_id)
                      FROM scans
@@ -578,7 +574,7 @@ impl Scan {
             // type, we clear the properties (and store them on the change record). So, in both cases, we can
             // now recover the modfiied properties from the change and this batch handles the minor differences
             // between the two operations
-            conn.execute(
+            c.execute(
                 "UPDATE items
                 SET (
                     is_ts,
@@ -619,7 +615,7 @@ impl Scan {
 
             // Undoing a modify requires selectively copying back (from the change)
             // the property groups that were part of the modify
-            conn.execute(
+            c.execute(
                 "UPDATE items
                 SET (
                     mod_date,
@@ -658,7 +654,7 @@ impl Scan {
             )?;
 
             // Undo deletes. This is simple because deletes just set the tombstone flag
-            conn.execute(
+            c.execute(
                 "UPDATE items
                 SET is_ts = 0,
                     last_scan = ?1
@@ -672,7 +668,7 @@ impl Scan {
             )?;
 
             // Undo alerts. Delete all of the alerts created during the scan
-            conn.execute(
+            c.execute(
                 "DELETE FROM alerts
                 WHERE scan_id = ?1",
                 [scan.scan_id()],
@@ -683,14 +679,14 @@ impl Scan {
             // context of a stop or error
             let final_state = if error_message.is_some() { 6 } else { 5 };
 
-            conn.execute(
+            c.execute(
                 "UPDATE scans SET state = ?, total_size = NULL, error = ? WHERE scan_id = ?",
                 params![final_state, error_message, scan.scan_id()],
             )?;
 
             // Find the items that had their last_scan updated but where no change
             // record was created, and reset their last_scan
-            conn.execute(
+            c.execute(
                 "UPDATE items
                  SET last_scan = ?1
                  WHERE last_scan = ?2
@@ -703,7 +699,7 @@ impl Scan {
             )?;
 
             // Delete the change records from the stopped scan
-            conn.execute("DELETE FROM changes WHERE scan_id = ?1", [scan.scan_id()])?;
+            c.execute("DELETE FROM changes WHERE scan_id = ?1", [scan.scan_id()])?;
 
             // Final step is to delete the remaining items that were created during
             // the scan. We have to do this after the change records are deleted otherwise
@@ -711,7 +707,7 @@ impl Scan {
             // since we'll be abandoning change records. This operation assumes that the
             // only remaining items with a last_scan of the current scan are the simple
             // adds. This should be true :)
-            conn.execute(
+            c.execute(
                 "DELETE FROM items
             WHERE last_scan = ?",
                 [scan.scan_id()],
@@ -766,8 +762,7 @@ pub struct ScanStats {
 
 impl ScanStats {
     /// Get statistics for a specific scan ID
-    pub fn get_for_scan(db: &Database, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
+    pub fn get_for_scan(conn: &Connection, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
 
         // Use existing function to get scan
         let scan = match Scan::get_by_id_or_latest(conn, Some(scan_id), None)? {
@@ -839,16 +834,14 @@ impl ScanStats {
     }
 
     /// Get statistics for the most recent scan across all roots
-    pub fn get_latest(db: &Database) -> Result<Option<Self>, FsPulseError> {
-        let conn = db.conn();
-
+    pub fn get_latest(conn: &Connection) -> Result<Option<Self>, FsPulseError> {
         // Use existing function with None to get latest scan
         let scan = match Scan::get_by_id_or_latest(conn, None, None)? {
             Some(s) => s,
             None => return Ok(None),
         };
 
-        Self::get_for_scan(db, scan.scan_id())
+        Self::get_for_scan(conn, scan.scan_id())
     }
 }
 
@@ -871,10 +864,9 @@ pub struct ScanHistoryRow {
 /// Get count of scan history entries (completed, stopped, or error states)
 /// Optionally filtered by root_id
 pub fn get_scan_history_count(
-    db: &Database,
+    conn: &Connection,
     root_id: Option<i64>,
 ) -> Result<i64, FsPulseError> {
-    let conn = db.conn();
 
     let count: i64 = if let Some(root_id) = root_id {
         conn.query_row(
@@ -900,12 +892,11 @@ pub fn get_scan_history_count(
 /// Optionally filtered by root_id
 /// Ordered by scan_id DESC
 pub fn get_scan_history(
-    db: &Database,
+    conn: &Connection,
     root_id: Option<i64>,
     limit: i64,
     offset: i64,
 ) -> Result<Vec<ScanHistoryRow>, FsPulseError> {
-    let conn = db.conn();
 
     let mut result = Vec::new();
 

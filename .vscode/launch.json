@@ -22,6 +22,26 @@
         },
         {
             "type": "lldb",
+            "request": "launch",
+            "name": "Server (Release)",
+            "preLaunchTask": "Prepare Dev Environment",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--release",
+                    "--bin=fspulse",
+                    "--package=fspulse"
+                ],
+                "filter": {
+                    "name": "fspulse",
+                    "kind": "bin"
+                }
+            },
+            "args": ["serve"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
             "request": "attach",
             "name": "Attach to Server (Debug)",
             "program": "${workspaceFolder}/target/debug/fspulse",
