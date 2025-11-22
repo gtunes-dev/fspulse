@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Database connection handling**: Refactored to use R2D2 connection pool for improved concurrency and resource management
 - **Batch updates during scan phase of scans**: Now transacting in batches rather than for each item
+- **Tracing during scans**: When the FsPulse log level is set to tracing, we now trace timing events for the scan phase of scans
+- **Log events have time signatures**: All log events now include time signatures
+
 
 ### Fixed
 - **Settings page**: Active configuration values now readable in light mode with proper background colors
