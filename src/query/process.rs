@@ -1,11 +1,6 @@
-use log::{error, info};
+use log::info;
 use pest::{iterators::Pairs, Parser};
 use rusqlite::{Row, Statement, ToSql};
-use tabled::{
-    builder::Builder,
-    settings::{object::Rows, Alignment, Style},
-    Table,
-};
 
 use super::{
     columns::{
@@ -41,47 +36,6 @@ pub trait QueryResult {
     fn prepare(&mut self, show: &mut Show);
     fn add_row(&mut self, row: Vec<String>);
     fn finalize(&mut self, show: &mut Show);
-}
-
-struct QueryResultBuilder {
-    tabled_builder: Option<Builder>,
-    table: Option<Table>,
-}
-
-impl QueryResult for QueryResultBuilder {
-    fn prepare(&mut self, show: &mut Show) {
-        if let Some(builder) = self.tabled_builder.as_mut() {
-            show.prepare_builder(builder);
-        } else {
-            panic!("QueryResultBuilder used after finalize");
-        }
-    }
-
-    fn add_row(&mut self, row: Vec<String>) {
-        self.tabled_builder
-            .as_mut()
-            .expect("QueryResultBuilder used after finalize")
-            .push_record(row);
-    }
-
-    fn finalize(&mut self, show: &mut Show) {
-        if let Some(builder) = self.tabled_builder.take() {
-            let mut table = builder.build();
-            show.set_column_aligments(&mut table);
-            self.table = Some(table);
-        } else {
-            panic!("Attempted to finalize twice");
-        }
-    }
-}
-
-impl QueryResultBuilder {
-    fn new() -> Self {
-        QueryResultBuilder {
-            tabled_builder: Some(Builder::new()),
-            table: None,
-        }
-    }
 }
 
 struct QueryResultVector {
@@ -986,38 +940,6 @@ impl QueryProcessor {
 
     pub fn execute_query_count(query_str: &str) -> Result<i64, FsPulseError> {
         Self::process_query_count(query_str)
-    }
-
-    pub fn execute_query_and_print(query_str: &str) -> Result<(), FsPulseError> {
-        let mut qrb = QueryResultBuilder::new();
-
-        match Self::process_query(query_str, &mut qrb) {
-            Ok(()) => {}
-            Err(err) => match err {
-                FsPulseError::ParsingError(inner) => {
-                    error!("Query parsing error: {inner}");
-                    println!("{inner}");
-                    return Ok(());
-                }
-                FsPulseError::CustomParsingError(msg) => {
-                    info!("Query parsing error: {msg}");
-                    println!("{msg}");
-                    return Ok(());
-                }
-                _ => {
-                    return Err(err);
-                }
-            },
-        };
-
-        let table = qrb.table.as_mut().unwrap();
-
-        table.with(Style::modern());
-        table.modify(Rows::first(), Alignment::center());
-
-        println!("{table}");
-
-        Ok(())
     }
 
     fn process_query(

@@ -13,24 +13,6 @@ pub enum ColAlign {
     Right,
 }
 
-impl ColAlign {
-    pub fn to_tabled(self) -> tabled::settings::Alignment {
-        match self {
-            ColAlign::Left => tabled::settings::Alignment::left(),
-            ColAlign::Center => tabled::settings::Alignment::center(),
-            ColAlign::Right => tabled::settings::Alignment::right(),
-        }
-    }
-
-    pub fn to_ratatui(self) -> ratatui::layout::Alignment {
-        match self {
-            ColAlign::Left => ratatui::layout::Alignment::Left,
-            ColAlign::Center => ratatui::layout::Alignment::Center,
-            ColAlign::Right => ratatui::layout::Alignment::Right,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 pub struct ColTypeInfo {
     pub rule: Rule,

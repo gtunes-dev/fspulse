@@ -1,11 +1,9 @@
-use chrono::{offset::LocalResult, DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
+use chrono::{offset::LocalResult, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use std::ffi::OsStr;
-use std::path::{Path, MAIN_SEPARATOR_STR};
+use std::path::Path;
 use tico::tico;
 
 use crate::error::FsPulseError;
-
-const NO_DIR_SEPARATOR: &str = "";
 
 pub struct Utils {}
 
@@ -22,46 +20,12 @@ impl Utils {
             .unwrap_or_else(|| path.to_owned())
     }
 
-    pub fn dir_sep_or_empty(is_dir: bool) -> &'static str {
-        if is_dir {
-            MAIN_SEPARATOR_STR
-        } else {
-            NO_DIR_SEPARATOR
-        }
-    }
-
-    pub fn _format_db_time(db_time: i64) -> String {
-        let datetime_utc = DateTime::<Utc>::from_timestamp(db_time, 0)
-            .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-
-        let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
-
-        datetime_local.format("%Y-%m-%d %H:%M:%S").to_string()
-    }
-
-    /*
-    /// Take a UTC timestamp and create a display string in local time
-    pub fn format_db_time_short(db_time: i64) -> String {
-        let datetime_utc = DateTime::<Utc>::from_timestamp(db_time, 0)
-            .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
-
-        let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
-
-        datetime_local.format("%Y-%b-%d %H:%M").to_string()
-    }
-
-    pub fn format_db_time_short_or_none(db_time: Option<i64>) -> String {
-        db_time.map_or("-".to_string(), Self::format_db_time_short)
-    }
-    */
-
     /// Parses a single date string (yyyy-mm-dd) and returns the NaiveDateTime values for:
     /// - start of day (00:00:00)
     /// - end of day (23:59:59)
     fn parse_date_bounds(date_str: &str) -> Result<(NaiveDateTime, NaiveDateTime), FsPulseError> {
-        let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|_| {
-            FsPulseError::CustomParsingError(format!("Invalid date: '{date_str}'"))
-        })?;
+        let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            .map_err(|_| FsPulseError::CustomParsingError(format!("Invalid date: '{date_str}'")))?;
 
         let start_dt = date.and_hms_opt(0, 0, 0).ok_or_else(|| {
             FsPulseError::CustomParsingError(format!(
@@ -70,9 +34,7 @@ impl Utils {
         })?;
 
         let end_dt = date.and_hms_opt(23, 59, 59).ok_or_else(|| {
-            FsPulseError::CustomParsingError(format!(
-                "Unable to create end time for '{date_str}'"
-            ))
+            FsPulseError::CustomParsingError(format!("Unable to create end time for '{date_str}'"))
         })?;
         Ok((start_dt, end_dt))
     }
@@ -166,12 +128,6 @@ impl Utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_dir_sep_or_empty() {
-        assert_eq!(Utils::dir_sep_or_empty(true), std::path::MAIN_SEPARATOR_STR);
-        assert_eq!(Utils::dir_sep_or_empty(false), "");
-    }
 
     #[test]
     fn test_single_date_bounds_valid() {

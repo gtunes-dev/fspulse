@@ -537,30 +537,6 @@ impl Item {
         Ok(analysis_items)
     }
 
-    pub fn for_each_item_in_latest_scan<F>(scan_id: i64, mut func: F) -> Result<(), FsPulseError>
-    where
-        F: FnMut(&Item) -> Result<(), FsPulseError>,
-    {
-        let conn = Database::get_connection()?;
-        let sql = format!(
-            "SELECT {}
-             FROM items
-             WHERE last_scan = ?
-             ORDER BY item_path COLLATE natural_path ASC",
-            Item::ITEM_COLUMNS
-        );
-
-        let mut stmt = conn.prepare(&sql)?;
-
-        let rows = stmt.query_map([scan_id], Item::from_row)?;
-
-        for row in rows {
-            let item = row?;
-            func(&item)?;
-        }
-        Ok(())
-    }
-
     /// Get size history for an item over a date range
     /// Returns a list of (scan_id, started_at, size) tuples from the changes table
     /// filtered by scan date range. Only includes changes where size_new is not NULL.

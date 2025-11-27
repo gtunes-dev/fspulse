@@ -7,7 +7,6 @@ use crate::{error::FsPulseError, utils::Utils};
 
 use chrono::{DateTime, Local, Utc};
 use pest::iterators::Pair;
-use tabled::{builder::Builder, settings::object::Columns, Table};
 
 use super::{columns::ColSet, Rule};
 
@@ -283,17 +282,6 @@ impl Show {
         self.display_cols.iter().map(|dc| dc.alignment).collect()
     }
 
-    pub fn prepare_builder(&mut self, builder: &mut Builder) {
-        self.ensure_columns();
-        let header = self.get_column_headers();
-        builder.push_record(header);
-    }
-
-    pub fn set_column_aligments(&self, table: &mut Table) {
-        for (col_index, col) in self.display_cols.iter().enumerate() {
-            table.modify(Columns::one(col_index), col.alignment.to_tabled());
-        }
-    }
     pub fn add_all_columns(&mut self) {
         for (col, col_spec) in self.col_set.entries() {
             self.display_cols.push(DisplayCol {

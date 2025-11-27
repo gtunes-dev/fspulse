@@ -7,7 +7,7 @@ description = "FsPulse is a fast, cross-platform filesystem scanner and change t
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/gtunes-dev/fspulse"
 homepage = "https://github.com/gtunes-dev/fspulse"
-keywords = ["filesystem", "scanner", "tracking", "integrity", "cli"]
+keywords = ["filesystem", "scanner", "tracking", "integrity", "web", "service"]
 categories = ["command-line-utilities"]
 readme = "README.md"
 documentation = "https://gtunes-dev.github.io/fspulse/"
@@ -25,8 +25,6 @@ chrono = { version = "0.4", features = ["clock"] }
 clap = { version = "4.5", features = ["derive"] }
 claxon = "0.4"
 crossbeam-channel = "0.5"
-crossterm = "0.29"
-dialoguer = { version = "0.12", features = ["history"] }
 dunce = "1.0"
 directories = "6.0"
 figment = { version = "0.10", features = ["toml", "env", "test"] }
@@ -37,27 +35,23 @@ image = "0.25"
 log = "0.4"
 logging_timer = "1.1"
 lopdf = "0.38"
-md-5 = "0.10"
 once_cell = "1.21"
 pest = "2.8"
 pest_derive = "2.8"
 phf = "0.13"
 phf_macros = "0.13"
-ratatui = { version = "0.29", features = ["macros"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 rusqlite = { version = "0.37", features = ["bundled", "collation"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sha2 =  { version = "0.10", features = ["asm"] }
+sha2 =  "0.10"
 strum = "0.27"
 thiserror = "2.0"
-tabled = "0.20"
 threadpool = "1.8"
 tico = "2.0"
 tokio = { version = "1.48", features = ["full"] }
 toml = "0.9"
-tui-textarea = "0.7"
 axum = { version = "0.8", features = ["ws"] }
 rust-embed = { version = "8.5", features = ["debug-embed"] }
 mime_guess = "2.0"
@@ -81,9 +75,6 @@ codegen-units = 1  # FLAC decoder - documented 45% performance improvement
 
 [profile.release.package.sha2]
 codegen-units = 1  # SHA-256 hashing - critical path for file analysis
-
-[profile.release.package.md-5]
-codegen-units = 1  # MD5 hashing
 
 [profile.release.package.image]
 codegen-units = 1  # Image decoding/validation

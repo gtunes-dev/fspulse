@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **CLI simplified**: Running `fspulse` now starts the server by default; `fspulse serve` still works for backward compatibility
+- **TUI removed**: Terminal UI explorer (`src/explore/`) has been removed; all exploration is now through the web UI
+- **Legacy CLI commands removed**: Report commands and interactive CLI features removed; FsPulse is now a web-first application
+- **Removed `asm` feature from sha2**: Fixes x86_64 cross-compilation in CI workflow builds
+
+### Removed
+- Unused dependencies: `crossterm`, `dialoguer`, `ratatui`, `tui-textarea`, `tabled`, `md-5`
+
 ### Added
 - **Access error tracking**: New `access` column on items tracks permission issues encountered during scanning
   - `Ok`: No access issues
