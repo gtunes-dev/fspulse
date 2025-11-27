@@ -12,6 +12,7 @@ use crate::{
 pub struct AnalysisItem {
     item_id: i64,
     item_path: String,
+    access: i64,
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
     last_val_scan: Option<i64>,
@@ -29,6 +30,10 @@ impl AnalysisItem {
 
     pub fn item_path(&self) -> &str {
         &self.item_path
+    }
+
+    pub fn access(&self) -> Access {
+        Access::from_i64(self.access)
     }
 
     pub fn last_hash_scan(&self) -> Option<i64> {
@@ -66,14 +71,15 @@ impl AnalysisItem {
         Ok(AnalysisItem {
             item_id: row.get(0)?,
             item_path: row.get(1)?,
-            last_hash_scan: row.get(2)?,
-            file_hash: row.get(3)?,
-            last_val_scan: row.get(4)?,
-            val: row.get(5)?,
-            val_error: row.get(6)?,
-            meta_change: row.get(7)?,
-            needs_hash: row.get(8)?,
-            needs_val: row.get(9)?,
+            access: row.get(2)?,
+            last_hash_scan: row.get(3)?,
+            file_hash: row.get(4)?,
+            last_val_scan: row.get(5)?,
+            val: row.get(6)?,
+            val_error: row.get(7)?,
+            meta_change: row.get(8)?,
+            needs_hash: row.get(9)?,
+            needs_val: row.get(10)?,
         })
     }
 }
@@ -84,7 +90,7 @@ pub enum ItemType {
     File = 0,
     Directory = 1,
     Symlink = 2,
-    Other = 3,
+    Unknown = 3,
 }
 
 impl ItemType {
@@ -97,13 +103,13 @@ impl ItemType {
             0 => ItemType::File,
             1 => ItemType::Directory,
             2 => ItemType::Symlink,
-            3 => ItemType::Other,
+            3 => ItemType::Unknown,
             _ => {
                 warn!(
-                    "Invalid ItemType value in database: {}, defaulting to Other",
+                    "Invalid ItemType value in database: {}, defaulting to Unknown",
                     value
                 );
-                ItemType::Other
+                ItemType::Unknown
             }
         }
     }
@@ -113,7 +119,7 @@ impl ItemType {
             ItemType::File => "F",
             ItemType::Directory => "D",
             ItemType::Symlink => "S",
-            ItemType::Other => "O",
+            ItemType::Unknown => "U",
         }
     }
 
@@ -122,7 +128,7 @@ impl ItemType {
             ItemType::File => "File",
             ItemType::Directory => "Directory",
             ItemType::Symlink => "Symlink",
-            ItemType::Other => "Other",
+            ItemType::Unknown => "Unknown",
         }
     }
 
@@ -132,12 +138,12 @@ impl ItemType {
             "FILE" => Some(ItemType::File),
             "DIRECTORY" | "DIR" => Some(ItemType::Directory),
             "SYMLINK" => Some(ItemType::Symlink),
-            "OTHER" => Some(ItemType::Other),
+            "UNKNOWN" => Some(ItemType::Unknown),
             // Short names
             "F" => Some(ItemType::File),
             "D" => Some(ItemType::Directory),
             "S" => Some(ItemType::Symlink),
-            "O" => Some(ItemType::Other),
+            "U" => Some(ItemType::Unknown),
             _ => None,
         }
     }
@@ -155,6 +161,77 @@ impl crate::query::QueryEnum for ItemType {
     }
 }
 
+#[repr(i64)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Access {
+    Ok = 0,        // No known access issues (default)
+    MetaError = 1, // Can't stat (found during scan phase)
+    ReadError = 2, // Can stat, can't read (found during analysis phase)
+}
+
+impl Access {
+    pub fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            0 => Access::Ok,
+            1 => Access::MetaError,
+            2 => Access::ReadError,
+            _ => {
+                warn!(
+                    "Invalid Access value in database: {}, defaulting to Ok",
+                    value
+                );
+                Access::Ok
+            }
+        }
+    }
+
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            Access::Ok => "N",
+            Access::MetaError => "M",
+            Access::ReadError => "R",
+        }
+    }
+
+    pub fn full_name(&self) -> &'static str {
+        match self {
+            Access::Ok => "No Error",
+            Access::MetaError => "Meta Error",
+            Access::ReadError => "Read Error",
+        }
+    }
+
+    pub fn from_string(s: &str) -> Option<Self> {
+        match s.to_ascii_uppercase().as_str() {
+            // Full names
+            "NO ERROR" | "NOERROR" => Some(Access::Ok),
+            "META ERROR" | "METAERROR" => Some(Access::MetaError),
+            "READ ERROR" | "READERROR" => Some(Access::ReadError),
+            // Short names
+            "N" => Some(Access::Ok),
+            "M" => Some(Access::MetaError),
+            "R" => Some(Access::ReadError),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for Access {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.full_name())
+    }
+}
+
+impl crate::query::QueryEnum for Access {
+    fn from_token(s: &str) -> Option<i64> {
+        Self::from_string(s).map(|access| access.as_i64())
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Item {
     #[serde(rename = "id")]
@@ -165,6 +242,9 @@ pub struct Item {
     item_path: String,
     #[serde(rename = "type")]
     item_type: ItemType,
+
+    // Access state property group
+    access: Access,
 
     last_scan: i64,
     is_ts: bool,
@@ -191,6 +271,7 @@ impl Item {
         root_id,
         item_path,
         item_type,
+        access,
         last_scan,
         is_ts,
         mod_date,
@@ -207,15 +288,16 @@ impl Item {
             root_id: row.get(1)?,
             item_path: row.get(2)?,
             item_type: ItemType::from_i64(row.get(3)?),
-            last_scan: row.get(4)?,
-            is_ts: row.get(5)?,
-            mod_date: row.get(6)?,
-            size: row.get(7)?,
-            last_hash_scan: row.get(8)?,
-            file_hash: row.get(9)?,
-            last_val_scan: row.get(10)?,
-            val: row.get(11)?,
-            val_error: row.get(12)?,
+            access: Access::from_i64(row.get(4)?),
+            last_scan: row.get(5)?,
+            is_ts: row.get(6)?,
+            mod_date: row.get(7)?,
+            size: row.get(8)?,
+            last_hash_scan: row.get(9)?,
+            file_hash: row.get(10)?,
+            last_val_scan: row.get(11)?,
+            val: row.get(12)?,
+            val_error: row.get(13)?,
         })
     }
 
@@ -252,6 +334,9 @@ impl Item {
     }
     pub fn item_type(&self) -> ItemType {
         self.item_type
+    }
+    pub fn access(&self) -> Access {
+        self.access
     }
     pub fn last_scan(&self) -> i64 {
         self.last_scan
@@ -294,6 +379,7 @@ impl Item {
         conn: &Connection,
         scan_id: i64,
         analysis_spec: &AnalysisSpec,
+        last_item_id: i64,
     ) -> Result<(u64, u64), FsPulseError> {
         let sql = r#"
             WITH candidates AS (
@@ -325,7 +411,9 @@ impl Item {
             WHERE
                 i.last_scan = $3 AND
                 i.item_type = 0 AND
-                i.is_ts = 0
+                i.is_ts = 0 AND
+                i.access <> 1 AND
+                i.item_id > $6
         )
         SELECT
             COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
@@ -341,7 +429,8 @@ impl Item {
             analysis_spec.hash_all() as i64,
             scan_id,
             analysis_spec.is_val() as i64,
-            analysis_spec.val_all() as i64
+            analysis_spec.val_all() as i64,
+            last_item_id
         ])?;
 
         if let Some(row) = rows.next()? {
@@ -379,6 +468,7 @@ impl Item {
             "SELECT
                 i.item_id,
                 i.item_path,
+                i.access,
                 i.last_hash_scan,
                 i.file_hash,
                 i.last_val_scan,
@@ -408,19 +498,20 @@ impl Item {
             i.last_scan = $3
             AND i.item_type = 0
             AND i.is_ts = 0
+            AND i.access <> 1
             AND i.item_id > $6
             AND (
                 ($1 = 1 AND (  -- hash enabled
                     ($2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan < $3)) OR
                     i.file_hash IS NULL OR
-                    c.change_type = 1 OR
-                    (c.change_type = 2 AND c.meta_change = 1)
+                    (c.change_type = 1 AND (i.last_hash_scan IS NULL OR i.last_hash_scan < $3)) OR
+                    (c.change_type = 2 AND c.meta_change = 1 AND (i.last_hash_scan IS NULL OR i.last_hash_scan < $3))
                 )) OR
                 ($4 = 1 AND (  -- val enabled
                     ($5 = 1 AND (i.val = 0 OR i.last_val_scan < $3)) OR
                     i.val = 0 OR
-                    c.change_type = 1 OR
-                    (c.change_type = 2 AND c.meta_change = 1)
+                    (c.change_type = 1 AND (i.last_val_scan IS NULL OR i.last_val_scan < $3)) OR
+                    (c.change_type = 2 AND c.meta_change = 1 AND (i.last_val_scan IS NULL OR i.last_val_scan < $3))
                 ))
             )
         ORDER BY i.item_id ASC
@@ -646,7 +737,7 @@ mod tests {
         assert_eq!(ItemType::File.as_i64(), 0);
         assert_eq!(ItemType::Directory.as_i64(), 1);
         assert_eq!(ItemType::Symlink.as_i64(), 2);
-        assert_eq!(ItemType::Other.as_i64(), 3);
+        assert_eq!(ItemType::Unknown.as_i64(), 3);
     }
 
     #[test]
@@ -655,11 +746,11 @@ mod tests {
         assert_eq!(ItemType::from_i64(0), ItemType::File);
         assert_eq!(ItemType::from_i64(1), ItemType::Directory);
         assert_eq!(ItemType::from_i64(2), ItemType::Symlink);
-        assert_eq!(ItemType::from_i64(3), ItemType::Other);
+        assert_eq!(ItemType::from_i64(3), ItemType::Unknown);
 
-        // Invalid values should default to Other
-        assert_eq!(ItemType::from_i64(999), ItemType::Other);
-        assert_eq!(ItemType::from_i64(-1), ItemType::Other);
+        // Invalid values should default to Unknown
+        assert_eq!(ItemType::from_i64(999), ItemType::Unknown);
+        assert_eq!(ItemType::from_i64(-1), ItemType::Unknown);
     }
 
     #[test]
@@ -667,7 +758,7 @@ mod tests {
         assert_eq!(ItemType::File.short_name(), "F");
         assert_eq!(ItemType::Directory.short_name(), "D");
         assert_eq!(ItemType::Symlink.short_name(), "S");
-        assert_eq!(ItemType::Other.short_name(), "O");
+        assert_eq!(ItemType::Unknown.short_name(), "U");
     }
 
     #[test]
@@ -675,7 +766,7 @@ mod tests {
         assert_eq!(ItemType::File.full_name(), "File");
         assert_eq!(ItemType::Directory.full_name(), "Directory");
         assert_eq!(ItemType::Symlink.full_name(), "Symlink");
-        assert_eq!(ItemType::Other.full_name(), "Other");
+        assert_eq!(ItemType::Unknown.full_name(), "Unknown");
     }
 
     #[test]
@@ -683,6 +774,7 @@ mod tests {
         let analysis_item = AnalysisItem {
             item_id: 123,
             item_path: "/test/path".to_string(),
+            access: Access::Ok.as_i64(),
             last_hash_scan: Some(456),
             file_hash: Some("abc123".to_string()),
             last_val_scan: Some(789),
@@ -695,6 +787,7 @@ mod tests {
 
         assert_eq!(analysis_item.item_id(), 123);
         assert_eq!(analysis_item.item_path(), "/test/path");
+        assert_eq!(analysis_item.access(), Access::Ok);
         assert_eq!(analysis_item.last_hash_scan(), Some(456));
         assert_eq!(analysis_item.file_hash(), Some("abc123"));
         assert_eq!(analysis_item.last_val_scan(), Some(789));
@@ -711,6 +804,7 @@ mod tests {
             root_id: 1,
             item_path: "/another/path".to_string(),
             item_type: ItemType::File,
+            access: Access::Ok,
             last_scan: 123456789,
             is_ts: true,
             mod_date: Some(987654321),
@@ -726,6 +820,7 @@ mod tests {
         assert_eq!(item.root_id(), 1);
         assert_eq!(item.item_path(), "/another/path");
         assert_eq!(item.item_type(), ItemType::File);
+        assert_eq!(item.access(), Access::Ok);
         assert_eq!(item.last_scan(), 123456789);
         assert!(item.is_ts());
         assert_eq!(item.mod_date(), Some(987654321));
@@ -744,12 +839,86 @@ mod tests {
             ItemType::File,
             ItemType::Directory,
             ItemType::Symlink,
-            ItemType::Other,
+            ItemType::Unknown,
         ];
-        let expected = ["F", "D", "S", "O"];
+        let expected = ["F", "D", "S", "U"];
 
         for (i, item_type) in types.iter().enumerate() {
             assert_eq!(item_type.short_name(), expected[i]);
+        }
+    }
+
+    #[test]
+    fn test_access_integer_values() {
+        assert_eq!(Access::Ok.as_i64(), 0);
+        assert_eq!(Access::MetaError.as_i64(), 1);
+        assert_eq!(Access::ReadError.as_i64(), 2);
+    }
+
+    #[test]
+    fn test_access_from_i64() {
+        assert_eq!(Access::from_i64(0), Access::Ok);
+        assert_eq!(Access::from_i64(1), Access::MetaError);
+        assert_eq!(Access::from_i64(2), Access::ReadError);
+
+        // Invalid values should default to Ok
+        assert_eq!(Access::from_i64(999), Access::Ok);
+        assert_eq!(Access::from_i64(-1), Access::Ok);
+    }
+
+    #[test]
+    fn test_access_short_name() {
+        assert_eq!(Access::Ok.short_name(), "N");
+        assert_eq!(Access::MetaError.short_name(), "M");
+        assert_eq!(Access::ReadError.short_name(), "R");
+    }
+
+    #[test]
+    fn test_access_full_name() {
+        assert_eq!(Access::Ok.full_name(), "No Error");
+        assert_eq!(Access::MetaError.full_name(), "Meta Error");
+        assert_eq!(Access::ReadError.full_name(), "Read Error");
+    }
+
+    #[test]
+    fn test_access_from_string() {
+        // Full names
+        assert_eq!(Access::from_string("No Error"), Some(Access::Ok));
+        assert_eq!(Access::from_string("NoError"), Some(Access::Ok));
+        assert_eq!(Access::from_string("Meta Error"), Some(Access::MetaError));
+        assert_eq!(Access::from_string("MetaError"), Some(Access::MetaError));
+        assert_eq!(Access::from_string("Read Error"), Some(Access::ReadError));
+        assert_eq!(Access::from_string("ReadError"), Some(Access::ReadError));
+
+        // Short names
+        assert_eq!(Access::from_string("N"), Some(Access::Ok));
+        assert_eq!(Access::from_string("M"), Some(Access::MetaError));
+        assert_eq!(Access::from_string("R"), Some(Access::ReadError));
+
+        // Case insensitive
+        assert_eq!(Access::from_string("no error"), Some(Access::Ok));
+        assert_eq!(Access::from_string("META ERROR"), Some(Access::MetaError));
+
+        // Invalid
+        assert_eq!(Access::from_string("X"), None);
+        assert_eq!(Access::from_string(""), None);
+    }
+
+    #[test]
+    fn test_access_display() {
+        assert_eq!(Access::Ok.to_string(), "No Error");
+        assert_eq!(Access::MetaError.to_string(), "Meta Error");
+        assert_eq!(Access::ReadError.to_string(), "Read Error");
+    }
+
+    #[test]
+    fn test_access_round_trip() {
+        let states = [Access::Ok, Access::MetaError, Access::ReadError];
+
+        for access in states {
+            let str_val = access.short_name();
+            let parsed_back = Access::from_string(str_val).unwrap();
+            assert_eq!(access, parsed_back, "Round trip failed for {access:?}");
         }
     }
 }

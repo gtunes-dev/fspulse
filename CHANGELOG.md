@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Access error tracking**: New `access` column on items tracks permission issues encountered during scanning
+  - `Ok`: No access issues
+  - `MetaError`: Unable to read file metadata (detected during scan phase)
+  - `ReadError`: Unable to read file contents (detected during analysis phase)
+- **Access Denied alerts**: New alert type generated when files cannot be read during analysis
+  - Displayed with amber "warning" badge in web UI to distinguish from validation errors
+  - Filterable via new "Access Denied" option in Alerts page type dropdown
+- **Change tracking for access state**: Change records now include `access_old` and `access_new` columns to track permission changes over time
+
+### Changed
+- **Resilient scanning**: Permission errors no longer abort scans. Items with access issues are tracked and can be retried on subsequent scans when permissions are restored
+- **Hashing optimization**: Removed unnecessary `BufReader` wrapper for more efficient large file hashing
+
 ## [v0.3.1] - 2025-11-23
 
 ### Changed

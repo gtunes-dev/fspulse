@@ -292,24 +292,30 @@ export function AlertsPage() {
   }
 
   const getAlertTypeBadge = (type: AlertTypeValue) => {
-    if (type === 'H') {
-      return <Badge variant="error">Suspicious Hash</Badge>
-    } else {
-      return <Badge variant="error">Invalid Item</Badge>
+    switch (type) {
+      case 'H':
+        return <Badge variant="error">Suspicious Hash</Badge>
+      case 'I':
+        return <Badge variant="error">Invalid Item</Badge>
+      case 'A':
+        return <Badge variant="warning">Access Denied</Badge>
     }
   }
 
   const getAlertDetails = (alert: AlertRow) => {
-    if (alert.alert_type === 'H') {
-      return (
-        <div className="text-xs space-y-1">
-          <div>Hash changed</div>
-          <div className="font-mono text-muted-foreground">Old: {alert.hash_old || 'N/A'}</div>
-          <div className="font-mono text-muted-foreground">New: {alert.hash_new || 'N/A'}</div>
-        </div>
-      )
-    } else {
-      return <div className="text-xs">{alert.val_error || 'Validation error'}</div>
+    switch (alert.alert_type) {
+      case 'H':
+        return (
+          <div className="text-xs space-y-1">
+            <div>Hash changed</div>
+            <div className="font-mono text-muted-foreground">Old: {alert.hash_old || 'N/A'}</div>
+            <div className="font-mono text-muted-foreground">New: {alert.hash_new || 'N/A'}</div>
+          </div>
+        )
+      case 'I':
+        return <div className="text-xs">{alert.val_error || 'Validation error'}</div>
+      case 'A':
+        return <div className="text-xs">File could not be read</div>
     }
   }
 
@@ -361,6 +367,7 @@ export function AlertsPage() {
                     <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="H">Suspicious Hash</SelectItem>
                     <SelectItem value="I">Invalid Item</SelectItem>
+                    <SelectItem value="A">Access Denied</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

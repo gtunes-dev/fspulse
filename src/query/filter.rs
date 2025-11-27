@@ -1,4 +1,12 @@
-use crate::{alerts::{AlertStatus, AlertType}, changes::ChangeType, error::FsPulseError, items::ItemType, scans::ScanState, utils::Utils, validate::validator::ValidationState};
+use crate::{
+    alerts::{AlertStatus, AlertType},
+    changes::ChangeType,
+    error::FsPulseError,
+    items::{Access, ItemType},
+    scans::ScanState,
+    utils::Utils,
+    validate::validator::ValidationState,
+};
 use pest::iterators::{Pair, Pairs};
 use phf::Map;
 use phf_macros::{phf_map, phf_ordered_map};
@@ -193,9 +201,9 @@ impl DateFilter {
     }
 
     pub fn validate_values(pair: &mut Pairs<Rule>) -> Result<(), FsPulseError> {
-      let inner_pairs = pair.next().unwrap().into_inner();
+        let inner_pairs = pair.next().unwrap().into_inner();
 
-       for date_spec in inner_pairs {
+        for date_spec in inner_pairs {
             match date_spec.as_rule() {
                 Rule::date => {
                     let date_start_str = date_spec.as_str();
@@ -209,8 +217,8 @@ impl DateFilter {
                 }
                 Rule::null => {}
                 Rule::not_null => {}
-                Rule::date_filter_EOI => {},
-                Rule::EOI => {},
+                Rule::date_filter_EOI => {}
+                Rule::EOI => {}
                 _ => unreachable!(),
             }
         }
@@ -503,6 +511,9 @@ static ENUM_PARSERS: Map<&'static str, EnumParser> = phf_map! {
     "val" => ValidationState::from_token,
     "val_old" => ValidationState::from_token,
     "val_new" => ValidationState::from_token,
+    "access" => Access::from_token,
+    "access_old" => Access::from_token,
+    "access_new" => Access::from_token,
 };
 
 /// Filter for integer-backed enums (like scan_state)
@@ -566,11 +577,9 @@ impl EnumFilter {
         };
 
         // Get the parser for this enum column
-        let parser = ENUM_PARSERS.get(enum_col.as_str())
-            .ok_or_else(|| FsPulseError::CustomParsingError(format!(
-                "Unknown enum column: '{}'",
-                enum_col
-            )))?;
+        let parser = ENUM_PARSERS.get(enum_col.as_str()).ok_or_else(|| {
+            FsPulseError::CustomParsingError(format!("Unknown enum column: '{}'", enum_col))
+        })?;
 
         // Parse each enum value using the parser
         for enum_val_pair in iter {
@@ -580,8 +589,7 @@ impl EnumFilter {
                 None => {
                     return Err(FsPulseError::CustomParsingError(format!(
                         "Invalid {} value: '{}'",
-                        enum_col,
-                        token
+                        enum_col, token
                     )))
                 }
             }
@@ -743,31 +751,51 @@ mod tests {
     #[test]
     fn test_id_filter_single_id() {
         let result = QueryParser::parse(Rule::id_filter_EOI, "42");
-        assert!(result.is_ok(), "Failed to parse single ID '42': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse single ID '42': {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_id_filter_multiple_ids() {
         let result = QueryParser::parse(Rule::id_filter_EOI, "1, 5, 10");
-        assert!(result.is_ok(), "Failed to parse multiple IDs: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple IDs: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_id_filter_range() {
         let result = QueryParser::parse(Rule::id_filter_EOI, "1..10");
-        assert!(result.is_ok(), "Failed to parse range '1..10': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse range '1..10': {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_id_filter_multiple_ranges() {
         let result = QueryParser::parse(Rule::id_filter_EOI, "1..10, 20..30");
-        assert!(result.is_ok(), "Failed to parse multiple ranges: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple ranges: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_id_filter_mixed() {
         let result = QueryParser::parse(Rule::id_filter_EOI, "1, 5..10, 15");
-        assert!(result.is_ok(), "Failed to parse mixed IDs and ranges: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse mixed IDs and ranges: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -779,13 +807,21 @@ mod tests {
     #[test]
     fn test_id_filter_not_null() {
         let result = QueryParser::parse(Rule::id_filter_EOI, "not null");
-        assert!(result.is_ok(), "Failed to parse 'not null': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'not null': {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_id_filter_whitespace() {
         let result = QueryParser::parse(Rule::id_filter_EOI, "  1 ,  5 .. 10  ,  15  ");
-        assert!(result.is_ok(), "Failed to parse with whitespace: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse with whitespace: {:?}",
+            result.err()
+        );
     }
 
     // ==================================================================================
@@ -795,19 +831,31 @@ mod tests {
     #[test]
     fn test_date_filter_single_date() {
         let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15");
-        assert!(result.is_ok(), "Failed to parse single date: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse single date: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_date_filter_range() {
         let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-01..2025-01-31");
-        assert!(result.is_ok(), "Failed to parse date range: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse date range: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_date_filter_multiple_dates() {
         let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-01, 2025-02-01");
-        assert!(result.is_ok(), "Failed to parse multiple dates: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple dates: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -819,7 +867,11 @@ mod tests {
     #[test]
     fn test_date_filter_not_null() {
         let result = QueryParser::parse(Rule::date_filter_EOI, "not null");
-        assert!(result.is_ok(), "Failed to parse 'not null': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'not null': {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -847,10 +899,18 @@ mod tests {
     #[test]
     fn test_bool_filter_false() {
         let result = QueryParser::parse(Rule::bool_filter_EOI, "false");
-        assert!(result.is_ok(), "Failed to parse 'false': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'false': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::bool_filter_EOI, "FALSE");
-        assert!(result.is_ok(), "Failed to parse 'FALSE': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'FALSE': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::bool_filter_EOI, "F");
         assert!(result.is_ok(), "Failed to parse 'F': {:?}", result.err());
@@ -865,13 +925,21 @@ mod tests {
     #[test]
     fn test_bool_filter_not_null() {
         let result = QueryParser::parse(Rule::bool_filter_EOI, "not null");
-        assert!(result.is_ok(), "Failed to parse 'not null': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'not null': {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_bool_filter_multiple() {
         let result = QueryParser::parse(Rule::bool_filter_EOI, "true, false");
-        assert!(result.is_ok(), "Failed to parse multiple bool values: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple bool values: {:?}",
+            result.err()
+        );
     }
 
     // ==================================================================================
@@ -881,31 +949,51 @@ mod tests {
     #[test]
     fn test_string_filter_single() {
         let result = QueryParser::parse(Rule::string_filter_EOI, "'error'");
-        assert!(result.is_ok(), "Failed to parse single string: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse single string: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_string_filter_multiple() {
         let result = QueryParser::parse(Rule::string_filter_EOI, "'error', 'warning'");
-        assert!(result.is_ok(), "Failed to parse multiple strings: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple strings: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_string_filter_empty() {
         let result = QueryParser::parse(Rule::string_filter_EOI, "''");
-        assert!(result.is_ok(), "Failed to parse empty string: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse empty string: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_string_filter_with_spaces() {
         let result = QueryParser::parse(Rule::string_filter_EOI, "'file not found'");
-        assert!(result.is_ok(), "Failed to parse string with spaces: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse string with spaces: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_string_filter_escaped_quote() {
         let result = QueryParser::parse(Rule::string_filter_EOI, r"'can\'t open file'");
-        assert!(result.is_ok(), "Failed to parse string with escaped quote: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse string with escaped quote: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -917,7 +1005,11 @@ mod tests {
     #[test]
     fn test_string_filter_not_null() {
         let result = QueryParser::parse(Rule::string_filter_EOI, "not null");
-        assert!(result.is_ok(), "Failed to parse 'not null': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'not null': {:?}",
+            result.err()
+        );
     }
 
     // ==================================================================================
@@ -927,25 +1019,41 @@ mod tests {
     #[test]
     fn test_path_filter_single() {
         let result = QueryParser::parse(Rule::path_filter_EOI, "'/home/user'");
-        assert!(result.is_ok(), "Failed to parse single path: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse single path: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_path_filter_multiple() {
         let result = QueryParser::parse(Rule::path_filter_EOI, "'/var/log', '/tmp'");
-        assert!(result.is_ok(), "Failed to parse multiple paths: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple paths: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_path_filter_windows() {
         let result = QueryParser::parse(Rule::path_filter_EOI, r"'C:\Users\Documents'");
-        assert!(result.is_ok(), "Failed to parse Windows path: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse Windows path: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_path_filter_with_spaces() {
         let result = QueryParser::parse(Rule::path_filter_EOI, "'/home/my documents'");
-        assert!(result.is_ok(), "Failed to parse path with spaces: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse path with spaces: {:?}",
+            result.err()
+        );
     }
 
     // ==================================================================================
@@ -955,7 +1063,11 @@ mod tests {
     #[test]
     fn test_val_filter_valid() {
         let result = QueryParser::parse(Rule::val_filter_EOI, "Valid");
-        assert!(result.is_ok(), "Failed to parse 'Valid': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Valid': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::val_filter_EOI, "V");
         assert!(result.is_ok(), "Failed to parse 'V': {:?}", result.err());
@@ -964,7 +1076,11 @@ mod tests {
     #[test]
     fn test_val_filter_invalid() {
         let result = QueryParser::parse(Rule::val_filter_EOI, "Invalid");
-        assert!(result.is_ok(), "Failed to parse 'Invalid': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Invalid': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::val_filter_EOI, "I");
         assert!(result.is_ok(), "Failed to parse 'I': {:?}", result.err());
@@ -973,7 +1089,11 @@ mod tests {
     #[test]
     fn test_val_filter_no_validator() {
         let result = QueryParser::parse(Rule::val_filter_EOI, "No Validator");
-        assert!(result.is_ok(), "Failed to parse 'No Validator': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'No Validator': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::val_filter_EOI, "N");
         assert!(result.is_ok(), "Failed to parse 'N': {:?}", result.err());
@@ -982,7 +1102,11 @@ mod tests {
     #[test]
     fn test_val_filter_unknown() {
         let result = QueryParser::parse(Rule::val_filter_EOI, "Unknown");
-        assert!(result.is_ok(), "Failed to parse 'Unknown': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Unknown': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::val_filter_EOI, "U");
         assert!(result.is_ok(), "Failed to parse 'U': {:?}", result.err());
@@ -991,10 +1115,18 @@ mod tests {
     #[test]
     fn test_val_filter_multiple() {
         let result = QueryParser::parse(Rule::val_filter_EOI, "Valid, Invalid");
-        assert!(result.is_ok(), "Failed to parse multiple values: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple values: {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::val_filter_EOI, "V, I, N");
-        assert!(result.is_ok(), "Failed to parse multiple short codes: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple short codes: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1019,7 +1151,11 @@ mod tests {
     #[test]
     fn test_item_type_filter_directory() {
         let result = QueryParser::parse(Rule::item_type_filter_EOI, "Directory");
-        assert!(result.is_ok(), "Failed to parse 'Directory': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Directory': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::item_type_filter_EOI, "Dir");
         assert!(result.is_ok(), "Failed to parse 'Dir': {:?}", result.err());
@@ -1031,7 +1167,11 @@ mod tests {
     #[test]
     fn test_item_type_filter_symlink() {
         let result = QueryParser::parse(Rule::item_type_filter_EOI, "Symlink");
-        assert!(result.is_ok(), "Failed to parse 'Symlink': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Symlink': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::item_type_filter_EOI, "S");
         assert!(result.is_ok(), "Failed to parse 'S': {:?}", result.err());
@@ -1040,10 +1180,18 @@ mod tests {
     #[test]
     fn test_item_type_filter_multiple() {
         let result = QueryParser::parse(Rule::item_type_filter_EOI, "File, Directory");
-        assert!(result.is_ok(), "Failed to parse multiple types: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple types: {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::item_type_filter_EOI, "F, D, S");
-        assert!(result.is_ok(), "Failed to parse multiple short codes: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple short codes: {:?}",
+            result.err()
+        );
     }
 
     // ==================================================================================
@@ -1062,7 +1210,11 @@ mod tests {
     #[test]
     fn test_change_type_filter_modify() {
         let result = QueryParser::parse(Rule::change_type_filter_EOI, "Modify");
-        assert!(result.is_ok(), "Failed to parse 'Modify': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Modify': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::change_type_filter_EOI, "M");
         assert!(result.is_ok(), "Failed to parse 'M': {:?}", result.err());
@@ -1071,7 +1223,11 @@ mod tests {
     #[test]
     fn test_change_type_filter_delete() {
         let result = QueryParser::parse(Rule::change_type_filter_EOI, "Delete");
-        assert!(result.is_ok(), "Failed to parse 'Delete': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Delete': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::change_type_filter_EOI, "D");
         assert!(result.is_ok(), "Failed to parse 'D': {:?}", result.err());
@@ -1080,10 +1236,18 @@ mod tests {
     #[test]
     fn test_change_type_filter_multiple() {
         let result = QueryParser::parse(Rule::change_type_filter_EOI, "Add, Modify");
-        assert!(result.is_ok(), "Failed to parse multiple types: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple types: {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::change_type_filter_EOI, "A, M, D");
-        assert!(result.is_ok(), "Failed to parse multiple short codes: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple short codes: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1117,7 +1281,11 @@ mod tests {
     #[test]
     fn test_alert_type_filter_multiple() {
         let result = QueryParser::parse(Rule::alert_type_filter_EOI, "H, I");
-        assert!(result.is_ok(), "Failed to parse multiple alert types: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple alert types: {:?}",
+            result.err()
+        );
     }
 
     // ==================================================================================
@@ -1154,7 +1322,11 @@ mod tests {
     #[test]
     fn test_alert_status_filter_multiple() {
         let result = QueryParser::parse(Rule::alert_status_filter_EOI, "D, F, O");
-        assert!(result.is_ok(), "Failed to parse multiple alert statuses: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple alert statuses: {:?}",
+            result.err()
+        );
     }
 
     // ==================================================================================
@@ -1164,10 +1336,18 @@ mod tests {
     #[test]
     fn test_scan_state_filter_single_full_name() {
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning");
-        assert!(result.is_ok(), "Failed to parse 'Scanning': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Scanning': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Completed");
-        assert!(result.is_ok(), "Failed to parse 'Completed': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Completed': {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1179,58 +1359,118 @@ mod tests {
         assert!(result.is_ok(), "Failed to parse 'C': {:?}", result.err());
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "P");
-        assert!(result.is_ok(), "Failed to parse 'P' (Stopped): {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'P' (Stopped): {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_scan_state_filter_case_variations() {
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "scanning");
-        assert!(result.is_ok(), "Failed to parse 'scanning' (lowercase): {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'scanning' (lowercase): {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "SCANNING");
-        assert!(result.is_ok(), "Failed to parse 'SCANNING' (uppercase): {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'SCANNING' (uppercase): {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning");
-        assert!(result.is_ok(), "Failed to parse 'Scanning' (titlecase): {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Scanning' (titlecase): {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "s");
-        assert!(result.is_ok(), "Failed to parse 's' (lowercase short code): {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 's' (lowercase short code): {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "S");
-        assert!(result.is_ok(), "Failed to parse 'S' (uppercase short code): {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'S' (uppercase short code): {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_scan_state_filter_multiple_values() {
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning, Completed");
-        assert!(result.is_ok(), "Failed to parse 'Scanning, Completed': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Scanning, Completed': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "S, C, E");
-        assert!(result.is_ok(), "Failed to parse 'S, C, E': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'S, C, E': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning, C, Error");
-        assert!(result.is_ok(), "Failed to parse mixed 'Scanning, C, Error': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse mixed 'Scanning, C, Error': {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_scan_state_filter_all_states() {
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning");
-        assert!(result.is_ok(), "Failed to parse 'Scanning': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Scanning': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Sweeping");
-        assert!(result.is_ok(), "Failed to parse 'Sweeping': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Sweeping': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Analyzing");
-        assert!(result.is_ok(), "Failed to parse 'Analyzing': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Analyzing': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Completed");
-        assert!(result.is_ok(), "Failed to parse 'Completed': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Completed': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Stopped");
-        assert!(result.is_ok(), "Failed to parse 'Stopped': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Stopped': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Error");
-        assert!(result.is_ok(), "Failed to parse 'Error': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Error': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "S");
         assert!(result.is_ok(), "Failed to parse 'S': {:?}", result.err());
@@ -1266,10 +1506,18 @@ mod tests {
     #[test]
     fn test_scan_state_filter_whitespace() {
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, " Scanning ");
-        assert!(result.is_ok(), "Failed to parse with whitespace: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse with whitespace: {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning , Completed");
-        assert!(result.is_ok(), "Failed to parse with comma whitespace: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse with comma whitespace: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1307,7 +1555,11 @@ mod tests {
     #[test]
     fn test_int_filter_greater_than() {
         let result = QueryParser::parse(Rule::int_filter_EOI, "> 100");
-        assert!(result.is_ok(), "Failed to parse '> 100': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse '> 100': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::int_filter_EOI, ">100");
         assert!(result.is_ok(), "Failed to parse '>100': {:?}", result.err());
@@ -1316,7 +1568,11 @@ mod tests {
     #[test]
     fn test_int_filter_less_than() {
         let result = QueryParser::parse(Rule::int_filter_EOI, "< 100");
-        assert!(result.is_ok(), "Failed to parse '< 100': {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse '< 100': {:?}",
+            result.err()
+        );
 
         let result = QueryParser::parse(Rule::int_filter_EOI, "<100");
         assert!(result.is_ok(), "Failed to parse '<100': {:?}", result.err());
@@ -1331,12 +1587,20 @@ mod tests {
     #[test]
     fn test_int_filter_large_value() {
         let result = QueryParser::parse(Rule::int_filter_EOI, "> 1000000000");
-        assert!(result.is_ok(), "Failed to parse large value: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse large value: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_int_filter_whitespace() {
         let result = QueryParser::parse(Rule::int_filter_EOI, "  >   100  ");
-        assert!(result.is_ok(), "Failed to parse with whitespace: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to parse with whitespace: {:?}",
+            result.err()
+        );
     }
 }

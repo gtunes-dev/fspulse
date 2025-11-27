@@ -1136,12 +1136,16 @@ impl QueueEntry {
                     .map_err(FsPulseError::DatabaseError)?;
                 log::debug!("Deleted manual scan queue entry {}", queue_id);
             } else if source == SourceType::Scheduled.as_i32() {
+                // Clear both scan_id and analysis_hwm when scan completes
                 c.execute(
-                    "UPDATE scan_queue SET scan_id = NULL WHERE queue_id = ?",
+                    "UPDATE scan_queue SET scan_id = NULL, analysis_hwm = NULL WHERE queue_id = ?",
                     [queue_id],
                 )
                 .map_err(FsPulseError::DatabaseError)?;
-                log::debug!("Cleared scan_id for scheduled queue entry {}", queue_id);
+                log::debug!(
+                    "Cleared scan_id and analysis_hwm for scheduled queue entry {}",
+                    queue_id
+                );
             } else {
                 log::error!(
                     "Unknown source type {} for queue entry {}",
@@ -1410,6 +1414,133 @@ pub fn list_schedules() -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
 
     let results: Result<Vec<_>, _> = schedules.collect();
     results.map_err(FsPulseError::DatabaseError)
+}
+
+// ============================================================================
+// AnalysisTracker - Tracks in-flight analysis items for HWM management
+// ============================================================================
+
+use std::sync::Mutex;
+
+/// Tracks in-flight analysis items and manages the high water mark (HWM) for
+/// restart resilience. The HWM represents the highest item_id such that all
+/// items with id <= HWM have been fully processed.
+///
+/// Thread-safe: can be shared between the main thread (which adds batches)
+/// and worker threads (which complete items).
+pub struct AnalysisTracker {
+    /// Sorted vector of item IDs currently being processed
+    in_flight: Mutex<Vec<i64>>,
+    /// The scan_id for this analysis session
+    scan_id: i64,
+}
+
+impl AnalysisTracker {
+    /// Create a new tracker for the given scan
+    pub fn new(scan_id: i64) -> Self {
+        Self {
+            in_flight: Mutex::new(Vec::new()),
+            scan_id,
+        }
+    }
+
+    /// Add a batch of item IDs to track. Called by main thread after fetching.
+    pub fn add_batch(&self, ids: impl Iterator<Item = i64>) {
+        let mut v = self.in_flight.lock().unwrap();
+        v.extend(ids);
+        v.sort_unstable();
+    }
+
+    /// Mark an item as complete and update HWM if appropriate.
+    /// Called by worker threads after finishing processing.
+    ///
+    /// The HWM update logic:
+    /// - If this is not the smallest ID, just remove it (items before it are still in-flight)
+    /// - If this is the smallest ID:
+    ///   - If it's the only ID, set HWM to this ID (all work complete up to here)
+    ///   - Otherwise, set HWM to (next_smallest - 1), indicating all IDs before
+    ///     the next in-flight item are complete
+    pub fn complete_item(&self, id: i64) -> Result<(), FsPulseError> {
+        let mut v = self.in_flight.lock().unwrap();
+
+        if let Some(pos) = v.iter().position(|&x| x == id) {
+            let new_hwm = if pos == 0 {
+                // This is the smallest item
+                if v.len() == 1 {
+                    // Only item - all work up to this ID is complete
+                    Some(id)
+                } else {
+                    // More items remain - HWM is one less than the next in-flight item
+                    Some(v[1] - 1)
+                }
+            } else {
+                // Not the smallest - can't advance HWM yet
+                None
+            };
+
+            v.remove(pos);
+
+            // Update DB if we have a new HWM (still holding lock to ensure ordering)
+            if let Some(hwm) = new_hwm {
+                let conn = Database::get_connection()?;
+                Database::immediate_transaction(&conn, |c| {
+                    let rows_updated = c
+                        .execute(
+                            "UPDATE scan_queue SET analysis_hwm = ? WHERE scan_id = ?",
+                            [hwm, self.scan_id],
+                        )
+                        .map_err(FsPulseError::DatabaseError)?;
+
+                    if rows_updated == 0 {
+                        log::warn!(
+                            "AnalysisTracker: No scan_queue row found for scan_id {} when updating HWM to {}",
+                            self.scan_id,
+                            hwm
+                        );
+                    }
+
+                    Ok(())
+                })?;
+            }
+        } else {
+            log::warn!(
+                "AnalysisTracker: Item {} not found in in-flight vector for scan_id {}",
+                id,
+                self.scan_id
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Load the current HWM from the database for restart resilience
+    pub fn load_hwm(conn: &Connection, scan_id: i64) -> Result<i64, FsPulseError> {
+        let hwm: Option<i64> = conn
+            .query_row(
+                "SELECT analysis_hwm FROM scan_queue WHERE scan_id = ?",
+                [scan_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?
+            .flatten();
+
+        Ok(hwm.unwrap_or(0))
+    }
+
+    /// Warn if there are still items in the in-flight vector.
+    /// Should be called after analysis completes successfully to verify all items were processed.
+    pub fn warn_if_not_empty(&self) {
+        let v = self.in_flight.lock().unwrap();
+        if !v.is_empty() {
+            log::warn!(
+                "AnalysisTracker: {} items still in-flight after analysis completed for scan_id {}. Item IDs: {:?}",
+                v.len(),
+                self.scan_id,
+                &v[..v.len().min(10)] // Show at most first 10 IDs
+            );
+        }
+    }
 }
 
 #[cfg(test)]

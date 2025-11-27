@@ -18,7 +18,6 @@ const SQL_LATEST_FOR_ROOT: &str =
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
 
-
 #[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(i32)]
 pub enum HashMode {
@@ -279,7 +278,6 @@ impl Scan {
         scan_id: Option<i64>,
         root_id: Option<i64>,
     ) -> Result<Option<Self>, FsPulseError> {
-
         let (query, query_param) = match (scan_id, root_id) {
             (Some(_), _) => (SQL_SCAN_ID_OR_LATEST, scan_id),
             (_, Some(_)) => (SQL_LATEST_FOR_ROOT, root_id),
@@ -386,7 +384,11 @@ impl Scan {
         self.delete_count
     }
 
-    pub fn set_total_size(&mut self, conn: &Connection, total_size: i64) -> Result<(), FsPulseError> {
+    pub fn set_total_size(
+        &mut self,
+        conn: &Connection,
+        total_size: i64,
+    ) -> Result<(), FsPulseError> {
         let rows_updated = conn.execute(
             "UPDATE scans SET total_size = ? WHERE scan_id = ?",
             [total_size, self.scan_id],
@@ -395,8 +397,7 @@ impl Scan {
         if rows_updated == 0 {
             return Err(FsPulseError::Error(format!(
                 "Could not update the total_size of Scan Id {} to {}",
-                self.scan_id,
-                total_size
+                self.scan_id, total_size
             )));
         }
 
@@ -491,7 +492,14 @@ impl Scan {
                             ),
                         )?;
 
-                        Ok((file_count, folder_count, alert_count, add_count, modify_count, delete_count))
+                        Ok((
+                            file_count,
+                            folder_count,
+                            alert_count,
+                            add_count,
+                            modify_count,
+                            delete_count,
+                        ))
                     })?;
 
                 // Update in-memory struct
@@ -546,7 +554,11 @@ impl Scan {
         Ok(())
     }
 
-    pub fn stop_scan(conn: &Connection, scan: &Scan, error_message: Option<&str>) -> Result<(), FsPulseError> {
+    pub fn stop_scan(
+        conn: &Connection,
+        scan: &Scan,
+        error_message: Option<&str>,
+    ) -> Result<(), FsPulseError> {
         Database::immediate_transaction(conn, |c| {
             // Find the id of the last scan on this root to not be stopped
             // We'll restore this scan_id to all partially updated by the
@@ -578,6 +590,7 @@ impl Scan {
                 "UPDATE items
                 SET (
                     is_ts,
+                    access,
                     mod_date,
                     size,
                     last_hash_scan,
@@ -590,6 +603,7 @@ impl Scan {
                 (
                     SELECT
                         CASE WHEN c.change_type = 1 THEN 1 ELSE items.is_ts END,
+                        COALESCE(c.access_old, items.access),
                         c.mod_date_old,
                         c.size_old,
                         c.last_hash_scan_old,
@@ -618,6 +632,7 @@ impl Scan {
             c.execute(
                 "UPDATE items
                 SET (
+                    access,
                     mod_date,
                     size,
                     last_hash_scan,
@@ -629,6 +644,7 @@ impl Scan {
                 ) =
                 (
                 SELECT
+                    CASE WHEN c.access_old IS NOT NULL THEN c.access_old ELSE items.access END,
                     CASE WHEN c.meta_change = 1 THEN COALESCE(c.mod_date_old, items.mod_date) ELSE items.mod_date END,
                     CASE WHEN c.meta_change = 1 THEN COALESCE(c.size_old, items.size) ELSE items.size END,
                     CASE WHEN c.hash_change = 1 THEN c.last_hash_scan_old ELSE items.last_hash_scan END,
@@ -763,7 +779,6 @@ pub struct ScanStats {
 impl ScanStats {
     /// Get statistics for a specific scan ID
     pub fn get_for_scan(conn: &Connection, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
-
         // Use existing function to get scan
         let scan = match Scan::get_by_id_or_latest(conn, Some(scan_id), None)? {
             Some(s) => s,
@@ -791,20 +806,24 @@ impl ScanStats {
         ).unwrap_or((0, 0, 0, 0, 0, 0));
 
         // Get hashing statistics
-        let items_hashed: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM items
+        let items_hashed: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM items
              WHERE last_scan = ? AND hash IS NOT NULL",
-            params![scan_id],
-            |row| row.get(0)
-        ).unwrap_or(0);
+                params![scan_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         // Get validation statistics
-        let items_validated: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM items
+        let items_validated: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM items
              WHERE last_scan = ? AND (val IS NOT NULL OR val_error IS NOT NULL)",
-            params![scan_id],
-            |row| row.get(0)
-        ).unwrap_or(0);
+                params![scan_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         Ok(Some(ScanStats {
             scan_id: scan.scan_id(),
@@ -867,7 +886,6 @@ pub fn get_scan_history_count(
     conn: &Connection,
     root_id: Option<i64>,
 ) -> Result<i64, FsPulseError> {
-
     let count: i64 = if let Some(root_id) = root_id {
         conn.query_row(
             "SELECT COUNT(*) FROM scans
@@ -897,7 +915,6 @@ pub fn get_scan_history(
     limit: i64,
     offset: i64,
 ) -> Result<Vec<ScanHistoryRow>, FsPulseError> {
-
     let mut result = Vec::new();
 
     if let Some(root_id) = root_id {
@@ -918,7 +935,7 @@ pub fn get_scan_history(
             LEFT JOIN scan_schedules sch ON s.schedule_id = sch.schedule_id
             WHERE s.state IN (4, 5, 6) AND s.root_id = ?
             ORDER BY s.scan_id DESC
-            LIMIT ? OFFSET ?"
+            LIMIT ? OFFSET ?",
         )?;
 
         let rows = stmt.query_map(params![root_id, limit, offset], |row| {
@@ -958,7 +975,7 @@ pub fn get_scan_history(
             LEFT JOIN scan_schedules sch ON s.schedule_id = sch.schedule_id
             WHERE s.state IN (4, 5, 6)
             ORDER BY s.scan_id DESC
-            LIMIT ? OFFSET ?"
+            LIMIT ? OFFSET ?",
         )?;
 
         let rows = stmt.query_map(params![limit, offset], |row| {
@@ -1053,7 +1070,7 @@ mod tests {
         let _none = HashMode::None;
         let _new = HashMode::New;
         let _all = HashMode::All;
-        
+
         // Test PartialEq
         assert_eq!(HashMode::None, HashMode::None);
         assert_ne!(HashMode::None, HashMode::New);
@@ -1066,7 +1083,7 @@ mod tests {
         let _none = ValidateMode::None;
         let _new = ValidateMode::New;
         let _all = ValidateMode::All;
-        
+
         // Test PartialEq
         assert_eq!(ValidateMode::None, ValidateMode::None);
         assert_ne!(ValidateMode::None, ValidateMode::New);

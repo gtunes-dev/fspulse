@@ -8,12 +8,14 @@ pub struct Change {
     pub scan_id: i64,
     pub item_id: i64,
     pub change_type: ChangeType,
+    pub access_old: Option<i64>,   // Previous access state (if changed)
+    pub access_new: Option<i64>,   // New access state (if changed)
     pub is_undelete: Option<bool>, // Present if "A". True if add is undelete
     pub meta_change: Option<bool>, // Present if "M". True if metadata changed, else False
     pub mod_date_old: Option<i64>, // Meaningful if undelete or meta_change
     pub mod_date_new: Option<i64>, // Meaningful if metdata_changed
-    pub size_old: Option<i64>, // Meaningful if undelete or meta_change
-    pub size_new: Option<i64>, // Meaningful if undelete or meta_change
+    pub size_old: Option<i64>,     // Meaningful if undelete or meta_change
+    pub size_new: Option<i64>,     // Meaningful if undelete or meta_change
     pub hash_change: Option<bool>, // Present if "M". True if hash changed, else False
     #[allow(dead_code)]
     pub last_hash_scan_old: Option<i64>, // Present if "M" and hash_change
@@ -23,7 +25,7 @@ pub struct Change {
     pub val_change: Option<bool>,  // Present if "M", True if validation changed, else False
     #[allow(dead_code)]
     pub last_val_scan_old: Option<i64>, // Present if "M" and validation changed
-    pub val_old: Option<i64>,   // Validation state of the item if val_change = true
+    pub val_old: Option<i64>,      // Validation state of the item if val_change = true
     #[allow(dead_code)]
     pub val_new: Option<i64>, // Meaningful if undelete or val_change
     #[allow(dead_code)]
@@ -59,7 +61,10 @@ impl ChangeType {
             2 => ChangeType::Modify,
             3 => ChangeType::Delete,
             _ => {
-                warn!("Invalid ChangeType value in database: {}, defaulting to NoChange", value);
+                warn!(
+                    "Invalid ChangeType value in database: {}, defaulting to NoChange",
+                    value
+                );
                 ChangeType::NoChange
             }
         }
@@ -161,7 +166,7 @@ mod tests {
         assert_eq!(ChangeType::Modify.short_name(), "M");
         assert_eq!(ChangeType::NoChange.short_name(), "N");
     }
-    
+
     #[test]
     fn test_change_type_display() {
         assert_eq!(ChangeType::Add.to_string(), "Add");
@@ -169,7 +174,7 @@ mod tests {
         assert_eq!(ChangeType::Modify.to_string(), "Modify");
         assert_eq!(ChangeType::NoChange.to_string(), "No Change");
     }
-    
+
     #[test]
     fn test_change_type_from_string() {
         assert_eq!(ChangeType::from_string("A"), Some(ChangeType::Add));
@@ -186,21 +191,29 @@ mod tests {
 
     #[test]
     fn test_change_type_round_trip() {
-        let types = [ChangeType::NoChange, ChangeType::Add, ChangeType::Modify, ChangeType::Delete];
+        let types = [
+            ChangeType::NoChange,
+            ChangeType::Add,
+            ChangeType::Modify,
+            ChangeType::Delete,
+        ];
 
         for change_type in types {
             let str_val = change_type.short_name();
             let parsed_back = ChangeType::from_string(str_val).unwrap();
-            assert_eq!(change_type, parsed_back, "Round trip failed for {change_type:?}");
+            assert_eq!(
+                change_type, parsed_back,
+                "Round trip failed for {change_type:?}"
+            );
         }
     }
-    
+
     #[test]
     fn test_change_type_copy_clone() {
         let change_type = ChangeType::Add;
         let change_type_copy = change_type;
         let change_type_clone = change_type;
-        
+
         // All should be equal
         assert_eq!(change_type, change_type_copy);
         assert_eq!(change_type, change_type_clone);

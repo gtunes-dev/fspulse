@@ -61,6 +61,7 @@ pub enum ColType {
     AlertType,
     AlertStatus,
     ScanState,
+    Access,
     Int,
 }
 
@@ -105,7 +106,7 @@ impl ColType {
             ColType::ItemType => ColTypeInfo::new(
                 Rule::item_type_filter_EOI,
                 "Item Type",
-                "F (file), D (directory), S (symlink)\nComma-separated values",
+                "F (file), D (directory), S (symlink), U (unknown)\nComma-separated values",
             ),
             ColType::ChangeType => ColTypeInfo::new(
                 Rule::change_type_filter_EOI,
@@ -115,7 +116,7 @@ impl ColType {
             ColType::AlertType => ColTypeInfo::new(
                 Rule::alert_type_filter_EOI,
                 "Alert Type",
-                "Alert types: H (suspicious hash), I (invalid item)\nComma-separated values",
+                "Alert types: H (suspicious hash), I (invalid item), A (access denied)\nComma-separated values",
             ),
             ColType::AlertStatus => ColTypeInfo::new(
                 Rule::alert_status_filter_EOI,
@@ -126,6 +127,11 @@ impl ColType {
                 Rule::scan_state_filter_EOI,
                 "Scan State",
                 "Scan states: S (Scanning), W (Sweeping), A (Analyzing), C (Completed), P (Stopped), E (Error)\nComma-separated values",
+            ),
+            ColType::Access => ColTypeInfo::new(
+                Rule::access_filter_EOI,
+                "Access",
+                "Access states: N (No Error), M (Meta Error), R (Read Error)\nComma-separated values (null and not null also ok)",
             ),
         }
     }
@@ -199,6 +205,7 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "item_type" => ColSpec::new("item_type", "Type", true, ColType::ItemType, ColAlign::Center),
     "last_scan" => ColSpec::new("last_scan", "Last Scan", true, ColType::Id, ColAlign::Right),
     "is_ts" => ColSpec::new("is_ts", "Is TS", true, ColType::Bool, ColAlign::Center),
+    "access" => ColSpec::new("access", "Access", false, ColType::Access, ColAlign::Center),
     "mod_date" => ColSpec::new("mod_date", "Mod Date", true, ColType::Date, ColAlign::Center),
     "size" => ColSpec::new("size", "Size", false, ColType::Int, ColAlign::Right),
     "last_hash_scan" => ColSpec::new("last_hash_scan", "Last Hash Scan", false, ColType::Id, ColAlign::Right),
@@ -215,6 +222,8 @@ pub const CHANGES_QUERY_COLS: ColMap = phf_ordered_map! {
     "item_id" => ColSpec::new("changes.item_id", "Item Id", true, ColType::Id, ColAlign::Right),
     "item_path" => ColSpec::new("items.item_path", "Item Path", false, ColType::Path, ColAlign::Left),
     "change_type" => ColSpec::new("change_type", "Type", true, ColType::ChangeType, ColAlign::Center),
+    "access_old" => ColSpec::new("access_old", "Access Old", false, ColType::Access, ColAlign::Center),
+    "access_new" => ColSpec::new("access_new", "Access New", false, ColType::Access, ColAlign::Center),
     "is_undelete" => ColSpec::new("is_undelete", "Is Undelete", false, ColType::Bool, ColAlign::Center),
     "meta_change" => ColSpec::new("meta_change", "Meta Change", false, ColType::Bool, ColAlign::Center),
     "mod_date_old" => ColSpec::new("mod_date_old", "Mod Date Old", false, ColType::Date, ColAlign::Center),

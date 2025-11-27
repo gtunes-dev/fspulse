@@ -22,7 +22,7 @@ use crate::{
     changes::ChangeType,
     database::Database,
     error::FsPulseError,
-    items::ItemType,
+    items::{Access, ItemType},
     scans::ScanState,
     validate::validator::ValidationState,
 };
@@ -509,6 +509,7 @@ impl ItemsQuery {
                 "item_type" => Format::format_item_type(item.item_type, col.format)?,
                 "last_scan" => Format::format_i64(item.last_scan),
                 "is_ts" => Format::format_bool(item.is_ts, col.format)?,
+                "access" => Format::format_access(item.access, col.format)?,
                 "mod_date" => Format::format_opt_date(item.mod_date, col.format)?,
                 "size" => Format::format_opt_i64(item.size),
                 "file_hash" => Format::format_opt_string(&item.file_hash),
@@ -651,6 +652,12 @@ impl ChangesQuery {
                 "item_id" => Format::format_i64(change.item_id),
                 "item_path" => Format::format_path(&change.item_path, col.format)?,
                 "change_type" => Format::format_change_type(change.change_type, col.format)?,
+                "access_old" => {
+                    Format::format_opt_access(change.access_old.map(Access::from_i64), col.format)?
+                }
+                "access_new" => {
+                    Format::format_opt_access(change.access_new.map(Access::from_i64), col.format)?
+                }
                 "is_undelete" => Format::format_opt_bool(change.is_undelete, col.format)?,
                 "meta_change" => Format::format_opt_bool(change.meta_change, col.format)?,
                 "mod_date_old" => Format::format_opt_date(change.mod_date_old, col.format)?,
@@ -785,6 +792,7 @@ struct ItemsQueryRow {
     item_type: ItemType,
     last_scan: i64,
     is_ts: bool,
+    access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
     last_hash_scan: Option<i64>,
@@ -803,13 +811,14 @@ impl ItemsQueryRow {
             item_type: ItemType::from_i64(row.get(3)?),
             last_scan: row.get(4)?,
             is_ts: row.get(5)?,
-            mod_date: row.get(6)?,
-            size: row.get(7)?,
-            last_hash_scan: row.get(8)?,
-            file_hash: row.get(9)?,
-            last_val_scan: row.get(10)?,
-            val: row.get(11)?,
-            val_error: row.get(12)?,
+            access: Access::from_i64(row.get(6)?),
+            mod_date: row.get(7)?,
+            size: row.get(8)?,
+            last_hash_scan: row.get(9)?,
+            file_hash: row.get(10)?,
+            last_val_scan: row.get(11)?,
+            val: row.get(12)?,
+            val_error: row.get(13)?,
         })
     }
 }
@@ -822,6 +831,8 @@ pub struct ChangesQueryRow {
     pub item_id: i64,
     pub item_path: String,
     pub change_type: ChangeType,
+    pub access_old: Option<i64>,
+    pub access_new: Option<i64>,
     pub is_undelete: Option<bool>,
     pub meta_change: Option<bool>,
     pub mod_date_old: Option<i64>,
@@ -849,22 +860,24 @@ impl ChangesQueryRow {
             item_id: row.get(3)?,
             item_path: row.get(4)?,
             change_type: ChangeType::from_i64(row.get(5)?),
-            is_undelete: row.get(6)?,
-            meta_change: row.get(7)?,
-            mod_date_old: row.get(8)?,
-            mod_date_new: row.get(9)?,
-            size_old: row.get(10)?,
-            size_new: row.get(11)?,
-            hash_change: row.get(12)?,
-            last_hash_scan_old: row.get(13)?,
-            hash_old: row.get(14)?,
-            hash_new: row.get(15)?,
-            val_change: row.get(16)?,
-            last_val_scan_old: row.get(17)?,
-            val_old: row.get(18)?,
-            val_new: row.get(19)?,
-            val_error_old: row.get(20)?,
-            val_error_new: row.get(21)?,
+            access_old: row.get(6)?,
+            access_new: row.get(7)?,
+            is_undelete: row.get(8)?,
+            meta_change: row.get(9)?,
+            mod_date_old: row.get(10)?,
+            mod_date_new: row.get(11)?,
+            size_old: row.get(12)?,
+            size_new: row.get(13)?,
+            hash_change: row.get(14)?,
+            last_hash_scan_old: row.get(15)?,
+            hash_old: row.get(16)?,
+            hash_new: row.get(17)?,
+            val_change: row.get(18)?,
+            last_val_scan_old: row.get(19)?,
+            val_old: row.get(20)?,
+            val_new: row.get(21)?,
+            val_error_old: row.get(22)?,
+            val_error_new: row.get(23)?,
         })
     }
 }
@@ -1011,12 +1024,8 @@ impl QueryProcessor {
         query_str: &str,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
-        info!("Parsing query: {query_str}");
-
         let mut parsed_query = QueryParser::parse(Rule::query, query_str)
             .map_err(|err| FsPulseError::ParsingError(Box::new(err)))?;
-
-        info!("Parsed query: {parsed_query}");
 
         let query_pair = parsed_query.next().unwrap();
         let mut query_iter = query_pair.into_inner();
@@ -1039,12 +1048,8 @@ impl QueryProcessor {
         offset_add: i64,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
-        info!("Parsing query with overrides: {query_str}");
-
         let mut parsed_query = QueryParser::parse(Rule::query, query_str)
             .map_err(|err| FsPulseError::ParsingError(Box::new(err)))?;
-
-        info!("Parsed query: {parsed_query}");
 
         let query_pair = parsed_query.next().unwrap();
         let mut query_iter = query_pair.into_inner();
@@ -1122,7 +1127,8 @@ impl QueryProcessor {
                 | Rule::change_type_filter
                 | Rule::alert_type_filter
                 | Rule::alert_status_filter
-                | Rule::val_filter => {
+                | Rule::val_filter
+                | Rule::access_filter => {
                     EnumFilter::add_enum_filter_to_query(token, query)?;
                 }
                 Rule::path_filter => {

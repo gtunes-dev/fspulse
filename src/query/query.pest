@@ -10,18 +10,18 @@ query_type = { "roots" | "scans" | "items" | "changes" | "alerts" }
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | int_filter }
+filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | access_filter | int_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | change_type_show | alert_type_show | alert_status_show | scan_state_show | int_show }
+show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | change_type_show | alert_type_show | alert_status_show | scan_state_show | access_show | int_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { id_col | date_col | bool_col | string_col | path_col | val_col | item_type_col | change_type_col | alert_type_col | alert_status_col | scan_state_col | int_col }
+order_column =  { id_col | date_col | bool_col | string_col | path_col | val_col | item_type_col | change_type_col | alert_type_col | alert_status_col | scan_state_col | access_col | int_col }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause
@@ -46,6 +46,7 @@ change_type_filter_EOI  = { WS* ~ change_type_filter_values ~ WS* ~ EOI }
 alert_type_filter_EOI   = { WS* ~ alert_type_filter_values ~ WS* ~ EOI }
 alert_status_filter_EOI = { WS* ~ alert_status_filter_values ~ WS* ~ EOI }
 scan_state_filter_EOI   = { WS* ~ scan_state_filter_values ~ WS* ~ EOI }
+access_filter_EOI       = { WS* ~ access_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
@@ -167,9 +168,13 @@ item_type               =  {
   | "SYMLINK"
   | "symlink"
   | "Symlink"
+  | "UNKNOWN"
+  | "unknown"
+  | "Unknown"
   | ^"F"
   | ^"D"
   | ^"S"
+  | ^"U"
 }
 
 // Change Type Columns
@@ -228,8 +233,15 @@ alert_type               =  {
   | "INVALIDITEM"
   | "invaliditem"
   | "InvalidItem"
+  | "ACCESS DENIED"
+  | "access denied"
+  | "Access Denied"
+  | "ACCESSDENIED"
+  | "accessdenied"
+  | "AccessDenied"
   | ^"H"
   | ^"I"
+  | ^"A"
 }
 
 alert_status_col = { "alert_status" }
@@ -292,6 +304,41 @@ scan_state               =  {
   | ^"C"
   | ^"P"
   | ^"E"
+}
+
+// Access Columns (access_new/access_old must come before access to prevent partial matches)
+access_col = { "access_new" | "access_old" | "access" }
+
+access_show         =  { access_col ~ access_modifier? }
+access_modifier     = _{ WS* ~ "@" ~ WS* ~ access_display_mode }
+access_display_mode =  { full | short }
+
+access_filter        =  { access_col ~ access_filter_body }
+access_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ access_filter_values ~ WS* ~ RPAREN }
+access_filter_values = _{ access_spec ~ (WS* ~ COMMA ~ WS* ~ access_spec)* }
+access_spec          = _{ null | not_null | access }
+access               =  {
+    "NO ERROR"
+  | "no error"
+  | "No Error"
+  | "NOERROR"
+  | "noerror"
+  | "NoError"
+  | "META ERROR"
+  | "meta error"
+  | "Meta Error"
+  | "METAERROR"
+  | "metaerror"
+  | "MetaError"
+  | "READ ERROR"
+  | "read error"
+  | "Read Error"
+  | "READERROR"
+  | "readerror"
+  | "ReadError"
+  | ^"N"
+  | ^"M"
+  | ^"R"
 }
 
 // Integer columns

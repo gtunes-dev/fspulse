@@ -8,6 +8,7 @@ mod v7_to_v8;
 mod v8_to_v9;
 mod v9_to_v10;
 mod v10_to_v11;
+mod v11_to_v12;
 
 pub use base::CREATE_SCHEMA_SQL;
 pub use v2_to_v3::UPGRADE_2_TO_3_SQL;
@@ -19,3 +20,4 @@ pub use v7_to_v8::UPGRADE_7_TO_8_SQL;
 pub use v8_to_v9::UPGRADE_8_TO_9_SQL;
 pub use v9_to_v10::UPGRADE_9_TO_10_SQL;
 pub use v10_to_v11::UPGRADE_10_TO_11_SQL;
+pub use v11_to_v12::UPGRADE_11_TO_12_SQL;

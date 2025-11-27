@@ -471,6 +471,8 @@ export function ItemDetailSheet({
         return <Badge variant="destructive">Suspicious Hash</Badge>
       case 'I':
         return <Badge variant="destructive">Invalid Item</Badge>
+      case 'A':
+        return <Badge variant="warning">Access Denied</Badge>
       default:
         return <Badge variant="secondary">{type}</Badge>
     }

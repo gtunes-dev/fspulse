@@ -9,6 +9,7 @@ use crate::error::FsPulseError;
 pub enum AlertType {
     SuspiciousHash = 0,
     InvalidItem = 1,
+    AccessDenied = 2,
 }
 
 #[repr(i64)]
@@ -28,6 +29,7 @@ impl AlertType {
         match value {
             0 => AlertType::SuspiciousHash,
             1 => AlertType::InvalidItem,
+            2 => AlertType::AccessDenied,
             _ => {
                 warn!(
                     "Invalid AlertType value in database: {}, defaulting to SuspiciousHash",
@@ -42,6 +44,7 @@ impl AlertType {
         match self {
             AlertType::SuspiciousHash => "H",
             AlertType::InvalidItem => "I",
+            AlertType::AccessDenied => "A",
         }
     }
 
@@ -49,6 +52,7 @@ impl AlertType {
         match self {
             AlertType::SuspiciousHash => "Suspicious Hash",
             AlertType::InvalidItem => "Invalid Item",
+            AlertType::AccessDenied => "Access Denied",
         }
     }
 
@@ -57,9 +61,11 @@ impl AlertType {
             // Full names
             "SUSPICIOUS HASH" | "SUSPICIOUSHASH" => Some(AlertType::SuspiciousHash),
             "INVALID ITEM" | "INVALIDITEM" => Some(AlertType::InvalidItem),
+            "ACCESS DENIED" | "ACCESSDENIED" => Some(AlertType::AccessDenied),
             // Short names
             "H" => Some(AlertType::SuspiciousHash),
             "I" => Some(AlertType::InvalidItem),
+            "A" => Some(AlertType::AccessDenied),
             _ => None,
         }
     }
@@ -258,6 +264,43 @@ impl Alerts {
         Ok(())
     }
 
+    /// Create an alert when an item becomes inaccessible.
+    /// This is called when access transitions from Ok to MetaError or ReadError.
+    pub fn add_access_denied_alert(
+        conn: &Connection,
+        scan_id: i64,
+        item_id: i64,
+    ) -> Result<(), FsPulseError> {
+        let sql = r#"
+            INSERT INTO alerts (
+                alert_type,
+                alert_status,
+                scan_id,
+                item_id,
+                created_at
+            )
+            VALUES (
+                :alert_type,
+                :alert_status,
+                :scan_id,
+                :item_id,
+                strftime('%s', 'now', 'utc')
+            )
+        "#;
+
+        conn.execute(
+            sql,
+            named_params! {
+                ":alert_type":      AlertType::AccessDenied.as_i64(),
+                ":alert_status":    AlertStatus::Open.as_i64(),
+                ":scan_id":         scan_id,
+                ":item_id":         item_id,
+            },
+        )?;
+
+        Ok(())
+    }
+
     pub fn set_alert_status(
         conn: &Connection,
         alert_id: i64,
@@ -290,6 +333,7 @@ mod tests {
         // Verify the integer values match the expected order
         assert_eq!(AlertType::SuspiciousHash.as_i64(), 0);
         assert_eq!(AlertType::InvalidItem.as_i64(), 1);
+        assert_eq!(AlertType::AccessDenied.as_i64(), 2);
     }
 
     #[test]
@@ -297,6 +341,7 @@ mod tests {
         // Verify round-trip conversion
         assert_eq!(AlertType::from_i64(0), AlertType::SuspiciousHash);
         assert_eq!(AlertType::from_i64(1), AlertType::InvalidItem);
+        assert_eq!(AlertType::from_i64(2), AlertType::AccessDenied);
 
         // Invalid values should default to SuspiciousHash
         assert_eq!(AlertType::from_i64(999), AlertType::SuspiciousHash);
@@ -307,23 +352,28 @@ mod tests {
     fn test_alert_type_short_name() {
         assert_eq!(AlertType::SuspiciousHash.short_name(), "H");
         assert_eq!(AlertType::InvalidItem.short_name(), "I");
+        assert_eq!(AlertType::AccessDenied.short_name(), "A");
     }
 
     #[test]
     fn test_alert_type_full_name() {
         assert_eq!(AlertType::SuspiciousHash.full_name(), "Suspicious Hash");
         assert_eq!(AlertType::InvalidItem.full_name(), "Invalid Item");
+        assert_eq!(AlertType::AccessDenied.full_name(), "Access Denied");
     }
 
     #[test]
     fn test_alert_type_traits() {
         let suspicious = AlertType::SuspiciousHash;
         let invalid = AlertType::InvalidItem;
+        let access = AlertType::AccessDenied;
 
         // Test PartialEq
         assert_eq!(suspicious, AlertType::SuspiciousHash);
         assert_eq!(invalid, AlertType::InvalidItem);
+        assert_eq!(access, AlertType::AccessDenied);
         assert_ne!(suspicious, invalid);
+        assert_ne!(invalid, access);
 
         // Test Copy
         let suspicious_copy = suspicious;
@@ -402,7 +452,11 @@ mod tests {
     #[test]
     fn test_alert_type_completeness() {
         // Verify we can convert all enum variants to strings
-        let all_types = [AlertType::SuspiciousHash, AlertType::InvalidItem];
+        let all_types = [
+            AlertType::SuspiciousHash,
+            AlertType::InvalidItem,
+            AlertType::AccessDenied,
+        ];
 
         for alert_type in all_types {
             let short_str = alert_type.short_name();

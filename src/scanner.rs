@@ -20,20 +20,22 @@
 use crate::alerts::Alerts;
 use crate::changes::ChangeType;
 use crate::hash::Hash;
-use crate::items::{AnalysisItem, Item, ItemType};
+use crate::items::{Access, AnalysisItem, Item, ItemType};
 use crate::progress::ProgressReporter;
 use crate::roots::Root;
 use crate::scans::ScanState;
+use crate::schedules::AnalysisTracker;
 use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
 use crossbeam_channel::bounded;
-use log::{error, info, Level};
+use log::{error, info, trace, Level};
 use logging_timer::timer;
 use rusqlite::Connection;
 use threadpool::ThreadPool;
 
 use std::fs::Metadata;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -193,66 +195,171 @@ impl Scanner {
 
         ctx.reporter.increment_directories_scanned();
 
-        let items = {
-            // Uncomment for granular perf investigations
-            // let _tmr = timer!(Level::Trace; "fs::read_dir", "{}", path.display());
-            fs::read_dir(path)?
+        // Try to read directory contents, handling access errors
+        let items = match fs::read_dir(path) {
+            Ok(items) => items,
+            Err(e) => {
+                match e.kind() {
+                    ErrorKind::PermissionDenied => {
+                        // Can't list directory contents - signal to caller
+                        return Err(FsPulseError::DirectoryUnreadable(path.to_path_buf()));
+                    }
+                    ErrorKind::NotFound => {
+                        // Directory disappeared during scan
+                        trace!("Directory disappeared during scan: '{}'", path.display());
+                        return Ok(0);
+                    }
+                    _ => {
+                        error!(
+                            "Unexpected error reading directory '{}': {} (kind: {:?})",
+                            path.display(),
+                            e,
+                            e.kind()
+                        );
+                        return Err(FsPulseError::from(e));
+                    }
+                }
+            }
         };
+
         let mut total_size: i64 = 0;
 
         for item in items {
-            let item = item?;
+            // Handle errors during directory iteration
+            let item = match item {
+                Ok(entry) => entry,
+                Err(e) => {
+                    match e.kind() {
+                        ErrorKind::PermissionDenied => {
+                            error!(
+                                "Permission denied reading directory entry in '{}': {}",
+                                path.display(),
+                                e
+                            );
+                            continue;
+                        }
+                        _ => {
+                            // Other I/O errors during iteration - log and continue
+                            error!(
+                                "Error reading directory entry in '{}': {}",
+                                path.display(),
+                                e
+                            );
+                            continue;
+                        }
+                    }
+                }
+            };
             let item_path = item.path();
-            let item_metadata = {
-                // Uncomment for granular perf investigations
-                // let _tmr = timer!(Level::Trace; "fs::symlink_metadata", "{}", item_path.display());
-                fs::symlink_metadata(&item_path)?
+
+            // Try to get metadata, handling access errors gracefully
+            let item_metadata = match fs::symlink_metadata(&item_path) {
+                Ok(metadata) => Some(metadata),
+                Err(e) => {
+                    match e.kind() {
+                        ErrorKind::NotFound => {
+                            // File disappeared during scan (race condition) - skip it
+                            trace!("File disappeared during scan: '{}'", item_path.display());
+                            continue;
+                        }
+                        ErrorKind::PermissionDenied => {
+                            // Can't access metadata - treat as file with MetaError access state
+                            error!(
+                                "Cannot access metadata for '{}': {}. Treating as file with MetaError.",
+                                item_path.display(),
+                                e
+                            );
+                            None
+                        }
+                        _ => {
+                            // Other errors - log and propagate
+                            error!(
+                                "Unexpected error getting metadata for '{}': {} (kind: {:?})",
+                                item_path.display(),
+                                e,
+                                e.kind()
+                            );
+                            return Err(FsPulseError::from(e));
+                        }
+                    }
+                }
             };
 
             ctx.reporter.increment_files_scanned();
 
-            if item_metadata.is_dir() {
-                // Recursively scan the subdirectory and get its size
-                let subdir_size = Scanner::scan_directory_recursive(ctx, &item_path)?;
+            match item_metadata {
+                Some(ref metadata) if metadata.is_dir() => {
+                    // Recursively scan the subdirectory and get its size
+                    // If we can't read the directory contents, we still handle it as an item
+                    let (subdir_size, dir_read_error) =
+                        match Scanner::scan_directory_recursive(ctx, &item_path) {
+                            Ok(size) => (size, false),
+                            Err(FsPulseError::DirectoryUnreadable(ref p)) => {
+                                error!(
+                                    "Cannot read directory contents for '{}': Permission denied",
+                                    p.display()
+                                );
+                                (0, true)
+                            }
+                            Err(e) => return Err(e),
+                        };
 
-                // Handle the subdirectory with its computed size
-                let returned_size = Scanner::handle_scan_item(
-                    ctx,
-                    ItemType::Directory,
-                    &item_path,
-                    &item_metadata,
-                    Some(subdir_size),
-                )?;
+                    // Handle the subdirectory with its computed size
+                    let returned_size = Scanner::handle_scan_item(
+                        ctx,
+                        ItemType::Directory,
+                        &item_path,
+                        Some(metadata),
+                        Some(subdir_size),
+                        dir_read_error,
+                    )?;
 
-                total_size += returned_size;
-            } else {
-                Scanner::check_interrupted(ctx.interrupt_token)?;
+                    total_size += returned_size;
+                }
+                Some(ref metadata) => {
+                    Scanner::check_interrupted(ctx.interrupt_token)?;
 
-                // Handle files, symlinks, and other items
-                let item_type = if item_metadata.is_file() {
-                    ItemType::File
-                } else if item_metadata.is_symlink() {
-                    ItemType::Symlink
-                } else {
-                    ItemType::Other
-                };
+                    // Handle files, symlinks, and other items
+                    let item_type = if metadata.is_file() {
+                        ItemType::File
+                    } else if metadata.is_symlink() {
+                        ItemType::Symlink
+                    } else {
+                        ItemType::Unknown
+                    };
 
-                // Files have meaningful sizes, symlinks and other don't
-                let item_size = if item_metadata.is_file() {
-                    Some(item_metadata.len() as i64)
-                } else {
-                    None
-                };
+                    // Files have meaningful sizes, symlinks and other don't
+                    let item_size = if metadata.is_file() {
+                        Some(metadata.len() as i64)
+                    } else {
+                        None
+                    };
 
-                let returned_size = Scanner::handle_scan_item(
-                    ctx,
-                    item_type,
-                    &item_path,
-                    &item_metadata,
-                    item_size,
-                )?;
+                    let returned_size = Scanner::handle_scan_item(
+                        ctx,
+                        item_type,
+                        &item_path,
+                        Some(metadata),
+                        item_size,
+                        false, // No directory read error for non-directories
+                    )?;
 
-                total_size += returned_size;
+                    total_size += returned_size;
+                }
+                None => {
+                    // Metadata unavailable (permission denied) - treat as Unknown with MetaError
+                    Scanner::check_interrupted(ctx.interrupt_token)?;
+
+                    Scanner::handle_scan_item(
+                        ctx,
+                        ItemType::Unknown,
+                        &item_path,
+                        None, // No metadata available
+                        None, // No size available
+                        false,
+                    )?;
+                    // Don't add to total_size since we don't know the size
+                }
             }
         }
 
@@ -273,7 +380,21 @@ impl Scanner {
 
         // Recursively scan the root directory and get the total size
         // Note: We don't store the root directory itself as an item in the database
-        let total_size = Scanner::scan_directory_recursive(&mut ctx, &root_path_buf)?;
+        let total_size = match Scanner::scan_directory_recursive(&mut ctx, &root_path_buf) {
+            Ok(size) => size,
+            Err(FsPulseError::DirectoryUnreadable(ref p)) => {
+                // Root directory is unreadable - scan cannot proceed
+                error!(
+                    "Cannot read root directory '{}': Permission denied. Scan cannot proceed.",
+                    p.display()
+                );
+                return Err(FsPulseError::Error(format!(
+                    "Root directory '{}' is unreadable",
+                    p.display()
+                )));
+            }
+            Err(e) => return Err(e),
+        };
 
         // Flush any remaining batched writes
         ctx.flush()?;
@@ -346,10 +467,16 @@ impl Scanner {
             return Ok(());
         }
 
+        // Load the high water mark from scan_queue (for restart resilience)
+        let initial_hwm = AnalysisTracker::load_hwm(&conn, scan.scan_id())?;
+
         let (analyze_total, analyze_done) =
-            Item::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec())?;
+            Item::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
 
         reporter.start_analyzing_phase(analyze_total, analyze_done);
+
+        // Create the analysis tracker for HWM management (shared with worker threads)
+        let tracker = Arc::new(AnalysisTracker::new(scan.scan_id()));
 
         // Create a bounded channel to limit the number of queued tasks (e.g., max 100 tasks)
         let (sender, receiver) = bounded::<AnalysisItem>(100);
@@ -369,6 +496,7 @@ impl Scanner {
             let scan_copy = scan.clone();
             let reporter_clone = Arc::clone(&reporter);
             let interrupt_token_clone = Arc::clone(interrupt_token);
+            let tracker_clone = Arc::clone(&tracker);
 
             // Set initial idle state
             reporter.set_thread_idle(thread_index);
@@ -383,13 +511,14 @@ impl Scanner {
                         thread_index,
                         &reporter_clone,
                         &interrupt_token_clone,
+                        &tracker_clone,
                     );
                 }
                 reporter_clone.set_thread_idle(thread_index);
             });
         }
 
-        let mut last_item_id = 0;
+        let mut last_item_id = initial_hwm;
 
         loop {
             if interrupt_token.load(Ordering::Acquire) {
@@ -408,6 +537,9 @@ impl Scanner {
                 break;
             }
 
+            // Add batch item IDs to tracker before distributing work
+            tracker.add_batch(analysis_items.iter().map(|item| item.item_id()));
+
             for analysis_item in analysis_items {
                 // Items will be ordered by id. We keep track of the last seen id and provide
                 // it in calls to fetch_next_analysis_batch to avoid picking up unprocessed
@@ -420,6 +552,8 @@ impl Scanner {
                     .send(analysis_item)
                     .expect("Failed to send task into the bounded channel");
             }
+
+            // HWM is now updated by workers via tracker.complete_item()
         }
 
         // Drop the sender to signal the workers that no more items will come.
@@ -435,6 +569,11 @@ impl Scanner {
         // some hashing or validation operations, we have to be careful to not allow it to
         // appear complete
         Scanner::check_interrupted(interrupt_token)?;
+
+        // If we got here without interruption, all items should have been processed.
+        // Warn if the tracker still has items (indicates a bug in the tracking logic).
+        tracker.warn_if_not_empty();
+
         scan.set_state_completed(&conn)
     }
 
@@ -444,10 +583,8 @@ impl Scanner {
         thread_index: usize,
         reporter: &Arc<ProgressReporter>,
         interrupt_token: &Arc<AtomicBool>,
+        tracker: &Arc<AnalysisTracker>,
     ) {
-        // TODO: Improve the error handling for all analysis. Need to differentiate
-        // between file system errors and actual content errors
-
         // This function is the entry point for each worker thread to process an item.
         // It performs hashing and/or validation as needed and updates the database.
         // It does not return errors, but it does need to check for interruption.
@@ -457,6 +594,7 @@ impl Scanner {
         // The calling code will always check for interrupt and do the right thing
         // depending on why the interrupt was generated
 
+        let item_id = analysis_item.item_id();
         let path = Path::new(analysis_item.item_path());
 
         info!("Beginning analysis of: {path:?}");
@@ -467,19 +605,32 @@ impl Scanner {
             .to_string_lossy();
 
         let mut new_hash = None;
+        let mut read_attempted = false;
+        let mut read_succeeded = false;
+        let mut read_permission_denied = false;
 
         if analysis_item.needs_hash() && !Scanner::is_interrupted(interrupt_token) {
             reporter.set_thread_hashing(thread_index, display_path.to_string());
+            read_attempted = true;
 
             // The hash function checks for interrupt at its start and periodically
-            new_hash = match Hash::compute_sha2_256_hash(path, interrupt_token) {
-                Ok(hash_s) => Some(hash_s),
+            match Hash::compute_sha2_256_hash(path, interrupt_token) {
+                Ok(hash_s) => {
+                    new_hash = Some(hash_s);
+                    read_succeeded = true;
+                }
+                Err(FsPulseError::IoError(ref io_err))
+                    if io_err.kind() == ErrorKind::PermissionDenied =>
+                {
+                    error!(
+                        "Cannot read file for hashing '{}': Permission denied",
+                        &display_path
+                    );
+                    read_permission_denied = true;
+                }
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
-                    // If hashing fails, we set the hash to the error string
-                    // This isn't great, but it allows us to have a string value when stopping a scan
-                    // and leaves an error artifact behind for investigation
-                    Some(error.to_string())
+                    // Other errors (not permission denied) - don't affect access state
                 }
             };
         }
@@ -487,16 +638,31 @@ impl Scanner {
         let mut new_val = ValidationState::Unknown;
         let mut new_val_error = None;
 
-        if analysis_item.needs_val() && !Scanner::is_interrupted(interrupt_token) {
+        // Skip validation if we already know we can't read the file
+        if analysis_item.needs_val()
+            && !read_permission_denied
+            && !Scanner::is_interrupted(interrupt_token)
+        {
             let validator = from_path(path);
             match validator {
                 Some(v) => {
                     reporter.set_thread_validating(thread_index, display_path.to_string());
+                    read_attempted = true;
 
                     match v.validate(path, interrupt_token) {
                         Ok((res_validity_state, res_validation_error)) => {
                             new_val = res_validity_state;
                             new_val_error = res_validation_error;
+                            read_succeeded = true;
+                        }
+                        Err(FsPulseError::IoError(ref io_err))
+                            if io_err.kind() == ErrorKind::PermissionDenied =>
+                        {
+                            error!(
+                                "Cannot read file for validation '{}': Permission denied",
+                                &display_path
+                            );
+                            read_permission_denied = true;
                         }
                         Err(e) => {
                             let e_str = e.to_string();
@@ -510,6 +676,15 @@ impl Scanner {
             }
         }
 
+        // Determine new access state based on read results
+        let new_access = if read_permission_denied {
+            Some(Access::ReadError)
+        } else if read_attempted && read_succeeded {
+            Some(Access::Ok)
+        } else {
+            None // No change - preserve current access state
+        };
+
         if !Scanner::is_interrupted(interrupt_token) {
             if let Err(error) = Scanner::update_item_analysis(
                 scan,
@@ -517,6 +692,7 @@ impl Scanner {
                 new_hash,
                 new_val,
                 new_val_error,
+                new_access,
                 interrupt_token,
             ) {
                 let e_str = error.to_string();
@@ -532,184 +708,409 @@ impl Scanner {
         // Set thread back to idle after completing work
         reporter.set_thread_idle(thread_index);
 
+        // Mark item complete in tracker (updates HWM if appropriate)
+        if let Err(e) = tracker.complete_item(item_id) {
+            error!("Error updating analysis HWM for item {}: {}", item_id, e);
+        }
+
         info!("Done analyzing: {path:?}");
+    }
+
+    /// Calculate the new access state based on item type, current access, and scan results.
+    ///
+    /// Priority (highest to lowest):
+    /// 1. meta_error=true → MetaError (can't stat at all)
+    /// 2. dir_read_error=true (directories only) → ReadError (can stat but can't list)
+    /// 3. Otherwise, clear MetaError (stat worked), preserve ReadError for non-directories
+    ///
+    /// For directories:
+    /// - If meta_error: MetaError
+    /// - If read_dir failed: ReadError (can stat but can't list contents)
+    /// - If read_dir succeeded: Ok (stat and read both work, clear any previous error)
+    ///
+    /// For files/symlinks/other:
+    /// - If meta_error: MetaError
+    /// - MetaError → Ok (stat works now)
+    /// - ReadError → ReadError (preserved until analysis phase clears it)
+    /// - Ok → Ok
+    fn calculate_new_access(
+        item_type: ItemType,
+        old_access: Access,
+        dir_read_error: bool,
+        meta_error: bool,
+    ) -> Access {
+        // MetaError takes priority - if we can't stat, that's the access state
+        if meta_error {
+            return Access::MetaError;
+        }
+
+        if item_type == ItemType::Directory {
+            if dir_read_error {
+                Access::ReadError
+            } else {
+                // Directory stat and read_dir both succeeded - clear any errors
+                Access::Ok
+            }
+        } else {
+            // For non-directories, clear MetaError (stat worked), preserve ReadError
+            match old_access {
+                Access::MetaError => Access::Ok,
+                Access::ReadError => Access::ReadError,
+                Access::Ok => Access::Ok,
+            }
+        }
+    }
+
+    /// Helper to check update result and return appropriate error
+    fn check_update_result(rows_updated: usize, item_id: i64) -> Result<(), FsPulseError> {
+        if rows_updated == 0 {
+            Err(FsPulseError::Error(format!(
+                "Item Id {} not found for update",
+                item_id
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Helper to compute access change values for change records
+    fn access_change_values(old_access: Access, new_access: Access) -> (Option<i64>, Option<i64>) {
+        if old_access != new_access {
+            (Some(old_access.as_i64()), Some(new_access.as_i64()))
+        } else {
+            (None, None)
+        }
+    }
+
+    /// Returns true if an AccessDenied alert should be created.
+    /// Alert is created when access transitions from Ok to an error state.
+    fn should_alert_access_denied(old_access: Access, new_access: Access) -> bool {
+        old_access == Access::Ok && new_access != Access::Ok
     }
 
     fn handle_scan_item(
         ctx: &mut ScanContext,
         item_type: ItemType,
         path: &Path,
-        metadata: &Metadata,
+        metadata: Option<&Metadata>,
         computed_size: Option<i64>,
+        dir_read_error: bool,
     ) -> Result<i64, FsPulseError> {
         let _tmr = timer!(Level::Trace; "handle_scan_item", "{}", path.display());
 
-        // load the item
         let path_str = path.to_string_lossy();
         let existing_item =
             Item::get_by_root_path_type(ctx.conn, ctx.scan.root_id(), &path_str, item_type)?;
 
-        let mod_date = metadata
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64);
+        // If metadata is None, we have a MetaError (couldn't stat)
+        let meta_error = metadata.is_none();
+
+        let mod_date = metadata.and_then(|m| {
+            m.modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs() as i64)
+        });
 
         let size = computed_size;
 
-        if let Some(existing_item) = existing_item {
-            // If the item was already processed for this scan, return its size from the database.
-            // This allows scan resumption to work correctly - we don't re-process the item, but
-            // we do need its size for folder size aggregation. We intentionally do not handle
-            // the case where the item was seen within this scan but has since been modified or
-            // changed type. There are edge cases where this might cause strangeness in reports
-            // such as when an item was seen as a file, the scan was resumed and the item has
-            // changed into a directory. In this case, we'll still traverse the children within
-            // the resumed scan and a tree report will look odd.
-            if existing_item.last_scan() == ctx.scan.scan_id() {
-                return Ok(existing_item.size().unwrap_or(0));
+        match existing_item {
+            Some(ref item) if item.last_scan() == ctx.scan.scan_id() => {
+                // Already processed this scan - return cached size for folder aggregation
+                Ok(item.size().unwrap_or(0))
             }
-
-            let meta_change = existing_item.mod_date() != mod_date || existing_item.size() != size;
-
-            if existing_item.is_ts() {
-                // Rehydrate a tombstone
-                ctx.execute_batch_write(|c| {
-                    let rows_updated = c.execute(
-                        "UPDATE items SET
-                                is_ts = 0,
-                                mod_date = ?,
-                                size = ?,
-                                file_hash = NULL,
-                                val = ?,
-                                val_error = NULL,
-                                last_scan = ?,
-                                last_hash_scan = NULL,
-                                last_val_scan = NULL
-                            WHERE item_id = ?",
-                        (
-                            mod_date,
-                            size,
-                            ValidationState::Unknown.as_i64(),
-                            ctx.scan.scan_id(),
-                            existing_item.item_id(),
-                        ),
-                    )?;
-                    if rows_updated == 0 {
-                        return Err(FsPulseError::Error(format!(
-                            "Item Id {} not found for update",
-                            existing_item.item_id()
-                        )));
-                    }
-
-                    c.execute(
-                        "INSERT INTO changes
-                            (
-                                scan_id,
-                                item_id,
-                                change_type,
-                                is_undelete,
-                                mod_date_old,
-                                mod_date_new,
-                                size_old,
-                                size_new,
-                                hash_old,
-                                val_old,
-                                val_error_old
-                            )
-                        VALUES
-                            (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            ctx.scan.scan_id(),
-                            existing_item.item_id(),
-                            ChangeType::Add.as_i64(),
-                            existing_item.mod_date(),
-                            mod_date,
-                            existing_item.size(),
-                            size,
-                            existing_item.file_hash(),
-                            existing_item.validity_state_as_str(),
-                            existing_item.val_error(),
-                        ),
-                    )?;
-
-                    Ok(())
-                })?;
-            } else if meta_change {
-                ctx.execute_batch_write(|c| {
-                    let rows_updated = c.execute(
-                        "UPDATE items SET
-                            mod_date = ?,
-                            size = ?,
-                            last_scan = ?
-                        WHERE item_id = ?",
-                        (mod_date, size, ctx.scan.scan_id(), existing_item.item_id()),
-                    )?;
-                    if rows_updated == 0 {
-                        return Err(FsPulseError::Error(format!(
-                            "Item Id {} not found for update",
-                            existing_item.item_id()
-                        )));
-                    }
-                    c.execute(
-                        "INSERT INTO changes
-                                (
-                                    scan_id,
-                                    item_id,
-                                    change_type,
-                                    meta_change,
-                                    mod_date_old,
-                                    mod_date_new,
-                                    size_old,
-                                    size_new)
-                                VALUES (?, ?, ?, 1, ?, ?, ?, ?)",
-                        (
-                            ctx.scan.scan_id(),
-                            existing_item.item_id(),
-                            ChangeType::Modify.as_i64(),
-                            meta_change.then_some(existing_item.mod_date()),
-                            meta_change.then_some(mod_date),
-                            meta_change.then_some(existing_item.size()),
-                            meta_change.then_some(size),
-                        ),
-                    )?;
-
-                    Ok(())
-                })?;
-            } else {
-                // No change - just update last_scan
-                ctx.execute_batch_write(|c| {
-                    let rows_updated = c.execute(
-                        "UPDATE items SET last_scan = ? WHERE item_id = ?",
-                        (ctx.scan.scan_id(), existing_item.item_id()),
-                    )?;
-
-                    if rows_updated == 0 {
-                        return Err(FsPulseError::Error(format!(
-                            "Item Id {} not found for update",
-                            existing_item.item_id()
-                        )));
-                    }
-                    Ok(())
-                })?;
+            Some(existing_item) => {
+                Scanner::handle_existing_item(
+                    ctx,
+                    &existing_item,
+                    item_type,
+                    mod_date,
+                    size,
+                    dir_read_error,
+                    meta_error,
+                )?;
+                Ok(computed_size.unwrap_or(0))
             }
-        } else {
-            // Item is new, insert into items and changes tables
-            ctx.execute_batch_write(|c| {
-                c.execute("INSERT INTO items (root_id, item_path, item_type, mod_date, size, val, last_scan) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (ctx.scan.root_id(), &path_str, item_type.as_i64(), mod_date, size, ValidationState::Unknown.as_i64(), ctx.scan.scan_id()))?;
-
-                let item_id: i64 = c.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
-
-                c.execute("INSERT INTO changes (scan_id, item_id, change_type, is_undelete, mod_date_new, size_new, hash_change, val_change) VALUES (?, ?, ?, 0, ?, ?, 0, 0)",
-                    (ctx.scan.scan_id(), item_id, ChangeType::Add.as_i64(), mod_date, size))?;
-
-                Ok(())
-            })?;
+            None => {
+                Scanner::handle_new_item(
+                    ctx,
+                    item_type,
+                    &path_str,
+                    mod_date,
+                    size,
+                    dir_read_error,
+                    meta_error,
+                )?;
+                Ok(computed_size.unwrap_or(0))
+            }
         }
+    }
 
-        // Return the size for folder aggregation (0 if None)
-        Ok(computed_size.unwrap_or(0))
+    /// Handle an existing item (non-tombstone or tombstone)
+    fn handle_existing_item(
+        ctx: &mut ScanContext,
+        existing_item: &Item,
+        item_type: ItemType,
+        mod_date: Option<i64>,
+        size: Option<i64>,
+        dir_read_error: bool,
+        meta_error: bool,
+    ) -> Result<(), FsPulseError> {
+        let old_access = existing_item.access();
+        let new_access =
+            Scanner::calculate_new_access(item_type, old_access, dir_read_error, meta_error);
+        let access_changed = old_access != new_access;
+        let meta_change = existing_item.mod_date() != mod_date || existing_item.size() != size;
+
+        if existing_item.is_ts() {
+            Scanner::handle_tombstone_rehydration(
+                ctx,
+                existing_item,
+                mod_date,
+                size,
+                old_access,
+                new_access,
+            )
+        } else if meta_change || access_changed {
+            Scanner::handle_item_modification(
+                ctx,
+                existing_item,
+                mod_date,
+                size,
+                old_access,
+                new_access,
+                meta_change,
+            )
+        } else {
+            // No change at all - just update last_scan
+            Scanner::handle_item_no_change(ctx, existing_item)
+        }
+    }
+
+    /// Handle tombstone rehydration (item coming back from deletion)
+    fn handle_tombstone_rehydration(
+        ctx: &mut ScanContext,
+        existing_item: &Item,
+        mod_date: Option<i64>,
+        size: Option<i64>,
+        old_access: Access,
+        new_access: Access,
+    ) -> Result<(), FsPulseError> {
+        ctx.execute_batch_write(|c| {
+            let rows_updated = c.execute(
+                "UPDATE items SET
+                    is_ts = 0,
+                    access = ?,
+                    mod_date = ?,
+                    size = ?,
+                    file_hash = NULL,
+                    val = ?,
+                    val_error = NULL,
+                    last_scan = ?,
+                    last_hash_scan = NULL,
+                    last_val_scan = NULL
+                WHERE item_id = ?",
+                (
+                    new_access.as_i64(),
+                    mod_date,
+                    size,
+                    ValidationState::Unknown.as_i64(),
+                    ctx.scan.scan_id(),
+                    existing_item.item_id(),
+                ),
+            )?;
+            Scanner::check_update_result(rows_updated, existing_item.item_id())?;
+
+            let (access_old_val, access_new_val) =
+                Scanner::access_change_values(old_access, new_access);
+
+            c.execute(
+                "INSERT INTO changes (
+                    scan_id, item_id, change_type,
+                    access_old, access_new,
+                    is_undelete, mod_date_old, mod_date_new, size_old, size_new,
+                    hash_old, val_old, val_error_old
+                ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    ctx.scan.scan_id(),
+                    existing_item.item_id(),
+                    ChangeType::Add.as_i64(),
+                    access_old_val,
+                    access_new_val,
+                    existing_item.mod_date(),
+                    mod_date,
+                    existing_item.size(),
+                    size,
+                    existing_item.file_hash(),
+                    existing_item.validity_state_as_str(),
+                    existing_item.val_error(),
+                ),
+            )?;
+
+            // Alert if rehydrated item is inaccessible
+            // For rehydration, we alert whenever new_access is not Ok, regardless of what
+            // the old access state was (since the item was a tombstone, any new access
+            // error is a problem worth alerting on, similar to a brand new item)
+            if new_access != Access::Ok {
+                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), existing_item.item_id())?;
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Handle item modification (metadata and/or access change)
+    fn handle_item_modification(
+        ctx: &mut ScanContext,
+        existing_item: &Item,
+        mod_date: Option<i64>,
+        size: Option<i64>,
+        old_access: Access,
+        new_access: Access,
+        meta_change: bool,
+    ) -> Result<(), FsPulseError> {
+        ctx.execute_batch_write(|c| {
+            // Update item with new values
+            let rows_updated = c.execute(
+                "UPDATE items SET
+                    access = ?,
+                    mod_date = ?,
+                    size = ?,
+                    last_scan = ?
+                WHERE item_id = ?",
+                (
+                    new_access.as_i64(),
+                    mod_date,
+                    size,
+                    ctx.scan.scan_id(),
+                    existing_item.item_id(),
+                ),
+            )?;
+            Scanner::check_update_result(rows_updated, existing_item.item_id())?;
+
+            // Build change record
+            let (access_old_val, access_new_val) =
+                Scanner::access_change_values(old_access, new_access);
+
+            let (mod_date_old, mod_date_new, size_old, size_new) = if meta_change {
+                (
+                    existing_item.mod_date(),
+                    mod_date,
+                    existing_item.size(),
+                    size,
+                )
+            } else {
+                (None, None, None, None)
+            };
+
+            c.execute(
+                "INSERT INTO changes (
+                    scan_id, item_id, change_type,
+                    access_old, access_new,
+                    meta_change, mod_date_old, mod_date_new, size_old, size_new
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    ctx.scan.scan_id(),
+                    existing_item.item_id(),
+                    ChangeType::Modify.as_i64(),
+                    access_old_val,
+                    access_new_val,
+                    if meta_change { Some(true) } else { None },
+                    mod_date_old,
+                    mod_date_new,
+                    size_old,
+                    size_new,
+                ),
+            )?;
+
+            // Alert if item became inaccessible (Ok → error)
+            if Scanner::should_alert_access_denied(old_access, new_access) {
+                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), existing_item.item_id())?;
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Handle item with no changes - just update last_scan
+    fn handle_item_no_change(
+        ctx: &mut ScanContext,
+        existing_item: &Item,
+    ) -> Result<(), FsPulseError> {
+        ctx.execute_batch_write(|c| {
+            let rows_updated = c.execute(
+                "UPDATE items SET last_scan = ? WHERE item_id = ?",
+                (ctx.scan.scan_id(), existing_item.item_id()),
+            )?;
+            Scanner::check_update_result(rows_updated, existing_item.item_id())
+        })
+    }
+
+    /// Handle a new item (never seen before)
+    fn handle_new_item(
+        ctx: &mut ScanContext,
+        item_type: ItemType,
+        path_str: &str,
+        mod_date: Option<i64>,
+        size: Option<i64>,
+        dir_read_error: bool,
+        meta_error: bool,
+    ) -> Result<(), FsPulseError> {
+        // For new items, calculate access based on error conditions
+        // Priority: meta_error (can't stat) > dir_read_error (can stat, can't read_dir) > Ok
+        let new_access = if meta_error {
+            Access::MetaError
+        } else if dir_read_error {
+            Access::ReadError
+        } else {
+            Access::Ok
+        };
+
+        ctx.execute_batch_write(|c| {
+            c.execute(
+                "INSERT INTO items (root_id, item_path, item_type, access, mod_date, size, val, last_scan)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    ctx.scan.root_id(),
+                    path_str,
+                    item_type.as_i64(),
+                    new_access.as_i64(),
+                    mod_date,
+                    size,
+                    ValidationState::Unknown.as_i64(),
+                    ctx.scan.scan_id(),
+                ),
+            )?;
+
+            let item_id: i64 = c.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
+
+            // For new items with access errors (MetaError or ReadError), record the access state
+            let (access_old_val, access_new_val): (Option<i64>, Option<i64>) =
+                if new_access != Access::Ok {
+                    (None, Some(new_access.as_i64()))
+                } else {
+                    (None, None)
+                };
+
+            c.execute(
+                "INSERT INTO changes (
+                    scan_id, item_id, change_type,
+                    access_old, access_new,
+                    is_undelete, mod_date_new, size_new, hash_change, val_change
+                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 0, 0)",
+                (
+                    ctx.scan.scan_id(),
+                    item_id,
+                    ChangeType::Add.as_i64(),
+                    access_old_val,
+                    access_new_val,
+                    mod_date,
+                    size,
+                ),
+            )?;
+
+            Ok(())
+        })
     }
 
     pub fn update_item_analysis(
@@ -718,6 +1119,7 @@ impl Scanner {
         new_hash: Option<String>,
         new_val: ValidationState,
         new_val_error: Option<String>,
+        new_access: Option<Access>,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let mut update_changes = false;
@@ -733,6 +1135,8 @@ impl Scanner {
         let mut c_val_new = None;
         let mut c_val_error_old = None;
         let mut c_val_error_new = None;
+        let mut c_access_old: Option<i64> = None;
+        let mut c_access_new: Option<i64> = None;
 
         // values to use in the item update
         let mut i_hash = analysis_item.file_hash();
@@ -740,9 +1144,25 @@ impl Scanner {
         let mut i_val_error = analysis_item.val_error();
         let mut i_last_hash_scan = analysis_item.last_hash_scan();
         let mut i_last_val_scan = analysis_item.last_val_scan();
+        let mut i_access = analysis_item.access();
 
         let mut alert_possible_hash = false;
         let mut alert_invalid_item = false;
+        let mut alert_access_denied = false;
+
+        // Check if access state changed
+        if let Some(access) = new_access {
+            if access != analysis_item.access() {
+                update_changes = true;
+                c_access_old = Some(analysis_item.access().as_i64());
+                c_access_new = Some(access.as_i64());
+                i_access = access;
+
+                // Alert if item became inaccessible (Ok → error)
+                alert_access_denied =
+                    Scanner::should_alert_access_denied(analysis_item.access(), access);
+            }
+        }
 
         if analysis_item.needs_hash() {
             if analysis_item.file_hash() != new_hash.as_deref() {
@@ -834,6 +1254,10 @@ impl Scanner {
                 )?;
             }
 
+            if alert_access_denied {
+                Alerts::add_access_denied_alert(c, scan.scan_id(), analysis_item.item_id())?;
+            }
+
             // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
             if update_changes {
                 c.execute(
@@ -841,6 +1265,8 @@ impl Scanner {
                             scan_id,
                             item_id,
                             change_type,
+                            access_old,
+                            access_new,
                             meta_change,
                             hash_change,
                             last_hash_scan_old,
@@ -853,9 +1279,11 @@ impl Scanner {
                             val_error_old,
                             val_error_new
                         )
-                        VALUES (?, ?, 2, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, 2, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(scan_id, item_id)
                         DO UPDATE SET
+                            access_old = COALESCE(excluded.access_old, changes.access_old),
+                            access_new = COALESCE(excluded.access_new, changes.access_new),
                             hash_change = excluded.hash_change,
                             last_hash_scan_old = excluded.last_hash_scan_old,
                             hash_old = excluded.hash_old,
@@ -869,6 +1297,8 @@ impl Scanner {
                     rusqlite::params![
                         scan.scan_id(),
                         analysis_item.item_id(),
+                        c_access_old,
+                        c_access_new,
                         c_hash_change,
                         c_last_hash_scan_old,
                         c_hash_old,
@@ -887,6 +1317,7 @@ impl Scanner {
             c.execute(
                 "UPDATE items
                 SET
+                    access = ?,
                     file_hash = ?,
                     val = ?,
                     val_error = ?,
@@ -894,6 +1325,7 @@ impl Scanner {
                     last_val_scan = ?
                 WHERE item_id = ?",
                 rusqlite::params![
+                    i_access.as_i64(),
                     i_hash,
                     i_val.as_i64(),
                     i_val_error,

@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, Read},
+    io::Read,
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -20,29 +20,26 @@ impl Hash {
         path: &Path,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<String, FsPulseError> {
-
         // Check for interrupt before doing any work
         if interrupt_token.load(Ordering::Acquire) {
             return Err(FsPulseError::ScanInterrupted);
         }
 
-        let f = File::open(path)?;
+        let mut f = File::open(path)?;
 
         let mut hasher = Sha256::new();
-
-        let mut reader = BufReader::new(f);
-        let mut buffer = [0; 8192]; // Read in 8KB chunks
+        let mut buffer = [0; 131_072]; // Read in 128KB chunks
 
         let mut loop_counter = 0;
 
         loop {
             loop_counter += 1;
-            // Every 256 loops, check for interrupt
-            if loop_counter % 256 == 0 && interrupt_token.load(Ordering::Acquire) {
+            // Every 16 loops, check for interrupt
+            if loop_counter % 16 == 0 && interrupt_token.load(Ordering::Acquire) {
                 return Err(FsPulseError::ScanInterrupted);
             }
 
-            let bytes_read = reader.read(&mut buffer)?;
+            let bytes_read = f.read(&mut buffer)?;
             if bytes_read == 0 {
                 break;
             }

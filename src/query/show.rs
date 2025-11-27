@@ -1,17 +1,13 @@
 use crate::alerts::{AlertStatus, AlertType};
 use crate::changes::ChangeType;
-use crate::items::ItemType;
+use crate::items::{Access, ItemType};
 use crate::query::columns::ColAlign;
 use crate::validate::validator::ValidationState;
 use crate::{error::FsPulseError, utils::Utils};
 
 use chrono::{DateTime, Local, Utc};
 use pest::iterators::Pair;
-use tabled::{
-    builder::Builder,
-    settings::object::Columns,
-    Table,
-};
+use tabled::{builder::Builder, settings::object::Columns, Table};
 
 use super::{columns::ColSet, Rule};
 
@@ -57,7 +53,7 @@ impl Format {
         // Timestamp is the only format specifier that returns a value in UTC
         if format == Format::Timestamp {
             Ok(datetime_utc.timestamp().to_string())
-        } else {            
+        } else {
             let datetime_local: DateTime<Local> = datetime_utc.with_timezone(&Local);
 
             let format_str = match format {
@@ -119,7 +115,10 @@ impl Format {
         }
     }
 
-    pub fn format_change_type(change_type: ChangeType, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_change_type(
+        change_type: ChangeType,
+        format: Format,
+    ) -> Result<String, FsPulseError> {
         match format {
             Format::Short | Format::None => Ok(change_type.short_name().to_owned()),
             Format::Full => Ok(change_type.full_name().to_owned()),
@@ -137,14 +136,20 @@ impl Format {
         }
     }
 
-    pub fn format_opt_val(val: Option<ValidationState>, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_opt_val(
+        val: Option<ValidationState>,
+        format: Format,
+    ) -> Result<String, FsPulseError> {
         match val {
             Some(val) => Self::format_val(val, format),
             None => Ok("-".into()),
         }
     }
 
-    pub fn format_alert_type(alert_type: AlertType, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_alert_type(
+        alert_type: AlertType,
+        format: Format,
+    ) -> Result<String, FsPulseError> {
         match format {
             Format::Short | Format::None => Ok(alert_type.short_name().to_owned()),
             Format::Full => Ok(alert_type.full_name().to_owned()),
@@ -154,7 +159,10 @@ impl Format {
         }
     }
 
-    pub fn format_alert_status(alert_status: AlertStatus, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_alert_status(
+        alert_status: AlertStatus,
+        format: Format,
+    ) -> Result<String, FsPulseError> {
         match format {
             Format::Short | Format::None => Ok(alert_status.short_name().to_owned()),
             Format::Full => Ok(alert_status.full_name().to_owned()),
@@ -175,7 +183,10 @@ impl Format {
         }
     }
 
-    pub fn format_scan_state(state: crate::scans::ScanState, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_scan_state(
+        state: crate::scans::ScanState,
+        format: Format,
+    ) -> Result<String, FsPulseError> {
         match format {
             Format::Short | Format::None => Ok(state.short_name().to_owned()),
             Format::Full => Ok(state.full_name().to_owned()),
@@ -183,6 +194,23 @@ impl Format {
         }
     }
 
+    pub fn format_access(access: Access, format: Format) -> Result<String, FsPulseError> {
+        match format {
+            Format::Short | Format::None => Ok(access.short_name().to_owned()),
+            Format::Full => Ok(access.full_name().to_owned()),
+            _ => Err(FsPulseError::Error("Invalid access format".into())),
+        }
+    }
+
+    pub fn format_opt_access(
+        access: Option<Access>,
+        format: Format,
+    ) -> Result<String, FsPulseError> {
+        match access {
+            Some(access) => Self::format_access(access, format),
+            None => Ok("-".into()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -304,7 +332,8 @@ impl Show {
                 | Rule::change_type_show
                 | Rule::alert_type_show
                 | Rule::alert_status_show
-                | Rule::scan_state_show => {
+                | Rule::scan_state_show
+                | Rule::access_show => {
                     let mut path_show_parts = element.into_inner();
                     let display_col = path_show_parts.next().unwrap().as_str();
 

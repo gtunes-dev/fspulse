@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '11');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '12');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS items (
     item_path TEXT NOT NULL,                         -- Absolute path of the item
     item_type INTEGER NOT NULL,                 -- Item type enum (0=File, 1=Directory, 2=Symlink, 3=Other)
 
+    -- Access State Property Group
+    access INTEGER NOT NULL DEFAULT 0,          -- Access state enum (0=Ok, 1=MetaError, 2=ReadError)
+
     last_scan INTEGER NOT NULL,              -- Last scan where the item was present
     is_ts BOOLEAN NOT NULL DEFAULT 0,       -- Indicates if the item is a tombstone
 
@@ -83,6 +86,10 @@ CREATE TABLE IF NOT EXISTS changes (
     scan_id INTEGER NOT NULL,                   -- The scan in which the change was detected
     item_id INTEGER NOT NULL,                   -- The file or directory that changed
     change_type INTEGER NOT NULL,               -- Change type enum (0=NoChange, 1=Add, 2=Modify, 3=Delete)
+
+    -- Access State Properties (any change type)
+    access_old INTEGER DEFAULT NULL,            -- Previous access state enum (if changed)
+    access_new INTEGER DEFAULT NULL,            -- New access state enum (if changed)
 
     -- Add specific properties
     is_undelete BOOLEAN DEFAULT NULL,           -- Not Null if "A". True if item was tombstone
@@ -169,6 +176,7 @@ CREATE TABLE IF NOT EXISTS scan_queue (
     validate_mode INTEGER NOT NULL CHECK(validate_mode IN (0, 1, 2)),
     source INTEGER NOT NULL CHECK(source IN (0, 1)),                   -- 0=manual, 1=scheduled
     created_at INTEGER NOT NULL,
+    analysis_hwm INTEGER DEFAULT NULL,                                 -- High water mark for analysis restart resilience
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id),
     FOREIGN KEY (scan_id) REFERENCES scans(scan_id)
