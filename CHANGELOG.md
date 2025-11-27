@@ -7,15 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- **CLI simplified**: Running `fspulse` now starts the server by default; `fspulse serve` still works for backward compatibility
-- **TUI removed**: Terminal UI explorer (`src/explore/`) has been removed; all exploration is now through the web UI
-- **Legacy CLI commands removed**: Report commands and interactive CLI features removed; FsPulse is now a web-first application
-- **Removed `asm` feature from sha2**: Fixes x86_64 cross-compilation in CI workflow builds
-
-### Removed
-- Unused dependencies: `crossterm`, `dialoguer`, `ratatui`, `tui-textarea`, `tabled`, `md-5`
-
 ### Added
 - **Access error tracking**: New `access` column on items tracks permission issues encountered during scanning
   - `Ok`: No access issues
@@ -27,8 +18,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Change tracking for access state**: Change records now include `access_old` and `access_new` columns to track permission changes over time
 
 ### Changed
+- **CLI simplified**: Running `fspulse` now starts the server by default; `fspulse serve` still works for backward compatibility
+- **TUI removed**: Terminal UI explorer (`src/explore/`) has been removed; all exploration is now through the web UI
+- **Legacy CLI commands removed**: Report commands and interactive CLI features removed; FsPulse is now a web-first application
+- **Removed `asm` feature from sha2**: Fixes x86_64 cross-compilation in CI workflow builds
 - **Resilient scanning**: Permission errors no longer abort scans. Items with access issues are tracked and can be retried on subsequent scans when permissions are restored
 - **Hashing optimization**: Removed unnecessary `BufReader` wrapper for more efficient large file hashing
+
+### Removed
+- Unused dependencies: `crossterm`, `dialoguer`, `ratatui`, `tui-textarea`, `tabled`, `md-5`
+
+### Fixed
+- **Query null/not-null filters**: Restored ability to filter enum columns (like `val`, `access`, `change_type`) by `null` and `not null` in FsPulse queries
+- **Explore page empty results**: Structured tabs (Roots, Scans, Items, Changes, Alerts) now display "No results found" message when query returns no rows
+- **Explore page layout**: Fixed issue where outer card would detach from inner content when shrinking browser width on structured tabs
 
 ## [v0.3.1] - 2025-11-23
 

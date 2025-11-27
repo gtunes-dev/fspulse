@@ -504,16 +504,16 @@ type EnumParser = fn(&str) -> Option<i64>;
 /// Static map from column names to enum parsers
 static ENUM_PARSERS: Map<&'static str, EnumParser> = phf_map! {
     "scan_state" => ScanState::from_token,
-    "item_type" => ItemType::from_token,
-    "change_type" => ChangeType::from_token,
-    "alert_type" => AlertType::from_token,
-    "alert_status" => AlertStatus::from_token,
-    "val" => ValidationState::from_token,
-    "val_old" => ValidationState::from_token,
-    "val_new" => ValidationState::from_token,
-    "access" => Access::from_token,
-    "access_old" => Access::from_token,
-    "access_new" => Access::from_token,
+"item_type" => ItemType::from_token,
+"change_type" => ChangeType::from_token,
+"alert_type" => AlertType::from_token,
+"alert_status" => AlertStatus::from_token,
+"val" => ValidationState::from_token,
+"val_old" => ValidationState::from_token,
+"val_new" => ValidationState::from_token,
+"access" => Access::from_token,
+"access_old" => Access::from_token,
+"access_new" => Access::from_token,
 };
 
 /// Filter for integer-backed enums (like scan_state)
@@ -521,6 +521,8 @@ static ENUM_PARSERS: Map<&'static str, EnumParser> = phf_map! {
 pub struct EnumFilter {
     enum_col_db: &'static str,
     enum_vals: Vec<i64>,
+    match_null: bool,
+    match_not_null: bool,
 }
 
 impl Filter for EnumFilter {
@@ -529,8 +531,30 @@ impl Filter for EnumFilter {
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
 
-        if self.enum_vals.len() > 1 {
+        let mut pred_count = self.enum_vals.len();
+        if self.match_null {
+            pred_count += 1
+        };
+        if self.match_not_null {
+            pred_count += 1
+        };
+
+        if pred_count > 1 {
             pred_str.push('(');
+        }
+
+        // if match_null is true, it will always be first
+        if self.match_null {
+            first = false;
+            pred_str.push_str(&format!("({} IS NULL)", &self.enum_col_db));
+        }
+
+        if self.match_not_null {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+            pred_str.push_str(&format!("({} IS NOT NULL)", &self.enum_col_db));
         }
 
         for enum_val in &self.enum_vals {
@@ -543,7 +567,7 @@ impl Filter for EnumFilter {
             pred_vec.push(Box::new(*enum_val));
         }
 
-        if self.enum_vals.len() > 1 {
+        if pred_count > 1 {
             pred_str.push(')');
         }
 
@@ -556,6 +580,8 @@ impl EnumFilter {
         EnumFilter {
             enum_col_db,
             enum_vals: Vec::new(),
+            match_null: false,
+            match_not_null: false,
         }
     }
 
@@ -583,14 +609,20 @@ impl EnumFilter {
 
         // Parse each enum value using the parser
         for enum_val_pair in iter {
-            let token = enum_val_pair.as_str();
-            match parser(token) {
-                Some(db_val) => enum_filter.enum_vals.push(db_val),
-                None => {
-                    return Err(FsPulseError::CustomParsingError(format!(
-                        "Invalid {} value: '{}'",
-                        enum_col, token
-                    )))
+            match enum_val_pair.as_rule() {
+                Rule::null => enum_filter.match_null = true,
+                Rule::not_null => enum_filter.match_not_null = true,
+                _ => {
+                    let token_str = enum_val_pair.as_str();
+                    match parser(token_str) {
+                        Some(db_val) => enum_filter.enum_vals.push(db_val),
+                        None => {
+                            return Err(FsPulseError::CustomParsingError(format!(
+                                "Invalid {} value: '{}'",
+                                enum_col, token_str
+                            )))
+                        }
+                    }
                 }
             }
         }
@@ -1525,6 +1557,8 @@ mod tests {
         let filter = EnumFilter {
             enum_col_db: "state",
             enum_vals: vec![1],
+            match_null: false,
+            match_not_null: false,
         };
 
         let result = filter.to_predicate_parts();
@@ -1539,6 +1573,8 @@ mod tests {
         let filter = EnumFilter {
             enum_col_db: "state",
             enum_vals: vec![1, 4, 6],
+            match_null: false,
+            match_not_null: false,
         };
 
         let result = filter.to_predicate_parts();
@@ -1546,6 +1582,58 @@ mod tests {
         let (pred_str, pred_vec) = result.unwrap();
         assert_eq!(pred_str, "((state = ?) OR (state = ?) OR (state = ?))");
         assert_eq!(pred_vec.len(), 3);
+    }
+
+    #[test]
+    fn test_enum_filter_predicate_null_only() {
+        let filter = EnumFilter {
+            enum_col_db: "state",
+            enum_vals: vec![],
+            match_null: true,
+            match_not_null: false,
+        };
+        let (pred_str, pred_vec) = filter.to_predicate_parts().unwrap();
+        assert_eq!(pred_str, "(state IS NULL)");
+        assert_eq!(pred_vec.len(), 0);
+    }
+
+    #[test]
+    fn test_enum_filter_predicate_not_null_only() {
+        let filter = EnumFilter {
+            enum_col_db: "state",
+            enum_vals: vec![],
+            match_null: false,
+            match_not_null: true,
+        };
+        let (pred_str, pred_vec) = filter.to_predicate_parts().unwrap();
+        assert_eq!(pred_str, "(state IS NOT NULL)");
+        assert_eq!(pred_vec.len(), 0);
+    }
+
+    #[test]
+    fn test_enum_filter_predicate_null_with_values() {
+        let filter = EnumFilter {
+            enum_col_db: "state",
+            enum_vals: vec![1, 2],
+            match_null: true,
+            match_not_null: false,
+        };
+        let (pred_str, pred_vec) = filter.to_predicate_parts().unwrap();
+        assert_eq!(pred_str, "((state IS NULL) OR (state = ?) OR (state = ?))");
+        assert_eq!(pred_vec.len(), 2);
+    }
+
+    #[test]
+    fn test_enum_filter_predicate_null_and_not_null() {
+        let filter = EnumFilter {
+            enum_col_db: "state",
+            enum_vals: vec![],
+            match_null: true,
+            match_not_null: true,
+        };
+        let (pred_str, pred_vec) = filter.to_predicate_parts().unwrap();
+        assert_eq!(pred_str, "((state IS NULL) OR (state IS NOT NULL))");
+        assert_eq!(pred_vec.len(), 0);
     }
 
     // ==================================================================================

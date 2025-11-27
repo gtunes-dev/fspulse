@@ -215,7 +215,7 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
   }
 
   return (
-    <div className="flex h-full gap-4">
+    <div className="flex h-full gap-4 min-w-0">
       {/* Column Selector Card - Left Panel */}
       <Card className="w-96 flex flex-col">
         <CardContent className="flex-1 overflow-y-auto p-0">
@@ -351,7 +351,7 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
       </Card>
 
       {/* Data Table Card - Right Panel */}
-      <Card className="flex-1 flex flex-col">
+      <Card className="flex-1 flex flex-col min-w-0">
         <CardContent className="flex-1 overflow-auto p-0">
           {loading ? (
             <div className="p-4">Loading data...</div>
@@ -435,7 +435,11 @@ export function DataExplorerView({ domain }: DataExplorerViewProps) {
                 </div>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              No results found
+            </div>
+          )}
         </CardContent>
       </Card>
 
