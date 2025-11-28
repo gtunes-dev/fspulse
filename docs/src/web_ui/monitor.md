@@ -1,4 +1,4 @@
-# Monitor & Scheduling
+# Monitor
 
 The Monitor page is your control center for managing scan roots, scheduling automatic scans, and viewing the scan queue.
 

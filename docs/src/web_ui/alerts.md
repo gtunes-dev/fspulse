@@ -4,7 +4,22 @@ The Alerts page provides a centralized view for managing integrity issues detect
 
 ## Alert Types
 
-FsPulse generates two types of alerts:
+FsPulse generates three types of alerts:
+
+### Access Denied
+
+Triggered when FsPulse is unable to access an item or folder. These alerts can occur during either the scan phase or the analysis phase:
+
+**During Scan Phase:**
+- Unable to retrieve item metadata (type, size, or modification date)
+- Unable to enumerate folder contents (typically due to permission restrictions)
+
+**During Analysis Phase:**
+- Unable to read a file for hashing or validation
+
+**Notes:**
+- If FsPulse cannot determine an item's type from metadata, the item is recorded as an instance of the "Unknown" type
+- Items with failed metadata retrieval, whether "Unknown" or otherwise, are not examined during the analysis phase
 
 ### Suspicious Hash Changes
 
@@ -41,7 +56,7 @@ Each alert can be in one of three states:
 
 Filter alerts by:
 - Status (Open/Flagged/Dismissed)
-- Alert type (Hash change/Validation failure)
+- Alert type (Access denied/Hash change/Validation failure)
 - Root
 - Time range
 - Path search
@@ -61,6 +76,7 @@ Select multiple alerts to update status in bulk.
 Click an alert to view:
 - Item path and metadata
 - Alert timestamp
+- Access error details (for access denied alerts)
 - Change details (for hash changes)
 - Validation error message (for invalid items)
 - Link to item in Browse view
