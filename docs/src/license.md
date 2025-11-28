@@ -6,7 +6,7 @@ You are free to use, modify, and distribute the software under the terms of this
 
 ## Full License Text
 
-```
+```text
 MIT License
 
 Copyright (c) 2025 gtunes-dev

@@ -99,7 +99,7 @@ In development mode, the backend serves frontend files directly from `frontend/d
 ### "Frontend assets not found"
 
 **Error:**
-```
+```text
 ❌ ERROR: Frontend assets not found at 'frontend/dist/'
 ```
 

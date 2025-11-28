@@ -103,13 +103,15 @@ fspulse --help
 
 ---
 
-## Usage: Web UI or CLI
+## Running FsPulse
 
-After installation, you can use FsPulse in two ways:
+After installation, start the FsPulse server:
 
-### Web UI (Server Mode)
+```sh
+fspulse
+```
 
-Start the server:
+Or explicitly:
 
 ```sh
 fspulse serve
@@ -117,35 +119,23 @@ fspulse serve
 
 Then open your browser to **http://localhost:8080** to access the web interface.
 
-The web UI provides:
+FsPulse is a **web-first application**. All functionality is available through the web UI:
 - Root management (create, view, delete roots)
-- Scan initiation with real-time progress
-- Interactive data exploration
+- Scan scheduling and initiation with real-time progress
+- Interactive data browsing and exploration
 - Powerful query interface
+- Alert management
 
-### Command-Line Interface
+### Configuration
 
-Use FsPulse directly from the terminal for data analysis:
+FsPulse is configured through environment variables or a config file, not command-line flags:
 
-**Interactive exploration:**
 ```sh
-fspulse interact  # Menu-driven interface
-fspulse explore   # Data explorer TUI
+# Example: Change port and enable debug logging
+export FSPULSE_SERVER_PORT=9090
+export FSPULSE_LOGGING_FSPULSE=debug
+fspulse
 ```
 
-**Query and report on scan results:**
-```sh
-# Items whose path contains 'reports'
-fspulse query "items where item_path:('reports')"
-
-# Changes involving items detected as invalid
-fspulse query "changes where val_new:(I) show default, val_old, val_new order by change_id desc"
-
-# View recent scans
-fspulse report scans --last 5
-```
-
-> **Note:** Scanning is performed through the web UI. The CLI provides powerful tools for querying and analyzing scan results.
-
-See the [Query Syntax](query.md) page for more examples and the [Command-Line Interface](cli.md) page for all available commands.
+See [Configuration](configuration.md) for all available settings and the [Command-Line Interface](cli.md) page for more details.
 

@@ -220,37 +220,6 @@ Even though you mount directories as read-only (`:ro`), Linux permissions still 
 
 ---
 
-## Using the CLI
-
-While the web UI provides full functionality, you can also use CLI commands via `docker exec`:
-
-```bash
-# Run a query
-docker exec fspulse fspulse query "items where scan:(5)"
-
-# View reports
-docker exec fspulse fspulse report scans --last 10
-
-# Interactive menu (requires -it flags)
-docker exec -it fspulse fspulse interact
-
-# Data explorer TUI (requires -it flags)
-docker exec -it fspulse fspulse explore
-```
-
-The `-it` flags are required for interactive modes (`interact` and `explore`) to properly handle terminal input.
-
-**Helper script** (optional): Create `fspulse-docker.sh` to simplify CLI access:
-
-```bash
-#!/bin/bash
-docker exec fspulse fspulse "$@"
-```
-
-Then use it: `./fspulse-docker.sh query "items limit 10"`
-
----
-
 ## Advanced Topics
 
 ### Custom Network Settings
@@ -361,19 +330,6 @@ docker run -d \
    ```bash
    chown -R 1000:1000 /mnt/pool/fspulse/data
    ```
-
-### Interactive Mode Doesn't Work
-
-**Problem**: `fspulse interact` or `fspulse explore` looks broken in docker exec
-
-**Solution**: Use `-it` flags for proper terminal:
-```bash
-# Wrong (missing -it)
-docker exec fspulse fspulse interact
-
-# Correct
-docker exec -it fspulse fspulse interact
-```
 
 ### Configuration Changes Don't Persist
 
@@ -489,7 +445,6 @@ FsPulse images support multiple architectures—Docker automatically pulls the c
 - Explore the [Configuration](configuration.md) reference for all available settings
 - Learn about [Query Syntax](query.md) for advanced data filtering
 - Read [Scanning](scanning.md) to understand how scans work
-- Check [Command-Line Interface](cli.md) for all CLI commands
 
 ---
 

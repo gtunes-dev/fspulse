@@ -50,14 +50,15 @@ scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 |-------------------|----------|------------------------------------------------|
 | `scan_id`         | Integer  | Unique scan identifier                         |
 | `root_id`         | Integer  | Root directory identifier                      |
+| `schedule_id`     | Integer  | Schedule identifier (null for manual scans)    |
+| `started_at`      | Date     | Timestamp when scan started                    |
+| `ended_at`        | Date     | Timestamp when scan ended (null if incomplete) |
+| `was_restarted`   | Boolean  | True if scan was resumed after restart         |
 | `scan_state`      | Scan State Enum | State of the scan                       |
 | `is_hash`         | Boolean  | Hash new or changed files                      |
 | `hash_all`        | Boolean  | Hash all items including unchanged             |
 | `is_val`          | Boolean  | Validate new or changed files                  |
 | `val_all`         | Boolean  | Validate all items including unchanged         |
-| `started_at`      | Date     | Timestamp when scan started                    |
-| `ended_at`        | Date     | Timestamp when scan ended (null if incomplete) |
-| `was_restarted`   | Boolean  | True if scan was resumed after restart         |
 | `file_count`      | Integer  | Count of files found in the scan               |
 | `folder_count`    | Integer  | Count of directories found in the scan         |
 | `total_size`      | Integer  | Total size in bytes of all files in the scan   |
@@ -80,10 +81,10 @@ items [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 | Property         | Type                |
 |------------------|---------------------|
 | `item_id`        | Integer             |
-| `scan_id`        | Integer             |
 | `root_id`        | Integer             |
 | `item_path`      | Path                |
 | `item_type`      | Item Type Enum      |
+| `access`         | Access Status       |
 | `last_scan`      | Integer             |
 | `is_ts`          | Boolean             |
 | `mod_date`       | Date                |
@@ -107,15 +108,17 @@ changes [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 | Property             | Type                |
 |----------------------|---------------------|
 | `change_id`          | Integer             |
-| `root_id`            | Integer             |
 | `scan_id`            | Integer             |
 | `item_id`            | Integer             |
-| `item_path`          | Path                |
 | `change_type`        | Change Type Enum    |
+| `access_old`         | Access Status       |
+| `access_new`         | Access Status       |
 | `is_undelete`        | Boolean             |
 | `meta_change`        | Boolean             |
 | `mod_date_old`       | Date                |
 | `mod_date_new`       | Date                |
+| `size_old`           | Integer             |
+| `size_new`           | Integer             |
 | `hash_change`        | Boolean             |
 | `last_hash_scan_old` | Integer             |
 | `hash_old`           | String              |
@@ -126,6 +129,8 @@ changes [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
 | `val_new`            | Validation Status   |
 | `val_error_old`      | String              |
 | `val_error_new`      | String              |
+| `root_id`            | Integer             |
+| `item_path`          | Path                |
 
 ---
 
@@ -150,6 +155,7 @@ Values must match the column’s type. You can use individual values, ranges (wh
 | Item Type Enum      | `F`, `D`, `S`, `O`, `null`, `not null`, `NULL`, `NOT NULL` | File (F), Directory (D), Symlink (S), Other (O). Unquoted. Ranges not supported. |
 | Change Type Enum    | `N`, `A`, `M`, `D`, `null`, `not null`, `NULL`, `NOT NULL` | No Change (N), Add (A), Modify (M), Delete (D). Unquoted. Ranges not supported. |
 | Scan State Enum     | `S`, `W`, `A`, `C`, `P`, `E`, `null`, `not null`, `NULL`, `NOT NULL` | Scanning (S), Sweeping (W), Analyzing (A), Completed (C), Stopped (P), Error (E). Unquoted. Ranges not supported. |
+| Access Status       | `N`, `M`, `R`, `null`, `not null`, `NULL`, `NOT NULL` | No Error (N), Meta Error (M), Read Error (R). Unquoted. Ranges not supported. |
 
 ---
 
@@ -238,5 +244,5 @@ scans show scan_id, file_count, total_size, add_count, modify_count, delete_coun
 
 ---
 
-See also: [Interactive Mode](interactive_mode.md) · [Validators](validators.md) · [Configuration](configuration.md)
+See also: [Explore Page](web_ui/explore.md) · [Validators](validators.md) · [Configuration](configuration.md)
 

@@ -4,10 +4,10 @@ This guide walks you through your first scan and basic usage of FsPulse.
 
 ## Starting the Web Interface
 
-Launch the FsPulse server:
+Launch FsPulse:
 
 ```sh
-fspulse serve
+fspulse
 ```
 
 Open your browser to **http://127.0.0.1:8080**
@@ -49,5 +49,5 @@ Scheduled scans will run automatically based on your configuration.
 ## Next Steps
 
 - Learn about [Scanning Concepts](../scanning.md)
-- Explore the [Web Interface](../web_ui.md) features
+- Explore the [Interface](../web_ui.md) features
 - Understand the [Query Syntax](../query.md) for advanced analysis

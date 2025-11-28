@@ -42,17 +42,19 @@ Whether you're managing storage capacity, tracking project evolution, or ensurin
 - **Historical Analysis** — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts
 - **Alert System** — Suspicious hash changes and validation failures flagged immediately with status management
 - **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing your filesystem data
-- **Dual Interface** — Elegant web UI for visual exploration, full-featured CLI for automation and scripting
+- **Web-First Design** — Elegant web UI for all operations including scanning, browsing, querying, and configuration
 
-## Usage Modes
+## Running FsPulse
 
-FsPulse offers flexibility in how you interact with it:
+FsPulse is a **web-first application**. Start the server and access all functionality through your browser:
 
-- **Web UI Mode**: Run `fspulse serve` to start the server and access the full web interface at http://127.0.0.1:8080. Great for visual data exploration, managing multiple roots, and real-time scan monitoring.
+```sh
+fspulse
+```
 
-- **Command-Line Mode**: Use direct terminal commands like `fspulse query` and `fspulse report` for automation, scripted workflows, and quick data analysis operations.
+Then open **http://localhost:8080** in your browser to access the web interface.
 
-- **Interactive Terminal Mode**: Use `fspulse interact` for menu-driven navigation or `fspulse explore` for a full-screen data explorer TUI—perfect for terminal users who want visual feedback without leaving the command line.
+The web UI provides complete functionality for managing roots, scheduling and monitoring scans, browsing your filesystem data, running queries, and managing alerts. Configuration is done through environment variables or a config file—see [Configuration](configuration.md) for details.
 
 FsPulse is designed to scale across large file systems while maintaining clarity and control for the user.
 

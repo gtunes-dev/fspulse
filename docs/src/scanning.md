@@ -14,7 +14,7 @@ FsPulse scans are at the core of how it tracks changes to the file system over t
 4. Configure scan options (hashing, validation)
 5. Start the scan and monitor real-time progress on the **Home** page
 
-The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules (daily, weekly, monthly, or custom intervals) or initiate individual scans as needed. See [Monitor & Scheduling](web_ui/monitor.md) for details.
+The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules (daily, weekly, monthly, or custom intervals) or initiate individual scans as needed. See [Monitor](web_ui/monitor.md) for details.
 
 Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.
 
@@ -40,13 +40,12 @@ If a hash is detected to have changed, a change record is created and an alert i
 
 You can investigate hash changes through the web UI:
 - **[Alerts Page](web_ui/alerts.md)**: Shows suspicious hash changes where file metadata hasn't changed
-- **[Explore Page](web_ui/explore.md)**: Run custom queries to analyze hash changes
+- **[Explore Page](web_ui/explore.md)**: Use the **Query** tab to run custom queries
 
-For CLI users or automation, use the query command:
-
-  ```sh
-  fspulse query 'changes where meta_change:(F), hash_change:(T) show default, item_path order by change_id desc'
-  ```
+Example query to find hash changes without metadata changes (run on the Explore page's Query tab):
+```text
+changes where meta_change:(F), hash_change:(T) show default, item_path order by change_id desc
+```
 
 ## Validating
 
@@ -85,13 +84,12 @@ If a validation pass produces an error identical to a previously seen error, no 
 Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:
 - **[Alerts Page](web_ui/alerts.md)**: Shows all items with validation failures, with filtering and status management
 - **[Browse Page](web_ui/browse.md)**: Click any item to see its validation status and error details
-- **[Explore Page](web_ui/explore.md)**: Run custom queries to analyze validation patterns
+- **[Explore Page](web_ui/explore.md)**: Use the **Query** tab to run custom queries
 
-For CLI users or automation, query validation state changes:
-
- ```sh
-  fspulse query 'changes where val_change:(T) show default, item_path order by change_id desc'
-  ```
+Example query to find validation state changes (run on the Explore page's Query tab):
+```text
+changes where val_change:(T) show default, item_path order by change_id desc
+```
 
 Additional queries can filter on specific old and new validation states. See [Query Syntax](query.md) for details.
 

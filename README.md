@@ -56,7 +56,7 @@ Whether you're managing storage capacity, tracking project evolution, or ensurin
 - **Historical Analysis** — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts
 - **Alert System** — Suspicious hash changes and validation failures flagged immediately with status management
 - **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing your filesystem data
-- **Dual Interface** — Elegant web UI for visual exploration, full-featured CLI for automation and scripting
+- **Web-First Design** — Elegant web UI for all operations including scanning, browsing, querying, and configuration
 
 ---
 
@@ -68,10 +68,9 @@ Quick start instructions are below, but full documentation is available in book 
 
 Key sections:
 - [Getting Started](https://gtunes-dev.github.io/fspulse/getting_started.html) — Installation, Docker deployment, and first steps
-- [Web Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Monitor, Browse, Insights, Alerts, and Explore pages
+- [Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Monitor, Browse, Insights, Alerts, and Explore pages
 - [Scanning Concepts](https://gtunes-dev.github.io/fspulse/scanning.html) — How scans work, hashing, and validation
 - [Query Syntax](https://gtunes-dev.github.io/fspulse/query.html) — Powerful filtering and data exploration
-- [Command-Line Interface](https://gtunes-dev.github.io/fspulse/cli.html) — CLI commands for automation and scripting
 - [Configuration](https://gtunes-dev.github.io/fspulse/configuration.html) — Customizing FsPulse behavior
 
 ---
@@ -93,69 +92,53 @@ The [Docker Deployment Guide](https://gtunes-dev.github.io/fspulse/docker.html) 
 
 ---
 
-## ⚡ Usage Examples
+## ⚡ Running FsPulse
 
-FsPulse can run in three modes depending on your needs:
+Start the FsPulse server:
 
-### Web UI Mode
+```sh
+fspulse
+```
 
-Start the server and access through your browser:
+Or explicitly:
 
 ```sh
 fspulse serve
 ```
 
-Open **http://127.0.0.1:8080** in your browser to access the full web interface.
+Open **http://127.0.0.1:8080** in your browser to access the web interface.
 
-**Great for:** Visual data exploration, managing multiple roots, real-time scan monitoring, continuous awareness
+All functionality is available through the web UI:
+- Configure and manage scan roots
+- Schedule automatic scans
+- Monitor scan progress in real-time
+- Browse your filesystem hierarchy
+- Query and explore your data
+- Manage alerts and validation issues
 
----
+### Configuration
 
-### Command-Line Mode
-
-Direct terminal commands for scripting and automation:
-
-```sh
-# Query for invalid items
-fspulse query "items where val:(I)"
-
-# View recent scans
-fspulse report scans --last 5
-
-# Find items with hash changes
-fspulse query "changes where hash_change:(T) show item_path, hash_old, hash_new"
-
-# Find directories over 10GB
-fspulse query "items where size > 10GB and item_type:(D)"
-```
-
-**Great for:** Automation, scripted workflows, CI/CD integration, quick one-off operations
-
-**Note:** All scanning is performed through the web UI. The CLI provides powerful querying and reporting capabilities.
-
----
-
-### Interactive Terminal Mode
-
-Menu-driven interfaces for guided terminal workflows:
+FsPulse is configured through environment variables or a config file:
 
 ```sh
-fspulse interact  # Menu-driven interface
-fspulse explore   # Full-screen data explorer
+# Example: Change port and enable debug logging
+export FSPULSE_SERVER_PORT=9090
+export FSPULSE_LOGGING_FSPULSE=debug
+fspulse
 ```
 
-**Great for:** Terminal users who want visual feedback without leaving the command line
+See the [Configuration Guide](https://gtunes-dev.github.io/fspulse/configuration.html) for all available settings.
 
 ---
 
-### 🖥️ Web Interface Highlights
+### 🖥️ Interface Highlights
 
-The web UI provides powerful visual tools for monitoring and exploring your data:
+The interface provides powerful visual tools for monitoring and exploring your data:
 
-- **Monitor & Schedule** — Configure automatic scans with flexible scheduling options, view execution queue status, and manage scan roots
+- **Monitor** — Configure automatic scans with flexible scheduling options, view execution queue status, and manage scan roots
 - **Live Scan Progress** — Watch scan activity in real-time whether manually initiated or scheduled, with detailed phase-by-phase statistics
 - **Browse with Detail View** — Explore your filesystem hierarchy with elegant sliding panels showing item metadata, validation status, alerts, and complete change history
-- **Insights & Trends** — Interactive charts tracking file sizes, counts, change activity, and validation issues over time with customizable date ranges
+- **Insights** — Interactive charts tracking file sizes, counts, change activity, and validation issues over time with customizable date ranges
 - **Alert Management** — Filter, flag, and dismiss integrity issues with context-aware views and status tracking
 
 <p align="center">

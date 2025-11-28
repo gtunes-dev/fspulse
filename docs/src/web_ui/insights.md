@@ -1,4 +1,4 @@
-# Insights & Trends
+# Insights
 
 The Insights page provides interactive visualizations showing how your data evolves over time across multiple scans.
 
