@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unused dependencies: `crossterm`, `dialoguer`, `ratatui`, `tui-textarea`, `tabled`, `md-5`
 
 ### Fixed
+- **Item Details Slow Load**: Added an index to the changes table on item_id to help with various scenarios where loading changes for an item was slow 
 - **Query null/not-null filters**: Restored ability to filter enum columns (like `val`, `access`, `change_type`) by `null` and `not null` in FsPulse queries
 - **Explore page empty results**: Structured tabs (Roots, Scans, Items, Changes, Alerts) now display "No results found" message when query returns no rows
 - **Explore page layout**: Fixed issue where outer card would detach from inner content when shrinking browser width on structured tabs

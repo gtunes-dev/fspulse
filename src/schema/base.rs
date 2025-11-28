@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '12');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '13');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS changes (
 
 -- Indexes to optimize queries
 CREATE INDEX IF NOT EXISTS idx_changes_scan_type ON changes (scan_id, change_type);
+CREATE INDEX IF NOT EXISTS idx_changes_item ON changes (item_id);
 
 CREATE TABLE IF NOT EXISTS alerts (
   alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,6 +141,9 @@ CREATE TABLE IF NOT EXISTS alerts (
   -- invalid file
   val_error TEXT DEFAULT NULL
 );
+
+-- Indexes to optimize queries
+CREATE INDEX IF NOT EXISTS idx_alerts_item ON alerts (item_id);
 
 -- Scan schedules table stores recurring scan configurations
 CREATE TABLE IF NOT EXISTS scan_schedules (

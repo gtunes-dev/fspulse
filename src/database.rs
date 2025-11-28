@@ -2,9 +2,9 @@ use crate::{
     config::Config,
     error::FsPulseError,
     schema::{
-        CREATE_SCHEMA_SQL, UPGRADE_10_TO_11_SQL, UPGRADE_11_TO_12_SQL, UPGRADE_2_TO_3_SQL,
-        UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL, UPGRADE_6_TO_7_SQL,
-        UPGRADE_7_TO_8_SQL, UPGRADE_8_TO_9_SQL, UPGRADE_9_TO_10_SQL,
+        CREATE_SCHEMA_SQL, UPGRADE_10_TO_11_SQL, UPGRADE_11_TO_12_SQL, UPGRADE_12_TO_13_SQL,
+        UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL,
+        UPGRADE_6_TO_7_SQL, UPGRADE_7_TO_8_SQL, UPGRADE_8_TO_9_SQL, UPGRADE_9_TO_10_SQL,
     },
     sort::compare_paths,
 };
@@ -20,7 +20,7 @@ use std::time::Duration;
 use std::env;
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 12;
+const CURRENT_SCHEMA_VERSION: u32 = 13;
 
 // Connection pool configuration
 const POOL_MAX_SIZE: u32 = 15;
@@ -353,6 +353,7 @@ fn ensure_schema_current() -> Result<(), FsPulseError> {
                 9 => upgrade_schema(&conn, db_version, UPGRADE_9_TO_10_SQL)?,
                 10 => upgrade_schema(&conn, db_version, UPGRADE_10_TO_11_SQL)?,
                 11 => upgrade_schema(&conn, db_version, UPGRADE_11_TO_12_SQL)?,
+                12 => upgrade_schema(&conn, db_version, UPGRADE_12_TO_13_SQL)?,
                 _ => {
                     return Err(FsPulseError::Error(
                         "No valid database update available".to_string(),
@@ -468,7 +469,7 @@ mod tests {
             )
             .expect("Should be able to query schema version");
 
-        assert_eq!(version, "12", "Schema version should be 12");
+        assert_eq!(version, "13", "Schema version should be 13");
     }
 
     #[test]
