@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.3] - 2025-11-29
+
+### Fixed
+- **crates.io publishing issue**: keywords had been edited and had too many 
+
 ## [v0.3.2] - 2025-11-29
 
 ### Added
