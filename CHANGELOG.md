@@ -7,32 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.2] - 2025-11-29
+
 ### Added
-- **Access error tracking**: New `access` column on items tracks permission issues encountered during scanning
-  - `Ok`: No access issues
-  - `MetaError`: Unable to read file metadata (detected during scan phase)
-  - `ReadError`: Unable to read file contents (detected during analysis phase)
-- **Access Denied alerts**: New alert type generated when files cannot be read during analysis
-  - Displayed with amber "warning" badge in web UI to distinguish from validation errors
-  - Filterable via new "Access Denied" option in Alerts page type dropdown
-- **Change tracking for access state**: Change records now include `access_old` and `access_new` columns to track permission changes over time
+- **Access error tracking**: Files with permission issues are now tracked as having access issues instead causing scans to stop
+- **Access Denied alerts**: New alert type for files that can't be read, shown with amber badge in Alerts page
 
 ### Changed
-- **CLI simplified**: Running `fspulse` now starts the server by default; `fspulse serve` still works for backward compatibility
-- **TUI removed**: Terminal UI explorer (`src/explore/`) has been removed; all exploration is now through the web UI
-- **Legacy CLI commands removed**: Report commands and interactive CLI features removed; FsPulse is now a web-first application
-- **Removed `asm` feature from sha2**: Fixes x86_64 cross-compilation in CI workflow builds
-- **Resilient scanning**: Permission errors no longer abort scans. Items with access issues are tracked and can be retried on subsequent scans when permissions are restored
-- **Hashing optimization**: Removed unnecessary `BufReader` wrapper for more efficient large file hashing
-
-### Removed
-- Unused dependencies: `crossterm`, `dialoguer`, `ratatui`, `tui-textarea`, `tabled`, `md-5`
+- **Simplified startup**: Just run `fspulse` to start the server (no subcommand needed)
+- **Web-first**: Terminal UI and legacy CLI commands removed; all features now in web UI
+- **Resilient scanning**: Permission errors no longer stop scans; affected items can be retried when access is restored
 
 ### Fixed
-- **Item Details Slow Load**: Added an index to the changes table on item_id to help with various scenarios where loading changes for an item was slow 
-- **Query null/not-null filters**: Restored ability to filter enum columns (like `val`, `access`, `change_type`) by `null` and `not null` in FsPulse queries
-- **Explore page empty results**: Structured tabs (Roots, Scans, Items, Changes, Alerts) now display "No results found" message when query returns no rows
-- **Explore page layout**: Fixed issue where outer card would detach from inner content when shrinking browser width on structured tabs
+- **Item details loading**: Significantly faster loading of change history for items
+- **Query filters**: Restored null/not-null filtering for enum columns
+- **Explore page**: Empty results now show "No results found"; fixed layout issues on narrow screens
 
 ## [v0.3.1] - 2025-11-23
 
