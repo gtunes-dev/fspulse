@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/table'
 import { fetchQuery } from '@/lib/api'
 import { formatTimeAgo } from '@/lib/dateUtils'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 
@@ -29,7 +29,7 @@ interface RootMap {
 }
 
 export function RecentScansTable() {
-  const { lastScanCompletedAt } = useScanManager()
+  const { lastTaskCompletedAt } = useTaskContext()
   const [scans, setScans] = useState<ScanRow[]>([])
   const [roots, setRoots] = useState<RootMap>({})
   const [loading, setLoading] = useState(true)
@@ -105,7 +105,7 @@ export function RecentScansTable() {
     }
 
     loadData()
-  }, [lastScanCompletedAt])
+  }, [lastTaskCompletedAt])
 
   const formatChanges = (add: number, modify: number, del: number): string => {
     const changes = []

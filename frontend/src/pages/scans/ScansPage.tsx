@@ -9,7 +9,7 @@ import { EmptyStateNoScans } from './EmptyStateNoScans'
 import { PauseScanDialog } from './PauseScanDialog'
 import { Card, CardContent } from '@/components/ui/card'
 import { InfoBar } from '@/components/shared/InfoBar'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import { countQuery } from '@/lib/api'
 
 /**
@@ -30,7 +30,7 @@ import { countQuery } from '@/lib/api'
  */
 export function ScansPage() {
   const [searchParams] = useSearchParams()
-  const { isPaused, pauseUntil } = useScanManager()
+  const { isPaused, pauseUntil } = useTaskContext()
   const [loading, setLoading] = useState(true)
   const [rootCount, setRootCount] = useState(0)
   const [scanCount, setScanCount] = useState(0)

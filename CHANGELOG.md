@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Generic task progress system**: Refactored backend progress reporting from scan-specific to generic task-based architecture, enabling future support for multiple task types (export, maintenance, etc.)
+- **Frontend context renamed**: `ScanManagerContext` → `TaskContext` with updated types for generic task progress
+- **Indeterminate progress bar**: Scanning phase now shows shimmer animation instead of percentage (since file count is unknown until scan completes)
+
 ## [v0.3.3] - 2025-11-29
 
 ### Fixed

@@ -16,7 +16,7 @@ import { EditScheduleDialog } from './EditScheduleDialog'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { RootFilter } from '@/components/shared/RootFilter'
 import { formatDateRelative } from '@/lib/dateUtils'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import type { ScheduleWithRoot } from '@/lib/types'
 
 interface SchedulesTableProps {
@@ -31,7 +31,7 @@ const ITEMS_PER_PAGE = 25
 
 export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>(
   function SchedulesTable({ isScanning }, ref) {
-    const { lastScanCompletedAt, lastScanScheduledAt } = useScanManager()
+    const { lastTaskCompletedAt, lastTaskScheduledAt } = useTaskContext()
     const [schedules, setSchedules] = useState<ScheduleWithRoot[]>([])
     const [loading, setLoading] = useState(true)
     const [currentPage, setCurrentPage] = useState(1)
@@ -85,7 +85,7 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
       }
 
       loadSchedules()
-    }, [lastScanCompletedAt, lastScanScheduledAt, reloadTrigger])
+    }, [lastTaskCompletedAt, lastTaskScheduledAt, reloadTrigger])
 
     // Expose reload method via ref for manual refresh
     useImperativeHandle(ref, () => ({

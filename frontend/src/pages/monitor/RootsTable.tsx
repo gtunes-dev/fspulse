@@ -16,7 +16,7 @@ import { CreateScheduleDialog } from './CreateScheduleDialog'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { ScanDetailSheet } from '@/components/shared/ScanDetailSheet'
 import { formatDateRelative } from '@/lib/dateUtils'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import type { RootWithScan } from '@/lib/types'
 
 interface RootsTableProps {
@@ -28,7 +28,7 @@ interface RootsTableProps {
 const ITEMS_PER_PAGE = 25
 
 export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger }: RootsTableProps) {
-  const { currentScanId, lastScanCompletedAt, lastScanScheduledAt, isPaused } = useScanManager()
+  const { activeRootId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -66,7 +66,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger
     }
 
     loadRoots()
-  }, [currentScanId, lastScanCompletedAt, lastScanScheduledAt, internalReloadTrigger, externalReloadTrigger])
+  }, [activeRootId, lastTaskCompletedAt, lastTaskScheduledAt, internalReloadTrigger, externalReloadTrigger])
 
   // Pagination
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -140,7 +140,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger
                   const scheduleCount = root.schedule_count
 
                   // Check if this root has the currently active scan
-                  const hasActiveScan = scanInfo && currentScanId === scanInfo.scan_id
+                  const hasActiveScan = activeRootId === root.root_id
 
                   // Build Last Scan content
                   let lastScanContent: ReactElement
@@ -214,7 +214,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger
                       )
                     } else if (['Pending', 'Scanning', 'Sweeping', 'Analyzing'].includes(scanInfo.state)) {
                       // Check if this is the currently active scan
-                      const isActiveScan = currentScanId === scanInfo.scan_id
+                      const isActiveScan = activeRootId === root.root_id
 
                       lastScanContent = (
                         <div className="flex flex-col gap-0.5">

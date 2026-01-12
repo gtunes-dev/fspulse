@@ -1,6 +1,6 @@
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::progress::{BroadcastMessage, ProgressReporter, ScanStatus};
+use crate::task::{BroadcastMessage, TaskProgress, TaskStatus, TaskType};
 use crate::roots::Root;
 use crate::scanner::Scanner;
 use crate::scans::{HashMode, Scan, ValidateMode};
@@ -42,10 +42,12 @@ pub struct ScanManager {
 /// Information about the currently running scan
 struct ActiveScanInfo {
     scan_id: i64,
+    #[allow(dead_code)]
     root_id: i64,
+    #[allow(dead_code)]
     root_path: String,
     interrupt_token: Arc<AtomicBool>,
-    reporter: Arc<ProgressReporter>,
+    task_progress: Arc<TaskProgress>,
     task_handle: Option<JoinHandle<()>>,
     broadcast_handle: Option<JoinHandle<()>>,
 }
@@ -267,8 +269,14 @@ impl ScanManager {
             .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?;
         let root_path = root.root_path().to_string();
 
-        // Create progress reporter that maintains scan state
-        let reporter = Arc::new(ProgressReporter::new(scan_id, root_id, root_path.clone()));
+        // Create task progress reporter
+        let task_progress = TaskProgress::new(
+            scan_id,
+            TaskType::Scan,
+            Some(root_id),
+            "Scanning",
+            &root_path,
+        );
         let interrupt_token = Arc::new(AtomicBool::new(false));
 
         // Spawn per-scan broadcast thread
@@ -291,10 +299,8 @@ impl ScanManager {
                     if let Some(active) = &manager.current_scan {
                         if active.scan_id == scan_id {
                             matches!(
-                                active.reporter.get_status(),
-                                ScanStatus::Completed
-                                    | ScanStatus::Stopped
-                                    | ScanStatus::Error { .. }
+                                active.task_progress.get_status(),
+                                TaskStatus::Completed | TaskStatus::Stopped | TaskStatus::Error
                             )
                         } else {
                             // Scan was replaced, exit this broadcast thread
@@ -318,7 +324,8 @@ impl ScanManager {
 
         // Clone references we need to keep after moving into spawn_blocking
         let interrupt_token_for_storage = Arc::clone(&interrupt_token);
-        let reporter_for_storage = Arc::clone(&reporter);
+        let task_progress_for_storage = Arc::clone(&task_progress);
+        let task_progress_for_scan = Arc::clone(&task_progress);
 
         // Spawn scan task
         let task_handle = tokio::task::spawn_blocking(move || {
@@ -326,7 +333,7 @@ impl ScanManager {
                 Ok(conn) => conn,
                 Err(e) => {
                     error!("Failed to get database connection in scan task: {}", e);
-                    reporter.mark_error(format!("Failed to get database connection: {}", e));
+                    task_progress.set_error(&format!("Failed to get database connection: {}", e));
                     return;
                 }
             };
@@ -335,23 +342,23 @@ impl ScanManager {
                 Ok(Some(root)) => root,
                 Ok(None) => {
                     error!("Root {} not found", root_id);
-                    reporter.mark_error(format!("Root {} not found", root_id));
+                    task_progress.set_error(&format!("Root {} not found", root_id));
                     return;
                 }
                 Err(e) => {
                     error!("Failed to get root {}: {}", root_id, e);
-                    reporter.mark_error(format!("Failed to get root: {}", e));
+                    task_progress.set_error(&format!("Failed to get root: {}", e));
                     return;
                 }
             };
 
             let scan_result =
-                Scanner::do_scan_machine(&mut scan, &root, reporter.clone(), interrupt_token);
+                Scanner::do_scan_machine(&mut scan, &root, task_progress_for_scan, interrupt_token);
 
             // Handle result
             match scan_result {
                 Ok(()) => {
-                    reporter.mark_completed();
+                    task_progress.set_status(TaskStatus::Completed);
                 }
                 Err(ref e) if matches!(e, FsPulseError::ScanInterrupted) => {
                     // If the scan is shutting down, we always treat ScanInterrupted as if it's a result
@@ -364,14 +371,14 @@ impl ScanManager {
                         // explicit stop and a pause - we just treat it like a pause.
                         if ScanManager::is_paused() {
                             info!("Scan {} was paused", scan_id);
-                            reporter.mark_completed();
+                            task_progress.set_status(TaskStatus::Completed);
                         } else {
                             info!("Scan {} was stopped, rolling back changes", scan_id);
                             if let Err(stop_err) = scan.set_state_stopped(&conn) {
                                 error!("Failed to stop scan {}: {}", scan_id, stop_err);
-                                reporter.mark_error(format!("Failed to stop scan: {}", stop_err));
+                                task_progress.set_error(&format!("Failed to stop scan: {}", stop_err));
                             } else {
-                                reporter.mark_stopped();
+                                task_progress.set_status(TaskStatus::Stopped);
                             }
                         }
                     }
@@ -381,12 +388,12 @@ impl ScanManager {
                     let error_msg = e.to_string();
                     if let Err(stop_err) = Scan::stop_scan(&conn, &scan, Some(&error_msg)) {
                         error!("Failed to stop scan {} after error: {}", scan_id, stop_err);
-                        reporter.mark_error(format!(
+                        task_progress.set_error(&format!(
                             "Scan error: {}; Failed to stop: {}",
                             error_msg, stop_err
                         ));
                     } else {
-                        reporter.mark_error(error_msg);
+                        task_progress.set_error(&error_msg);
                     }
                 }
             }
@@ -403,7 +410,7 @@ impl ScanManager {
             root_id,
             root_path: root_path.clone(),
             interrupt_token: interrupt_token_for_storage,
-            reporter: reporter_for_storage,
+            task_progress: task_progress_for_storage,
             task_handle: Some(task_handle),
             broadcast_handle: Some(broadcast_handle),
         });
@@ -456,19 +463,19 @@ impl ScanManager {
                     return Err("Shutting down".to_string());
                 }
 
-                let current_status = active.reporter.get_status();
+                let current_status = active.task_progress.get_status();
 
                 match current_status {
-                    ScanStatus::Running => {
-                        active.reporter.mark_stopping();
+                    TaskStatus::Running => {
+                        active.task_progress.set_status(TaskStatus::Stopping);
                         active.interrupt_token.store(true, Ordering::Release);
                         Ok(())
                     }
-                    ScanStatus::Stopping => Err("Scan is already stopping".to_string()),
-                    ScanStatus::Stopped => Err("Scan has already been stopped".to_string()),
-                    ScanStatus::Pausing => Err("Scan is currently pausing".to_string()),
-                    ScanStatus::Completed => Err("Scan has already completed".to_string()),
-                    ScanStatus::Error { .. } => Err("Scan has already errored".to_string()),
+                    TaskStatus::Stopping => Err("Scan is already stopping".to_string()),
+                    TaskStatus::Stopped => Err("Scan has already been stopped".to_string()),
+                    TaskStatus::Pausing => Err("Scan is currently pausing".to_string()),
+                    TaskStatus::Completed => Err("Scan has already completed".to_string()),
+                    TaskStatus::Error => Err("Scan has already errored".to_string()),
                 }
             }
             Some(active) => Err(format!(
@@ -518,9 +525,9 @@ impl ScanManager {
 
             // Interrupt current scan if running
             if let Some(active) = &manager.current_scan {
-                let current_status = active.reporter.get_status();
-                if matches!(current_status, ScanStatus::Running) {
-                    active.reporter.mark_pausing();
+                let current_status = active.task_progress.get_status();
+                if matches!(current_status, TaskStatus::Running) {
+                    active.task_progress.set_status(TaskStatus::Pausing);
                     active.interrupt_token.store(true, Ordering::Release);
                 }
             }
@@ -643,38 +650,32 @@ impl ScanManager {
         }
 
         if let Some(active) = &self.current_scan {
-            let scan_progress_status = active.reporter.get_current_state();
-            let scan_status = active.reporter.get_current_state().status;
+            let task_state = active.task_progress.get_snapshot();
+            let task_status = task_state.status;
 
-            match scan_status {
-                ScanStatus::Completed | ScanStatus::Error { .. } | ScanStatus::Stopped => {
+            match task_status {
+                TaskStatus::Completed | TaskStatus::Error | TaskStatus::Stopped => {
                     if allow_send_terminal {
-                        let _ = self.broadcaster.send(BroadcastMessage::ActiveScan {
-                            scan: Box::new(scan_progress_status),
+                        let _ = self.broadcaster.send(BroadcastMessage::ActiveTask {
+                            task: Box::new(task_state),
                         });
-                    } else {
-                        // Terminal state, and sending is not allowed → do nothing.
                     }
+                    // Terminal state and sending not allowed → do nothing
                 }
                 _ => {
-                    // Non-terminal state → always broadcast.
-                    let _ = self.broadcaster.send(BroadcastMessage::ActiveScan {
-                        scan: Box::new(scan_progress_status),
+                    // Non-terminal state → always broadcast
+                    let _ = self.broadcaster.send(BroadcastMessage::ActiveTask {
+                        task: Box::new(task_state),
                     });
                 }
             }
+        } else if self.is_paused {
+            // System is paused
+            let pause_until = self.pause_until.unwrap_or(-1);
+            let _ = self.broadcaster.send(BroadcastMessage::Paused { pause_until });
         } else {
-            // No active scan → check if paused or idle
-            if self.is_paused {
-                // System is paused
-                let pause_until = self.pause_until.unwrap_or(-1);
-                let _ = self
-                    .broadcaster
-                    .send(BroadcastMessage::Paused { pause_until });
-            } else {
-                // System is idle
-                let _ = self.broadcaster.send(BroadcastMessage::NoActiveScan);
-            }
+            // System is idle
+            let _ = self.broadcaster.send(BroadcastMessage::NoActiveTask);
         }
     }
 
@@ -723,7 +724,7 @@ impl ScanManager {
     }
 
     /// Check if the process is shutting down, returning error if so
-    /// Must be called with the scan manager mutiex
+    /// Must be called with the scan manager mutex
     fn check_shutting_down_locked(&self) -> Result<(), FsPulseError> {
         if self.is_shutting_down {
             Err(FsPulseError::ShuttingDown)

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { ScanManagerProvider } from './contexts/ScanManagerContext'
+import { TaskProvider } from './contexts/TaskContext'
 import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
 import { ScansPage } from './pages/scans/ScansPage'
@@ -13,7 +13,7 @@ import { SettingsPage } from './pages/settings/SettingsPage'
 function App() {
   return (
     <BrowserRouter>
-      <ScanManagerProvider>
+      <TaskProvider>
         <div className="flex h-screen flex-col bg-background">
           <Header />
           <div className="flex flex-1 overflow-hidden">
@@ -31,7 +31,7 @@ function App() {
             </main>
           </div>
         </div>
-      </ScanManagerProvider>
+      </TaskProvider>
     </BrowserRouter>
   )
 }

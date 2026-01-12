@@ -21,10 +21,10 @@ use crate::alerts::Alerts;
 use crate::changes::ChangeType;
 use crate::hash::Hash;
 use crate::items::{Access, AnalysisItem, Item, ItemType};
-use crate::progress::ProgressReporter;
 use crate::roots::Root;
 use crate::scans::ScanState;
 use crate::schedules::AnalysisTracker;
+use crate::task::TaskProgress;
 use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
@@ -50,25 +50,46 @@ const SCAN_BATCH_SIZE: usize = 100;
 struct ScanContext<'a> {
     conn: &'a Connection,
     scan: &'a Scan,
-    reporter: &'a Arc<ProgressReporter>,
+    task_progress: &'a Arc<TaskProgress>,
     interrupt_token: &'a Arc<AtomicBool>,
     batch_count: usize,
+    files_scanned: u64,
+    directories_scanned: u64,
 }
 
 impl<'a> ScanContext<'a> {
     fn new(
         conn: &'a Connection,
         scan: &'a Scan,
-        reporter: &'a Arc<ProgressReporter>,
+        task_progress: &'a Arc<TaskProgress>,
         interrupt_token: &'a Arc<AtomicBool>,
     ) -> Self {
         Self {
             conn,
             scan,
-            reporter,
+            task_progress,
             interrupt_token,
             batch_count: 0,
+            files_scanned: 0,
+            directories_scanned: 0,
         }
+    }
+
+    fn increment_files_scanned(&mut self) {
+        self.files_scanned += 1;
+        self.update_scanning_progress();
+    }
+
+    fn increment_directories_scanned(&mut self) {
+        self.directories_scanned += 1;
+        self.update_scanning_progress();
+    }
+
+    fn update_scanning_progress(&self) {
+        self.task_progress.set_indeterminate_progress(&format!(
+            "{} files in {} directories",
+            self.files_scanned, self.directories_scanned
+        ));
     }
 
     fn execute_batch_write<F, T>(&mut self, f: F) -> Result<T, FsPulseError>
@@ -123,7 +144,7 @@ impl Scanner {
     pub fn do_scan_machine(
         scan: &mut Scan,
         root: &Root,
-        reporter: Arc<ProgressReporter>,
+        task_progress: Arc<TaskProgress>,
         interrupt_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         // NOTE: We check for interrupt at appropriate points in the scanner code with:
@@ -154,22 +175,23 @@ impl Scanner {
 
             match loop_state {
                 ScanState::Scanning => {
-                    reporter.start_scanning_phase();
+                    task_progress.set_phase("Phase 1 of 3: Scanning");
                     if scan.state() == ScanState::Scanning {
-                        Scanner::do_state_scanning(root, scan, reporter.clone(), &interrupt_token)?;
+                        Scanner::do_state_scanning(root, scan, task_progress.clone(), &interrupt_token)?;
                     }
                     loop_state = ScanState::Sweeping;
                 }
                 ScanState::Sweeping => {
-                    reporter.start_sweeping_phase();
+                    task_progress.set_phase("Phase 2 of 3: Sweeping");
                     if scan.state() == ScanState::Sweeping {
-                        Scanner::do_state_sweeping(scan, &interrupt_token)?;
+                        Scanner::do_state_sweeping(scan, task_progress.clone(), &interrupt_token)?;
                     }
                     loop_state = ScanState::Analyzing;
                 }
                 ScanState::Analyzing => {
+                    task_progress.set_phase("Phase 3 of 3: Analyzing");
                     let analysis_result = if scan.state() == ScanState::Analyzing {
-                        Scanner::do_state_analyzing(scan, reporter.clone(), &interrupt_token)
+                        Scanner::do_state_analyzing(scan, task_progress.clone(), &interrupt_token)
                     } else {
                         Ok(())
                     };
@@ -193,7 +215,7 @@ impl Scanner {
 
         Scanner::check_interrupted(ctx.interrupt_token)?;
 
-        ctx.reporter.increment_directories_scanned();
+        ctx.increment_directories_scanned();
 
         // Try to read directory contents, handling access errors
         let items = match fs::read_dir(path) {
@@ -285,7 +307,7 @@ impl Scanner {
                 }
             };
 
-            ctx.reporter.increment_files_scanned();
+            ctx.increment_files_scanned();
 
             match item_metadata {
                 Some(ref metadata) if metadata.is_dir() => {
@@ -369,14 +391,14 @@ impl Scanner {
     fn do_state_scanning(
         root: &Root,
         scan: &mut Scan,
-        reporter: Arc<ProgressReporter>,
+        task_progress: Arc<TaskProgress>,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         let conn = Database::get_connection()?;
         let root_path_buf = PathBuf::from(root.root_path());
 
         // Create scanning context
-        let mut ctx = ScanContext::new(&conn, scan, &reporter, interrupt_token);
+        let mut ctx = ScanContext::new(&conn, scan, &task_progress, interrupt_token);
 
         // Recursively scan the root directory and get the total size
         // Note: We don't store the root directory itself as an item in the database
@@ -399,6 +421,12 @@ impl Scanner {
         // Flush any remaining batched writes
         ctx.flush()?;
 
+        // Add breadcrumb for completed scanning phase
+        ctx.task_progress.add_breadcrumb(&format!(
+            "Scanned {} files in {} directories",
+            ctx.files_scanned, ctx.directories_scanned
+        ));
+
         // Drop ctx to release the immutable borrow of scan before we mutably borrow it
         drop(ctx);
 
@@ -412,6 +440,7 @@ impl Scanner {
 
     fn do_state_sweeping(
         scan: &mut Scan,
+        task_progress: Arc<TaskProgress>,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         Scanner::check_interrupted(interrupt_token)?;
@@ -445,12 +474,14 @@ impl Scanner {
             Ok(())
         })?;
 
+        task_progress.add_breadcrumb("Tombstoned deleted items");
+
         scan.set_state_analyzing(&conn)
     }
 
     fn do_state_analyzing(
         scan: &mut Scan,
-        reporter: Arc<ProgressReporter>,
+        task_progress: Arc<TaskProgress>,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         // Get a single connection for this entire phase
@@ -473,7 +504,8 @@ impl Scanner {
         let (analyze_total, analyze_done) =
             Item::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
 
-        reporter.start_analyzing_phase(analyze_total, analyze_done);
+        // Set up counter-based progress tracking
+        task_progress.set_progress_total(analyze_total, analyze_done, Some("files"));
 
         // Create the analysis tracker for HWM management (shared with worker threads)
         let tracker = Arc::new(AnalysisTracker::new(scan.scan_id()));
@@ -490,16 +522,16 @@ impl Scanner {
         let num_threads = cmp::min(items_remaining_usize, thread_count);
         let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread
 
+        // Set up thread states
+        task_progress.set_thread_count(num_threads);
+
         for thread_index in 0..num_threads {
             // Clone shared resources for each worker thread.
             let receiver = receiver.clone();
             let scan_copy = scan.clone();
-            let reporter_clone = Arc::clone(&reporter);
+            let task_progress_clone = Arc::clone(&task_progress);
             let interrupt_token_clone = Arc::clone(interrupt_token);
             let tracker_clone = Arc::clone(&tracker);
-
-            // Set initial idle state
-            reporter.set_thread_idle(thread_index);
 
             // Worker thread: continuously receive and process tasks.
             // Each thread gets its own connection from the pool!
@@ -509,12 +541,12 @@ impl Scanner {
                         &scan_copy,
                         analysis_item,
                         thread_index,
-                        &reporter_clone,
+                        &task_progress_clone,
                         &interrupt_token_clone,
                         &tracker_clone,
                     );
                 }
-                reporter_clone.set_thread_idle(thread_index);
+                task_progress_clone.set_thread_idle(thread_index);
             });
         }
 
@@ -574,6 +606,10 @@ impl Scanner {
         // Warn if the tracker still has items (indicates a bug in the tracking logic).
         tracker.warn_if_not_empty();
 
+        // Clear thread states and add breadcrumb
+        task_progress.clear_thread_states();
+        task_progress.add_breadcrumb(&format!("Analyzed {} files", analyze_total));
+
         scan.set_state_completed(&conn)
     }
 
@@ -581,7 +617,7 @@ impl Scanner {
         scan: &Scan,
         analysis_item: AnalysisItem,
         thread_index: usize,
-        reporter: &Arc<ProgressReporter>,
+        task_progress: &Arc<TaskProgress>,
         interrupt_token: &Arc<AtomicBool>,
         tracker: &Arc<AnalysisTracker>,
     ) {
@@ -610,7 +646,7 @@ impl Scanner {
         let mut read_permission_denied = false;
 
         if analysis_item.needs_hash() && !Scanner::is_interrupted(interrupt_token) {
-            reporter.set_thread_hashing(thread_index, display_path.to_string());
+            task_progress.set_thread_state(thread_index, "Hashing", "info", Some(&display_path));
             read_attempted = true;
 
             // The hash function checks for interrupt at its start and periodically
@@ -646,7 +682,7 @@ impl Scanner {
             let validator = from_path(path);
             match validator {
                 Some(v) => {
-                    reporter.set_thread_validating(thread_index, display_path.to_string());
+                    task_progress.set_thread_state(thread_index, "Validating", "info-alternate", Some(&display_path));
                     read_attempted = true;
 
                     match v.validate(path, interrupt_token) {
@@ -703,10 +739,10 @@ impl Scanner {
             }
         }
 
-        reporter.increment_analysis_completed();
+        task_progress.increment_progress();
 
         // Set thread back to idle after completing work
-        reporter.set_thread_idle(thread_index);
+        task_progress.set_thread_idle(thread_index);
 
         // Mark item complete in tracker (updates HWM if appropriate)
         if let Err(e) = tracker.complete_item(item_id) {

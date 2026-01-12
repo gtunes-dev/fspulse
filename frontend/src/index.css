@@ -94,3 +94,13 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* Indeterminate progress bar animation */
+@keyframes progress-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}

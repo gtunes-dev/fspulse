@@ -2,10 +2,10 @@ import { RootsTable } from './RootsTable'
 import { SchedulesTable } from './SchedulesTable'
 import { AddRootDialog } from './AddRootDialog'
 import { useState, useRef } from 'react'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 
 export function MonitorPage() {
-  const { isScanning } = useScanManager()
+  const { isRunning } = useTaskContext()
   const [addRootDialogOpen, setAddRootDialogOpen] = useState(false)
   const schedulesTableRef = useRef<{ reload: () => void }>(null)
   const [rootsReloadTrigger, setRootsReloadTrigger] = useState(0)
@@ -21,7 +21,7 @@ export function MonitorPage() {
       />
 
       <SchedulesTable
-        isScanning={isScanning}
+        isScanning={isRunning}
         ref={schedulesTableRef}
       />
 

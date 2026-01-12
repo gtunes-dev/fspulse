@@ -10,7 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatTimeAgo } from '@/lib/dateUtils'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import { CheckCircle, XCircle, AlertTriangle, Calendar, Play } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { RootFilter } from '@/components/shared/RootFilter'
@@ -42,7 +42,7 @@ interface RootMap {
 const ITEMS_PER_PAGE = 25
 
 export function ScanHistoryTable() {
-  const { lastScanCompletedAt } = useScanManager()
+  const { lastTaskCompletedAt } = useTaskContext()
   const [scans, setScans] = useState<ScanHistoryRow[]>([])
   const [roots, setRoots] = useState<Root[]>([])
   const [rootMap, setRootMap] = useState<RootMap>({})
@@ -146,7 +146,7 @@ export function ScanHistoryTable() {
     }
 
     loadScanHistory()
-  }, [lastScanCompletedAt, selectedRootId, currentPage])
+  }, [lastTaskCompletedAt, selectedRootId, currentPage])
 
   // Reset to page 1 when filters change
   useEffect(() => {

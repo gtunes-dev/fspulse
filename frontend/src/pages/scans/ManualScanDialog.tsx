@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { RootPicker } from '@/components/shared/RootPicker'
 import { ScanOptionsFields } from '@/components/shared/ScanOptionsFields'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import { fetchQuery } from '@/lib/api'
 import { Loader2 } from 'lucide-react'
 
@@ -25,7 +25,7 @@ interface ManualScanDialogProps {
 }
 
 export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) {
-  const { notifyScanScheduled } = useScanManager()
+  const { notifyTaskScheduled } = useTaskContext()
 
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>('')
@@ -115,8 +115,8 @@ export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) 
         throw new Error(`Failed to schedule scan: ${response.statusText}`)
       }
 
-      // Notify that a scan was scheduled (triggers refresh in UpcomingScansTable)
-      notifyScanScheduled()
+      // Notify that a task was scheduled (triggers refresh in UpcomingScansTable)
+      notifyTaskScheduled()
 
       // WebSocket will receive state updates when backend starts the scan
 

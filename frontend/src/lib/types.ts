@@ -84,65 +84,40 @@ export interface ValidateFilterResponse {
   error?: string
 }
 
-// Scan Manager Types
+// Task Progress Types (WebSocket protocol)
 
-export type ScanStatus = 'running' | 'pausing' | 'stopping' | 'stopped' | 'completed' | 'error'
+export type TaskType = 'scan'
 
-// Broadcast message types from WebSocket
+export type TaskStatus = 'running' | 'pausing' | 'stopping' | 'stopped' | 'completed' | 'error'
+
 export type BroadcastMessage =
-  | { type: 'active_scan'; scan: ScanState }
-  | { type: 'no_active_scan' }
+  | { type: 'active_task'; task: TaskProgressState }
+  | { type: 'no_active_task' }
   | { type: 'paused'; pause_until: number }
 
-export interface ScanProgress {
-  current: number
-  total: number
-  percentage: number
+export interface ProgressBar {
+  percentage: number | null
+  message: string | null
 }
 
 export interface ThreadState {
-  thread_index: number
-  status: 'idle' | 'active'
-  current_file: string | null
+  status: string
+  status_style: string
+  detail: string | null
 }
 
-export interface ThreadOperation {
-  type: 'idle' | 'hashing' | 'validating'
-  file?: string
-}
-
-export interface ThreadStateRaw {
-  thread_index: number
-  operation: ThreadOperation
-}
-
-export interface ScanningProgress {
-  files_scanned: number
-  directories_scanned: number
-}
-
-export interface OverallProgress {
-  completed: number
-  total: number
-  percentage: number
-}
-
-export interface ScanStatusInfo {
-  status: ScanStatus
-  message?: string
-}
-
-export interface ScanState {
-  scan_id: number | null  // null when idle
-  root_id?: number | null  // null when idle
-  root_path: string  // empty when idle
-  current_phase?: 'scanning' | 'sweeping' | 'analyzing'  // simplified from object to string
-  completed_phases?: string[]
-  scanning_progress?: ScanningProgress
-  overall_progress?: OverallProgress
-  thread_states?: ThreadStateRaw[]
-  status?: ScanStatusInfo
-  error?: string
+export interface TaskProgressState {
+  task_id: number
+  task_type: TaskType
+  active_root_id: number | null
+  action: string
+  target: string
+  status: TaskStatus
+  error_message: string | null
+  breadcrumbs: string[] | null
+  phase: string | null
+  progress_bar: ProgressBar | null
+  thread_states: ThreadState[] | null
 }
 
 // Pause-related types
@@ -155,16 +130,18 @@ export interface PauseRequest {
   duration_seconds: number  // -1 for indefinite
 }
 
-export interface ScanData {
-  scan_id: number
-  root_path: string
-  phase: number // 1=scanning, 2=sweeping, 3=analyzing
-  progress: ScanProgress
-  threads: ThreadState[]
-  status?: ScanStatusInfo
-  error_message?: string
-  completed_phases?: string[] // Breadcrumbs for completed phases
-  scanning_counts?: { files: number; directories: number } // File/directory counts for phase 1
+export interface TaskData {
+  task_id: number
+  task_type: TaskType
+  active_root_id: number | null
+  action: string
+  target: string
+  status: TaskStatus
+  error_message: string | null
+  breadcrumbs: string[]
+  phase: string | null
+  progress_bar: ProgressBar | null
+  thread_states: ThreadState[]
 }
 
 export interface CurrentScanInfo {

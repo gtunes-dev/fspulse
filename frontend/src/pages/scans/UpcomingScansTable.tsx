@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import { Clock, Calendar, CirclePause } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 
@@ -25,7 +25,7 @@ interface UpcomingScan {
 }
 
 export function UpcomingScansTable() {
-  const { currentScanId, lastScanCompletedAt, lastScanScheduledAt, isPaused } = useScanManager()
+  const { currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
   const [scans, setScans] = useState<UpcomingScan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +59,7 @@ export function UpcomingScansTable() {
     }
 
     loadData()
-  }, [currentScanId, lastScanCompletedAt, lastScanScheduledAt])
+  }, [currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt])
 
   const formatNextRun = (timestamp: number, isQueued: boolean, queuePosition: number): string => {
     // For queued scans, show queue position instead of time

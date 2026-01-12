@@ -7,7 +7,6 @@ mod database;
 mod error;
 mod hash;
 mod items;
-mod progress;
 mod query;
 mod roots;
 mod scan_manager;
@@ -17,6 +16,7 @@ mod schedules;
 mod schema;
 mod server;
 mod sort;
+mod task;
 mod utils;
 mod validate;
 

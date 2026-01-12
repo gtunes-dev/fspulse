@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 
 interface PauseScanDialogProps {
   open: boolean
@@ -19,7 +19,7 @@ export function PauseScanDialog({
   open,
   onOpenChange,
 }: PauseScanDialogProps) {
-  const { pauseScan, unpauseScan, isPaused, pauseUntil } = useScanManager()
+  const { pauseTasks, unpauseTasks, isPaused, pauseUntil } = useTaskContext()
   const [error, setError] = useState('')
   const [pausing, setPausing] = useState(false)
   const [unpausing, setUnpausing] = useState(false)
@@ -55,7 +55,7 @@ export function PauseScanDialog({
     setPausing(true)
 
     try {
-      await pauseScan(selectedDuration)
+      await pauseTasks(selectedDuration)
 
       // Close dialog on success
       handleOpenChange(false)
@@ -72,7 +72,7 @@ export function PauseScanDialog({
     setUnpausing(true)
 
     try {
-      await unpauseScan()
+      await unpauseTasks()
 
       // Close dialog on success
       handleOpenChange(false)

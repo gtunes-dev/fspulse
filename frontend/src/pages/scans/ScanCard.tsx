@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ChevronRight, CirclePause, Play, Lightbulb } from 'lucide-react'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,116 +9,42 @@ import { ManualScanDialog } from './ManualScanDialog'
 import { PauseScanDialog } from './PauseScanDialog'
 
 export function ScanCard() {
-  const { activeScan, currentScanId, isPaused, stopScan } = useScanManager()
+  const { activeTask, currentTaskId, isPaused, stopTask } = useTaskContext()
   const [detailsExpanded, setDetailsExpanded] = useState(() => {
     return localStorage.getItem('fspulse.scan.details.expanded') === 'true'
   })
   const [stopping, setStopping] = useState(false)
-  const [breadcrumbs, setBreadcrumbs] = useState<string[]>([])
   const [showManualScanDialog, setShowManualScanDialog] = useState(false)
   const [showPauseDialog, setShowPauseDialog] = useState(false)
 
-  const currentScan = activeScan
-
-  // Update breadcrumbs from scan state
-  useEffect(() => {
-    if (currentScan && currentScan.completed_phases) {
-      setBreadcrumbs(currentScan.completed_phases)
-    } else {
-      setBreadcrumbs([])
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentScan?.completed_phases])
-
-  // Save expanded state to localStorage
   useEffect(() => {
     localStorage.setItem('fspulse.scan.details.expanded', detailsExpanded ? 'true' : 'false')
   }, [detailsExpanded])
 
-  // Prepare scan details if there's an active scan
-  let statusValue: string | undefined
-  let phaseNames: string[]
-  let phaseName: string | undefined
-  let percentage: number | undefined
-  let itemsText = ''
-  let showPercentage = false
-  let isPhase1 = false
-  let showStopButton = false
-  let stopButtonText = 'Stop'
-  let stopButtonDisabled = false
-  let showThreadDetails = false
-
-  if (currentScan) {
-    statusValue = currentScan.status?.status || 'running'
-    phaseNames = ['Scanning Files', 'Tombstoning Deletes', 'Analyzing']
-    phaseName = phaseNames[currentScan.phase - 1] || 'Processing'
-    percentage = currentScan.progress?.percentage || 0
-
-    // Calculate items text based on phase
-    if (currentScan.phase === 3) {
-      itemsText = `${currentScan.progress.current.toLocaleString()} / ${currentScan.progress.total.toLocaleString()} files`
-      showPercentage = true
-    } else if (currentScan.phase === 1) {
-      if (currentScan.scanning_counts) {
-        const files = currentScan.scanning_counts.files.toLocaleString()
-        const dirs = currentScan.scanning_counts.directories.toLocaleString()
-        itemsText = `${files} files in ${dirs} directories`
-      } else {
-        itemsText = 'Scanning files...'
-      }
-      isPhase1 = true
-    } else if (currentScan.phase === 2) {
-      if (currentScan.scanning_counts) {
-        const files = currentScan.scanning_counts.files.toLocaleString()
-        const dirs = currentScan.scanning_counts.directories.toLocaleString()
-        itemsText = `${files} files in ${dirs} directories`
-      } else {
-        itemsText = 'Processing...'
-      }
-    }
-
-    // Determine stop button display based on status
-    if (statusValue === 'running') {
-      showStopButton = true
-      stopButtonText = 'Stop'
-      stopButtonDisabled = false
-    } else if (statusValue === 'pausing' || statusValue === 'stopping') {
-      showStopButton = true
-      stopButtonText = statusValue === 'stopping' ? 'Stopping' : 'Stop'
-      stopButtonDisabled = true
-    } else if (statusValue === 'stopped') {
-      showStopButton = true
-      stopButtonText = 'Stopped'
-      stopButtonDisabled = true
-    } else if (statusValue === 'completed') {
-      if (stopping) {
-        showStopButton = true
-        stopButtonText = 'Completed'
-        stopButtonDisabled = true
-      } else {
-        showStopButton = false
-      }
-    }
-
-    showThreadDetails = currentScan.phase === 3 && currentScan.threads && currentScan.threads.length > 0
-  }
-
   const handleStop = async () => {
-    if (!currentScanId) return
+    if (!currentTaskId) return
     setStopping(true)
     try {
-      await stopScan(currentScanId)
+      await stopTask(currentTaskId)
     } catch (error) {
-      console.error('Failed to stop scan:', error)
-      alert('Failed to stop scan. Please try again.')
+      console.error('Failed to stop task:', error)
+      alert('Failed to stop task. Please try again.')
     }
   }
+
+  // Derive display state from activeTask
+  const status = activeTask?.status ?? 'running'
+  const showStopButton = (activeTask && status !== 'completed') || (stopping && status === 'completed')
+  const stopButtonDisabled = status === 'pausing' || status === 'stopping' || status === 'stopped' || status === 'completed'
+  const stopButtonText = status === 'stopping' ? 'Stopping' : status === 'stopped' ? 'Stopped' : status === 'completed' ? 'Completed' : 'Stop'
+  const showThreadDetails = activeTask && activeTask.thread_states.length > 0
+  const hasPercentage = activeTask?.progress_bar?.percentage !== null && activeTask?.progress_bar?.percentage !== undefined
 
   return (
     <>
       <Card>
         <CardContent className="pt-6">
-          {/* Action Bar - Always Visible */}
+          {/* Action Bar */}
           <div className="flex items-center gap-3 mb-4">
             <Button size="lg" onClick={() => setShowManualScanDialog(true)}>
               <Play className="h-4 w-4 mr-2" />
@@ -128,7 +54,7 @@ export function ScanCard() {
               size="lg"
               variant="secondary"
               onClick={() => setShowPauseDialog(true)}
-              disabled={!!(currentScan && (statusValue === 'pausing' || statusValue === 'stopping'))}
+              disabled={!!(activeTask && (status === 'pausing' || status === 'stopping'))}
               className={isPaused ? 'text-purple-600 dark:text-purple-400' : ''}
             >
               <CirclePause className="h-4 w-4 mr-2" />
@@ -138,8 +64,7 @@ export function ScanCard() {
 
           {/* Content Area */}
           <div className="border border-border rounded-lg p-4">
-            {!currentScan ? (
-              // No active scan - show status and monitor hint
+            {!activeTask ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No scan in progress
@@ -149,13 +74,12 @@ export function ScanCard() {
                 </InfoBar>
               </div>
             ) : (
-              // Active scan display
               <>
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <div className="text-lg font-semibold">
-                      Scanning: {currentScan.root_path}
+                      {activeTask.action}: {activeTask.target}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -171,10 +95,10 @@ export function ScanCard() {
                   </div>
                 </div>
 
-                {/* Breadcrumbs - Completed Phases */}
-                {breadcrumbs.length > 0 && (
+                {/* Breadcrumbs */}
+                {activeTask.breadcrumbs.length > 0 && (
                   <div className="mb-3 space-y-1">
-                    {breadcrumbs.map((crumb, idx) => (
+                    {activeTask.breadcrumbs.map((crumb, idx) => (
                       <div key={idx} className="text-sm text-green-600 dark:text-green-400">
                         ✓ {crumb}
                       </div>
@@ -183,32 +107,48 @@ export function ScanCard() {
                 )}
 
                 {/* Error Message */}
-                {currentScan.error_message && statusValue === 'error' && (
+                {activeTask.error_message && status === 'error' && (
                   <div className="text-sm text-red-600 dark:text-red-400 font-mono mb-3">
-                    {currentScan.error_message}
+                    {activeTask.error_message}
                   </div>
                 )}
 
                 {/* Progress Section */}
                 <div className="mb-3">
-                  <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="font-medium">Phase {currentScan.phase} of 3: {phaseName}</span>
-                    {showPercentage && <span className="text-muted-foreground">{percentage?.toFixed(1)}%</span>}
-                  </div>
-                  {showPercentage && (
+                  {activeTask.phase && (
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="font-medium">{activeTask.phase}</span>
+                      {hasPercentage && (
+                        <span className="text-muted-foreground">
+                          {activeTask.progress_bar!.percentage!.toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {activeTask.progress_bar && hasPercentage && (
                     <div className="w-full h-2 bg-muted rounded-sm overflow-hidden mb-2">
                       <div
                         className="h-full bg-primary transition-all duration-300"
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${activeTask.progress_bar.percentage}%` }}
                       />
                     </div>
                   )}
-                  <div className={`text-sm ${isPhase1 ? 'text-primary' : ''}`}>
-                    {itemsText}
-                  </div>
+                  {activeTask.progress_bar && !hasPercentage && (
+                    <div className="w-full h-2 bg-primary/30 rounded-sm overflow-hidden mb-2 relative">
+                      <div
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-primary to-transparent"
+                        style={{ animation: 'progress-shimmer 4s ease-in-out infinite' }}
+                      />
+                    </div>
+                  )}
+                  {activeTask.progress_bar?.message && (
+                    <div className={`text-sm ${!hasPercentage ? 'text-primary' : ''}`}>
+                      {activeTask.progress_bar.message}
+                    </div>
+                  )}
                 </div>
 
-                {/* Thread Details Toggle (Phase 3 only) */}
+                {/* Thread Details */}
                 {showThreadDetails && (
                   <>
                     <button
@@ -223,56 +163,19 @@ export function ScanCard() {
 
                     {detailsExpanded && (
                       <div className="mt-2 border-t border-border pt-2">
-                        {currentScan.threads && currentScan.threads.length > 0 ? (
-                          currentScan.threads.map((thread) => {
-                            let operation = 'idle'
-                            let filePath = thread.current_file || '-'
-
-                            if (thread.current_file) {
-                              if (thread.current_file.startsWith('Hashing:')) {
-                                operation = 'hashing'
-                                filePath = thread.current_file.substring(9).trim()
-                              } else if (thread.current_file.startsWith('Validating:')) {
-                                operation = 'validating'
-                                filePath = thread.current_file.substring(12).trim()
-                              } else if (thread.status === 'active') {
-                                operation = 'scanning'
-                              }
-                            }
-
-                            const statusLabels: Record<string, string> = {
-                              hashing: 'HASHING',
-                              validating: 'VALIDATING',
-                              scanning: 'SCANNING',
-                              idle: 'IDLE',
-                            }
-
-                            const badgeVariants: Record<string, 'info' | 'info-alternate' | 'success' | 'secondary'> = {
-                              hashing: 'info',
-                              validating: 'info-alternate',
-                              scanning: 'success',
-                              idle: 'secondary',
-                            }
-
-                            return (
-                              <div key={thread.thread_index} className="flex items-center gap-3 text-sm py-2 border-b border-border last:border-b-0">
-                                <Badge
-                                  variant={badgeVariants[operation]}
-                                  className="min-w-[90px] justify-center font-bold text-xs"
-                                >
-                                  {statusLabels[operation]}
-                                </Badge>
-                                <span className="text-muted-foreground truncate text-sm" title={filePath}>
-                                  {filePath}
-                                </span>
-                              </div>
-                            )
-                          })
-                        ) : (
-                          <div className="py-3 text-sm text-muted-foreground italic text-center">
-                            Waiting for thread activity...
+                        {activeTask.thread_states.map((thread, idx) => (
+                          <div key={idx} className="flex items-center gap-3 text-sm py-2 border-b border-border last:border-b-0">
+                            <Badge
+                              variant={thread.status_style as 'info' | 'info-alternate' | 'success' | 'secondary'}
+                              className="min-w-[90px] justify-center font-bold text-xs"
+                            >
+                              {thread.status}
+                            </Badge>
+                            <span className="text-muted-foreground truncate text-sm" title={thread.detail ?? '-'}>
+                              {thread.detail ?? '-'}
+                            </span>
                           </div>
-                        )}
+                        ))}
                       </div>
                     )}
                   </>

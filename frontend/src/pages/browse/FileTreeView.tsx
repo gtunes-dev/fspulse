@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
 import { fetchQuery } from '@/lib/api'
-import { useScanManager } from '@/contexts/ScanManagerContext'
+import { useTaskContext } from '@/contexts/TaskContext'
 import type { ColumnSpec } from '@/lib/types'
 import type { TreeNodeData } from '@/lib/pathUtils'
 import { sortTreeItems } from '@/lib/pathUtils'
@@ -15,7 +15,7 @@ interface FileTreeViewProps {
 }
 
 export function FileTreeView({ rootId, rootPath, showTombstones }: FileTreeViewProps) {
-  const { activeScan } = useScanManager()
+  const { activeRootId } = useTaskContext()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,7 +25,7 @@ export function FileTreeView({ rootId, rootPath, showTombstones }: FileTreeViewP
   const loadedRootRef = useRef<string | null>(null)
 
   // Check if this root is currently being scanned
-  const isRootBeingScanned = activeScan?.root_path === rootPath
+  const isRootBeingScanned = activeRootId === rootId
 
   // Virtual tree hook - NO allItems, always load on demand
   const { flatItems, initializeTree, toggleNode, isLoading: isNodeLoading } = useVirtualTree({
