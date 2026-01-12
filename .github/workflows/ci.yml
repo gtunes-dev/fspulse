@@ -49,15 +49,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
             ext: tar.gz
 
-          # macOS builds were temporarily disabled Nov 2025 due to hashFiles regression.
-          # Runner images have been rolled back. If issues recur, see:
-          #   https://github.com/actions/runner-images/issues/13341
-          #   https://github.com/actions/runner/issues/4134
-          # macOS Intel
-          - os: macos-13
-            target: x86_64-apple-darwin
-            ext: tar.gz
-
           # macOS Apple Silicon
           - os: macos-latest
             target: aarch64-apple-darwin
