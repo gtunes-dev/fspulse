@@ -12,10 +12,6 @@ pub const UPGRADE_9_TO_10_SQL: &str = r#"
 -- - scans.total_file_size → scans.total_size (now includes all sizes, not just files)
 --
 
-PRAGMA foreign_keys = OFF;
-
-BEGIN TRANSACTION;
-
 -- Verify schema version is exactly 9
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '9' THEN 1 ELSE 0 END);
 
@@ -38,8 +34,4 @@ ALTER TABLE scans RENAME COLUMN total_file_size TO total_size;
 -- ========================================
 
 UPDATE meta SET value = '10' WHERE key = 'schema_version';
-
-COMMIT;
-
-PRAGMA foreign_keys = ON;
 "#;

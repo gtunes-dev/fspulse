@@ -13,11 +13,6 @@ pub const UPGRADE_7_TO_8_SQL: &str = r#"
 -- behavior, where /proj and its children sort before /proj-A.
 --
 
--- Disable foreign key constraints BEFORE transaction starts
-PRAGMA foreign_keys = OFF;
-
-BEGIN TRANSACTION;
-
 -- Verify schema version is exactly 7
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '7' THEN 1 ELSE 0 END);
 
@@ -50,9 +45,4 @@ CREATE INDEX idx_items_root_scan ON items (root_id, last_scan, is_ts);
 
 -- Update schema version
 UPDATE meta SET value = '8' WHERE key = 'schema_version';
-
-COMMIT;
-
--- Re-enable foreign key constraints
-PRAGMA foreign_keys = ON;
 "#;

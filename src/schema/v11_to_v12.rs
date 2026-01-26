@@ -18,10 +18,6 @@ pub const UPGRADE_11_TO_12_SQL: &str = r#"
 --   - Add analysis_hwm (high water mark for analysis restart resilience)
 --
 
-PRAGMA foreign_keys = OFF;
-
-BEGIN TRANSACTION;
-
 -- Verify schema version is exactly 11
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '11' THEN 1 ELSE 0 END);
 
@@ -55,8 +51,4 @@ ALTER TABLE scan_queue ADD COLUMN analysis_hwm INTEGER DEFAULT NULL;
 -- ========================================
 
 UPDATE meta SET value = '12' WHERE key = 'schema_version';
-
-COMMIT;
-
-PRAGMA foreign_keys = ON;
 "#;

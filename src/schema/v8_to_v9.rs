@@ -13,10 +13,6 @@ pub const UPGRADE_8_TO_9_SQL: &str = r#"
 -- - Numeric enums for consistency with existing patterns
 --
 
-PRAGMA foreign_keys = OFF;
-
-BEGIN TRANSACTION;
-
 -- Verify schema version is exactly 8
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '8' THEN 1 ELSE 0 END);
 
@@ -116,8 +112,4 @@ CREATE INDEX idx_scan_queue_root ON scan_queue(root_id);
 -- ========================================
 
 UPDATE meta SET value = '9' WHERE key = 'schema_version';
-
-COMMIT;
-
-PRAGMA foreign_keys = ON;
 "#;

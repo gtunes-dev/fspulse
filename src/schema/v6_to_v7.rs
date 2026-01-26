@@ -12,11 +12,6 @@ pub const UPGRADE_6_TO_7_SQL: &str = r#"
 -- Following SQLite's table reconstruction pattern (same as v2→v3 migration)
 --
 
--- Disable foreign key constraints BEFORE transaction starts
-PRAGMA foreign_keys = OFF;
-
-BEGIN TRANSACTION;
-
 -- Verify schema version is exactly 6
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '6' THEN 1 ELSE 0 END);
 
@@ -236,9 +231,4 @@ UPDATE sqlite_sequence SET seq = (SELECT MAX(alert_id) FROM alerts) WHERE name =
 
 -- Update schema version
 UPDATE meta SET value = '7' WHERE key = 'schema_version';
-
-COMMIT;
-
--- Re-enable foreign key constraints
-PRAGMA foreign_keys = ON;
 "#;

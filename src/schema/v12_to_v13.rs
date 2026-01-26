@@ -6,10 +6,6 @@ pub const UPGRADE_12_TO_13_SQL: &str = r#"
 -- queries that look up changes for a specific item.
 --
 
-PRAGMA foreign_keys = OFF;
-
-BEGIN TRANSACTION;
-
 -- Verify schema version is exactly 12
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '12' THEN 1 ELSE 0 END);
 
@@ -25,8 +21,4 @@ CREATE INDEX IF NOT EXISTS idx_alerts_item ON alerts (item_id);
 -- ========================================
 
 UPDATE meta SET value = '13' WHERE key = 'schema_version';
-
-COMMIT;
-
-PRAGMA foreign_keys = ON;
 "#;

@@ -3,7 +3,7 @@ pub const UPGRADE_3_TO_4_SQL: &str = r#"
 -- Schema Upgrade: Version 3 → 4
 --
 -- This migration creates the alerts table to support the new alerts feature
-BEGIN TRANSACTION;
+--
 
 -- Verify schema version is exactly 3
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '3' THEN 1 ELSE 0 END);
@@ -29,6 +29,4 @@ CREATE TABLE alerts (
 
 -- Update schema version
 UPDATE meta SET value = '4' WHERE key = 'schema_version';
-
-COMMIT;
 "#;

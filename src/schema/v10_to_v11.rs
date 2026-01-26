@@ -17,10 +17,6 @@ pub const UPGRADE_10_TO_11_SQL: &str = r#"
 --   - Add index on deleted_at for filtering active schedules
 --
 
-PRAGMA foreign_keys = OFF;
-
-BEGIN TRANSACTION;
-
 -- Verify schema version is exactly 10
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '10' THEN 1 ELSE 0 END);
 
@@ -56,8 +52,4 @@ CREATE INDEX idx_scan_schedules_deleted ON scan_schedules(deleted_at);
 -- ========================================
 
 UPDATE meta SET value = '11' WHERE key = 'schema_version';
-
-COMMIT;
-
-PRAGMA foreign_keys = ON;
 "#;

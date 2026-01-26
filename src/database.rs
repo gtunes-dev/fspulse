@@ -2,9 +2,9 @@ use crate::{
     config::Config,
     error::FsPulseError,
     schema::{
-        CREATE_SCHEMA_SQL, UPGRADE_10_TO_11_SQL, UPGRADE_11_TO_12_SQL, UPGRADE_12_TO_13_SQL,
-        UPGRADE_2_TO_3_SQL, UPGRADE_3_TO_4_SQL, UPGRADE_4_TO_5_SQL, UPGRADE_5_TO_6_SQL,
-        UPGRADE_6_TO_7_SQL, UPGRADE_7_TO_8_SQL, UPGRADE_8_TO_9_SQL, UPGRADE_9_TO_10_SQL,
+        Migration, CREATE_SCHEMA_SQL, MIGRATION_10_TO_11, MIGRATION_11_TO_12, MIGRATION_12_TO_13,
+        MIGRATION_2_TO_3, MIGRATION_3_TO_4, MIGRATION_4_TO_5, MIGRATION_5_TO_6, MIGRATION_6_TO_7,
+        MIGRATION_7_TO_8, MIGRATION_8_TO_9, MIGRATION_9_TO_10,
     },
     sort::compare_paths,
 };
@@ -343,17 +343,17 @@ fn ensure_schema_current() -> Result<(), FsPulseError> {
         loop {
             db_version = match db_version {
                 CURRENT_SCHEMA_VERSION => break,
-                2 => upgrade_schema(&conn, db_version, UPGRADE_2_TO_3_SQL)?,
-                3 => upgrade_schema(&conn, db_version, UPGRADE_3_TO_4_SQL)?,
-                4 => upgrade_schema(&conn, db_version, UPGRADE_4_TO_5_SQL)?,
-                5 => upgrade_schema(&conn, db_version, UPGRADE_5_TO_6_SQL)?,
-                6 => upgrade_schema(&conn, db_version, UPGRADE_6_TO_7_SQL)?,
-                7 => upgrade_schema(&conn, db_version, UPGRADE_7_TO_8_SQL)?,
-                8 => upgrade_schema(&conn, db_version, UPGRADE_8_TO_9_SQL)?,
-                9 => upgrade_schema(&conn, db_version, UPGRADE_9_TO_10_SQL)?,
-                10 => upgrade_schema(&conn, db_version, UPGRADE_10_TO_11_SQL)?,
-                11 => upgrade_schema(&conn, db_version, UPGRADE_11_TO_12_SQL)?,
-                12 => upgrade_schema(&conn, db_version, UPGRADE_12_TO_13_SQL)?,
+                2 => upgrade_schema(&conn, db_version, &MIGRATION_2_TO_3)?,
+                3 => upgrade_schema(&conn, db_version, &MIGRATION_3_TO_4)?,
+                4 => upgrade_schema(&conn, db_version, &MIGRATION_4_TO_5)?,
+                5 => upgrade_schema(&conn, db_version, &MIGRATION_5_TO_6)?,
+                6 => upgrade_schema(&conn, db_version, &MIGRATION_6_TO_7)?,
+                7 => upgrade_schema(&conn, db_version, &MIGRATION_7_TO_8)?,
+                8 => upgrade_schema(&conn, db_version, &MIGRATION_8_TO_9)?,
+                9 => upgrade_schema(&conn, db_version, &MIGRATION_9_TO_10)?,
+                10 => upgrade_schema(&conn, db_version, &MIGRATION_10_TO_11)?,
+                11 => upgrade_schema(&conn, db_version, &MIGRATION_11_TO_12)?,
+                12 => upgrade_schema(&conn, db_version, &MIGRATION_12_TO_13)?,
                 _ => {
                     return Err(FsPulseError::Error(
                         "No valid database update available".to_string(),
@@ -376,17 +376,51 @@ fn create_schema(conn: &Connection) -> Result<(), FsPulseError> {
 fn upgrade_schema(
     conn: &Connection,
     current_version: u32,
-    batch: &'static str,
+    migration: &Migration,
 ) -> Result<u32, FsPulseError> {
+    let next_version = current_version + 1;
     info!(
         "Upgrading database schema {} => {}",
-        current_version,
-        current_version + 1
+        current_version, next_version
     );
-    conn.execute_batch(batch)?;
+
+    // Disable foreign key constraints during migration (required for table reconstruction)
+    conn.execute("PRAGMA foreign_keys = OFF", [])
+        .map_err(FsPulseError::DatabaseError)?;
+
+    // Run all migration phases within a transaction for atomicity
+    let result =
+        Database::immediate_transaction(conn, |conn| run_migration_phases(conn, migration));
+
+    // Re-enable foreign key constraints (always, even on error)
+    conn.execute("PRAGMA foreign_keys = ON", [])
+        .map_err(FsPulseError::DatabaseError)?;
+
+    // Propagate any error from the migration
+    result?;
+
     info!("Database successfully upgraded");
 
-    Ok(current_version + 1)
+    Ok(next_version)
+}
+
+fn run_migration_phases(conn: &Connection, migration: &Migration) -> Result<(), FsPulseError> {
+    // Phase 1: Pre-SQL (if present)
+    if let Some(pre_sql) = migration.pre_sql {
+        conn.execute_batch(pre_sql)?;
+    }
+
+    // Phase 2: Rust code (if present)
+    if let Some(code_fn) = migration.code_fn {
+        code_fn(conn)?;
+    }
+
+    // Phase 3: Post-SQL (if present)
+    if let Some(post_sql) = migration.post_sql {
+        conn.execute_batch(post_sql)?;
+    }
+
+    Ok(())
 }
 
 // ============================================================================

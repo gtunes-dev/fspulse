@@ -9,18 +9,13 @@ pub const UPGRADE_2_TO_3_SQL: &str = r#"
 -- https://www.sqlite.org/lang_altertable.html
 --
 -- We avoid renaming the original table. Instead, we:
--- 1. Disable foreign keys BEFORE the transaction.
--- 2. Create a new version of 'scans' as 'new_scans'.
--- 3. Copy the old contents into 'new_scans'.
--- 4. Drop the original 'scans'.
--- 5. Rename 'new_scans' to 'scans'.
+-- 1. Create a new version of 'scans' as 'new_scans'.
+-- 2. Copy the old contents into 'new_scans'.
+-- 3. Drop the original 'scans'.
+-- 4. Rename 'new_scans' to 'scans'.
 --
 -- This preserves foreign key relationships in dependent tables like 'items' and 'changes'.
 --
--- Disable foreign key constraints BEFORE transaction starts
-PRAGMA foreign_keys = OFF;
-
-BEGIN TRANSACTION;
 
 -- Verify schema version is exactly 2
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '2' THEN 1 ELSE 0 END);
@@ -67,9 +62,4 @@ UPDATE meta SET value = '3' WHERE key = 'schema_version';
 
 -- Update sqlite_sequence to preserve AUTOINCREMENT
 UPDATE sqlite_sequence SET seq = (SELECT MAX(scan_id) FROM scans) WHERE name = 'scans';
-
-COMMIT;
-
--- Re-enable foreign key constraints
-PRAGMA foreign_keys = ON;
 "#;

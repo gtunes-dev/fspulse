@@ -8,7 +8,7 @@ pub const UPGRADE_5_TO_6_SQL: &str = r#"
 -- - add_count, modify_count, delete_count: Counts of each change type
 --
 -- It also ensures file_count and folder_count are NULL for incomplete scans.
-BEGIN TRANSACTION;
+--
 
 -- Verify schema version is exactly 5
 SELECT 1 / (CASE WHEN (SELECT value FROM meta WHERE key = 'schema_version') = '5' THEN 1 ELSE 0 END);
@@ -36,6 +36,4 @@ WHERE state != 4;
 
 -- Update schema version
 UPDATE meta SET value = '6' WHERE key = 'schema_version';
-
-COMMIT;
 "#;
