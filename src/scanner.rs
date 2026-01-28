@@ -498,7 +498,7 @@ impl Scanner {
             return Ok(());
         }
 
-        // Load the high water mark from scan_queue (for restart resilience)
+        // Load the high water mark from task_queue (for restart resilience)
         let initial_hwm = AnalysisTracker::load_hwm(&conn, scan.scan_id())?;
 
         let (analyze_total, analyze_done) =

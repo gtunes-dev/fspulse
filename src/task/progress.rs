@@ -1,18 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
+use super::task_type::TaskType;
+
 // ============================================================================
 // Task Protocol Types (for WebSocket broadcasting)
 // These types define the wire format sent to frontend clients
 // ============================================================================
-
-/// Task type enum - what kind of task is running
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TaskType {
-    Scan,
-    // Future: Export, Maintenance, etc.
-}
 
 /// Task status for the protocol
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

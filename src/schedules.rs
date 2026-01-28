@@ -2,6 +2,7 @@ use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::scans::{AnalysisSpec, HashMode, Scan, ValidateMode};
+use crate::task::{ScanSettings, TaskType};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -590,19 +591,22 @@ impl Schedule {
             )
             .map_err(FsPulseError::DatabaseError)?;
 
+        // Build task_settings using typed struct
+        let task_settings = ScanSettings::new(schedule.hash_mode, schedule.validate_mode).to_json()?;
+
         // Insert queue entry (schedule is enabled by default)
         conn.execute(
-            "INSERT INTO scan_queue (
-                root_id, schedule_id, scan_id, next_scan_time,
-                hash_mode, validate_mode, source, created_at
-            ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?)",
+            "INSERT INTO task_queue (
+                task_type, is_active, root_id, schedule_id, scan_id, next_run_time,
+                source, task_settings, created_at
+            ) VALUES (?, 0, ?, ?, NULL, ?, ?, ?, ?)",
             rusqlite::params![
+                TaskType::Scan.as_i64(),
                 schedule.root_id,
                 schedule_id,
                 next_scan_time,
-                schedule.hash_mode.as_i32(),
-                schedule.validate_mode.as_i32(),
                 SourceType::Scheduled.as_i32(),
+                task_settings,
                 now,
             ],
         )
@@ -734,9 +738,9 @@ impl Schedule {
             )));
         }
 
-        // Update next_scan_time in queue (if queue entry exists)
+        // Update next_run_time in queue (if queue entry exists)
         conn.execute(
-            "UPDATE scan_queue SET next_scan_time = ? WHERE schedule_id = ?",
+            "UPDATE task_queue SET next_run_time = ? WHERE schedule_id = ?",
             rusqlite::params![next_scan_time, self.schedule_id],
         )
         .map_err(FsPulseError::DatabaseError)?;
@@ -782,10 +786,10 @@ impl Schedule {
 
             // Update queue entry based on enabled state
             if enabled {
-                // Re-enabling: create queue entry if it doesn't exist, or update next_scan_time
+                // Re-enabling: create queue entry if it doesn't exist, or update next_run_time
                 let queue_exists: bool = c
                     .query_row(
-                        "SELECT COUNT(*) FROM scan_queue WHERE schedule_id = ?",
+                        "SELECT COUNT(*) FROM task_queue WHERE schedule_id = ?",
                         [schedule_id],
                         |row| row.get::<_, i64>(0),
                     )
@@ -795,7 +799,7 @@ impl Schedule {
                 if queue_exists {
                     // Update existing queue entry
                     c.execute(
-                        "UPDATE scan_queue SET next_scan_time = ? WHERE schedule_id = ?",
+                        "UPDATE task_queue SET next_run_time = ? WHERE schedule_id = ?",
                         rusqlite::params![next_scan_time.unwrap(), schedule_id],
                     )
                     .map_err(FsPulseError::DatabaseError)?;
@@ -806,27 +810,31 @@ impl Schedule {
                         FsPulseError::Error(format!("Schedule {} not found", schedule_id))
                     })?;
 
+                    // Build task_settings using typed struct
+                    let task_settings =
+                        ScanSettings::new(schedule.hash_mode, schedule.validate_mode).to_json()?;
+
                     c.execute(
-                        "INSERT INTO scan_queue (
-                            root_id, schedule_id, scan_id, next_scan_time,
-                            hash_mode, validate_mode, source, created_at
-                        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?)",
+                        "INSERT INTO task_queue (
+                            task_type, is_active, root_id, schedule_id, scan_id, next_run_time,
+                            source, task_settings, created_at
+                        ) VALUES (?, 0, ?, ?, NULL, ?, ?, ?, ?)",
                         rusqlite::params![
+                            TaskType::Scan.as_i64(),
                             schedule.root_id,
                             schedule_id,
                             next_scan_time.unwrap(),
-                            schedule.hash_mode.as_i32(),
-                            schedule.validate_mode.as_i32(),
                             SourceType::Scheduled.as_i32(),
+                            task_settings,
                             now,
                         ],
                     )
                     .map_err(FsPulseError::DatabaseError)?;
                 }
             } else {
-                // Disabling: set next_scan_time to NULL
+                // Disabling: set next_run_time to NULL
                 c.execute(
-                    "UPDATE scan_queue SET next_scan_time = NULL WHERE schedule_id = ?",
+                    "UPDATE task_queue SET next_run_time = NULL WHERE schedule_id = ?",
                     [schedule_id],
                 )
                 .map_err(FsPulseError::DatabaseError)?;
@@ -846,20 +854,20 @@ impl Schedule {
         conn: &rusqlite::Connection,
         schedule_id: i64,
     ) -> Result<(), FsPulseError> {
-        // Check if scan is currently running for this schedule
-        let scan_id: Option<Option<i64>> = conn
+        // Check if task is currently running for this schedule (is_active = 1)
+        let is_active: Option<bool> = conn
             .query_row(
-                "SELECT scan_id FROM scan_queue WHERE schedule_id = ?",
+                "SELECT is_active FROM task_queue WHERE schedule_id = ?",
                 [schedule_id],
                 |row| row.get(0),
             )
             .optional()
             .map_err(FsPulseError::DatabaseError)?;
 
-        // scan_id is Some(Some(id)) if queue entry exists with a running scan
-        // scan_id is Some(None) if queue entry exists but no scan running
-        // scan_id is None if no queue entry exists
-        if let Some(Some(_)) = scan_id {
+        // is_active is Some(true) if queue entry exists with a running task
+        // is_active is Some(false) if queue entry exists but no task running
+        // is_active is None if no queue entry exists
+        if is_active == Some(true) {
             return Err(FsPulseError::Error(
                 "Cannot delete schedule while scan is in progress. Stop the scan first."
                     .to_string(),
@@ -868,7 +876,7 @@ impl Schedule {
 
         // Delete queue entry first (references schedule_id)
         conn.execute(
-            "DELETE FROM scan_queue WHERE schedule_id = ?",
+            "DELETE FROM task_queue WHERE schedule_id = ?",
             [schedule_id],
         )
         .map_err(FsPulseError::DatabaseError)?;
@@ -893,28 +901,24 @@ impl Schedule {
     }
 }
 
-/// A scan queue entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueueEntry {
-    pub queue_id: i64,
-    pub root_id: i64,
-    pub schedule_id: Option<i64>, // NULL for manual scans
-    pub scan_id: Option<i64>,     // NULL until scan starts, set by ScanManager
-
-    // When this work should run (Unix timestamp, UTC)
-    // NULL when schedule is disabled
-    pub next_scan_time: Option<i64>,
-
-    // Scan configuration
-    pub hash_mode: HashMode,
-    pub validate_mode: ValidateMode,
-
-    // Source: Manual or Scheduled
-    pub source: SourceType,
-
-    // Metadata
-    pub created_at: i64, // Unix timestamp (UTC)
-}
+/// Task queue operations
+///
+/// This struct provides associated functions for working with the task_queue table.
+/// It is not instantiated directly - use the associated functions instead.
+///
+/// The task_queue table stores work items (scans and other tasks) with:
+/// - `queue_id`: Primary key
+/// - `task_type`: TaskType enum (0=Scan, etc.)
+/// - `is_active`: True when task is executing
+/// - `root_id`: Optional root reference
+/// - `schedule_id`: Optional schedule reference
+/// - `scan_id`: Set when scan starts (for resume)
+/// - `next_run_time`: When to run (NULL when disabled)
+/// - `source`: Manual (0) or Scheduled (1)
+/// - `task_settings`: JSON config (e.g., ScanSettings)
+/// - `analysis_hwm`: High water mark for restart resilience
+/// - `created_at`: Creation timestamp
+pub struct QueueEntry;
 
 impl QueueEntry {
     // ========================================
@@ -943,18 +947,21 @@ impl QueueEntry {
             return Err(FsPulseError::Error(format!("Root {} not found", root_id)));
         }
 
+        // Build task_settings using typed struct
+        let task_settings = ScanSettings::new(hash_mode, validate_mode).to_json()?;
+
         // Create queue entry
         conn.execute(
-            "INSERT INTO scan_queue (
-                root_id, schedule_id, scan_id, next_scan_time,
-                hash_mode, validate_mode, source, created_at
-            ) VALUES (?, NULL, NULL, ?, ?, ?, ?, ?)",
+            "INSERT INTO task_queue (
+                task_type, is_active, root_id, schedule_id, scan_id, next_run_time,
+                source, task_settings, created_at
+            ) VALUES (?, 0, ?, NULL, NULL, ?, ?, ?, ?)",
             rusqlite::params![
+                TaskType::Scan.as_i64(),
                 root_id,
                 now, // Manual scans run immediately
-                hash_mode.as_i32(),
-                validate_mode.as_i32(),
                 SourceType::Manual.as_i32(),
+                task_settings,
                 now,
             ],
         )
@@ -966,28 +973,29 @@ impl QueueEntry {
     /// Get the next scan to run, creating it atomically if needed
     ///
     /// This function handles the complete scan initiation workflow:
-    /// 1. Checks for incomplete scans (resume case) - returns existing scan
+    /// 1. Checks for incomplete scans (resume case via is_active) - returns existing scan
     /// 2. Finds highest priority work (manual first, then scheduled due)
     /// 3. Creates scan record for the work
-    /// 4. Updates queue entry with scan_id
-    /// 5. For scheduled scans: calculates next_scan_time (fail-fast before crashes)
+    /// 4. Updates queue entry with scan_id and is_active
+    /// 5. For scheduled scans: calculates next_run_time (fail-fast before crashes)
     ///
     /// Returns the Scan object ready to be executed, or None if no work available.
     pub fn get_next_scan(conn: &Connection) -> Result<Option<Scan>, FsPulseError> {
         let now = chrono::Utc::now().timestamp();
 
         Database::immediate_transaction(conn, |c| {
-            // Step 1: Check if ANY scan is currently running (resume case)
-            let running_scan_id = c
+            // Step 1: Check if ANY task is currently running (resume case)
+            // For scan tasks, is_active=true means scan_id IS NOT NULL
+            let running_task = c
                 .query_row(
-                    "SELECT scan_id FROM scan_queue WHERE scan_id IS NOT NULL LIMIT 1",
-                    [],
+                    "SELECT scan_id FROM task_queue WHERE is_active = 1 AND task_type = ? LIMIT 1",
+                    [TaskType::Scan.as_i64()],
                     |row| row.get::<_, i64>(0),
                 )
                 .optional()
                 .map_err(FsPulseError::DatabaseError)?;
 
-            if let Some(scan_id) = running_scan_id {
+            if let Some(scan_id) = running_task {
                 // Resume case: return existing incomplete scan
                 // prior to loading - mark it restarted
                 c.execute(
@@ -1005,33 +1013,21 @@ impl QueueEntry {
             // Step 2: Find highest priority work (manual first, then scheduled due)
             // Single query with priority: manual scans (source=0) always first,
             // then scheduled scans (source=1) only if due
+            // Only look at Scan tasks that are not active
             let work = c
                 .query_row(
-                    "SELECT queue_id, root_id, schedule_id, hash_mode, validate_mode
-                 FROM scan_queue
-                 WHERE scan_id IS NULL AND (source = ? OR next_scan_time <= ?)
-                 ORDER BY source ASC, next_scan_time ASC, queue_id ASC
+                    "SELECT queue_id, root_id, schedule_id, task_settings
+                 FROM task_queue
+                 WHERE task_type = ? AND is_active = 0 AND (source = ? OR next_run_time <= ?)
+                 ORDER BY source ASC, next_run_time ASC, queue_id ASC
                  LIMIT 1",
-                    rusqlite::params![SourceType::Manual.as_i32(), now],
+                    rusqlite::params![TaskType::Scan.as_i64(), SourceType::Manual.as_i32(), now],
                     |row| {
                         Ok((
                             row.get::<_, i64>(0)?,         // queue_id
                             row.get::<_, i64>(1)?,         // root_id
                             row.get::<_, Option<i64>>(2)?, // schedule_id
-                            HashMode::from_i32(row.get(3)?).ok_or_else(|| {
-                                rusqlite::Error::InvalidColumnType(
-                                    3,
-                                    "hash_mode".to_string(),
-                                    rusqlite::types::Type::Integer,
-                                )
-                            })?,
-                            ValidateMode::from_i32(row.get(4)?).ok_or_else(|| {
-                                rusqlite::Error::InvalidColumnType(
-                                    4,
-                                    "validate_mode".to_string(),
-                                    rusqlite::types::Type::Integer,
-                                )
-                            })?,
+                            row.get::<_, String>(3)?,      // task_settings
                         ))
                     },
                 )
@@ -1043,24 +1039,27 @@ impl QueueEntry {
                 None => return Ok(None), // No work available
             };
 
-            let (queue_id, root_id, schedule_id, hash_mode, validate_mode) = work;
+            let (queue_id, root_id, schedule_id, task_settings_json) = work;
+
+            // Parse task_settings JSON using typed struct
+            let settings = ScanSettings::from_json(&task_settings_json)?;
 
             // Step 3: Get root for scan creation
             let root = Root::get_by_id(c, root_id)?
                 .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", root_id)))?;
 
             // Step 4: Create analysis spec and scan
-            let analysis_spec = AnalysisSpec::from_modes(hash_mode, validate_mode);
+            let analysis_spec = AnalysisSpec::from_modes(settings.hash_mode, settings.validate_mode);
             let scan = Scan::create(c, &root, schedule_id, &analysis_spec)?;
 
-            // Step 5: Update queue entry with scan_id
+            // Step 5: Update queue entry with scan_id and mark as active
             c.execute(
-                "UPDATE scan_queue SET scan_id = ? WHERE queue_id = ?",
+                "UPDATE task_queue SET scan_id = ?, is_active = 1 WHERE queue_id = ?",
                 rusqlite::params![scan.scan_id(), queue_id],
             )
             .map_err(FsPulseError::DatabaseError)?;
 
-            // Step 6: For scheduled scans, calculate and set next_scan_time NOW
+            // Step 6: For scheduled scans, calculate and set next_run_time NOW
             if let Some(schedule_id) = schedule_id {
                 let schedule = Schedule::get_by_id(c, schedule_id)?.ok_or_else(|| {
                     FsPulseError::Error(format!("Schedule {} not found", schedule_id))
@@ -1071,7 +1070,7 @@ impl QueueEntry {
                 })?;
 
                 c.execute(
-                    "UPDATE scan_queue SET next_scan_time = ? WHERE queue_id = ?",
+                    "UPDATE task_queue SET next_run_time = ? WHERE queue_id = ?",
                     rusqlite::params![next_time, queue_id],
                 )
                 .map_err(FsPulseError::DatabaseError)?;
@@ -1112,7 +1111,7 @@ impl QueueEntry {
             // 2. Find queue entry
             let queue_entry = c
                 .query_row(
-                    "SELECT queue_id, source FROM scan_queue WHERE scan_id = ?",
+                    "SELECT queue_id, source FROM task_queue WHERE scan_id = ?",
                     [scan_id],
                     |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?)),
                 )
@@ -1132,18 +1131,18 @@ impl QueueEntry {
 
             // 3. Clean up based on source
             if source == SourceType::Manual.as_i32() {
-                c.execute("DELETE FROM scan_queue WHERE queue_id = ?", [queue_id])
+                c.execute("DELETE FROM task_queue WHERE queue_id = ?", [queue_id])
                     .map_err(FsPulseError::DatabaseError)?;
                 log::debug!("Deleted manual scan queue entry {}", queue_id);
             } else if source == SourceType::Scheduled.as_i32() {
-                // Clear both scan_id and analysis_hwm when scan completes
+                // Clear scan_id, is_active, and analysis_hwm when scan completes
                 c.execute(
-                    "UPDATE scan_queue SET scan_id = NULL, analysis_hwm = NULL WHERE queue_id = ?",
+                    "UPDATE task_queue SET scan_id = NULL, is_active = 0, analysis_hwm = NULL WHERE queue_id = ?",
                     [queue_id],
                 )
                 .map_err(FsPulseError::DatabaseError)?;
                 log::debug!(
-                    "Cleared scan_id and analysis_hwm for scheduled queue entry {}",
+                    "Cleared scan_id, is_active, and analysis_hwm for scheduled queue entry {}",
                     queue_id
                 );
             } else {
@@ -1170,12 +1169,20 @@ impl QueueEntry {
         let conn = Database::get_connection()?;
 
         // Build WHERE clause based on pause state
+        // Only include scan tasks
+        let scan_task_type = TaskType::Scan.as_i64();
         let where_clause = if scans_are_paused {
-            // Include all entries with next_scan_time (paused scan has scan_id, others don't)
-            "WHERE q.next_scan_time IS NOT NULL"
+            // Include all entries with next_run_time (paused scan has is_active=1, others don't)
+            format!(
+                "WHERE q.task_type = {} AND q.next_run_time IS NOT NULL",
+                scan_task_type
+            )
         } else {
-            // Exclude the active scan (scan_id IS NOT NULL)
-            "WHERE q.scan_id IS NULL AND q.next_scan_time IS NOT NULL"
+            // Exclude the active scan (is_active = 1)
+            format!(
+                "WHERE q.task_type = {} AND q.is_active = 0 AND q.next_run_time IS NOT NULL",
+                scan_task_type
+            )
         };
 
         let query = format!(
@@ -1185,14 +1192,14 @@ impl QueueEntry {
                 r.root_path,
                 q.schedule_id,
                 s.schedule_name,
-                q.next_scan_time,
+                q.next_run_time,
                 q.source,
                 q.scan_id
-             FROM scan_queue q
+             FROM task_queue q
              INNER JOIN roots r ON q.root_id = r.root_id
              LEFT JOIN scan_schedules s ON q.schedule_id = s.schedule_id
              {}
-             ORDER BY q.scan_id DESC, q.source ASC, q.next_scan_time ASC, q.queue_id ASC
+             ORDER BY q.is_active DESC, q.source ASC, q.next_run_time ASC, q.queue_id ASC
              LIMIT ?",
             where_clause
         );
@@ -1201,7 +1208,7 @@ impl QueueEntry {
 
         let scans = stmt
             .query_map([limit], |row| {
-                let next_scan_time: i64 = row.get(5)?;
+                let next_run_time: i64 = row.get(5)?;
                 let source: i32 = row.get(6)?;
 
                 Ok(UpcomingScan {
@@ -1210,7 +1217,7 @@ impl QueueEntry {
                     root_path: row.get(2)?,
                     schedule_id: row.get(3)?,
                     schedule_name: row.get(4)?,
-                    next_scan_time,
+                    next_scan_time: next_run_time,
                     source: SourceType::from_i32(source).ok_or_else(|| {
                         rusqlite::Error::InvalidColumnType(
                             6,
@@ -1218,7 +1225,7 @@ impl QueueEntry {
                             rusqlite::types::Type::Integer,
                         )
                     })?,
-                    is_queued: next_scan_time <= now,
+                    is_queued: next_run_time <= now,
                     scan_id: row.get(7)?,
                 })
             })
@@ -1247,8 +1254,8 @@ pub fn count_schedules_for_root(root_id: i64) -> Result<i64, FsPulseError> {
 
 /// Check if a root has an active scan in progress.
 ///
-/// A root has an active scan if there is a row in the scan_queue table
-/// with the specified root_id and a non-null scan_id.
+/// A root has an active scan if there is a row in the task_queue table
+/// with the specified root_id and is_active = 1.
 ///
 /// IMPORTANT: The `_immediate` suffix indicates this function MUST be called
 /// within an immediate transaction. The caller is responsible for managing
@@ -1268,7 +1275,7 @@ pub fn root_has_active_scan_immediate(
 ) -> Result<bool, FsPulseError> {
     let has_active_scan: bool = conn
         .query_row(
-            "SELECT COUNT(*) FROM scan_queue WHERE root_id = ? AND scan_id IS NOT NULL",
+            "SELECT COUNT(*) FROM task_queue WHERE root_id = ? AND is_active = 1",
             [root_id],
             |row| row.get::<_, i64>(0),
         )
@@ -1280,10 +1287,10 @@ pub fn root_has_active_scan_immediate(
 
 /// Delete all schedules and queue entries for a specific root.
 ///
-/// This function deletes all scan queue entries and scan schedules associated
+/// This function deletes all task queue entries and scan schedules associated
 /// with the specified root. The deletions are performed in the correct order
 /// to respect foreign key constraints:
-/// 1. Delete from scan_queue (references schedule_id)
+/// 1. Delete from task_queue (references schedule_id)
 /// 2. Delete from scan_schedules
 ///
 /// IMPORTANT: The `_immediate` suffix indicates this function MUST be called
@@ -1302,7 +1309,7 @@ pub fn delete_schedules_for_root_immediate(
     root_id: i64,
 ) -> Result<(), FsPulseError> {
     // Delete queue entries first (they reference schedule_id)
-    conn.execute("DELETE FROM scan_queue WHERE root_id = ?", [root_id])
+    conn.execute("DELETE FROM task_queue WHERE root_id = ?", [root_id])
         .map_err(FsPulseError::DatabaseError)?;
 
     // Soft delete schedules by setting deleted_at timestamp
@@ -1352,10 +1359,10 @@ pub fn list_schedules() -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
             s.hash_mode, s.validate_mode,
             s.created_at, s.updated_at,
             r.root_path,
-            q.next_scan_time
+            q.next_run_time
         FROM scan_schedules s
         INNER JOIN roots r ON s.root_id = r.root_id
-        LEFT JOIN scan_queue q ON s.schedule_id = q.schedule_id
+        LEFT JOIN task_queue q ON s.schedule_id = q.schedule_id
         WHERE s.deleted_at IS NULL
         ORDER BY s.schedule_name COLLATE NOCASE ASC",
     )?;
@@ -1486,14 +1493,14 @@ impl AnalysisTracker {
                 Database::immediate_transaction(&conn, |c| {
                     let rows_updated = c
                         .execute(
-                            "UPDATE scan_queue SET analysis_hwm = ? WHERE scan_id = ?",
+                            "UPDATE task_queue SET analysis_hwm = ? WHERE scan_id = ?",
                             [hwm, self.scan_id],
                         )
                         .map_err(FsPulseError::DatabaseError)?;
 
                     if rows_updated == 0 {
                         log::warn!(
-                            "AnalysisTracker: No scan_queue row found for scan_id {} when updating HWM to {}",
+                            "AnalysisTracker: No task_queue row found for scan_id {} when updating HWM to {}",
                             self.scan_id,
                             hwm
                         );
@@ -1517,7 +1524,7 @@ impl AnalysisTracker {
     pub fn load_hwm(conn: &Connection, scan_id: i64) -> Result<i64, FsPulseError> {
         let hwm: Option<i64> = conn
             .query_row(
-                "SELECT analysis_hwm FROM scan_queue WHERE scan_id = ?",
+                "SELECT analysis_hwm FROM task_queue WHERE scan_id = ?",
                 [scan_id],
                 |row| row.get(0),
             )
