@@ -73,7 +73,7 @@ CREATE TABLE scan_queue (
     queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,
     schedule_id INTEGER,  -- NULL for manual scans
-    scan_id INTEGER,      -- NULL until scan starts, set when ScanManager starts the scan
+    scan_id INTEGER,      -- NULL until scan starts, set when TaskManager starts the scan
 
     -- When this work should run (Unix timestamp, UTC)
     -- For scheduled work: calculated when scan starts, updated after completion, NULL when disabled

@@ -17,9 +17,9 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 
 /// Global singleton instance
-static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
+static TASK_MANAGER: Lazy<Mutex<TaskManager>> = Lazy::new(|| {
     let (broadcaster, _) = broadcast::channel(1024);
-    Mutex::new(ScanManager {
+    Mutex::new(TaskManager {
         current_scan: None,
         broadcaster,
         db_is_compacting: false,
@@ -30,8 +30,8 @@ static SCAN_MANAGER: Lazy<Mutex<ScanManager>> = Lazy::new(|| {
 });
 
 /// Manages the currently active scan with singleton semantics
-pub struct ScanManager {
-    current_scan: Option<ActiveScanInfo>,
+pub struct TaskManager {
+    current_scan: Option<ActiveTaskInfo>,
     broadcaster: broadcast::Sender<BroadcastMessage>,
     db_is_compacting: bool,
     is_shutting_down: bool,
@@ -40,7 +40,7 @@ pub struct ScanManager {
 }
 
 /// Information about the currently running scan
-struct ActiveScanInfo {
+struct ActiveTaskInfo {
     scan_id: i64,
     #[allow(dead_code)]
     root_id: i64,
@@ -60,10 +60,10 @@ pub struct CurrentScanInfo {
     pub root_path: String,
 }
 
-impl ScanManager {
+impl TaskManager {
     /// Get the global singleton instance
-    pub fn instance() -> &'static Mutex<ScanManager> {
-        &SCAN_MANAGER
+    pub fn instance() -> &'static Mutex<TaskManager> {
+        &TASK_MANAGER
     }
 
     /// Initialize pause state from database
@@ -187,7 +187,7 @@ impl ScanManager {
 
     /// Entry point 2: Background polling (every 5 seconds)
     pub fn poll_queue(conn: &Connection) -> Result<(), FsPulseError> {
-        let _tmr = timer!(Level::Trace; "ScanManager::poll_queue mutex");
+        let _tmr = timer!(Level::Trace; "TaskManager::poll_queue");
         let mut manager = Self::instance().lock().unwrap();
 
         // Try to start next scan - it's fine if nothing happens
@@ -365,11 +365,11 @@ impl ScanManager {
                     // of the shutdown. There's a chance that the user was trying to stop the scan
                     // and if that's the case, the scan will unexpectedly resume the next time the
                     // process starts. We accept that.
-                    if !ScanManager::is_shutting_down() {
+                    if !TaskManager::is_shutting_down() {
                         // For the purpose of reporting to the web ui, when a scan is interrrupted
                         // and the app is pausing, we don't bother to differentiate between an
                         // explicit stop and a pause - we just treat it like a pause.
-                        if ScanManager::is_paused() {
+                        if TaskManager::is_paused() {
                             info!("Scan {} was paused", scan_id);
                             task_progress.set_status(TaskStatus::Completed);
                         } else {
@@ -398,14 +398,14 @@ impl ScanManager {
                 }
             }
 
-            // Clean up queue and ScanManager
-            if let Err(e) = ScanManager::on_scan_complete(&conn, scan_id) {
+            // Clean up queue and TaskManager
+            if let Err(e) = TaskManager::on_scan_complete(&conn, scan_id) {
                 error!("Failed to complete scan {}: {}", scan_id, e);
             }
         });
 
         // Store active scan state with task handle
-        self.current_scan = Some(ActiveScanInfo {
+        self.current_scan = Some(ActiveTaskInfo {
             scan_id,
             root_id,
             root_path: root_path.clone(),
@@ -422,7 +422,7 @@ impl ScanManager {
     /// Cleans up queue and clears active scan
     pub fn on_scan_complete(conn: &Connection, scan_id: i64) -> Result<(), FsPulseError> {
         // Clear active scan
-        let _tmr = timer!(Level::Trace; "ScanManager::on_scan_complete mutex");
+        let _tmr = timer!(Level::Trace; "TaskManager::on_scan_complete mutex");
         let mut manager = Self::instance().lock().unwrap();
 
         // Clean up queue (verifies state, deletes/clears entry)
@@ -446,7 +446,7 @@ impl ScanManager {
                 // messages are enough to get it into a corrected state
                 manager.broadcast_current_state_locked(true);
                 manager.current_scan = None;
-                log::info!("Scan {} completed or exited, ScanManager now idle", scan_id);
+                log::info!("Scan {} completed or exited, TaskManager now idle", scan_id);
             }
         }
 
@@ -455,7 +455,7 @@ impl ScanManager {
 
     /// Request interrupt of the current scan
     pub fn request_stop(scan_id: i64) -> Result<(), String> {
-        let manager: std::sync::MutexGuard<'_, ScanManager> = Self::instance().lock().unwrap();
+        let manager: std::sync::MutexGuard<'_, TaskManager> = Self::instance().lock().unwrap();
 
         match &manager.current_scan {
             Some(active) if active.scan_id == scan_id => {
@@ -598,7 +598,7 @@ impl ScanManager {
 
     /// Check if pause has expired and clear it if so
     /// Returns true if pause was cleared (became unpaused)
-    /// This function expects to be called with the ScanManager mutex already held
+    /// This function expects to be called with the TaskManager mutex already held
     fn clear_pause_if_expired_locked(&mut self, conn: &Connection) -> Result<bool, FsPulseError> {
         // If pause_until is -1, still paused indefinitely
         if self.pause_until == Some(-1) {
@@ -634,7 +634,7 @@ impl ScanManager {
     /// Called on WebSocket connection and by broadcast thread
     /// Thread-safe: acquires mutex to read current state
     pub fn broadcast_current_state(allow_send_terminal: bool) {
-        let _tmr = timer!(Level::Trace; "ScanManager::broadcast_current_state mutex");
+        let _tmr = timer!(Level::Trace; "TaskManager::broadcast_current_state mutex");
         let manager = Self::instance().lock().unwrap();
 
         manager.broadcast_current_state_locked(allow_send_terminal);

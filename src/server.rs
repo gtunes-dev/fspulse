@@ -26,7 +26,7 @@ use tokio::sync::broadcast;
 use crate::api;
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::scan_manager::ScanManager;
+use crate::task_manager::TaskManager;
 
 // Embed static files in release builds
 #[cfg(not(debug_assertions))]
@@ -64,7 +64,7 @@ impl WebServer {
 
         // Initialize pause state from database
         let conn = Database::get_connection()?;
-        ScanManager::init_pause_state(&conn)?;
+        TaskManager::init_pause_state(&conn)?;
 
         // Create shutdown channel for background tasks
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
@@ -87,13 +87,13 @@ impl WebServer {
                             }
                         };
 
-                        if let Err(e) = ScanManager::poll_queue(&conn) {
+                        if let Err(e) = TaskManager::poll_queue(&conn) {
                             log::error!("Queue processor error: {}", e);
                         }
                     }
                     _ = shutdown_rx.recv() => {
                         log::info!("Background queue processor shutting down gracefully");
-                        ScanManager::do_shutdown().await;
+                        TaskManager::do_shutdown().await;
                         println!("   Background queue processor stopped");
                         break;
                     }

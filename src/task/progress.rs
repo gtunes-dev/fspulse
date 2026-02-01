@@ -133,7 +133,7 @@ impl TaskProgressInternalState {
 /// Progress reporter for tasks
 ///
 /// Tasks use this struct to report their progress. The state is periodically
-/// read by ScanManager and broadcast to connected WebSocket clients.
+/// read by TaskManager and broadcast to connected WebSocket clients.
 pub struct TaskProgress {
     state: Mutex<TaskProgressInternalState>,
 }

@@ -192,7 +192,6 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useTaskContext() {
   const context = useContext(TaskContext)
   if (!context) {

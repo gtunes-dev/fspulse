@@ -26,7 +26,7 @@ export default defineConfig([
         'warn',
         {
           allowConstantExport: true,
-          allowExportNames: ['badgeVariants', 'buttonVariants', 'useScanManager']
+          allowExportNames: ['badgeVariants', 'buttonVariants', 'useTaskContext']
         },
       ],
     },

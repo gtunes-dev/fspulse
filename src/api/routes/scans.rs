@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 /// Shared application state
-/// ScanManager is now a global singleton, so AppState is empty
+/// TaskManager is now a global singleton, so AppState is empty
 #[derive(Clone)]
 pub struct AppState {}
 
@@ -40,7 +40,7 @@ pub async fn schedule_scan(
     State(_state): State<AppState>,
     Json(req): Json<ScheduleScanRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    use crate::scan_manager::ScanManager;
+    use crate::task_manager::TaskManager;
     use crate::scans::{HashMode, ValidateMode};
 
     let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -67,7 +67,7 @@ pub async fn schedule_scan(
     };
 
     // Schedule manual scan (creates queue entry and tries to start it)
-    ScanManager::schedule_manual_scan(&conn, req.root_id, hash_mode, validate_mode).map_err(
+    TaskManager::schedule_manual_scan(&conn, req.root_id, hash_mode, validate_mode).map_err(
         |e| {
             error!("Failed to schedule manual scan: {}", e);
             if e.to_string().contains("Root not found") {
@@ -93,19 +93,19 @@ pub async fn scan_progress_ws(
 }
 
 async fn handle_scan_progress(mut socket: WebSocket) {
-    use crate::scan_manager::ScanManager;
+    use crate::task_manager::TaskManager;
 
     log::info!("[WS] New WebSocket connection established");
 
-    // Subscribe to scan state broadcasts from ScanManager
-    let mut receiver = ScanManager::subscribe();
+    // Subscribe to scan state broadcasts from TaskManager
+    let mut receiver = TaskManager::subscribe();
 
     // Send initial state to client immediately upon connection
     // This is the handshake that ensures clients always know the current state
     log::info!("[WS] Broadcasting current state to new client");
 
     // Immediately broadcast status. Terminal status is only sent from
-    ScanManager::broadcast_current_state(false);
+    TaskManager::broadcast_current_state(false);
 
     // Stream broadcast messages (ActiveScan or NoActiveScan)
     loop {
@@ -168,9 +168,9 @@ pub async fn stop_scan(
     State(_state): State<AppState>,
     Path(scan_id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
-    use crate::scan_manager::ScanManager;
+    use crate::task_manager::TaskManager;
 
-    ScanManager::request_stop(scan_id).map_err(|e| {
+    TaskManager::request_stop(scan_id).map_err(|e| {
         error!("Failed to stop scan {}: {}", scan_id, e);
         StatusCode::NOT_FOUND
     })?;
@@ -191,11 +191,11 @@ pub async fn set_pause(
     State(_state): State<AppState>,
     Json(req): Json<PauseRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    use crate::scan_manager::ScanManager;
+    use crate::task_manager::TaskManager;
 
     let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    ScanManager::set_pause(&conn, req.duration_seconds).map_err(|e| {
+    TaskManager::set_pause(&conn, req.duration_seconds).map_err(|e| {
         error!("Failed to set pause: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -207,11 +207,11 @@ pub async fn set_pause(
 /// DELETE /api/pause
 /// Clear pause - allows scanning to resume
 pub async fn clear_pause(State(_state): State<AppState>) -> Result<StatusCode, StatusCode> {
-    use crate::scan_manager::ScanManager;
+    use crate::task_manager::TaskManager;
 
     let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    ScanManager::clear_pause(&conn).map_err(|e| {
+    TaskManager::clear_pause(&conn).map_err(|e| {
         error!("Failed to clear pause: {}", e);
         StatusCode::BAD_REQUEST // 400 - likely tried to unpause while scan unwinding
     })?;
@@ -224,10 +224,10 @@ pub async fn clear_pause(State(_state): State<AppState>) -> Result<StatusCode, S
 /// Get information about the currently running scan, if any
 pub async fn get_current_scan(
     State(_state): State<AppState>,
-) -> Result<Json<Option<crate::scan_manager::CurrentScanInfo>>, StatusCode> {
-    use crate::scan_manager::ScanManager;
+) -> Result<Json<Option<crate::task_manager::CurrentScanInfo>>, StatusCode> {
+    use crate::task_manager::TaskManager;
 
-    let current = ScanManager::get_current_scan_info();
+    let current = TaskManager::get_current_scan_info();
     Ok(Json(current))
 }
 

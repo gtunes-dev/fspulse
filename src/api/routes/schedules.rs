@@ -1,5 +1,5 @@
 use crate::database::Database;
-use crate::scan_manager::ScanManager;
+use crate::task_manager::TaskManager;
 use crate::scans::{HashMode, ValidateMode};
 use crate::schedules::{
     CreateScheduleParams, IntervalUnit, Schedule, ScheduleType, ScheduleWithRoot,
@@ -53,7 +53,7 @@ pub async fn create_schedule(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let schedule = ScanManager::create_schedule(
+    let schedule = TaskManager::create_schedule(
         &conn,
         CreateScheduleParams {
             root_id: request.root_id,
@@ -117,7 +117,7 @@ pub async fn update_schedule(
         updated_at: now,
     };
 
-    ScanManager::update_schedule(&conn, &updated).map_err(|e| {
+    TaskManager::update_schedule(&conn, &updated).map_err(|e| {
         log::error!("Failed to update schedule: {}", e);
         StatusCode::BAD_REQUEST
     })?;
@@ -133,7 +133,7 @@ pub async fn delete_schedule(Path(schedule_id): Path<i64>) -> Result<StatusCode,
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    ScanManager::delete_schedule(&conn, schedule_id).map_err(|e| {
+    TaskManager::delete_schedule(&conn, schedule_id).map_err(|e| {
         log::error!("Failed to delete schedule: {}", e);
         StatusCode::BAD_REQUEST
     })?;
@@ -148,7 +148,7 @@ pub async fn toggle_schedule(
     Json(request): Json<ToggleScheduleRequest>,
 ) -> Result<StatusCode, StatusCode> {
     // Use set_schedule_enabled which properly handles queue management
-    ScanManager::set_schedule_enabled(schedule_id, request.enabled).map_err(|e| {
+    TaskManager::set_schedule_enabled(schedule_id, request.enabled).map_err(|e| {
         log::error!("Failed to toggle schedule: {}", e);
         StatusCode::BAD_REQUEST
     })?;
@@ -160,10 +160,10 @@ pub async fn toggle_schedule(
 /// Get upcoming scans for display in Scans page
 /// Returns list of upcoming scans (excludes currently running scan unless paused)
 pub async fn get_upcoming_scans() -> Result<Json<Value>, StatusCode> {
-    use crate::scan_manager::ScanManager;
+    use crate::task_manager::TaskManager;
 
-    // Get next 10 upcoming scans via ScanManager (synchronized with pause state)
-    let scans = ScanManager::get_upcoming_scans(10).map_err(|e| {
+    // Get next 10 upcoming scans via TaskManager (synchronized with pause state)
+    let scans = TaskManager::get_upcoming_scans(10).map_err(|e| {
         log::error!("Error fetching upcoming scans: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;

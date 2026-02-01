@@ -2,7 +2,7 @@ use axum::{http::StatusCode, Json};
 use log::error;
 
 use crate::database::{Database, DbStats};
-use crate::scan_manager::ScanManager;
+use crate::task_manager::TaskManager;
 
 /// GET /api/database/stats
 ///
@@ -22,8 +22,8 @@ pub async fn get_database_stats() -> Result<Json<DbStats>, StatusCode> {
 /// Returns error if a scan is currently running
 /// May take several minutes for large databases
 pub async fn compact_database() -> Result<StatusCode, (StatusCode, String)> {
-    // Call ScanManager to coordinate compaction
-    ScanManager::compact_db().map_err(|e| {
+    // Call TaskManager to coordinate compaction
+    TaskManager::compact_db().map_err(|e| {
         error!("Database compaction failed: {}", e);
         (StatusCode::CONFLICT, e)
     })?;

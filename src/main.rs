@@ -9,7 +9,7 @@ mod hash;
 mod items;
 mod query;
 mod roots;
-mod scan_manager;
+mod task_manager;
 mod scanner;
 mod scans;
 mod schedules;
