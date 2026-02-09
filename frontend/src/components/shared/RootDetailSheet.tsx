@@ -118,14 +118,11 @@ export function RootDetailSheet({
         setScans(scanResponse.rows.map(parseScanRow))
 
         // Load schedule count
-        const scheduleCountResponse = await countQuery('scan_schedules', {
-          columns: [{ name: 'schedule_id', visible: true, sort_direction: 'none', position: 0 }],
-          filters: [
-            { column: 'root_id', value: rootId.toString() },
-            { column: 'enabled', value: '1' },
-          ],
-        })
-        setScheduleCount(scheduleCountResponse.count)
+        const scheduleCountResponse = await fetch(`/api/roots/${rootId}/schedule-count`)
+        if (scheduleCountResponse.ok) {
+          const data = await scheduleCountResponse.json()
+          setScheduleCount(data.count)
+        }
       } catch (error) {
         console.error('Error loading root details:', error)
       } finally {

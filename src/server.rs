@@ -186,6 +186,10 @@ impl WebServer {
                 get(api::roots::get_roots_with_scans),
             )
             .route("/api/roots/{root_id}", delete(api::roots::delete_root))
+            .route(
+                "/api/roots/{root_id}/schedule-count",
+                get(api::roots::get_schedule_count),
+            )
             // Schedule endpoints
             .route("/api/schedules", get(api::schedules::list_schedules))
             .route("/api/schedules", post(api::schedules::create_schedule))

@@ -235,6 +235,19 @@ pub async fn get_roots_with_scans(
     Ok(Json(results))
 }
 
+/// GET /api/roots/{root_id}/schedule-count
+/// Returns the number of active (enabled) schedules for a specific root
+pub async fn get_schedule_count(
+    Path(root_id): Path<i64>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let count = schedules::count_schedules_for_root(root_id).map_err(|e| {
+        error!("Failed to count schedules for root {}: {}", root_id, e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(serde_json::json!({ "count": count })))
+}
+
 /// DELETE /api/roots/{root_id}
 /// Deletes a root and all associated data (scans, items, changes, alerts)
 pub async fn delete_root(
