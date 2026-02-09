@@ -63,8 +63,16 @@ impl AnalysisItem {
         self.needs_hash
     }
 
+    pub fn set_needs_hash(&mut self, value: bool) {
+        self.needs_hash = value;
+    }
+
     pub fn needs_val(&self) -> bool {
         self.needs_val
+    }
+
+    pub fn set_needs_val(&mut self, value: bool) {
+        self.needs_val = value;
     }
 
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {

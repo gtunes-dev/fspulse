@@ -29,7 +29,7 @@ use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
 use crossbeam_channel::bounded;
-use log::{error, info, trace, Level};
+use log::{error, info, trace, warn, Level};
 use logging_timer::timer;
 use rusqlite::Connection;
 use threadpool::ThreadPool;
@@ -615,7 +615,7 @@ impl Scanner {
 
     fn process_item_async(
         scan: &Scan,
-        analysis_item: AnalysisItem,
+        mut analysis_item: AnalysisItem,
         thread_index: usize,
         task_progress: &Arc<TaskProgress>,
         interrupt_token: &Arc<AtomicBool>,
@@ -631,7 +631,7 @@ impl Scanner {
         // depending on why the interrupt was generated
 
         let item_id = analysis_item.item_id();
-        let path = Path::new(analysis_item.item_path());
+        let path = PathBuf::from(analysis_item.item_path());
 
         info!("Beginning analysis of: {path:?}");
 
@@ -644,13 +644,14 @@ impl Scanner {
         let mut read_attempted = false;
         let mut read_succeeded = false;
         let mut read_permission_denied = false;
+        let mut file_not_found = false;
 
         if analysis_item.needs_hash() && !Scanner::is_interrupted(interrupt_token) {
             task_progress.set_thread_state(thread_index, "Hashing", "info", Some(&display_path));
             read_attempted = true;
 
             // The hash function checks for interrupt at its start and periodically
-            match Hash::compute_sha2_256_hash(path, interrupt_token) {
+            match Hash::compute_sha2_256_hash(&path, interrupt_token) {
                 Ok(hash_s) => {
                     new_hash = Some(hash_s);
                     read_succeeded = true;
@@ -663,6 +664,21 @@ impl Scanner {
                         &display_path
                     );
                     read_permission_denied = true;
+                }
+                Err(FsPulseError::IoError(ref io_err))
+                    if io_err.kind() == ErrorKind::NotFound =>
+                {
+                    // File was deleted between the scan/sweep phase and analysis.
+                    // This is a normal race condition, not an error the user needs
+                    // to act on. We skip hash and validation analysis for this item
+                    // so that update_item_analysis won't examine or compare hash/val
+                    // state, and set access to MetaError to reflect that the file
+                    // could not be found.
+                    warn!(
+                        "File not found during hashing '{}': skipping analysis",
+                        &display_path
+                    );
+                    file_not_found = true;
                 }
                 Err(error) => {
                     error!("Error hashing '{}': {}", &display_path, error);
@@ -677,15 +693,16 @@ impl Scanner {
         // Skip validation if we already know we can't read the file
         if analysis_item.needs_val()
             && !read_permission_denied
+            && !file_not_found
             && !Scanner::is_interrupted(interrupt_token)
         {
-            let validator = from_path(path);
+            let validator = from_path(&path);
             match validator {
                 Some(v) => {
                     task_progress.set_thread_state(thread_index, "Validating", "info-alternate", Some(&display_path));
                     read_attempted = true;
 
-                    match v.validate(path, interrupt_token) {
+                    match v.validate(&path, interrupt_token) {
                         Ok((res_validity_state, res_validation_error)) => {
                             new_val = res_validity_state;
                             new_val_error = res_validation_error;
@@ -700,6 +717,17 @@ impl Scanner {
                             );
                             read_permission_denied = true;
                         }
+                        Err(FsPulseError::IoError(ref io_err))
+                            if io_err.kind() == ErrorKind::NotFound =>
+                        {
+                            // File deleted between hashing and validation (or only
+                            // validation was requested). Same handling as hashing.
+                            warn!(
+                                "File not found during validation '{}': skipping analysis",
+                                &display_path
+                            );
+                            file_not_found = true;
+                        }
                         Err(e) => {
                             let e_str = e.to_string();
                             error!("Error validating '{}': {}", &display_path, e_str);
@@ -712,8 +740,23 @@ impl Scanner {
             }
         }
 
+        // If the file was not found during hashing or validation, disable both
+        // hash and validation analysis. The item was deleted between scan/sweep
+        // and analysis — a normal race condition. By clearing needs_hash and
+        // needs_val, update_item_analysis will skip all hash/val comparisons and
+        // only update the access state to MetaError. The item's last_hash_scan
+        // and last_val_scan markers are intentionally NOT advanced, so the item
+        // will be picked up for analysis again on the next scan when (if) the
+        // file reappears.
+        if file_not_found {
+            analysis_item.set_needs_hash(false);
+            analysis_item.set_needs_val(false);
+        }
+
         // Determine new access state based on read results
-        let new_access = if read_permission_denied {
+        let new_access = if file_not_found {
+            Some(Access::MetaError)
+        } else if read_permission_denied {
             Some(Access::ReadError)
         } else if read_attempted && read_succeeded {
             Some(Access::Ok)

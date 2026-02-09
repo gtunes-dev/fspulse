@@ -142,16 +142,40 @@ impl Database {
         conn.execute("BEGIN IMMEDIATE", [])
             .map_err(FsPulseError::DatabaseError)?;
 
-        match f(conn) {
-            Ok(result) => {
+        // Use catch_unwind to ensure the transaction is rolled back even if the
+        // closure panics. Without this, a panic would skip both COMMIT and
+        // ROLLBACK, leaving the connection with an open transaction. When the
+        // connection is returned to the pool, subsequent uses would fail with
+        // "cannot start a transaction within a transaction".
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(conn))) {
+            Ok(Ok(result)) => {
                 conn.execute("COMMIT", [])
                     .map_err(FsPulseError::DatabaseError)?;
                 Ok(result)
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 // Attempt rollback, but preserve original error
                 let _ = conn.execute("ROLLBACK", []);
                 Err(e)
+            }
+            Err(panic_payload) => {
+                // Closure panicked — rollback to clean up the connection before
+                // resuming the panic so the connection isn't returned to the pool
+                // with an open transaction.
+                let _ = conn.execute("ROLLBACK", []);
+
+                // Extract a message from the panic payload for structured logging.
+                // Panic payloads are typically &str or String.
+                let msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown panic".to_string()
+                };
+                log::error!("Panic inside immediate_transaction (rolled back): {}", msg);
+
+                std::panic::resume_unwind(panic_payload);
             }
         }
     }
