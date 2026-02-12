@@ -22,7 +22,7 @@ impl Hash {
     ) -> Result<String, FsPulseError> {
         // Check for interrupt before doing any work
         if interrupt_token.load(Ordering::Acquire) {
-            return Err(FsPulseError::ScanInterrupted);
+            return Err(FsPulseError::TaskInterrupted);
         }
 
         let mut f = File::open(path)?;
@@ -36,7 +36,7 @@ impl Hash {
             loop_counter += 1;
             // Every 16 loops, check for interrupt
             if loop_counter % 16 == 0 && interrupt_token.load(Ordering::Acquire) {
-                return Err(FsPulseError::ScanInterrupted);
+                return Err(FsPulseError::TaskInterrupted);
             }
 
             let bytes_read = f.read(&mut buffer)?;
@@ -140,6 +140,6 @@ mod tests {
         let result = Hash::compute_sha2_256_hash(temp_file.path(), &interrupt_token);
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), FsPulseError::ScanInterrupted));
+        assert!(matches!(result.unwrap_err(), FsPulseError::TaskInterrupted));
     }
 }

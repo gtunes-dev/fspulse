@@ -1,14 +1,12 @@
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::task::{BroadcastMessage, TaskProgress, TaskStatus, TaskType};
-use crate::roots::Root;
-use crate::scanner::Scanner;
-use crate::scans::{HashMode, Scan, ValidateMode};
+use crate::task::{BroadcastMessage, TaskProgress, TaskStatus};
+use crate::scans::{HashMode, ValidateMode};
 use crate::schedules::{QueueEntry, Schedule};
 use log::{error, info, Level};
 use logging_timer::timer;
 use once_cell::sync::Lazy;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -20,7 +18,7 @@ use tokio::task::JoinHandle;
 static TASK_MANAGER: Lazy<Mutex<TaskManager>> = Lazy::new(|| {
     let (broadcaster, _) = broadcast::channel(1024);
     Mutex::new(TaskManager {
-        current_scan: None,
+        current_task: None,
         broadcaster,
         db_is_compacting: false,
         is_shutting_down: false,
@@ -29,9 +27,9 @@ static TASK_MANAGER: Lazy<Mutex<TaskManager>> = Lazy::new(|| {
     })
 });
 
-/// Manages the currently active scan with singleton semantics
+/// Manages the currently active task with singleton semantics
 pub struct TaskManager {
-    current_scan: Option<ActiveTaskInfo>,
+    current_task: Option<ActiveTaskInfo>,
     broadcaster: broadcast::Sender<BroadcastMessage>,
     db_is_compacting: bool,
     is_shutting_down: bool,
@@ -39,13 +37,12 @@ pub struct TaskManager {
     pause_until: Option<i64>,
 }
 
-/// Information about the currently running scan
+/// Information about the currently running task
+/// Fields are extracted from the Task trait before the task is moved into spawn_blocking
 struct ActiveTaskInfo {
-    scan_id: i64,
-    #[allow(dead_code)]
-    root_id: i64,
-    #[allow(dead_code)]
-    root_path: String,
+    queue_id: i64,
+    root_id: Option<i64>,
+    root_path: Option<String>,
     interrupt_token: Arc<AtomicBool>,
     task_progress: Arc<TaskProgress>,
     task_handle: Option<JoinHandle<()>>,
@@ -126,7 +123,7 @@ impl TaskManager {
 
         // Try to start immediately (while still holding mutex)
         // Whether it starts or not, scheduling succeeded
-        manager.try_start_next_scan_locked(conn)?;
+        manager.try_start_next_task_locked(conn)?;
 
         Ok(())
     }
@@ -190,8 +187,8 @@ impl TaskManager {
         let _tmr = timer!(Level::Trace; "TaskManager::poll_queue");
         let mut manager = Self::instance().lock().unwrap();
 
-        // Try to start next scan - it's fine if nothing happens
-        manager.try_start_next_scan_locked(conn)?;
+        // Try to start next task - it's fine if nothing happens
+        manager.try_start_next_task_locked(conn)?;
 
         Ok(())
     }
@@ -201,11 +198,11 @@ impl TaskManager {
         let (task_handle, broadcast_handle) = {
             let mut manager = Self::instance().lock().unwrap();
 
-            // setting this to true will prevent additional scans from starting
+            // setting this to true will prevent additional tasks from starting
             manager.is_shutting_down = true;
 
             // Signal interrupt and extract task handle
-            if let Some(active) = &mut manager.current_scan {
+            if let Some(active) = &mut manager.current_task {
                 active.interrupt_token.store(true, Ordering::Release);
                 let task_handle = active.task_handle.take(); // Move the task handle out, leaving None
                 let broadcast_handle = active.broadcast_handle.take(); // Move the broadcast handle out, leaving none
@@ -216,12 +213,12 @@ impl TaskManager {
             // MutexGuard drops here at end of block
         };
 
-        // Wait for scan task to complete
+        // Wait for task to complete
         if let Some(handle) = task_handle {
-            log::info!("Waiting for active scan to complete...");
+            log::info!("Waiting for active task to complete...");
             // Await the task completion
             let _ = handle.await;
-            log::info!("Active scan completed");
+            log::info!("Active task completed");
         }
 
         if let Some(handle) = broadcast_handle {
@@ -241,12 +238,12 @@ impl TaskManager {
         manager.is_paused
     }
 
-    /// Shared logic: Find and start next scan
+    /// Shared logic: Find and start next task
     /// Called with mutex already held
-    /// Updates self.current_scan if scan started
-    fn try_start_next_scan_locked(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
-        // Already running a scan, compacting the database, or shutting down?
-        if self.current_scan.is_some() || self.db_is_compacting || self.is_shutting_down {
+    /// Uses the factory function to create a task via the Task trait
+    fn try_start_next_task_locked(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
+        // Already running a task, compacting the database, or shutting down?
+        if self.current_task.is_some() || self.db_is_compacting || self.is_shutting_down {
             return Ok(());
         }
 
@@ -255,67 +252,66 @@ impl TaskManager {
             return Ok(());
         }
 
-        // Get next scan from queue (creates scan, updates queue)
-        let mut scan = match QueueEntry::get_next_scan(conn)? {
-            Some(s) => s,
+        // Get next task from queue via generic factory
+        let mut task = match QueueEntry::get_next_task(conn)? {
+            Some(t) => t,
             None => return Ok(()), // No work available - not an error
         };
 
-        let scan_id = scan.scan_id();
-        let root_id = scan.root_id();
-
-        // Get root for progress reporting
-        let root = Root::get_by_id(conn, root_id)?
-            .ok_or_else(|| FsPulseError::Error("Root not found".to_string()))?;
-        let root_path = root.root_path().to_string();
+        // Extract metadata from the task before moving it into spawn_blocking
+        let queue_id = task.queue_id();
+        let task_type = task.task_type();
+        let root_id = task.active_root_id();
+        let action = task.action().to_string();
+        let display_target = task.display_target();
 
         // Create task progress reporter
         let task_progress = TaskProgress::new(
-            scan_id,
-            TaskType::Scan,
-            Some(root_id),
-            "Scanning",
-            &root_path,
+            queue_id,
+            task_type,
+            root_id,
+            &action,
+            &display_target,
         );
         let interrupt_token = Arc::new(AtomicBool::new(false));
 
-        // Spawn per-scan broadcast thread
+        // Spawn per-task broadcast thread
         // This thread polls state every 250ms and broadcasts to all connected clients
-        // It exits when the scan reaches a terminal state
+        // It exits when the task reaches a terminal state
         let broadcast_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_millis(250));
 
-            log::info!("Broadcast thread started for scan {}", scan_id);
+            log::info!("Broadcast thread started for queue_id {}", queue_id);
 
             loop {
                 interval.tick().await;
 
-                // Broadcast current state. Only on_scan_complete is allowed to send terminal messages
+                // Broadcast current state. Only on_task_complete is allowed to send terminal messages
                 Self::broadcast_current_state(false);
 
-                // Check if scan reached terminal state
+                // Check if task reached terminal state
                 let is_terminal = {
                     let manager = Self::instance().lock().unwrap();
-                    if let Some(active) = &manager.current_scan {
-                        if active.scan_id == scan_id {
+                    if let Some(active) = &manager.current_task {
+                        if active.queue_id == queue_id {
                             matches!(
                                 active.task_progress.get_status(),
                                 TaskStatus::Completed | TaskStatus::Stopped | TaskStatus::Error
                             )
                         } else {
-                            // Scan was replaced, exit this broadcast thread
+                            // Task was replaced, exit this broadcast thread
                             true
                         }
                     } else {
-                        // Scan was cleared, exit
+                        // Task was cleared, exit
                         true
                     }
                 };
 
                 if is_terminal {
                     log::info!(
-                        "Broadcast thread exiting for scan {} (terminal state reached)",
-                        scan_id
+                        "Broadcast thread exiting for queue_id {} (terminal state reached)",
+                        queue_id
                     );
                     break;
                 }
@@ -325,58 +321,35 @@ impl TaskManager {
         // Clone references we need to keep after moving into spawn_blocking
         let interrupt_token_for_storage = Arc::clone(&interrupt_token);
         let task_progress_for_storage = Arc::clone(&task_progress);
-        let task_progress_for_scan = Arc::clone(&task_progress);
+        let task_progress_for_task = Arc::clone(&task_progress);
 
-        // Spawn scan task
+        // Spawn task execution
         let task_handle = tokio::task::spawn_blocking(move || {
-            let conn = match Database::get_connection() {
-                Ok(conn) => conn,
-                Err(e) => {
-                    error!("Failed to get database connection in scan task: {}", e);
-                    task_progress.set_error(&format!("Failed to get database connection: {}", e));
-                    return;
-                }
-            };
-
-            let root = match Root::get_by_id(&conn, root_id) {
-                Ok(Some(root)) => root,
-                Ok(None) => {
-                    error!("Root {} not found", root_id);
-                    task_progress.set_error(&format!("Root {} not found", root_id));
-                    return;
-                }
-                Err(e) => {
-                    error!("Failed to get root {}: {}", root_id, e);
-                    task_progress.set_error(&format!("Failed to get root: {}", e));
-                    return;
-                }
-            };
-
-            let scan_result =
-                Scanner::do_scan_machine(&mut scan, &root, task_progress_for_scan, interrupt_token);
+            let task_result =
+                task.run(task_progress_for_task, Arc::clone(&interrupt_token));
 
             // Handle result
-            match scan_result {
+            match task_result {
                 Ok(()) => {
                     task_progress.set_status(TaskStatus::Completed);
                 }
-                Err(ref e) if matches!(e, FsPulseError::ScanInterrupted) => {
-                    // If the scan is shutting down, we always treat ScanInterrupted as if it's a result
-                    // of the shutdown. There's a chance that the user was trying to stop the scan
-                    // and if that's the case, the scan will unexpectedly resume the next time the
+                Err(ref e) if matches!(e, FsPulseError::TaskInterrupted) => {
+                    // Task was interrupted. If we're shutting down, we always treat this
+                    // as a result of the shutdown. There's a chance the user was trying to
+                    // stop the task, and if so, it will unexpectedly resume next time the
                     // process starts. We accept that.
                     if !TaskManager::is_shutting_down() {
-                        // For the purpose of reporting to the web ui, when a scan is interrrupted
-                        // and the app is pausing, we don't bother to differentiate between an
-                        // explicit stop and a pause - we just treat it like a pause.
+                        // When interrupted and the app is pausing, we don't differentiate
+                        // between an explicit stop and a pause - we just treat it like a pause.
                         if TaskManager::is_paused() {
-                            info!("Scan {} was paused", scan_id);
+                            info!("Task (queue_id {}) was paused", queue_id);
                             task_progress.set_status(TaskStatus::Completed);
                         } else {
-                            info!("Scan {} was stopped, rolling back changes", scan_id);
-                            if let Err(stop_err) = scan.set_state_stopped(&conn) {
-                                error!("Failed to stop scan {}: {}", scan_id, stop_err);
-                                task_progress.set_error(&format!("Failed to stop scan: {}", stop_err));
+                            info!("Task (queue_id {}) was stopped, rolling back changes", queue_id);
+                            if let Err(stop_err) = task.on_stopped() {
+                                error!("Failed to stop task (queue_id {}): {}", queue_id, stop_err);
+                                task_progress
+                                    .set_error(&format!("Failed to stop task: {}", stop_err));
                             } else {
                                 task_progress.set_status(TaskStatus::Stopped);
                             }
@@ -384,12 +357,12 @@ impl TaskManager {
                     }
                 }
                 Err(e) => {
-                    error!("Scan {} failed: {}", scan_id, e);
+                    error!("Task (queue_id {}) failed: {}", queue_id, e);
                     let error_msg = e.to_string();
-                    if let Err(stop_err) = Scan::stop_scan(&conn, &scan, Some(&error_msg)) {
-                        error!("Failed to stop scan {} after error: {}", scan_id, stop_err);
+                    if let Err(stop_err) = task.on_error(&error_msg) {
+                        error!("Failed to stop task (queue_id {}) after error: {}", queue_id, stop_err);
                         task_progress.set_error(&format!(
-                            "Scan error: {}; Failed to stop: {}",
+                            "Task error: {}; Failed to stop: {}",
                             error_msg, stop_err
                         ));
                     } else {
@@ -399,16 +372,24 @@ impl TaskManager {
             }
 
             // Clean up queue and TaskManager
-            if let Err(e) = TaskManager::on_scan_complete(&conn, scan_id) {
-                error!("Failed to complete scan {}: {}", scan_id, e);
+            let conn = match Database::get_connection() {
+                Ok(conn) => conn,
+                Err(e) => {
+                    error!("Failed to get connection for task cleanup: {}", e);
+                    return;
+                }
+            };
+
+            if let Err(e) = TaskManager::on_task_complete(&conn, queue_id) {
+                error!("Failed to complete task (queue_id {}): {}", queue_id, e);
             }
         });
 
-        // Store active scan state with task handle
-        self.current_scan = Some(ActiveTaskInfo {
-            scan_id,
+        // Store active task state with task handle
+        self.current_task = Some(ActiveTaskInfo {
+            queue_id,
             root_id,
-            root_path: root_path.clone(),
+            root_path: Some(display_target),
             interrupt_token: interrupt_token_for_storage,
             task_progress: task_progress_for_storage,
             task_handle: Some(task_handle),
@@ -418,47 +399,58 @@ impl TaskManager {
         Ok(())
     }
 
-    /// Called when scan finishes (from background task)
-    /// Cleans up queue and clears active scan
-    pub fn on_scan_complete(conn: &Connection, scan_id: i64) -> Result<(), FsPulseError> {
-        // Clear active scan
-        let _tmr = timer!(Level::Trace; "TaskManager::on_scan_complete mutex");
+    /// Called when task finishes (from background task)
+    /// Cleans up queue and clears active task
+    pub fn on_task_complete(conn: &Connection, queue_id: i64) -> Result<(), FsPulseError> {
+        let _tmr = timer!(Level::Trace; "TaskManager::on_task_complete mutex");
         let mut manager = Self::instance().lock().unwrap();
 
         // Clean up queue (verifies state, deletes/clears entry)
         // If we're shutting down, we don't clear the queue entry. It will be taken care
         // of on the next run
-        // Note: QueueEntry::complete_work gets its own connection internally
         if !manager.is_shutting_down && !manager.is_paused {
-            QueueEntry::complete_work(conn, scan_id)?;
+            QueueEntry::complete_work(conn, queue_id)?;
         }
 
-        if let Some(active) = &manager.current_scan {
-            if active.scan_id == scan_id {
-                // Notify the UI that the scan is complete. It should be in a terminal state
+        if let Some(active) = &manager.current_task {
+            if active.queue_id == queue_id {
+                // Notify the UI that the task is complete. It should be in a terminal state
                 // This is the only place from which we send terminal messages
                 // Terminal messages are a "best effort". We assume that one of two things is
                 // true when the web UI is trying to show progress:
                 // A) the web ui is connected and will receive this terminal message when it is sent
-                // B) the web ui is connecting or is not connected, in which case they will receeive
+                // B) the web ui is connecting or is not connected, in which case they will receive
                 // a "NoActiveScan" message when they do connect
-                // If the web UI is in a state in which it thinks an active scan is occuring, these
+                // If the web UI is in a state in which it thinks an active task is occurring, these
                 // messages are enough to get it into a corrected state
                 manager.broadcast_current_state_locked(true);
-                manager.current_scan = None;
-                log::info!("Scan {} completed or exited, TaskManager now idle", scan_id);
+                manager.current_task = None;
+                log::info!(
+                    "Task (queue_id {}) completed or exited, TaskManager now idle",
+                    queue_id
+                );
             }
         }
 
         Ok(())
     }
 
-    /// Request interrupt of the current scan
-    pub fn request_stop(scan_id: i64) -> Result<(), String> {
-        let manager: std::sync::MutexGuard<'_, TaskManager> = Self::instance().lock().unwrap();
+    /// Request interrupt of the current task
+    /// The caller must provide the queue_id of the task they intend to stop.
+    /// This guards against race conditions where the task the caller saw has
+    /// already completed and a different task is now running.
+    pub fn request_stop(queue_id: i64) -> Result<(), String> {
+        let manager = Self::instance().lock().unwrap();
 
-        match &manager.current_scan {
-            Some(active) if active.scan_id == scan_id => {
+        match &manager.current_task {
+            Some(active) => {
+                if active.queue_id != queue_id {
+                    return Err(format!(
+                        "Task {} is not running (current task is {})",
+                        queue_id, active.queue_id
+                    ));
+                }
+
                 if manager.is_shutting_down {
                     return Err("Shutting down".to_string());
                 }
@@ -471,24 +463,20 @@ impl TaskManager {
                         active.interrupt_token.store(true, Ordering::Release);
                         Ok(())
                     }
-                    TaskStatus::Stopping => Err("Scan is already stopping".to_string()),
-                    TaskStatus::Stopped => Err("Scan has already been stopped".to_string()),
-                    TaskStatus::Pausing => Err("Scan is currently pausing".to_string()),
-                    TaskStatus::Completed => Err("Scan has already completed".to_string()),
-                    TaskStatus::Error => Err("Scan has already errored".to_string()),
+                    TaskStatus::Stopping => Err("Task is already stopping".to_string()),
+                    TaskStatus::Stopped => Err("Task has already been stopped".to_string()),
+                    TaskStatus::Pausing => Err("Task is currently pausing".to_string()),
+                    TaskStatus::Completed => Err("Task has already completed".to_string()),
+                    TaskStatus::Error => Err("Task has already errored".to_string()),
                 }
             }
-            Some(active) => Err(format!(
-                "Scan {} is not the current scan (current: {})",
-                scan_id, active.scan_id
-            )),
-            None => Err("No scan is currently running".to_string()),
+            None => Err("No task is currently running".to_string()),
         }
     }
 
     /// Set pause state with duration
     /// duration_seconds: -1 for indefinite, positive value for timed pause
-    /// If a scan is currently running, it will be interrupted
+    /// If a task is currently running, it will be interrupted
     pub fn set_pause(conn: &Connection, duration_seconds: i64) -> Result<(), FsPulseError> {
         let mut manager = Self::instance().lock().unwrap();
 
@@ -516,15 +504,15 @@ impl TaskManager {
             Database::set_meta_value_locked(conn, "pause_until", &pause_until.to_string())
         })?;
 
-        // always update the pause_intil time
+        // always update the pause_until time
         manager.pause_until = Some(pause_until);
 
         // If already paused, there's no need to do any additional work
         if !manager.is_paused {
             manager.is_paused = true;
 
-            // Interrupt current scan if running
-            if let Some(active) = &manager.current_scan {
+            // Interrupt current task if running
+            if let Some(active) = &manager.current_task {
                 let current_status = active.task_progress.get_status();
                 if matches!(current_status, TaskStatus::Running) {
                     active.task_progress.set_status(TaskStatus::Pausing);
@@ -556,7 +544,7 @@ impl TaskManager {
             return Ok(());
         }
 
-        // Cannot pause during shutdown or database compaction
+        // Cannot clear pause during shutdown or database compaction
         if manager.is_shutting_down {
             return Err(FsPulseError::Error(
                 "Cannot clear pause during shutdown".to_string(),
@@ -568,13 +556,13 @@ impl TaskManager {
             ));
         }
 
-        // if a pause was requested, and there is an active scan, that scan is going
+        // if a pause was requested, and there is an active task, that task is going
         // to be in the process of unwinding. We need to let that complete before
         // allowing the user to unpause
-        if manager.current_scan.is_some() {
-            info!("Clear pause requested while pausing an in-progress scan");
+        if manager.current_task.is_some() {
+            info!("Clear pause requested while pausing an in-progress task");
             return Err(FsPulseError::Error(
-                "Can't unpause when pausing an active scan".into(),
+                "Can't unpause when pausing an active task".into(),
             ));
         }
 
@@ -589,7 +577,7 @@ impl TaskManager {
 
         manager.broadcast_current_state_locked(false);
 
-        manager.try_start_next_scan_locked(conn)?;
+        manager.try_start_next_task_locked(conn)?;
 
         info!("Pause cleared");
 
@@ -623,8 +611,8 @@ impl TaskManager {
         Ok(false) // Still paused
     }
 
-    /// Subscribe to scan state updates
-    /// Returns a receiver that will receive broadcast messages for all scan events
+    /// Subscribe to task state updates
+    /// Returns a receiver that will receive broadcast messages for all task events
     pub fn subscribe() -> broadcast::Receiver<BroadcastMessage> {
         let manager = Self::instance().lock().unwrap();
         manager.broadcaster.subscribe()
@@ -649,7 +637,7 @@ impl TaskManager {
             return;
         }
 
-        if let Some(active) = &self.current_scan {
+        if let Some(active) = &self.current_task {
             let task_state = active.task_progress.get_snapshot();
             let task_status = task_state.status;
 
@@ -680,16 +668,36 @@ impl TaskManager {
     }
 
     /// Get current scan info
+    /// Queries the task_queue table by queue_id to get the scan_id
     pub fn get_current_scan_info() -> Option<CurrentScanInfo> {
-        let manager = Self::instance().lock().unwrap();
-        manager.current_scan.as_ref().map(|active| CurrentScanInfo {
-            scan_id: active.scan_id,
-            root_id: active.root_id,
-            root_path: active.root_path.clone(),
+        // Extract what we need from the mutex, then release it before DB query
+        let (queue_id, root_id, root_path) = {
+            let manager = Self::instance().lock().unwrap();
+            let active = manager.current_task.as_ref()?;
+            let root_id = active.root_id?;
+            let root_path = active.root_path.clone()?;
+            (active.queue_id, root_id, root_path)
+        };
+
+        // Query DB for scan_id outside of mutex
+        let conn = Database::get_connection().ok()?;
+        let scan_id: i64 = conn
+            .query_row(
+                "SELECT scan_id FROM task_queue WHERE queue_id = ? AND scan_id IS NOT NULL",
+                [queue_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .ok()??;
+
+        Some(CurrentScanInfo {
+            scan_id,
+            root_id,
+            root_path,
         })
     }
 
-    /// Get upcoming scans, synchronized with scan manager state
+    /// Get upcoming scans, synchronized with task manager state
     /// If paused, includes the in-progress scan as first entry
     pub fn get_upcoming_scans(
         limit: i64,
@@ -698,18 +706,18 @@ impl TaskManager {
         let scans_are_paused = manager.is_paused;
 
         // Note: QueueEntry::get_upcoming_scans gets its own connection internally
-        // Call schedules method while holding mutex to synchronize with try_start_next_scan
+        // Call schedules method while holding mutex to synchronize with try_start_next_task
         QueueEntry::get_upcoming_scans(limit, scans_are_paused)
     }
 
     /// Compact the database
-    /// Returns error if a scan is currently running
+    /// Returns error if a task is currently running
     /// Blocks until compaction is complete
     pub fn compact_db() -> Result<(), String> {
         // Acquire mutex and check state
         let mut manager = Self::instance().lock().unwrap();
-        if manager.current_scan.is_some() {
-            return Err("Cannot compact: scan in progress".to_string());
+        if manager.current_task.is_some() {
+            return Err("Cannot compact: task in progress".to_string());
         }
         manager.db_is_compacting = true;
         drop(manager); // Release mutex before long operation
@@ -724,7 +732,7 @@ impl TaskManager {
     }
 
     /// Check if the process is shutting down, returning error if so
-    /// Must be called with the scan manager mutex
+    /// Must be called with the task manager mutex
     fn check_shutting_down_locked(&self) -> Result<(), FsPulseError> {
         if self.is_shutting_down {
             Err(FsPulseError::ShuttingDown)

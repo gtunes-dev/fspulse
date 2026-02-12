@@ -28,8 +28,8 @@ pub enum FsPulseError {
     #[error("Configuration error: {0}")]
     ConfigError(String),
 
-    #[error("Scan interrupted")]
-    ScanInterrupted,
+    #[error("Task interrupted")]
+    TaskInterrupted,
 
     #[error("Shutting down")]
     ShuttingDown,

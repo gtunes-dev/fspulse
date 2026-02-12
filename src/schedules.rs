@@ -1,8 +1,7 @@
 use crate::database::Database;
 use crate::error::FsPulseError;
-use crate::roots::Root;
-use crate::scans::{AnalysisSpec, HashMode, Scan, ValidateMode};
-use crate::task::{ScanSettings, TaskType};
+use crate::scans::{HashMode, Scan, ValidateMode};
+use crate::task::{ScanSettings, ScanTask, Task, TaskType};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -901,6 +900,16 @@ impl Schedule {
     }
 }
 
+/// A row from the task_queue table, used to dispatch to task-type-specific factories
+pub struct QueueRow {
+    pub queue_id: i64,
+    pub task_type: TaskType,
+    pub root_id: i64,
+    pub schedule_id: Option<i64>,
+    pub scan_id: Option<i64>,
+    pub task_settings: String,
+}
+
 /// Task queue operations
 ///
 /// This struct provides associated functions for working with the task_queue table.
@@ -970,164 +979,135 @@ impl QueueEntry {
         Ok(())
     }
 
-    /// Get the next scan to run, creating it atomically if needed
+    /// Find the next queue entry to process (generic across all task types)
     ///
-    /// This function handles the complete scan initiation workflow:
-    /// 1. Checks for incomplete scans (resume case via is_active) - returns existing scan
-    /// 2. Finds highest priority work (manual first, then scheduled due)
-    /// 3. Creates scan record for the work
-    /// 4. Updates queue entry with scan_id and is_active
-    /// 5. For scheduled scans: calculates next_run_time (fail-fast before crashes)
+    /// Checks for active tasks first (resume case), then finds highest priority
+    /// ready work (manual first, then scheduled due).
+    fn find_next_queue_entry(conn: &Connection, now: i64) -> Result<Option<QueueRow>, FsPulseError> {
+        // Step 1: Check for active task (resume case)
+        let active = conn
+            .query_row(
+                "SELECT queue_id, task_type, root_id, schedule_id, scan_id, task_settings
+                 FROM task_queue WHERE is_active = 1 LIMIT 1",
+                [],
+                |row| {
+                    Ok(QueueRow {
+                        queue_id: row.get(0)?,
+                        task_type: TaskType::from_i64(row.get(1)?),
+                        root_id: row.get(2)?,
+                        schedule_id: row.get(3)?,
+                        scan_id: row.get(4)?,
+                        task_settings: row.get(5)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?;
+
+        if let Some(row) = active {
+            return Ok(Some(row));
+        }
+
+        // Step 2: Find highest priority ready work (manual first, then scheduled due)
+        let work = conn
+            .query_row(
+                "SELECT queue_id, task_type, root_id, schedule_id, scan_id, task_settings
+                 FROM task_queue
+                 WHERE is_active = 0 AND (source = ? OR next_run_time <= ?)
+                 ORDER BY source ASC, next_run_time ASC, queue_id ASC
+                 LIMIT 1",
+                rusqlite::params![SourceType::Manual.as_i32(), now],
+                |row| {
+                    Ok(QueueRow {
+                        queue_id: row.get(0)?,
+                        task_type: TaskType::from_i64(row.get(1)?),
+                        root_id: row.get(2)?,
+                        schedule_id: row.get(3)?,
+                        scan_id: row.get(4)?,
+                        task_settings: row.get(5)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?;
+
+        Ok(work)
+    }
+
+    /// Get the next task to execute from the queue
     ///
-    /// Returns the Scan object ready to be executed, or None if no work available.
-    pub fn get_next_scan(conn: &Connection) -> Result<Option<Scan>, FsPulseError> {
+    /// Generically finds the next queue entry, then dispatches to the appropriate
+    /// task-type-specific factory to create the concrete task. All type-specific
+    /// logic (creating scans, fetching roots, etc.) lives in the factory methods.
+    ///
+    /// Returns a boxed Task trait object ready for execution, or None if no work available.
+    pub fn get_next_task(conn: &Connection) -> Result<Option<Box<dyn Task>>, FsPulseError> {
         let now = chrono::Utc::now().timestamp();
 
         Database::immediate_transaction(conn, |c| {
-            // Step 1: Check if ANY task is currently running (resume case)
-            // For scan tasks, is_active=true means scan_id IS NOT NULL
-            let running_task = c
-                .query_row(
-                    "SELECT scan_id FROM task_queue WHERE is_active = 1 AND task_type = ? LIMIT 1",
-                    [TaskType::Scan.as_i64()],
-                    |row| row.get::<_, i64>(0),
-                )
-                .optional()
-                .map_err(FsPulseError::DatabaseError)?;
-
-            if let Some(scan_id) = running_task {
-                // Resume case: return existing incomplete scan
-                // prior to loading - mark it restarted
-                c.execute(
-                    "UPDATE scans SET was_restarted = 1 WHERE scan_id = ?",
-                    rusqlite::params![scan_id],
-                )
-                .map_err(FsPulseError::DatabaseError)?;
-
-                let scan = Scan::get_by_id_or_latest(c, Some(scan_id), None)?
-                    .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?;
-
-                return Ok(Some(scan));
-            }
-
-            // Step 2: Find highest priority work (manual first, then scheduled due)
-            // Single query with priority: manual scans (source=0) always first,
-            // then scheduled scans (source=1) only if due
-            // Only look at Scan tasks that are not active
-            let work = c
-                .query_row(
-                    "SELECT queue_id, root_id, schedule_id, task_settings
-                 FROM task_queue
-                 WHERE task_type = ? AND is_active = 0 AND (source = ? OR next_run_time <= ?)
-                 ORDER BY source ASC, next_run_time ASC, queue_id ASC
-                 LIMIT 1",
-                    rusqlite::params![TaskType::Scan.as_i64(), SourceType::Manual.as_i32(), now],
-                    |row| {
-                        Ok((
-                            row.get::<_, i64>(0)?,         // queue_id
-                            row.get::<_, i64>(1)?,         // root_id
-                            row.get::<_, Option<i64>>(2)?, // schedule_id
-                            row.get::<_, String>(3)?,      // task_settings
-                        ))
-                    },
-                )
-                .optional()
-                .map_err(FsPulseError::DatabaseError)?;
-
-            let work = match work {
-                Some(w) => w,
-                None => return Ok(None), // No work available
+            let row = match Self::find_next_queue_entry(c, now)? {
+                Some(r) => r,
+                None => return Ok(None),
             };
 
-            let (queue_id, root_id, schedule_id, task_settings_json) = work;
+            let task: Box<dyn Task> = match row.task_type {
+                TaskType::Scan => ScanTask::from_queue(c, &row, now)?,
+            };
 
-            // Parse task_settings JSON using typed struct
-            let settings = ScanSettings::from_json(&task_settings_json)?;
-
-            // Step 3: Get root for scan creation
-            let root = Root::get_by_id(c, root_id)?
-                .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", root_id)))?;
-
-            // Step 4: Create analysis spec and scan
-            let analysis_spec = AnalysisSpec::from_modes(settings.hash_mode, settings.validate_mode);
-            let scan = Scan::create(c, &root, schedule_id, &analysis_spec)?;
-
-            // Step 5: Update queue entry with scan_id and mark as active
-            c.execute(
-                "UPDATE task_queue SET scan_id = ?, is_active = 1 WHERE queue_id = ?",
-                rusqlite::params![scan.scan_id(), queue_id],
-            )
-            .map_err(FsPulseError::DatabaseError)?;
-
-            // Step 6: For scheduled scans, calculate and set next_run_time NOW
-            if let Some(schedule_id) = schedule_id {
-                let schedule = Schedule::get_by_id(c, schedule_id)?.ok_or_else(|| {
-                    FsPulseError::Error(format!("Schedule {} not found", schedule_id))
-                })?;
-
-                let next_time = schedule.calculate_next_scan_time(now).map_err(|e| {
-                    FsPulseError::Error(format!("Failed to calculate next scan time: {}", e))
-                })?;
-
-                c.execute(
-                    "UPDATE task_queue SET next_run_time = ? WHERE queue_id = ?",
-                    rusqlite::params![next_time, queue_id],
-                )
-                .map_err(FsPulseError::DatabaseError)?;
-            }
-
-            Ok(Some(scan))
+            Ok(Some(task))
         })
     }
 
     /// Complete work and clean up queue entry
     /// Verifies scan is in final state before updating queue
-    pub fn complete_work(conn: &Connection, scan_id: i64) -> Result<(), FsPulseError> {
+    pub fn complete_work(conn: &Connection, queue_id: i64) -> Result<(), FsPulseError> {
         use crate::scans::ScanState;
 
         Database::immediate_transaction(conn, |c| {
-            // 1. Get scan and verify state
-            let scan = Scan::get_by_id_or_latest(c, Some(scan_id), None)?
-                .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?;
-
-            let is_final = matches!(
-                scan.state(),
-                ScanState::Completed | ScanState::Stopped | ScanState::Error
-            );
-
-            if !is_final {
-                log::error!(
-                    "Attempting to complete work for scan {} in non-final state {:?}",
-                    scan_id,
-                    scan.state()
-                );
-                return Err(FsPulseError::Error(format!(
-                    "Scan {} is not in final state (state: {:?})",
-                    scan_id,
-                    scan.state()
-                )));
-            }
-
-            // 2. Find queue entry
+            // 1. Find queue entry by queue_id
             let queue_entry = c
                 .query_row(
-                    "SELECT queue_id, source FROM task_queue WHERE scan_id = ?",
-                    [scan_id],
-                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i32>(1)?)),
+                    "SELECT scan_id, source FROM task_queue WHERE queue_id = ?",
+                    [queue_id],
+                    |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, i32>(1)?)),
                 )
                 .optional()
                 .map_err(FsPulseError::DatabaseError)?;
 
-            let (queue_id, source) = match queue_entry {
+            let (scan_id_opt, source) = match queue_entry {
                 Some(e) => e,
                 None => {
                     log::warn!(
-                        "No queue entry found for scan {} during completion",
-                        scan_id
+                        "No queue entry found for queue_id {} during completion",
+                        queue_id
                     );
                     return Ok(()); // Not fatal - maybe already cleaned up
                 }
             };
+
+            // 2. If there's a scan_id, verify the scan is in a final state
+            if let Some(scan_id) = scan_id_opt {
+                let scan = Scan::get_by_id_or_latest(c, Some(scan_id), None)?
+                    .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?;
+
+                let is_final = matches!(
+                    scan.state(),
+                    ScanState::Completed | ScanState::Stopped | ScanState::Error
+                );
+
+                if !is_final {
+                    log::error!(
+                        "Attempting to complete work for scan {} in non-final state {:?}",
+                        scan_id,
+                        scan.state()
+                    );
+                    return Err(FsPulseError::Error(format!(
+                        "Scan {} is not in final state (state: {:?})",
+                        scan_id,
+                        scan.state()
+                    )));
+                }
+            }
 
             // 3. Clean up based on source
             if source == SourceType::Manual.as_i32() {

@@ -54,7 +54,7 @@ impl TaskThreadState {
 /// This is what gets broadcast to web clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskProgressState {
-    pub task_id: i64,
+    pub queue_id: i64,
     pub task_type: TaskType,
     pub active_root_id: Option<i64>,
     pub action: String,
@@ -83,7 +83,7 @@ pub enum BroadcastMessage {
 /// Internal state for TaskProgress
 struct TaskProgressInternalState {
     // Identity (immutable after construction)
-    task_id: i64,
+    queue_id: i64,
     task_type: TaskType,
     active_root_id: Option<i64>,
     action: String,
@@ -141,7 +141,7 @@ pub struct TaskProgress {
 impl TaskProgress {
     /// Create a new task progress reporter
     pub fn new(
-        task_id: i64,
+        queue_id: i64,
         task_type: TaskType,
         active_root_id: Option<i64>,
         action: &str,
@@ -149,7 +149,7 @@ impl TaskProgress {
     ) -> Arc<Self> {
         Arc::new(Self {
             state: Mutex::new(TaskProgressInternalState {
-                task_id,
+                queue_id,
                 task_type,
                 active_root_id,
                 action: action.to_string(),
@@ -296,7 +296,7 @@ impl TaskProgress {
         let state = self.state.lock().unwrap();
 
         TaskProgressState {
-            task_id: state.task_id,
+            queue_id: state.queue_id,
             task_type: state.task_type,
             active_root_id: state.active_root_id,
             action: state.action.clone(),

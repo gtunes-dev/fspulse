@@ -83,8 +83,8 @@ pub async fn schedule_scan(
     Ok(StatusCode::OK)
 }
 
-/// WebSocket endpoint for streaming scan progress
-/// GET /ws/scans/progress
+/// WebSocket endpoint for streaming task progress
+/// GET /ws/tasks/progress
 pub async fn scan_progress_ws(
     ws: WebSocketUpgrade,
     State(_state): State<AppState>,
@@ -162,20 +162,20 @@ async fn handle_scan_progress(mut socket: WebSocket) {
     // WebSocket will close automatically when dropped
 }
 
-/// POST /api/scans/{scan_id}/stop
-/// Request stop of a running scan
-pub async fn stop_scan(
+/// POST /api/tasks/{queue_id}/stop
+/// Request stop of a running task by its queue_id
+pub async fn stop_task(
     State(_state): State<AppState>,
-    Path(scan_id): Path<i64>,
+    Path(queue_id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
     use crate::task_manager::TaskManager;
 
-    TaskManager::request_stop(scan_id).map_err(|e| {
-        error!("Failed to stop scan {}: {}", scan_id, e);
+    TaskManager::request_stop(queue_id).map_err(|e| {
+        error!("Failed to stop task (queue_id {}): {}", queue_id, e);
         StatusCode::NOT_FOUND
     })?;
 
-    log::info!("Stop requested for scan {}", scan_id);
+    log::info!("Stop requested for task (queue_id {})", queue_id);
     Ok(StatusCode::ACCEPTED) // 202 Accepted - stop requested, will complete async
 }
 

@@ -1,17 +1,50 @@
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
+use crate::error::FsPulseError;
+
+use super::progress::TaskProgress;
+use super::task_type::TaskType;
+
 /// Trait for long-running, pausable, stoppable tasks
 ///
-/// Tasks are operations that:
-/// - Can be scheduled and queued
-/// - Report progress via TaskProgress
-/// - Can be paused (checkpoint and resume later)
-/// - Can be stopped (rollback and cancel)
+/// Methods on this trait were discovered bottom-up from what TaskManager
+/// needs to interact with tasks generically:
 ///
-/// Examples: scanning a root, exporting data, database maintenance
-#[allow(dead_code)]
-pub trait Task {
-    // TODO: Define trait methods as we extract from Scanner
-    // Candidates:
-    // - fn run(&mut self, progress: &TaskProgress) -> Result<(), Error>
-    // - fn can_pause(&self) -> bool
-    // - fn can_stop(&self) -> bool
+/// - `run`: Execute the task (TaskManager calls this in spawn_blocking)
+/// - `task_type`, `task_id`, `queue_id`: Identity for progress tracking and queue cleanup
+/// - `active_root_id`, `action`, `display_target`: Metadata for TaskProgress creation
+/// - `on_stopped`, `on_error`: Cleanup handlers called by TaskManager on interrupt/failure
+///
+/// The trait is object-safe so TaskManager can work with Box<dyn Task>
+pub trait Task: Send {
+    /// Execute the task
+    fn run(
+        &mut self,
+        progress: Arc<TaskProgress>,
+        interrupt_token: Arc<AtomicBool>,
+    ) -> Result<(), FsPulseError>;
+
+    /// The task type
+    fn task_type(&self) -> TaskType;
+
+    /// The queue_id from the task_queue table
+    fn queue_id(&self) -> i64;
+
+    /// The root_id associated with this task, if any
+    fn active_root_id(&self) -> Option<i64>;
+
+    /// Human-readable action name for progress display (e.g., "Scanning")
+    fn action(&self) -> &str;
+
+    /// Human-readable target for progress display (e.g., root path for scans)
+    fn display_target(&self) -> String;
+
+    /// Handle task stopped by user (rollback changes)
+    /// Called by TaskManager when interrupt is detected and system is not paused/shutting down
+    fn on_stopped(&mut self) -> Result<(), FsPulseError>;
+
+    /// Handle task error (stop with error message)
+    /// Called by TaskManager when task.run() returns an error that isn't an interrupt
+    fn on_error(&mut self, error_msg: &str) -> Result<(), FsPulseError>;
 }

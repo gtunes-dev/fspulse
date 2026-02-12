@@ -40,7 +40,7 @@ impl Validator for ClaxonValidator {
 
                     // Check for interrupt every 256 blocks
                     if block_count % 256 == 0 && interrupt_token.load(Ordering::Acquire) {
-                        return Err(FsPulseError::ScanInterrupted);
+                        return Err(FsPulseError::TaskInterrupted);
                     }
                 }
                 Ok(None) => break, // EOF.

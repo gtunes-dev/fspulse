@@ -150,7 +150,7 @@ impl Scanner {
         // NOTE: We check for interrupt at appropriate points in the scanner code with:
         //
         //   if interrupt_token.load(Ordering::Acquire) {
-        //       return Err(FsPulseError::ScanInterrupted);
+        //       return Err(FsPulseError::TaskInterrupted);
         //   }
         //
         // Interrupt may be signaled because the user explicitly stopped this scan,
@@ -1423,7 +1423,7 @@ impl Scanner {
     /// Check if scan has been interrupted, returning error if so
     fn check_interrupted(interrupt_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
         if interrupt_token.load(Ordering::Acquire) {
-            Err(FsPulseError::ScanInterrupted)
+            Err(FsPulseError::TaskInterrupted)
         } else {
             Ok(())
         }

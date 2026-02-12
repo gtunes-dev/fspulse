@@ -107,7 +107,7 @@ export interface ThreadState {
 }
 
 export interface TaskProgressState {
-  task_id: number
+  queue_id: number
   task_type: TaskType
   active_root_id: number | null
   action: string
@@ -131,7 +131,7 @@ export interface PauseRequest {
 }
 
 export interface TaskData {
-  task_id: number
+  queue_id: number
   task_type: TaskType
   active_root_id: number | null
   action: string

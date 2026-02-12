@@ -25,7 +25,7 @@ interface UpcomingScan {
 }
 
 export function UpcomingScansTable() {
-  const { currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
+  const { currentQueueId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
   const [scans, setScans] = useState<UpcomingScan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +59,7 @@ export function UpcomingScansTable() {
     }
 
     loadData()
-  }, [currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt])
+  }, [currentQueueId, lastTaskCompletedAt, lastTaskScheduledAt])
 
   const formatNextRun = (timestamp: number, isQueued: boolean, queuePosition: number): string => {
     // For queued scans, show queue position instead of time

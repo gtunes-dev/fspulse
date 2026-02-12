@@ -27,7 +27,7 @@ impl Validator for ImageValidator {
         // Check for interrupt before starting. Because of how this validator works,
         // this is the only test we can do
         if interrupt_token.load(Ordering::Acquire) {
-            return Err(FsPulseError::ScanInterrupted);
+            return Err(FsPulseError::TaskInterrupted);
         }
 
         let open_result = ImageReader::open(path);

@@ -35,7 +35,7 @@ impl Validator for LopdfValidator {
         for object in doc.objects.values() {
             object_count += 1;
             if object_count % 256 == 0 && interrupt_token.load(Ordering::Acquire) {
-                return Err(FsPulseError::ScanInterrupted);
+                return Err(FsPulseError::TaskInterrupted);
             }
 
             if let Err(e) = Self::validate_object(object) {

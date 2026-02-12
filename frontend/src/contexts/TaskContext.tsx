@@ -8,14 +8,14 @@ import type {
 
 interface TaskContextType {
   activeTask: TaskData | null
-  currentTaskId: number | null
+  currentQueueId: number | null
   activeRootId: number | null
   isRunning: boolean
   isPaused: boolean
   pauseUntil: number | null
   lastTaskCompletedAt: number | null
   lastTaskScheduledAt: number | null
-  stopTask: (taskId: number) => Promise<void>
+  stopTask: (queueId: number) => Promise<void>
   pauseTasks: (durationSeconds: number) => Promise<void>
   unpauseTasks: () => Promise<void>
   notifyTaskScheduled: () => void
@@ -26,8 +26,8 @@ const TaskContext = createContext<TaskContextType | null>(null)
 const TERMINAL_STATUSES: TaskStatus[] = ['completed', 'stopped', 'error']
 
 // API endpoints
-const WS_PROGRESS_ENDPOINT = '/ws/scans/progress'
-const API_CANCEL_ENDPOINT = (taskId: number) => `/api/scans/${taskId}/cancel`
+const WS_PROGRESS_ENDPOINT = '/ws/tasks/progress'
+const API_STOP_ENDPOINT = (queueId: number) => `/api/tasks/${queueId}/stop`
 
 export function TaskProvider({ children }: { children: React.ReactNode }) {
   const [activeTask, setActiveTask] = useState<TaskData | null>(null)
@@ -37,10 +37,10 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
-  const lastProcessedState = useRef<{ task_id: number | null; status: TaskStatus | null }>({ task_id: null, status: null })
+  const lastProcessedState = useRef<{ queue_id: number | null; status: TaskStatus | null }>({ queue_id: null, status: null })
 
   // Derived state
-  const currentTaskId = activeTask?.task_id ?? null
+  const currentQueueId = activeTask?.queue_id ?? null
   const activeRootId = activeTask?.active_root_id ?? null
   const isRunning = activeTask !== null
   const isPaused = pauseState?.paused ?? false
@@ -57,7 +57,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       setActiveTask(prev => {
         if (prev === null) return null
         setLastTaskCompletedAt(Date.now())
-        lastProcessedState.current = { task_id: null, status: null }
+        lastProcessedState.current = { queue_id: null, status: null }
         return null
       })
       setPauseState(null)
@@ -70,14 +70,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     // Deduplicate terminal states
     if (isTerminal) {
       const last = lastProcessedState.current
-      if (last.task_id === task.task_id && last.status === task.status) {
+      if (last.queue_id === task.queue_id && last.status === task.status) {
         return
       }
-      lastProcessedState.current = { task_id: task.task_id, status: task.status }
+      lastProcessedState.current = { queue_id: task.queue_id, status: task.status }
     }
 
     setActiveTask(prev => {
-      if (prev !== null && prev.task_id !== task.task_id) {
+      if (prev !== null && prev.queue_id !== task.queue_id) {
         setLastTaskCompletedAt(Date.now())
       }
 
@@ -86,7 +86,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       }
 
       return {
-        task_id: task.task_id,
+        queue_id: task.queue_id,
         task_type: task.task_type,
         active_root_id: task.active_root_id,
         action: task.action,
@@ -136,8 +136,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     }
   }, [handleBroadcastMessage])
 
-  const stopTask = useCallback(async (taskId: number) => {
-    const response = await fetch(API_CANCEL_ENDPOINT(taskId), { method: 'POST' })
+  const stopTask = useCallback(async (queueId: number) => {
+    const response = await fetch(API_STOP_ENDPOINT(queueId), { method: 'POST' })
     if (!response.ok) throw new Error('Failed to stop task')
   }, [])
 
@@ -172,7 +172,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
   const value: TaskContextType = {
     activeTask,
-    currentTaskId,
+    currentQueueId,
     activeRootId,
     isRunning,
     isPaused,

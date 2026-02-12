@@ -167,7 +167,7 @@ impl WebServer {
             // Scan endpoints
             .route("/api/scans/schedule", post(api::scans::schedule_scan))
             .route("/api/scans/current", get(api::scans::get_current_scan))
-            .route("/api/scans/{scan_id}/cancel", post(api::scans::stop_scan))
+            .route("/api/tasks/{queue_id}/stop", post(api::scans::stop_task))
             .route(
                 "/api/scans/scan_history/count",
                 get(api::scans::get_scan_history_count),
@@ -233,7 +233,7 @@ impl WebServer {
             .route("/api/settings", put(api::settings::update_settings))
             .route("/api/settings", delete(api::settings::delete_settings))
             // WebSocket routes
-            .route("/ws/scans/progress", get(api::scans::scan_progress_ws))
+            .route("/ws/tasks/progress", get(api::scans::scan_progress_ws))
             // Add state for handlers
             .with_state(app_state);
 
