@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '14');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '15');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -169,47 +169,46 @@ CREATE INDEX IF NOT EXISTS idx_scan_schedules_enabled ON scan_schedules(enabled)
 CREATE INDEX IF NOT EXISTS idx_scan_schedules_root ON scan_schedules(root_id);
 CREATE INDEX IF NOT EXISTS idx_scan_schedules_deleted ON scan_schedules(deleted_at);
 
--- Task queue table stores active work items (scans and other tasks)
-CREATE TABLE IF NOT EXISTS task_queue (
-    queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_type INTEGER NOT NULL DEFAULT 0,          -- TaskType enum: 0=Scan, 1=DatabaseCompact, etc.
+-- Tasks table stores work items and their execution history
+CREATE TABLE IF NOT EXISTS tasks (
+    task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_type INTEGER NOT NULL DEFAULT 0,          -- TaskType enum: 0=Scan
 
-    -- Active/running indicator (applies to ALL task types)
-    is_active BOOLEAN NOT NULL DEFAULT 0,          -- True when task is currently executing
+    -- Lifecycle status
+    status INTEGER NOT NULL DEFAULT 0,             -- TaskStatus enum: 0=Pending, 1=Running, 2=Completed, 3=Stopped, 4=Error
 
-    -- Root reference (set at queue time for tasks that operate on a root, NULL otherwise)
-    root_id INTEGER,                               -- Some task types operate on a root, some don't
+    -- Root reference
+    root_id INTEGER,
 
-    -- Schedule reference (for scheduled tasks - currently only scans are schedulable)
-    schedule_id INTEGER,                           -- FK to scan_schedules
+    -- Schedule reference (ON DELETE SET NULL so completed tasks survive schedule deletion)
+    schedule_id INTEGER,
 
-    -- Scan-specific: FK to scans table (set when scan task starts, NULL for non-scan tasks)
-    scan_id INTEGER,                               -- Created when scan begins, used for resume
+    -- Scan-specific: FK to scans table
+    scan_id INTEGER,
 
     -- Scheduling
-    next_run_time INTEGER,                         -- Unix timestamp (UTC), NULL when disabled
+    run_at INTEGER NOT NULL DEFAULT 0,             -- When eligible to run (0 = immediately)
     source INTEGER NOT NULL CHECK(source IN (0, 1)), -- 0=manual, 1=scheduled
 
-    -- Task settings (JSON for task-specific config)
-    -- For scans: {"hash_mode":"New","validate_mode":"None"}
-    -- For other tasks: task-specific settings
+    -- Task configuration (immutable JSON — permanent artifact)
     task_settings TEXT NOT NULL,
 
-    -- Resume tracking (for scan tasks)
-    analysis_hwm INTEGER DEFAULT NULL,             -- High water mark for analysis restart resilience
+    -- Transient execution state (generic JSON, NULL when not running)
+    task_state TEXT,
 
-    -- Metadata
+    -- Timestamps
     created_at INTEGER NOT NULL,
+    started_at INTEGER,                            -- When execution began
+    completed_at INTEGER,                          -- When terminal status was reached
 
-    FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id),
+    FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id) ON DELETE SET NULL,
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (scan_id) REFERENCES scans(scan_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_task_queue_type_next ON task_queue(task_type, next_run_time);
-CREATE INDEX IF NOT EXISTS idx_task_queue_source_next ON task_queue(source, next_run_time);
-CREATE INDEX IF NOT EXISTS idx_task_queue_root ON task_queue(root_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_task_queue_schedule ON task_queue(schedule_id) WHERE schedule_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_status_source_runat ON tasks(status, source, run_at, task_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_schedule ON tasks(schedule_id) WHERE schedule_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_root ON tasks(root_id);
 
 COMMIT;
 "#;

@@ -88,7 +88,7 @@ export interface ValidateFilterResponse {
 
 export type TaskType = 'scan'
 
-export type TaskStatus = 'running' | 'pausing' | 'stopping' | 'stopped' | 'completed' | 'error'
+export type TaskStatus = 'pending' | 'running' | 'pausing' | 'stopping' | 'stopped' | 'completed' | 'error'
 
 export type BroadcastMessage =
   | { type: 'active_task'; task: TaskProgressState }
@@ -107,7 +107,7 @@ export interface ThreadState {
 }
 
 export interface TaskProgressState {
-  queue_id: number
+  task_id: number
   task_type: TaskType
   active_root_id: number | null
   action: string
@@ -131,7 +131,7 @@ export interface PauseRequest {
 }
 
 export interface TaskData {
-  queue_id: number
+  task_id: number
   task_type: TaskType
   active_root_id: number | null
   action: string

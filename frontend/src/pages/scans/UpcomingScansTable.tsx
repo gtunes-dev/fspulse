@@ -13,19 +13,19 @@ import { Clock, Calendar, CirclePause } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 
 interface UpcomingScan {
-  queue_id: number
+  task_id: number
   root_id: number
   root_path: string
   schedule_id: number | null
   schedule_name: string | null
-  next_scan_time: number  // Unix timestamp
+  run_at: number  // Unix timestamp (0 = immediately)
   source: string  // "Manual" or "Scheduled"
-  is_queued: boolean  // true if waiting to start (next_scan_time <= now)
+  is_ready: boolean  // true if run_at <= now (eligible to start)
   scan_id: number | null  // Non-null if this is an in-progress scan that is paused
 }
 
 export function UpcomingScansTable() {
-  const { currentQueueId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
+  const { currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
   const [scans, setScans] = useState<UpcomingScan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,20 +59,20 @@ export function UpcomingScansTable() {
     }
 
     loadData()
-  }, [currentQueueId, lastTaskCompletedAt, lastTaskScheduledAt])
+  }, [currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt])
 
-  const formatNextRun = (timestamp: number, isQueued: boolean, queuePosition: number): string => {
-    // For queued scans, show queue position instead of time
-    if (isQueued) {
-      if (queuePosition === 0) return 'Next'
-      const position = queuePosition + 1
+  const formatNextRun = (runAt: number, isReady: boolean, readyPosition: number): string => {
+    // For ready scans, show position instead of time
+    if (isReady) {
+      if (readyPosition === 0) return 'Next'
+      const position = readyPosition + 1
       const suffix = position === 2 ? 'nd' : position === 3 ? 'rd' : 'th'
-      return `${position}${suffix} in queue`
+      return `${position}${suffix} in line`
     }
 
     // For scheduled scans, show relative time
     const now = Date.now() / 1000  // Convert to seconds
-    const diff = timestamp - now
+    const diff = runAt - now
 
     const minutes = Math.floor(diff / 60)
     const hours = Math.floor(diff / 3600)
@@ -158,12 +158,12 @@ export function UpcomingScansTable() {
               </TableHeader>
               <TableBody>
                 {scans.map((scan) => {
-                  // Calculate queue position for queued scans
-                  const queuedScans = scans.filter(s => s.is_queued)
-                  const queuePosition = queuedScans.findIndex(s => s.queue_id === scan.queue_id)
+                  // Calculate position among ready scans
+                  const readyScans = scans.filter(s => s.is_ready)
+                  const readyPosition = readyScans.findIndex(s => s.task_id === scan.task_id)
 
                   return (
-                    <TableRow key={scan.queue_id}>
+                    <TableRow key={scan.task_id}>
                       <TableCell
                         className="max-w-[200px] truncate"
                         title={scan.root_path}
@@ -188,10 +188,10 @@ export function UpcomingScansTable() {
                               <CirclePause className="h-4 w-4 text-purple-500" />
                               <span className="text-sm">Paused</span>
                             </>
-                          ) : scan.is_queued ? (
+                          ) : scan.is_ready ? (
                             <>
                               <Clock className="h-4 w-4 text-purple-500" />
-                              <span className="text-sm">Queued</span>
+                              <span className="text-sm">Ready</span>
                             </>
                           ) : (
                             <>
@@ -204,9 +204,9 @@ export function UpcomingScansTable() {
                       <TableCell className="text-right font-medium">
                         {scan.scan_id !== null
                           ? 'When unpaused'
-                          : (scan.is_queued && queuePosition === 0 && isPaused)
+                          : (scan.is_ready && readyPosition === 0 && isPaused)
                             ? 'When unpaused'
-                            : formatNextRun(scan.next_scan_time, scan.is_queued, queuePosition)
+                            : formatNextRun(scan.run_at, scan.is_ready, readyPosition)
                         }
                       </TableCell>
                     </TableRow>

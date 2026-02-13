@@ -167,7 +167,7 @@ impl WebServer {
             // Scan endpoints
             .route("/api/scans/schedule", post(api::scans::schedule_scan))
             .route("/api/scans/current", get(api::scans::get_current_scan))
-            .route("/api/tasks/{queue_id}/stop", post(api::scans::stop_task))
+            .route("/api/tasks/{task_id}/stop", post(api::scans::stop_task))
             .route(
                 "/api/scans/scan_history/count",
                 get(api::scans::get_scan_history_count),

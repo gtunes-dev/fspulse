@@ -9,7 +9,7 @@ import { ManualScanDialog } from './ManualScanDialog'
 import { PauseScanDialog } from './PauseScanDialog'
 
 export function ScanCard() {
-  const { activeTask, currentQueueId, isPaused, stopTask } = useTaskContext()
+  const { activeTask, currentTaskId, isPaused, stopTask } = useTaskContext()
   const [detailsExpanded, setDetailsExpanded] = useState(() => {
     return localStorage.getItem('fspulse.scan.details.expanded') === 'true'
   })
@@ -22,10 +22,10 @@ export function ScanCard() {
   }, [detailsExpanded])
 
   const handleStop = async () => {
-    if (!currentQueueId) return
+    if (!currentTaskId) return
     setStopping(true)
     try {
-      await stopTask(currentQueueId)
+      await stopTask(currentTaskId)
     } catch (error) {
       console.error('Failed to stop task:', error)
       alert('Failed to stop task. Please try again.')

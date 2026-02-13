@@ -12,7 +12,7 @@ use super::task_type::TaskType;
 /// needs to interact with tasks generically:
 ///
 /// - `run`: Execute the task (TaskManager calls this in spawn_blocking)
-/// - `task_type`, `task_id`, `queue_id`: Identity for progress tracking and queue cleanup
+/// - `task_type`, `task_id`: Identity for progress tracking and task cleanup
 /// - `active_root_id`, `action`, `display_target`: Metadata for TaskProgress creation
 /// - `on_stopped`, `on_error`: Cleanup handlers called by TaskManager on interrupt/failure
 ///
@@ -28,8 +28,8 @@ pub trait Task: Send {
     /// The task type
     fn task_type(&self) -> TaskType;
 
-    /// The queue_id from the task_queue table
-    fn queue_id(&self) -> i64;
+    /// The task_id from the tasks table
+    fn task_id(&self) -> i64;
 
     /// The root_id associated with this task, if any
     fn active_root_id(&self) -> Option<i64>;

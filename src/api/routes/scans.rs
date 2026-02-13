@@ -162,20 +162,20 @@ async fn handle_scan_progress(mut socket: WebSocket) {
     // WebSocket will close automatically when dropped
 }
 
-/// POST /api/tasks/{queue_id}/stop
-/// Request stop of a running task by its queue_id
+/// POST /api/tasks/{task_id}/stop
+/// Request stop of a running task by its task_id
 pub async fn stop_task(
     State(_state): State<AppState>,
-    Path(queue_id): Path<i64>,
+    Path(task_id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
     use crate::task_manager::TaskManager;
 
-    TaskManager::request_stop(queue_id).map_err(|e| {
-        error!("Failed to stop task (queue_id {}): {}", queue_id, e);
+    TaskManager::request_stop(task_id).map_err(|e| {
+        error!("Failed to stop task (task_id {}): {}", task_id, e);
         StatusCode::NOT_FOUND
     })?;
 
-    log::info!("Stop requested for task (queue_id {})", queue_id);
+    log::info!("Stop requested for task (task_id {})", task_id);
     Ok(StatusCode::ACCEPTED) // 202 Accepted - stop requested, will complete async
 }
 

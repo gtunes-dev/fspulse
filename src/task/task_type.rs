@@ -1,7 +1,7 @@
 use log::warn;
 use serde::{Deserialize, Serialize};
 
-/// Task type enum - what kind of task is stored in task_queue
+/// Task type enum - what kind of task is stored in the tasks table
 ///
 /// This enum is stored as an integer in the database and serialized as
 /// lowercase strings for the WebSocket protocol.

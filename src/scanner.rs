@@ -23,7 +23,7 @@ use crate::hash::Hash;
 use crate::items::{Access, AnalysisItem, Item, ItemType};
 use crate::roots::Root;
 use crate::scans::ScanState;
-use crate::schedules::AnalysisTracker;
+use crate::schedules::{AnalysisTracker, ScanTaskState};
 use crate::task::TaskProgress;
 use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
@@ -144,6 +144,8 @@ impl Scanner {
     pub fn do_scan_machine(
         scan: &mut Scan,
         root: &Root,
+        task_id: i64,
+        mut initial_task_state: Option<String>,
         task_progress: Arc<TaskProgress>,
         interrupt_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
@@ -191,7 +193,7 @@ impl Scanner {
                 ScanState::Analyzing => {
                     task_progress.set_phase("Phase 3 of 3: Analyzing");
                     let analysis_result = if scan.state() == ScanState::Analyzing {
-                        Scanner::do_state_analyzing(scan, task_progress.clone(), &interrupt_token)
+                        Scanner::do_state_analyzing(scan, task_id, initial_task_state.take(), task_progress.clone(), &interrupt_token)
                     } else {
                         Ok(())
                     };
@@ -481,6 +483,8 @@ impl Scanner {
 
     fn do_state_analyzing(
         scan: &mut Scan,
+        task_id: i64,
+        initial_task_state: Option<String>,
         task_progress: Arc<TaskProgress>,
         interrupt_token: &Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
@@ -498,8 +502,9 @@ impl Scanner {
             return Ok(());
         }
 
-        // Load the high water mark from task_queue (for restart resilience)
-        let initial_hwm = AnalysisTracker::load_hwm(&conn, scan.scan_id())?;
+        // Parse initial task state for restart resilience (HWM loaded from TaskRow)
+        let initial_state = ScanTaskState::from_task_state(initial_task_state.as_deref())?;
+        let initial_hwm = initial_state.high_water_mark;
 
         let (analyze_total, analyze_done) =
             Item::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
@@ -508,7 +513,7 @@ impl Scanner {
         task_progress.set_progress_total(analyze_total, analyze_done, Some("files"));
 
         // Create the analysis tracker for HWM management (shared with worker threads)
-        let tracker = Arc::new(AnalysisTracker::new(scan.scan_id()));
+        let tracker = Arc::new(AnalysisTracker::new(task_id, initial_state));
 
         // Create a bounded channel to limit the number of queued tasks (e.g., max 100 tasks)
         let (sender, receiver) = bounded::<AnalysisItem>(100);

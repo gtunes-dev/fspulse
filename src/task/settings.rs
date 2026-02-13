@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Settings for a scan task.
 ///
 /// This struct is serialized to JSON and stored in the `task_settings` column
-/// of the `task_queue` table. Using a typed struct instead of raw JSON provides:
+/// of the `tasks` table. Using a typed struct instead of raw JSON provides:
 /// - Type safety at compile time
 /// - Automatic validation during deserialization
 /// - Easy evolution with `#[serde(default)]` for new fields

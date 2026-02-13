@@ -2,7 +2,7 @@ use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::task::{BroadcastMessage, TaskProgress, TaskStatus};
 use crate::scans::{HashMode, ValidateMode};
-use crate::schedules::{QueueEntry, Schedule};
+use crate::schedules::{TaskEntry, Schedule};
 use log::{error, info, Level};
 use logging_timer::timer;
 use once_cell::sync::Lazy;
@@ -40,7 +40,7 @@ pub struct TaskManager {
 /// Information about the currently running task
 /// Fields are extracted from the Task trait before the task is moved into spawn_blocking
 struct ActiveTaskInfo {
-    queue_id: i64,
+    task_id: i64,
     root_id: Option<i64>,
     root_path: Option<String>,
     interrupt_token: Arc<AtomicBool>,
@@ -118,7 +118,7 @@ impl TaskManager {
 
         // Create queue entry atomically with root existence check
         Database::immediate_transaction(conn, |conn| {
-            QueueEntry::create_manual(conn, root_id, hash_mode, validate_mode)
+            TaskEntry::create_manual(conn, root_id, hash_mode, validate_mode)
         })?;
 
         // Try to start immediately (while still holding mutex)
@@ -145,7 +145,7 @@ impl TaskManager {
     }
 
     /// Update an existing schedule
-    /// Updates schedule and recalculates next_scan_time atomically
+    /// Updates schedule and recalculates run_at atomically
     pub fn update_schedule(conn: &Connection, schedule: &Schedule) -> Result<(), FsPulseError> {
         // Hold mutex to prevent queue modifications during schedule update
         let manager = Self::instance().lock().unwrap();
@@ -171,7 +171,7 @@ impl TaskManager {
 
     /// Set schedule enabled/disabled state
     /// When disabling: removes from queue (running scan completes normally)
-    /// When enabling: recalculates next_scan_time and adds back to queue
+    /// When enabling: recalculates run_at and creates a Pending task
     pub fn set_schedule_enabled(schedule_id: i64, enabled: bool) -> Result<(), FsPulseError> {
         // Hold mutex to prevent queue modifications during enable/disable
         let manager = Self::instance().lock().unwrap();
@@ -253,13 +253,13 @@ impl TaskManager {
         }
 
         // Get next task from queue via generic factory
-        let mut task = match QueueEntry::get_next_task(conn)? {
+        let mut task = match TaskEntry::get_next_task(conn)? {
             Some(t) => t,
             None => return Ok(()), // No work available - not an error
         };
 
         // Extract metadata from the task before moving it into spawn_blocking
-        let queue_id = task.queue_id();
+        let task_id = task.task_id();
         let task_type = task.task_type();
         let root_id = task.active_root_id();
         let action = task.action().to_string();
@@ -267,7 +267,7 @@ impl TaskManager {
 
         // Create task progress reporter
         let task_progress = TaskProgress::new(
-            queue_id,
+            task_id,
             task_type,
             root_id,
             &action,
@@ -281,7 +281,7 @@ impl TaskManager {
         let broadcast_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_millis(250));
 
-            log::info!("Broadcast thread started for queue_id {}", queue_id);
+            log::info!("Broadcast thread started for task_id {}", task_id);
 
             loop {
                 interval.tick().await;
@@ -293,7 +293,7 @@ impl TaskManager {
                 let is_terminal = {
                     let manager = Self::instance().lock().unwrap();
                     if let Some(active) = &manager.current_task {
-                        if active.queue_id == queue_id {
+                        if active.task_id == task_id {
                             matches!(
                                 active.task_progress.get_status(),
                                 TaskStatus::Completed | TaskStatus::Stopped | TaskStatus::Error
@@ -310,8 +310,8 @@ impl TaskManager {
 
                 if is_terminal {
                     log::info!(
-                        "Broadcast thread exiting for queue_id {} (terminal state reached)",
-                        queue_id
+                        "Broadcast thread exiting for task_id {} (terminal state reached)",
+                        task_id
                     );
                     break;
                 }
@@ -342,12 +342,12 @@ impl TaskManager {
                         // When interrupted and the app is pausing, we don't differentiate
                         // between an explicit stop and a pause - we just treat it like a pause.
                         if TaskManager::is_paused() {
-                            info!("Task (queue_id {}) was paused", queue_id);
+                            info!("Task (task_id {}) was paused", task_id);
                             task_progress.set_status(TaskStatus::Completed);
                         } else {
-                            info!("Task (queue_id {}) was stopped, rolling back changes", queue_id);
+                            info!("Task (task_id {}) was stopped, rolling back changes", task_id);
                             if let Err(stop_err) = task.on_stopped() {
-                                error!("Failed to stop task (queue_id {}): {}", queue_id, stop_err);
+                                error!("Failed to stop task (task_id {}): {}", task_id, stop_err);
                                 task_progress
                                     .set_error(&format!("Failed to stop task: {}", stop_err));
                             } else {
@@ -357,10 +357,10 @@ impl TaskManager {
                     }
                 }
                 Err(e) => {
-                    error!("Task (queue_id {}) failed: {}", queue_id, e);
+                    error!("Task (task_id {}) failed: {}", task_id, e);
                     let error_msg = e.to_string();
                     if let Err(stop_err) = task.on_error(&error_msg) {
-                        error!("Failed to stop task (queue_id {}) after error: {}", queue_id, stop_err);
+                        error!("Failed to stop task (task_id {}) after error: {}", task_id, stop_err);
                         task_progress.set_error(&format!(
                             "Task error: {}; Failed to stop: {}",
                             error_msg, stop_err
@@ -380,14 +380,14 @@ impl TaskManager {
                 }
             };
 
-            if let Err(e) = TaskManager::on_task_complete(&conn, queue_id) {
-                error!("Failed to complete task (queue_id {}): {}", queue_id, e);
+            if let Err(e) = TaskManager::on_task_complete(&conn, task_id) {
+                error!("Failed to complete task (task_id {}): {}", task_id, e);
             }
         });
 
         // Store active task state with task handle
         self.current_task = Some(ActiveTaskInfo {
-            queue_id,
+            task_id,
             root_id,
             root_path: Some(display_target),
             interrupt_token: interrupt_token_for_storage,
@@ -401,19 +401,54 @@ impl TaskManager {
 
     /// Called when task finishes (from background task)
     /// Cleans up queue and clears active task
-    pub fn on_task_complete(conn: &Connection, queue_id: i64) -> Result<(), FsPulseError> {
+    pub fn on_task_complete(conn: &Connection, task_id: i64) -> Result<(), FsPulseError> {
         let _tmr = timer!(Level::Trace; "TaskManager::on_task_complete mutex");
         let mut manager = Self::instance().lock().unwrap();
 
-        // Clean up queue (verifies state, deletes/clears entry)
-        // If we're shutting down, we don't clear the queue entry. It will be taken care
-        // of on the next run
+        // Complete the task (set terminal status and timestamp)
+        // If we're shutting down or paused, leave the task as Running for resume on next start
         if !manager.is_shutting_down && !manager.is_paused {
-            QueueEntry::complete_work(conn, queue_id)?;
+            // Determine terminal status from task progress.
+            // We expect the status to already be terminal (Completed/Stopped/Error) since
+            // the spawn_blocking closure sets it before calling on_task_complete. The
+            // non-terminal arms below handle unexpected states defensively.
+            let terminal_status = match manager.current_task.as_ref() {
+                Some(active) if active.task_id == task_id => {
+                    match active.task_progress.get_status() {
+                        TaskStatus::Completed => TaskStatus::Completed,
+                        TaskStatus::Stopped => TaskStatus::Stopped,
+                        TaskStatus::Error => TaskStatus::Error,
+                        // Non-terminal states should not occur here, but if they do,
+                        // treat as completed since the task has in fact finished.
+                        TaskStatus::Pending
+                        | TaskStatus::Running
+                        | TaskStatus::Pausing
+                        | TaskStatus::Stopping => {
+                            log::warn!(
+                                "Task {} finishing with unexpected non-terminal status {:?}, recording as Completed",
+                                task_id,
+                                active.task_progress.get_status()
+                            );
+                            TaskStatus::Completed
+                        }
+                    }
+                }
+                // Task ID mismatch or no active task — should not happen, but the task
+                // did finish, so record it as completed.
+                _ => {
+                    log::warn!(
+                        "on_task_complete called for task {} but it is not the active task, recording as Completed",
+                        task_id
+                    );
+                    TaskStatus::Completed
+                }
+            };
+
+            TaskEntry::complete_task(conn, task_id, terminal_status)?;
         }
 
         if let Some(active) = &manager.current_task {
-            if active.queue_id == queue_id {
+            if active.task_id == task_id {
                 // Notify the UI that the task is complete. It should be in a terminal state
                 // This is the only place from which we send terminal messages
                 // Terminal messages are a "best effort". We assume that one of two things is
@@ -426,8 +461,8 @@ impl TaskManager {
                 manager.broadcast_current_state_locked(true);
                 manager.current_task = None;
                 log::info!(
-                    "Task (queue_id {}) completed or exited, TaskManager now idle",
-                    queue_id
+                    "Task (task_id {}) completed or exited, TaskManager now idle",
+                    task_id
                 );
             }
         }
@@ -436,18 +471,18 @@ impl TaskManager {
     }
 
     /// Request interrupt of the current task
-    /// The caller must provide the queue_id of the task they intend to stop.
+    /// The caller must provide the task_id of the task they intend to stop.
     /// This guards against race conditions where the task the caller saw has
     /// already completed and a different task is now running.
-    pub fn request_stop(queue_id: i64) -> Result<(), String> {
+    pub fn request_stop(task_id: i64) -> Result<(), String> {
         let manager = Self::instance().lock().unwrap();
 
         match &manager.current_task {
             Some(active) => {
-                if active.queue_id != queue_id {
+                if active.task_id != task_id {
                     return Err(format!(
                         "Task {} is not running (current task is {})",
-                        queue_id, active.queue_id
+                        task_id, active.task_id
                     ));
                 }
 
@@ -463,6 +498,7 @@ impl TaskManager {
                         active.interrupt_token.store(true, Ordering::Release);
                         Ok(())
                     }
+                    TaskStatus::Pending => Err("Task has not started yet".to_string()),
                     TaskStatus::Stopping => Err("Task is already stopping".to_string()),
                     TaskStatus::Stopped => Err("Task has already been stopped".to_string()),
                     TaskStatus::Pausing => Err("Task is currently pausing".to_string()),
@@ -668,23 +704,23 @@ impl TaskManager {
     }
 
     /// Get current scan info
-    /// Queries the task_queue table by queue_id to get the scan_id
+    /// Queries the tasks table by task_id to get the scan_id
     pub fn get_current_scan_info() -> Option<CurrentScanInfo> {
         // Extract what we need from the mutex, then release it before DB query
-        let (queue_id, root_id, root_path) = {
+        let (task_id, root_id, root_path) = {
             let manager = Self::instance().lock().unwrap();
             let active = manager.current_task.as_ref()?;
             let root_id = active.root_id?;
             let root_path = active.root_path.clone()?;
-            (active.queue_id, root_id, root_path)
+            (active.task_id, root_id, root_path)
         };
 
         // Query DB for scan_id outside of mutex
         let conn = Database::get_connection().ok()?;
         let scan_id: i64 = conn
             .query_row(
-                "SELECT scan_id FROM task_queue WHERE queue_id = ? AND scan_id IS NOT NULL",
-                [queue_id],
+                "SELECT scan_id FROM tasks WHERE task_id = ? AND scan_id IS NOT NULL",
+                [task_id],
                 |row| row.get(0),
             )
             .optional()
@@ -705,9 +741,9 @@ impl TaskManager {
         let manager = Self::instance().lock().unwrap();
         let scans_are_paused = manager.is_paused;
 
-        // Note: QueueEntry::get_upcoming_scans gets its own connection internally
+        // Note: TaskEntry::get_upcoming_scans gets its own connection internally
         // Call schedules method while holding mutex to synchronize with try_start_next_task
-        QueueEntry::get_upcoming_scans(limit, scans_are_paused)
+        TaskEntry::get_upcoming_scans(limit, scans_are_paused)
     }
 
     /// Compact the database
