@@ -1,51 +1,224 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::Mutex;
 
-use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::scanner::Scanner;
+use crate::schedules::TaskEntry;
 use crate::scans::{AnalysisSpec, Scan};
-use crate::schedules::{Schedule, TaskRow};
 
 use super::progress::TaskProgress;
 use super::settings::ScanSettings;
 use super::task_type::TaskType;
 use super::traits::Task;
 
-/// A scan task that implements the Task trait
-///
-/// Wraps the Scanner's state machine execution into a Task-compatible interface.
-/// Contains the Scan record and Root needed for execution.
-pub struct ScanTask {
-    task_id: i64,
-    scan: Scan,
-    root: Root,
-    /// Initial task_state JSON loaded from the tasks table (for resume).
-    /// Consumed (taken) when `run()` is called.
-    initial_task_state: Option<String>,
+// ============================================================================
+// ScanTaskState - Scan-specific task state for restart resilience
+// ============================================================================
+
+/// Scan-specific task state stored in the tasks.task_state JSON column.
+/// Contains state needed to resume a scan after interruption.
+/// Preserved at completion as a historical artifact.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanTaskState {
+    #[serde(default)]
+    pub scan_id: Option<i64>,
+    pub high_water_mark: i64,
 }
 
-impl ScanTask {
-    fn new(task_id: i64, scan: Scan, root: Root, initial_task_state: Option<String>) -> Self {
+impl ScanTaskState {
+    pub fn new() -> Self {
         Self {
-            task_id,
-            scan,
-            root,
-            initial_task_state,
+            scan_id: None,
+            high_water_mark: 0,
         }
     }
 
-    /// Factory: create a ScanTask from a task row, either resuming or starting a new scan
-    ///
-    /// IMPORTANT: Must be called within an immediate transaction
-    pub fn from_task_row(conn: &Connection, row: &TaskRow, now: i64) -> Result<Box<dyn Task>, FsPulseError> {
-        let root = Root::get_by_id(conn, row.root_id)?
-            .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", row.root_id)))?;
+    pub fn from_task_state(task_state: Option<&str>) -> Result<Self, FsPulseError> {
+        match task_state {
+            Some(json) => serde_json::from_str(json)
+                .map_err(|e| FsPulseError::Error(format!("Invalid ScanTaskState JSON: {}", e))),
+            None => Ok(Self::new()),
+        }
+    }
 
-        let scan = if let Some(scan_id) = row.scan_id {
+    pub fn to_json(&self) -> Result<String, FsPulseError> {
+        serde_json::to_string(self)
+            .map_err(|e| FsPulseError::Error(format!("Failed to serialize ScanTaskState: {}", e)))
+    }
+}
+
+// ============================================================================
+// AnalysisTracker - Tracks in-flight analysis items for HWM management
+// ============================================================================
+
+/// Internal state protected by the AnalysisTracker mutex
+struct AnalysisTrackerInner {
+    /// Sorted vector of item IDs currently being processed
+    in_flight: Vec<i64>,
+    /// Scan-specific task state (persisted to DB as JSON)
+    state: ScanTaskState,
+}
+
+/// Tracks in-flight analysis items and manages the high water mark (HWM) for
+/// restart resilience. The HWM represents the highest item_id such that all
+/// items with id <= HWM have been fully processed.
+///
+/// The HWM is persisted in the `task_state` JSON column via `ScanTaskState`.
+///
+/// Thread-safe: wrapped in Arc and shared between the main thread (which adds
+/// batches) and worker threads (which complete items). Internal Mutex protects
+/// both the in-flight vector and the ScanTaskState.
+pub struct AnalysisTracker {
+    inner: Mutex<AnalysisTrackerInner>,
+    /// The task_id for this analysis session
+    task_id: i64,
+}
+
+impl AnalysisTracker {
+    /// Create a new tracker for the given task with initial state.
+    pub fn new(task_id: i64, initial_state: ScanTaskState) -> Self {
+        Self {
+            inner: Mutex::new(AnalysisTrackerInner {
+                in_flight: Vec::new(),
+                state: initial_state,
+            }),
+            task_id,
+        }
+    }
+
+    /// Get the current high water mark
+    #[allow(dead_code)]
+    pub fn high_water_mark(&self) -> i64 {
+        self.inner.lock().unwrap().state.high_water_mark
+    }
+
+    /// Add a batch of item IDs to track. Called by main thread after fetching.
+    pub fn add_batch(&self, ids: impl Iterator<Item = i64>) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.in_flight.extend(ids);
+        inner.in_flight.sort_unstable();
+    }
+
+    /// Mark an item as complete and update HWM if appropriate.
+    /// Called by worker threads after finishing processing.
+    ///
+    /// The HWM update logic:
+    /// - If this is not the smallest ID, just remove it (items before it are still in-flight)
+    /// - If this is the smallest ID:
+    ///   - If it's the only ID, set HWM to this ID (all work complete up to here)
+    ///   - Otherwise, set HWM to (next_smallest - 1), indicating all IDs before
+    ///     the next in-flight item are complete
+    pub fn complete_item(&self, id: i64) -> Result<(), FsPulseError> {
+        let mut inner = self.inner.lock().unwrap();
+
+        if let Some(pos) = inner.in_flight.iter().position(|&x| x == id) {
+            let new_hwm = if pos == 0 {
+                // This is the smallest item
+                if inner.in_flight.len() == 1 {
+                    // Only item - all work up to this ID is complete
+                    Some(id)
+                } else {
+                    // More items remain - HWM is one less than the next in-flight item
+                    Some(inner.in_flight[1] - 1)
+                }
+            } else {
+                // Not the smallest - can't advance HWM yet
+                None
+            };
+
+            inner.in_flight.remove(pos);
+
+            // Update DB if we have a new HWM (still holding lock to ensure ordering)
+            if let Some(hwm) = new_hwm {
+                inner.state.high_water_mark = hwm;
+                let task_state_json = inner.state.to_json()?;
+                TaskEntry::set_task_state(self.task_id, &task_state_json)?;
+            }
+        } else {
+            log::warn!(
+                "AnalysisTracker: Item {} not found in in-flight vector for task_id {}",
+                id,
+                self.task_id
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Warn if there are still items in the in-flight vector.
+    /// Should be called after analysis completes successfully to verify all items were processed.
+    pub fn warn_if_not_empty(&self) {
+        let inner = self.inner.lock().unwrap();
+        if !inner.in_flight.is_empty() {
+            log::warn!(
+                "AnalysisTracker: {} items still in-flight after analysis completed for task_id {}. Item IDs: {:?}",
+                inner.in_flight.len(),
+                self.task_id,
+                &inner.in_flight[..inner.in_flight.len().min(10)] // Show at most first 10 IDs
+            );
+        }
+    }
+}
+
+// ============================================================================
+// ScanTask - Task trait implementation for scan operations
+// ============================================================================
+
+/// A scan task that implements the Task trait
+///
+/// Constructed with parsed settings and state (no I/O). All scan-specific
+/// database operations happen in `run()`.
+pub struct ScanTask {
+    task_id: i64,
+    root_id: i64,
+    root_path: String,
+    schedule_id: Option<i64>,
+    settings: ScanSettings,
+    initial_state: ScanTaskState,
+    // Populated during run()
+    scan: Option<Scan>,
+    root: Option<Root>,
+}
+
+impl ScanTask {
+    /// Pure constructor — parses JSON settings and state, no database I/O.
+    pub fn new(
+        task_id: i64,
+        root_id: i64,
+        root_path: String,
+        schedule_id: Option<i64>,
+        settings_json: &str,
+        task_state_json: Option<&str>,
+    ) -> Result<Self, FsPulseError> {
+        let settings = ScanSettings::from_json(settings_json)?;
+        let initial_state = ScanTaskState::from_task_state(task_state_json)?;
+
+        Ok(Self {
+            task_id,
+            root_id,
+            root_path,
+            schedule_id,
+            settings,
+            initial_state,
+            scan: None,
+            root: None,
+        })
+    }
+
+    /// Initialize the scan — load Root, create or resume Scan record,
+    /// and persist scan_id to task_state. Called at the start of run().
+    fn initialize_scan(&mut self) -> Result<(), FsPulseError> {
+        let conn = Database::get_connection()?;
+
+        let root = Root::get_by_id(&conn, self.root_id)?
+            .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", self.root_id)))?;
+
+        let scan = if let Some(scan_id) = self.initial_state.scan_id {
             // Resume case: mark restarted and load existing scan
             conn.execute(
                 "UPDATE scans SET was_restarted = 1 WHERE scan_id = ?",
@@ -53,65 +226,32 @@ impl ScanTask {
             )
             .map_err(FsPulseError::DatabaseError)?;
 
-            Scan::get_by_id_or_latest(conn, Some(scan_id), None)?
+            Scan::get_by_id_or_latest(&conn, Some(scan_id), None)?
                 .ok_or_else(|| FsPulseError::Error(format!("Scan {} not found", scan_id)))?
         } else {
-            // New scan: create scan record and mark task as running
-            let settings = ScanSettings::from_json(&row.task_settings)?;
-            let analysis_spec = AnalysisSpec::from_modes(settings.hash_mode, settings.validate_mode);
-            let scan = Scan::create(conn, &root, row.schedule_id, &analysis_spec)?;
+            // New scan: create scan record and persist scan_id to task_state
+            let analysis_spec =
+                AnalysisSpec::from_modes(self.settings.hash_mode, self.settings.validate_mode);
 
-            // Mark task as Running with scan_id and started_at
-            conn.execute(
-                "UPDATE tasks SET scan_id = ?, status = 1, started_at = ? WHERE task_id = ?",
-                rusqlite::params![scan.scan_id(), now, row.task_id],
-            )
-            .map_err(FsPulseError::DatabaseError)?;
+            Database::immediate_transaction(&conn, |c| {
+                let scan = Scan::create(c, &root, self.schedule_id, &analysis_spec)?;
 
-            // For scheduled scans, create a new Pending row for the next occurrence
-            if let Some(schedule_id) = row.schedule_id {
-                let schedule = Schedule::get_by_id(conn, schedule_id)?.ok_or_else(|| {
-                    FsPulseError::Error(format!("Schedule {} not found", schedule_id))
-                })?;
+                // Write scan_id into task_state atomically with scan creation
+                self.initial_state.scan_id = Some(scan.scan_id());
+                let state_json = self.initial_state.to_json()?;
+                c.execute(
+                    "UPDATE tasks SET task_state = ? WHERE task_id = ? AND status = 1",
+                    rusqlite::params![state_json, self.task_id],
+                )
+                .map_err(FsPulseError::DatabaseError)?;
 
-                let next_time = schedule.calculate_next_scan_time(now).map_err(|e| {
-                    FsPulseError::Error(format!("Failed to calculate next scan time: {}", e))
-                })?;
-
-                // Verify no other Pending row exists for this schedule_id
-                let pending_exists: bool = conn
-                    .query_row(
-                        "SELECT COUNT(*) FROM tasks WHERE schedule_id = ? AND status = 0 AND task_id != ?",
-                        rusqlite::params![schedule_id, row.task_id],
-                        |row| row.get::<_, i64>(0),
-                    )
-                    .map(|count| count > 0)
-                    .map_err(FsPulseError::DatabaseError)?;
-
-                if !pending_exists {
-                    conn.execute(
-                        "INSERT INTO tasks (
-                            task_type, status, root_id, schedule_id, scan_id, run_at,
-                            source, task_settings, created_at
-                        ) VALUES (?, 0, ?, ?, NULL, ?, ?, ?, ?)",
-                        rusqlite::params![
-                            TaskType::Scan.as_i64(),
-                            row.root_id,
-                            schedule_id,
-                            next_time,
-                            crate::schedules::SourceType::Scheduled.as_i32(),
-                            row.task_settings,
-                            now,
-                        ],
-                    )
-                    .map_err(FsPulseError::DatabaseError)?;
-                }
-            }
-
-            scan
+                Ok(scan)
+            })?
         };
 
-        Ok(Box::new(ScanTask::new(row.task_id, scan, root, row.task_state.clone())))
+        self.scan = Some(scan);
+        self.root = Some(root);
+        Ok(())
     }
 }
 
@@ -121,11 +261,18 @@ impl Task for ScanTask {
         progress: Arc<TaskProgress>,
         interrupt_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
+        // Perform all scan-specific I/O: load Root, create/resume Scan
+        self.initialize_scan()?;
+
+        let scan = self.scan.as_mut().unwrap();
+        let root = self.root.as_ref().unwrap();
+
         Scanner::do_scan_machine(
-            &mut self.scan,
-            &self.root,
+            scan,
+            root,
             self.task_id,
-            self.initial_task_state.take(),
+            // Pass the initial_state as JSON string for the scanner's HWM logic
+            Some(self.initial_state.to_json()?),
             progress,
             interrupt_token,
         )
@@ -140,7 +287,7 @@ impl Task for ScanTask {
     }
 
     fn active_root_id(&self) -> Option<i64> {
-        Some(self.scan.root_id())
+        Some(self.root_id)
     }
 
     fn action(&self) -> &str {
@@ -148,16 +295,22 @@ impl Task for ScanTask {
     }
 
     fn display_target(&self) -> String {
-        self.root.root_path().to_string()
+        self.root_path.clone()
     }
 
     fn on_stopped(&mut self) -> Result<(), FsPulseError> {
-        let conn = Database::get_connection()?;
-        self.scan.set_state_stopped(&conn)
+        if let Some(ref mut scan) = self.scan {
+            let conn = Database::get_connection()?;
+            scan.set_state_stopped(&conn)?;
+        }
+        Ok(())
     }
 
     fn on_error(&mut self, error_msg: &str) -> Result<(), FsPulseError> {
-        let conn = Database::get_connection()?;
-        Scan::stop_scan(&conn, &self.scan, Some(error_msg))
+        if let Some(ref scan) = self.scan {
+            let conn = Database::get_connection()?;
+            Scan::stop_scan(&conn, scan, Some(error_msg))?;
+        }
+        Ok(())
     }
 }

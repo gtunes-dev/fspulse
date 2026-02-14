@@ -220,17 +220,6 @@ pub async fn clear_pause(State(_state): State<AppState>) -> Result<StatusCode, S
     Ok(StatusCode::OK)
 }
 
-/// GET /api/scans/current
-/// Get information about the currently running scan, if any
-pub async fn get_current_scan(
-    State(_state): State<AppState>,
-) -> Result<Json<Option<crate::task_manager::CurrentScanInfo>>, StatusCode> {
-    use crate::task_manager::TaskManager;
-
-    let current = TaskManager::get_current_scan_info();
-    Ok(Json(current))
-}
-
 /// GET /api/home/last-scan-stats
 /// Get statistics for the most recent scan (used by Home page dashboard)
 pub async fn get_last_scan_stats() -> Result<Json<Value>, StatusCode> {

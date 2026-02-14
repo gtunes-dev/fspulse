@@ -21,7 +21,7 @@ interface UpcomingScan {
   run_at: number  // Unix timestamp (0 = immediately)
   source: string  // "Manual" or "Scheduled"
   is_ready: boolean  // true if run_at <= now (eligible to start)
-  scan_id: number | null  // Non-null if this is an in-progress scan that is paused
+  status: number     // TaskStatus: 0=Pending, 1=Running
 }
 
 export function UpcomingScansTable() {
@@ -183,7 +183,7 @@ export function UpcomingScansTable() {
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {scan.scan_id !== null ? (
+                          {scan.status === 1 ? (
                             <>
                               <CirclePause className="h-4 w-4 text-purple-500" />
                               <span className="text-sm">Paused</span>
@@ -202,7 +202,7 @@ export function UpcomingScansTable() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {scan.scan_id !== null
+                        {scan.status === 1
                           ? 'When unpaused'
                           : (scan.is_ready && readyPosition === 0 && isPaused)
                             ? 'When unpaused'

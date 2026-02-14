@@ -596,9 +596,9 @@ impl Schedule {
         // Insert task entry (schedule is enabled by default)
         conn.execute(
             "INSERT INTO tasks (
-                task_type, status, root_id, schedule_id, scan_id, run_at,
+                task_type, status, root_id, schedule_id, run_at,
                 source, task_settings, created_at
-            ) VALUES (?, 0, ?, ?, NULL, ?, ?, ?, ?)",
+            ) VALUES (?, 0, ?, ?, ?, ?, ?, ?)",
             rusqlite::params![
                 TaskType::Scan.as_i64(),
                 schedule.root_id,
@@ -813,9 +813,9 @@ impl Schedule {
 
                     c.execute(
                         "INSERT INTO tasks (
-                            task_type, status, root_id, schedule_id, scan_id, run_at,
+                            task_type, status, root_id, schedule_id, run_at,
                             source, task_settings, created_at
-                        ) VALUES (?, 0, ?, ?, NULL, ?, ?, ?, ?)",
+                        ) VALUES (?, 0, ?, ?, ?, ?, ?, ?)",
                         rusqlite::params![
                             TaskType::Scan.as_i64(),
                             schedule.root_id,
@@ -878,15 +878,16 @@ impl Schedule {
     }
 }
 
-/// A row from the tasks table, used to dispatch to task-type-specific factories
-pub struct TaskRow {
-    pub task_id: i64,
-    pub task_type: TaskType,
-    pub root_id: i64,
-    pub schedule_id: Option<i64>,
-    pub scan_id: Option<i64>,
-    pub task_settings: String,
-    pub task_state: Option<String>,
+/// A row from the tasks table, used internally to dispatch to task-type-specific factories
+struct TaskRow {
+    task_id: i64,
+    task_type: TaskType,
+    status: TaskStatus,
+    root_id: i64,
+    root_path: String,
+    schedule_id: Option<i64>,
+    task_settings: String,
+    task_state: Option<String>,
 }
 
 /// Task operations
@@ -900,11 +901,10 @@ pub struct TaskRow {
 /// - `status`: TaskStatus enum (0=Pending, 1=Running, 2=Completed, 3=Stopped, 4=Error)
 /// - `root_id`: Optional root reference
 /// - `schedule_id`: Optional schedule reference
-/// - `scan_id`: Set when scan starts (for resume)
 /// - `run_at`: When to run (0 for immediate)
 /// - `source`: Manual (0) or Scheduled (1)
 /// - `task_settings`: JSON config (e.g., ScanSettings)
-/// - `task_state`: JSON state for restart resilience (e.g., ScanTaskState)
+/// - `task_state`: Execution state JSON (e.g., ScanTaskState with scan_id and HWM)
 /// - `created_at`, `started_at`, `completed_at`: Lifecycle timestamps
 pub struct TaskEntry;
 
@@ -967,18 +967,22 @@ impl TaskEntry {
         // Step 1: Check for Running task (resume case — process died while executing)
         let active = conn
             .query_row(
-                "SELECT task_id, task_type, root_id, schedule_id, scan_id, task_settings, task_state
-                 FROM tasks WHERE status = 1 LIMIT 1",
+                "SELECT t.task_id, t.task_type, t.status, t.root_id, r.root_path,
+                        t.schedule_id, t.task_settings, t.task_state
+                 FROM tasks t
+                 INNER JOIN roots r ON t.root_id = r.root_id
+                 WHERE t.status = 1 LIMIT 1",
                 [],
                 |row| {
                     Ok(TaskRow {
                         task_id: row.get(0)?,
                         task_type: TaskType::from_i64(row.get(1)?),
-                        root_id: row.get(2)?,
-                        schedule_id: row.get(3)?,
-                        scan_id: row.get(4)?,
-                        task_settings: row.get(5)?,
-                        task_state: row.get(6)?,
+                        status: TaskStatus::from_i64(row.get(2)?),
+                        root_id: row.get(3)?,
+                        root_path: row.get(4)?,
+                        schedule_id: row.get(5)?,
+                        task_settings: row.get(6)?,
+                        task_state: row.get(7)?,
                     })
                 },
             )
@@ -992,21 +996,24 @@ impl TaskEntry {
         // Step 2: Find highest priority Pending work (manual first, then scheduled due)
         let work = conn
             .query_row(
-                "SELECT task_id, task_type, root_id, schedule_id, scan_id, task_settings, task_state
-                 FROM tasks
-                 WHERE status = 0 AND (source = ? OR run_at <= ?)
-                 ORDER BY source ASC, run_at ASC, task_id ASC
+                "SELECT t.task_id, t.task_type, t.status, t.root_id, r.root_path,
+                        t.schedule_id, t.task_settings, t.task_state
+                 FROM tasks t
+                 INNER JOIN roots r ON t.root_id = r.root_id
+                 WHERE t.status = 0 AND (t.source = ? OR t.run_at <= ?)
+                 ORDER BY t.source ASC, t.run_at ASC, t.task_id ASC
                  LIMIT 1",
                 rusqlite::params![SourceType::Manual.as_i32(), now],
                 |row| {
                     Ok(TaskRow {
                         task_id: row.get(0)?,
                         task_type: TaskType::from_i64(row.get(1)?),
-                        root_id: row.get(2)?,
-                        schedule_id: row.get(3)?,
-                        scan_id: row.get(4)?,
-                        task_settings: row.get(5)?,
-                        task_state: row.get(6)?,
+                        status: TaskStatus::from_i64(row.get(2)?),
+                        root_id: row.get(3)?,
+                        root_path: row.get(4)?,
+                        schedule_id: row.get(5)?,
+                        task_settings: row.get(6)?,
+                        task_state: row.get(7)?,
                     })
                 },
             )
@@ -1016,11 +1023,77 @@ impl TaskEntry {
         Ok(work)
     }
 
+    /// Atomically activate a Pending task: mark it Running and, if scheduled,
+    /// create the next occurrence. No-op for Running tasks (resume case).
+    /// Must be called within an immediate transaction.
+    fn activate_task(conn: &Connection, row: &TaskRow, now: i64) -> Result<(), FsPulseError> {
+        if row.status == TaskStatus::Running {
+            // Resume case — task was already activated before crash
+            return Ok(());
+        }
+
+        // Mark task as Running
+        let rows_updated = conn
+            .execute(
+                "UPDATE tasks SET status = 1, started_at = ? WHERE task_id = ? AND status = 0",
+                rusqlite::params![now, row.task_id],
+            )
+            .map_err(FsPulseError::DatabaseError)?;
+
+        if rows_updated == 0 {
+            return Err(FsPulseError::Error(format!(
+                "Task {} was not in Pending status during activation",
+                row.task_id
+            )));
+        }
+
+        // For scheduled tasks, create the next occurrence
+        if let Some(schedule_id) = row.schedule_id {
+            let schedule = Schedule::get_by_id(conn, schedule_id)?.ok_or_else(|| {
+                FsPulseError::Error(format!("Schedule {} not found", schedule_id))
+            })?;
+
+            let next_time = schedule.calculate_next_scan_time(now).map_err(|e| {
+                FsPulseError::Error(format!("Failed to calculate next scan time: {}", e))
+            })?;
+
+            // Verify no other Pending row exists for this schedule
+            let pending_exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM tasks WHERE schedule_id = ? AND status = 0 AND task_id != ?",
+                    rusqlite::params![schedule_id, row.task_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map(|count| count > 0)
+                .map_err(FsPulseError::DatabaseError)?;
+
+            if !pending_exists {
+                conn.execute(
+                    "INSERT INTO tasks (
+                        task_type, status, root_id, schedule_id, run_at,
+                        source, task_settings, created_at
+                    ) VALUES (?, 0, ?, ?, ?, ?, ?, ?)",
+                    rusqlite::params![
+                        row.task_type.as_i64(),
+                        row.root_id,
+                        schedule_id,
+                        next_time,
+                        SourceType::Scheduled.as_i32(),
+                        row.task_settings,
+                        now,
+                    ],
+                )
+                .map_err(FsPulseError::DatabaseError)?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Get the next task to execute from the queue
     ///
-    /// Generically finds the next queue entry, then dispatches to the appropriate
-    /// task-type-specific factory to create the concrete task. All type-specific
-    /// logic (creating scans, fetching roots, etc.) lives in the factory methods.
+    /// Atomically finds the next task, activates it (marks Running, schedules next
+    /// occurrence), and constructs the concrete Task object via pure factory.
     ///
     /// Returns a boxed Task trait object ready for execution, or None if no work available.
     pub fn get_next_task(conn: &Connection) -> Result<Option<Box<dyn Task>>, FsPulseError> {
@@ -1032,8 +1105,19 @@ impl TaskEntry {
                 None => return Ok(None),
             };
 
+            // Generic activation: mark Running + schedule next occurrence
+            Self::activate_task(c, &row, now)?;
+
+            // Dispatch to task-type-specific constructor (pure, no I/O)
             let task: Box<dyn Task> = match row.task_type {
-                TaskType::Scan => ScanTask::from_task_row(c, &row, now)?,
+                TaskType::Scan => Box::new(ScanTask::new(
+                    row.task_id,
+                    row.root_id,
+                    row.root_path,
+                    row.schedule_id,
+                    &row.task_settings,
+                    row.task_state.as_deref(),
+                )?),
             };
 
             Ok(Some(task))
@@ -1047,7 +1131,7 @@ impl TaskEntry {
 
         Database::immediate_transaction(conn, |c| {
             c.execute(
-                "UPDATE tasks SET status = ?, completed_at = ?, task_state = NULL WHERE task_id = ?",
+                "UPDATE tasks SET status = ?, completed_at = ? WHERE task_id = ?",
                 rusqlite::params![terminal_status.as_i64(), now, task_id],
             )
             .map_err(FsPulseError::DatabaseError)?;
@@ -1088,7 +1172,7 @@ impl TaskEntry {
     /// Get upcoming scans for display in UI (excludes currently running scan)
     /// Returns task entries with root_path and schedule_name joined
     /// Limited to next 10 upcoming scans, ordered by priority (Running first, then manual, then by time)
-    /// If scans_are_paused is true, includes the Running scan (with scan_id) as first row
+    /// If scans_are_paused is true, includes the Running scan as first row
     pub fn get_upcoming_scans(
         limit: i64,
         scans_are_paused: bool,
@@ -1121,7 +1205,7 @@ impl TaskEntry {
                 s.schedule_name,
                 q.run_at,
                 q.source,
-                q.scan_id
+                q.status
              FROM tasks q
              INNER JOIN roots r ON q.root_id = r.root_id
              LEFT JOIN scan_schedules s ON q.schedule_id = s.schedule_id
@@ -1153,7 +1237,7 @@ impl TaskEntry {
                         )
                     })?,
                     is_ready: run_at <= now,
-                    scan_id: row.get(7)?,
+                    status: row.get(7)?,
                 })
             })
             .map_err(FsPulseError::DatabaseError)?
@@ -1244,8 +1328,8 @@ pub struct UpcomingScan {
     pub schedule_name: Option<String>, // NULL for manual scans
     pub run_at: i64,                   // Unix timestamp (0 = immediately)
     pub source: SourceType,
-    pub is_ready: bool,       // true if run_at <= now (eligible to start)
-    pub scan_id: Option<i64>, // Non-null if this is an in-progress scan that is paused
+    pub is_ready: bool,  // true if run_at <= now (eligible to start)
+    pub status: i64,     // TaskStatus as integer (0=Pending, 1=Running)
 }
 
 /// Schedule with root path and next scan time
@@ -1332,153 +1416,6 @@ pub fn list_schedules() -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
 
     let results: Result<Vec<_>, _> = schedules.collect();
     results.map_err(FsPulseError::DatabaseError)
-}
-
-// ============================================================================
-// ScanTaskState - Scan-specific task state for restart resilience
-// ============================================================================
-
-/// Scan-specific task state stored in the tasks.task_state JSON column.
-/// Contains state needed to resume a scan after interruption.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScanTaskState {
-    pub high_water_mark: i64,
-}
-
-impl ScanTaskState {
-    pub fn new() -> Self {
-        Self { high_water_mark: 0 }
-    }
-
-    pub fn from_task_state(task_state: Option<&str>) -> Result<Self, FsPulseError> {
-        match task_state {
-            Some(json) => serde_json::from_str(json)
-                .map_err(|e| FsPulseError::Error(format!("Invalid ScanTaskState JSON: {}", e))),
-            None => Ok(Self::new()),
-        }
-    }
-
-    pub fn to_json(&self) -> Result<String, FsPulseError> {
-        serde_json::to_string(self)
-            .map_err(|e| FsPulseError::Error(format!("Failed to serialize ScanTaskState: {}", e)))
-    }
-}
-
-// ============================================================================
-// AnalysisTracker - Tracks in-flight analysis items for HWM management
-// ============================================================================
-
-use std::sync::Mutex;
-
-/// Internal state protected by the AnalysisTracker mutex
-struct AnalysisTrackerInner {
-    /// Sorted vector of item IDs currently being processed
-    in_flight: Vec<i64>,
-    /// Scan-specific task state (persisted to DB as JSON)
-    state: ScanTaskState,
-}
-
-/// Tracks in-flight analysis items and manages the high water mark (HWM) for
-/// restart resilience. The HWM represents the highest item_id such that all
-/// items with id <= HWM have been fully processed.
-///
-/// The HWM is persisted in the `task_state` JSON column via `ScanTaskState`.
-///
-/// Thread-safe: wrapped in Arc and shared between the main thread (which adds
-/// batches) and worker threads (which complete items). Internal Mutex protects
-/// both the in-flight vector and the ScanTaskState.
-pub struct AnalysisTracker {
-    inner: Mutex<AnalysisTrackerInner>,
-    /// The task_id for this analysis session
-    task_id: i64,
-}
-
-impl AnalysisTracker {
-    /// Create a new tracker for the given task with initial state.
-    /// The initial_state is typically loaded from the TaskRow.task_state column
-    /// when the task is first loaded from the database.
-    pub fn new(task_id: i64, initial_state: ScanTaskState) -> Self {
-        Self {
-            inner: Mutex::new(AnalysisTrackerInner {
-                in_flight: Vec::new(),
-                state: initial_state,
-            }),
-            task_id,
-        }
-    }
-
-    /// Get the current high water mark
-    #[allow(dead_code)]
-    pub fn high_water_mark(&self) -> i64 {
-        self.inner.lock().unwrap().state.high_water_mark
-    }
-
-    /// Add a batch of item IDs to track. Called by main thread after fetching.
-    pub fn add_batch(&self, ids: impl Iterator<Item = i64>) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.in_flight.extend(ids);
-        inner.in_flight.sort_unstable();
-    }
-
-    /// Mark an item as complete and update HWM if appropriate.
-    /// Called by worker threads after finishing processing.
-    ///
-    /// The HWM update logic:
-    /// - If this is not the smallest ID, just remove it (items before it are still in-flight)
-    /// - If this is the smallest ID:
-    ///   - If it's the only ID, set HWM to this ID (all work complete up to here)
-    ///   - Otherwise, set HWM to (next_smallest - 1), indicating all IDs before
-    ///     the next in-flight item are complete
-    pub fn complete_item(&self, id: i64) -> Result<(), FsPulseError> {
-        let mut inner = self.inner.lock().unwrap();
-
-        if let Some(pos) = inner.in_flight.iter().position(|&x| x == id) {
-            let new_hwm = if pos == 0 {
-                // This is the smallest item
-                if inner.in_flight.len() == 1 {
-                    // Only item - all work up to this ID is complete
-                    Some(id)
-                } else {
-                    // More items remain - HWM is one less than the next in-flight item
-                    Some(inner.in_flight[1] - 1)
-                }
-            } else {
-                // Not the smallest - can't advance HWM yet
-                None
-            };
-
-            inner.in_flight.remove(pos);
-
-            // Update DB if we have a new HWM (still holding lock to ensure ordering)
-            if let Some(hwm) = new_hwm {
-                inner.state.high_water_mark = hwm;
-                let task_state_json = inner.state.to_json()?;
-                TaskEntry::set_task_state(self.task_id, &task_state_json)?;
-            }
-        } else {
-            log::warn!(
-                "AnalysisTracker: Item {} not found in in-flight vector for task_id {}",
-                id,
-                self.task_id
-            );
-        }
-
-        Ok(())
-    }
-
-    /// Warn if there are still items in the in-flight vector.
-    /// Should be called after analysis completes successfully to verify all items were processed.
-    pub fn warn_if_not_empty(&self) {
-        let inner = self.inner.lock().unwrap();
-        if !inner.in_flight.is_empty() {
-            log::warn!(
-                "AnalysisTracker: {} items still in-flight after analysis completed for task_id {}. Item IDs: {:?}",
-                inner.in_flight.len(),
-                self.task_id,
-                &inner.in_flight[..inner.in_flight.len().min(10)] // Show at most first 10 IDs
-            );
-        }
-    }
 }
 
 #[cfg(test)]

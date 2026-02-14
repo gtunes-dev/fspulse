@@ -6,8 +6,8 @@ use crate::schedules::{TaskEntry, Schedule};
 use log::{error, info, Level};
 use logging_timer::timer;
 use once_cell::sync::Lazy;
-use rusqlite::{Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
+use rusqlite::Connection;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -41,21 +41,12 @@ pub struct TaskManager {
 /// Fields are extracted from the Task trait before the task is moved into spawn_blocking
 struct ActiveTaskInfo {
     task_id: i64,
-    root_id: Option<i64>,
-    root_path: Option<String>,
     interrupt_token: Arc<AtomicBool>,
     task_progress: Arc<TaskProgress>,
     task_handle: Option<JoinHandle<()>>,
     broadcast_handle: Option<JoinHandle<()>>,
 }
 
-/// Information about current scan for status queries
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CurrentScanInfo {
-    pub scan_id: i64,
-    pub root_id: i64,
-    pub root_path: String,
-}
 
 impl TaskManager {
     /// Get the global singleton instance
@@ -388,8 +379,6 @@ impl TaskManager {
         // Store active task state with task handle
         self.current_task = Some(ActiveTaskInfo {
             task_id,
-            root_id,
-            root_path: Some(display_target),
             interrupt_token: interrupt_token_for_storage,
             task_progress: task_progress_for_storage,
             task_handle: Some(task_handle),
@@ -701,36 +690,6 @@ impl TaskManager {
             // System is idle
             let _ = self.broadcaster.send(BroadcastMessage::NoActiveTask);
         }
-    }
-
-    /// Get current scan info
-    /// Queries the tasks table by task_id to get the scan_id
-    pub fn get_current_scan_info() -> Option<CurrentScanInfo> {
-        // Extract what we need from the mutex, then release it before DB query
-        let (task_id, root_id, root_path) = {
-            let manager = Self::instance().lock().unwrap();
-            let active = manager.current_task.as_ref()?;
-            let root_id = active.root_id?;
-            let root_path = active.root_path.clone()?;
-            (active.task_id, root_id, root_path)
-        };
-
-        // Query DB for scan_id outside of mutex
-        let conn = Database::get_connection().ok()?;
-        let scan_id: i64 = conn
-            .query_row(
-                "SELECT scan_id FROM tasks WHERE task_id = ? AND scan_id IS NOT NULL",
-                [task_id],
-                |row| row.get(0),
-            )
-            .optional()
-            .ok()??;
-
-        Some(CurrentScanInfo {
-            scan_id,
-            root_id,
-            root_path,
-        })
     }
 
     /// Get upcoming scans, synchronized with task manager state

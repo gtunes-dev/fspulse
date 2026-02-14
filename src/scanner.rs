@@ -23,8 +23,7 @@ use crate::hash::Hash;
 use crate::items::{Access, AnalysisItem, Item, ItemType};
 use crate::roots::Root;
 use crate::scans::ScanState;
-use crate::schedules::{AnalysisTracker, ScanTaskState};
-use crate::task::TaskProgress;
+use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
 use crate::validate::validator::{from_path, ValidationState};
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 

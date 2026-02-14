@@ -144,12 +144,6 @@ export interface TaskData {
   thread_states: ThreadState[]
 }
 
-export interface CurrentScanInfo {
-  scan_id: number
-  root_path: string
-  started_at: string
-}
-
 // Root with Scan Info (for Scan page)
 export interface LastScanInfo {
   scan_id: number

@@ -37,9 +37,6 @@ CREATE TABLE tasks (
     -- Schedule reference (ON DELETE SET NULL so completed tasks survive schedule deletion)
     schedule_id INTEGER,
 
-    -- Scan-specific: FK to scans table
-    scan_id INTEGER,
-
     -- Scheduling
     run_at INTEGER NOT NULL DEFAULT 0,             -- When eligible to run (0 = immediately)
     source INTEGER NOT NULL CHECK(source IN (0, 1)), -- 0=manual, 1=scheduled
@@ -47,8 +44,8 @@ CREATE TABLE tasks (
     -- Task configuration (immutable JSON — permanent artifact)
     task_settings TEXT NOT NULL,
 
-    -- Transient execution state (generic JSON, NULL when not running)
-    -- For scan tasks: {"high_water_mark": 12345}
+    -- Execution state (generic JSON, NULL until first set, preserved at completion)
+    -- For scan tasks: {"scan_id": 42, "high_water_mark": 12345}
     task_state TEXT,
 
     -- Timestamps
@@ -57,8 +54,7 @@ CREATE TABLE tasks (
     completed_at INTEGER,                          -- When terminal status was reached
 
     FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id) ON DELETE SET NULL,
-    FOREIGN KEY (root_id) REFERENCES roots(root_id),
-    FOREIGN KEY (scan_id) REFERENCES scans(scan_id)
+    FOREIGN KEY (root_id) REFERENCES roots(root_id)
 );
 "#;
 
@@ -82,11 +78,11 @@ pub fn migrate_14_to_15(conn: &Connection) -> Result<(), FsPulseError> {
                 row.get::<_, bool>(2)?,        // is_active
                 row.get::<_, Option<i64>>(3)?, // root_id
                 row.get::<_, Option<i64>>(4)?, // schedule_id
-                row.get::<_, Option<i64>>(5)?, // scan_id
+                row.get::<_, Option<i64>>(5)?, // scan_id → merged into task_state
                 row.get::<_, Option<i64>>(6)?, // next_run_time
                 row.get::<_, i32>(7)?,         // source
                 row.get::<_, String>(8)?,      // task_settings
-                row.get::<_, Option<i64>>(9)?, // analysis_hwm
+                row.get::<_, Option<i64>>(9)?, // analysis_hwm → merged into task_state
                 row.get::<_, i64>(10)?,        // created_at
             ))
         })
@@ -100,9 +96,9 @@ pub fn migrate_14_to_15(conn: &Connection) -> Result<(), FsPulseError> {
     let mut insert_stmt = conn
         .prepare(
             "INSERT INTO tasks (
-                task_id, task_type, status, root_id, schedule_id, scan_id,
+                task_id, task_type, status, root_id, schedule_id,
                 run_at, source, task_settings, task_state, created_at, started_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .map_err(FsPulseError::DatabaseError)?;
 
@@ -126,8 +122,13 @@ pub fn migrate_14_to_15(conn: &Connection) -> Result<(), FsPulseError> {
         // run_at: next_run_time if set, 0 (immediately) otherwise
         let run_at: i64 = next_run_time.unwrap_or(0);
 
-        // task_state: convert analysis_hwm integer to ScanTaskState JSON if present
-        let task_state: Option<String> = analysis_hwm.map(|hwm| format!("{{\"high_water_mark\":{}}}", hwm));
+        // task_state: merge scan_id and analysis_hwm into ScanTaskState JSON
+        let task_state: Option<String> = match (scan_id, analysis_hwm) {
+            (Some(sid), Some(hwm)) => Some(format!("{{\"scan_id\":{},\"high_water_mark\":{}}}", sid, hwm)),
+            (Some(sid), None) => Some(format!("{{\"scan_id\":{},\"high_water_mark\":0}}", sid)),
+            (None, Some(hwm)) => Some(format!("{{\"high_water_mark\":{}}}", hwm)),
+            (None, None) => None,
+        };
 
         // started_at: best approximation — use created_at if active
         let started_at: Option<i64> = if is_active { Some(created_at) } else { None };
@@ -139,7 +140,6 @@ pub fn migrate_14_to_15(conn: &Connection) -> Result<(), FsPulseError> {
                 status,
                 root_id,
                 schedule_id,
-                scan_id,
                 run_at,
                 source,
                 task_settings,

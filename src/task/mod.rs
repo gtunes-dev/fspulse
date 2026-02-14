@@ -6,7 +6,7 @@ mod task_type;
 mod traits;
 
 pub use progress::{BroadcastMessage, TaskProgress};
-pub use scan_task::ScanTask;
+pub use scan_task::{AnalysisTracker, ScanTask, ScanTaskState};
 pub use settings::ScanSettings;
 pub use task_status::TaskStatus;
 pub use task_type::TaskType;

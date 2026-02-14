@@ -183,9 +183,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- Schedule reference (ON DELETE SET NULL so completed tasks survive schedule deletion)
     schedule_id INTEGER,
 
-    -- Scan-specific: FK to scans table
-    scan_id INTEGER,
-
     -- Scheduling
     run_at INTEGER NOT NULL DEFAULT 0,             -- When eligible to run (0 = immediately)
     source INTEGER NOT NULL CHECK(source IN (0, 1)), -- 0=manual, 1=scheduled
@@ -193,7 +190,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- Task configuration (immutable JSON — permanent artifact)
     task_settings TEXT NOT NULL,
 
-    -- Transient execution state (generic JSON, NULL when not running)
+    -- Execution state (generic JSON, NULL until first set, preserved at completion)
     task_state TEXT,
 
     -- Timestamps
@@ -202,8 +199,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     completed_at INTEGER,                          -- When terminal status was reached
 
     FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id) ON DELETE SET NULL,
-    FOREIGN KEY (root_id) REFERENCES roots(root_id),
-    FOREIGN KEY (scan_id) REFERENCES scans(scan_id)
+    FOREIGN KEY (root_id) REFERENCES roots(root_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status_source_runat ON tasks(status, source, run_at, task_id);
