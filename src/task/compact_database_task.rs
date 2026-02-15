@@ -120,6 +120,14 @@ impl Task for CompactDatabaseTask {
     fn is_exclusive(&self) -> bool {
         true
     }
+
+    fn is_stoppable(&self) -> bool {
+        false
+    }
+
+    fn is_pausable(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

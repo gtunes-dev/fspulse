@@ -361,6 +361,14 @@ impl Task for ScanTask {
     fn is_exclusive(&self) -> bool {
         false
     }
+
+    fn is_stoppable(&self) -> bool {
+        true
+    }
+
+    fn is_pausable(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

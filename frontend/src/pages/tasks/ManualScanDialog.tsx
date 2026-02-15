@@ -115,7 +115,7 @@ export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) 
         throw new Error(`Failed to schedule scan: ${response.statusText}`)
       }
 
-      // Notify that a task was scheduled (triggers refresh in UpcomingScansTable)
+      // Notify that a task was scheduled (triggers refresh in UpcomingTasksTable)
       notifyTaskScheduled()
 
       // WebSocket will receive state updates when backend starts the scan

@@ -1,12 +1,14 @@
 use axum::{
-    extract::{Json, State},
+    extract::{Json, Query, State},
     http::StatusCode,
 };
 use log::error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::database::Database;
+use crate::schedules::{TaskEntry, TaskHistoryRow};
 use crate::scans::{HashMode, ValidateMode};
+use crate::task::TaskType;
 use crate::task_manager::TaskManager;
 
 use super::scans::AppState;
@@ -81,4 +83,63 @@ pub async fn schedule_compact_database() -> Result<StatusCode, (StatusCode, Stri
     })?;
 
     Ok(StatusCode::ACCEPTED)
+}
+
+/// Query parameters for task history count endpoint
+#[derive(Debug, Deserialize)]
+pub struct TaskHistoryCountParams {
+    pub task_type: Option<i64>,
+}
+
+/// Response structure for task history count
+#[derive(Debug, Serialize)]
+pub struct TaskHistoryCountResponse {
+    pub count: i64,
+}
+
+/// Query parameters for task history fetch endpoint
+#[derive(Debug, Deserialize)]
+pub struct TaskHistoryFetchParams {
+    pub task_type: Option<i64>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+/// Response structure for task history fetch
+#[derive(Debug, Serialize)]
+pub struct TaskHistoryFetchResponse {
+    pub tasks: Vec<TaskHistoryRow>,
+}
+
+/// GET /api/tasks/history/count?task_type=0
+/// Returns count of task history entries (completed, stopped, or error states)
+/// Optionally filtered by task_type
+pub async fn get_task_history_count(
+    Query(params): Query<TaskHistoryCountParams>,
+) -> Result<Json<TaskHistoryCountResponse>, StatusCode> {
+    let task_type = params.task_type.map(TaskType::from_i64);
+
+    let count = TaskEntry::get_task_history_count(task_type).map_err(|e| {
+        error!("Failed to get task history count: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(TaskHistoryCountResponse { count }))
+}
+
+/// GET /api/tasks/history/fetch?task_type=0&limit=25&offset=0
+/// Returns paginated task history with root and schedule information
+/// Optionally filtered by task_type
+pub async fn get_task_history_fetch(
+    Query(params): Query<TaskHistoryFetchParams>,
+) -> Result<Json<TaskHistoryFetchResponse>, StatusCode> {
+    let task_type = params.task_type.map(TaskType::from_i64);
+
+    let tasks = TaskEntry::get_task_history(task_type, params.limit, params.offset)
+        .map_err(|e| {
+            error!("Failed to get task history: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(TaskHistoryFetchResponse { tasks }))
 }

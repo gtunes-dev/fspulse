@@ -156,19 +156,19 @@ pub async fn toggle_schedule(
     Ok(StatusCode::OK)
 }
 
-/// GET /api/schedules/upcoming
-/// Get upcoming scans for display in Scans page
-/// Returns list of upcoming scans (excludes currently running scan unless paused)
-pub async fn get_upcoming_scans() -> Result<Json<Value>, StatusCode> {
+/// GET /api/tasks/upcoming
+/// Get upcoming tasks for display in Tasks page
+/// Returns list of upcoming tasks (excludes currently running task unless paused)
+pub async fn get_upcoming_tasks() -> Result<Json<Value>, StatusCode> {
     use crate::task_manager::TaskManager;
 
-    // Get next 10 upcoming scans via TaskManager (synchronized with pause state)
-    let scans = TaskManager::get_upcoming_scans(10).map_err(|e| {
-        log::error!("Error fetching upcoming scans: {}", e);
+    // Get next 10 upcoming tasks via TaskManager (synchronized with pause state)
+    let tasks = TaskManager::get_upcoming_tasks(10).map_err(|e| {
+        log::error!("Error fetching upcoming tasks: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(json!({ "upcoming_scans": scans })))
+    Ok(Json(json!({ "upcoming_tasks": tasks })))
 }
 
 /// GET /api/schedules

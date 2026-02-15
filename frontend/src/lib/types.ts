@@ -111,6 +111,8 @@ export interface TaskProgressState {
   task_type: TaskType
   active_root_id: number | null
   is_exclusive: boolean
+  is_stoppable: boolean
+  is_pausable: boolean
   action: string
   target: string
   status: TaskStatus
@@ -136,6 +138,8 @@ export interface TaskData {
   task_type: TaskType
   active_root_id: number | null
   is_exclusive: boolean
+  is_stoppable: boolean
+  is_pausable: boolean
   action: string
   target: string
   status: TaskStatus

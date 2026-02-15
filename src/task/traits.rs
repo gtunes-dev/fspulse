@@ -52,4 +52,15 @@ pub trait Task: Send {
     /// When true, TaskManager blocks scheduling new tasks, pausing, and unpausing
     /// while this task is running. Used for operations like VACUUM that lock the database.
     fn is_exclusive(&self) -> bool;
+
+    /// Whether this task can be stopped by the user and leave the database in a clean state.
+    /// Stoppable tasks interrupt progress and leave a rational database state (e.g., scan
+    /// rolls back to pre-scan state). Non-stoppable tasks (e.g., VACUUM) are atomic and
+    /// cannot be interrupted.
+    fn is_stoppable(&self) -> bool;
+
+    /// Whether this task can suspend mid-execution when the system is paused.
+    /// Pausable tasks check the interrupt token and suspend; non-pausable tasks ignore
+    /// the token and run to completion. The pause takes effect after non-pausable tasks finish.
+    fn is_pausable(&self) -> bool;
 }

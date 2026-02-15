@@ -1224,36 +1224,33 @@ impl TaskEntry {
         })
     }
 
-    /// Get upcoming scans for display in UI (excludes currently running scan)
+    /// Get upcoming tasks for display in UI
     /// Returns task entries with root_path and schedule_name joined
-    /// Limited to next 10 upcoming scans, ordered by priority (Running first, then manual, then by time)
-    /// If scans_are_paused is true, includes the Running scan as first row
-    pub fn get_upcoming_scans(
+    /// Limited to next 10 upcoming tasks, ordered by priority (Running first, then manual, then by time)
+    /// If tasks_are_paused is true, includes the Running task as first row
+    pub fn get_upcoming_tasks(
         limit: i64,
-        scans_are_paused: bool,
-    ) -> Result<Vec<UpcomingScan>, FsPulseError> {
+        tasks_are_paused: bool,
+    ) -> Result<Vec<UpcomingTask>, FsPulseError> {
         let now = chrono::Utc::now().timestamp();
         let conn = Database::get_connection()?;
 
+        let pending = TaskStatus::Pending.as_i64();
+        let running = TaskStatus::Running.as_i64();
+
         // Build WHERE clause based on pause state
-        let scan_task_type = TaskType::Scan.as_i64();
-        let where_clause = if scans_are_paused {
-            // Include Running (status=1) and Pending (status=0) tasks
-            format!(
-                "WHERE q.task_type = {} AND q.status IN (0, 1)",
-                scan_task_type
-            )
+        let where_clause = if tasks_are_paused {
+            // Include Running and Pending tasks
+            format!("WHERE q.status IN ({}, {})", pending, running)
         } else {
-            // Only Pending tasks (status=0)
-            format!(
-                "WHERE q.task_type = {} AND q.status = 0",
-                scan_task_type
-            )
+            // Only Pending tasks
+            format!("WHERE q.status = {}", pending)
         };
 
         let query = format!(
             "SELECT
                 q.task_id,
+                q.task_type,
                 q.root_id,
                 r.root_path,
                 q.schedule_id,
@@ -1262,7 +1259,7 @@ impl TaskEntry {
                 q.source,
                 q.status
              FROM tasks q
-             INNER JOIN roots r ON q.root_id = r.root_id
+             LEFT JOIN roots r ON q.root_id = r.root_id
              LEFT JOIN scan_schedules s ON q.schedule_id = s.schedule_id
              {}
              ORDER BY q.status DESC, q.source ASC, q.run_at ASC, q.task_id ASC
@@ -1272,34 +1269,137 @@ impl TaskEntry {
 
         let mut stmt = conn.prepare(&query).map_err(FsPulseError::DatabaseError)?;
 
-        let scans = stmt
+        let tasks = stmt
             .query_map([limit], |row| {
-                let run_at: i64 = row.get(5)?;
-                let source: i32 = row.get(6)?;
+                let run_at: i64 = row.get(6)?;
+                let source: i32 = row.get(7)?;
 
-                Ok(UpcomingScan {
+                Ok(UpcomingTask {
                     task_id: row.get(0)?,
-                    root_id: row.get(1)?,
-                    root_path: row.get(2)?,
-                    schedule_id: row.get(3)?,
-                    schedule_name: row.get(4)?,
+                    task_type: TaskType::from_i64(row.get(1)?),
+                    root_id: row.get(2)?,
+                    root_path: row.get(3)?,
+                    schedule_id: row.get(4)?,
+                    schedule_name: row.get(5)?,
                     run_at,
                     source: SourceType::from_i32(source).ok_or_else(|| {
                         rusqlite::Error::InvalidColumnType(
-                            6,
+                            7,
                             "source".to_string(),
                             rusqlite::types::Type::Integer,
                         )
                     })?,
                     is_ready: run_at <= now,
-                    status: row.get(7)?,
+                    status: row.get(8)?,
                 })
             })
             .map_err(FsPulseError::DatabaseError)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(FsPulseError::DatabaseError)?;
 
-        Ok(scans)
+        Ok(tasks)
+    }
+
+    /// Get task history count for pagination
+    /// Returns count of tasks in terminal states (Completed, Stopped, Error)
+    /// Optionally filtered by task_type
+    pub fn get_task_history_count(
+        task_type: Option<TaskType>,
+    ) -> Result<i64, FsPulseError> {
+        let conn = Database::get_connection()?;
+
+        let completed = TaskStatus::Completed.as_i64();
+        let stopped = TaskStatus::Stopped.as_i64();
+        let error = TaskStatus::Error.as_i64();
+        let terminal_statuses = format!("{}, {}, {}", completed, stopped, error);
+
+        let (query, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match task_type {
+            Some(tt) => (
+                format!("SELECT COUNT(*) FROM tasks WHERE status IN ({}) AND task_type = ?", terminal_statuses),
+                vec![Box::new(tt.as_i64())],
+            ),
+            None => (
+                format!("SELECT COUNT(*) FROM tasks WHERE status IN ({})", terminal_statuses),
+                vec![],
+            ),
+        };
+
+        let count: i64 = conn
+            .query_row(&query, rusqlite::params_from_iter(params.iter()), |row| row.get(0))
+            .map_err(FsPulseError::DatabaseError)?;
+
+        Ok(count)
+    }
+
+    /// Get task history for display in UI
+    /// Returns completed/stopped/error tasks with root_path and schedule_name
+    /// Optionally filtered by task_type, paginated
+    pub fn get_task_history(
+        task_type: Option<TaskType>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<TaskHistoryRow>, FsPulseError> {
+        let conn = Database::get_connection()?;
+
+        let completed = TaskStatus::Completed.as_i64();
+        let stopped = TaskStatus::Stopped.as_i64();
+        let error = TaskStatus::Error.as_i64();
+
+        let type_filter = match task_type {
+            Some(tt) => format!("AND t.task_type = {}", tt.as_i64()),
+            None => String::new(),
+        };
+
+        let query = format!(
+            "SELECT
+                t.task_id,
+                t.task_type,
+                t.root_id,
+                r.root_path,
+                s.schedule_name,
+                t.source,
+                t.status,
+                t.started_at,
+                t.completed_at
+             FROM tasks t
+             LEFT JOIN roots r ON t.root_id = r.root_id
+             LEFT JOIN scan_schedules s ON t.schedule_id = s.schedule_id
+             WHERE t.status IN ({}, {}, {}) {}
+             ORDER BY t.completed_at DESC, t.task_id DESC
+             LIMIT ? OFFSET ?",
+            completed, stopped, error, type_filter
+        );
+
+        let mut stmt = conn.prepare(&query).map_err(FsPulseError::DatabaseError)?;
+
+        let tasks = stmt
+            .query_map(rusqlite::params![limit, offset], |row| {
+                let source: i32 = row.get(5)?;
+                let status: i64 = row.get(6)?;
+
+                Ok(TaskHistoryRow {
+                    task_id: row.get(0)?,
+                    task_type: TaskType::from_i64(row.get(1)?),
+                    root_id: row.get(2)?,
+                    root_path: row.get(3)?,
+                    schedule_name: row.get(4)?,
+                    source: SourceType::from_i32(source).ok_or_else(|| {
+                        rusqlite::Error::InvalidColumnType(
+                            5,
+                            "source".to_string(),
+                            rusqlite::types::Type::Integer,
+                        )
+                    })?,
+                    status: TaskStatus::from_i64(status),
+                    started_at: row.get(7)?,
+                    completed_at: row.get(8)?,
+                })
+            })
+            .map_err(FsPulseError::DatabaseError)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(FsPulseError::DatabaseError)?;
+
+        Ok(tasks)
     }
 }
 
@@ -1373,18 +1473,33 @@ pub fn delete_schedules_for_root_immediate(
     Ok(())
 }
 
-/// Information about an upcoming scan for UI display
+/// Information about an upcoming task for UI display
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpcomingScan {
+pub struct UpcomingTask {
     pub task_id: i64,
-    pub root_id: i64,
-    pub root_path: String,
+    pub task_type: TaskType,
+    pub root_id: Option<i64>,
+    pub root_path: Option<String>,
     pub schedule_id: Option<i64>,
     pub schedule_name: Option<String>, // NULL for manual scans
     pub run_at: i64,                   // Unix timestamp (0 = immediately)
     pub source: SourceType,
     pub is_ready: bool,  // true if run_at <= now (eligible to start)
     pub status: i64,     // TaskStatus as integer (0=Pending, 1=Running)
+}
+
+/// A completed task for history display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskHistoryRow {
+    pub task_id: i64,
+    pub task_type: TaskType,
+    pub root_id: Option<i64>,
+    pub root_path: Option<String>,
+    pub schedule_name: Option<String>,
+    pub source: SourceType,
+    pub status: TaskStatus,
+    pub started_at: Option<i64>,
+    pub completed_at: Option<i64>,
 }
 
 /// Schedule with root path and next scan time

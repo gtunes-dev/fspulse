@@ -3,11 +3,11 @@ import { Button } from '@/components/ui/button'
 import { useNavigate } from 'react-router-dom'
 import { ExternalLink } from 'lucide-react'
 
-interface EmptyStateNoScansProps {
+interface EmptyStateNoTasksProps {
   rootCount: number
 }
 
-export function EmptyStateNoScans({ rootCount }: EmptyStateNoScansProps) {
+export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
   const navigate = useNavigate()
 
   return (
@@ -15,7 +15,7 @@ export function EmptyStateNoScans({ rootCount }: EmptyStateNoScansProps) {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <h3 className="text-xl font-semibold mb-3">Ready to scan?</h3>
+            <h3 className="text-xl font-semibold mb-3">Ready to get started?</h3>
             <p className="text-base text-muted-foreground mb-6 max-w-md">
               You've configured {rootCount === 1 ? 'a root' : 'roots'}! Use the Manual Scan button above to start scanning, or visit Monitor to add more roots and configure schedules.
             </p>

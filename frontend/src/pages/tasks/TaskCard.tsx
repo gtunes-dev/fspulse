@@ -6,19 +6,19 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { InfoBar } from '@/components/shared/InfoBar'
 import { ManualScanDialog } from './ManualScanDialog'
-import { PauseScanDialog } from './PauseScanDialog'
+import { PauseDialog } from './PauseDialog'
 
-export function ScanCard() {
+export function TaskCard() {
   const { activeTask, currentTaskId, isExclusive, isPaused, stopTask } = useTaskContext()
   const [detailsExpanded, setDetailsExpanded] = useState(() => {
-    return localStorage.getItem('fspulse.scan.details.expanded') === 'true'
+    return localStorage.getItem('fspulse.task.details.expanded') === 'true'
   })
   const [stopping, setStopping] = useState(false)
   const [showManualScanDialog, setShowManualScanDialog] = useState(false)
   const [showPauseDialog, setShowPauseDialog] = useState(false)
 
   useEffect(() => {
-    localStorage.setItem('fspulse.scan.details.expanded', detailsExpanded ? 'true' : 'false')
+    localStorage.setItem('fspulse.task.details.expanded', detailsExpanded ? 'true' : 'false')
   }, [detailsExpanded])
 
   const handleStop = async () => {
@@ -34,11 +34,19 @@ export function ScanCard() {
 
   // Derive display state from activeTask
   const status = activeTask?.status ?? 'running'
-  const showStopButton = (activeTask && status !== 'completed') || (stopping && status === 'completed')
+  const isStoppable = activeTask?.is_stoppable ?? false
+  const isPausable = activeTask?.is_pausable ?? true
+  const showStopButton = isStoppable && ((activeTask && status !== 'completed') || (stopping && status === 'completed'))
   const stopButtonDisabled = status === 'pausing' || status === 'stopping' || status === 'stopped' || status === 'completed'
   const stopButtonText = status === 'stopping' ? 'Stopping' : status === 'stopped' ? 'Stopped' : status === 'completed' ? 'Completed' : 'Stop'
   const showThreadDetails = activeTask && activeTask.thread_states.length > 0
   const hasPercentage = activeTask?.progress_bar?.percentage !== null && activeTask?.progress_bar?.percentage !== undefined
+
+  // Pause button label adapts based on whether the running task is pausable
+  const getPauseButtonLabel = () => {
+    if (isPaused) return 'Edit Pause'
+    return 'Pause'
+  }
 
   return (
     <>
@@ -58,16 +66,25 @@ export function ScanCard() {
               className={isPaused ? 'text-purple-600 dark:text-purple-400' : ''}
             >
               <CirclePause className="h-4 w-4 mr-2" />
-              {isPaused ? 'Edit Pause' : 'Pause Scanning'}
+              {getPauseButtonLabel()}
             </Button>
           </div>
+
+          {/* Pause status message when paused with non-pausable active task */}
+          {isPaused && activeTask && !isPausable && status === 'running' && (
+            <div className="mb-4">
+              <InfoBar variant="info" icon={CirclePause}>
+                Pause will take effect after current task completes
+              </InfoBar>
+            </div>
+          )}
 
           {/* Content Area */}
           <div className="border border-border rounded-lg p-4">
             {!activeTask ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No scan in progress
+                  No task in progress
                 </p>
                 <InfoBar variant="info" icon={Lightbulb}>
                   Configure recurring scans on the <a href="/monitor" className="underline hover:text-primary">Monitor</a> page
@@ -188,7 +205,7 @@ export function ScanCard() {
 
       {/* Dialogs */}
       <ManualScanDialog open={showManualScanDialog} onOpenChange={setShowManualScanDialog} />
-      <PauseScanDialog open={showPauseDialog} onOpenChange={setShowPauseDialog} />
+      <PauseDialog open={showPauseDialog} onOpenChange={setShowPauseDialog} />
     </>
   )
 }

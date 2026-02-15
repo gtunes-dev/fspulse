@@ -204,8 +204,17 @@ impl WebServer {
                 patch(api::schedules::toggle_schedule),
             )
             .route(
-                "/api/schedules/upcoming",
-                get(api::schedules::get_upcoming_scans),
+                "/api/tasks/upcoming",
+                get(api::schedules::get_upcoming_tasks),
+            )
+            // Task history endpoints
+            .route(
+                "/api/tasks/history/count",
+                get(api::tasks::get_task_history_count),
+            )
+            .route(
+                "/api/tasks/history/fetch",
+                get(api::tasks::get_task_history_fetch),
             )
             // Item endpoints
             .route(

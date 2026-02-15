@@ -264,6 +264,8 @@ impl TaskManager {
         let task_type = task.task_type();
         let root_id = task.active_root_id();
         let is_exclusive = task.is_exclusive();
+        let is_stoppable = task.is_stoppable();
+        let is_pausable = task.is_pausable();
         let action = task.action().to_string();
         let display_target = task.display_target();
 
@@ -273,6 +275,8 @@ impl TaskManager {
             task_type,
             root_id,
             is_exclusive,
+            is_stoppable,
+            is_pausable,
             &action,
             &display_target,
         );
@@ -685,17 +689,17 @@ impl TaskManager {
         }
     }
 
-    /// Get upcoming scans, synchronized with task manager state
-    /// If paused, includes the in-progress scan as first entry
-    pub fn get_upcoming_scans(
+    /// Get upcoming tasks, synchronized with task manager state
+    /// If paused, includes the in-progress task as first entry
+    pub fn get_upcoming_tasks(
         limit: i64,
-    ) -> Result<Vec<crate::schedules::UpcomingScan>, FsPulseError> {
+    ) -> Result<Vec<crate::schedules::UpcomingTask>, FsPulseError> {
         let manager = Self::instance().lock().unwrap();
-        let scans_are_paused = manager.is_paused;
+        let tasks_are_paused = manager.is_paused;
 
-        // Note: TaskEntry::get_upcoming_scans gets its own connection internally
+        // Note: TaskEntry::get_upcoming_tasks gets its own connection internally
         // Call schedules method while holding mutex to synchronize with try_start_next_task
-        TaskEntry::get_upcoming_scans(limit, scans_are_paused)
+        TaskEntry::get_upcoming_tasks(limit, tasks_are_paused)
     }
 
     /// Check if task-related activity is allowed.

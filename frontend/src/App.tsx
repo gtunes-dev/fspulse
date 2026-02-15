@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { TaskProvider } from './contexts/TaskContext'
 import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
+import { TasksPage } from './pages/tasks/TasksPage'
 import { ScansPage } from './pages/scans/ScansPage'
 import { MonitorPage } from './pages/monitor/MonitorPage'
 import { ExplorePage } from './pages/explore/ExplorePage'
@@ -20,7 +21,8 @@ function App() {
             <Sidebar />
             <main className="flex-1 overflow-auto bg-background p-6">
               <Routes>
-                <Route path="/" element={<ScansPage />} />
+                <Route path="/" element={<TasksPage />} />
+                <Route path="/scans" element={<ScansPage />} />
                 <Route path="/monitor" element={<MonitorPage />} />
                 <Route path="/explore/*" element={<ExplorePage />} />
                 <Route path="/alerts" element={<AlertsPage />} />

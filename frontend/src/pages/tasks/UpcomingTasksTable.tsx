@@ -12,10 +12,11 @@ import { useTaskContext } from '@/contexts/TaskContext'
 import { Clock, Calendar, CirclePause } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 
-interface UpcomingScan {
+interface UpcomingTask {
   task_id: number
-  root_id: number
-  root_path: string
+  task_type: string  // TaskType: 'scan', 'compact_database', etc.
+  root_id: number | null
+  root_path: string | null
   schedule_id: number | null
   schedule_name: string | null
   run_at: number  // Unix timestamp (0 = immediately)
@@ -24,9 +25,17 @@ interface UpcomingScan {
   status: number     // TaskStatus: 0=Pending, 1=Running
 }
 
-export function UpcomingScansTable() {
+const taskTypeDisplayName = (taskType: string): string => {
+  switch (taskType) {
+    case 'scan': return 'Scan'
+    case 'compact_database': return 'Compact Database'
+    default: return taskType
+  }
+}
+
+export function UpcomingTasksTable() {
   const { currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
-  const [scans, setScans] = useState<UpcomingScan[]>([])
+  const [tasks, setTasks] = useState<UpcomingTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
@@ -43,16 +52,16 @@ export function UpcomingScansTable() {
         }
         setError(null)
 
-        const response = await fetch('/api/schedules/upcoming')
+        const response = await fetch('/api/tasks/upcoming')
         if (!response.ok) {
-          throw new Error(`Failed to fetch upcoming scans: ${response.statusText}`)
+          throw new Error(`Failed to fetch upcoming tasks: ${response.statusText}`)
         }
 
         const data = await response.json()
-        setScans(data.upcoming_scans || [])
+        setTasks(data.upcoming_tasks || [])
       } catch (err) {
-        console.error('Error loading upcoming scans:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load upcoming scans')
+        console.error('Error loading upcoming tasks:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load upcoming tasks')
       } finally {
         setLoading(false)
       }
@@ -62,7 +71,7 @@ export function UpcomingScansTable() {
   }, [currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt])
 
   const formatNextRun = (runAt: number, isReady: boolean, readyPosition: number): string => {
-    // For ready scans, show position instead of time
+    // For ready tasks, show position instead of time
     if (isReady) {
       if (readyPosition === 0) return 'Next'
       const position = readyPosition + 1
@@ -70,7 +79,7 @@ export function UpcomingScansTable() {
       return `${position}${suffix} in line`
     }
 
-    // For scheduled scans, show relative time
+    // For scheduled tasks, show relative time
     const now = Date.now() / 1000  // Convert to seconds
     const diff = runAt - now
 
@@ -96,11 +105,11 @@ export function UpcomingScansTable() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Upcoming Scans</CardTitle>
+          <CardTitle>Upcoming Tasks</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground text-center py-4">
-            Loading upcoming scans...
+            Loading upcoming tasks...
           </p>
         </CardContent>
       </Card>
@@ -111,7 +120,7 @@ export function UpcomingScansTable() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Upcoming Scans</CardTitle>
+          <CardTitle>Upcoming Tasks</CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
           <p className="text-sm text-red-500 text-center py-4">
@@ -122,16 +131,16 @@ export function UpcomingScansTable() {
     )
   }
 
-  if (scans.length === 0) {
+  if (tasks.length === 0) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Upcoming Scans</CardTitle>
+          <CardTitle>Upcoming Tasks</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <div className="border border-border rounded-lg">
             <p className="text-sm text-muted-foreground text-center py-12">
-              No upcoming scans scheduled
+              No upcoming tasks
             </p>
           </div>
         </CardContent>
@@ -143,13 +152,14 @@ export function UpcomingScansTable() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Upcoming Scans</CardTitle>
+          <CardTitle>Upcoming Tasks</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <div className="border border-border rounded-lg overflow-hidden">
             <Table>
               <TableHeader className="bg-muted">
                 <TableRow>
+                  <TableHead className="uppercase text-xs tracking-wide">Type</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
                   <TableHead className="text-center uppercase text-xs tracking-wide">Status</TableHead>
@@ -157,38 +167,45 @@ export function UpcomingScansTable() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {scans.map((scan) => {
-                  // Calculate position among ready scans
-                  const readyScans = scans.filter(s => s.is_ready)
-                  const readyPosition = readyScans.findIndex(s => s.task_id === scan.task_id)
+                {tasks.map((task) => {
+                  // Calculate position among ready tasks
+                  const readyTasks = tasks.filter(t => t.is_ready)
+                  const readyPosition = readyTasks.findIndex(t => t.task_id === task.task_id)
 
                   return (
-                    <TableRow key={scan.task_id}>
+                    <TableRow key={task.task_id}>
+                      <TableCell>
+                        {taskTypeDisplayName(task.task_type)}
+                      </TableCell>
                       <TableCell
                         className="max-w-[200px] truncate"
-                        title={scan.root_path}
+                        title={task.root_path ?? undefined}
                       >
-                        <button
-                          onClick={() => {
-                            setSelectedRoot({ id: scan.root_id, path: scan.root_path })
-                            setRootSheetOpen(true)
-                          }}
-                          className="text-left hover:underline hover:text-primary cursor-pointer"
-                        >
-                          {shortenPath(scan.root_path)}
-                        </button>
+                        {task.root_path ? (
+                          <button
+                            onClick={() => {
+                              setSelectedRoot({ id: task.root_id!, path: task.root_path! })
+                              setRootSheetOpen(true)
+                            }}
+                            className="text-left hover:underline hover:text-primary cursor-pointer"
+                          >
+                            {shortenPath(task.root_path)}
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground">&mdash;</span>
+                        )}
                       </TableCell>
                       <TableCell>
-                        {scan.schedule_name || <span className="text-muted-foreground">(Manual)</span>}
+                        {task.schedule_name || <span className="text-muted-foreground">(Manual)</span>}
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {scan.status === 1 ? (
+                          {task.status === 1 ? (
                             <>
                               <CirclePause className="h-4 w-4 text-purple-500" />
                               <span className="text-sm">Paused</span>
                             </>
-                          ) : scan.is_ready ? (
+                          ) : task.is_ready ? (
                             <>
                               <Clock className="h-4 w-4 text-purple-500" />
                               <span className="text-sm">Ready</span>
@@ -202,11 +219,11 @@ export function UpcomingScansTable() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {scan.status === 1
+                        {task.status === 1
                           ? 'When unpaused'
-                          : (scan.is_ready && readyPosition === 0 && isPaused)
+                          : (task.is_ready && readyPosition === 0 && isPaused)
                             ? 'When unpaused'
-                            : formatNextRun(scan.run_at, scan.is_ready, readyPosition)
+                            : formatNextRun(task.run_at, task.is_ready, readyPosition)
                         }
                       </TableCell>
                     </TableRow>

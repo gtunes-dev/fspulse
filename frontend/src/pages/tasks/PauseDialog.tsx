@@ -10,15 +10,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { useTaskContext } from '@/contexts/TaskContext'
 
-interface PauseScanDialogProps {
+interface PauseDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function PauseScanDialog({
+export function PauseDialog({
   open,
   onOpenChange,
-}: PauseScanDialogProps) {
+}: PauseDialogProps) {
   const { pauseTasks, unpauseTasks, isPaused, pauseUntil } = useTaskContext()
   const [error, setError] = useState('')
   const [pausing, setPausing] = useState(false)
@@ -99,7 +99,7 @@ export function PauseScanDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isPaused ? 'Edit Pause' : 'Pause Scanning'}</DialogTitle>
+          <DialogTitle>{isPaused ? 'Edit Pause' : 'Pause Tasks'}</DialogTitle>
           <DialogDescription>
             {isPaused ? (
               <>
@@ -110,7 +110,7 @@ export function PauseScanDialog({
                 . You can update the duration or unpause now.
               </>
             ) : (
-              'Scanning will be paused for the selected duration. Any in-progress scan will be stopped and can resume later.'
+              'Tasks will be paused for the selected duration. Any pausable in-progress task will be suspended.'
             )}
           </DialogDescription>
         </DialogHeader>

@@ -47,6 +47,8 @@ pub struct TaskProgressState {
     pub task_type: TaskType,
     pub active_root_id: Option<i64>,
     pub is_exclusive: bool,
+    pub is_stoppable: bool,
+    pub is_pausable: bool,
     pub action: String,
     pub target: String,
     pub status: TaskStatus,
@@ -77,6 +79,8 @@ struct TaskProgressInternalState {
     task_type: TaskType,
     active_root_id: Option<i64>,
     is_exclusive: bool,
+    is_stoppable: bool,
+    is_pausable: bool,
     action: String,
     target: String,
 
@@ -131,11 +135,14 @@ pub struct TaskProgress {
 
 impl TaskProgress {
     /// Create a new task progress reporter
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         task_id: i64,
         task_type: TaskType,
         active_root_id: Option<i64>,
         is_exclusive: bool,
+        is_stoppable: bool,
+        is_pausable: bool,
         action: &str,
         target: &str,
     ) -> Arc<Self> {
@@ -145,6 +152,8 @@ impl TaskProgress {
                 task_type,
                 active_root_id,
                 is_exclusive,
+                is_stoppable,
+                is_pausable,
                 action: action.to_string(),
                 target: target.to_string(),
                 status: TaskStatus::Running,
@@ -293,6 +302,8 @@ impl TaskProgress {
             task_type: state.task_type,
             active_root_id: state.active_root_id,
             is_exclusive: state.is_exclusive,
+            is_stoppable: state.is_stoppable,
+            is_pausable: state.is_pausable,
             action: state.action.clone(),
             target: state.target.clone(),
             status: state.status,
