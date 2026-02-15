@@ -20,7 +20,6 @@ static TASK_MANAGER: Lazy<Mutex<TaskManager>> = Lazy::new(|| {
     Mutex::new(TaskManager {
         current_task: None,
         broadcaster,
-        db_is_compacting: false,
         is_shutting_down: false,
         is_paused: false,
         pause_until: None,
@@ -31,7 +30,6 @@ static TASK_MANAGER: Lazy<Mutex<TaskManager>> = Lazy::new(|| {
 pub struct TaskManager {
     current_task: Option<ActiveTaskInfo>,
     broadcaster: broadcast::Sender<BroadcastMessage>,
-    db_is_compacting: bool,
     is_shutting_down: bool,
     is_paused: bool,
     pause_until: Option<i64>,
@@ -41,6 +39,7 @@ pub struct TaskManager {
 /// Fields are extracted from the Task trait before the task is moved into spawn_blocking
 struct ActiveTaskInfo {
     task_id: i64,
+    is_exclusive: bool,
     interrupt_token: Arc<AtomicBool>,
     task_progress: Arc<TaskProgress>,
     task_handle: Option<JoinHandle<()>>,
@@ -92,28 +91,39 @@ impl TaskManager {
         Ok(())
     }
 
-    /// Entry point 1: Manual scan from UI
-    /// Creates queue entry and immediately tries to start it
-    /// Returns Ok if scan was scheduled, Err if scheduling failed
-    /// UI should check GET /api/scans/current to see if scan started
+    /// Schedule a manual scan task.
+    /// Creates queue entry and immediately tries to start it.
     pub fn schedule_manual_scan(
         conn: &Connection,
         root_id: i64,
         hash_mode: HashMode,
         validate_mode: ValidateMode,
     ) -> Result<(), FsPulseError> {
-        // Hold mutex for entire operation to avoid race
         let mut manager = Self::instance().lock().unwrap();
 
-        manager.check_shutting_down_locked()?;
+        manager.check_activity_allowed_locked()?;
 
-        // Create queue entry atomically with root existence check
         Database::immediate_transaction(conn, |conn| {
             TaskEntry::create_manual(conn, root_id, hash_mode, validate_mode)
         })?;
 
-        // Try to start immediately (while still holding mutex)
-        // Whether it starts or not, scheduling succeeded
+        manager.try_start_next_task_locked(conn)?;
+
+        Ok(())
+    }
+
+    /// Schedule a database compaction task.
+    /// Creates a compact task entry (or no-op if already queued) and immediately
+    /// tries to start it.
+    pub fn schedule_compact_database(conn: &Connection) -> Result<(), FsPulseError> {
+        let mut manager = Self::instance().lock().unwrap();
+
+        manager.check_activity_allowed_locked()?;
+
+        Database::immediate_transaction(conn, |conn| {
+            TaskEntry::create_compact_database(conn)
+        })?;
+
         manager.try_start_next_task_locked(conn)?;
 
         Ok(())
@@ -129,7 +139,7 @@ impl TaskManager {
         // Hold mutex to prevent queue modifications during schedule creation
         let manager = Self::instance().lock().unwrap();
 
-        manager.check_shutting_down_locked()?;
+        manager.check_activity_allowed_locked()?;
 
         // Create schedule and queue entry in transaction
         Database::immediate_transaction(conn, |conn| Schedule::create_and_queue(conn, params))
@@ -141,7 +151,7 @@ impl TaskManager {
         // Hold mutex to prevent queue modifications during schedule update
         let manager = Self::instance().lock().unwrap();
 
-        manager.check_shutting_down_locked()?;
+        manager.check_activity_allowed_locked()?;
 
         // Update schedule in transaction
         Database::immediate_transaction(conn, |conn| schedule.update(conn))
@@ -154,7 +164,7 @@ impl TaskManager {
         // Hold mutex to prevent queue modifications during schedule deletion
         let manager = Self::instance().lock().unwrap();
 
-        manager.check_shutting_down_locked()?;
+        manager.check_activity_allowed_locked()?;
 
         // Delete schedule in transaction
         Database::immediate_transaction(conn, |conn| Schedule::delete_immediate(conn, schedule_id))
@@ -167,7 +177,7 @@ impl TaskManager {
         // Hold mutex to prevent queue modifications during enable/disable
         let manager = Self::instance().lock().unwrap();
 
-        manager.check_shutting_down_locked()?;
+        manager.check_activity_allowed_locked()?;
 
         // Note: Schedule::set_enabled gets its own connection internally
         Schedule::set_enabled(schedule_id, enabled)
@@ -233,8 +243,8 @@ impl TaskManager {
     /// Called with mutex already held
     /// Uses the factory function to create a task via the Task trait
     fn try_start_next_task_locked(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
-        // Already running a task, compacting the database, or shutting down?
-        if self.current_task.is_some() || self.db_is_compacting || self.is_shutting_down {
+        // Already running a task or shutting down?
+        if self.current_task.is_some() || self.is_shutting_down {
             return Ok(());
         }
 
@@ -253,6 +263,7 @@ impl TaskManager {
         let task_id = task.task_id();
         let task_type = task.task_type();
         let root_id = task.active_root_id();
+        let is_exclusive = task.is_exclusive();
         let action = task.action().to_string();
         let display_target = task.display_target();
 
@@ -261,6 +272,7 @@ impl TaskManager {
             task_id,
             task_type,
             root_id,
+            is_exclusive,
             &action,
             &display_target,
         );
@@ -379,6 +391,7 @@ impl TaskManager {
         // Store active task state with task handle
         self.current_task = Some(ActiveTaskInfo {
             task_id,
+            is_exclusive,
             interrupt_token: interrupt_token_for_storage,
             task_progress: task_progress_for_storage,
             task_handle: Some(task_handle),
@@ -505,17 +518,7 @@ impl TaskManager {
     pub fn set_pause(conn: &Connection, duration_seconds: i64) -> Result<(), FsPulseError> {
         let mut manager = Self::instance().lock().unwrap();
 
-        // Cannot pause during shutdown or database compaction
-        if manager.is_shutting_down {
-            return Err(FsPulseError::Error(
-                "Cannot pause during shutdown".to_string(),
-            ));
-        }
-        if manager.db_is_compacting {
-            return Err(FsPulseError::Error(
-                "Cannot pause during database compaction".to_string(),
-            ));
-        }
+        manager.check_activity_allowed_locked()?;
 
         // Calculate pause_until timestamp
         let pause_until = if duration_seconds == -1 {
@@ -569,17 +572,7 @@ impl TaskManager {
             return Ok(());
         }
 
-        // Cannot clear pause during shutdown or database compaction
-        if manager.is_shutting_down {
-            return Err(FsPulseError::Error(
-                "Cannot clear pause during shutdown".to_string(),
-            ));
-        }
-        if manager.db_is_compacting {
-            return Err(FsPulseError::Error(
-                "Cannot clear pause during database compaction".to_string(),
-            ));
-        }
+        manager.check_activity_allowed_locked()?;
 
         // if a pause was requested, and there is an active task, that task is going
         // to be in the process of unwinding. We need to let that complete before
@@ -705,34 +698,20 @@ impl TaskManager {
         TaskEntry::get_upcoming_scans(limit, scans_are_paused)
     }
 
-    /// Compact the database
-    /// Returns error if a task is currently running
-    /// Blocks until compaction is complete
-    pub fn compact_db() -> Result<(), String> {
-        // Acquire mutex and check state
-        let mut manager = Self::instance().lock().unwrap();
-        if manager.current_task.is_some() {
-            return Err("Cannot compact: task in progress".to_string());
-        }
-        manager.db_is_compacting = true;
-        drop(manager); // Release mutex before long operation
-
-        let result = Database::compact();
-
-        // Set flag back (whether success or failure)
-        let mut manager = Self::instance().lock().unwrap();
-        manager.db_is_compacting = false;
-
-        result.map_err(|e| format!("Compaction failed: {}", e))
-    }
-
-    /// Check if the process is shutting down, returning error if so
-    /// Must be called with the task manager mutex
-    fn check_shutting_down_locked(&self) -> Result<(), FsPulseError> {
+    /// Check if task-related activity is allowed.
+    /// Returns error if the system is shutting down or an exclusive task is running.
+    /// Must be called with the task manager mutex held.
+    fn check_activity_allowed_locked(&self) -> Result<(), FsPulseError> {
         if self.is_shutting_down {
-            Err(FsPulseError::ShuttingDown)
-        } else {
-            Ok(())
+            return Err(FsPulseError::ShuttingDown);
         }
+        if let Some(active) = &self.current_task {
+            if active.is_exclusive {
+                return Err(FsPulseError::Error(
+                    "Cannot perform operation while an exclusive task is running".into(),
+                ));
+            }
+        }
+        Ok(())
     }
 }

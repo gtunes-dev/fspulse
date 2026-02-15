@@ -24,65 +24,6 @@ impl AppState {
     }
 }
 
-/// Request structure for scheduling a scan
-#[derive(Debug, Deserialize)]
-pub struct ScheduleScanRequest {
-    pub root_id: i64,
-    pub hash_mode: String,     // "None", "New", "All"
-    pub validate_mode: String, // "None", "New", "All"
-}
-
-/// POST /api/scans/schedule
-/// Schedules a new manual scan through the queue
-/// Returns 200 OK if scan was scheduled
-/// UI should call GET /api/scans/current to check if scan started
-pub async fn schedule_scan(
-    State(_state): State<AppState>,
-    Json(req): Json<ScheduleScanRequest>,
-) -> Result<StatusCode, StatusCode> {
-    use crate::task_manager::TaskManager;
-    use crate::scans::{HashMode, ValidateMode};
-
-    let conn = Database::get_connection().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Parse scan options
-    let hash_mode = match req.hash_mode.as_str() {
-        "None" => HashMode::None,
-        "New" => HashMode::New,
-        "All" => HashMode::All,
-        _ => {
-            error!("Invalid hash_mode: {}", req.hash_mode);
-            return Err(StatusCode::BAD_REQUEST);
-        }
-    };
-
-    let validate_mode = match req.validate_mode.as_str() {
-        "None" => ValidateMode::None,
-        "New" => ValidateMode::New,
-        "All" => ValidateMode::All,
-        _ => {
-            error!("Invalid validate_mode: {}", req.validate_mode);
-            return Err(StatusCode::BAD_REQUEST);
-        }
-    };
-
-    // Schedule manual scan (creates queue entry and tries to start it)
-    TaskManager::schedule_manual_scan(&conn, req.root_id, hash_mode, validate_mode).map_err(
-        |e| {
-            error!("Failed to schedule manual scan: {}", e);
-            if e.to_string().contains("Root not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-        },
-    )?;
-
-    log::info!("Manual scan scheduled for root {}", req.root_id);
-
-    Ok(StatusCode::OK)
-}
-
 /// WebSocket endpoint for streaming task progress
 /// GET /ws/tasks/progress
 pub async fn scan_progress_ws(

@@ -9,7 +9,7 @@ import { ManualScanDialog } from './ManualScanDialog'
 import { PauseScanDialog } from './PauseScanDialog'
 
 export function ScanCard() {
-  const { activeTask, currentTaskId, isPaused, stopTask } = useTaskContext()
+  const { activeTask, currentTaskId, isExclusive, isPaused, stopTask } = useTaskContext()
   const [detailsExpanded, setDetailsExpanded] = useState(() => {
     return localStorage.getItem('fspulse.scan.details.expanded') === 'true'
   })
@@ -46,7 +46,7 @@ export function ScanCard() {
         <CardContent className="pt-6">
           {/* Action Bar */}
           <div className="flex items-center gap-3 mb-4">
-            <Button size="lg" onClick={() => setShowManualScanDialog(true)}>
+            <Button size="lg" onClick={() => setShowManualScanDialog(true)} disabled={isExclusive}>
               <Play className="h-4 w-4 mr-2" />
               Manual Scan
             </Button>
@@ -54,7 +54,7 @@ export function ScanCard() {
               size="lg"
               variant="secondary"
               onClick={() => setShowPauseDialog(true)}
-              disabled={!!(activeTask && (status === 'pausing' || status === 'stopping'))}
+              disabled={isExclusive || !!(activeTask && (status === 'pausing' || status === 'stopping'))}
               className={isPaused ? 'text-purple-600 dark:text-purple-400' : ''}
             >
               <CirclePause className="h-4 w-4 mr-2" />
@@ -79,7 +79,7 @@ export function ScanCard() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <div className="text-lg font-semibold">
-                      {activeTask.action}: {activeTask.target}
+                      {activeTask.target ? `${activeTask.action}: ${activeTask.target}` : activeTask.action}
                     </div>
                   </div>
                   <div className="flex gap-2">

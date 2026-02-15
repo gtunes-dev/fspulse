@@ -20,7 +20,7 @@ export function Header() {
 
   // Derive display values from activeTask
   const headerText = activeTask
-    ? `${activeTask.action}: ${shortenPath(activeTask.target)}`
+    ? (activeTask.target ? `${activeTask.action}: ${shortenPath(activeTask.target)}` : activeTask.action)
     : ''
 
   const phaseText = activeTask?.phase ?? ''
@@ -60,7 +60,7 @@ export function Header() {
 
                       {progressMessage && (
                         <>
-                          <span>•</span>
+                          {phaseText && <span>•</span>}
                           <span>{progressMessage}</span>
                         </>
                       )}

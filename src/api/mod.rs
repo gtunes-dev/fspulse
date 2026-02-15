@@ -9,4 +9,5 @@ pub use routes::roots;
 pub use routes::schedules;
 pub use routes::items;
 pub use routes::database;
+pub use routes::tasks;
 pub use routes::settings;

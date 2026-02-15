@@ -86,7 +86,7 @@ export interface ValidateFilterResponse {
 
 // Task Progress Types (WebSocket protocol)
 
-export type TaskType = 'scan'
+export type TaskType = 'scan' | 'compact_database'
 
 export type TaskStatus = 'pending' | 'running' | 'pausing' | 'stopping' | 'stopped' | 'completed' | 'error'
 
@@ -110,6 +110,7 @@ export interface TaskProgressState {
   task_id: number
   task_type: TaskType
   active_root_id: number | null
+  is_exclusive: boolean
   action: string
   target: string
   status: TaskStatus
@@ -134,6 +135,7 @@ export interface TaskData {
   task_id: number
   task_type: TaskType
   active_root_id: number | null
+  is_exclusive: boolean
   action: string
   target: string
   status: TaskStatus

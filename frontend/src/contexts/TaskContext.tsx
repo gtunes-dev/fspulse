@@ -11,6 +11,7 @@ interface TaskContextType {
   currentTaskId: number | null
   activeRootId: number | null
   isRunning: boolean
+  isExclusive: boolean
   isPaused: boolean
   pauseUntil: number | null
   lastTaskCompletedAt: number | null
@@ -43,6 +44,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const currentTaskId = activeTask?.task_id ?? null
   const activeRootId = activeTask?.active_root_id ?? null
   const isRunning = activeTask !== null
+  const isExclusive = activeTask?.is_exclusive ?? false
   const isPaused = pauseState?.paused ?? false
   const pauseUntil = pauseState?.pauseUntil ?? null
 
@@ -89,6 +91,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         task_id: task.task_id,
         task_type: task.task_type,
         active_root_id: task.active_root_id,
+        is_exclusive: task.is_exclusive,
         action: task.action,
         target: task.target,
         status: task.status,
@@ -175,6 +178,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     currentTaskId,
     activeRootId,
     isRunning,
+    isExclusive,
     isPaused,
     pauseUntil,
     lastTaskCompletedAt,

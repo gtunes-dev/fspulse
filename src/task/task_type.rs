@@ -10,10 +10,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum TaskType {
     Scan = 0,
-    // Future task types:
-    // DatabaseCompact = 1,
-    // Export = 2,
-    // etc.
+    #[serde(rename = "compact_database")]
+    CompactDatabase = 1,
 }
 
 impl TaskType {
@@ -21,10 +19,10 @@ impl TaskType {
         *self as i64
     }
 
-    #[allow(dead_code)] // Part of AlertType pattern, will be used when reading from DB
     pub fn from_i64(value: i64) -> Self {
         match value {
             0 => TaskType::Scan,
+            1 => TaskType::CompactDatabase,
             _ => {
                 warn!(
                     "Invalid TaskType value in database: {}, defaulting to Scan",
@@ -35,16 +33,18 @@ impl TaskType {
         }
     }
 
-    #[allow(dead_code)] // Part of AlertType pattern, will be used for display
+    #[allow(dead_code)]
     pub fn short_name(&self) -> &'static str {
         match self {
             TaskType::Scan => "S",
+            TaskType::CompactDatabase => "CD",
         }
     }
 
     pub fn full_name(&self) -> &'static str {
         match self {
             TaskType::Scan => "Scan",
+            TaskType::CompactDatabase => "Compact Database",
         }
     }
 
@@ -52,8 +52,10 @@ impl TaskType {
         match s.to_ascii_uppercase().as_str() {
             // Full names
             "SCAN" => Some(TaskType::Scan),
+            "COMPACT DATABASE" | "COMPACTDATABASE" => Some(TaskType::CompactDatabase),
             // Short names
             "S" => Some(TaskType::Scan),
+            "CD" => Some(TaskType::CompactDatabase),
             _ => None,
         }
     }
@@ -78,11 +80,13 @@ mod tests {
     #[test]
     fn test_task_type_integer_values() {
         assert_eq!(TaskType::Scan.as_i64(), 0);
+        assert_eq!(TaskType::CompactDatabase.as_i64(), 1);
     }
 
     #[test]
     fn test_task_type_from_i64() {
         assert_eq!(TaskType::from_i64(0), TaskType::Scan);
+        assert_eq!(TaskType::from_i64(1), TaskType::CompactDatabase);
         // Invalid values should default to Scan
         assert_eq!(TaskType::from_i64(999), TaskType::Scan);
         assert_eq!(TaskType::from_i64(-1), TaskType::Scan);
@@ -91,11 +95,13 @@ mod tests {
     #[test]
     fn test_task_type_short_name() {
         assert_eq!(TaskType::Scan.short_name(), "S");
+        assert_eq!(TaskType::CompactDatabase.short_name(), "CD");
     }
 
     #[test]
     fn test_task_type_full_name() {
         assert_eq!(TaskType::Scan.full_name(), "Scan");
+        assert_eq!(TaskType::CompactDatabase.full_name(), "Compact Database");
     }
 
     #[test]
@@ -105,22 +111,48 @@ mod tests {
         assert_eq!(TaskType::from_string("Scan"), Some(TaskType::Scan));
         assert_eq!(TaskType::from_string("S"), Some(TaskType::Scan));
         assert_eq!(TaskType::from_string("s"), Some(TaskType::Scan));
+        assert_eq!(
+            TaskType::from_string("compact database"),
+            Some(TaskType::CompactDatabase)
+        );
+        assert_eq!(
+            TaskType::from_string("COMPACT DATABASE"),
+            Some(TaskType::CompactDatabase)
+        );
+        assert_eq!(
+            TaskType::from_string("COMPACTDATABASE"),
+            Some(TaskType::CompactDatabase)
+        );
+        assert_eq!(
+            TaskType::from_string("CD"),
+            Some(TaskType::CompactDatabase)
+        );
+        assert_eq!(
+            TaskType::from_string("cd"),
+            Some(TaskType::CompactDatabase)
+        );
         assert_eq!(TaskType::from_string("invalid"), None);
     }
 
     #[test]
     fn test_task_type_display() {
         assert_eq!(format!("{}", TaskType::Scan), "Scan");
+        assert_eq!(format!("{}", TaskType::CompactDatabase), "Compact Database");
     }
 
     #[test]
     fn test_task_type_serde_roundtrip() {
         let scan = TaskType::Scan;
         let json = serde_json::to_string(&scan).unwrap();
-        // Should serialize to lowercase "scan"
         assert_eq!(json, "\"scan\"");
         let restored: TaskType = serde_json::from_str(&json).unwrap();
         assert_eq!(scan, restored);
+
+        let compact = TaskType::CompactDatabase;
+        let json = serde_json::to_string(&compact).unwrap();
+        assert_eq!(json, "\"compact_database\"");
+        let restored: TaskType = serde_json::from_str(&json).unwrap();
+        assert_eq!(compact, restored);
     }
 
     #[test]
@@ -138,5 +170,9 @@ mod tests {
         // Test Debug
         let debug_str = format!("{scan:?}");
         assert!(debug_str.contains("Scan"));
+
+        let compact = TaskType::CompactDatabase;
+        let debug_str = format!("{compact:?}");
+        assert!(debug_str.contains("CompactDatabase"));
     }
 }

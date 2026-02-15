@@ -1,7 +1,7 @@
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::scans::{HashMode, ValidateMode};
-use crate::task::{ScanSettings, ScanTask, Task, TaskStatus, TaskType};
+use crate::task::{CompactDatabaseSettings, CompactDatabaseTask, ScanSettings, ScanTask, Task, TaskStatus, TaskType};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -883,8 +883,8 @@ struct TaskRow {
     task_id: i64,
     task_type: TaskType,
     status: TaskStatus,
-    root_id: i64,
-    root_path: String,
+    root_id: Option<i64>,
+    root_path: Option<String>,
     schedule_id: Option<i64>,
     task_settings: String,
     task_state: Option<String>,
@@ -957,6 +957,44 @@ impl TaskEntry {
         Ok(())
     }
 
+    /// Create a new compact database task entry, or no-op if one already exists.
+    /// This is the singleton check — prevents duplicate pending compact tasks.
+    /// Must be called within a transaction for atomicity.
+    pub fn create_compact_database(conn: &rusqlite::Connection) -> Result<(), FsPulseError> {
+        // Check for existing Pending compact task
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE task_type = ? AND status = 0",
+                [TaskType::CompactDatabase.as_i64()],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count > 0)
+            .map_err(FsPulseError::DatabaseError)?;
+
+        if exists {
+            return Ok(()); // Already queued, no-op
+        }
+
+        let now = chrono::Utc::now().timestamp();
+        let task_settings = CompactDatabaseSettings {}.to_json()?;
+
+        conn.execute(
+            "INSERT INTO tasks (
+                task_type, status, run_at,
+                source, task_settings, created_at
+            ) VALUES (?, 0, 0, ?, ?, ?)",
+            rusqlite::params![
+                TaskType::CompactDatabase.as_i64(),
+                SourceType::Manual.as_i32(),
+                task_settings,
+                now,
+            ],
+        )
+        .map_err(FsPulseError::DatabaseError)?;
+
+        Ok(())
+    }
+
     /// Find the next task to process (generic across all task types)
     ///
     /// Priority order:
@@ -970,7 +1008,7 @@ impl TaskEntry {
                 "SELECT t.task_id, t.task_type, t.status, t.root_id, r.root_path,
                         t.schedule_id, t.task_settings, t.task_state
                  FROM tasks t
-                 INNER JOIN roots r ON t.root_id = r.root_id
+                 LEFT JOIN roots r ON t.root_id = r.root_id
                  WHERE t.status = 1 LIMIT 1",
                 [],
                 |row| {
@@ -999,7 +1037,7 @@ impl TaskEntry {
                 "SELECT t.task_id, t.task_type, t.status, t.root_id, r.root_path,
                         t.schedule_id, t.task_settings, t.task_state
                  FROM tasks t
-                 INNER JOIN roots r ON t.root_id = r.root_id
+                 LEFT JOIN roots r ON t.root_id = r.root_id
                  WHERE t.status = 0 AND (t.source = ? OR t.run_at <= ?)
                  ORDER BY t.source ASC, t.run_at ASC, t.task_id ASC
                  LIMIT 1",
@@ -1110,14 +1148,31 @@ impl TaskEntry {
 
             // Dispatch to task-type-specific constructor (pure, no I/O)
             let task: Box<dyn Task> = match row.task_type {
-                TaskType::Scan => Box::new(ScanTask::new(
-                    row.task_id,
-                    row.root_id,
-                    row.root_path,
-                    row.schedule_id,
-                    &row.task_settings,
-                    row.task_state.as_deref(),
-                )?),
+                TaskType::Scan => {
+                    let root_id = row.root_id.ok_or_else(|| {
+                        FsPulseError::Error(format!(
+                            "Scan task {} has NULL root_id",
+                            row.task_id
+                        ))
+                    })?;
+                    let root_path = row.root_path.ok_or_else(|| {
+                        FsPulseError::Error(format!(
+                            "Scan task {} has NULL root_path",
+                            row.task_id
+                        ))
+                    })?;
+                    Box::new(ScanTask::new(
+                        row.task_id,
+                        root_id,
+                        root_path,
+                        row.schedule_id,
+                        &row.task_settings,
+                        row.task_state.as_deref(),
+                    )?)
+                }
+                TaskType::CompactDatabase => {
+                    Box::new(CompactDatabaseTask::new(row.task_id))
+                }
             };
 
             Ok(Some(task))

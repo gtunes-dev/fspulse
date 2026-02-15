@@ -99,7 +99,7 @@ export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) 
       }
 
       // Schedule the scan
-      const response = await fetch('/api/scans/schedule', {
+      const response = await fetch('/api/tasks/scan', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

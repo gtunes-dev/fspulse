@@ -164,9 +164,11 @@ impl WebServer {
                 "/api/alerts/{alert_id}/status",
                 put(api::alerts::update_alert_status),
             )
-            // Scan endpoints
-            .route("/api/scans/schedule", post(api::scans::schedule_scan))
+            // Task scheduling endpoints
+            .route("/api/tasks/scan", post(api::tasks::schedule_scan))
+            .route("/api/tasks/compact-database", post(api::tasks::schedule_compact_database))
             .route("/api/tasks/{task_id}/stop", post(api::scans::stop_task))
+            // Scan endpoints
             .route(
                 "/api/scans/scan_history/count",
                 get(api::scans::get_scan_history_count),
@@ -222,10 +224,6 @@ impl WebServer {
             .route(
                 "/api/database/stats",
                 get(api::database::get_database_stats),
-            )
-            .route(
-                "/api/database/compact",
-                post(api::database::compact_database),
             )
             // Settings endpoints
             .route("/api/settings", get(api::settings::get_settings))

@@ -1,6 +1,7 @@
 use chrono::{offset::LocalResult, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use std::ffi::OsStr;
 use std::path::Path;
+use std::time::Duration;
 use tico::tico;
 
 use crate::error::FsPulseError;
@@ -113,6 +114,19 @@ impl Utils {
         Ok((start_ts, end_ts))
     }
 
+    /// Format a duration as a human-readable elapsed time string.
+    /// Examples: "0s", "5s", "1m 30s", "61m 1s"
+    pub fn format_elapsed(duration: Duration) -> String {
+        let total_secs = duration.as_secs();
+        if total_secs < 60 {
+            format!("{}s", total_secs)
+        } else {
+            let mins = total_secs / 60;
+            let secs = total_secs % 60;
+            format!("{}m {}s", mins, secs)
+        }
+    }
+
     pub fn _format_path_for_display(path: &Path, max_len: usize) -> String {
         let path_str = path.to_string_lossy();
         if path_str.len() <= max_len {
@@ -166,6 +180,16 @@ mod tests {
 
         let normal_path = Utils::display_short_path("short.txt");
         assert_eq!(normal_path, "short.txt");
+    }
+
+    #[test]
+    fn test_format_elapsed() {
+        assert_eq!(Utils::format_elapsed(Duration::from_secs(0)), "0s");
+        assert_eq!(Utils::format_elapsed(Duration::from_secs(5)), "5s");
+        assert_eq!(Utils::format_elapsed(Duration::from_secs(59)), "59s");
+        assert_eq!(Utils::format_elapsed(Duration::from_secs(60)), "1m 0s");
+        assert_eq!(Utils::format_elapsed(Duration::from_secs(90)), "1m 30s");
+        assert_eq!(Utils::format_elapsed(Duration::from_secs(3661)), "61m 1s");
     }
 
     #[test]

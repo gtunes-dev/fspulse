@@ -47,4 +47,9 @@ pub trait Task: Send {
     /// Handle task error (stop with error message)
     /// Called by TaskManager when task.run() returns an error that isn't an interrupt
     fn on_error(&mut self, error_msg: &str) -> Result<(), FsPulseError>;
+
+    /// Whether this task requires exclusive system access.
+    /// When true, TaskManager blocks scheduling new tasks, pausing, and unpausing
+    /// while this task is running. Used for operations like VACUUM that lock the database.
+    fn is_exclusive(&self) -> bool;
 }

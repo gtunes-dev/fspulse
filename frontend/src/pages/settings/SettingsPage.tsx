@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CircleDashed, RefreshCw } from 'lucide-react'
 import { formatFileSize } from '@/lib/formatUtils'
+import { useTaskContext } from '@/contexts/TaskContext'
 
 interface AppInfo {
   name: string
@@ -39,6 +40,8 @@ interface SettingsResponse {
 }
 
 export function SettingsPage() {
+  const { isExclusive, lastTaskCompletedAt } = useTaskContext()
+
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +49,6 @@ export function SettingsPage() {
   const [dbStats, setDbStats] = useState<DbStats | null>(null)
   const [dbLoading, setDbLoading] = useState(true)
   const [dbError, setDbError] = useState<string | null>(null)
-  const [compacting, setCompacting] = useState(false)
   const [compactionMessage, setCompactionMessage] = useState<string | null>(null)
 
   const [settings, setSettings] = useState<SettingsResponse | null>(null)
@@ -107,38 +109,32 @@ export function SettingsPage() {
     }
   }
 
+  // Refresh DB stats when a task completes (picks up new sizes after VACUUM)
+  useEffect(() => {
+    if (lastTaskCompletedAt) {
+      fetchDbStats()
+    }
+  }, [lastTaskCompletedAt])
+
   async function handleCompact() {
-    if (!dbStats) return
-
-    const sizeBefore = dbStats.total_size
-
     try {
-      setCompacting(true)
       setCompactionMessage(null)
 
-      const response = await fetch('/api/database/compact', {
+      const response = await fetch('/api/tasks/compact-database', {
         method: 'POST',
       })
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(errorText || 'Compaction failed')
+        throw new Error(errorText || 'Failed to schedule compaction')
       }
 
-      // Fetch stats again to show savings
-      const statsAfter = await fetchDbStats()
-
-      // Calculate and show savings
-      const sizeAfter = statsAfter?.total_size || 0
-      const saved = sizeBefore - sizeAfter
-      setCompactionMessage(`Compaction complete! Saved ${formatFileSize(saved)}`)
+      setCompactionMessage('Compaction scheduled')
     } catch (err) {
-      console.error('Error compacting database:', err)
+      console.error('Error scheduling database compaction:', err)
       setCompactionMessage(
-        err instanceof Error ? `Error: ${err.message}` : 'Compaction failed'
+        err instanceof Error ? `Error: ${err.message}` : 'Failed to schedule compaction'
       )
-    } finally {
-      setCompacting(false)
     }
   }
 
@@ -787,10 +783,10 @@ export function SettingsPage() {
                 <div className="flex items-center gap-3">
                   <Button
                     onClick={handleCompact}
-                    disabled={compacting || dbStats.wasted_size === 0}
+                    disabled={isExclusive || dbStats.wasted_size === 0}
                     size="default"
                   >
-                    {compacting ? 'Compacting...' : 'Compact Database'}
+                    Compact Database
                   </Button>
                   {dbStats.wasted_size === 0 && (
                     <span className="text-xs text-muted-foreground">
@@ -813,8 +809,7 @@ export function SettingsPage() {
 
                 <p className="text-xs text-muted-foreground">
                   Compacting the database reclaims wasted space from deleted data and migrations.
-                  This operation may take several minutes for large databases and cannot run while
-                  a scan is in progress.
+                  This operation runs as a background task and may take several minutes for large databases.
                 </p>
               </div>
             </div>
