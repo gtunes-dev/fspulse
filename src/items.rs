@@ -316,7 +316,7 @@ impl Item {
         item_type: ItemType,
     ) -> Result<Option<Self>, FsPulseError> {
         let query = format!(
-            "SELECT {} FROM ITEMS WHERE root_id = ? AND item_path = ? AND item_type = ?",
+            "SELECT {} FROM items_old WHERE root_id = ? AND item_path = ? AND item_type = ?",
             Item::ITEM_COLUMNS
         );
 
@@ -413,7 +413,7 @@ impl Item {
                     WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
                     ELSE 0
                 END AS needs_val
-            FROM items i
+            FROM items_old i
             LEFT JOIN changes c
                 ON c.item_id = i.item_id AND c.scan_id = $3
             WHERE
@@ -499,7 +499,7 @@ impl Item {
                 WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
                 ELSE 0
             END AS needs_val
-        FROM items i
+        FROM items_old i
         LEFT JOIN changes c
             ON c.item_id = i.item_id AND c.scan_id = $3
         WHERE
@@ -606,7 +606,7 @@ impl Item {
         // Note: Always includes tombstones - client-side filtering provides better UX
         let sql = format!(
             "SELECT {}
-             FROM items
+             FROM items_old
              WHERE root_id = ?
                AND item_path LIKE ? || '%'
                AND item_path != ?
@@ -632,7 +632,7 @@ impl Item {
     /// Returns counts of non-tombstone files and directories that are direct or nested children
     pub fn get_children_counts(item_id: i64) -> Result<ChildrenCounts, FsPulseError> {
         // First get the path and root_id of the parent directory
-        let parent_sql = "SELECT item_path, root_id FROM items WHERE item_id = ?";
+        let parent_sql = "SELECT item_path, root_id FROM items_old WHERE item_id = ?";
         let conn = Database::get_connection()?;
         let (parent_path, root_id): (String, i64) = conn
             .query_row(parent_sql, params![item_id], |row| {
@@ -648,7 +648,7 @@ impl Item {
             SELECT
                 item_type,
                 COUNT(*) as count
-            FROM items
+            FROM items_old
             WHERE root_id = ?
               AND is_ts = 0
               AND item_path LIKE ? || '%'

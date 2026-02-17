@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '15');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '16');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -42,8 +42,11 @@ CREATE TABLE IF NOT EXISTS scans (
     FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id)
 );
 
--- Items table tracks files and directories discovered during scans
-CREATE TABLE IF NOT EXISTS items (
+-- ========================================
+-- Old-model items table (items_old)
+-- ========================================
+-- Mutable current state of each item. Retained during dual-write transition period.
+CREATE TABLE IF NOT EXISTS items_old (
     item_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,                   -- Links each item to a root
     item_path TEXT NOT NULL,                         -- Absolute path of the item
@@ -75,10 +78,12 @@ CREATE TABLE IF NOT EXISTS items (
     UNIQUE (root_id, item_path, item_type)           -- Ensures uniqueness within each root path
 );
 
--- Indexes to optimize queries
-CREATE INDEX IF NOT EXISTS idx_items_path ON items (item_path COLLATE natural_path);
-CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
-CREATE INDEX IF NOT EXISTS idx_items_root_scan ON items (root_id, last_scan, is_ts);
+-- Indexes for items_old
+-- idx_items_old_path and idx_items_old_root_path use _old suffix to avoid name conflicts
+-- with the new items table. idx_items_root_scan has no conflict so keeps its original name.
+CREATE INDEX IF NOT EXISTS idx_items_old_path ON items_old (item_path COLLATE natural_path);
+CREATE INDEX IF NOT EXISTS idx_items_old_root_path ON items_old (root_id, item_path COLLATE natural_path, item_type);
+CREATE INDEX IF NOT EXISTS idx_items_root_scan ON items_old (root_id, last_scan, is_ts);
 
 -- Changes table tracks modifications between scans
 CREATE TABLE IF NOT EXISTS changes (
@@ -116,13 +121,71 @@ CREATE TABLE IF NOT EXISTS changes (
     val_error_new DEFAULT NULL,             -- Stores the new validation error (if changed)
 
     FOREIGN KEY (scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (item_id) REFERENCES items_old(item_id),
     UNIQUE (scan_id, item_id)
 );
 
 -- Indexes to optimize queries
 CREATE INDEX IF NOT EXISTS idx_changes_scan_type ON changes (scan_id, change_type);
 CREATE INDEX IF NOT EXISTS idx_changes_item ON changes (item_id);
+
+-- ========================================
+-- New-model identity table (items)
+-- ========================================
+-- Lightweight stable identity for each item across all its versions.
+CREATE TABLE IF NOT EXISTS items (
+    item_id     INTEGER PRIMARY KEY,  -- NOT AUTOINCREMENT: values match items_old
+    root_id     INTEGER NOT NULL,
+    item_path   TEXT NOT NULL,
+    item_type   INTEGER NOT NULL,
+    FOREIGN KEY (root_id) REFERENCES roots(root_id),
+    UNIQUE (root_id, item_path, item_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_items_path ON items (item_path COLLATE natural_path);
+CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
+
+-- ========================================
+-- Temporal item versions table
+-- ========================================
+-- One row per distinct state of an item. Full state snapshot per version.
+CREATE TABLE IF NOT EXISTS item_versions (
+    version_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id         INTEGER NOT NULL,
+    root_id         INTEGER NOT NULL,
+    item_path       TEXT NOT NULL,
+    item_type       INTEGER NOT NULL,
+    first_scan_id   INTEGER NOT NULL,
+    last_scan_id    INTEGER NOT NULL,
+    is_deleted      BOOLEAN NOT NULL DEFAULT 0,
+    access          INTEGER NOT NULL DEFAULT 0,
+    mod_date        INTEGER,
+    size            INTEGER,
+    file_hash       TEXT,
+    val             INTEGER NOT NULL DEFAULT 3,
+    val_error       TEXT,
+    last_hash_scan  INTEGER,
+    last_val_scan   INTEGER,
+    FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (root_id) REFERENCES roots(root_id),
+    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
+    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_versions_item_scan ON item_versions (item_id, first_scan_id DESC);
+CREATE INDEX IF NOT EXISTS idx_versions_root_scan ON item_versions (root_id, first_scan_id);
+CREATE INDEX IF NOT EXISTS idx_versions_first_scan ON item_versions (first_scan_id);
+
+-- ========================================
+-- Scan undo log (transient, for rollback support)
+-- ========================================
+CREATE TABLE IF NOT EXISTS scan_undo_log (
+    undo_id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    version_id          INTEGER NOT NULL,
+    old_last_scan_id    INTEGER NOT NULL,
+    old_last_hash_scan  INTEGER,
+    old_last_val_scan   INTEGER
+);
 
 CREATE TABLE IF NOT EXISTS alerts (
   alert_id INTEGER PRIMARY KEY AUTOINCREMENT,

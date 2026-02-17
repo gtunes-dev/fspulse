@@ -95,7 +95,7 @@ impl Root {
             )?;
 
             // Delete items for this root
-            c.execute("DELETE FROM items WHERE root_id = ?", [root_id])?;
+            c.execute("DELETE FROM items_old WHERE root_id = ?", [root_id])?;
 
             // Delete scans for this root
             c.execute("DELETE FROM scans WHERE root_id = ?", [root_id])?;

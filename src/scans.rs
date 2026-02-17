@@ -440,7 +440,7 @@ impl Scan {
                                 "SELECT
                                 SUM(CASE WHEN item_type = 0 THEN 1 ELSE 0 END) AS file_count,
                                 SUM(CASE WHEN item_type = 1 THEN 1 ELSE 0 END) AS folder_count
-                                FROM items WHERE last_scan = ? AND is_ts = 0",
+                                FROM items_old WHERE last_scan = ? AND is_ts = 0",
                                 [self.scan_id],
                                 |row| Ok((row.get(0)?, row.get(1)?)),
                             )
@@ -587,7 +587,7 @@ impl Scan {
             // now recover the modfiied properties from the change and this batch handles the minor differences
             // between the two operations
             c.execute(
-                "UPDATE items
+                "UPDATE items_old
                 SET (
                     is_ts,
                     access,
@@ -602,8 +602,8 @@ impl Scan {
                 ) =
                 (
                     SELECT
-                        CASE WHEN c.change_type = 1 THEN 1 ELSE items.is_ts END,
-                        COALESCE(c.access_old, items.access),
+                        CASE WHEN c.change_type = 1 THEN 1 ELSE items_old.is_ts END,
+                        COALESCE(c.access_old, items_old.access),
                         c.mod_date_old,
                         c.size_old,
                         c.last_hash_scan_old,
@@ -613,7 +613,7 @@ impl Scan {
                         c.val_error_old,
                         ?1
                     FROM changes c
-                    WHERE c.item_id = items.item_id
+                    WHERE c.item_id = items_old.item_id
                         AND c.scan_id = ?2
                         AND (c.change_type = 1 AND c.is_undelete = 1)
                     LIMIT 1
@@ -630,7 +630,7 @@ impl Scan {
             // Undoing a modify requires selectively copying back (from the change)
             // the property groups that were part of the modify
             c.execute(
-                "UPDATE items
+                "UPDATE items_old
                 SET (
                     access,
                     mod_date,
@@ -644,17 +644,17 @@ impl Scan {
                 ) =
                 (
                 SELECT
-                    CASE WHEN c.access_old IS NOT NULL THEN c.access_old ELSE items.access END,
-                    CASE WHEN c.meta_change = 1 THEN COALESCE(c.mod_date_old, items.mod_date) ELSE items.mod_date END,
-                    CASE WHEN c.meta_change = 1 THEN COALESCE(c.size_old, items.size) ELSE items.size END,
-                    CASE WHEN c.hash_change = 1 THEN c.last_hash_scan_old ELSE items.last_hash_scan END,
-                    CASE WHEN c.hash_change = 1 THEN c.hash_old ELSE items.file_hash END,
-                    CASE WHEN c.val_change = 1 THEN c.last_val_scan_old ELSE items.last_val_scan END,
-                    CASE WHEN c.val_change = 1 THEN c.val_old ELSE items.val END,
-                    CASE WHEN c.val_change = 1 THEN c.val_error_old ELSE items.val_error END,
+                    CASE WHEN c.access_old IS NOT NULL THEN c.access_old ELSE items_old.access END,
+                    CASE WHEN c.meta_change = 1 THEN COALESCE(c.mod_date_old, items_old.mod_date) ELSE items_old.mod_date END,
+                    CASE WHEN c.meta_change = 1 THEN COALESCE(c.size_old, items_old.size) ELSE items_old.size END,
+                    CASE WHEN c.hash_change = 1 THEN c.last_hash_scan_old ELSE items_old.last_hash_scan END,
+                    CASE WHEN c.hash_change = 1 THEN c.hash_old ELSE items_old.file_hash END,
+                    CASE WHEN c.val_change = 1 THEN c.last_val_scan_old ELSE items_old.last_val_scan END,
+                    CASE WHEN c.val_change = 1 THEN c.val_old ELSE items_old.val END,
+                    CASE WHEN c.val_change = 1 THEN c.val_error_old ELSE items_old.val_error END,
                     ?1
                 FROM changes c
-                WHERE c.item_id = items.item_id
+                WHERE c.item_id = items_old.item_id
                     AND c.scan_id = ?2
                     AND c.change_type = 2
                 LIMIT 1
@@ -662,7 +662,7 @@ impl Scan {
                 WHERE last_scan = ?2
                 AND EXISTS (
                     SELECT 1 FROM changes c
-                    WHERE c.item_id = items.item_id
+                    WHERE c.item_id = items_old.item_id
                         AND c.scan_id = ?2
                         AND c.change_type = 2
                 )",
@@ -671,7 +671,7 @@ impl Scan {
 
             // Undo deletes. This is simple because deletes just set the tombstone flag
             c.execute(
-                "UPDATE items
+                "UPDATE items_old
                 SET is_ts = 0,
                     last_scan = ?1
                 WHERE item_id IN (
@@ -703,12 +703,12 @@ impl Scan {
             // Find the items that had their last_scan updated but where no change
             // record was created, and reset their last_scan
             c.execute(
-                "UPDATE items
+                "UPDATE items_old
                  SET last_scan = ?1
                  WHERE last_scan = ?2
                    AND NOT EXISTS (
                      SELECT 1 FROM changes c
-                     WHERE c.item_id = items.item_id
+                     WHERE c.item_id = items_old.item_id
                        AND c.scan_id = ?2
                    )",
                 [prev_scan_id, scan.scan_id()],
@@ -724,7 +724,7 @@ impl Scan {
             // only remaining items with a last_scan of the current scan are the simple
             // adds. This should be true :)
             c.execute(
-                "DELETE FROM items
+                "DELETE FROM items_old_old
             WHERE last_scan = ?",
                 [scan.scan_id()],
             )?;
@@ -799,7 +799,7 @@ impl ScanStats {
                 SUM(CASE WHEN c.change_type = 2 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_modified,
                 SUM(CASE WHEN c.change_type = 3 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_deleted
              FROM changes c
-             JOIN items i ON c.item_id = i.item_id
+             JOIN items_old i ON c.item_id = i.item_id
              WHERE c.scan_id = ?",
             params![scan_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
@@ -808,7 +808,7 @@ impl ScanStats {
         // Get hashing statistics
         let items_hashed: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM items
+                "SELECT COUNT(*) FROM items_old
              WHERE last_scan = ? AND hash IS NOT NULL",
                 params![scan_id],
                 |row| row.get(0),
@@ -818,7 +818,7 @@ impl ScanStats {
         // Get validation statistics
         let items_validated: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM items
+                "SELECT COUNT(*) FROM items_old
              WHERE last_scan = ? AND (val IS NOT NULL OR val_error IS NOT NULL)",
                 params![scan_id],
                 |row| row.get(0),

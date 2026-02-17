@@ -453,7 +453,7 @@ impl Scanner {
             c.execute(
                 "INSERT INTO changes (scan_id, item_id, change_type)
                     SELECT ?, item_id, ?
-                    FROM items
+                    FROM items_old
                     WHERE root_id = ? AND is_ts = 0 AND last_scan < ?",
                 (
                     scan.scan_id(),
@@ -465,7 +465,7 @@ impl Scanner {
 
             // Mark unseen items as tombstones
             c.execute(
-                "UPDATE items SET
+                "UPDATE items_old SET
                     is_ts = 1,
                     last_scan = ?
                 WHERE root_id = ? AND last_scan < ? AND is_ts = 0",
@@ -981,7 +981,7 @@ impl Scanner {
     ) -> Result<(), FsPulseError> {
         ctx.execute_batch_write(|c| {
             let rows_updated = c.execute(
-                "UPDATE items SET
+                "UPDATE items_old SET
                     is_ts = 0,
                     access = ?,
                     mod_date = ?,
@@ -1055,7 +1055,7 @@ impl Scanner {
         ctx.execute_batch_write(|c| {
             // Update item with new values
             let rows_updated = c.execute(
-                "UPDATE items SET
+                "UPDATE items_old SET
                     access = ?,
                     mod_date = ?,
                     size = ?,
@@ -1122,7 +1122,7 @@ impl Scanner {
     ) -> Result<(), FsPulseError> {
         ctx.execute_batch_write(|c| {
             let rows_updated = c.execute(
-                "UPDATE items SET last_scan = ? WHERE item_id = ?",
+                "UPDATE items_old SET last_scan = ? WHERE item_id = ?",
                 (ctx.scan.scan_id(), existing_item.item_id()),
             )?;
             Scanner::check_update_result(rows_updated, existing_item.item_id())
@@ -1151,7 +1151,7 @@ impl Scanner {
 
         ctx.execute_batch_write(|c| {
             c.execute(
-                "INSERT INTO items (root_id, item_path, item_type, access, mod_date, size, val, last_scan)
+                "INSERT INTO items_old (root_id, item_path, item_type, access, mod_date, size, val, last_scan)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     ctx.scan.root_id(),
@@ -1396,9 +1396,9 @@ impl Scanner {
                 )?;
             }
 
-            // Step 2: Update `items` table
+            // Step 2: Update `items_old` table
             c.execute(
-                "UPDATE items
+                "UPDATE items_old
                 SET
                     access = ?,
                     file_hash = ?,

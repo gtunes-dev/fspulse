@@ -685,7 +685,7 @@ impl QueryImpl {
         {offset_clause}";
 
     const ITEMS_SQL_QUERY: &str = "SELECT {select_list}
-        FROM items
+        FROM items_old
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -693,8 +693,8 @@ impl QueryImpl {
 
     const CHANGES_SQL_QUERY: &str = "SELECT {select_list}
         FROM changes
-        JOIN items
-            ON changes.item_id = items.item_id
+        JOIN items_old
+            ON changes.item_id = items_old.item_id
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -702,8 +702,8 @@ impl QueryImpl {
 
     const ALERTS_SQL_QUERY: &str = "SELECT {select_list}
         FROM alerts
-        JOIN items
-          ON alerts.item_id = items.item_id
+        JOIN items_old
+          ON alerts.item_id = items_old.item_id
         JOIN scans
             on alerts.scan_id = scans.scan_id
         {where_clause}
