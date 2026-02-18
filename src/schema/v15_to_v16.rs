@@ -46,6 +46,7 @@ CREATE TABLE items (
     item_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id     INTEGER NOT NULL,
     item_path   TEXT NOT NULL,
+    item_name   TEXT NOT NULL,
     item_type   INTEGER NOT NULL,
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     UNIQUE (root_id, item_path, item_type)
@@ -53,6 +54,7 @@ CREATE TABLE items (
 
 CREATE INDEX idx_items_path ON items (item_path COLLATE natural_path);
 CREATE INDEX idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
+CREATE INDEX idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
 
 -- ========================================
 -- Create item_versions table
@@ -97,8 +99,11 @@ pub fn migrate_15_to_16(conn: &Connection) -> Result<(), FsPulseError> {
     // Step 1: Bulk-copy identities from items_old into new items table
     info!("Migration 15→16: Copying item identities...");
     let identity_count = conn.execute(
-        "INSERT INTO items (item_id, root_id, item_path, item_type)
-         SELECT item_id, root_id, item_path, item_type FROM items_old",
+        "INSERT INTO items (item_id, root_id, item_path, item_name, item_type)
+         SELECT item_id, root_id, item_path,
+                REPLACE(item_path, RTRIM(item_path, REPLACE(item_path, '/', '')), ''),
+                item_type
+         FROM items_old",
         [],
     ).map_err(FsPulseError::DatabaseError)?;
     info!("Migration 15→16: Copied {} item identities", identity_count);

@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS items (
     item_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id     INTEGER NOT NULL,
     item_path   TEXT NOT NULL,
+    item_name   TEXT NOT NULL,
     item_type   INTEGER NOT NULL,
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     UNIQUE (root_id, item_path, item_type)
@@ -144,6 +145,7 @@ CREATE TABLE IF NOT EXISTS items (
 
 CREATE INDEX IF NOT EXISTS idx_items_path ON items (item_path COLLATE natural_path);
 CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
+CREATE INDEX IF NOT EXISTS idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
 
 -- ========================================
 -- Temporal item versions table

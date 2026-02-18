@@ -50,25 +50,22 @@ export function SearchResultsList({
         const items = (await response.json()) as Array<{
           item_id: number
           item_path: string
+          item_name: string
           item_type: string
           is_deleted: boolean
         }>
 
-        const flatItems: FlatTreeItem[] = items.map((item) => {
-          const itemName =
-            item.item_path.split('/').filter(Boolean).pop() || item.item_path
-          return {
-            item_id: item.item_id,
-            item_path: item.item_path,
-            item_name: itemName,
-            item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-            is_deleted: item.is_deleted,
-            depth: 0,
-            isExpanded: false,
-            childrenLoaded: false,
-            hasChildren: item.item_type === 'D',
-          }
-        })
+        const flatItems: FlatTreeItem[] = items.map((item) => ({
+          item_id: item.item_id,
+          item_path: item.item_path,
+          item_name: item.item_name,
+          item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
+          is_deleted: item.is_deleted,
+          depth: 0,
+          isExpanded: false,
+          childrenLoaded: false,
+          hasChildren: item.item_type === 'D',
+        }))
 
         setResults(flatItems)
       } catch (err) {

@@ -14,6 +14,7 @@ interface UseVirtualTreeOptions {
 interface ImmediateChildrenResponse {
   item_id: number
   item_path: string
+  item_name: string
   item_type: string
   is_deleted: boolean
 }
@@ -113,13 +114,6 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
   }, [])
 
   /**
-   * Extracts the item name from a full path.
-   */
-  const extractItemName = useCallback((path: string): string => {
-    return path.split('/').filter(Boolean).pop() || path
-  }, [])
-
-  /**
    * Loads children for a directory node from the temporal API.
    * Children are always loaded with deleted items - filtering happens client-side.
    */
@@ -149,17 +143,14 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       const items = await response.json() as ImmediateChildrenResponse[]
 
       // Transform API response to TreeNodeData format
-      const childItems: TreeNodeData[] = items.map(item => {
-        const itemName = extractItemName(item.item_path)
-        return {
-          item_id: item.item_id,
-          item_path: item.item_path,
-          item_name: itemName,
-          item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-          is_ts: item.is_deleted,
-          name: itemName,
-        }
-      })
+      const childItems: TreeNodeData[] = items.map(item => ({
+        item_id: item.item_id,
+        item_path: item.item_path,
+        item_name: item.item_name,
+        item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
+        is_ts: item.is_deleted,
+        name: item.item_name,
+      }))
 
       // Sort children (directories first, then alphabetically)
       const sortedChildren = sortTreeItems(childItems)
@@ -207,7 +198,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         return updated
       })
     }
-  }, [rootId, scanId, extractItemName])
+  }, [rootId, scanId])
 
   /**
    * Toggles the expansion state of a directory node.

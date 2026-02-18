@@ -129,6 +129,7 @@ pub struct ImmediateChildrenParams {
 pub struct ItemResponse {
     pub item_id: i64,
     pub item_path: String,
+    pub item_name: String,
     pub item_type: String,
     pub is_deleted: bool,
 }
@@ -147,6 +148,7 @@ pub async fn get_immediate_children(
                 .map(|item| ItemResponse {
                     item_id: item.item_id,
                     item_path: item.item_path.clone(),
+                    item_name: item.item_name.clone(),
                     item_type: item.item_type.short_name().to_string(),
                     is_deleted: item.is_deleted,
                 })
@@ -187,6 +189,7 @@ pub async fn search_items(
                 .map(|item| ItemResponse {
                     item_id: item.item_id,
                     item_path: item.item_path.clone(),
+                    item_name: item.item_name.clone(),
                     item_type: item.item_type.short_name().to_string(),
                     is_deleted: item.is_deleted,
                 })
