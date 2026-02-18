@@ -231,6 +231,10 @@ impl WebServer {
                 "/api/items/immediate-children",
                 get(api::items::get_immediate_children),
             )
+            .route(
+                "/api/items/search",
+                get(api::items::search_items),
+            )
             // Old model item endpoints (to be removed at cutover)
             .route(
                 "/api/old_items/{item_id}/children-counts",

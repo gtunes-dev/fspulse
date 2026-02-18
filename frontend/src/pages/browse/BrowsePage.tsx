@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { RootCard } from '@/components/shared/RootCard'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { FileTreeView } from './FileTreeView'
+import { SearchResultsList } from './SearchResultsList'
 import { ScanDatePicker } from './ScanDatePicker'
 import { OldFileTreeView } from './OldFileTreeView'
 import { OldSearchResultsList } from './OldSearchResultsList'
@@ -23,7 +24,10 @@ export function BrowsePage() {
 
   // New temporal card state
   const [resolvedScanId, setResolvedScanId] = useState<number | null>(null)
+  const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
   const [showDeleted, setShowDeleted] = useState(false)
+  const [newSearchFilter, setNewSearchFilter] = useState('')
+  const [newDebouncedSearch, setNewDebouncedSearch] = useState('')
 
   // Old card state
   const [showTombstones, setShowTombstones] = useState(false)
@@ -74,16 +78,29 @@ export function BrowsePage() {
   // Reset resolved scan when root changes
   useEffect(() => {
     setResolvedScanId(null)
+    setScanStatus('resolving')
   }, [selectedRootId])
 
   // Stable callbacks for ScanDatePicker
   const handleScanResolved = useCallback((scanId: number) => {
     setResolvedScanId(scanId)
+    setScanStatus('resolved')
   }, [])
 
   const handleNoScan = useCallback(() => {
     setResolvedScanId(null)
+    setScanStatus('no-scan')
   }, [])
+
+  // Debounce new search input
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setNewDebouncedSearch(newSearchFilter)
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [newSearchFilter])
+
+  const hasNewSearchQuery = newDebouncedSearch.trim().length > 0
 
   // Handle search filter with debouncing (old card)
   const handleSearchChange = (value: string) => {
@@ -146,6 +163,11 @@ export function BrowsePage() {
               />
             )}
 
+            <SearchFilter
+              value={newSearchFilter}
+              onChange={setNewSearchFilter}
+            />
+
             <div className="flex items-center gap-2">
               <Checkbox
                 id="show-deleted-new"
@@ -159,20 +181,44 @@ export function BrowsePage() {
           </>
         }
       >
-        <div className="border border-border rounded-lg">
-          {selectedRoot && resolvedScanId ? (
-            <FileTreeView
-              rootId={selectedRoot.root_id}
-              rootPath={selectedRoot.root_path}
-              scanId={resolvedScanId}
-              showDeleted={showDeleted}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-64 text-muted-foreground">
-              {selectedRoot ? 'Resolving scan...' : 'Select a root'}
+        {selectedRoot && resolvedScanId ? (
+          <>
+            {/* Tree View - hidden when searching */}
+            <div style={{ display: hasNewSearchQuery ? 'none' : 'block' }}>
+              <div className="border border-border rounded-lg">
+                <FileTreeView
+                  rootId={selectedRoot.root_id}
+                  rootPath={selectedRoot.root_path}
+                  scanId={resolvedScanId}
+                  showDeleted={showDeleted}
+                />
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* Search Results - shown when searching */}
+            {hasNewSearchQuery && (
+              <div className="border border-border rounded-lg">
+                <SearchResultsList
+                  rootId={selectedRoot.root_id}
+                  rootPath={selectedRoot.root_path}
+                  scanId={resolvedScanId}
+                  searchQuery={newDebouncedSearch}
+                  showDeleted={showDeleted}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="border border-border rounded-lg">
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+              {!selectedRoot
+                ? 'Select a root'
+                : scanStatus === 'no-scan'
+                  ? 'No scan data available for the selected date'
+                  : 'Resolving scan...'}
+            </div>
+          </div>
+        )}
       </RootCard>
 
       {/* Old browse card (to be removed at cutover) */}

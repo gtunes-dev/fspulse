@@ -773,6 +773,59 @@ pub fn get_temporal_immediate_children(
     Ok(items)
 }
 
+/// Search for items by name at a point in time using items + item_versions.
+/// Matches against the item name (last path segment) rather than the full path.
+/// Returns items whose name contains the search query, ordered by path.
+pub fn search_temporal_items(
+    root_id: i64,
+    scan_id: i64,
+    query: &str,
+) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    let sep = MAIN_SEPARATOR_STR;
+
+    // The REPLACE(RTRIM(...)) idiom extracts the filename (last path segment):
+    // 1. REPLACE(path, sep, '') gives all non-separator characters
+    // 2. RTRIM(path, <those chars>) trims from right, stopping at last separator
+    // 3. REPLACE(path, <prefix>, '') gives just the filename
+    let sql = format!(
+        "SELECT i.item_id, i.item_path, i.item_type, iv.is_deleted
+         FROM items i
+         JOIN item_versions iv ON iv.item_id = i.item_id
+         WHERE i.root_id = ?1
+           AND iv.first_scan_id = (
+               SELECT MAX(first_scan_id)
+               FROM item_versions
+               WHERE item_id = i.item_id
+                 AND first_scan_id <= ?2
+           )
+           AND REPLACE(i.item_path,
+                 RTRIM(i.item_path, REPLACE(i.item_path, '{sep}', '')),
+                 '') LIKE '%' || ?3 || '%'
+         ORDER BY i.item_path COLLATE natural_path ASC
+         LIMIT 200"
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+
+    let rows = stmt.query_map(
+        params![root_id, scan_id, query],
+        |row| {
+            Ok(TemporalTreeItem {
+                item_id: row.get(0)?,
+                item_path: row.get(1)?,
+                item_type: ItemType::from_i64(row.get(2)?),
+                is_deleted: row.get(3)?,
+            })
+        },
+    )?;
+
+    let items: Vec<TemporalTreeItem> = rows.collect::<Result<Vec<_>, _>>()?;
+
+    Ok(items)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

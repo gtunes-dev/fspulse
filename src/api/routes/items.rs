@@ -165,3 +165,43 @@ pub async fn get_immediate_children(
         }
     }
 }
+
+/// Query parameters for temporal item search
+#[derive(Debug, Deserialize)]
+pub struct SearchParams {
+    pub root_id: i64,
+    pub scan_id: i64,
+    pub query: String,
+}
+
+/// GET /api/items/search?root_id=X&scan_id=Y&query=term
+/// Searches for items by name (last path segment) at a point in time.
+/// Always includes deleted items - filtering should be done client-side.
+pub async fn search_items(
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<ItemResponse>>, (StatusCode, String)> {
+    match items::search_temporal_items(params.root_id, params.scan_id, &params.query) {
+        Ok(items) => {
+            let response: Vec<ItemResponse> = items
+                .iter()
+                .map(|item| ItemResponse {
+                    item_id: item.item_id,
+                    item_path: item.item_path.clone(),
+                    item_type: item.item_type.short_name().to_string(),
+                    is_deleted: item.is_deleted,
+                })
+                .collect();
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!(
+                "Failed to search items for root_id={}, scan_id={}, query='{}': {}",
+                params.root_id, params.scan_id, params.query, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to search items: {}", e),
+            ))
+        }
+    }
+}
