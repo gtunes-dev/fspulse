@@ -216,18 +216,29 @@ impl WebServer {
                 "/api/tasks/history/fetch",
                 get(api::tasks::get_task_history_fetch),
             )
+            // Scan resolution endpoint (temporal versioning)
+            .route(
+                "/api/scans/resolve",
+                get(api::scans::resolve_scan),
+            )
             // Item endpoints
             .route(
                 "/api/items/{item_id}/size-history",
                 get(api::items::get_item_size_history),
             )
-            .route(
-                "/api/items/{item_id}/children-counts",
-                get(api::items::get_children_counts),
-            )
+            // Temporal model item endpoints
             .route(
                 "/api/items/immediate-children",
                 get(api::items::get_immediate_children),
+            )
+            // Old model item endpoints (to be removed at cutover)
+            .route(
+                "/api/old_items/{item_id}/children-counts",
+                get(api::items::old_get_children_counts),
+            )
+            .route(
+                "/api/old_items/immediate-children",
+                get(api::items::old_get_immediate_children),
             )
             // Database endpoints
             .route(

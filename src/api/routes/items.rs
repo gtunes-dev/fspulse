@@ -6,7 +6,7 @@ use axum::{
 use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::items::{Item, SizeHistoryPoint};
+use crate::items::{self, Item, SizeHistoryPoint};
 
 /// Query parameters for date range filtering
 #[derive(Debug, Deserialize)]
@@ -21,23 +21,23 @@ pub struct SizeHistoryResponse {
     pub history: Vec<SizeHistoryPoint>,
 }
 
-/// Response structure for children counts
+/// Response structure for children counts (old model)
 #[derive(Debug, Serialize)]
-pub struct ChildrenCountsResponse {
+pub struct OldChildrenCountsResponse {
     pub file_count: i64,
     pub directory_count: i64,
 }
 
-/// Query parameters for getting immediate children
+/// Query parameters for getting immediate children (old model)
 #[derive(Debug, Deserialize)]
-pub struct ImmediateChildrenParams {
+pub struct OldImmediateChildrenParams {
     pub root_id: i64,
     pub parent_path: String,
 }
 
-/// Item data for API response
+/// Item data for API response (old model)
 #[derive(Debug, Serialize)]
-pub struct ItemResponse {
+pub struct OldItemResponse {
     pub item_id: i64,
     pub item_path: String,
     pub item_type: String,
@@ -62,13 +62,13 @@ pub async fn get_item_size_history(
     }
 }
 
-/// GET /api/items/:item_id/children-counts
+/// GET /api/old_items/:item_id/children-counts
 /// Returns counts of files and directories that are children of the given directory
-pub async fn get_children_counts(
+pub async fn old_get_children_counts(
     Path(item_id): Path<i64>,
-) -> Result<Json<ChildrenCountsResponse>, (StatusCode, String)> {
-    match Item::get_children_counts(item_id) {
-        Ok(counts) => Ok(Json(ChildrenCountsResponse {
+) -> Result<Json<OldChildrenCountsResponse>, (StatusCode, String)> {
+    match Item::old_get_children_counts(item_id) {
+        Ok(counts) => Ok(Json(OldChildrenCountsResponse {
             file_count: counts.file_count,
             directory_count: counts.directory_count,
         })),
@@ -82,17 +82,17 @@ pub async fn get_children_counts(
     }
 }
 
-/// GET /api/items/immediate-children?root_id=X&parent_path=/path
+/// GET /api/old_items/immediate-children?root_id=X&parent_path=/path
 /// Returns immediate children (one level deep) of the specified directory path
 /// Always includes tombstones - filtering should be done client-side
-pub async fn get_immediate_children(
-    Query(params): Query<ImmediateChildrenParams>,
-) -> Result<Json<Vec<ItemResponse>>, (StatusCode, String)> {
-    match Item::get_immediate_children(params.root_id, &params.parent_path) {
+pub async fn old_get_immediate_children(
+    Query(params): Query<OldImmediateChildrenParams>,
+) -> Result<Json<Vec<OldItemResponse>>, (StatusCode, String)> {
+    match Item::old_get_immediate_children(params.root_id, &params.parent_path) {
         Ok(items) => {
-            let response: Vec<ItemResponse> = items
+            let response: Vec<OldItemResponse> = items
                 .iter()
-                .map(|item| ItemResponse {
+                .map(|item| OldItemResponse {
                     item_id: item.item_id(),
                     item_path: item.item_path().to_string(),
                     item_type: item.item_type().short_name().to_string(),
@@ -105,6 +105,58 @@ pub async fn get_immediate_children(
             error!(
                 "Failed to get immediate children for root_id={}, parent_path={}: {}",
                 params.root_id, params.parent_path, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get immediate children: {}", e),
+            ))
+        }
+    }
+}
+
+// ---- New temporal model endpoints ----
+
+/// Query parameters for temporal immediate children
+#[derive(Debug, Deserialize)]
+pub struct ImmediateChildrenParams {
+    pub root_id: i64,
+    pub parent_path: String,
+    pub scan_id: i64,
+}
+
+/// Item data for temporal API response
+#[derive(Debug, Serialize)]
+pub struct ItemResponse {
+    pub item_id: i64,
+    pub item_path: String,
+    pub item_type: String,
+    pub is_deleted: bool,
+}
+
+/// GET /api/items/immediate-children?root_id=X&parent_path=/path&scan_id=Y
+/// Returns immediate children at a point in time using the item_versions table.
+/// Always includes deleted items - filtering should be done client-side.
+pub async fn get_immediate_children(
+    Query(params): Query<ImmediateChildrenParams>,
+) -> Result<Json<Vec<ItemResponse>>, (StatusCode, String)> {
+    match items::get_temporal_immediate_children(params.root_id, &params.parent_path, params.scan_id)
+    {
+        Ok(items) => {
+            let response: Vec<ItemResponse> = items
+                .iter()
+                .map(|item| ItemResponse {
+                    item_id: item.item_id,
+                    item_path: item.item_path.clone(),
+                    item_type: item.item_type.short_name().to_string(),
+                    is_deleted: item.is_deleted,
+                })
+                .collect();
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!(
+                "Failed to get temporal immediate children for root_id={}, parent_path={}, scan_id={}: {}",
+                params.root_id, params.parent_path, params.scan_id, e
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,

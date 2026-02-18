@@ -430,7 +430,7 @@ export function ItemDetailSheet({
 
       setLoadingChildrenCounts(true)
       try {
-        const response = await fetch(`/api/items/${itemId}/children-counts`)
+        const response = await fetch(`/api/old_items/${itemId}/children-counts`)
 
         if (!response.ok) {
           throw new Error('Failed to load children counts')

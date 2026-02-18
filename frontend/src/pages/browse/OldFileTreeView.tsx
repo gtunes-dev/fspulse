@@ -1,34 +1,39 @@
 import { useState, useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
+import { fetchQuery } from '@/lib/api'
+import { useTaskContext } from '@/contexts/TaskContext'
+import type { ColumnSpec } from '@/lib/types'
 import type { TreeNodeData } from '@/lib/pathUtils'
 import { sortTreeItems } from '@/lib/pathUtils'
-import { useVirtualTree } from '@/hooks/useVirtualTree'
+import { useOldVirtualTree } from '@/hooks/useOldVirtualTree'
 
-interface FileTreeViewProps {
+interface OldFileTreeViewProps {
   rootId: number
   rootPath: string
-  scanId: number
-  showDeleted: boolean
+  showTombstones: boolean
 }
 
-export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTreeViewProps) {
+export function OldFileTreeView({ rootId, rootPath, showTombstones }: OldFileTreeViewProps) {
+  const { activeRootId } = useTaskContext()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const parentRef = useRef<HTMLDivElement>(null)
 
   // Track what we've loaded to prevent duplicate fetches
-  const loadedKeyRef = useRef<string | null>(null)
+  const loadedRootRef = useRef<string | null>(null)
 
-  // Virtual tree hook with temporal scan_id
-  const { flatItems, initializeTree, toggleNode, isLoading: isNodeLoading } = useVirtualTree({
+  // Check if this root is currently being scanned
+  const isRootBeingScanned = activeRootId === rootId
+
+  // Virtual tree hook - NO allItems, always load on demand
+  const { flatItems, initializeTree, toggleNode, isLoading: isNodeLoading } = useOldVirtualTree({
     rootId,
-    scanId,
   })
 
-  // Filter deleted items client-side based on showDeleted toggle
-  const visibleItems = showDeleted
+  // Filter tombstones client-side based on showTombstones toggle
+  const visibleItems = showTombstones
     ? flatItems
     : flatItems.filter(item => !item.is_deleted)
 
@@ -36,34 +41,63 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
   const virtualizer = useVirtualizer({
     count: visibleItems.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 36,
+    estimateSize: () => 36, // Fixed row height in pixels
     overscan: 5,
   })
 
   useEffect(() => {
-    // Create a unique key for this root+scan combination
-    const loadKey = `${rootId}:${rootPath}:${scanId}`
+    // Don't load items if the root is currently being scanned
+    if (isRootBeingScanned) {
+      loadedRootRef.current = null // Reset so we reload when scan finishes
+      initializeTree([])
+      return
+    }
 
-    // Skip if we've already started loading this combination
-    if (loadedKeyRef.current === loadKey) {
+    // Create a unique key for this root
+    const rootKey = `${rootId}:${rootPath}`
+
+    // Skip if we've already started loading this root
+    if (loadedRootRef.current === rootKey) {
       return
     }
 
     // Mark as loading IMMEDIATELY to prevent Strict Mode duplicates
-    loadedKeyRef.current = loadKey
+    loadedRootRef.current = rootKey
 
     async function loadRootLevelItems() {
       setLoading(true)
       setError(null)
 
       try {
+        // First, check if there are any completed scans for this root
+        const scanColumns: ColumnSpec[] = [
+          { name: 'scan_id', visible: true, sort_direction: 'desc', position: 0 }
+        ]
+
+        const scanResponse = await fetchQuery('scans', {
+          columns: scanColumns,
+          filters: [
+            { column: 'root_id', value: rootId.toString() },
+            { column: 'scan_state', value: 'C' }, // Completed scans only
+          ],
+          limit: 1,
+          offset: 0,
+        })
+
+        if (scanResponse.rows.length === 0) {
+          setError('No completed scans found for this root')
+          initializeTree([])
+          return
+        }
+
+        // Load ONLY root-level items using the new endpoint
+        // Backend always returns tombstones - we filter client-side
         const params = new URLSearchParams({
           root_id: rootId.toString(),
           parent_path: rootPath,
-          scan_id: scanId.toString(),
         })
 
-        const response = await fetch(`/api/items/immediate-children?${params}`)
+        const response = await fetch(`/api/old_items/immediate-children?${params}`)
         if (!response.ok) {
           throw new Error(`Failed to fetch root items: ${response.statusText}`)
         }
@@ -72,7 +106,7 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
           item_id: number
           item_path: string
           item_type: string
-          is_deleted: boolean
+          is_ts: boolean
         }>
 
         // Transform to TreeNodeData
@@ -83,7 +117,7 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
             item_path: item.item_path,
             item_name: itemName,
             item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-            is_ts: item.is_deleted,
+            is_ts: item.is_ts,
             name: itemName,
           }
         })
@@ -94,7 +128,7 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
         initializeTree(sortedNodes)
       } catch (err) {
         // Reset on error to allow retry
-        loadedKeyRef.current = null
+        loadedRootRef.current = null
         setError(err instanceof Error ? err.message : 'Failed to load items')
         console.error('Error loading root items:', err)
       } finally {
@@ -103,7 +137,19 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
     }
 
     loadRootLevelItems()
-  }, [rootId, rootPath, scanId, initializeTree])
+  }, [rootId, rootPath, isRootBeingScanned, initializeTree])
+
+  // Show message if root is currently being scanned
+  if (isRootBeingScanned) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <p className="text-lg mb-2">Scan in progress</p>
+          <p className="text-sm">Browse is unavailable while this root is being scanned</p>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

@@ -5,31 +5,29 @@ export type { FlatTreeItem }
 
 interface UseVirtualTreeOptions {
   rootId: number
-  scanId: number
 }
 
 /**
- * Response type from the temporal /api/items/immediate-children endpoint
+ * Response type from the /api/items/immediate-children endpoint
  */
 interface ImmediateChildrenResponse {
   item_id: number
   item_path: string
   item_type: string
-  is_deleted: boolean
+  is_ts: boolean
 }
 
 /**
- * Hook for managing a virtualized tree structure with lazy loading
- * using the temporal item_versions model.
+ * Hook for managing a virtualized tree structure with lazy loading.
  *
  * This hook maintains a flat array of tree items and handles expansion/collapse
  * logic with on-demand loading of children from the backend API.
  *
- * @param options - Configuration including rootId and scanId for API calls
+ * @param options - Configuration including rootId for API calls
  * @returns Tree state and operations (flatItems, initializeTree, toggleNode, isLoading)
  */
-export function useVirtualTree(options: UseVirtualTreeOptions) {
-  const { rootId, scanId } = options
+export function useOldVirtualTree(options: UseVirtualTreeOptions) {
+  const { rootId } = options
   const [flatItems, setFlatItems] = useState<FlatTreeItem[]>([])
   const [loadingItems, setLoadingItems] = useState<Set<number>>(new Set())
 
@@ -54,7 +52,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       depth: 0,
       isExpanded: false,
       childrenLoaded: false,
-      hasChildren: item.item_type === 'D',
+      hasChildren: item.item_type === 'D', // Directories have children
     }))
     setFlatItems(initialFlatItems)
   }, [])
@@ -114,14 +112,15 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
 
   /**
    * Extracts the item name from a full path.
+   * Handles both Unix and Windows paths.
    */
   const extractItemName = useCallback((path: string): string => {
     return path.split('/').filter(Boolean).pop() || path
   }, [])
 
   /**
-   * Loads children for a directory node from the temporal API.
-   * Children are always loaded with deleted items - filtering happens client-side.
+   * Loads children for a directory node from the API.
+   * Children are always loaded with tombstones - filtering happens client-side.
    */
   const loadChildren = useCallback(async (itemId: number, parentPath: string, parentDepth: number) => {
     // Check ref synchronously to prevent race conditions with stale closures
@@ -134,13 +133,14 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
     setLoadingItems(prev => new Set(prev).add(itemId))
 
     try {
+      // Query from backend using the immediate children endpoint
+      // Backend always returns tombstones - we filter client-side for better UX
       const params = new URLSearchParams({
         root_id: rootId.toString(),
         parent_path: parentPath,
-        scan_id: scanId.toString(),
       })
 
-      const url = `/api/items/immediate-children?${params}`
+      const url = `/api/old_items/immediate-children?${params}`
       const response = await fetch(url)
       if (!response.ok) {
         throw new Error(`Failed to fetch children: ${response.statusText}`)
@@ -156,8 +156,8 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
           item_path: item.item_path,
           item_name: itemName,
           item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-          is_ts: item.is_deleted,
-          name: itemName,
+          is_ts: item.is_ts,
+          name: itemName, // sortTreeItems expects 'name' field
         }
       })
 
@@ -207,7 +207,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         return updated
       })
     }
-  }, [rootId, scanId, extractItemName])
+  }, [rootId, extractItemName])
 
   /**
    * Toggles the expansion state of a directory node.

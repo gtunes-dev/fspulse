@@ -8,6 +8,22 @@ export interface ItemData {
   is_ts: boolean // Is tombstone
 }
 
+/**
+ * Represents a flattened tree item for virtualization.
+ * Items are stored in a flat array with depth metadata for efficient rendering.
+ */
+export interface FlatTreeItem {
+  item_id: number
+  item_path: string
+  item_name: string
+  item_type: 'F' | 'D' | 'S' | 'O'
+  is_deleted: boolean
+  depth: number
+  isExpanded: boolean
+  childrenLoaded: boolean
+  hasChildren: boolean
+}
+
 export interface TreeNodeData extends ItemData {
   name: string // Extracted from path (last segment)
   children?: TreeNodeData[] // Lazy-loaded

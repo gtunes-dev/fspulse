@@ -384,6 +384,48 @@ impl Scan {
         self.delete_count
     }
 
+    /// Resolve a date to the most recent completed scan for a root at or before that date.
+    /// If `date_str` is None, returns the most recent completed scan for the root.
+    /// Returns (scan_id, started_at) or None if no matching scan exists.
+    pub fn resolve_scan_for_date(
+        root_id: i64,
+        date_str: Option<&str>,
+    ) -> Result<Option<(i64, i64)>, FsPulseError> {
+        let conn = Database::get_connection()?;
+
+        match date_str {
+            Some(date) => {
+                // Get end-of-day timestamp for the given date
+                let (_start_ts, end_ts) = crate::utils::Utils::single_date_bounds(date)?;
+
+                let result: Option<(i64, i64)> = conn
+                    .query_row(
+                        "SELECT scan_id, started_at FROM scans
+                         WHERE root_id = ? AND state = 4 AND started_at <= ?
+                         ORDER BY started_at DESC LIMIT 1",
+                        params![root_id, end_ts],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .optional()?;
+
+                Ok(result)
+            }
+            None => {
+                let result: Option<(i64, i64)> = conn
+                    .query_row(
+                        "SELECT scan_id, started_at FROM scans
+                         WHERE root_id = ? AND state = 4
+                         ORDER BY scan_id DESC LIMIT 1",
+                        params![root_id],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .optional()?;
+
+                Ok(result)
+            }
+        }
+    }
+
     pub fn set_total_size(
         &mut self,
         conn: &Connection,

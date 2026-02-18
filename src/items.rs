@@ -582,10 +582,10 @@ impl Item {
         Ok(history)
     }
 
-    /// Get immediate children (one level deep) of a directory
+    /// Get immediate children (one level deep) of a directory (old model)
     /// Returns only the direct children, not nested descendants
     /// Always includes tombstones - filtering should be done client-side
-    pub fn get_immediate_children(
+    pub fn old_get_immediate_children(
         root_id: i64,
         parent_path: &str,
     ) -> Result<Vec<Item>, FsPulseError> {
@@ -628,9 +628,9 @@ impl Item {
         Ok(items)
     }
 
-    /// Get counts of children (files and directories) for a directory item
+    /// Get counts of children (files and directories) for a directory item (old model)
     /// Returns counts of non-tombstone files and directories that are direct or nested children
-    pub fn get_children_counts(item_id: i64) -> Result<ChildrenCounts, FsPulseError> {
+    pub fn old_get_children_counts(item_id: i64) -> Result<ChildrenCounts, FsPulseError> {
         // First get the path and root_id of the parent directory
         let parent_sql = "SELECT item_path, root_id FROM items_old WHERE item_id = ?";
         let conn = Database::get_connection()?;
@@ -709,6 +709,67 @@ impl SizeHistoryPoint {
 pub struct ChildrenCounts {
     pub file_count: i64,
     pub directory_count: i64,
+}
+
+/// Lightweight struct for temporal tree browsing results
+#[derive(Clone, Debug, Serialize)]
+pub struct TemporalTreeItem {
+    pub item_id: i64,
+    pub item_path: String,
+    pub item_type: ItemType,
+    pub is_deleted: bool,
+}
+
+/// Get immediate children at a point in time using the item_versions table.
+/// Returns the effective version of each immediate child of `parent_path`
+/// as of `scan_id`.
+pub fn get_temporal_immediate_children(
+    root_id: i64,
+    parent_path: &str,
+    scan_id: i64,
+) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    let path_prefix = if parent_path == MAIN_SEPARATOR_STR {
+        MAIN_SEPARATOR_STR.to_string()
+    } else {
+        format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
+    };
+
+    let sql = format!(
+        "SELECT iv.item_id, iv.item_path, iv.item_type, iv.is_deleted
+         FROM item_versions iv
+         WHERE iv.root_id = ?1
+           AND iv.first_scan_id = (
+               SELECT MAX(first_scan_id)
+               FROM item_versions
+               WHERE item_id = iv.item_id
+                 AND first_scan_id <= ?2
+           )
+           AND iv.item_path LIKE ?3 || '%'
+           AND iv.item_path != ?4
+           AND SUBSTR(iv.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'
+         ORDER BY iv.item_path COLLATE natural_path ASC",
+        MAIN_SEPARATOR_STR
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+
+    let rows = stmt.query_map(
+        params![root_id, scan_id, &path_prefix, parent_path],
+        |row| {
+            Ok(TemporalTreeItem {
+                item_id: row.get(0)?,
+                item_path: row.get(1)?,
+                item_type: ItemType::from_i64(row.get(2)?),
+                is_deleted: row.get(3)?,
+            })
+        },
+    )?;
+
+    let items: Vec<TemporalTreeItem> = rows.collect::<Result<Vec<_>, _>>()?;
+
+    Ok(items)
 }
 
 #[cfg(test)]

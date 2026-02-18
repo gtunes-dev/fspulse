@@ -1,5 +1,5 @@
 use crate::database::Database;
-use crate::scans::{ScanHistoryRow, ScanStats};
+use crate::scans::{Scan, ScanHistoryRow, ScanStats};
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -263,4 +263,46 @@ pub async fn get_scan_history_fetch(
         })?;
 
     Ok(Json(ScanHistoryFetchResponse { scans }))
+}
+
+/// Query parameters for scan resolution
+#[derive(Debug, Deserialize)]
+pub struct ResolveScanParams {
+    pub root_id: i64,
+    pub date: Option<String>, // "YYYY-MM-DD", omit for latest
+}
+
+/// Response structure for resolved scan
+#[derive(Debug, Serialize)]
+pub struct ResolvedScanResponse {
+    pub scan_id: i64,
+    pub started_at: i64,
+}
+
+/// GET /api/scans/resolve?root_id=X&date=YYYY-MM-DD
+/// Resolves a date to the most recent completed scan for a root at or before that date.
+/// If date is omitted, returns the latest completed scan.
+pub async fn resolve_scan(
+    Query(params): Query<ResolveScanParams>,
+) -> Result<Json<ResolvedScanResponse>, (StatusCode, String)> {
+    match Scan::resolve_scan_for_date(params.root_id, params.date.as_deref()) {
+        Ok(Some((scan_id, started_at))) => Ok(Json(ResolvedScanResponse {
+            scan_id,
+            started_at,
+        })),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            "No completed scan found for the specified root and date".to_string(),
+        )),
+        Err(e) => {
+            error!(
+                "Failed to resolve scan for root_id={}, date={:?}: {}",
+                params.root_id, params.date, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to resolve scan: {}", e),
+            ))
+        }
+    }
 }

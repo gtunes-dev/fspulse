@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { RootCard } from '@/components/shared/RootCard'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { FileTreeView } from './FileTreeView'
-import { SearchResultsList } from './SearchResultsList'
+import { ScanDatePicker } from './ScanDatePicker'
+import { OldFileTreeView } from './OldFileTreeView'
+import { OldSearchResultsList } from './OldSearchResultsList'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 
@@ -16,11 +18,17 @@ interface Root {
 export function BrowsePage() {
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // New temporal card state
+  const [resolvedScanId, setResolvedScanId] = useState<number | null>(null)
+  const [showDeleted, setShowDeleted] = useState(false)
+
+  // Old card state
   const [showTombstones, setShowTombstones] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   // Load roots on mount
   useEffect(() => {
@@ -63,12 +71,26 @@ export function BrowsePage() {
 
   const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
 
-  // Handle search filter with debouncing
+  // Reset resolved scan when root changes
+  useEffect(() => {
+    setResolvedScanId(null)
+  }, [selectedRootId])
+
+  // Stable callbacks for ScanDatePicker
+  const handleScanResolved = useCallback((scanId: number) => {
+    setResolvedScanId(scanId)
+  }, [])
+
+  const handleNoScan = useCallback(() => {
+    setResolvedScanId(null)
+  }, [])
+
+  // Handle search filter with debouncing (old card)
   const handleSearchChange = (value: string) => {
     setSearchFilter(value)
   }
 
-  // Debounce search input
+  // Debounce search input (old card)
   useEffect(() => {
     const timeout = setTimeout(() => {
       setDebouncedSearch(searchFilter)
@@ -77,7 +99,6 @@ export function BrowsePage() {
     return () => clearTimeout(timeout)
   }, [searchFilter])
 
-  // Determine if we should show search results
   const hasSearchQuery = debouncedSearch.trim().length > 0
 
   if (loading) {
@@ -107,9 +128,54 @@ export function BrowsePage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <h1 className="text-2xl font-semibold mb-8">Browse</h1>
+    <div className="flex flex-col h-full gap-6">
+      <h1 className="text-2xl font-semibold mb-2">Browse</h1>
 
+      {/* New temporal browse card */}
+      <RootCard
+        roots={roots}
+        selectedRootId={selectedRootId}
+        onRootChange={setSelectedRootId}
+        actionBar={
+          <>
+            {selectedRoot && (
+              <ScanDatePicker
+                rootId={selectedRoot.root_id}
+                onScanResolved={handleScanResolved}
+                onNoScan={handleNoScan}
+              />
+            )}
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-deleted-new"
+                checked={showDeleted}
+                onCheckedChange={(checked) => setShowDeleted(checked === true)}
+              />
+              <Label htmlFor="show-deleted-new" className="text-sm font-medium cursor-pointer">
+                Show deleted
+              </Label>
+            </div>
+          </>
+        }
+      >
+        <div className="border border-border rounded-lg">
+          {selectedRoot && resolvedScanId ? (
+            <FileTreeView
+              rootId={selectedRoot.root_id}
+              rootPath={selectedRoot.root_path}
+              scanId={resolvedScanId}
+              showDeleted={showDeleted}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+              {selectedRoot ? 'Resolving scan...' : 'Select a root'}
+            </div>
+          )}
+        </div>
+      </RootCard>
+
+      {/* Old browse card (to be removed at cutover) */}
       <RootCard
         roots={roots}
         selectedRootId={selectedRootId}
@@ -123,11 +189,11 @@ export function BrowsePage() {
 
             <div className="flex items-center gap-2">
               <Checkbox
-                id="show-deleted"
+                id="show-deleted-old"
                 checked={showTombstones}
                 onCheckedChange={(checked) => setShowTombstones(checked === true)}
               />
-              <Label htmlFor="show-deleted" className="text-sm font-medium cursor-pointer">
+              <Label htmlFor="show-deleted-old" className="text-sm font-medium cursor-pointer">
                 Show deleted
               </Label>
             </div>
@@ -138,7 +204,7 @@ export function BrowsePage() {
         <div style={{ display: hasSearchQuery ? 'none' : 'block' }}>
           <div className="border border-border rounded-lg">
             {selectedRoot && (
-              <FileTreeView
+              <OldFileTreeView
                 rootId={selectedRoot.root_id}
                 rootPath={selectedRoot.root_path}
                 showTombstones={showTombstones}
@@ -150,7 +216,7 @@ export function BrowsePage() {
         {/* Search Results - shown when searching */}
         {hasSearchQuery && selectedRoot && (
           <div className="border border-border rounded-lg">
-            <SearchResultsList
+            <OldSearchResultsList
               rootId={selectedRoot.root_id}
               searchQuery={debouncedSearch}
               showTombstones={showTombstones}

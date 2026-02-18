@@ -3,11 +3,11 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
 import { fetchQuery, countQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
-import type { FlatTreeItem } from '@/hooks/useVirtualTree'
+import type { FlatTreeItem } from '@/lib/pathUtils'
 
 const ITEMS_PER_PAGE = 100
 
-interface SearchResultsListProps {
+interface OldSearchResultsListProps {
   rootId: number
   searchQuery: string
   showTombstones: boolean
@@ -17,7 +17,7 @@ interface SearchResultsListProps {
  * Displays search results as a flat, paginated list.
  * Items are rendered using the same TreeNode component but without expand/collapse.
  */
-export function SearchResultsList({ rootId, searchQuery, showTombstones }: SearchResultsListProps) {
+export function OldSearchResultsList({ rootId, searchQuery, showTombstones }: OldSearchResultsListProps) {
   const [items, setItems] = useState<FlatTreeItem[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
@@ -98,7 +98,7 @@ export function SearchResultsList({ rootId, searchQuery, showTombstones }: Searc
           item_path: itemPath,
           item_name: itemPath.split('/').filter(Boolean).pop() || itemPath,
           item_type: itemType,
-          is_ts: row[3] === '1' || row[3] === 'true',
+          is_deleted: row[3] === '1' || row[3] === 'true',
           depth: 0, // Flat list, no depth
           isExpanded: false,
           childrenLoaded: false,

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, Folder, FolderOpen, File, Trash2 } from 'lucide-react'
 import { ItemDetailSheet } from '@/components/shared/ItemDetailSheet'
-import type { FlatTreeItem } from '@/hooks/useVirtualTree'
+import type { FlatTreeItem } from '@/lib/pathUtils'
 
 interface TreeNodeProps {
   item: FlatTreeItem
@@ -41,8 +41,8 @@ export function TreeNode({
   const paddingLeft = item.depth * 20 + 8
 
   // Shared styling for tombstones (deleted items)
-  const tombstoneClass = item.is_ts ? 'text-muted-foreground' : ''
-  const textClass = item.is_ts ? 'line-through' : ''
+  const tombstoneClass = item.is_deleted ? 'text-muted-foreground' : ''
+  const textClass = item.is_deleted ? 'line-through' : ''
 
   // Render directory icon - expandable (button with chevron) or static (just folder icon)
   const DirectoryIcon = () => {
@@ -92,7 +92,7 @@ export function TreeNode({
         >
           {item.item_name}
         </span>
-        {item.is_ts && (
+        {item.is_deleted && (
           <Trash2
             className="h-4 w-4 flex-shrink-0 ml-2 text-muted-foreground"
             aria-label="Deleted item"
@@ -103,7 +103,7 @@ export function TreeNode({
         itemId={item.item_id}
         itemPath={item.item_path}
         itemType={item.item_type}
-        isTombstone={item.is_ts}
+        isTombstone={item.is_deleted}
         rootId={rootId}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
