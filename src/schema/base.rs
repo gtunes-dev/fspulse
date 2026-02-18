@@ -134,7 +134,7 @@ CREATE INDEX IF NOT EXISTS idx_changes_item ON changes (item_id);
 -- ========================================
 -- Lightweight stable identity for each item across all its versions.
 CREATE TABLE IF NOT EXISTS items (
-    item_id     INTEGER PRIMARY KEY,  -- NOT AUTOINCREMENT: values match items_old
+    item_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id     INTEGER NOT NULL,
     item_path   TEXT NOT NULL,
     item_type   INTEGER NOT NULL,
@@ -148,13 +148,10 @@ CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLL
 -- ========================================
 -- Temporal item versions table
 -- ========================================
--- One row per distinct state of an item. Full state snapshot per version.
+-- One row per distinct state of an item. Identity (path, type, root) lives in items.
 CREATE TABLE IF NOT EXISTS item_versions (
     version_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id         INTEGER NOT NULL,
-    root_id         INTEGER NOT NULL,
-    item_path       TEXT NOT NULL,
-    item_type       INTEGER NOT NULL,
     first_scan_id   INTEGER NOT NULL,
     last_scan_id    INTEGER NOT NULL,
     is_deleted      BOOLEAN NOT NULL DEFAULT 0,
@@ -167,13 +164,11 @@ CREATE TABLE IF NOT EXISTS item_versions (
     last_hash_scan  INTEGER,
     last_val_scan   INTEGER,
     FOREIGN KEY (item_id) REFERENCES items(item_id),
-    FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_versions_item_scan ON item_versions (item_id, first_scan_id DESC);
-CREATE INDEX IF NOT EXISTS idx_versions_root_scan ON item_versions (root_id, first_scan_id);
 CREATE INDEX IF NOT EXISTS idx_versions_first_scan ON item_versions (first_scan_id);
 
 -- ========================================

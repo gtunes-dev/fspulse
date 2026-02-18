@@ -43,7 +43,7 @@ CREATE INDEX idx_items_old_root_path ON items_old (root_id, item_path COLLATE na
 -- Create new identity table
 -- ========================================
 CREATE TABLE items (
-    item_id     INTEGER PRIMARY KEY,  -- NOT AUTOINCREMENT: values copied from items_old
+    item_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id     INTEGER NOT NULL,
     item_path   TEXT NOT NULL,
     item_type   INTEGER NOT NULL,
@@ -60,9 +60,6 @@ CREATE INDEX idx_items_root_path ON items (root_id, item_path COLLATE natural_pa
 CREATE TABLE item_versions (
     version_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id         INTEGER NOT NULL,
-    root_id         INTEGER NOT NULL,
-    item_path       TEXT NOT NULL,
-    item_type       INTEGER NOT NULL,
     first_scan_id   INTEGER NOT NULL,
     last_scan_id    INTEGER NOT NULL,
     is_deleted      BOOLEAN NOT NULL DEFAULT 0,
@@ -75,13 +72,11 @@ CREATE TABLE item_versions (
     last_hash_scan  INTEGER,
     last_val_scan   INTEGER,
     FOREIGN KEY (item_id) REFERENCES items(item_id),
-    FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
 );
 
 CREATE INDEX idx_versions_item_scan ON item_versions (item_id, first_scan_id DESC);
-CREATE INDEX idx_versions_root_scan ON item_versions (root_id, first_scan_id);
 CREATE INDEX idx_versions_first_scan ON item_versions (first_scan_id);
 
 -- ========================================
@@ -127,9 +122,14 @@ pub fn migrate_15_to_16(conn: &Connection) -> Result<(), FsPulseError> {
     Ok(())
 }
 
-/// Post-SQL: Update schema version.
+/// Post-SQL: Update schema version and pause scheduled tasks.
 pub const UPGRADE_15_TO_16_POST_SQL: &str = r#"
 UPDATE meta SET value = '16' WHERE key = 'schema_version';
+
+-- Pause scheduled tasks indefinitely after migration.
+-- The scanner does not yet write to the new temporal tables,
+-- so prevent it from running until dual-write is implemented.
+INSERT OR REPLACE INTO meta (key, value) VALUES ('pause_until', '-1');
 "#;
 
 // ============================================================================
@@ -196,7 +196,7 @@ fn reconstruct_versions(
 ) -> Result<usize, FsPulseError> {
     // Fetch all items, ordered for predictable processing
     let mut item_stmt = conn.prepare(
-        "SELECT item_id, root_id, item_path, item_type, access, last_scan, is_ts,
+        "SELECT item_id, root_id, access, last_scan, is_ts,
                 mod_date, size, last_hash_scan, file_hash, last_val_scan, val, val_error
          FROM items_old
          ORDER BY item_id ASC"
@@ -207,18 +207,16 @@ fn reconstruct_versions(
             Ok(ItemOldRow {
                 item_id: row.get(0)?,
                 root_id: row.get(1)?,
-                item_path: row.get(2)?,
-                item_type: row.get(3)?,
-                access: row.get(4)?,
-                last_scan: row.get(5)?,
-                is_ts: row.get(6)?,
-                mod_date: row.get(7)?,
-                size: row.get(8)?,
-                last_hash_scan: row.get(9)?,
-                file_hash: row.get(10)?,
-                last_val_scan: row.get(11)?,
-                val: row.get(12)?,
-                val_error: row.get(13)?,
+                access: row.get(2)?,
+                last_scan: row.get(3)?,
+                is_ts: row.get(4)?,
+                mod_date: row.get(5)?,
+                size: row.get(6)?,
+                last_hash_scan: row.get(7)?,
+                file_hash: row.get(8)?,
+                last_val_scan: row.get(9)?,
+                val: row.get(10)?,
+                val_error: row.get(11)?,
             })
         })
         .map_err(FsPulseError::DatabaseError)?
@@ -245,11 +243,10 @@ fn reconstruct_versions(
     // Prepare version insert
     let mut insert_stmt = conn.prepare(
         "INSERT INTO item_versions (
-            item_id, root_id, item_path, item_type,
-            first_scan_id, last_scan_id,
+            item_id, first_scan_id, last_scan_id,
             is_deleted, access, mod_date, size, file_hash,
             val, val_error, last_hash_scan, last_val_scan
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).map_err(FsPulseError::DatabaseError)?;
 
     let mut total_versions = 0;
@@ -284,7 +281,7 @@ fn reconstruct_versions(
         if changes.is_empty() {
             // No changes at all — create a single version from items_old current state.
             insert_stmt.execute(rusqlite::params![
-                item_id, root_id, &item.item_path, item.item_type,
+                item_id,
                 last_scan, last_scan,
                 item.is_ts as i64, item.access, item.mod_date, item.size, &item.file_hash,
                 item.val, &item.val_error, item.last_hash_scan, item.last_val_scan,
@@ -305,7 +302,7 @@ fn reconstruct_versions(
                             let close_scan = find_previous_scan(completed_scans, root_id, change.scan_id)
                                 .unwrap_or(prev.first_scan_id);
                             insert_stmt.execute(rusqlite::params![
-                                item_id, root_id, &item.item_path, item.item_type,
+                                item_id,
                                 prev.first_scan_id, close_scan,
                                 prev.is_deleted as i64, prev.access,
                                 prev.mod_date, prev.size, prev.file_hash,
@@ -335,7 +332,7 @@ fn reconstruct_versions(
                             let close_scan = find_previous_scan(completed_scans, root_id, change.scan_id)
                                 .unwrap_or(prev.first_scan_id);
                             insert_stmt.execute(rusqlite::params![
-                                item_id, root_id, &item.item_path, item.item_type,
+                                item_id,
                                 prev.first_scan_id, close_scan,
                                 prev.is_deleted as i64, prev.access,
                                 prev.mod_date, prev.size, prev.file_hash,
@@ -391,7 +388,7 @@ fn reconstruct_versions(
                             let close_scan = find_previous_scan(completed_scans, root_id, change.scan_id)
                                 .unwrap_or(prev.first_scan_id);
                             insert_stmt.execute(rusqlite::params![
-                                item_id, root_id, &item.item_path, item.item_type,
+                                item_id,
                                 prev.first_scan_id, close_scan,
                                 prev.is_deleted as i64, prev.access,
                                 prev.mod_date, prev.size, prev.file_hash,
@@ -483,7 +480,7 @@ fn reconstruct_versions(
                         let close_scan = find_previous_scan(completed_scans, root_id, change.scan_id)
                             .unwrap_or(prev.first_scan_id);
                         insert_stmt.execute(rusqlite::params![
-                            item_id, root_id, &item.item_path, item.item_type,
+                            item_id,
                             prev.first_scan_id, close_scan,
                             prev.is_deleted as i64, prev.access,
                             prev.mod_date, prev.size, prev.file_hash,
@@ -522,7 +519,7 @@ fn reconstruct_versions(
         // without a corresponding change record.
         if let Some(ref final_ver) = builder {
             insert_stmt.execute(rusqlite::params![
-                item_id, root_id, &item.item_path, item.item_type,
+                item_id,
                 final_ver.first_scan_id, last_scan,
                 item.is_ts as i64, item.access,
                 item.mod_date, item.size, &item.file_hash,
@@ -539,8 +536,6 @@ fn reconstruct_versions(
 struct ItemOldRow {
     item_id: i64,
     root_id: i64,
-    item_path: String,
-    item_type: i64,
     access: i64,
     last_scan: i64,
     is_ts: bool,

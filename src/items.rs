@@ -720,7 +720,7 @@ pub struct TemporalTreeItem {
     pub is_deleted: bool,
 }
 
-/// Get immediate children at a point in time using the item_versions table.
+/// Get immediate children at a point in time using items + item_versions.
 /// Returns the effective version of each immediate child of `parent_path`
 /// as of `scan_id`.
 pub fn get_temporal_immediate_children(
@@ -737,19 +737,20 @@ pub fn get_temporal_immediate_children(
     };
 
     let sql = format!(
-        "SELECT iv.item_id, iv.item_path, iv.item_type, iv.is_deleted
-         FROM item_versions iv
-         WHERE iv.root_id = ?1
+        "SELECT i.item_id, i.item_path, i.item_type, iv.is_deleted
+         FROM items i
+         JOIN item_versions iv ON iv.item_id = i.item_id
+         WHERE i.root_id = ?1
            AND iv.first_scan_id = (
                SELECT MAX(first_scan_id)
                FROM item_versions
-               WHERE item_id = iv.item_id
+               WHERE item_id = i.item_id
                  AND first_scan_id <= ?2
            )
-           AND iv.item_path LIKE ?3 || '%'
-           AND iv.item_path != ?4
-           AND SUBSTR(iv.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'
-         ORDER BY iv.item_path COLLATE natural_path ASC",
+           AND i.item_path LIKE ?3 || '%'
+           AND i.item_path != ?4
+           AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'
+         ORDER BY i.item_path COLLATE natural_path ASC",
         MAIN_SEPARATOR_STR
     );
 
