@@ -1,6 +1,7 @@
 use crate::database::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
+use crate::undo_log::UndoLog;
 
 use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::Serialize;
@@ -602,6 +603,11 @@ impl Scan {
         error_message: Option<&str>,
     ) -> Result<(), FsPulseError> {
         Database::immediate_transaction(conn, |c| {
+            // ====== NEW MODEL ======
+            // Roll back item_versions, orphaned identities, and undo log
+            UndoLog::rollback(c, scan.scan_id())?;
+
+            // ====== OLD MODEL ======
             // Find the id of the last scan on this root to not be stopped
             // We'll restore this scan_id to all partially updated by the
             // scan being stopped
@@ -766,13 +772,15 @@ impl Scan {
             // only remaining items with a last_scan of the current scan are the simple
             // adds. This should be true :)
             c.execute(
-                "DELETE FROM items_old_old
-            WHERE last_scan = ?",
+                "DELETE FROM items_old WHERE last_scan = ?",
                 [scan.scan_id()],
             )?;
+            // ====== END OLD MODEL ======
 
             Ok(())
-        })
+        })?;
+
+        Ok(())
     }
 }
 

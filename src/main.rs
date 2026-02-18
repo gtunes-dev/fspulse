@@ -6,6 +6,8 @@ mod config;
 mod database;
 mod error;
 mod hash;
+mod item_identity;
+mod item_version;
 mod items;
 mod query;
 mod roots;
@@ -17,6 +19,7 @@ mod schema;
 mod server;
 mod sort;
 mod task;
+mod undo_log;
 mod utils;
 mod validate;
 
