@@ -155,15 +155,27 @@ impl Alerts {
         prev_hash_scan: i64,
         current_scan: i64,
     ) -> Result<bool, FsPulseError> {
+        // Check if any version created after last_hash_scan (and up to current scan)
+        // has different (mod_date, size) from its predecessor. The version active at
+        // last_hash_scan serves as the implicit baseline — it's the predecessor of
+        // the first post-hash version. Uses IS NOT for NULL-safe comparison.
         let sql = r#"
             SELECT EXISTS (
                 SELECT 1
-                FROM   changes
-                WHERE  item_id      = :item_id
-                AND  scan_id     > :prev_scan     -- AFTER previous-hash scan
-                AND  scan_id     < :current_scan  -- BEFORE current scan
-                AND  meta_change  = 1
-            ) AS has_meta_change;
+                FROM item_versions v
+                JOIN item_versions prev
+                    ON prev.item_id = v.item_id
+                    AND prev.first_scan_id = (
+                        SELECT MAX(first_scan_id)
+                        FROM item_versions
+                        WHERE item_id = v.item_id
+                          AND first_scan_id < v.first_scan_id
+                    )
+                WHERE v.item_id = :item_id
+                  AND v.first_scan_id > :prev_scan
+                  AND v.first_scan_id <= :current_scan
+                  AND (v.mod_date IS NOT prev.mod_date OR v.size IS NOT prev.size)
+            ) AS has_meta_change
         "#;
 
         let has_meta_change: bool = conn.query_row(

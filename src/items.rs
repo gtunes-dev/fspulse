@@ -18,7 +18,6 @@ pub struct AnalysisItem {
     last_val_scan: Option<i64>,
     val: i64,
     val_error: Option<String>,
-    meta_change: Option<bool>,
     needs_hash: bool,
     needs_val: bool,
 }
@@ -55,10 +54,6 @@ impl AnalysisItem {
         self.val_error.as_deref()
     }
 
-    pub fn meta_change(&self) -> Option<bool> {
-        self.meta_change
-    }
-
     pub fn needs_hash(&self) -> bool {
         self.needs_hash
     }
@@ -85,9 +80,8 @@ impl AnalysisItem {
             last_val_scan: row.get(5)?,
             val: row.get(6)?,
             val_error: row.get(7)?,
-            meta_change: row.get(8)?,
-            needs_hash: row.get(9)?,
-            needs_val: row.get(10)?,
+            needs_hash: row.get(8)?,
+            needs_val: row.get(9)?,
         })
     }
 }
@@ -391,45 +385,52 @@ impl Item {
     ) -> Result<(u64, u64), FsPulseError> {
         let sql = r#"
             WITH candidates AS (
+                SELECT
+                    cv.last_hash_scan,
+                    cv.last_val_scan,
+                    CASE
+                        WHEN $1 = 0 THEN 0
+                        WHEN $2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3) THEN 1
+                        WHEN cv.file_hash IS NULL THEN 1
+                        WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
+                        WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
+                        WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                        ELSE 0
+                    END AS needs_hash,
+                    CASE
+                        WHEN $4 = 0 THEN 0
+                        WHEN $5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
+                        WHEN cv.val = 0 THEN 1
+                        WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
+                        WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
+                        WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                        ELSE 0
+                    END AS needs_val
+                FROM items i
+                JOIN item_versions cv
+                    ON cv.item_id = i.item_id
+                    AND cv.last_scan_id = $3
+                LEFT JOIN item_versions pv
+                    ON pv.item_id = i.item_id
+                    AND pv.first_scan_id = (
+                        SELECT MAX(first_scan_id)
+                        FROM item_versions
+                        WHERE item_id = i.item_id
+                          AND first_scan_id < cv.first_scan_id
+                    )
+                WHERE
+                    i.item_type = 0
+                    AND cv.is_deleted = 0
+                    AND cv.access <> 1
+                    AND i.item_id > $6
+            )
             SELECT
-                i.item_id,
-                i.last_hash_scan,
-                i.file_hash,
-                i.last_val_scan,
-                i.val,
-                CASE
-                    WHEN $1 = 0 THEN 0
-                    WHEN $2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan IS NULL OR i.last_hash_scan < $3) THEN 1
-                    WHEN i.file_hash IS NULL THEN 1
-                    WHEN c.change_type = 1 THEN 1
-                    WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
-                    ELSE 0
-                END AS needs_hash,
-                CASE
-                    WHEN $4 = 0 THEN 0
-                    WHEN $5 = 1 AND (i.val = 0 OR i.last_val_scan IS NULL OR i.last_val_scan < $3) THEN 1
-                    WHEN i.val = 0 THEN 1
-                    WHEN c.change_type = 1 THEN 1
-                    WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
-                    ELSE 0
-                END AS needs_val
-            FROM items_old i
-            LEFT JOIN changes c
-                ON c.item_id = i.item_id AND c.scan_id = $3
-            WHERE
-                i.last_scan = $3 AND
-                i.item_type = 0 AND
-                i.is_ts = 0 AND
-                i.access <> 1 AND
-                i.item_id > $6
-        )
-        SELECT
-            COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
-            COALESCE(SUM(CASE
-                WHEN (needs_hash = 1 AND last_hash_scan = $3)
-                OR (needs_val = 1 AND last_val_scan = $3)
-                THEN 1 ELSE 0 END), 0) AS total_done
-        FROM candidates"#;
+                COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
+                COALESCE(SUM(CASE
+                    WHEN (needs_hash = 1 AND last_hash_scan = $3)
+                    OR (needs_val = 1 AND last_val_scan = $3)
+                    THEN 1 ELSE 0 END), 0) AS total_done
+            FROM candidates"#;
 
         let mut stmt = conn.prepare(sql)?;
         let mut rows = stmt.query(params![
@@ -476,54 +477,65 @@ impl Item {
             "SELECT
                 i.item_id,
                 i.item_path,
-                i.access,
-                i.last_hash_scan,
-                i.file_hash,
-                i.last_val_scan,
-                i.val,
-                i.val_error,
-                c.meta_change,
-            CASE
-                WHEN $1 = 0 THEN 0  -- hash disabled
-                WHEN $2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan < $3) THEN 1  -- hash_all
-                WHEN i.file_hash IS NULL THEN 1
-                WHEN c.change_type = 1 THEN 1
-                WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
-                ELSE 0
-            END AS needs_hash,
-            CASE
-                WHEN $4 = 0 THEN 0  -- val disabled
-                WHEN $5 = 1 AND (i.val = 0 OR i.last_val_scan < $3) THEN 1  -- val_all
-                WHEN i.val = 0 THEN 1
-                WHEN c.change_type = 1 THEN 1
-                WHEN c.change_type = 2 AND c.meta_change = 1 THEN 1
-                ELSE 0
-            END AS needs_val
-        FROM items_old i
-        LEFT JOIN changes c
-            ON c.item_id = i.item_id AND c.scan_id = $3
-        WHERE
-            i.last_scan = $3
-            AND i.item_type = 0
-            AND i.is_ts = 0
-            AND i.access <> 1
-            AND i.item_id > $6
-            AND (
-                ($1 = 1 AND (  -- hash enabled
-                    ($2 = 1 AND (i.file_hash IS NULL OR i.last_hash_scan < $3)) OR
-                    i.file_hash IS NULL OR
-                    (c.change_type = 1 AND (i.last_hash_scan IS NULL OR i.last_hash_scan < $3)) OR
-                    (c.change_type = 2 AND c.meta_change = 1 AND (i.last_hash_scan IS NULL OR i.last_hash_scan < $3))
-                )) OR
-                ($4 = 1 AND (  -- val enabled
-                    ($5 = 1 AND (i.val = 0 OR i.last_val_scan < $3)) OR
-                    i.val = 0 OR
-                    (c.change_type = 1 AND (i.last_val_scan IS NULL OR i.last_val_scan < $3)) OR
-                    (c.change_type = 2 AND c.meta_change = 1 AND (i.last_val_scan IS NULL OR i.last_val_scan < $3))
-                ))
-            )
-        ORDER BY i.item_id ASC
-        LIMIT {limit}"
+                cv.access,
+                cv.last_hash_scan,
+                cv.file_hash,
+                cv.last_val_scan,
+                cv.val,
+                cv.val_error,
+                CASE
+                    WHEN $1 = 0 THEN 0
+                    WHEN $2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3) THEN 1
+                    WHEN cv.file_hash IS NULL THEN 1
+                    WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
+                    WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
+                    WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                    ELSE 0
+                END AS needs_hash,
+                CASE
+                    WHEN $4 = 0 THEN 0
+                    WHEN $5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
+                    WHEN cv.val = 0 THEN 1
+                    WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
+                    WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
+                    WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                    ELSE 0
+                END AS needs_val
+            FROM items i
+            JOIN item_versions cv
+                ON cv.item_id = i.item_id
+                AND cv.last_scan_id = $3
+            LEFT JOIN item_versions pv
+                ON pv.item_id = i.item_id
+                AND pv.first_scan_id = (
+                    SELECT MAX(first_scan_id)
+                    FROM item_versions
+                    WHERE item_id = i.item_id
+                      AND first_scan_id < cv.first_scan_id
+                )
+            WHERE
+                i.item_type = 0
+                AND cv.is_deleted = 0
+                AND cv.access <> 1
+                AND i.item_id > $6
+                AND (
+                    ($1 = 1 AND (
+                        ($2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
+                        cv.file_hash IS NULL OR
+                        (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
+                        (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
+                        (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3))
+                    )) OR
+                    ($4 = 1 AND (
+                        ($5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
+                        cv.val = 0 OR
+                        (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
+                        (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
+                        (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3))
+                    ))
+                )
+            ORDER BY i.item_id ASC
+            LIMIT {limit}"
         );
 
         let mut stmt = conn.prepare(&query)?;
@@ -873,7 +885,6 @@ mod tests {
             last_val_scan: Some(789),
             val: ValidationState::Valid.as_i64(),
             val_error: Some("test error".to_string()),
-            meta_change: Some(true),
             needs_hash: true,
             needs_val: false,
         };
@@ -885,7 +896,6 @@ mod tests {
         assert_eq!(analysis_item.file_hash(), Some("abc123"));
         assert_eq!(analysis_item.last_val_scan(), Some(789));
         assert_eq!(analysis_item.val_error(), Some("test error"));
-        assert_eq!(analysis_item.meta_change(), Some(true));
         assert!(analysis_item.needs_hash());
         assert!(!analysis_item.needs_val());
     }

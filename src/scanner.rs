@@ -1352,13 +1352,11 @@ impl Scanner {
 
                 i_hash = new_hash.as_deref();
 
-                // The hash changed. Assess whether it's suspicious or not
-                // It's only suspicious if metadata (file size and mod date)
-                // didn't change in this update or any update since that last
-                // hash scan
-                alert_possible_hash = match analysis_item.meta_change() {
-                    Some(true) => false,
-                    Some(false) | None => true,
+                // The hash changed. It's suspicious if metadata never changed
+                // between the last hash scan and now. Only check if there was
+                // a previous hash (otherwise it's the first hash, not suspicious).
+                if analysis_item.last_hash_scan().is_some() {
+                    alert_possible_hash = true;
                 }
             }
 
@@ -1417,9 +1415,10 @@ impl Scanner {
                     i_last_hash_scan, i_last_val_scan,
                 )?;
             } else if update_changes {
-                // Pre-existing version with state change: INSERT new version.
-                // No undo log needed — closing is conceptual (last_scan_id already correct
-                // from handle_item_no_change), and new version has first_scan_id = current_scan.
+                // Pre-existing version with state change: undo the walk-phase touch,
+                // then INSERT a new version as the sole current version for this scan.
+                ItemVersion::restore_last_scan(c, current_version.version_id())?;
+
                 ItemVersion::insert_full(
                     c, analysis_item.item_id(), scan.scan_id(),
                     false, i_access,
@@ -1440,23 +1439,23 @@ impl Scanner {
             }
 
             // Alerts (shared)
+            // alert_possible_hash is only set when last_hash_scan is Some
             if alert_possible_hash {
-                if let Some(last_hash_scan) = analysis_item.last_hash_scan() {
-                    if !Alerts::meta_changed_between(
+                let last_hash_scan = analysis_item.last_hash_scan().unwrap();
+                if !Alerts::meta_changed_between(
+                    c,
+                    analysis_item.item_id(),
+                    last_hash_scan,
+                    scan.scan_id(),
+                )? {
+                    Alerts::add_suspicious_hash_alert(
                         c,
-                        analysis_item.item_id(),
-                        last_hash_scan,
                         scan.scan_id(),
-                    )? {
-                        Alerts::add_suspicious_hash_alert(
-                            c,
-                            scan.scan_id(),
-                            analysis_item.item_id(),
-                            analysis_item.last_hash_scan(),
-                            analysis_item.file_hash(),
-                            c_hash_new.unwrap(),
-                        )?;
-                    }
+                        analysis_item.item_id(),
+                        analysis_item.last_hash_scan(),
+                        analysis_item.file_hash(),
+                        c_hash_new.unwrap(),
+                    )?;
                 }
             }
 

@@ -1,7 +1,7 @@
 use log::error;
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::{error::FsPulseError, items::Access, validate::validator::ValidationState};
+use crate::{error::FsPulseError, items::Access, undo_log::UndoLog, validate::validator::ValidationState};
 
 /// A single temporal version of an item.
 ///
@@ -106,9 +106,10 @@ impl ItemVersion {
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
-                is_deleted, access, mod_date, size
-             ) VALUES (?, ?, ?, 0, ?, ?, ?)",
-            params![item_id, scan_id, scan_id, access.as_i64(), mod_date, size],
+                is_deleted, access, mod_date, size, val
+             ) VALUES (?, ?, ?, 0, ?, ?, ?, ?)",
+            params![item_id, scan_id, scan_id, access.as_i64(), mod_date, size,
+                    ValidationState::Unknown.as_i64()],
         )?;
         Ok(())
     }
@@ -179,6 +180,25 @@ impl ItemVersion {
             params![scan_id, version_id],
         )?;
         Ok(())
+    }
+
+    /// Restore a pre-existing version's `last_scan_id` to its pre-scan value.
+    ///
+    /// During the walk phase, `touch_last_scan` advances `last_scan_id` to the current
+    /// scan for every unchanged item. When the analysis phase later determines that
+    /// the item's state actually changed (hash or validation), it must INSERT a new
+    /// version. Before doing so, this method restores the old version's `last_scan_id`
+    /// so that only the new version has `last_scan_id = current_scan`, preserving the
+    /// invariant that at most one version per item is "current" in any given scan.
+    ///
+    /// The original value is read from the undo log (written by the walk phase).
+    /// On rollback this restore is idempotent — the undo log replay sets the same value.
+    pub fn restore_last_scan(
+        conn: &Connection,
+        version_id: i64,
+    ) -> Result<(), FsPulseError> {
+        let old_last_scan_id = UndoLog::get_old_last_scan_id(conn, version_id)?;
+        Self::touch_last_scan(conn, version_id, old_last_scan_id)
     }
 
     /// Update a same-scan version in place with analysis results.

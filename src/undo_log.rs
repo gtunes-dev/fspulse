@@ -32,6 +32,24 @@ impl UndoLog {
         Ok(())
     }
 
+    /// Read the pre-scan `last_scan_id` for a version from the undo log.
+    ///
+    /// Used by the analysis phase when it needs to "properly close" a pre-existing version
+    /// before inserting a new version. The walk phase already logged the undo entry via
+    /// `handle_item_no_change`; this reads the original value back so the analysis phase
+    /// can restore it, ensuring only the new version has `last_scan_id = current_scan`.
+    pub fn get_old_last_scan_id(
+        conn: &Connection,
+        version_id: i64,
+    ) -> Result<i64, FsPulseError> {
+        let old_last_scan_id: i64 = conn.query_row(
+            "SELECT old_last_scan_id FROM scan_undo_log WHERE version_id = ?",
+            params![version_id],
+            |row| row.get(0),
+        )?;
+        Ok(old_last_scan_id)
+    }
+
     /// Clear the entire undo log. Called on scan completion.
     ///
     /// SQLite's truncate optimization makes DELETE without WHERE effectively O(1).
