@@ -1,7 +1,6 @@
-use log::error;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{self, params, Connection, OptionalExtension};
 
-use crate::{error::FsPulseError, items::Access, undo_log::UndoLog, validate::validator::ValidationState};
+use crate::{error::FsPulseError, item_identity::Access, scans::AnalysisSpec, undo_log::UndoLog, validate::validator::ValidationState};
 
 /// A single temporal version of an item.
 ///
@@ -250,184 +249,7 @@ impl ItemVersion {
         Ok(())
     }
 
-    /// Validate that the old model (items_old) and new model (items + item_versions)
-    /// are in sync. Logs mismatches and returns an error if any are found.
-    ///
-    /// Used by both the v15→v16 migration (to verify initial data) and by the scanner
-    /// (to verify dual-write correctness after each scan). Temporary — removed at cutover.
-    pub fn validate_against_old_model(
-        conn: &Connection,
-        context: &str,
-    ) -> Result<(), FsPulseError> {
-        let mut errors: Vec<String> = Vec::new();
-
-        // Validation 1: Row counts — every item in items_old should have an identity in items
-        let items_old_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM items_old", [], |row| row.get(0)
-        ).map_err(FsPulseError::DatabaseError)?;
-
-        let items_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM items", [], |row| row.get(0)
-        ).map_err(FsPulseError::DatabaseError)?;
-
-        if items_old_count != items_count {
-            errors.push(format!(
-                "Identity count mismatch: items_old has {} rows, items has {} rows",
-                items_old_count, items_count
-            ));
-        }
-
-        // Validation 2: Every item should have at least one version
-        let items_without_versions: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM items i
-             WHERE NOT EXISTS (SELECT 1 FROM item_versions v WHERE v.item_id = i.item_id)",
-            [], |row| row.get(0)
-        ).map_err(FsPulseError::DatabaseError)?;
-
-        if items_without_versions > 0 {
-            errors.push(format!(
-                "{} items have no version rows in item_versions",
-                items_without_versions
-            ));
-        }
-
-        // Validation 3: Compare current state in items_old against latest version
-        let mut stmt = conn.prepare(
-            "SELECT
-                io.item_id, io.item_path,
-                io.is_ts, io.access, io.mod_date, io.size, io.file_hash,
-                io.val, io.val_error, io.last_hash_scan, io.last_val_scan, io.last_scan,
-                v.is_deleted, v.access, v.mod_date, v.size, v.file_hash,
-                v.val, v.val_error, v.last_hash_scan, v.last_val_scan, v.last_scan_id
-             FROM items_old io
-             JOIN (
-                 SELECT item_id, is_deleted, access, mod_date, size, file_hash,
-                        val, val_error, last_hash_scan, last_val_scan, last_scan_id
-                 FROM item_versions v1
-                 WHERE v1.first_scan_id = (
-                     SELECT MAX(v2.first_scan_id) FROM item_versions v2
-                     WHERE v2.item_id = v1.item_id
-                 )
-             ) v ON v.item_id = io.item_id"
-        ).map_err(FsPulseError::DatabaseError)?;
-
-        let rows = stmt.query_map([], |row| {
-            Ok(OldNewComparisonRow {
-                item_id: row.get(0)?,
-                item_path: row.get(1)?,
-                old_is_ts: row.get(2)?,
-                old_access: row.get(3)?,
-                old_mod_date: row.get(4)?,
-                old_size: row.get(5)?,
-                old_file_hash: row.get(6)?,
-                old_val: row.get(7)?,
-                old_val_error: row.get(8)?,
-                old_last_hash_scan: row.get(9)?,
-                old_last_val_scan: row.get(10)?,
-                old_last_scan: row.get(11)?,
-                ver_is_deleted: row.get(12)?,
-                ver_access: row.get(13)?,
-                ver_mod_date: row.get(14)?,
-                ver_size: row.get(15)?,
-                ver_file_hash: row.get(16)?,
-                ver_val: row.get(17)?,
-                ver_val_error: row.get(18)?,
-                ver_last_hash_scan: row.get(19)?,
-                ver_last_val_scan: row.get(20)?,
-                ver_last_scan_id: row.get(21)?,
-            })
-        }).map_err(FsPulseError::DatabaseError)?;
-
-        let mut mismatch_count = 0;
-        let max_logged = 50;
-
-        for row_result in rows {
-            let r = row_result.map_err(FsPulseError::DatabaseError)?;
-            let mut item_errors: Vec<String> = Vec::new();
-
-            if r.old_is_ts != r.ver_is_deleted {
-                item_errors.push(format!("is_ts/is_deleted: {} vs {}", r.old_is_ts, r.ver_is_deleted));
-            }
-            if r.old_access != r.ver_access {
-                item_errors.push(format!("access: {} vs {}", r.old_access, r.ver_access));
-            }
-            if r.old_mod_date != r.ver_mod_date {
-                item_errors.push(format!("mod_date: {:?} vs {:?}", r.old_mod_date, r.ver_mod_date));
-            }
-            if r.old_size != r.ver_size {
-                item_errors.push(format!("size: {:?} vs {:?}", r.old_size, r.ver_size));
-            }
-            if r.old_file_hash != r.ver_file_hash {
-                item_errors.push(format!("file_hash: {:?} vs {:?}", r.old_file_hash, r.ver_file_hash));
-            }
-            if r.old_val != r.ver_val {
-                item_errors.push(format!("val: {} vs {}", r.old_val, r.ver_val));
-            }
-            if r.old_val_error != r.ver_val_error {
-                item_errors.push(format!("val_error: {:?} vs {:?}", r.old_val_error, r.ver_val_error));
-            }
-            if r.old_last_hash_scan != r.ver_last_hash_scan {
-                item_errors.push(format!("last_hash_scan: {:?} vs {:?}", r.old_last_hash_scan, r.ver_last_hash_scan));
-            }
-            if r.old_last_val_scan != r.ver_last_val_scan {
-                item_errors.push(format!("last_val_scan: {:?} vs {:?}", r.old_last_val_scan, r.ver_last_val_scan));
-            }
-            if r.old_last_scan != r.ver_last_scan_id {
-                item_errors.push(format!("last_scan/last_scan_id: {} vs {}", r.old_last_scan, r.ver_last_scan_id));
-            }
-
-            if !item_errors.is_empty() {
-                mismatch_count += 1;
-                if mismatch_count <= max_logged {
-                    error!(
-                        "{} validation: item_id={} path='{}' mismatches: [{}]",
-                        context, r.item_id, r.item_path, item_errors.join(", ")
-                    );
-                }
-            }
-        }
-
-        if mismatch_count > max_logged {
-            error!(
-                "{} validation: ... and {} more items with mismatches (only first {} shown)",
-                context, mismatch_count - max_logged, max_logged
-            );
-        }
-
-        if mismatch_count > 0 {
-            errors.push(format!(
-                "{} items have state mismatches between items_old and latest item_version",
-                mismatch_count
-            ));
-        }
-
-        // Validation 4: Version chain ordering
-        let bad_ranges: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM item_versions WHERE first_scan_id > last_scan_id",
-            [], |row| row.get(0)
-        ).map_err(FsPulseError::DatabaseError)?;
-
-        if bad_ranges > 0 {
-            errors.push(format!(
-                "{} version rows have first_scan_id > last_scan_id",
-                bad_ranges
-            ));
-        }
-
-        if !errors.is_empty() {
-            for err in &errors {
-                error!("{} validation error: {}", context, err);
-            }
-            return Err(FsPulseError::Error(format!(
-                "{} validation failed with {} error(s). See log for details.",
-                context, errors.len()
-            )));
-        }
-
-        Ok(())
-    }
-
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+    pub(crate) fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(ItemVersion {
             version_id: row.get(0)?,
             first_scan_id: row.get(1)?,
@@ -445,29 +267,278 @@ impl ItemVersion {
     }
 }
 
-/// Row type for comparing old model (items_old) against new model (latest item_version).
-/// Temporary — removed at cutover along with validate_against_old_model.
-struct OldNewComparisonRow {
+/// An item ready for the analysis phase, with its current state and flags
+/// indicating which analysis operations are needed.
+#[derive(Clone, Debug)]
+pub struct AnalysisItem {
     item_id: i64,
     item_path: String,
-    old_is_ts: bool,
-    old_access: i64,
-    old_mod_date: Option<i64>,
-    old_size: Option<i64>,
-    old_file_hash: Option<String>,
-    old_val: i64,
-    old_val_error: Option<String>,
-    old_last_hash_scan: Option<i64>,
-    old_last_val_scan: Option<i64>,
-    old_last_scan: i64,
-    ver_is_deleted: bool,
-    ver_access: i64,
-    ver_mod_date: Option<i64>,
-    ver_size: Option<i64>,
-    ver_file_hash: Option<String>,
-    ver_val: i64,
-    ver_val_error: Option<String>,
-    ver_last_hash_scan: Option<i64>,
-    ver_last_val_scan: Option<i64>,
-    ver_last_scan_id: i64,
+    access: i64,
+    last_hash_scan: Option<i64>,
+    file_hash: Option<String>,
+    last_val_scan: Option<i64>,
+    val: i64,
+    val_error: Option<String>,
+    needs_hash: bool,
+    needs_val: bool,
+}
+
+impl AnalysisItem {
+    pub fn item_id(&self) -> i64 {
+        self.item_id
+    }
+
+    pub fn item_path(&self) -> &str {
+        &self.item_path
+    }
+
+    pub fn access(&self) -> Access {
+        Access::from_i64(self.access)
+    }
+
+    pub fn last_hash_scan(&self) -> Option<i64> {
+        self.last_hash_scan
+    }
+
+    pub fn file_hash(&self) -> Option<&str> {
+        self.file_hash.as_deref()
+    }
+    pub fn last_val_scan(&self) -> Option<i64> {
+        self.last_val_scan
+    }
+
+    pub fn val(&self) -> ValidationState {
+        ValidationState::from_i64(self.val)
+    }
+
+    pub fn val_error(&self) -> Option<&str> {
+        self.val_error.as_deref()
+    }
+
+    pub fn needs_hash(&self) -> bool {
+        self.needs_hash
+    }
+
+    pub fn set_needs_hash(&mut self, value: bool) {
+        self.needs_hash = value;
+    }
+
+    pub fn needs_val(&self) -> bool {
+        self.needs_val
+    }
+
+    pub fn set_needs_val(&mut self, value: bool) {
+        self.needs_val = value;
+    }
+
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(AnalysisItem {
+            item_id: row.get(0)?,
+            item_path: row.get(1)?,
+            access: row.get(2)?,
+            last_hash_scan: row.get(3)?,
+            file_hash: row.get(4)?,
+            last_val_scan: row.get(5)?,
+            val: row.get(6)?,
+            val_error: row.get(7)?,
+            needs_hash: row.get(8)?,
+            needs_val: row.get(9)?,
+        })
+    }
+
+    pub fn get_analysis_counts(
+        conn: &Connection,
+        scan_id: i64,
+        analysis_spec: &AnalysisSpec,
+        last_item_id: i64,
+    ) -> Result<(u64, u64), crate::error::FsPulseError> {
+        let sql = r#"
+            WITH candidates AS (
+                SELECT
+                    cv.last_hash_scan,
+                    cv.last_val_scan,
+                    CASE
+                        WHEN $1 = 0 THEN 0
+                        WHEN $2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3) THEN 1
+                        WHEN cv.file_hash IS NULL THEN 1
+                        WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
+                        WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
+                        WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                        ELSE 0
+                    END AS needs_hash,
+                    CASE
+                        WHEN $4 = 0 THEN 0
+                        WHEN $5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
+                        WHEN cv.val = 0 THEN 1
+                        WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
+                        WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
+                        WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                        ELSE 0
+                    END AS needs_val
+                FROM items i
+                JOIN item_versions cv
+                    ON cv.item_id = i.item_id
+                    AND cv.last_scan_id = $3
+                LEFT JOIN item_versions pv
+                    ON pv.item_id = i.item_id
+                    AND pv.first_scan_id = (
+                        SELECT MAX(first_scan_id)
+                        FROM item_versions
+                        WHERE item_id = i.item_id
+                          AND first_scan_id < cv.first_scan_id
+                    )
+                WHERE
+                    i.item_type = 0
+                    AND cv.is_deleted = 0
+                    AND cv.access <> 1
+                    AND i.item_id > $6
+            )
+            SELECT
+                COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
+                COALESCE(SUM(CASE
+                    WHEN (needs_hash = 1 AND last_hash_scan = $3)
+                    OR (needs_val = 1 AND last_val_scan = $3)
+                    THEN 1 ELSE 0 END), 0) AS total_done
+            FROM candidates"#;
+
+        let mut stmt = conn.prepare(sql)?;
+        let mut rows = stmt.query(params![
+            analysis_spec.is_hash() as i64,
+            analysis_spec.hash_all() as i64,
+            scan_id,
+            analysis_spec.is_val() as i64,
+            analysis_spec.val_all() as i64,
+            last_item_id
+        ])?;
+
+        if let Some(row) = rows.next()? {
+            let total_needed = row.get::<_, i64>(0)? as u64;
+            let total_done = row.get::<_, i64>(1)? as u64;
+            Ok((total_needed, total_done))
+        } else {
+            Ok((0, 0))
+        }
+    }
+
+    pub fn fetch_next_batch(
+        conn: &Connection,
+        scan_id: i64,
+        analysis_spec: &AnalysisSpec,
+        last_item_id: i64,
+        limit: usize,
+    ) -> Result<Vec<AnalysisItem>, crate::error::FsPulseError> {
+        let query = format!(
+            "SELECT
+                i.item_id,
+                i.item_path,
+                cv.access,
+                cv.last_hash_scan,
+                cv.file_hash,
+                cv.last_val_scan,
+                cv.val,
+                cv.val_error,
+                CASE
+                    WHEN $1 = 0 THEN 0
+                    WHEN $2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3) THEN 1
+                    WHEN cv.file_hash IS NULL THEN 1
+                    WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
+                    WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
+                    WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                    ELSE 0
+                END AS needs_hash,
+                CASE
+                    WHEN $4 = 0 THEN 0
+                    WHEN $5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
+                    WHEN cv.val = 0 THEN 1
+                    WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
+                    WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
+                    WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                    ELSE 0
+                END AS needs_val
+            FROM items i
+            JOIN item_versions cv
+                ON cv.item_id = i.item_id
+                AND cv.last_scan_id = $3
+            LEFT JOIN item_versions pv
+                ON pv.item_id = i.item_id
+                AND pv.first_scan_id = (
+                    SELECT MAX(first_scan_id)
+                    FROM item_versions
+                    WHERE item_id = i.item_id
+                      AND first_scan_id < cv.first_scan_id
+                )
+            WHERE
+                i.item_type = 0
+                AND cv.is_deleted = 0
+                AND cv.access <> 1
+                AND i.item_id > $6
+                AND (
+                    ($1 = 1 AND (
+                        ($2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
+                        cv.file_hash IS NULL OR
+                        (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
+                        (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
+                        (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3))
+                    )) OR
+                    ($4 = 1 AND (
+                        ($5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
+                        cv.val = 0 OR
+                        (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
+                        (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
+                        (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3))
+                    ))
+                )
+            ORDER BY i.item_id ASC
+            LIMIT {limit}"
+        );
+
+        let mut stmt = conn.prepare(&query)?;
+
+        let rows = stmt.query_map(
+            [
+                analysis_spec.is_hash() as i64,
+                analysis_spec.hash_all() as i64,
+                scan_id,
+                analysis_spec.is_val() as i64,
+                analysis_spec.val_all() as i64,
+                last_item_id,
+            ],
+            AnalysisItem::from_row,
+        )?;
+
+        let analysis_items: Vec<AnalysisItem> = rows.collect::<Result<Vec<_>, _>>()?;
+
+        Ok(analysis_items)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_analysis_item_getters() {
+        let analysis_item = AnalysisItem {
+            item_id: 123,
+            item_path: "/test/path".to_string(),
+            access: Access::Ok.as_i64(),
+            last_hash_scan: Some(456),
+            file_hash: Some("abc123".to_string()),
+            last_val_scan: Some(789),
+            val: ValidationState::Valid.as_i64(),
+            val_error: Some("test error".to_string()),
+            needs_hash: true,
+            needs_val: false,
+        };
+
+        assert_eq!(analysis_item.item_id(), 123);
+        assert_eq!(analysis_item.item_path(), "/test/path");
+        assert_eq!(analysis_item.access(), Access::Ok);
+        assert_eq!(analysis_item.last_hash_scan(), Some(456));
+        assert_eq!(analysis_item.file_hash(), Some("abc123"));
+        assert_eq!(analysis_item.last_val_scan(), Some(789));
+        assert_eq!(analysis_item.val_error(), Some("test error"));
+        assert!(analysis_item.needs_hash());
+        assert!(!analysis_item.needs_val());
+    }
 }

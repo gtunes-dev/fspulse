@@ -1,3 +1,4 @@
+use log::warn;
 use rusqlite::{params, Connection};
 
 use crate::{error::FsPulseError, item_version::ItemVersion};
@@ -53,9 +54,31 @@ impl UndoLog {
     /// Clear the entire undo log. Called on scan completion.
     ///
     /// SQLite's truncate optimization makes DELETE without WHERE effectively O(1).
-    #[allow(dead_code)]
     pub fn clear(conn: &Connection) -> Result<(), FsPulseError> {
         conn.execute("DELETE FROM scan_undo_log", [])?;
+        Ok(())
+    }
+
+    /// Guard: warn and clear if the undo log is non-empty at scan start.
+    ///
+    /// A non-empty undo log at scan start means a previous scan completed or errored
+    /// without properly cleaning up — likely a crash. The stale entries are harmless
+    /// but would corrupt rollback if left in place, so we clear them.
+    pub fn warn_and_clear_if_not_empty(conn: &Connection) -> Result<(), FsPulseError> {
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM scan_undo_log",
+            [],
+            |row| row.get(0),
+        )?;
+
+        if count > 0 {
+            warn!(
+                "Undo log contains {} stale entries at scan start — clearing (likely prior crash)",
+                count
+            );
+            Self::clear(conn)?;
+        }
+
         Ok(())
     }
 

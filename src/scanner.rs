@@ -18,11 +18,9 @@
 // 5. Stopped
 
 use crate::alerts::Alerts;
-use crate::changes::ChangeType;
 use crate::hash::Hash;
-use crate::item_identity::ItemIdentity;
-use crate::item_version::ItemVersion;
-use crate::items::{Access, AnalysisItem, Item, ItemType};
+use crate::item_identity::{Access, ExistingItem, ItemIdentity, ItemType};
+use crate::item_version::{AnalysisItem, ItemVersion};
 use crate::roots::Root;
 use crate::scans::ScanState;
 use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
@@ -162,6 +160,14 @@ impl Scanner {
         // does not differentiate between the reasons for interrupting a scan -
         // it exits cleanly with the scan, and database, in a resumable state
         // independent of the reason the interrupt was triggered
+
+        // Guard: the undo log should be empty at scan start. If not, a previous scan
+        // crashed without cleaning up. Warn and clear to prevent stale entries from
+        // corrupting this scan's rollback.
+        {
+            let conn = Database::get_connection()?;
+            UndoLog::warn_and_clear_if_not_empty(&conn)?;
+        }
 
         // Loop through all states, even if resuming, to allow progress updates
         let mut loop_state = ScanState::Scanning;
@@ -481,37 +487,14 @@ impl Scanner {
                 (scan.scan_id(), scan.scan_id(), scan.root_id(), scan.scan_id()),
             )?;
 
-            // OLD MODEL (remove at cutover) {
-            // Insert deletion records into changes
-            c.execute(
-                "INSERT INTO changes (scan_id, item_id, change_type)
-                    SELECT ?, item_id, ?
-                    FROM items_old
-                    WHERE root_id = ? AND is_ts = 0 AND last_scan < ?",
-                (
-                    scan.scan_id(),
-                    ChangeType::Delete.as_i64(),
-                    scan.root_id(),
-                    scan.scan_id(),
-                ),
-            )?;
-
-            // Mark unseen items as tombstones
-            c.execute(
-                "UPDATE items_old SET
-                    is_ts = 1,
-                    last_scan = ?
-                WHERE root_id = ? AND last_scan < ? AND is_ts = 0",
-                (scan.scan_id(), scan.root_id(), scan.scan_id()),
-            )?;
-            // } END OLD MODEL
+            scan.set_state_analyzing(c)?;
 
             Ok(())
         })?;
 
         task_progress.add_breadcrumb("Tombstoned deleted items");
 
-        scan.set_state_analyzing(&conn)
+        Ok(())
     }
 
     fn do_state_analyzing(
@@ -532,16 +515,6 @@ impl Scanner {
         if !is_hash && !is_val {
             Scanner::check_interrupted(interrupt_token)?;
             scan.set_state_completed(&conn)?;
-            // NEW MODEL: clear undo log after scan is durably marked complete.
-            // If this fails, the stale undo data is harmless — it's never consumed
-            // because the scan is already in Completed state.
-            UndoLog::clear(&conn)?;
-            // NEW MODEL: validate old and new models are in sync (temporary — remove at cutover).
-            // Swallow the error so the scan stays complete — propagating would trigger rollback
-            // and destroy the data we need to inspect.
-            if let Err(e) = ItemVersion::validate_against_old_model(&conn, "Scan completion") {
-                error!("Dual-write validation failed (scan already complete): {e}");
-            }
             return Ok(());
         }
 
@@ -550,7 +523,7 @@ impl Scanner {
         let initial_hwm = initial_state.high_water_mark;
 
         let (analyze_total, analyze_done) =
-            Item::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
+            AnalysisItem::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
 
         // Set up counter-based progress tracking
         task_progress.set_progress_total(analyze_total, analyze_done, Some("files"));
@@ -605,7 +578,7 @@ impl Scanner {
                 break;
             }
 
-            let analysis_items = Item::fetch_next_analysis_batch(
+            let analysis_items = AnalysisItem::fetch_next_batch(
                 &conn,
                 scan.scan_id(),
                 scan.analysis_spec(),
@@ -659,16 +632,6 @@ impl Scanner {
         task_progress.add_breadcrumb(&format!("Analyzed {} files", analyze_total));
 
         scan.set_state_completed(&conn)?;
-        // NEW MODEL: clear undo log after scan is durably marked complete.
-        // If this fails, the stale undo data is harmless — it's never consumed
-        // because the scan is already in Completed state.
-        UndoLog::clear(&conn)?;
-        // NEW MODEL: validate old and new models are in sync (temporary — remove at cutover).
-        // Swallow the error so the scan stays complete — propagating would trigger rollback
-        // and destroy the data we need to inspect.
-        if let Err(e) = ItemVersion::validate_against_old_model(&conn, "Scan completion") {
-            error!("Dual-write validation failed (scan already complete): {e}");
-        }
         Ok(())
     }
 
@@ -899,27 +862,6 @@ impl Scanner {
         }
     }
 
-    /// Helper to check update result and return appropriate error
-    fn check_update_result(rows_updated: usize, item_id: i64) -> Result<(), FsPulseError> {
-        if rows_updated == 0 {
-            Err(FsPulseError::Error(format!(
-                "Item Id {} not found for update",
-                item_id
-            )))
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Helper to compute access change values for change records
-    fn access_change_values(old_access: Access, new_access: Access) -> (Option<i64>, Option<i64>) {
-        if old_access != new_access {
-            (Some(old_access.as_i64()), Some(new_access.as_i64()))
-        } else {
-            (None, None)
-        }
-    }
-
     /// Returns true if an AccessDenied alert should be created.
     /// Alert is created when access transitions from Ok to an error state.
     fn should_alert_access_denied(old_access: Access, new_access: Access) -> bool {
@@ -938,7 +880,7 @@ impl Scanner {
 
         let path_str = path.to_string_lossy();
         let existing_item =
-            Item::get_by_root_path_type(ctx.conn, ctx.scan.root_id(), &path_str, item_type)?;
+            ExistingItem::get_by_root_path_type(ctx.conn, ctx.scan.root_id(), &path_str, item_type)?;
 
         // If metadata is None, we have a MetaError (couldn't stat)
         let meta_error = metadata.is_none();
@@ -953,9 +895,9 @@ impl Scanner {
         let size = computed_size;
 
         match existing_item {
-            Some(ref item) if item.last_scan() == ctx.scan.scan_id() => {
+            Some(ref existing) if existing.version.last_scan_id() == ctx.scan.scan_id() => {
                 // Already processed this scan - return cached size for folder aggregation
-                Ok(item.size().unwrap_or(0))
+                Ok(existing.version.size().unwrap_or(0))
             }
             Some(existing_item) => {
                 Scanner::handle_existing_item(
@@ -987,26 +929,25 @@ impl Scanner {
     /// Handle an existing item (non-tombstone or tombstone)
     fn handle_existing_item(
         ctx: &mut ScanContext,
-        existing_item: &Item,
+        existing_item: &ExistingItem,
         item_type: ItemType,
         mod_date: Option<i64>,
         size: Option<i64>,
         dir_read_error: bool,
         meta_error: bool,
     ) -> Result<(), FsPulseError> {
-        let old_access = existing_item.access();
+        let old_access = existing_item.version.access();
         let new_access =
             Scanner::calculate_new_access(item_type, old_access, dir_read_error, meta_error);
         let access_changed = old_access != new_access;
-        let meta_change = existing_item.mod_date() != mod_date || existing_item.size() != size;
+        let meta_change = existing_item.version.mod_date() != mod_date || existing_item.version.size() != size;
 
-        if existing_item.is_ts() {
+        if existing_item.version.is_deleted() {
             Scanner::handle_tombstone_rehydration(
                 ctx,
                 existing_item,
                 mod_date,
                 size,
-                old_access,
                 new_access,
             )
         } else if meta_change || access_changed {
@@ -1017,7 +958,6 @@ impl Scanner {
                 size,
                 old_access,
                 new_access,
-                meta_change,
             )
         } else {
             // No change at all - just update last_scan
@@ -1028,78 +968,24 @@ impl Scanner {
     /// Handle tombstone rehydration (item coming back from deletion)
     fn handle_tombstone_rehydration(
         ctx: &mut ScanContext,
-        existing_item: &Item,
+        existing_item: &ExistingItem,
         mod_date: Option<i64>,
         size: Option<i64>,
-        old_access: Access,
         new_access: Access,
     ) -> Result<(), FsPulseError> {
         ctx.execute_batch_write(|c| {
-            // NEW MODEL: insert new alive version (old deleted version is not modified —
+            // Insert new alive version (old deleted version is not modified —
             // its last_scan_id already reflects when the deletion was last confirmed,
             // and temporal queries resolve via MAX(first_scan_id), not last_scan_id)
             ItemVersion::insert_initial(
-                c, existing_item.item_id(), ctx.scan.scan_id(), new_access, mod_date, size,
+                c, existing_item.item_id, ctx.scan.scan_id(), new_access, mod_date, size,
             )?;
 
-            // OLD MODEL (remove at cutover) {
-            let rows_updated = c.execute(
-                "UPDATE items_old SET
-                    is_ts = 0,
-                    access = ?,
-                    mod_date = ?,
-                    size = ?,
-                    file_hash = NULL,
-                    val = ?,
-                    val_error = NULL,
-                    last_scan = ?,
-                    last_hash_scan = NULL,
-                    last_val_scan = NULL
-                WHERE item_id = ?",
-                (
-                    new_access.as_i64(),
-                    mod_date,
-                    size,
-                    ValidationState::Unknown.as_i64(),
-                    ctx.scan.scan_id(),
-                    existing_item.item_id(),
-                ),
-            )?;
-            Scanner::check_update_result(rows_updated, existing_item.item_id())?;
-
-            let (access_old_val, access_new_val) =
-                Scanner::access_change_values(old_access, new_access);
-
-            c.execute(
-                "INSERT INTO changes (
-                    scan_id, item_id, change_type,
-                    access_old, access_new,
-                    is_undelete, mod_date_old, mod_date_new, size_old, size_new,
-                    hash_old, val_old, val_error_old
-                ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    ctx.scan.scan_id(),
-                    existing_item.item_id(),
-                    ChangeType::Add.as_i64(),
-                    access_old_val,
-                    access_new_val,
-                    existing_item.mod_date(),
-                    mod_date,
-                    existing_item.size(),
-                    size,
-                    existing_item.file_hash(),
-                    existing_item.validity_state_as_str(),
-                    existing_item.val_error(),
-                ),
-            )?;
-            // } END OLD MODEL
-
-            // Alerts (shared)
             // For rehydration, we alert whenever new_access is not Ok, regardless of what
             // the old access state was (since the item was a tombstone, any new access
             // error is a problem worth alerting on, similar to a brand new item)
             if new_access != Access::Ok {
-                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), existing_item.item_id())?;
+                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), existing_item.item_id)?;
             }
 
             Ok(())
@@ -1109,83 +995,23 @@ impl Scanner {
     /// Handle item modification (metadata and/or access change)
     fn handle_item_modification(
         ctx: &mut ScanContext,
-        existing_item: &Item,
+        existing_item: &ExistingItem,
         mod_date: Option<i64>,
         size: Option<i64>,
         old_access: Access,
         new_access: Access,
-        meta_change: bool,
     ) -> Result<(), FsPulseError> {
         ctx.execute_batch_write(|c| {
-            // NEW MODEL: insert new version carrying forward hash/val from previous version
+            // Insert new version carrying forward hash/val from previous version
             // (old version is not modified — its last_scan_id already reflects when it was
             // last confirmed, and temporal queries resolve via MAX(first_scan_id))
-            let current_version = ItemVersion::get_current(c, existing_item.item_id())?
-                .ok_or_else(|| FsPulseError::Error(format!(
-                    "No current version for item {} during modification",
-                    existing_item.item_id()
-                )))?;
             ItemVersion::insert_with_carry_forward(
-                c, existing_item.item_id(), ctx.scan.scan_id(),
-                false, new_access, mod_date, size, &current_version,
+                c, existing_item.item_id, ctx.scan.scan_id(),
+                false, new_access, mod_date, size, &existing_item.version,
             )?;
 
-            // OLD MODEL (remove at cutover) {
-            let rows_updated = c.execute(
-                "UPDATE items_old SET
-                    access = ?,
-                    mod_date = ?,
-                    size = ?,
-                    last_scan = ?
-                WHERE item_id = ?",
-                (
-                    new_access.as_i64(),
-                    mod_date,
-                    size,
-                    ctx.scan.scan_id(),
-                    existing_item.item_id(),
-                ),
-            )?;
-            Scanner::check_update_result(rows_updated, existing_item.item_id())?;
-
-            let (access_old_val, access_new_val) =
-                Scanner::access_change_values(old_access, new_access);
-
-            let (mod_date_old, mod_date_new, size_old, size_new) = if meta_change {
-                (
-                    existing_item.mod_date(),
-                    mod_date,
-                    existing_item.size(),
-                    size,
-                )
-            } else {
-                (None, None, None, None)
-            };
-
-            c.execute(
-                "INSERT INTO changes (
-                    scan_id, item_id, change_type,
-                    access_old, access_new,
-                    meta_change, mod_date_old, mod_date_new, size_old, size_new
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    ctx.scan.scan_id(),
-                    existing_item.item_id(),
-                    ChangeType::Modify.as_i64(),
-                    access_old_val,
-                    access_new_val,
-                    if meta_change { Some(true) } else { None },
-                    mod_date_old,
-                    mod_date_new,
-                    size_old,
-                    size_new,
-                ),
-            )?;
-            // } END OLD MODEL
-
-            // Alerts (shared)
             if Scanner::should_alert_access_denied(old_access, new_access) {
-                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), existing_item.item_id())?;
+                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), existing_item.item_id)?;
             }
 
             Ok(())
@@ -1195,25 +1021,11 @@ impl Scanner {
     /// Handle item with no changes - just update last_scan
     fn handle_item_no_change(
         ctx: &mut ScanContext,
-        existing_item: &Item,
+        existing_item: &ExistingItem,
     ) -> Result<(), FsPulseError> {
         ctx.execute_batch_write(|c| {
-            // NEW MODEL: update last_scan_id in place (with undo log)
-            let current_version = ItemVersion::get_current(c, existing_item.item_id())?
-                .ok_or_else(|| FsPulseError::Error(format!(
-                    "No current version for item {} during no-change update",
-                    existing_item.item_id()
-                )))?;
-            UndoLog::log_update(c, &current_version)?;
-            ItemVersion::touch_last_scan(c, current_version.version_id(), ctx.scan.scan_id())?;
-
-            // OLD MODEL (remove at cutover) {
-            let rows_updated = c.execute(
-                "UPDATE items_old SET last_scan = ? WHERE item_id = ?",
-                (ctx.scan.scan_id(), existing_item.item_id()),
-            )?;
-            Scanner::check_update_result(rows_updated, existing_item.item_id())?;
-            // } END OLD MODEL
+            UndoLog::log_update(c, &existing_item.version)?;
+            ItemVersion::touch_last_scan(c, existing_item.version.version_id(), ctx.scan.scan_id())?;
 
             Ok(())
         })
@@ -1240,51 +1052,12 @@ impl Scanner {
         };
 
         ctx.execute_batch_write(|c| {
-            // NEW MODEL: items table generates the item_id
             let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type)?;
             ItemVersion::insert_initial(c, item_id, ctx.scan.scan_id(), new_access, mod_date, size)?;
 
-            // OLD MODEL (remove at cutover) {
-            c.execute(
-                "INSERT INTO items_old (item_id, root_id, item_path, item_type, access, mod_date, size, val, last_scan)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    item_id,
-                    ctx.scan.root_id(),
-                    path_str,
-                    item_type.as_i64(),
-                    new_access.as_i64(),
-                    mod_date,
-                    size,
-                    ValidationState::Unknown.as_i64(),
-                    ctx.scan.scan_id(),
-                ),
-            )?;
-
-            let (access_old_val, access_new_val): (Option<i64>, Option<i64>) =
-                if new_access != Access::Ok {
-                    (None, Some(new_access.as_i64()))
-                } else {
-                    (None, None)
-                };
-
-            c.execute(
-                "INSERT INTO changes (
-                    scan_id, item_id, change_type,
-                    access_old, access_new,
-                    is_undelete, mod_date_new, size_new, hash_change, val_change
-                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, 0, 0)",
-                (
-                    ctx.scan.scan_id(),
-                    item_id,
-                    ChangeType::Add.as_i64(),
-                    access_old_val,
-                    access_new_val,
-                    mod_date,
-                    size,
-                ),
-            )?;
-            // } END OLD MODEL
+            if new_access != Access::Ok {
+                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), item_id)?;
+            }
 
             Ok(())
         })
@@ -1301,21 +1074,7 @@ impl Scanner {
     ) -> Result<(), FsPulseError> {
         let mut update_changes = false;
 
-        // values to use when updating the changes table
-        let mut c_hash_change = Some(false);
-        let mut c_last_hash_scan_old = None;
-        let mut c_hash_old = None;
-        let mut c_hash_new = None;
-        let mut c_val_change = Some(false);
-        let mut c_last_val_scan_old = None;
-        let mut c_val_old = None;
-        let mut c_val_new = None;
-        let mut c_val_error_old = None;
-        let mut c_val_error_new = None;
-        let mut c_access_old: Option<i64> = None;
-        let mut c_access_new: Option<i64> = None;
-
-        // values to use in the item update
+        // values to use in the version update
         let mut i_hash = analysis_item.file_hash();
         let mut i_val = analysis_item.val();
         let mut i_val_error = analysis_item.val_error();
@@ -1331,8 +1090,6 @@ impl Scanner {
         if let Some(access) = new_access {
             if access != analysis_item.access() {
                 update_changes = true;
-                c_access_old = Some(analysis_item.access().as_i64());
-                c_access_new = Some(access.as_i64());
                 i_access = access;
 
                 // Alert if item became inaccessible (Ok → error)
@@ -1343,13 +1100,7 @@ impl Scanner {
 
         if analysis_item.needs_hash() {
             if analysis_item.file_hash() != new_hash.as_deref() {
-                // if either the hash or validation state changes, we update changes
                 update_changes = true;
-                c_hash_change = Some(true);
-                c_last_hash_scan_old = analysis_item.last_hash_scan();
-                c_hash_old = analysis_item.file_hash();
-                c_hash_new = new_hash.as_deref();
-
                 i_hash = new_hash.as_deref();
 
                 // The hash changed. It's suspicious if metadata never changed
@@ -1369,23 +1120,10 @@ impl Scanner {
                 || (analysis_item.val_error() != new_val_error.as_deref())
             {
                 if new_val == ValidationState::Invalid {
-                    // if we're here, then either the previous validation
-                    // state wasn't Invalid or it was invalid but the
-                    // error message changed. In both fo these cases,
-                    // we should alert
                     alert_invalid_item = true;
                 }
 
-                // if either the hash or validation state changes, we update changes
                 update_changes = true;
-                c_val_change = Some(true);
-                c_last_val_scan_old = analysis_item.last_val_scan();
-                c_val_old = Some(analysis_item.val().as_i64());
-                c_val_new = Some(new_val.as_i64());
-                c_val_error_old = analysis_item.val_error();
-                c_val_error_new = new_val_error.as_deref();
-
-                // always update the item when the validation state changes
                 i_val = new_val;
                 i_val_error = new_val_error.as_deref();
             }
@@ -1400,7 +1138,6 @@ impl Scanner {
 
         // Use IMMEDIATE transaction for read-then-write pattern
         Database::immediate_transaction(&conn, |c| {
-            // NEW MODEL: update item_versions based on analysis results
             let current_version = ItemVersion::get_current(c, analysis_item.item_id())?
                 .ok_or_else(|| FsPulseError::Error(format!(
                     "No current version for item {} during analysis",
@@ -1438,7 +1175,7 @@ impl Scanner {
                 )?;
             }
 
-            // Alerts (shared)
+            // Alerts
             // alert_possible_hash is only set when last_hash_scan is Some
             if alert_possible_hash {
                 let last_hash_scan = analysis_item.last_hash_scan().unwrap();
@@ -1454,7 +1191,7 @@ impl Scanner {
                         analysis_item.item_id(),
                         analysis_item.last_hash_scan(),
                         analysis_item.file_hash(),
-                        c_hash_new.unwrap(),
+                        new_hash.as_deref().unwrap(),
                     )?;
                 }
             }
@@ -1464,92 +1201,13 @@ impl Scanner {
                     c,
                     scan.scan_id(),
                     analysis_item.item_id(),
-                    c_val_error_new.unwrap(),
+                    new_val_error.as_deref().unwrap_or("Unknown error"),
                 )?;
             }
 
             if alert_access_denied {
                 Alerts::add_access_denied_alert(c, scan.scan_id(), analysis_item.item_id())?;
             }
-
-            // OLD MODEL (remove at cutover) {
-            // Step 1: UPSERT into `changes` table if the change is something other than moving from the default state
-            if update_changes {
-                c.execute(
-                    "INSERT INTO changes (
-                            scan_id,
-                            item_id,
-                            change_type,
-                            access_old,
-                            access_new,
-                            meta_change,
-                            hash_change,
-                            last_hash_scan_old,
-                            hash_old,
-                            hash_new,
-                            val_change,
-                            last_val_scan_old,
-                            val_old,
-                            val_new,
-                            val_error_old,
-                            val_error_new
-                        )
-                        VALUES (?, ?, 2, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(scan_id, item_id)
-                        DO UPDATE SET
-                            access_old = COALESCE(excluded.access_old, changes.access_old),
-                            access_new = COALESCE(excluded.access_new, changes.access_new),
-                            hash_change = excluded.hash_change,
-                            last_hash_scan_old = excluded.last_hash_scan_old,
-                            hash_old = excluded.hash_old,
-                            hash_new = excluded.hash_new,
-                            val_change = excluded.val_change,
-                            last_val_scan_old = excluded.last_val_scan_old,
-                            val_old = excluded.val_old,
-                            val_new = excluded.val_new,
-                            val_error_old = excluded.val_error_old,
-                            val_error_new = excluded.val_error_new",
-                    rusqlite::params![
-                        scan.scan_id(),
-                        analysis_item.item_id(),
-                        c_access_old,
-                        c_access_new,
-                        c_hash_change,
-                        c_last_hash_scan_old,
-                        c_hash_old,
-                        c_hash_new,
-                        c_val_change,
-                        c_last_val_scan_old,
-                        c_val_old,
-                        c_val_new,
-                        c_val_error_old,
-                        c_val_error_new,
-                    ],
-                )?;
-            }
-
-            // Step 2: Update `items_old` table
-            c.execute(
-                "UPDATE items_old
-                SET
-                    access = ?,
-                    file_hash = ?,
-                    val = ?,
-                    val_error = ?,
-                    last_hash_scan = ?,
-                    last_val_scan = ?
-                WHERE item_id = ?",
-                rusqlite::params![
-                    i_access.as_i64(),
-                    i_hash,
-                    i_val.as_i64(),
-                    i_val_error,
-                    i_last_hash_scan,
-                    i_last_val_scan,
-                    analysis_item.item_id()
-                ],
-            )?;
-            // } END OLD MODEL
 
             Ok(())
         })?;

@@ -1,45 +1,6 @@
 use log::warn;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
-#[allow(dead_code)]
-pub struct Change {
-    pub change_id: i64,
-    pub scan_id: i64,
-    pub item_id: i64,
-    pub change_type: ChangeType,
-    pub access_old: Option<i64>,   // Previous access state (if changed)
-    pub access_new: Option<i64>,   // New access state (if changed)
-    pub is_undelete: Option<bool>, // Present if "A". True if add is undelete
-    pub meta_change: Option<bool>, // Present if "M". True if metadata changed, else False
-    pub mod_date_old: Option<i64>, // Meaningful if undelete or meta_change
-    pub mod_date_new: Option<i64>, // Meaningful if metdata_changed
-    pub size_old: Option<i64>,     // Meaningful if undelete or meta_change
-    pub size_new: Option<i64>,     // Meaningful if undelete or meta_change
-    pub hash_change: Option<bool>, // Present if "M". True if hash changed, else False
-    #[allow(dead_code)]
-    pub last_hash_scan_old: Option<i64>, // Present if "M" and hash_change
-    pub hash_old: Option<String>,  // Meaningful if undelete or hash_change
-    #[allow(dead_code)]
-    pub hash_new: Option<String>, // Meaningful if hash_change
-    pub val_change: Option<bool>,  // Present if "M", True if validation changed, else False
-    #[allow(dead_code)]
-    pub last_val_scan_old: Option<i64>, // Present if "M" and validation changed
-    pub val_old: Option<i64>,      // Validation state of the item if val_change = true
-    #[allow(dead_code)]
-    pub val_new: Option<i64>, // Meaningful if undelete or val_change
-    #[allow(dead_code)]
-    pub val_error_old: Option<String>, // Meaningful if undelete or val_change
-    #[allow(dead_code)]
-    pub val_error_new: Option<String>, // Meaningful if validity changed
-
-    // $TODO: Remove this. Was a bad idea to have this in the first place
-    // Changes should be a simple struct that models a Changes entity
-    // Additional non-entity fields
-    pub item_type: String,
-    pub item_path: String,
-}
-
 #[repr(i64)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize)]
 pub enum ChangeType {
@@ -114,22 +75,6 @@ impl std::fmt::Display for ChangeType {
 impl crate::query::QueryEnum for ChangeType {
     fn from_token(s: &str) -> Option<i64> {
         Self::from_string(s).map(|change_type| change_type.as_i64())
-    }
-}
-
-impl Change {
-    // TODO: Implement accessors for other fields
-    #[allow(dead_code)]
-    pub fn hash_old(&self) -> Option<&str> {
-        self.hash_old.as_deref()
-    }
-    #[allow(dead_code)]
-    pub fn val_old(&self) -> Option<i64> {
-        self.val_old
-    }
-    #[allow(dead_code)]
-    pub fn val_new(&self) -> Option<i64> {
-        self.val_new
     }
 }
 

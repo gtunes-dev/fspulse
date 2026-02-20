@@ -477,14 +477,16 @@ impl Scan {
                 // Use IMMEDIATE transaction for read-then-write pattern
                 let (file_count, folder_count, alert_count, add_count, modify_count, delete_count) =
                     Database::immediate_transaction(conn, |c| {
-                        // Compute file_count and folder_count (exclude tombstones)
+                        // Compute file_count and folder_count from current versions (exclude deleted)
                         let (file_count, folder_count): (i64, i64) = c
                             .query_row(
                                 "SELECT
-                                SUM(CASE WHEN item_type = 0 THEN 1 ELSE 0 END) AS file_count,
-                                SUM(CASE WHEN item_type = 1 THEN 1 ELSE 0 END) AS folder_count
-                                FROM items_old WHERE last_scan = ? AND is_ts = 0",
-                                [self.scan_id],
+                                    COALESCE(SUM(CASE WHEN i.item_type = 0 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN i.item_type = 1 THEN 1 ELSE 0 END), 0)
+                                 FROM items i
+                                 JOIN item_versions iv ON iv.item_id = i.item_id
+                                 WHERE i.root_id = ? AND iv.last_scan_id = ? AND iv.is_deleted = 0",
+                                params![self.root_id, self.scan_id],
                                 |row| Ok((row.get(0)?, row.get(1)?)),
                             )
                             .unwrap_or((0, 0));
@@ -498,14 +500,23 @@ impl Scan {
                             )
                             .unwrap_or(0);
 
-                        // Compute add_count, modify_count, delete_count
+                        // Compute add_count, modify_count, delete_count from versions created this scan
                         let (add_count, modify_count, delete_count): (i64, i64, i64) = c
                             .query_row(
                                 "SELECT
-                                COUNT(*) FILTER (WHERE change_type = 1),
-                                COUNT(*) FILTER (WHERE change_type = 2),
-                                COUNT(*) FILTER (WHERE change_type = 3)
-                                FROM changes WHERE scan_id = ?",
+                                    COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 0
+                                        AND (pv.version_id IS NULL OR pv.is_deleted = 1)), 0),
+                                    COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 0
+                                        AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
+                                    COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 1
+                                        AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0)
+                                 FROM item_versions iv
+                                 LEFT JOIN item_versions pv ON pv.item_id = iv.item_id
+                                     AND pv.first_scan_id = (
+                                         SELECT MAX(first_scan_id) FROM item_versions
+                                         WHERE item_id = iv.item_id AND first_scan_id < iv.first_scan_id
+                                     )
+                                 WHERE iv.first_scan_id = ?",
                                 [self.scan_id],
                                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                             )
@@ -534,6 +545,11 @@ impl Scan {
                                 self.scan_id,
                             ),
                         )?;
+
+                        // Clear the undo log atomically with the state transition.
+                        // Must be in this transaction so a crash can't leave a completed
+                        // scan with a stale undo log.
+                        UndoLog::clear(c)?;
 
                         Ok((
                             file_count,
@@ -603,179 +619,23 @@ impl Scan {
         error_message: Option<&str>,
     ) -> Result<(), FsPulseError> {
         Database::immediate_transaction(conn, |c| {
-            // ====== NEW MODEL ======
             // Roll back item_versions, orphaned identities, and undo log
             UndoLog::rollback(c, scan.scan_id())?;
 
-            // ====== OLD MODEL ======
-            // Find the id of the last scan on this root to not be stopped
-            // We'll restore this scan_id to all partially updated by the
-            // scan being stopped
-            let prev_scan_id: i64 = c.query_row(
-                "SELECT COALESCE(
-                    (SELECT MAX(scan_id)
-                     FROM scans
-                     WHERE root_id = ?
-                       AND scan_id < ?
-                       AND state = 4
-                    ),
-                    0
-                ) AS prev_scan_id",
-                [scan.root_id(), scan.scan_id()],
-                |row| row.get::<_, i64>(0),
-            )?;
-
-            // Undo Add (when they are reyhdrates) and Type Change
-            // When an item was previously tombstoned and then was found again during a scan
-            // the item is rehydrated. This means that is_ts is set to false and all properties
-            // on the item are cleared and set to new values. In this case the cleared properties are
-            // stored in the change record, and we can recover them from there. A type change is
-            // handled similarly. When an item that was known to be a file or folder is next seen as the other
-            // type, we clear the properties (and store them on the change record). So, in both cases, we can
-            // now recover the modfiied properties from the change and this batch handles the minor differences
-            // between the two operations
+            // Delete all alerts created during the scan
             c.execute(
-                "UPDATE items_old
-                SET (
-                    is_ts,
-                    access,
-                    mod_date,
-                    size,
-                    last_hash_scan,
-                    file_hash,
-                    last_val_scan,
-                    val,
-                    val_error,
-                    last_scan
-                ) =
-                (
-                    SELECT
-                        CASE WHEN c.change_type = 1 THEN 1 ELSE items_old.is_ts END,
-                        COALESCE(c.access_old, items_old.access),
-                        c.mod_date_old,
-                        c.size_old,
-                        c.last_hash_scan_old,
-                        c.hash_old,
-                        c.last_val_scan_old,
-                        c.val_old,
-                        c.val_error_old,
-                        ?1
-                    FROM changes c
-                    WHERE c.item_id = items_old.item_id
-                        AND c.scan_id = ?2
-                        AND (c.change_type = 1 AND c.is_undelete = 1)
-                    LIMIT 1
-                )
-                WHERE item_id IN (
-                    SELECT item_id
-                    FROM changes
-                    WHERE scan_id = ?2
-                        AND (change_type = 1 AND is_undelete = 1)
-                )",
-                [prev_scan_id, scan.scan_id()],
-            )?;
-
-            // Undoing a modify requires selectively copying back (from the change)
-            // the property groups that were part of the modify
-            c.execute(
-                "UPDATE items_old
-                SET (
-                    access,
-                    mod_date,
-                    size,
-                    last_hash_scan,
-                    file_hash,
-                    last_val_scan,
-                    val,
-                    val_error,
-                    last_scan
-                ) =
-                (
-                SELECT
-                    CASE WHEN c.access_old IS NOT NULL THEN c.access_old ELSE items_old.access END,
-                    CASE WHEN c.meta_change = 1 THEN COALESCE(c.mod_date_old, items_old.mod_date) ELSE items_old.mod_date END,
-                    CASE WHEN c.meta_change = 1 THEN COALESCE(c.size_old, items_old.size) ELSE items_old.size END,
-                    CASE WHEN c.hash_change = 1 THEN c.last_hash_scan_old ELSE items_old.last_hash_scan END,
-                    CASE WHEN c.hash_change = 1 THEN c.hash_old ELSE items_old.file_hash END,
-                    CASE WHEN c.val_change = 1 THEN c.last_val_scan_old ELSE items_old.last_val_scan END,
-                    CASE WHEN c.val_change = 1 THEN c.val_old ELSE items_old.val END,
-                    CASE WHEN c.val_change = 1 THEN c.val_error_old ELSE items_old.val_error END,
-                    ?1
-                FROM changes c
-                WHERE c.item_id = items_old.item_id
-                    AND c.scan_id = ?2
-                    AND c.change_type = 2
-                LIMIT 1
-                )
-                WHERE last_scan = ?2
-                AND EXISTS (
-                    SELECT 1 FROM changes c
-                    WHERE c.item_id = items_old.item_id
-                        AND c.scan_id = ?2
-                        AND c.change_type = 2
-                )",
-                [prev_scan_id, scan.scan_id()]
-            )?;
-
-            // Undo deletes. This is simple because deletes just set the tombstone flag
-            c.execute(
-                "UPDATE items_old
-                SET is_ts = 0,
-                    last_scan = ?1
-                WHERE item_id IN (
-                    SELECT item_id
-                    FROM changes
-                    WHERE scan_id = ?2
-                      AND change_type = 3
-                )",
-                [prev_scan_id, scan.scan_id()],
-            )?;
-
-            // Undo alerts. Delete all of the alerts created during the scan
-            c.execute(
-                "DELETE FROM alerts
-                WHERE scan_id = ?1",
+                "DELETE FROM alerts WHERE scan_id = ?",
                 [scan.scan_id()],
             )?;
 
             // Mark the scan as stopped (state=5) or error (state=6)
-            // Null the total_size that may have been set at the end of the scanning phase - it's not reliable in the
-            // context of a stop or error
+            // Null the total_size that may have been set at the end of the scanning phase
             let final_state = if error_message.is_some() { 6 } else { 5 };
 
             c.execute(
                 "UPDATE scans SET state = ?, total_size = NULL, error = ? WHERE scan_id = ?",
                 params![final_state, error_message, scan.scan_id()],
             )?;
-
-            // Find the items that had their last_scan updated but where no change
-            // record was created, and reset their last_scan
-            c.execute(
-                "UPDATE items_old
-                 SET last_scan = ?1
-                 WHERE last_scan = ?2
-                   AND NOT EXISTS (
-                     SELECT 1 FROM changes c
-                     WHERE c.item_id = items_old.item_id
-                       AND c.scan_id = ?2
-                   )",
-                [prev_scan_id, scan.scan_id()],
-            )?;
-
-            // Delete the change records from the stopped scan
-            c.execute("DELETE FROM changes WHERE scan_id = ?1", [scan.scan_id()])?;
-
-            // Final step is to delete the remaining items that were created during
-            // the scan. We have to do this after the change records are deleted otherwise
-            // attemping to delete these rows will generate a referential integrity violation
-            // since we'll be abandoning change records. This operation assumes that the
-            // only remaining items with a last_scan of the current scan are the simple
-            // adds. This should be true :)
-            c.execute(
-                "DELETE FROM items_old WHERE last_scan = ?",
-                [scan.scan_id()],
-            )?;
-            // ====== END OLD MODEL ======
 
             Ok(())
         })?;

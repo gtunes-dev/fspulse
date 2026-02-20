@@ -1,5 +1,4 @@
 use crate::error::FsPulseError;
-use crate::item_version::ItemVersion;
 use log::info;
 use rusqlite::Connection;
 use std::collections::HashMap;
@@ -94,7 +93,6 @@ CREATE TABLE scan_undo_log (
 "#;
 
 /// Rust code phase: Migrate data from `items_old` + `changes` into `items` + `item_versions`.
-/// Then validate the migration. If validation fails, return an error so the transaction rolls back.
 pub fn migrate_15_to_16(conn: &Connection) -> Result<(), FsPulseError> {
     // Step 1: Bulk-copy identities from items_old into new items table
     info!("Migration 15→16: Copying item identities...");
@@ -118,11 +116,6 @@ pub fn migrate_15_to_16(conn: &Connection) -> Result<(), FsPulseError> {
     info!("Migration 15→16: Reconstructing version chains...");
     let version_count = reconstruct_versions(conn, &completed_scans)?;
     info!("Migration 15→16: Created {} version rows", version_count);
-
-    // Step 4: Validate the migration
-    info!("Migration 15→16: Validating migration...");
-    ItemVersion::validate_against_old_model(conn, "Migration 15→16")?;
-    info!("Migration 15→16: Validation passed");
 
     Ok(())
 }

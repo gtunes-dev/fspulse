@@ -1,230 +1,19 @@
-use log::warn;
-use rusqlite::{self, params, Connection, OptionalExtension};
+use rusqlite::{self, params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::MAIN_SEPARATOR_STR;
 
 use crate::{
-    database::Database, error::FsPulseError, scans::AnalysisSpec, utils::Utils,
-    validate::validator::ValidationState,
+    database::Database, error::FsPulseError, utils::Utils,
 };
 
-#[derive(Clone, Debug)]
-pub struct AnalysisItem {
-    item_id: i64,
-    item_path: String,
-    access: i64,
-    last_hash_scan: Option<i64>,
-    file_hash: Option<String>,
-    last_val_scan: Option<i64>,
-    val: i64,
-    val_error: Option<String>,
-    needs_hash: bool,
-    needs_val: bool,
-}
+// Re-export types that were moved to item_identity.rs.
+// Keeps existing consumers (query module, API routes) working without import changes.
+pub use crate::item_identity::{Access, ItemType};
 
-impl AnalysisItem {
-    pub fn item_id(&self) -> i64 {
-        self.item_id
-    }
-
-    pub fn item_path(&self) -> &str {
-        &self.item_path
-    }
-
-    pub fn access(&self) -> Access {
-        Access::from_i64(self.access)
-    }
-
-    pub fn last_hash_scan(&self) -> Option<i64> {
-        self.last_hash_scan
-    }
-
-    pub fn file_hash(&self) -> Option<&str> {
-        self.file_hash.as_deref()
-    }
-    pub fn last_val_scan(&self) -> Option<i64> {
-        self.last_val_scan
-    }
-
-    pub fn val(&self) -> ValidationState {
-        ValidationState::from_i64(self.val)
-    }
-
-    pub fn val_error(&self) -> Option<&str> {
-        self.val_error.as_deref()
-    }
-
-    pub fn needs_hash(&self) -> bool {
-        self.needs_hash
-    }
-
-    pub fn set_needs_hash(&mut self, value: bool) {
-        self.needs_hash = value;
-    }
-
-    pub fn needs_val(&self) -> bool {
-        self.needs_val
-    }
-
-    pub fn set_needs_val(&mut self, value: bool) {
-        self.needs_val = value;
-    }
-
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(AnalysisItem {
-            item_id: row.get(0)?,
-            item_path: row.get(1)?,
-            access: row.get(2)?,
-            last_hash_scan: row.get(3)?,
-            file_hash: row.get(4)?,
-            last_val_scan: row.get(5)?,
-            val: row.get(6)?,
-            val_error: row.get(7)?,
-            needs_hash: row.get(8)?,
-            needs_val: row.get(9)?,
-        })
-    }
-}
-
-#[repr(i64)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum ItemType {
-    File = 0,
-    Directory = 1,
-    Symlink = 2,
-    Unknown = 3,
-}
-
-impl ItemType {
-    pub fn as_i64(&self) -> i64 {
-        *self as i64
-    }
-
-    pub fn from_i64(value: i64) -> Self {
-        match value {
-            0 => ItemType::File,
-            1 => ItemType::Directory,
-            2 => ItemType::Symlink,
-            3 => ItemType::Unknown,
-            _ => {
-                warn!(
-                    "Invalid ItemType value in database: {}, defaulting to Unknown",
-                    value
-                );
-                ItemType::Unknown
-            }
-        }
-    }
-
-    pub fn short_name(&self) -> &'static str {
-        match self {
-            ItemType::File => "F",
-            ItemType::Directory => "D",
-            ItemType::Symlink => "S",
-            ItemType::Unknown => "U",
-        }
-    }
-
-    pub fn full_name(&self) -> &'static str {
-        match self {
-            ItemType::File => "File",
-            ItemType::Directory => "Directory",
-            ItemType::Symlink => "Symlink",
-            ItemType::Unknown => "Unknown",
-        }
-    }
-
-    pub fn from_string(s: &str) -> Option<Self> {
-        match s.to_ascii_uppercase().as_str() {
-            // Full names
-            "FILE" => Some(ItemType::File),
-            "DIRECTORY" | "DIR" => Some(ItemType::Directory),
-            "SYMLINK" => Some(ItemType::Symlink),
-            "UNKNOWN" => Some(ItemType::Unknown),
-            // Short names
-            "F" => Some(ItemType::File),
-            "D" => Some(ItemType::Directory),
-            "S" => Some(ItemType::Symlink),
-            "U" => Some(ItemType::Unknown),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for ItemType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.full_name())
-    }
-}
-
+// QueryEnum impls for types re-exported from item_identity
 impl crate::query::QueryEnum for ItemType {
     fn from_token(s: &str) -> Option<i64> {
         Self::from_string(s).map(|item_type| item_type.as_i64())
-    }
-}
-
-#[repr(i64)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Access {
-    Ok = 0,        // No known access issues (default)
-    MetaError = 1, // Can't stat (found during scan phase)
-    ReadError = 2, // Can stat, can't read (found during analysis phase)
-}
-
-impl Access {
-    pub fn as_i64(&self) -> i64 {
-        *self as i64
-    }
-
-    pub fn from_i64(value: i64) -> Self {
-        match value {
-            0 => Access::Ok,
-            1 => Access::MetaError,
-            2 => Access::ReadError,
-            _ => {
-                warn!(
-                    "Invalid Access value in database: {}, defaulting to Ok",
-                    value
-                );
-                Access::Ok
-            }
-        }
-    }
-
-    pub fn short_name(&self) -> &'static str {
-        match self {
-            Access::Ok => "N",
-            Access::MetaError => "M",
-            Access::ReadError => "R",
-        }
-    }
-
-    pub fn full_name(&self) -> &'static str {
-        match self {
-            Access::Ok => "No Error",
-            Access::MetaError => "Meta Error",
-            Access::ReadError => "Read Error",
-        }
-    }
-
-    pub fn from_string(s: &str) -> Option<Self> {
-        match s.to_ascii_uppercase().as_str() {
-            // Full names
-            "NO ERROR" | "NOERROR" => Some(Access::Ok),
-            "META ERROR" | "METAERROR" => Some(Access::MetaError),
-            "READ ERROR" | "READERROR" => Some(Access::ReadError),
-            // Short names
-            "N" => Some(Access::Ok),
-            "M" => Some(Access::MetaError),
-            "R" => Some(Access::ReadError),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for Access {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.full_name())
     }
 }
 
@@ -238,7 +27,6 @@ impl crate::query::QueryEnum for Access {
 pub struct Item {
     #[serde(rename = "id")]
     item_id: i64,
-    #[allow(dead_code)]
     root_id: i64,
     #[serde(rename = "path")]
     item_path: String,
@@ -256,12 +44,10 @@ pub struct Item {
     size: Option<i64>,
 
     // Hash property group
-    #[allow(dead_code)]
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
 
     // Validation property group
-    #[allow(dead_code)]
     last_val_scan: Option<i64>,
     val: i64,
     val_error: Option<String>,
@@ -303,258 +89,20 @@ impl Item {
         })
     }
 
-    pub fn get_by_root_path_type(
-        conn: &Connection,
-        root_id: i64,
-        path: &str,
-        item_type: ItemType,
-    ) -> Result<Option<Self>, FsPulseError> {
-        let query = format!(
-            "SELECT {} FROM items_old WHERE root_id = ? AND item_path = ? AND item_type = ?",
-            Item::ITEM_COLUMNS
-        );
-
-        conn.query_row(
-            &query,
-            params![root_id, path, item_type.as_i64()],
-            Item::from_row,
-        )
-        .optional()
-        .map_err(FsPulseError::DatabaseError)
-    }
-
     pub fn item_id(&self) -> i64 {
         self.item_id
     }
 
-    #[allow(dead_code)]
-    pub fn root_id(&self) -> i64 {
-        self.root_id
-    }
     pub fn item_path(&self) -> &str {
         &self.item_path
     }
+
     pub fn item_type(&self) -> ItemType {
         self.item_type
     }
-    pub fn access(&self) -> Access {
-        self.access
-    }
-    pub fn last_scan(&self) -> i64 {
-        self.last_scan
-    }
+
     pub fn is_ts(&self) -> bool {
         self.is_ts
-    }
-    pub fn mod_date(&self) -> Option<i64> {
-        self.mod_date
-    }
-    pub fn size(&self) -> Option<i64> {
-        self.size
-    }
-    #[allow(dead_code)]
-    pub fn last_hash_scan(&self) -> Option<i64> {
-        self.last_hash_scan
-    }
-    pub fn file_hash(&self) -> Option<&str> {
-        self.file_hash.as_deref()
-    }
-
-    #[allow(dead_code)]
-    pub fn last_val_scan(&self) -> Option<i64> {
-        self.last_val_scan
-    }
-    pub fn validity_state_as_str(&self) -> &str {
-        self.val().short_name()
-    }
-
-    #[allow(dead_code)]
-    pub fn val(&self) -> ValidationState {
-        ValidationState::from_i64(self.val)
-    }
-
-    pub fn val_error(&self) -> Option<&str> {
-        self.val_error.as_deref()
-    }
-
-    pub fn get_analysis_counts(
-        conn: &Connection,
-        scan_id: i64,
-        analysis_spec: &AnalysisSpec,
-        last_item_id: i64,
-    ) -> Result<(u64, u64), FsPulseError> {
-        let sql = r#"
-            WITH candidates AS (
-                SELECT
-                    cv.last_hash_scan,
-                    cv.last_val_scan,
-                    CASE
-                        WHEN $1 = 0 THEN 0
-                        WHEN $2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3) THEN 1
-                        WHEN cv.file_hash IS NULL THEN 1
-                        WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
-                        WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
-                        WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
-                        ELSE 0
-                    END AS needs_hash,
-                    CASE
-                        WHEN $4 = 0 THEN 0
-                        WHEN $5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
-                        WHEN cv.val = 0 THEN 1
-                        WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
-                        WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
-                        WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
-                        ELSE 0
-                    END AS needs_val
-                FROM items i
-                JOIN item_versions cv
-                    ON cv.item_id = i.item_id
-                    AND cv.last_scan_id = $3
-                LEFT JOIN item_versions pv
-                    ON pv.item_id = i.item_id
-                    AND pv.first_scan_id = (
-                        SELECT MAX(first_scan_id)
-                        FROM item_versions
-                        WHERE item_id = i.item_id
-                          AND first_scan_id < cv.first_scan_id
-                    )
-                WHERE
-                    i.item_type = 0
-                    AND cv.is_deleted = 0
-                    AND cv.access <> 1
-                    AND i.item_id > $6
-            )
-            SELECT
-                COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
-                COALESCE(SUM(CASE
-                    WHEN (needs_hash = 1 AND last_hash_scan = $3)
-                    OR (needs_val = 1 AND last_val_scan = $3)
-                    THEN 1 ELSE 0 END), 0) AS total_done
-            FROM candidates"#;
-
-        let mut stmt = conn.prepare(sql)?;
-        let mut rows = stmt.query(params![
-            analysis_spec.is_hash() as i64,
-            analysis_spec.hash_all() as i64,
-            scan_id,
-            analysis_spec.is_val() as i64,
-            analysis_spec.val_all() as i64,
-            last_item_id
-        ])?;
-
-        if let Some(row) = rows.next()? {
-            let total_needed = row.get::<_, i64>(0)? as u64;
-            let total_done = row.get::<_, i64>(1)? as u64;
-            Ok((total_needed, total_done))
-        } else {
-            Ok((0, 0))
-        }
-    }
-
-    /*
-    pub fn count_analyzed_items(db: &Database, scan_id: i64) -> Result<i64, FsPulseError> {
-        let mut stmt = db.conn().prepare(
-            "SELECT COUNT(*) FROM items
-             WHERE
-                last_scan = ? AND
-                item_type = 0 AND
-                (last_hash_scan = ? OR last_val_scan = ?)",
-        )?;
-
-        let count: i64 = stmt.query_row([scan_id, scan_id, scan_id], |row| row.get(0))?;
-        Ok(count)
-    }
-    */
-
-    pub fn fetch_next_analysis_batch(
-        conn: &Connection,
-        scan_id: i64,
-        analysis_spec: &AnalysisSpec,
-        last_item_id: i64,
-        limit: usize, // Parameterized limit
-    ) -> Result<Vec<AnalysisItem>, FsPulseError> {
-        let query = format!(
-            "SELECT
-                i.item_id,
-                i.item_path,
-                cv.access,
-                cv.last_hash_scan,
-                cv.file_hash,
-                cv.last_val_scan,
-                cv.val,
-                cv.val_error,
-                CASE
-                    WHEN $1 = 0 THEN 0
-                    WHEN $2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3) THEN 1
-                    WHEN cv.file_hash IS NULL THEN 1
-                    WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
-                    WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
-                    WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
-                    ELSE 0
-                END AS needs_hash,
-                CASE
-                    WHEN $4 = 0 THEN 0
-                    WHEN $5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
-                    WHEN cv.val = 0 THEN 1
-                    WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
-                    WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
-                    WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
-                    ELSE 0
-                END AS needs_val
-            FROM items i
-            JOIN item_versions cv
-                ON cv.item_id = i.item_id
-                AND cv.last_scan_id = $3
-            LEFT JOIN item_versions pv
-                ON pv.item_id = i.item_id
-                AND pv.first_scan_id = (
-                    SELECT MAX(first_scan_id)
-                    FROM item_versions
-                    WHERE item_id = i.item_id
-                      AND first_scan_id < cv.first_scan_id
-                )
-            WHERE
-                i.item_type = 0
-                AND cv.is_deleted = 0
-                AND cv.access <> 1
-                AND i.item_id > $6
-                AND (
-                    ($1 = 1 AND (
-                        ($2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
-                        cv.file_hash IS NULL OR
-                        (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
-                        (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3)) OR
-                        (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3))
-                    )) OR
-                    ($4 = 1 AND (
-                        ($5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
-                        cv.val = 0 OR
-                        (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
-                        (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
-                        (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3))
-                    ))
-                )
-            ORDER BY i.item_id ASC
-            LIMIT {limit}"
-        );
-
-        let mut stmt = conn.prepare(&query)?;
-
-        let rows = stmt.query_map(
-            [
-                analysis_spec.is_hash() as i64,
-                analysis_spec.hash_all() as i64,
-                scan_id,
-                analysis_spec.is_val() as i64,
-                analysis_spec.val_all() as i64,
-                last_item_id,
-            ],
-            AnalysisItem::from_row,
-        )?;
-
-        let analysis_items: Vec<AnalysisItem> = rows.collect::<Result<Vec<_>, _>>()?;
-
-        Ok(analysis_items)
     }
 
     /// Get size history for an item over a date range
@@ -872,67 +420,6 @@ mod tests {
         assert_eq!(ItemType::Directory.full_name(), "Directory");
         assert_eq!(ItemType::Symlink.full_name(), "Symlink");
         assert_eq!(ItemType::Unknown.full_name(), "Unknown");
-    }
-
-    #[test]
-    fn test_analysis_item_getters() {
-        let analysis_item = AnalysisItem {
-            item_id: 123,
-            item_path: "/test/path".to_string(),
-            access: Access::Ok.as_i64(),
-            last_hash_scan: Some(456),
-            file_hash: Some("abc123".to_string()),
-            last_val_scan: Some(789),
-            val: ValidationState::Valid.as_i64(),
-            val_error: Some("test error".to_string()),
-            needs_hash: true,
-            needs_val: false,
-        };
-
-        assert_eq!(analysis_item.item_id(), 123);
-        assert_eq!(analysis_item.item_path(), "/test/path");
-        assert_eq!(analysis_item.access(), Access::Ok);
-        assert_eq!(analysis_item.last_hash_scan(), Some(456));
-        assert_eq!(analysis_item.file_hash(), Some("abc123"));
-        assert_eq!(analysis_item.last_val_scan(), Some(789));
-        assert_eq!(analysis_item.val_error(), Some("test error"));
-        assert!(analysis_item.needs_hash());
-        assert!(!analysis_item.needs_val());
-    }
-
-    #[test]
-    fn test_item_getters() {
-        let item = Item {
-            item_id: 456,
-            root_id: 1,
-            item_path: "/another/path".to_string(),
-            item_type: ItemType::File,
-            access: Access::Ok,
-            last_scan: 123456789,
-            is_ts: true,
-            mod_date: Some(987654321),
-            size: Some(1024),
-            last_hash_scan: Some(111),
-            file_hash: Some("def456".to_string()),
-            last_val_scan: Some(222),
-            val: ValidationState::Invalid.as_i64(),
-            val_error: Some("validation failed".to_string()),
-        };
-
-        assert_eq!(item.item_id(), 456);
-        assert_eq!(item.root_id(), 1);
-        assert_eq!(item.item_path(), "/another/path");
-        assert_eq!(item.item_type(), ItemType::File);
-        assert_eq!(item.access(), Access::Ok);
-        assert_eq!(item.last_scan(), 123456789);
-        assert!(item.is_ts());
-        assert_eq!(item.mod_date(), Some(987654321));
-        assert_eq!(item.size(), Some(1024));
-        assert_eq!(item.last_hash_scan(), Some(111));
-        assert_eq!(item.file_hash(), Some("def456"));
-        assert_eq!(item.last_val_scan(), Some(222));
-        assert_eq!(item.validity_state_as_str(), "I");
-        assert_eq!(item.val_error(), Some("validation failed"));
     }
 
     #[test]
