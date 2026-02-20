@@ -70,9 +70,9 @@ jobs:
             type=semver,pattern={{major}}
             type=semver,pattern=latest
 
-            # For main branch pushes, create:
-            # - main
-            type=ref,event=branch,enable={{is_default_branch}}
+            # For branch builds (push to main or manual workflow_dispatch):
+            # - creates a tag from the branch name (e.g., "main", "my-feature")
+            type=ref,event=branch
 
             # For main branch pushes, also add sha tag
             type=sha,prefix=main-,enable={{is_default_branch}}
