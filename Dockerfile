@@ -56,7 +56,6 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     tini \
     curl \
-    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (uid 1000, gid 1000)

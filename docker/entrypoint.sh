@@ -40,15 +40,15 @@ fi
 # Execute fspulse as the fspulse user (with the potentially adjusted UID/GID)
 # The app will auto-create config.toml and database if they don't exist
 #
-# Note: gosu may fail on some platforms (e.g., Synology DSM). If it fails,
+# Note: setpriv may fail on some platforms (e.g., Synology DSM). If it fails,
 # we fall back to running as root, which is safe since FsPulse only reads files.
-set +e  # Disable exit-on-error for gosu test
-if gosu fspulse true 2>/dev/null; then
-    # gosu works - use it to run as non-root user
+set +e  # Disable exit-on-error for setpriv test
+if setpriv --reuid=fspulse --regid=fspulse --init-groups true 2>/dev/null; then
+    # setpriv works - use it to run as non-root user
     set -e  # Re-enable exit-on-error
-    exec gosu fspulse /app/fspulse "$@"
+    exec setpriv --reuid=fspulse --regid=fspulse --init-groups /app/fspulse "$@"
 else
-    # gosu failed (common on Synology) - fall back to running as root
+    # setpriv failed (common on Synology) - fall back to running as root
     echo ""
     echo "Warning: Could not run as user 'fspulse' (platform limitation)"
     echo "Running as root instead (safe for read-only operations)"
