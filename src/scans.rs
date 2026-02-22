@@ -699,37 +699,50 @@ impl ScanStats {
         let root = crate::roots::Root::get_by_id(conn, scan.root_id())?
             .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", scan.root_id())))?;
 
-        // Get change statistics broken down by file vs folder
+        // Get change statistics broken down by file vs folder from temporal model.
+        // Versions with first_scan_id = scan_id are new versions created in this scan.
+        // By comparing with the previous version we classify as add/modify/delete.
         let changes: (i64, i64, i64, i64, i64, i64) = conn.query_row(
             "SELECT
-                SUM(CASE WHEN c.change_type = 1 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_added,
-                SUM(CASE WHEN c.change_type = 2 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_modified,
-                SUM(CASE WHEN c.change_type = 3 AND i.item_type = 0 THEN 1 ELSE 0 END) as files_deleted,
-                SUM(CASE WHEN c.change_type = 1 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_added,
-                SUM(CASE WHEN c.change_type = 2 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_modified,
-                SUM(CASE WHEN c.change_type = 3 AND i.item_type = 1 THEN 1 ELSE 0 END) as folders_deleted
-             FROM changes c
-             JOIN items_old i ON c.item_id = i.item_id
-             WHERE c.scan_id = ?",
+                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 0 AND iv.is_deleted = 0
+                    AND (pv.version_id IS NULL OR pv.is_deleted = 1)), 0),
+                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 0 AND iv.is_deleted = 0
+                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
+                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 0 AND iv.is_deleted = 1
+                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
+                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 1 AND iv.is_deleted = 0
+                    AND (pv.version_id IS NULL OR pv.is_deleted = 1)), 0),
+                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 1 AND iv.is_deleted = 0
+                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
+                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 1 AND iv.is_deleted = 1
+                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0)
+             FROM item_versions iv
+             JOIN items i ON i.item_id = iv.item_id
+             LEFT JOIN item_versions pv ON pv.item_id = iv.item_id
+                 AND pv.first_scan_id = (
+                     SELECT MAX(first_scan_id) FROM item_versions
+                     WHERE item_id = iv.item_id AND first_scan_id < iv.first_scan_id
+                 )
+             WHERE iv.first_scan_id = ?",
             params![scan_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
         ).unwrap_or((0, 0, 0, 0, 0, 0));
 
-        // Get hashing statistics
+        // Get hashing statistics from temporal model
         let items_hashed: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM items_old
-             WHERE last_scan = ? AND hash IS NOT NULL",
+                "SELECT COUNT(*) FROM item_versions
+                 WHERE last_hash_scan = ? AND file_hash IS NOT NULL",
                 params![scan_id],
                 |row| row.get(0),
             )
             .unwrap_or(0);
 
-        // Get validation statistics
+        // Get validation statistics from temporal model
         let items_validated: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM items_old
-             WHERE last_scan = ? AND (val IS NOT NULL OR val_error IS NOT NULL)",
+                "SELECT COUNT(*) FROM item_versions
+                 WHERE last_val_scan = ?",
                 params![scan_id],
                 |row| row.get(0),
             )

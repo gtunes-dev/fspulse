@@ -8,6 +8,7 @@ import { useTaskContext } from '@/contexts/TaskContext'
 interface AppInfo {
   name: string
   version: string
+  schema_version: string
   git_commit: string
   git_commit_short: string
   git_branch: string
@@ -835,6 +836,9 @@ export function SettingsPage() {
               <div className="grid grid-cols-[140px_1fr] gap-2 text-sm">
                 <span className="font-medium text-muted-foreground">Version:</span>
                 <span className="font-mono">{appInfo.version}</span>
+
+                <span className="font-medium text-muted-foreground">Schema:</span>
+                <span className="font-mono">v{appInfo.schema_version}</span>
 
                 <span className="font-medium text-muted-foreground">Build Date:</span>
                 <span className="font-mono text-xs">{formatTimestamp(appInfo.build_timestamp)}</span>

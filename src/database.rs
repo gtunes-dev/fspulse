@@ -3,7 +3,7 @@ use crate::{
     error::FsPulseError,
     schema::{
         Migration, CREATE_SCHEMA_SQL, MIGRATION_10_TO_11, MIGRATION_11_TO_12, MIGRATION_12_TO_13,
-        MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_2_TO_3, MIGRATION_3_TO_4,
+        MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17, MIGRATION_2_TO_3, MIGRATION_3_TO_4,
         MIGRATION_4_TO_5, MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8, MIGRATION_8_TO_9,
         MIGRATION_9_TO_10,
     },
@@ -21,7 +21,7 @@ use std::time::Duration;
 use std::env;
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 16;
+const CURRENT_SCHEMA_VERSION: u32 = 17;
 
 // Connection pool configuration
 const POOL_MAX_SIZE: u32 = 15;
@@ -122,6 +122,17 @@ impl Database {
         db_path.push(DB_FILENAME);
 
         Ok(db_path)
+    }
+
+    /// Read the schema version from the database.
+    pub fn get_schema_version() -> Result<String, FsPulseError> {
+        let conn = Self::get_connection()?;
+        let version: String = conn.query_row(
+            "SELECT value FROM meta WHERE key = 'schema_version'",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(version)
     }
 
     /// Execute a function within an IMMEDIATE transaction.
@@ -382,6 +393,7 @@ fn ensure_schema_current() -> Result<(), FsPulseError> {
                 13 => upgrade_schema(&conn, db_version, &MIGRATION_13_TO_14)?,
                 14 => upgrade_schema(&conn, db_version, &MIGRATION_14_TO_15)?,
                 15 => upgrade_schema(&conn, db_version, &MIGRATION_15_TO_16)?,
+                16 => upgrade_schema(&conn, db_version, &MIGRATION_16_TO_17)?,
                 _ => {
                     return Err(FsPulseError::Error(
                         "No valid database update available".to_string(),

@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '16');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '17');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -43,94 +43,7 @@ CREATE TABLE IF NOT EXISTS scans (
 );
 
 -- ========================================
--- Old-model items table (items_old)
--- ========================================
--- Mutable current state of each item. Retained during dual-write transition period.
-CREATE TABLE IF NOT EXISTS items_old (
-    item_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_id INTEGER NOT NULL,                   -- Links each item to a root
-    item_path TEXT NOT NULL,                         -- Absolute path of the item
-    item_type INTEGER NOT NULL,                 -- Item type enum (0=File, 1=Directory, 2=Symlink, 3=Other)
-
-    -- Access State Property Group
-    access INTEGER NOT NULL DEFAULT 0,          -- Access state enum (0=Ok, 1=MetaError, 2=ReadError)
-
-    last_scan INTEGER NOT NULL,              -- Last scan where the item was present
-    is_ts BOOLEAN NOT NULL DEFAULT 0,       -- Indicates if the item is a tombstone
-
-    -- Medatadata Property Group
-    mod_date INTEGER,                           -- Last mod_date timestamp
-    size INTEGER,                               -- Size in bytes (file size for files, computed size for directories)
-
-    -- Hash Property Group
-    last_hash_scan INTEGER,                  -- Id of last scan during which a hash was computed
-    file_hash TEXT,                          -- Hash of file contents (NULL for directories and if not computed)
-
-    -- Validation Property Group
-    last_val_scan INTEGER,                  -- Id of last scan during which file was validated
-    val INTEGER NOT NULL,                   -- Validation state enum (0=Valid, 1=Invalid, 2=NoValidator, 3=Unknown)
-    val_error TEXT,                         -- Description of invalid state
-
-    FOREIGN KEY (root_id) REFERENCES roots(root_id),
-    FOREIGN KEY (last_scan) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_hash_scan) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_val_scan) REFERENCES scans(scan_id),
-    UNIQUE (root_id, item_path, item_type)           -- Ensures uniqueness within each root path
-);
-
--- Indexes for items_old
--- idx_items_old_path and idx_items_old_root_path use _old suffix to avoid name conflicts
--- with the new items table. idx_items_root_scan has no conflict so keeps its original name.
-CREATE INDEX IF NOT EXISTS idx_items_old_path ON items_old (item_path COLLATE natural_path);
-CREATE INDEX IF NOT EXISTS idx_items_old_root_path ON items_old (root_id, item_path COLLATE natural_path, item_type);
-CREATE INDEX IF NOT EXISTS idx_items_root_scan ON items_old (root_id, last_scan, is_ts);
-
--- Changes table tracks modifications between scans
-CREATE TABLE IF NOT EXISTS changes (
-    change_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    scan_id INTEGER NOT NULL,                   -- The scan in which the change was detected
-    item_id INTEGER NOT NULL,                   -- The file or directory that changed
-    change_type INTEGER NOT NULL,               -- Change type enum (0=NoChange, 1=Add, 2=Modify, 3=Delete)
-
-    -- Access State Properties (any change type)
-    access_old INTEGER DEFAULT NULL,            -- Previous access state enum (if changed)
-    access_new INTEGER DEFAULT NULL,            -- New access state enum (if changed)
-
-    -- Add specific properties
-    is_undelete BOOLEAN DEFAULT NULL,           -- Not Null if "A". True if item was tombstone
-
-    -- Metadata Changed (Modify)
-    meta_change BOOLEAN DEFAULT NULL,      -- Not Null if "M". True if metadata changed
-    mod_date_old INTEGER DEFAULT NULL,          -- Stores the previous mod_date timestamp (if changed)
-    mod_date_new INTEGER DEFAULT NULL,          -- Stores the new mod_date timestamp (if changed)
-    size_old INTEGER DEFAULT NULL,              -- Stores the previous size (if changed)
-    size_new INTEGER DEFAULT NULL,              -- Stores the new size (if changed)
-
-    -- Hash Properties (Add, Modify)
-    hash_change BOOLEAN DEFAULT NULL,          -- Not Null if "A" or "M". True if hash changed
-    last_hash_scan_old INTEGER DEFAULT NULL,   -- Id of last scan during which a hash was computed
-    hash_old TEXT DEFAULT NULL,                 -- Stores the previous hash value (if changed)
-    hash_new TEXT DEFAULT NULL,                 -- Stores the new hash (if changed)
-
-    -- Validation Properties (Add or Modify)
-    val_change BOOLEAN DEFAULT NULL,        -- Not Null if "A" or "M", True if hash changed
-    last_val_scan_old INTEGER DEFAULT NULL,  -- Id of last scan during which validation was done
-    val_old INTEGER DEFAULT NULL,           -- Stores the previous validation state enum (if changed)
-    val_new INTEGER DEFAULT NULL,           -- If the validation state changes, current state is stored here
-    val_error_old DEFAULT NULL,             -- Stores the previous validation error (if changed)
-    val_error_new DEFAULT NULL,             -- Stores the new validation error (if changed)
-
-    FOREIGN KEY (scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (item_id) REFERENCES items_old(item_id),
-    UNIQUE (scan_id, item_id)
-);
-
--- Indexes to optimize queries
-CREATE INDEX IF NOT EXISTS idx_changes_scan_type ON changes (scan_id, change_type);
-CREATE INDEX IF NOT EXISTS idx_changes_item ON changes (item_id);
-
--- ========================================
--- New-model identity table (items)
+-- Item identity table
 -- ========================================
 -- Lightweight stable identity for each item across all its versions.
 CREATE TABLE IF NOT EXISTS items (

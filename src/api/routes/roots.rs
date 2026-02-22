@@ -249,7 +249,7 @@ pub async fn get_schedule_count(
 }
 
 /// DELETE /api/roots/{root_id}
-/// Deletes a root and all associated data (scans, items, changes, alerts)
+/// Deletes a root and all associated data (scans, items, versions, alerts)
 pub async fn delete_root(
     Path(root_id): Path<i64>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {

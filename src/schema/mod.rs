@@ -5,6 +5,7 @@ mod v12_to_v13;
 mod v13_to_v14;
 mod v14_to_v15;
 mod v15_to_v16;
+mod v16_to_v17;
 mod v2_to_v3;
 mod v3_to_v4;
 mod v4_to_v5;
@@ -27,6 +28,7 @@ use v12_to_v13::UPGRADE_12_TO_13_SQL;
 use v13_to_v14::{migrate_13_to_14, UPGRADE_13_TO_14_POST_SQL, UPGRADE_13_TO_14_PRE_SQL};
 use v14_to_v15::{migrate_14_to_15, UPGRADE_14_TO_15_POST_SQL, UPGRADE_14_TO_15_PRE_SQL};
 use v15_to_v16::{migrate_15_to_16, UPGRADE_15_TO_16_POST_SQL, UPGRADE_15_TO_16_PRE_SQL};
+use v16_to_v17::{migrate_16_to_17, UPGRADE_16_TO_17_POST_SQL, UPGRADE_16_TO_17_PRE_SQL};
 use v2_to_v3::UPGRADE_2_TO_3_SQL;
 use v3_to_v4::UPGRADE_3_TO_4_SQL;
 use v4_to_v5::UPGRADE_4_TO_5_SQL;
@@ -87,4 +89,9 @@ pub const MIGRATION_15_TO_16: Migration = Migration {
     pre_sql: Some(UPGRADE_15_TO_16_PRE_SQL),
     code_fn: Some(migrate_15_to_16),
     post_sql: Some(UPGRADE_15_TO_16_POST_SQL),
+};
+pub const MIGRATION_16_TO_17: Migration = Migration {
+    pre_sql: Some(UPGRADE_16_TO_17_PRE_SQL),
+    code_fn: Some(migrate_16_to_17),
+    post_sql: Some(UPGRADE_16_TO_17_POST_SQL),
 };

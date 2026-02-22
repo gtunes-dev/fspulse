@@ -59,7 +59,7 @@ impl Root {
         &self.root_path
     }
 
-    /// Delete a root and all associated data (scans, items, changes, alerts, schedules).
+    /// Delete a root and all associated data (scans, items, versions, alerts, schedules).
     /// This operation is performed within a transaction to ensure atomicity.
     /// Returns Ok(()) if successful, or an error if the root doesn't exist, has an active scan, or deletion fails.
     pub fn delete_root(root_id: i64) -> Result<(), FsPulseError> {
@@ -77,10 +77,11 @@ impl Root {
 
             // Delete in order based on foreign key constraints:
             // 1. alerts (references scan_id and item_id)
-            // 2. changes (references scan_id and item_id)
-            // 3. items (references root_id and scan_id)
-            // 4. scans (references root_id)
-            // 5. root itself
+            // 2. scan_undo_log (references version_id from item_versions)
+            // 3. item_versions (references item_id from items, scan_id from scans)
+            // 4. items (references root_id)
+            // 5. scans (references root_id)
+            // 6. root itself
 
             // Delete alerts for all scans of this root
             c.execute(
@@ -88,14 +89,26 @@ impl Root {
                 [root_id],
             )?;
 
-            // Delete changes for all scans of this root
+            // Delete undo log entries for versions belonging to this root's items
             c.execute(
-                "DELETE FROM changes WHERE scan_id IN (SELECT scan_id FROM scans WHERE root_id = ?)",
-                [root_id]
+                "DELETE FROM scan_undo_log WHERE version_id IN (
+                    SELECT v.version_id FROM item_versions v
+                    JOIN items i ON i.item_id = v.item_id
+                    WHERE i.root_id = ?
+                )",
+                [root_id],
+            )?;
+
+            // Delete item versions for this root
+            c.execute(
+                "DELETE FROM item_versions WHERE item_id IN (
+                    SELECT item_id FROM items WHERE root_id = ?
+                )",
+                [root_id],
             )?;
 
             // Delete items for this root
-            c.execute("DELETE FROM items_old WHERE root_id = ?", [root_id])?;
+            c.execute("DELETE FROM items WHERE root_id = ?", [root_id])?;
 
             // Delete scans for this root
             c.execute("DELETE FROM scans WHERE root_id = ?", [root_id])?;
