@@ -51,7 +51,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       item_path: item.item_path,
       item_name: item.item_name,
       item_type: item.item_type,
-      is_deleted: item.is_ts,
+      is_deleted: item.is_deleted,
       depth: 0,
       isExpanded: false,
       childrenLoaded: false,
@@ -148,7 +148,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         item_path: item.item_path,
         item_name: item.item_name,
         item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-        is_ts: item.is_deleted,
+        is_deleted: item.is_deleted,
         name: item.item_name,
       }))
 
@@ -175,7 +175,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
           item_path: child.item_path,
           item_name: child.item_name,
           item_type: child.item_type,
-          is_deleted: child.is_ts,
+          is_deleted: child.is_deleted,
           depth: parentDepth + 1,
           isExpanded: false,
           childrenLoaded: false,

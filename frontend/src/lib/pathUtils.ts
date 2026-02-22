@@ -5,7 +5,7 @@ export interface ItemData {
   item_path: string
   item_name: string // Filename/directory name (from backend using @name format)
   item_type: 'F' | 'D' | 'S' | 'O' // File, Directory, Symlink, Other
-  is_ts: boolean // Is tombstone
+  is_deleted: boolean
 }
 
 /**

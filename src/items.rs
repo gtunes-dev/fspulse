@@ -23,178 +23,48 @@ impl crate::query::QueryEnum for Access {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Item {
-    #[serde(rename = "id")]
+/// Get size history for an item using item_versions.
+/// Returns size data points from versions filtered by scan date range.
+/// Uses `from_date` for the lower bound and `to_scan_id` to cap at a specific scan.
+pub fn get_size_history(
     item_id: i64,
-    root_id: i64,
-    #[serde(rename = "path")]
-    item_path: String,
-    #[serde(rename = "type")]
-    item_type: ItemType,
+    from_date_str: &str,
+    to_scan_id: i64,
+) -> Result<Vec<SizeHistoryPoint>, FsPulseError> {
+    let conn = Database::get_connection()?;
 
-    // Access state property group
-    access: Access,
-
-    last_scan: i64,
-    is_ts: bool,
-
-    // Metadata property group
-    mod_date: Option<i64>,
-    size: Option<i64>,
-
-    // Hash property group
-    last_hash_scan: Option<i64>,
-    file_hash: Option<String>,
-
-    // Validation property group
-    last_val_scan: Option<i64>,
-    val: i64,
-    val_error: Option<String>,
-}
-
-impl Item {
-    const ITEM_COLUMNS: &str = "
-        item_id,
-        root_id,
-        item_path,
-        item_type,
-        access,
-        last_scan,
-        is_ts,
-        mod_date,
-        size,
-        last_hash_scan,
-        file_hash,
-        last_val_scan,
-        val,
-        val_error";
-
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(Item {
-            item_id: row.get(0)?,
-            root_id: row.get(1)?,
-            item_path: row.get(2)?,
-            item_type: ItemType::from_i64(row.get(3)?),
-            access: Access::from_i64(row.get(4)?),
-            last_scan: row.get(5)?,
-            is_ts: row.get(6)?,
-            mod_date: row.get(7)?,
-            size: row.get(8)?,
-            last_hash_scan: row.get(9)?,
-            file_hash: row.get(10)?,
-            last_val_scan: row.get(11)?,
-            val: row.get(12)?,
-            val_error: row.get(13)?,
-        })
-    }
-
-    pub fn item_id(&self) -> i64 {
-        self.item_id
-    }
-
-    pub fn item_path(&self) -> &str {
-        &self.item_path
-    }
-
-    pub fn item_type(&self) -> ItemType {
-        self.item_type
-    }
-
-    pub fn is_ts(&self) -> bool {
-        self.is_ts
-    }
-
-    /// Get size history for an item using item_versions.
-    /// Returns size data points from versions filtered by scan date range.
-    /// Uses `from_date` for the lower bound and `to_scan_id` to cap at a specific scan.
-    pub fn get_size_history(
-        item_id: i64,
-        from_date_str: &str,
-        to_scan_id: i64,
-    ) -> Result<Vec<SizeHistoryPoint>, FsPulseError> {
-        let conn = Database::get_connection()?;
-
-        // Get the upper bound timestamp from the anchor scan
-        let to_timestamp: i64 = conn
-            .query_row(
-                "SELECT started_at FROM scans WHERE scan_id = ?",
-                params![to_scan_id],
-                |row| row.get(0),
-            )?;
-
-        // Get the lower bound timestamp from the date string
-        let (from_timestamp, _) = Utils::range_date_bounds(from_date_str, from_date_str)?;
-
-        let sql = r#"
-            SELECT iv.first_scan_id, s.started_at, iv.size
-            FROM item_versions iv
-            JOIN scans s ON iv.first_scan_id = s.scan_id
-            WHERE iv.item_id = ?
-              AND iv.size IS NOT NULL
-              AND s.started_at BETWEEN ? AND ?
-            ORDER BY s.started_at ASC"#;
-
-        let mut stmt = conn.prepare(sql)?;
-        let rows = stmt.query_map(
-            params![item_id, from_timestamp, to_timestamp],
-            SizeHistoryPoint::from_row,
+    // Get the upper bound timestamp from the anchor scan
+    let to_timestamp: i64 = conn
+        .query_row(
+            "SELECT started_at FROM scans WHERE scan_id = ?",
+            params![to_scan_id],
+            |row| row.get(0),
         )?;
 
-        let mut history = Vec::new();
-        for row in rows {
-            history.push(row?);
-        }
+    // Get the lower bound timestamp from the date string
+    let (from_timestamp, _) = Utils::range_date_bounds(from_date_str, from_date_str)?;
 
-        Ok(history)
+    let sql = r#"
+        SELECT iv.first_scan_id, s.started_at, iv.size
+        FROM item_versions iv
+        JOIN scans s ON iv.first_scan_id = s.scan_id
+        WHERE iv.item_id = ?
+          AND iv.size IS NOT NULL
+          AND s.started_at BETWEEN ? AND ?
+        ORDER BY s.started_at ASC"#;
+
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map(
+        params![item_id, from_timestamp, to_timestamp],
+        SizeHistoryPoint::from_row,
+    )?;
+
+    let mut history = Vec::new();
+    for row in rows {
+        history.push(row?);
     }
 
-    /// Get immediate children (one level deep) of a directory (old model)
-    /// Returns only the direct children, not nested descendants
-    /// Always includes tombstones - filtering should be done client-side
-    pub fn old_get_immediate_children(
-        root_id: i64,
-        parent_path: &str,
-    ) -> Result<Vec<Item>, FsPulseError> {
-        let conn = Database::get_connection()?;
-
-        // Build the path prefix for matching
-        // Handle root path specially - if parent is "/" then children are like "/folder", not "//folder"
-        let path_prefix = if parent_path == MAIN_SEPARATOR_STR {
-            MAIN_SEPARATOR_STR.to_string()
-        } else {
-            format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
-        };
-
-        // SQL to get immediate children:
-        // 1. Match items whose path starts with parent_path/
-        // 2. Exclude items that have additional slashes after the parent prefix
-        //    (by checking that the remainder of the path contains no slashes)
-        // Note: Always includes tombstones - client-side filtering provides better UX
-        let sql = format!(
-            "SELECT {}
-             FROM items_old
-             WHERE root_id = ?
-               AND item_path LIKE ? || '%'
-               AND item_path != ?
-               AND SUBSTR(item_path, LENGTH(?) + 1) NOT LIKE '%{}%'
-             ORDER BY item_path COLLATE natural_path ASC",
-            Item::ITEM_COLUMNS,
-            MAIN_SEPARATOR_STR
-        );
-
-        let mut stmt = conn.prepare(&sql)?;
-
-        let rows = stmt.query_map(
-            params![root_id, &path_prefix, parent_path, &path_prefix],
-            Item::from_row,
-        )?;
-
-        let items: Vec<Item> = rows.collect::<Result<Vec<_>, _>>()?;
-
-        Ok(items)
-    }
-
+    Ok(history)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

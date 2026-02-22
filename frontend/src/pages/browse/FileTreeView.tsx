@@ -82,7 +82,7 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
           item_path: item.item_path,
           item_name: item.item_name,
           item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-          is_ts: item.is_deleted,
+          is_deleted: item.is_deleted,
           name: item.item_name,
         }))
 

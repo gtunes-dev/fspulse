@@ -243,11 +243,6 @@ impl WebServer {
                 "/api/items/search",
                 get(api::items::search_items),
             )
-            // Old model item endpoints (to be removed at cutover)
-            .route(
-                "/api/old_items/immediate-children",
-                get(api::items::old_get_immediate_children),
-            )
             // Database endpoints
             .route(
                 "/api/database/stats",

@@ -6,7 +6,7 @@ use axum::{
 use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::items::{self, Item, SizeHistoryPoint};
+use crate::items::{self, SizeHistoryPoint};
 
 /// Query parameters for size history (temporal model)
 #[derive(Debug, Deserialize)]
@@ -34,29 +34,13 @@ pub struct ChildrenCountsParams {
     pub scan_id: i64,
 }
 
-/// Query parameters for getting immediate children (old model)
-#[derive(Debug, Deserialize)]
-pub struct OldImmediateChildrenParams {
-    pub root_id: i64,
-    pub parent_path: String,
-}
-
-/// Item data for API response (old model)
-#[derive(Debug, Serialize)]
-pub struct OldItemResponse {
-    pub item_id: i64,
-    pub item_path: String,
-    pub item_type: String,
-    pub is_ts: bool,
-}
-
 /// GET /api/items/:item_id/size-history?from_date=YYYY-MM-DD&to_scan_id=42
 /// Returns size history for an item from a date up to a specific scan
 pub async fn get_item_size_history(
     Path(item_id): Path<i64>,
     Query(params): Query<SizeHistoryParams>,
 ) -> Result<Json<SizeHistoryResponse>, (StatusCode, String)> {
-    match Item::get_size_history(item_id, &params.from_date, params.to_scan_id) {
+    match items::get_size_history(item_id, &params.from_date, params.to_scan_id) {
         Ok(history) => Ok(Json(SizeHistoryResponse { history })),
         Err(e) => {
             error!("Failed to get size history for item {}: {}", item_id, e);
@@ -89,40 +73,6 @@ pub async fn get_children_counts(
         }
     }
 }
-
-/// GET /api/old_items/immediate-children?root_id=X&parent_path=/path
-/// Returns immediate children (one level deep) of the specified directory path
-/// Always includes tombstones - filtering should be done client-side
-pub async fn old_get_immediate_children(
-    Query(params): Query<OldImmediateChildrenParams>,
-) -> Result<Json<Vec<OldItemResponse>>, (StatusCode, String)> {
-    match Item::old_get_immediate_children(params.root_id, &params.parent_path) {
-        Ok(items) => {
-            let response: Vec<OldItemResponse> = items
-                .iter()
-                .map(|item| OldItemResponse {
-                    item_id: item.item_id(),
-                    item_path: item.item_path().to_string(),
-                    item_type: item.item_type().short_name().to_string(),
-                    is_ts: item.is_ts(),
-                })
-                .collect();
-            Ok(Json(response))
-        }
-        Err(e) => {
-            error!(
-                "Failed to get immediate children for root_id={}, parent_path={}: {}",
-                params.root_id, params.parent_path, e
-            );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get immediate children: {}", e),
-            ))
-        }
-    }
-}
-
-// ---- New temporal model endpoints ----
 
 /// Query parameters for temporal immediate children
 #[derive(Debug, Deserialize)]
