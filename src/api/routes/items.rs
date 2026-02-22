@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::items::{self, Item, SizeHistoryPoint};
 
-/// Query parameters for date range filtering
+/// Query parameters for size history (temporal model)
 #[derive(Debug, Deserialize)]
-pub struct DateRangeParams {
-    pub from_date: String, // Date string in format "yyyy-MM-dd"
-    pub to_date: String,   // Date string in format "yyyy-MM-dd"
+pub struct SizeHistoryParams {
+    pub from_date: String,
+    pub to_scan_id: i64,
 }
 
 /// Response structure for size history
@@ -21,11 +21,17 @@ pub struct SizeHistoryResponse {
     pub history: Vec<SizeHistoryPoint>,
 }
 
-/// Response structure for children counts (old model)
+/// Response structure for children counts
 #[derive(Debug, Serialize)]
-pub struct OldChildrenCountsResponse {
+pub struct ChildrenCountsResponse {
     pub file_count: i64,
     pub directory_count: i64,
+}
+
+/// Query parameters for children counts
+#[derive(Debug, Deserialize)]
+pub struct ChildrenCountsParams {
+    pub scan_id: i64,
 }
 
 /// Query parameters for getting immediate children (old model)
@@ -44,13 +50,13 @@ pub struct OldItemResponse {
     pub is_ts: bool,
 }
 
-/// GET /api/items/:item_id/size-history?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
-/// Returns size history for an item within a date range based on scan times
+/// GET /api/items/:item_id/size-history?from_date=YYYY-MM-DD&to_scan_id=42
+/// Returns size history for an item from a date up to a specific scan
 pub async fn get_item_size_history(
     Path(item_id): Path<i64>,
-    Query(params): Query<DateRangeParams>,
+    Query(params): Query<SizeHistoryParams>,
 ) -> Result<Json<SizeHistoryResponse>, (StatusCode, String)> {
-    match Item::get_size_history(item_id, &params.from_date, &params.to_date) {
+    match Item::get_size_history(item_id, &params.from_date, params.to_scan_id) {
         Ok(history) => Ok(Json(SizeHistoryResponse { history })),
         Err(e) => {
             error!("Failed to get size history for item {}: {}", item_id, e);
@@ -62,13 +68,15 @@ pub async fn get_item_size_history(
     }
 }
 
-/// GET /api/old_items/:item_id/children-counts
+/// GET /api/items/:item_id/children-counts?scan_id=42
 /// Returns counts of files and directories that are children of the given directory
-pub async fn old_get_children_counts(
+/// at the specified scan point in time
+pub async fn get_children_counts(
     Path(item_id): Path<i64>,
-) -> Result<Json<OldChildrenCountsResponse>, (StatusCode, String)> {
-    match Item::old_get_children_counts(item_id) {
-        Ok(counts) => Ok(Json(OldChildrenCountsResponse {
+    Query(params): Query<ChildrenCountsParams>,
+) -> Result<Json<ChildrenCountsResponse>, (StatusCode, String)> {
+    match items::get_children_counts(item_id, params.scan_id) {
+        Ok(counts) => Ok(Json(ChildrenCountsResponse {
             file_count: counts.file_count,
             directory_count: counts.directory_count,
         })),
@@ -206,5 +214,63 @@ pub async fn search_items(
                 format!("Failed to search items: {}", e),
             ))
         }
+    }
+}
+
+/// Query parameters for version history
+#[derive(Debug, Deserialize)]
+pub struct VersionHistoryParams {
+    /// For initial load: the scan to anchor around
+    pub scan_id: Option<i64>,
+    /// For pagination: load versions older than this scan
+    pub before_scan_id: Option<i64>,
+    /// Maximum versions to return (default 500)
+    pub limit: Option<i64>,
+}
+
+/// GET /api/items/:item_id/version-history?scan_id=42&limit=500
+/// GET /api/items/:item_id/version-history?before_scan_id=10&limit=100
+/// Returns version history for an item, either anchored at a scan or paginated
+pub async fn get_version_history(
+    Path(item_id): Path<i64>,
+    Query(params): Query<VersionHistoryParams>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let limit = params.limit.unwrap_or(500).min(500);
+
+    if let Some(scan_id) = params.scan_id {
+        // Initial load: anchored at a specific scan
+        match items::get_version_history_init(item_id, scan_id, limit) {
+            Ok(response) => Ok(Json(serde_json::to_value(response).unwrap())),
+            Err(e) => {
+                error!(
+                    "Failed to get version history for item {}, scan {}: {}",
+                    item_id, scan_id, e
+                );
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get version history: {}", e),
+                ))
+            }
+        }
+    } else if let Some(before_scan_id) = params.before_scan_id {
+        // Pagination: load older versions
+        match items::get_version_history_page(item_id, before_scan_id, limit) {
+            Ok(response) => Ok(Json(serde_json::to_value(response).unwrap())),
+            Err(e) => {
+                error!(
+                    "Failed to get version history page for item {}: {}",
+                    item_id, e
+                );
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get version history: {}", e),
+                ))
+            }
+        }
+    } else {
+        Err((
+            StatusCode::BAD_REQUEST,
+            "Either scan_id or before_scan_id must be provided".to_string(),
+        ))
     }
 }

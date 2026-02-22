@@ -1,6 +1,5 @@
 use crate::{
     alerts::{AlertStatus, AlertType},
-    changes::ChangeType,
     error::FsPulseError,
     items::{Access, ItemType},
     scans::ScanState,
@@ -505,15 +504,10 @@ type EnumParser = fn(&str) -> Option<i64>;
 static ENUM_PARSERS: Map<&'static str, EnumParser> = phf_map! {
     "scan_state" => ScanState::from_token,
 "item_type" => ItemType::from_token,
-"change_type" => ChangeType::from_token,
 "alert_type" => AlertType::from_token,
 "alert_status" => AlertStatus::from_token,
 "val" => ValidationState::from_token,
-"val_old" => ValidationState::from_token,
-"val_new" => ValidationState::from_token,
 "access" => Access::from_token,
-"access_old" => Access::from_token,
-"access_new" => Access::from_token,
 };
 
 /// Filter for integer-backed enums (like scan_state)
@@ -1224,68 +1218,6 @@ mod tests {
             "Failed to parse multiple short codes: {:?}",
             result.err()
         );
-    }
-
-    // ==================================================================================
-    // Change Type Filter Tests (EnumFilter - integer-backed)
-    // ==================================================================================
-
-    #[test]
-    fn test_change_type_filter_add() {
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "Add");
-        assert!(result.is_ok(), "Failed to parse 'Add': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "A");
-        assert!(result.is_ok(), "Failed to parse 'A': {:?}", result.err());
-    }
-
-    #[test]
-    fn test_change_type_filter_modify() {
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "Modify");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Modify': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "M");
-        assert!(result.is_ok(), "Failed to parse 'M': {:?}", result.err());
-    }
-
-    #[test]
-    fn test_change_type_filter_delete() {
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "Delete");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Delete': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "D");
-        assert!(result.is_ok(), "Failed to parse 'D': {:?}", result.err());
-    }
-
-    #[test]
-    fn test_change_type_filter_multiple() {
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "Add, Modify");
-        assert!(
-            result.is_ok(),
-            "Failed to parse multiple types: {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "A, M, D");
-        assert!(
-            result.is_ok(),
-            "Failed to parse multiple short codes: {:?}",
-            result.err()
-        );
-    }
-
-    #[test]
-    fn test_change_type_filter_null() {
-        let result = QueryParser::parse(Rule::change_type_filter_EOI, "null");
-        assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
     }
 
     // ==================================================================================

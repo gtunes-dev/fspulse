@@ -5,23 +5,23 @@
 
 query = { SOI ~ WS* ~ query_type ~ where_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ offset_clause? ~ WS* ~ EOI }
 
-query_type = { "roots" | "scans" | "items" | "changes" | "alerts" }
+query_type = { "roots" | "scans" | "items" | "versions" | "alerts" }
 
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | change_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | access_filter | int_filter }
+filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | access_filter | int_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | change_type_show | alert_type_show | alert_status_show | scan_state_show | access_show | int_show }
+show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | alert_type_show | alert_status_show | scan_state_show | access_show | int_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { id_col | date_col | bool_col | string_col | path_col | val_col | item_type_col | change_type_col | alert_type_col | alert_status_col | scan_state_col | access_col | int_col }
+order_column =  { id_col | date_col | bool_col | string_col | path_col | val_col | item_type_col | alert_type_col | alert_status_col | scan_state_col | access_col | int_col }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause
@@ -42,7 +42,6 @@ string_filter_EOI       = { string_filter_values ~ WS* ~ EOI }
 path_filter_EOI         = { WS* ~ path_filter_values ~ WS* ~ EOI }
 val_filter_EOI          = { WS* ~ val_filter_values ~ WS* ~ EOI }
 item_type_filter_EOI    = { WS* ~ item_type_filter_values ~ WS* ~ EOI }
-change_type_filter_EOI  = { WS* ~ change_type_filter_values ~ WS* ~ EOI }
 alert_type_filter_EOI   = { WS* ~ alert_type_filter_values ~ WS* ~ EOI }
 alert_status_filter_EOI = { WS* ~ alert_status_filter_values ~ WS* ~ EOI }
 scan_state_filter_EOI   = { WS* ~ scan_state_filter_values ~ WS* ~ EOI }
@@ -50,7 +49,7 @@ access_filter_EOI       = { WS* ~ access_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "change_id" | "last_scan" | "last_hash_scan_old" | "last_hash_scan" | "last_val_scan_old" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
+id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "version_id" | "first_scan_id" | "last_scan_id" | "last_hash_scan" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
 
 id_show = { id_col }
 
@@ -62,7 +61,7 @@ id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
 id               =  { WS* ~ ASCII_DIGIT+ }
 
 // Date Columns
-date_col = { "started_at" | "ended_at" | "mod_date_old" | "mod_date_new" | "mod_date" | "created_at" | "updated_at" | "deleted_at" }
+date_col = { "started_at" | "ended_at" | "mod_date" | "created_at" | "updated_at" }
 
 date_show             =  { date_col ~ date_display_modifier? }
 date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }
@@ -76,7 +75,7 @@ date_range         =  { date ~ WS* ~ DOTDOT ~ date }
 date               =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
-bool_col = { "is_undelete" | "is_hash" | "hash_all" | "is_val" | "val_all" | "hash_change" | "meta_change" | "val_change" | "is_ts" | "was_restarted" }
+bool_col = { "is_deleted" | "is_hash" | "hash_all" | "is_val" | "val_all" | "was_restarted" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }
@@ -89,7 +88,7 @@ bool               = _{ null | not_null | bool_true | bool_false }
 bool_true          =  { "TRUE" | "true" | "True" | ^"T" }
 bool_false         =  { "FALSE" | "false" | "False" | ^"F" }
 
-string_col = { "error" | "file_hash" | "val_error_old" | "val_error_new" | "val_error" | "hash_old" | "hash_new" }
+string_col = { "error" | "file_hash" | "val_error" | "hash_old" | "hash_new" }
 
 string_show = { string_col }
 
@@ -100,7 +99,7 @@ string_spec          = _{ null | not_null | ("'" ~ string ~ "'") }
 string               =  { (("\\'" | (!"'" ~ ANY)))* }
 
 // Path Columns
-path_col = { "item_path" | "root_path" }
+path_col = { "item_path" | "item_name" | "root_path" }
 
 path_show             =  { path_col ~ path_display_modifier? }
 path_display_modifier = _{ WS* ~ "@" ~ path_display_mode }
@@ -113,7 +112,7 @@ path_spec          = _{ "'" ~ path ~ "'" }
 path               =  { (("\\'" | (!"'" ~ ANY)))* }
 
 // Val Columns
-val_col = { "val_old" | "val_new" | "val" }
+val_col = { "val" }
 
 val_show             =  { val_col ~ val_display_modifier? }
 val_display_modifier = _{ WS* ~ "@" ~ WS* ~ val_display_mode }
@@ -175,39 +174,6 @@ item_type               =  {
   | ^"D"
   | ^"S"
   | ^"U"
-}
-
-// Change Type Columns
-change_type_col = { "change_type" }
-
-change_type_show         =  { change_type_col ~ change_type_modifier? }
-change_type_modifier     = _{ WS* ~ "@" ~ WS* ~ change_type_display_mode }
-change_type_display_mode =  { full | short }
-
-change_type_filter        =  { change_type_col ~ change_type_filter_body }
-change_type_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ change_type_filter_values ~ WS* ~ RPAREN }
-change_type_filter_values = _{ change_type_spec ~ (WS* ~ COMMA ~ WS* ~ change_type_spec)* }
-change_type_spec          = _{ null | not_null | change_type }
-change_type               =  {
-    "ADD"
-  | "add"
-  | "Add"
-  | "DELETE"
-  | "delete"
-  | "Delete"
-  | "MODIFY"
-  | "modify"
-  | "Modify"
-  | "NO CHANGE"
-  | "no change"
-  | "No Change"
-  | "NOCHANGE"
-  | "nochange"
-  | "NoChange"
-  | ^"A"
-  | ^"D"
-  | ^"M"
-  | ^"N"
 }
 
 alert_type_col = { "alert_type" }
@@ -306,8 +272,8 @@ scan_state               =  {
   | ^"E"
 }
 
-// Access Columns (access_new/access_old must come before access to prevent partial matches)
-access_col = { "access_new" | "access_old" | "access" }
+// Access Columns
+access_col = { "access" }
 
 access_show         =  { access_col ~ access_modifier? }
 access_modifier     = _{ WS* ~ "@" ~ WS* ~ access_display_mode }
@@ -342,7 +308,7 @@ access               =  {
 }
 
 // Integer columns
-int_col  = { "size_new" | "size_old" | "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" }
+int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

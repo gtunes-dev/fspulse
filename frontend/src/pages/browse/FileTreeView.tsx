@@ -157,6 +157,7 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
               <TreeNode
                 item={item}
                 rootId={rootId}
+                scanId={scanId}
                 onToggle={toggleNode}
                 isLoading={isNodeLoading(item.item_id)}
               />

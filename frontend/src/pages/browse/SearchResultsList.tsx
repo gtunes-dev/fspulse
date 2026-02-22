@@ -166,6 +166,7 @@ export function SearchResultsList({
                 <TreeNode
                   item={item}
                   rootId={rootId}
+                  scanId={scanId}
                   expandable={false}
                   showPathTooltip={true}
                 />

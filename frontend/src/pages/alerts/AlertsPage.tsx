@@ -60,7 +60,7 @@ export function AlertsPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [searchDebounce, setSearchDebounce] = useState<number | null>(null)
   const [updatingAlertId, setUpdatingAlertId] = useState<number | null>(null)
-  const [selectedItem, setSelectedItem] = useState<{ itemId: number; itemPath: string; rootId: number } | null>(null)
+  const [selectedItem, setSelectedItem] = useState<{ itemId: number; itemPath: string; rootId: number; scanId: number } | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
 
   // Track last filter key to avoid redundant count queries
@@ -441,7 +441,7 @@ export function AlertsPage() {
                           <div
                             className="group flex items-center gap-2 cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded transition-colors"
                             onClick={() => {
-                              setSelectedItem({ itemId: alert.item_id, itemPath: alert.item_path, rootId: alert.root_id })
+                              setSelectedItem({ itemId: alert.item_id, itemPath: alert.item_path, rootId: alert.root_id, scanId: alert.scan_id })
                               setSheetOpen(true)
                             }}
                             title={alert.item_path}
@@ -498,6 +498,7 @@ export function AlertsPage() {
             itemType="F"
             isTombstone={false}
             rootId={selectedItem.rootId}
+            scanId={selectedItem.scanId}
             open={sheetOpen}
             onOpenChange={setSheetOpen}
           />

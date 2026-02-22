@@ -105,29 +105,36 @@ impl Item {
         self.is_ts
     }
 
-    /// Get size history for an item over a date range
-    /// Returns a list of (scan_id, started_at, size) tuples from the changes table
-    /// filtered by scan date range. Only includes changes where size_new is not NULL.
-    /// Date strings should be in format "yyyy-MM-dd" (e.g., "2025-11-07")
+    /// Get size history for an item using item_versions.
+    /// Returns size data points from versions filtered by scan date range.
+    /// Uses `from_date` for the lower bound and `to_scan_id` to cap at a specific scan.
     pub fn get_size_history(
         item_id: i64,
-        from_date_str: &str, // Date string in format "yyyy-MM-dd"
-        to_date_str: &str,   // Date string in format "yyyy-MM-dd"
+        from_date_str: &str,
+        to_scan_id: i64,
     ) -> Result<Vec<SizeHistoryPoint>, FsPulseError> {
-        // Use the same date bounds logic as FsPulse queries
-        // This ensures full-day inclusivity (start at 00:00:00, end at 23:59:59)
-        let (from_timestamp, to_timestamp) = Utils::range_date_bounds(from_date_str, to_date_str)?;
+        let conn = Database::get_connection()?;
+
+        // Get the upper bound timestamp from the anchor scan
+        let to_timestamp: i64 = conn
+            .query_row(
+                "SELECT started_at FROM scans WHERE scan_id = ?",
+                params![to_scan_id],
+                |row| row.get(0),
+            )?;
+
+        // Get the lower bound timestamp from the date string
+        let (from_timestamp, _) = Utils::range_date_bounds(from_date_str, from_date_str)?;
 
         let sql = r#"
-            SELECT c.scan_id, s.started_at, c.size_new
-            FROM changes c
-            JOIN scans s ON c.scan_id = s.scan_id
-            WHERE c.item_id = ?
-              AND c.size_new IS NOT NULL
+            SELECT iv.first_scan_id, s.started_at, iv.size
+            FROM item_versions iv
+            JOIN scans s ON iv.first_scan_id = s.scan_id
+            WHERE iv.item_id = ?
+              AND iv.size IS NOT NULL
               AND s.started_at BETWEEN ? AND ?
             ORDER BY s.started_at ASC"#;
 
-        let conn = Database::get_connection()?;
         let mut stmt = conn.prepare(sql)?;
         let rows = stmt.query_map(
             params![item_id, from_timestamp, to_timestamp],
@@ -188,64 +195,6 @@ impl Item {
         Ok(items)
     }
 
-    /// Get counts of children (files and directories) for a directory item (old model)
-    /// Returns counts of non-tombstone files and directories that are direct or nested children
-    pub fn old_get_children_counts(item_id: i64) -> Result<ChildrenCounts, FsPulseError> {
-        // First get the path and root_id of the parent directory
-        let parent_sql = "SELECT item_path, root_id FROM items_old WHERE item_id = ?";
-        let conn = Database::get_connection()?;
-        let (parent_path, root_id): (String, i64) = conn
-            .query_row(parent_sql, params![item_id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
-            .optional()?
-            .ok_or_else(|| FsPulseError::Error(format!("Item not found: item_id={}", item_id)))?;
-
-        // Count children by type
-        // Children are items whose path starts with parent_path/
-        // We need to ensure the path comparison is correct
-        let sql = r#"
-            SELECT
-                item_type,
-                COUNT(*) as count
-            FROM items_old
-            WHERE root_id = ?
-              AND is_ts = 0
-              AND item_path LIKE ? || '%'
-              AND item_path != ?
-              AND (item_type = 0 OR item_type = 1)
-            GROUP BY item_type"#;
-
-        let mut stmt = conn.prepare(sql)?;
-        let path_prefix = if parent_path == MAIN_SEPARATOR_STR {
-            MAIN_SEPARATOR_STR.to_string()
-        } else {
-            format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
-        };
-
-        let rows = stmt.query_map(params![root_id, path_prefix, parent_path], |row| {
-            let item_type: i64 = row.get(0)?;
-            let count: i64 = row.get(1)?;
-            Ok((item_type, count))
-        })?;
-
-        let mut file_count = 0;
-        let mut directory_count = 0;
-
-        for row in rows {
-            let (item_type, count) = row?;
-            match ItemType::from_i64(item_type) {
-                ItemType::File => file_count = count,
-                ItemType::Directory => directory_count = count,
-                _ => {}
-            }
-        }
-
-        Ok(ChildrenCounts {
-            file_count,
-            directory_count,
-        })
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -378,6 +327,257 @@ pub fn search_temporal_items(
     let items: Vec<TemporalTreeItem> = rows.collect::<Result<Vec<_>, _>>()?;
 
     Ok(items)
+}
+
+// ---- Version history types and functions ----
+
+/// A single version entry for the ItemDetailSheet version history
+#[derive(Clone, Debug, Serialize)]
+pub struct VersionHistoryEntry {
+    pub version_id: i64,
+    pub first_scan_id: i64,
+    pub last_scan_id: i64,
+    pub first_scan_date: i64,
+    pub last_scan_date: i64,
+    pub is_deleted: bool,
+    pub access: i64,
+    pub mod_date: Option<i64>,
+    pub size: Option<i64>,
+    pub file_hash: Option<String>,
+    pub val: i64,
+    pub val_error: Option<String>,
+    pub last_hash_scan: Option<i64>,
+    pub last_val_scan: Option<i64>,
+}
+
+impl VersionHistoryEntry {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(VersionHistoryEntry {
+            version_id: row.get(0)?,
+            first_scan_id: row.get(1)?,
+            last_scan_id: row.get(2)?,
+            first_scan_date: row.get(3)?,
+            last_scan_date: row.get(4)?,
+            is_deleted: row.get(5)?,
+            access: row.get(6)?,
+            mod_date: row.get(7)?,
+            size: row.get(8)?,
+            file_hash: row.get(9)?,
+            val: row.get(10)?,
+            val_error: row.get(11)?,
+            last_hash_scan: row.get(12)?,
+            last_val_scan: row.get(13)?,
+        })
+    }
+}
+
+/// Response for initial version history load
+#[derive(Debug, Serialize)]
+pub struct VersionHistoryResponse {
+    pub versions: Vec<VersionHistoryEntry>,
+    pub anchor_index: Option<usize>,
+    pub has_more: bool,
+    pub total_count: i64,
+    pub first_seen_scan_id: i64,
+    pub first_seen_scan_date: i64,
+    pub anchor_scan_date: i64,
+}
+
+/// Response for version history pagination
+#[derive(Debug, Serialize)]
+pub struct VersionHistoryPageResponse {
+    pub versions: Vec<VersionHistoryEntry>,
+    pub has_more: bool,
+}
+
+const VERSION_HISTORY_COLUMNS: &str =
+    "v.version_id, v.first_scan_id, v.last_scan_id, \
+     s1.started_at, s2.started_at, \
+     v.is_deleted, v.access, \
+     v.mod_date, v.size, v.file_hash, v.val, v.val_error, v.last_hash_scan, v.last_val_scan";
+
+/// Get version history for an item, starting from a specific scan going backwards.
+/// Returns up to `limit` versions ordered by first_scan_id DESC.
+pub fn get_version_history_init(
+    item_id: i64,
+    scan_id: i64,
+    limit: i64,
+) -> Result<VersionHistoryResponse, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    // Get total count
+    let total_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM item_versions WHERE item_id = ?",
+        params![item_id],
+        |row| row.get(0),
+    )?;
+
+    if total_count == 0 {
+        return Ok(VersionHistoryResponse {
+            versions: Vec::new(),
+            anchor_index: None,
+            has_more: false,
+            total_count: 0,
+            first_seen_scan_id: 0,
+            first_seen_scan_date: 0,
+            anchor_scan_date: 0,
+        });
+    }
+
+    // Get first-seen scan id and date
+    let (first_seen_scan_id, first_seen_scan_date): (i64, i64) = conn
+        .query_row(
+            "SELECT iv.first_scan_id, s.started_at \
+             FROM item_versions iv \
+             JOIN scans s ON s.scan_id = iv.first_scan_id \
+             WHERE iv.item_id = ? \
+             ORDER BY iv.first_scan_id ASC \
+             LIMIT 1",
+            params![item_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+
+    // Get the anchor scan date
+    let anchor_scan_date: i64 = conn.query_row(
+        "SELECT started_at FROM scans WHERE scan_id = ?",
+        params![scan_id],
+        |row| row.get(0),
+    )?;
+
+    // Load versions from the anchor scan going backwards, joining scans for dates
+    let sql = format!(
+        "SELECT {} \
+         FROM item_versions v \
+         JOIN scans s1 ON s1.scan_id = v.first_scan_id \
+         JOIN scans s2 ON s2.scan_id = v.last_scan_id \
+         WHERE v.item_id = ? AND v.first_scan_id <= ? \
+         ORDER BY v.first_scan_id DESC \
+         LIMIT ?",
+        VERSION_HISTORY_COLUMNS
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(
+        params![item_id, scan_id, limit + 1],
+        VersionHistoryEntry::from_row,
+    )?;
+
+    let mut versions: Vec<VersionHistoryEntry> = rows.collect::<Result<Vec<_>, _>>()?;
+    let has_more = versions.len() as i64 > limit;
+    if has_more {
+        versions.truncate(limit as usize);
+    }
+
+    Ok(VersionHistoryResponse {
+        versions,
+        anchor_index: Some(0),
+        has_more,
+        total_count,
+        first_seen_scan_id,
+        first_seen_scan_date,
+        anchor_scan_date,
+    })
+}
+
+/// Get more version history (older versions) using cursor-based pagination.
+/// Returns versions with first_scan_id strictly less than `before_scan_id`.
+pub fn get_version_history_page(
+    item_id: i64,
+    before_scan_id: i64,
+    limit: i64,
+) -> Result<VersionHistoryPageResponse, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    let sql = format!(
+        "SELECT {} \
+         FROM item_versions v \
+         JOIN scans s1 ON s1.scan_id = v.first_scan_id \
+         JOIN scans s2 ON s2.scan_id = v.last_scan_id \
+         WHERE v.item_id = ? AND v.first_scan_id < ? \
+         ORDER BY v.first_scan_id DESC \
+         LIMIT ?",
+        VERSION_HISTORY_COLUMNS
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(
+        params![item_id, before_scan_id, limit + 1],
+        VersionHistoryEntry::from_row,
+    )?;
+
+    let mut versions: Vec<VersionHistoryEntry> = rows.collect::<Result<Vec<_>, _>>()?;
+    let has_more = versions.len() as i64 > limit;
+    if has_more {
+        versions.truncate(limit as usize);
+    }
+
+    Ok(VersionHistoryPageResponse { versions, has_more })
+}
+
+/// Get counts of children (files and directories) for a directory item using temporal model.
+/// Counts non-deleted items at the given scan_id.
+pub fn get_children_counts(
+    item_id: i64,
+    scan_id: i64,
+) -> Result<ChildrenCounts, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    // Get the parent item's path and root_id
+    let (parent_path, root_id): (String, i64) = conn
+        .query_row(
+            "SELECT item_path, root_id FROM items WHERE item_id = ?",
+            params![item_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?
+        .ok_or_else(|| FsPulseError::Error(format!("Item not found: item_id={}", item_id)))?;
+
+    let path_prefix = if parent_path == MAIN_SEPARATOR_STR {
+        MAIN_SEPARATOR_STR.to_string()
+    } else {
+        format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
+    };
+
+    let sql = r#"
+        SELECT
+            i.item_type,
+            COUNT(*) as count
+        FROM items i
+        JOIN item_versions iv ON iv.item_id = i.item_id
+        WHERE i.root_id = ?1
+          AND iv.first_scan_id = (
+              SELECT MAX(first_scan_id) FROM item_versions
+              WHERE item_id = i.item_id AND first_scan_id <= ?2
+          )
+          AND iv.is_deleted = 0
+          AND i.item_path LIKE ?3 || '%'
+          AND i.item_path != ?4
+          AND (i.item_type = 0 OR i.item_type = 1)
+        GROUP BY i.item_type"#;
+
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map(params![root_id, scan_id, path_prefix, parent_path], |row| {
+        let item_type: i64 = row.get(0)?;
+        let count: i64 = row.get(1)?;
+        Ok((item_type, count))
+    })?;
+
+    let mut file_count = 0;
+    let mut directory_count = 0;
+
+    for row in rows {
+        let (item_type, count) = row?;
+        match ItemType::from_i64(item_type) {
+            ItemType::File => file_count = count,
+            ItemType::Directory => directory_count = count,
+            _ => {}
+        }
+    }
+
+    Ok(ChildrenCounts {
+        file_count,
+        directory_count,
+    })
 }
 
 #[cfg(test)]

@@ -99,3 +99,16 @@ export function formatDateShort(timestampSeconds: number): string {
   const year = date.getFullYear()
   return `${month}/${day}/${year}`
 }
+
+/**
+ * Format timestamp as compact date: "d MMM yyyy" (e.g. "1 Dec 2024")
+ * Used for: Scan references throughout the UI
+ */
+export function formatScanDate(timestampSeconds: number): string {
+  const date = new Date(timestampSeconds * 1000)
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}

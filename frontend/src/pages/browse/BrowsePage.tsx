@@ -6,8 +6,6 @@ import { SearchFilter } from '@/components/shared/SearchFilter'
 import { FileTreeView } from './FileTreeView'
 import { SearchResultsList } from './SearchResultsList'
 import { ScanDatePicker } from './ScanDatePicker'
-import { OldFileTreeView } from './OldFileTreeView'
-import { OldSearchResultsList } from './OldSearchResultsList'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 
@@ -28,11 +26,6 @@ export function BrowsePage() {
   const [showDeleted, setShowDeleted] = useState(false)
   const [newSearchFilter, setNewSearchFilter] = useState('')
   const [newDebouncedSearch, setNewDebouncedSearch] = useState('')
-
-  // Old card state
-  const [showTombstones, setShowTombstones] = useState(false)
-  const [searchFilter, setSearchFilter] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   // Load roots on mount
   useEffect(() => {
@@ -101,22 +94,6 @@ export function BrowsePage() {
   }, [newSearchFilter])
 
   const hasNewSearchQuery = newDebouncedSearch.trim().length > 0
-
-  // Handle search filter with debouncing (old card)
-  const handleSearchChange = (value: string) => {
-    setSearchFilter(value)
-  }
-
-  // Debounce search input (old card)
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setDebouncedSearch(searchFilter)
-    }, 300)
-
-    return () => clearTimeout(timeout)
-  }, [searchFilter])
-
-  const hasSearchQuery = debouncedSearch.trim().length > 0
 
   if (loading) {
     return (
@@ -217,56 +194,6 @@ export function BrowsePage() {
                   ? 'No scan data available for the selected date'
                   : 'Resolving scan...'}
             </div>
-          </div>
-        )}
-      </RootCard>
-
-      {/* Old browse card (to be removed at cutover) */}
-      <RootCard
-        roots={roots}
-        selectedRootId={selectedRootId}
-        onRootChange={setSelectedRootId}
-        actionBar={
-          <>
-            <SearchFilter
-              value={searchFilter}
-              onChange={handleSearchChange}
-            />
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="show-deleted-old"
-                checked={showTombstones}
-                onCheckedChange={(checked) => setShowTombstones(checked === true)}
-              />
-              <Label htmlFor="show-deleted-old" className="text-sm font-medium cursor-pointer">
-                Show deleted
-              </Label>
-            </div>
-          </>
-        }
-      >
-        {/* Tree View - hidden when searching */}
-        <div style={{ display: hasSearchQuery ? 'none' : 'block' }}>
-          <div className="border border-border rounded-lg">
-            {selectedRoot && (
-              <OldFileTreeView
-                rootId={selectedRoot.root_id}
-                rootPath={selectedRoot.root_path}
-                showTombstones={showTombstones}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Search Results - shown when searching */}
-        {hasSearchQuery && selectedRoot && (
-          <div className="border border-border rounded-lg">
-            <OldSearchResultsList
-              rootId={selectedRoot.root_id}
-              searchQuery={debouncedSearch}
-              showTombstones={showTombstones}
-            />
           </div>
         )}
       </RootCard>

@@ -1,6 +1,5 @@
 mod alerts;
 mod api;
-mod changes;
 mod cli;
 mod config;
 mod database;

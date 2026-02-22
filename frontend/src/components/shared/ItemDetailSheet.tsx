@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
-import { File, Folder, FileX, FolderX, Calendar as CalendarIcon, HardDrive, Hash, ShieldAlert, ShieldCheck, ShieldQuestion, ChevronDown } from 'lucide-react'
+import {
+  File, Folder, FileX, FolderX, Calendar as CalendarIcon,
+  HardDrive, Hash, ShieldAlert, ShieldCheck, ShieldQuestion,
+  ChevronDown, Eye,
+} from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -44,9 +48,11 @@ import {
 } from 'recharts'
 import { fetchQuery, countQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
-import { formatDateFull } from '@/lib/dateUtils'
+import { formatDateFull, formatScanDate } from '@/lib/dateUtils'
 import { formatFileSize } from '@/lib/formatUtils'
 import { cn } from '@/lib/utils'
+
+// ---- Types ----
 
 interface ItemDetailSheetProps {
   itemId: number
@@ -54,38 +60,41 @@ interface ItemDetailSheetProps {
   itemType: 'F' | 'D' | 'S' | 'O'
   isTombstone: boolean
   rootId: number
+  scanId: number
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-interface ItemDetails {
-  item_id: number
-  item_path: string
-  item_type: string
-  is_ts: boolean
-  mod_date: number
+interface VersionEntry {
+  version_id: number
+  first_scan_id: number
+  last_scan_id: number
+  first_scan_date: number
+  last_scan_date: number
+  is_deleted: boolean
+  access: number
+  mod_date: number | null
   size: number | null
   file_hash: string | null
-  val_status: string | null
+  val: number
   val_error: string | null
+  last_hash_scan: number | null
+  last_val_scan: number | null
 }
 
-interface Change {
-  change_id: number
-  scan_id: number
-  change_type: string
-  is_undelete: boolean
-  meta_change: boolean
-  mod_date_old: number | null
-  mod_date_new: number | null
-  size_old: number | null
-  size_new: number | null
-  hash_change: boolean
-  hash_old: string | null
-  hash_new: string | null
-  val_change: boolean
-  val_old: string | null
-  val_new: string | null
+interface VersionHistoryInitResponse {
+  versions: VersionEntry[]
+  anchor_index: number | null
+  has_more: boolean
+  total_count: number
+  first_seen_scan_id: number
+  first_seen_scan_date: number
+  anchor_scan_date: number
+}
+
+interface VersionHistoryPageResponse {
+  versions: VersionEntry[]
+  has_more: boolean
 }
 
 interface Alert {
@@ -108,29 +117,20 @@ interface ChildrenCounts {
   directory_count: number
 }
 
+type ChangeKind = 'initial' | 'modified' | 'deleted' | 'restored'
+
+interface VersionChange {
+  version: VersionEntry
+  kind: ChangeKind
+  prev: VersionEntry | null
+}
+
 type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
-const CHANGES_PER_PAGE = 20
-const ALERTS_PER_PAGE = 20
+// ---- Constants ----
 
-// Column specifications - extracted to avoid duplication
-const CHANGE_COLUMNS: ColumnSpec[] = [
-  { name: 'change_id', visible: true, sort_direction: 'desc', position: 0 },
-  { name: 'scan_id', visible: true, sort_direction: 'none', position: 1 },
-  { name: 'change_type', visible: true, sort_direction: 'none', position: 2 },
-  { name: 'is_undelete', visible: true, sort_direction: 'none', position: 3 },
-  { name: 'meta_change', visible: true, sort_direction: 'none', position: 4 },
-  { name: 'mod_date_old', visible: true, sort_direction: 'none', position: 5 },
-  { name: 'mod_date_new', visible: true, sort_direction: 'none', position: 6 },
-  { name: 'size_old', visible: true, sort_direction: 'none', position: 7 },
-  { name: 'size_new', visible: true, sort_direction: 'none', position: 8 },
-  { name: 'hash_change', visible: true, sort_direction: 'none', position: 9 },
-  { name: 'hash_old', visible: true, sort_direction: 'none', position: 10 },
-  { name: 'hash_new', visible: true, sort_direction: 'none', position: 11 },
-  { name: 'val_change', visible: true, sort_direction: 'none', position: 12 },
-  { name: 'val_old', visible: true, sort_direction: 'none', position: 13 },
-  { name: 'val_new', visible: true, sort_direction: 'none', position: 14 },
-]
+const VERSIONS_PER_PAGE = 100
+const ALERTS_PER_PAGE = 20
 
 const ALERT_COLUMNS: ColumnSpec[] = [
   { name: 'alert_id', visible: true, sort_direction: 'desc', position: 0 },
@@ -141,26 +141,7 @@ const ALERT_COLUMNS: ColumnSpec[] = [
   { name: 'created_at', visible: true, sort_direction: 'none', position: 5 },
 ]
 
-// Row parsing helpers - extracted to avoid duplication
-function parseChangeRow(row: string[]): Change {
-  return {
-    change_id: parseInt(row[0]),
-    scan_id: parseInt(row[1]),
-    change_type: row[2],
-    is_undelete: row[3] === 'T',
-    meta_change: row[4] === 'T',
-    mod_date_old: row[5] && row[5] !== '-' ? parseInt(row[5]) : null,
-    mod_date_new: row[6] && row[6] !== '-' ? parseInt(row[6]) : null,
-    size_old: row[7] && row[7] !== '-' ? parseInt(row[7]) : null,
-    size_new: row[8] && row[8] !== '-' ? parseInt(row[8]) : null,
-    hash_change: row[9] === 'T',
-    hash_old: row[10] && row[10] !== '-' ? row[10] : null,
-    hash_new: row[11] && row[11] !== '-' ? row[11] : null,
-    val_change: row[12] === 'T',
-    val_old: row[13] && row[13] !== '-' ? row[13] : null,
-    val_new: row[14] && row[14] !== '-' ? row[14] : null,
-  }
-}
+// ---- Helpers ----
 
 function parseAlertRow(row: string[]): Alert {
   return {
@@ -173,23 +154,97 @@ function parseAlertRow(row: string[]): Alert {
   }
 }
 
+function accessLabel(access: number): string {
+  switch (access) {
+    case 0: return 'No Error'
+    case 1: return 'Meta Error'
+    case 2: return 'Read Error'
+    default: return `Unknown (${access})`
+  }
+}
+
+function valShort(val: number): string {
+  switch (val) {
+    case 0: return 'V'
+    case 1: return 'I'
+    case 2: return 'N'
+    case 3: return 'U'
+    default: return 'U'
+  }
+}
+
+function itemTypeLabel(type: string): string {
+  switch (type) {
+    case 'F': return 'File'
+    case 'D': return 'Directory'
+    case 'S': return 'Symlink'
+    default: return 'Other'
+  }
+}
+
+/** Classify a version relative to its predecessor */
+function classifyChange(version: VersionEntry, prev: VersionEntry | null): ChangeKind {
+  if (!prev) return 'initial'
+  if (version.is_deleted && !prev.is_deleted) return 'deleted'
+  if (!version.is_deleted && prev.is_deleted) return 'restored'
+  return 'modified'
+}
+
+/** Build the list of VersionChange entries from raw versions (ordered DESC) */
+function buildChanges(versions: VersionEntry[]): VersionChange[] {
+  if (versions.length === 0) return []
+
+  const changes: VersionChange[] = []
+  for (let i = 0; i < versions.length; i++) {
+    const version = versions[i]
+    const prev = i + 1 < versions.length ? versions[i + 1] : null
+    changes.push({
+      version,
+      kind: classifyChange(version, prev),
+      prev,
+    })
+  }
+  return changes
+}
+
+/** Check if two versions differ in any visible field */
+function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
+  return (
+    v.mod_date !== prev.mod_date ||
+    v.size !== prev.size ||
+    v.file_hash !== prev.file_hash ||
+    v.access !== prev.access ||
+    v.val !== prev.val ||
+    v.val_error !== prev.val_error
+  )
+}
+
+// ---- Component ----
+
 export function ItemDetailSheet({
   itemId,
   itemPath,
   itemType,
   isTombstone,
+  scanId,
   open,
   onOpenChange,
 }: ItemDetailSheetProps) {
-  const [loading, setLoading] = useState(false)
-  const [details, setDetails] = useState<ItemDetails | null>(null)
-  const [changes, setChanges] = useState<Change[]>([])
+  // Version history state
+  const [versions, setVersions] = useState<VersionEntry[]>([])
+  const [loadingVersions, setLoadingVersions] = useState(false)
+  const [loadingMoreVersions, setLoadingMoreVersions] = useState(false)
+  const [hasMoreVersions, setHasMoreVersions] = useState(false)
+  const [totalVersionCount, setTotalVersionCount] = useState(0)
+  const [firstSeenScanId, setFirstSeenScanId] = useState(0)
+  const [firstSeenScanDate, setFirstSeenScanDate] = useState(0)
+  const [anchorScanDate, setAnchorScanDate] = useState(0)
+  const [openVersions, setOpenVersions] = useState<Record<number, boolean>>({})
+
+  // Alerts state
   const [alerts, setAlerts] = useState<Alert[]>([])
-  const [totalChanges, setTotalChanges] = useState(0)
   const [totalAlerts, setTotalAlerts] = useState(0)
-  const [loadingMoreChanges, setLoadingMoreChanges] = useState(false)
   const [loadingMoreAlerts, setLoadingMoreAlerts] = useState(false)
-  const [openChanges, setOpenChanges] = useState<Record<number, boolean>>({})
 
   // Size history state
   const [sizeHistory, setSizeHistory] = useState<SizeHistoryPoint[]>([])
@@ -202,114 +257,83 @@ export function ItemDetailSheet({
   const [childrenCounts, setChildrenCounts] = useState<ChildrenCounts | null>(null)
   const [loadingChildrenCounts, setLoadingChildrenCounts] = useState(false)
 
-  // Extract file/folder name from path
   const itemName = itemPath.split('/').filter(Boolean).pop() || itemPath
 
-  // Reset collapsible state when switching items
+  // The anchor version is always the first in our DESC-ordered list
+  const anchorVersion = versions.length > 0 ? versions[0] : null
+
+  // Build change entries from loaded versions
+  const changes = buildChanges(versions)
+
+  // Reset state when switching items
   useEffect(() => {
-    setOpenChanges({})
+    setOpenVersions({})
   }, [itemId])
+
+  // ---- Data loading ----
 
   useEffect(() => {
     if (!open) return
 
-    async function loadItemDetails() {
-      setLoading(true)
+    async function loadData() {
+      setLoadingVersions(true)
       try {
-        // Load item details
-        const itemColumns: ColumnSpec[] = [
-          { name: 'item_id', visible: true, sort_direction: 'none', position: 0 },
-          { name: 'item_path', visible: true, sort_direction: 'none', position: 1 },
-          { name: 'item_type', visible: true, sort_direction: 'none', position: 2 },
-          { name: 'is_ts', visible: true, sort_direction: 'none', position: 3 },
-          { name: 'mod_date', visible: true, sort_direction: 'none', position: 4 },
-          { name: 'size', visible: true, sort_direction: 'none', position: 5 },
-          { name: 'file_hash', visible: true, sort_direction: 'none', position: 6 },
-          { name: 'val', visible: true, sort_direction: 'none', position: 7 },
-          { name: 'val_error', visible: true, sort_direction: 'none', position: 8 },
-        ]
-
-        const itemResponse = await fetchQuery('items', {
-          columns: itemColumns,
-          filters: [{ column: 'item_id', value: itemId.toString() }],
-          limit: 1,
-          offset: 0,
-        })
-
-        if (itemResponse.rows.length > 0) {
-          const row = itemResponse.rows[0]
-          setDetails({
-            item_id: parseInt(row[0]),
-            item_path: row[1],
-            item_type: row[2],
-            is_ts: row[3] === 'T',
-            mod_date: parseInt(row[4] || '0'),
-            size: row[5] && row[5] !== '-' ? parseInt(row[5]) : null,
-            file_hash: row[6] && row[6] !== '-' ? row[6] : null,
-            val_status: row[7] && row[7] !== '-' ? row[7] : null,
-            val_error: row[8] && row[8] !== '-' ? row[8] : null,
-          })
+        // Load version history (anchored at scanId)
+        const versionResponse = await fetch(
+          `/api/items/${itemId}/version-history?scan_id=${scanId}&limit=${VERSIONS_PER_PAGE}`
+        )
+        if (versionResponse.ok) {
+          const data: VersionHistoryInitResponse = await versionResponse.json()
+          setVersions(data.versions)
+          setHasMoreVersions(data.has_more)
+          setTotalVersionCount(data.total_count)
+          setFirstSeenScanId(data.first_seen_scan_id)
+          setFirstSeenScanDate(data.first_seen_scan_date)
+          setAnchorScanDate(data.anchor_scan_date)
         }
 
-        // Count total changes
-        const changeCountResponse = await countQuery('changes', {
-          columns: [{ name: 'change_id', visible: true, sort_direction: 'none', position: 0 }],
-          filters: [{ column: 'item_id', value: itemId.toString() }],
-        })
-        setTotalChanges(changeCountResponse.count)
-
-        // Load initial changes (most recent first)
-        const changeResponse = await fetchQuery('changes', {
-          columns: CHANGE_COLUMNS,
-          filters: [{ column: 'item_id', value: itemId.toString() }],
-          limit: CHANGES_PER_PAGE,
-          offset: 0,
-        })
-
-        setChanges(changeResponse.rows.map(parseChangeRow))
-
-        // Count total alerts
+        // Load alerts
         const alertCountResponse = await countQuery('alerts', {
           columns: [{ name: 'alert_id', visible: true, sort_direction: 'none', position: 0 }],
           filters: [{ column: 'item_id', value: itemId.toString() }],
         })
         setTotalAlerts(alertCountResponse.count)
 
-        // Load initial alerts (most recent first)
         const alertResponse = await fetchQuery('alerts', {
           columns: ALERT_COLUMNS,
           filters: [{ column: 'item_id', value: itemId.toString() }],
           limit: ALERTS_PER_PAGE,
           offset: 0,
         })
-
         setAlerts(alertResponse.rows.map(parseAlertRow))
       } catch (error) {
         console.error('Error loading item details:', error)
       } finally {
-        setLoading(false)
+        setLoadingVersions(false)
       }
     }
 
-    loadItemDetails()
-  }, [open, itemId, itemType])
+    loadData()
+  }, [open, itemId, scanId])
 
-  const loadMoreChanges = async () => {
-    setLoadingMoreChanges(true)
+  const loadMoreVersions = async () => {
+    if (versions.length === 0) return
+    const lastVersion = versions[versions.length - 1]
+
+    setLoadingMoreVersions(true)
     try {
-      const changeResponse = await fetchQuery('changes', {
-        columns: CHANGE_COLUMNS,
-        filters: [{ column: 'item_id', value: itemId.toString() }],
-        limit: CHANGES_PER_PAGE,
-        offset: changes.length,
-      })
-
-      const newChanges = changeResponse.rows.map(parseChangeRow)
-      setChanges([...changes, ...newChanges])
+      const response = await fetch(
+        `/api/items/${itemId}/version-history?before_scan_id=${lastVersion.first_scan_id}&limit=${VERSIONS_PER_PAGE}`
+      )
+      if (response.ok) {
+        const data: VersionHistoryPageResponse = await response.json()
+        setVersions(prev => [...prev, ...data.versions])
+        setHasMoreVersions(data.has_more)
+      }
     } catch (error) {
-      console.error('Error loading more changes:', error)
+      console.error('Error loading more versions:', error)
     } finally {
-      setLoadingMoreChanges(false)
+      setLoadingMoreVersions(false)
     }
   }
 
@@ -322,9 +346,8 @@ export function ItemDetailSheet({
         limit: ALERTS_PER_PAGE,
         offset: alerts.length,
       })
-
       const newAlerts = alertResponse.rows.map(parseAlertRow)
-      setAlerts([...alerts, ...newAlerts])
+      setAlerts(prev => [...prev, ...newAlerts])
     } catch (error) {
       console.error('Error loading more alerts:', error)
     } finally {
@@ -332,9 +355,105 @@ export function ItemDetailSheet({
     }
   }
 
-  const getValidationBadge = (status: string | null) => {
-    if (!status) return null
-    switch (status) {
+  // ---- Size history ----
+
+  const getDateRangeForPreset = (preset: TimeWindowPreset): { from: Date; to: Date } => {
+    const now = new Date()
+    const today = startOfDay(now)
+    switch (preset) {
+      case '7d': return { from: subDays(today, 7), to: today }
+      case '30d': return { from: subDays(today, 30), to: today }
+      case '3m': return { from: subMonths(today, 3), to: today }
+      case '6m': return { from: subMonths(today, 6), to: today }
+      case '1y': return { from: subYears(today, 1), to: today }
+      case 'custom': return {
+        from: fromDate || subMonths(today, 3),
+        to: toDate || today,
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (timeWindow !== 'custom') {
+      const { from, to } = getDateRangeForPreset(timeWindow)
+      setFromDate(from)
+      setToDate(to)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeWindow])
+
+  useEffect(() => {
+    const today = startOfDay(new Date())
+    setFromDate(subMonths(today, 3))
+    setToDate(today)
+  }, [])
+
+  const loadSizeHistory = useCallback(async () => {
+    if (!open || !fromDate) return
+
+    setLoadingSizeHistory(true)
+    try {
+      const fromDateStr = format(fromDate, 'yyyy-MM-dd')
+      const response = await fetch(
+        `/api/items/${itemId}/size-history?from_date=${fromDateStr}&to_scan_id=${scanId}`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setSizeHistory(data.history || [])
+      } else {
+        setSizeHistory([])
+      }
+    } catch (error) {
+      console.error('Error loading size history:', error)
+      setSizeHistory([])
+    } finally {
+      setLoadingSizeHistory(false)
+    }
+  }, [itemId, fromDate, scanId, open])
+
+  useEffect(() => {
+    loadSizeHistory()
+  }, [loadSizeHistory])
+
+  // ---- Children counts (directories) ----
+
+  useEffect(() => {
+    async function loadChildrenCounts() {
+      if (!open || itemType !== 'D' || isTombstone) {
+        setChildrenCounts(null)
+        return
+      }
+
+      setLoadingChildrenCounts(true)
+      try {
+        const response = await fetch(
+          `/api/items/${itemId}/children-counts?scan_id=${scanId}`
+        )
+        if (response.ok) {
+          const data = await response.json()
+          setChildrenCounts({
+            file_count: data.file_count,
+            directory_count: data.directory_count,
+          })
+        } else {
+          setChildrenCounts(null)
+        }
+      } catch (error) {
+        console.error('Error loading children counts:', error)
+        setChildrenCounts(null)
+      } finally {
+        setLoadingChildrenCounts(false)
+      }
+    }
+
+    loadChildrenCounts()
+  }, [open, itemId, itemType, isTombstone, scanId])
+
+  // ---- Badge renderers ----
+
+  const getValidationBadge = (val: number) => {
+    const short = valShort(val)
+    switch (short) {
       case 'V':
         return <Badge variant="success" className="gap-1"><ShieldCheck className="h-3 w-3" />Valid</Badge>
       case 'I':
@@ -347,121 +466,16 @@ export function ItemDetailSheet({
     }
   }
 
-  // Date range helper (same as Insights)
-  const getDateRangeForPreset = (preset: TimeWindowPreset): { from: Date; to: Date } => {
-    const now = new Date()
-    const today = startOfDay(now)
-
-    switch (preset) {
-      case '7d':
-        return { from: subDays(today, 7), to: today }
-      case '30d':
-        return { from: subDays(today, 30), to: today }
-      case '3m':
-        return { from: subMonths(today, 3), to: today }
-      case '6m':
-        return { from: subMonths(today, 6), to: today }
-      case '1y':
-        return { from: subYears(today, 1), to: today }
-      case 'custom':
-        return {
-          from: fromDate || subMonths(today, 3),
-          to: toDate || today
-        }
-    }
-  }
-
-  // Update date range when time window changes
-  useEffect(() => {
-    if (timeWindow !== 'custom') {
-      const { from, to } = getDateRangeForPreset(timeWindow)
-      setFromDate(from)
-      setToDate(to)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeWindow])
-
-  // Initialize date range on mount
-  useEffect(() => {
-    const today = startOfDay(new Date())
-    setFromDate(subMonths(today, 3))
-    setToDate(today)
-  }, [])
-
-  // Load size history when dates or item changes
-  const loadSizeHistory = useCallback(async () => {
-    if (!open || !fromDate || !toDate) return
-
-    setLoadingSizeHistory(true)
-    try {
-      // Format dates as "yyyy-MM-dd" strings to match FsPulse query system
-      const fromDateStr = format(fromDate, 'yyyy-MM-dd')
-      const toDateStr = format(toDate, 'yyyy-MM-dd')
-
-      const response = await fetch(
-        `/api/items/${itemId}/size-history?from_date=${fromDateStr}&to_date=${toDateStr}`
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to load size history')
-      }
-
-      const data = await response.json()
-      setSizeHistory(data.history || [])
-    } catch (error) {
-      console.error('Error loading size history:', error)
-      setSizeHistory([])
-    } finally {
-      setLoadingSizeHistory(false)
-    }
-  }, [itemId, fromDate, toDate, open])
-
-  useEffect(() => {
-    loadSizeHistory()
-  }, [loadSizeHistory])
-
-  // Load children counts for directories
-  useEffect(() => {
-    async function loadChildrenCounts() {
-      if (!open || itemType !== 'D' || isTombstone) {
-        setChildrenCounts(null)
-        return
-      }
-
-      setLoadingChildrenCounts(true)
-      try {
-        const response = await fetch(`/api/old_items/${itemId}/children-counts`)
-
-        if (!response.ok) {
-          throw new Error('Failed to load children counts')
-        }
-
-        const data = await response.json()
-        setChildrenCounts({
-          file_count: data.file_count,
-          directory_count: data.directory_count,
-        })
-      } catch (error) {
-        console.error('Error loading children counts:', error)
-        setChildrenCounts(null)
-      } finally {
-        setLoadingChildrenCounts(false)
-      }
-    }
-
-    loadChildrenCounts()
-  }, [open, itemId, itemType, isTombstone])
-
-  const getChangeTypeBadge = (type: string) => {
-    switch (type) {
-      case 'A':
-        return <Badge variant="success">Added</Badge>
-      case 'M':
+  const getChangeBadge = (kind: ChangeKind) => {
+    switch (kind) {
+      case 'initial':
+        return <Badge className="bg-blue-500 hover:bg-blue-600">Initial Version</Badge>
+      case 'modified':
         return <Badge className="bg-amber-500 hover:bg-amber-600">Modified</Badge>
-      case 'D':
+      case 'deleted':
         return <Badge variant="destructive">Deleted</Badge>
-      default:
-        return <Badge variant="secondary">No Change</Badge>
+      case 'restored':
+        return <Badge variant="success">Restored</Badge>
     }
   }
 
@@ -491,6 +505,28 @@ export function ItemDetailSheet({
     }
   }
 
+  // ---- Scan reference helpers ----
+
+  const scanRef = (scanId: number, scanDate: number) => (
+    <>Scan <span className="font-mono font-semibold">#{scanId}</span> ({formatScanDate(scanDate)})</>
+  )
+
+  const scanRangeLabel = (v: VersionEntry) => {
+    if (v.first_scan_id === v.last_scan_id) {
+      return scanRef(v.first_scan_id, v.first_scan_date)
+    }
+    return (
+      <>
+        Scans <span className="font-mono font-semibold">#{v.first_scan_id}</span>{' '}
+        ({formatScanDate(v.first_scan_date)}) &ndash;{' '}
+        <span className="font-mono font-semibold">#{v.last_scan_id}</span>{' '}
+        ({formatScanDate(v.last_scan_date)})
+      </>
+    )
+  }
+
+  // ---- Render ----
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="!w-[650px] sm:!w-[700px] !max-w-[700px] overflow-y-auto">
@@ -514,6 +550,17 @@ export function ItemDetailSheet({
             <div className="flex-1 min-w-0">
               <SheetTitle className="text-2xl font-bold break-words">{itemName}</SheetTitle>
               <p className="text-sm text-muted-foreground break-all mt-1">{itemPath}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {firstSeenScanId > 0 && (
+                  <>First seen {scanRef(firstSeenScanId, firstSeenScanDate)}</>
+                )}
+                {firstSeenScanId > 0 && totalVersionCount > 0 && (
+                  <span className="mx-1.5">&middot;</span>
+                )}
+                {totalVersionCount > 0 && (
+                  <>{totalVersionCount.toLocaleString()} version{totalVersionCount !== 1 ? 's' : ''}</>
+                )}
+              </p>
               {isTombstone && (
                 <div className="mt-2 flex items-center gap-2">
                   <Badge variant="destructive" className="text-base px-3 py-1">Deleted Item</Badge>
@@ -524,104 +571,111 @@ export function ItemDetailSheet({
           </div>
         </SheetHeader>
 
-        {loading ? (
+        {loadingVersions ? (
           <div className="flex items-center justify-center h-64">
             <p className="text-muted-foreground">Loading details...</p>
           </div>
-        ) : details ? (
+        ) : (
           <div className="space-y-6 mt-6">
-            {/* Beautiful Summary Section */}
-            <Card className="border-2">
-              <CardHeader>
-                <CardTitle>Current State</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Item ID</p>
-                    <p className="text-base font-semibold mt-1 font-mono">{details.item_id}</p>
+            {/* Current State Card */}
+            {anchorVersion && (
+              <Card className="border-2">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">
+                      {scanRef(scanId, anchorScanDate)}
+                    </CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      Version #{anchorVersion.version_id}
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <HardDrive className="h-4 w-4" />
-                      Type
-                    </p>
-                    <p className="text-base font-semibold mt-1">
-                      {details.item_type === 'F' ? 'File' : details.item_type === 'D' ? 'Directory' : details.item_type === 'S' ? 'Symlink' : 'Other'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                      <CalendarIcon className="h-4 w-4" />
-                      Modified
-                    </p>
-                    <p className="text-base font-semibold mt-1">
-                      {details.mod_date ? formatDateFull(details.mod_date) : 'N/A'}
-                    </p>
-                  </div>
-                  {details.size !== null && (
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground">Size</p>
-                      <p className="text-base font-semibold mt-1">{formatFileSize(details.size)}</p>
+                      <p className="text-sm font-medium text-muted-foreground">Item ID</p>
+                      <p className="text-base font-semibold mt-1 font-mono">{itemId}</p>
                     </div>
-                  )}
-                  {details.item_type === 'F' && (
                     <div>
                       <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        <ShieldCheck className="h-4 w-4" />
-                        Validation
+                        <HardDrive className="h-4 w-4" />
+                        Type
                       </p>
-                      <div className="mt-1">{getValidationBadge(details.val_status)}</div>
+                      <p className="text-base font-semibold mt-1">{itemTypeLabel(itemType)}</p>
                     </div>
-                  )}
-                  {details.item_type === 'F' && details.file_hash && details.file_hash !== '-' && (
-                    <div className="col-span-2">
+                    <div>
                       <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        <Hash className="h-4 w-4" />
-                        Hash
+                        <CalendarIcon className="h-4 w-4" />
+                        Modified
                       </p>
-                      <p className="text-xs font-mono mt-1 break-all">{details.file_hash}</p>
+                      <p className="text-base font-semibold mt-1">
+                        {anchorVersion.mod_date ? formatDateFull(anchorVersion.mod_date) : 'N/A'}
+                      </p>
                     </div>
-                  )}
-                  {details.item_type === 'F' && details.val_error && details.val_error.trim() !== '' && details.val_error !== '-' && (
-                    <div className="col-span-2">
-                      <p className="text-sm font-medium text-destructive">Validation Error</p>
-                      <p className="text-xs font-mono mt-1 bg-destructive/10 p-2 rounded">{details.val_error}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Children counts for directories */}
-                {details.item_type === 'D' && !isTombstone && (
-                  <div className="col-span-2 mt-4 pt-4 border-t">
-                    {loadingChildrenCounts ? (
-                      <div className="flex items-center justify-center py-4">
-                        <p className="text-sm text-muted-foreground">Loading...</p>
+                    {anchorVersion.size !== null && (
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Size</p>
+                        <p className="text-base font-semibold mt-1">{formatFileSize(anchorVersion.size)}</p>
                       </div>
-                    ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
-                      <div className="flex items-center justify-center gap-6">
-                        <div className="flex items-center gap-2">
-                          <Folder className="h-4 w-4" style={{ color: 'hsl(142 71% 45%)' }} />
-                          <span className="text-base font-semibold">
-                            {childrenCounts.directory_count.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <File className="h-4 w-4" style={{ color: 'hsl(221 83% 53%)' }} />
-                          <span className="text-base font-semibold">
-                            {childrenCounts.file_count.toLocaleString()}
-                          </span>
-                        </div>
+                    )}
+                    {itemType === 'F' && (
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4" />
+                          Validation
+                        </p>
+                        <div className="mt-1">{getValidationBadge(anchorVersion.val)}</div>
                       </div>
-                    ) : (
-                      <div className="flex items-center justify-center py-4">
-                        <p className="text-sm text-muted-foreground">No items in this directory</p>
+                    )}
+                    {itemType === 'F' && anchorVersion.file_hash && (
+                      <div className="col-span-2">
+                        <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                          <Hash className="h-4 w-4" />
+                          Hash
+                        </p>
+                        <p className="text-xs font-mono mt-1 break-all">{anchorVersion.file_hash}</p>
+                      </div>
+                    )}
+                    {itemType === 'F' && anchorVersion.val_error && anchorVersion.val_error.trim() !== '' && (
+                      <div className="col-span-2">
+                        <p className="text-sm font-medium text-destructive">Validation Error</p>
+                        <p className="text-xs font-mono mt-1 bg-destructive/10 p-2 rounded">{anchorVersion.val_error}</p>
                       </div>
                     )}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+
+                  {/* Children counts for directories */}
+                  {itemType === 'D' && !isTombstone && (
+                    <div className="col-span-2 mt-4 pt-4 border-t">
+                      {loadingChildrenCounts ? (
+                        <div className="flex items-center justify-center py-4">
+                          <p className="text-sm text-muted-foreground">Loading...</p>
+                        </div>
+                      ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
+                        <div className="flex items-center justify-center gap-6">
+                          <div className="flex items-center gap-2">
+                            <Folder className="h-4 w-4" style={{ color: 'hsl(142 71% 45%)' }} />
+                            <span className="text-base font-semibold">
+                              {childrenCounts.directory_count.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <File className="h-4 w-4" style={{ color: 'hsl(221 83% 53%)' }} />
+                            <span className="text-base font-semibold">
+                              {childrenCounts.file_count.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center py-4">
+                          <p className="text-sm text-muted-foreground">No items in this directory</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Size History Section */}
             <Card>
@@ -749,62 +803,47 @@ export function ItemDetailSheet({
                     </div>
                   )}
                 </CardContent>
-              </Card>
+            </Card>
 
-            {/* History Section */}
+            {/* Version History Section */}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>History</CardTitle>
-                  {totalChanges > CHANGES_PER_PAGE && (
+                  <CardTitle>Version History</CardTitle>
+                  {totalVersionCount > 0 && (
                     <p className="text-sm text-muted-foreground">
-                      Showing {changes.length} of {totalChanges} change{totalChanges !== 1 ? 's' : ''}
+                      Showing {versions.length} of {totalVersionCount.toLocaleString()} version{totalVersionCount !== 1 ? 's' : ''}
                     </p>
                   )}
                 </div>
               </CardHeader>
               <CardContent className="p-6">
-                {totalChanges === 0 ? (
+                {changes.length === 0 ? (
                   <div className="border border-border rounded-lg">
                     <p className="text-sm text-muted-foreground text-center py-12">
-                      No history recorded for this item
+                      No version history available for this item
                     </p>
                   </div>
                 ) : (
                   <>
                     <div className="border border-border rounded-lg">
                       <div className="p-0">
-                      {changes.map((change, idx) => {
-                        const isOpen = openChanges[change.change_id] || false
-                        const setIsOpen = (open: boolean) => {
-                          setOpenChanges(prev => ({ ...prev, [change.change_id]: open }))
-                        }
+                        {changes.map((change, idx) => {
+                          const v = change.version
+                          const isAnchor = idx === 0
+                          const isOpen = openVersions[v.version_id] || false
+                          const setIsOpen = (open: boolean) => {
+                            setOpenVersions(prev => ({ ...prev, [v.version_id]: open }))
+                          }
 
-                        return (
-                          <div key={change.change_id}>
-                            <div className="p-4">
-                              {change.change_type === 'M' && (() => {
-                                const hasMetaChanges = change.meta_change && (change.mod_date_old !== change.mod_date_new || change.size_old !== change.size_new)
-                                const hasHashChanges = change.hash_change && change.hash_old !== change.hash_new
-                                const hasValChanges = change.val_change && change.val_old !== change.val_new
-                                const hasAnyChanges = hasMetaChanges || hasHashChanges || hasValChanges
+                          // Determine if this entry is expandable
+                          const isExpandable =
+                            change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)
 
-                                if (!hasAnyChanges) {
-                                  return (
-                                    <div className="flex items-center gap-2">
-                                      {/* Invisible spacer to align badges with expandable rows */}
-                                      <div className="h-5 w-5 flex-shrink-0" />
-                                      {getChangeTypeBadge(change.change_type)}
-                                      <p className="text-xs text-muted-foreground">
-                                        Scan <span className="font-mono font-semibold">#{change.scan_id}</span>
-                                        <span className="mx-2">•</span>
-                                        Change <span className="font-mono font-semibold">#{change.change_id}</span>
-                                      </p>
-                                    </div>
-                                  )
-                                }
-
-                                return (
+                          return (
+                            <div key={v.version_id}>
+                              <div className={cn("p-4", isAnchor && "bg-accent/30")}>
+                                {isExpandable ? (
                                   <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                                     <div className="flex items-center gap-2">
                                       <CollapsibleTrigger asChild>
@@ -814,16 +853,19 @@ export function ItemDetailSheet({
                                           />
                                         </Button>
                                       </CollapsibleTrigger>
-                                      {getChangeTypeBadge(change.change_type)}
+                                      {getChangeBadge(change.kind)}
                                       <p className="text-xs text-muted-foreground">
-                                        Scan <span className="font-mono font-semibold">#{change.scan_id}</span>
-                                        <span className="mx-2">•</span>
-                                        Change <span className="font-mono font-semibold">#{change.change_id}</span>
+                                        {scanRangeLabel(v)}
+                                        <span className="mx-2">&bull;</span>
+                                        Version <span className="font-mono font-semibold">#{v.version_id}</span>
                                       </p>
+                                      {isAnchor && (
+                                        <Eye className="h-3.5 w-3.5 text-primary ml-auto flex-shrink-0" aria-label="Current view" />
+                                      )}
                                     </div>
                                     <CollapsibleContent className="mt-2 ml-7">
                                       <div className="space-y-2 text-xs">
-                                        {change.meta_change && change.mod_date_old !== change.mod_date_new && (
+                                        {change.prev && v.mod_date !== change.prev.mod_date && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 flex items-center gap-1">
                                               <CalendarIcon className="h-3 w-3" />
@@ -831,17 +873,17 @@ export function ItemDetailSheet({
                                             </p>
                                             <div className="flex items-center gap-2">
                                               <span className="text-muted-foreground">
-                                                {change.mod_date_old && change.mod_date_old !== 0 ? formatDateFull(change.mod_date_old) : 'N/A'}
+                                                {change.prev.mod_date ? formatDateFull(change.prev.mod_date) : 'N/A'}
                                               </span>
-                                              <span className="text-muted-foreground">→</span>
+                                              <span className="text-muted-foreground">&rarr;</span>
                                               <span className="font-medium">
-                                                {change.mod_date_new && change.mod_date_new !== 0 ? formatDateFull(change.mod_date_new) : 'N/A'}
+                                                {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}
                                               </span>
                                             </div>
                                           </div>
                                         )}
 
-                                        {change.meta_change && change.size_old !== change.size_new && (
+                                        {change.prev && v.size !== change.prev.size && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 flex items-center gap-1">
                                               <HardDrive className="h-3 w-3" />
@@ -849,17 +891,17 @@ export function ItemDetailSheet({
                                             </p>
                                             <div className="flex items-center gap-2">
                                               <span className="text-muted-foreground">
-                                                {formatFileSize(change.size_old)}
+                                                {formatFileSize(change.prev.size)}
                                               </span>
-                                              <span className="text-muted-foreground">→</span>
+                                              <span className="text-muted-foreground">&rarr;</span>
                                               <span className="font-medium">
-                                                {formatFileSize(change.size_new)}
+                                                {formatFileSize(v.size)}
                                               </span>
                                             </div>
                                           </div>
                                         )}
 
-                                        {change.hash_change && change.hash_old !== change.hash_new && (
+                                        {change.prev && v.file_hash !== change.prev.file_hash && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 flex items-center gap-1">
                                               <Hash className="h-3 w-3" />
@@ -869,70 +911,92 @@ export function ItemDetailSheet({
                                               <div className="flex items-start gap-2">
                                                 <span className="text-muted-foreground flex-shrink-0">Old:</span>
                                                 <span className="font-mono break-all text-muted-foreground">
-                                                  {change.hash_old && change.hash_old !== '-' ? change.hash_old : 'N/A'}
+                                                  {change.prev.file_hash || 'N/A'}
                                                 </span>
                                               </div>
                                               <div className="flex items-start gap-2">
                                                 <span className="text-muted-foreground flex-shrink-0">New:</span>
                                                 <span className="font-mono break-all font-medium">
-                                                  {change.hash_new && change.hash_new !== '-' ? change.hash_new : 'N/A'}
+                                                  {v.file_hash || 'N/A'}
                                                 </span>
                                               </div>
                                             </div>
                                           </div>
                                         )}
 
-                                        {change.val_change && change.val_old !== change.val_new && (
+                                        {change.prev && v.access !== change.prev.access && (
+                                          <div className="bg-muted/50 p-2 rounded">
+                                            <p className="font-medium mb-1">Access</p>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-muted-foreground">{accessLabel(change.prev.access)}</span>
+                                              <span className="text-muted-foreground">&rarr;</span>
+                                              <span className="font-medium">{accessLabel(v.access)}</span>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {change.prev && v.val !== change.prev.val && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 flex items-center gap-1">
                                               <ShieldCheck className="h-3 w-3" />
                                               Validation Status
                                             </p>
                                             <div className="flex items-center gap-2">
-                                              <span className="text-muted-foreground">
-                                                {change.val_old && change.val_old !== '-' ? getValidationBadge(change.val_old) : 'N/A'}
-                                              </span>
-                                              <span className="text-muted-foreground">→</span>
-                                              <span className="font-medium">
-                                                {change.val_new && change.val_new !== '-' ? getValidationBadge(change.val_new) : 'N/A'}
-                                              </span>
+                                              {getValidationBadge(change.prev.val)}
+                                              <span className="text-muted-foreground">&rarr;</span>
+                                              {getValidationBadge(v.val)}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {change.prev && v.val_error !== change.prev.val_error && (
+                                          <div className="bg-muted/50 p-2 rounded">
+                                            <p className="font-medium mb-1 text-destructive">Validation Error</p>
+                                            <div className="space-y-1">
+                                              {change.prev.val_error && (
+                                                <p className="font-mono text-muted-foreground break-all">
+                                                  Old: {change.prev.val_error}
+                                                </p>
+                                              )}
+                                              <p className="font-mono font-medium break-all">
+                                                {v.val_error ? `New: ${v.val_error}` : 'Cleared'}
+                                              </p>
                                             </div>
                                           </div>
                                         )}
                                       </div>
                                     </CollapsibleContent>
                                   </Collapsible>
-                                )
-                              })()}
-
-                              {/* Non-modified changes (Add/Delete) - no collapsible */}
-                              {change.change_type !== 'M' && (
-                                <div className="flex items-center gap-2">
-                                  {/* Invisible spacer to align badges with expandable rows */}
-                                  <div className="h-5 w-5 flex-shrink-0" />
-                                  {getChangeTypeBadge(change.change_type)}
-                                  <p className="text-xs text-muted-foreground">
-                                    Scan <span className="font-mono font-semibold">#{change.scan_id}</span>
-                                    <span className="mx-2">•</span>
-                                    Change <span className="font-mono font-semibold">#{change.change_id}</span>
-                                  </p>
-                                </div>
-                              )}
+                                ) : (
+                                  // Non-expandable entry (initial, deleted, restored, or modification with no visible diff)
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-5 w-5 flex-shrink-0" />
+                                    {getChangeBadge(change.kind)}
+                                    <p className="text-xs text-muted-foreground">
+                                      {scanRangeLabel(v)}
+                                      <span className="mx-2">&bull;</span>
+                                      Version <span className="font-mono font-semibold">#{v.version_id}</span>
+                                    </p>
+                                    {isAnchor && (
+                                      <Eye className="h-3.5 w-3.5 text-primary ml-auto flex-shrink-0" aria-label="Current view" />
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              {idx < changes.length - 1 && <Separator />}
                             </div>
-                            {idx < changes.length - 1 && <Separator />}
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
-                    </div>
-                    {totalChanges > changes.length && changes.length >= CHANGES_PER_PAGE && (
+                    {hasMoreVersions && (
                       <div className="mt-4 flex justify-center">
                         <Button
                           variant="outline"
-                          onClick={loadMoreChanges}
-                          disabled={loadingMoreChanges}
+                          onClick={loadMoreVersions}
+                          disabled={loadingMoreVersions}
                         >
-                          {loadingMoreChanges ? 'Loading...' : `Load ${Math.min(CHANGES_PER_PAGE, totalChanges - changes.length)} more`}
+                          {loadingMoreVersions ? 'Loading...' : 'Load older versions'}
                         </Button>
                       </div>
                     )}
@@ -964,29 +1028,29 @@ export function ItemDetailSheet({
                   <>
                     <div className="border border-border rounded-lg">
                       <div className="p-0">
-                      {alerts.map((alert, idx) => (
-                        <div key={alert.alert_id}>
-                          <div className="p-4">
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                {getAlertTypeBadge(alert.alert_type)}
-                                {getAlertStatusBadge(alert.alert_status)}
+                        {alerts.map((alert, idx) => (
+                          <div key={alert.alert_id}>
+                            <div className="p-4">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  {getAlertTypeBadge(alert.alert_type)}
+                                  {getAlertStatusBadge(alert.alert_status)}
+                                  <p className="text-xs text-muted-foreground">
+                                    Scan <span className="font-mono font-semibold">#{alert.scan_id}</span>
+                                  </p>
+                                </div>
+                                {alert.val_error && (
+                                  <p className="text-sm text-red-600">{alert.val_error}</p>
+                                )}
                                 <p className="text-xs text-muted-foreground">
-                                  Scan <span className="font-mono font-semibold">#{alert.scan_id}</span>
+                                  Created on {formatDateFull(alert.created)}
                                 </p>
                               </div>
-                              {alert.val_error && (
-                                <p className="text-sm text-red-600">{alert.val_error}</p>
-                              )}
-                              <p className="text-xs text-muted-foreground">
-                                Created on {formatDateFull(alert.created)}
-                              </p>
                             </div>
+                            {idx < alerts.length - 1 && <Separator />}
                           </div>
-                          {idx < alerts.length - 1 && <Separator />}
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
                     </div>
                     {totalAlerts > alerts.length && alerts.length >= ALERTS_PER_PAGE && (
                       <div className="mt-4 flex justify-center">
@@ -1004,7 +1068,7 @@ export function ItemDetailSheet({
               </CardContent>
             </Card>
           </div>
-        ) : null}
+        )}
       </SheetContent>
     </Sheet>
   )

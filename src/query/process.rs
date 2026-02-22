@@ -4,17 +4,15 @@ use rusqlite::{Row, Statement, ToSql};
 
 use super::{
     columns::{
-        ColSet, ALERTS_QUERY_COLS, CHANGES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS,
-        SCANS_QUERY_COLS,
+        ColSet, ALERTS_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS,
+        VERSIONS_QUERY_COLS,
     },
     filter::{BoolFilter, EnumFilter, IntFilter},
     show::{Format, Show},
 };
-//use tablestream::{Column, Stream};
 
 use crate::{
     alerts::{AlertStatus, AlertType},
-    changes::ChangeType,
     database::Database,
     error::FsPulseError,
     items::{Access, ItemType},
@@ -278,10 +276,10 @@ fn make_query(query_type: &str, count_only: bool) -> Box<dyn Query> {
         ("items", _) => Box::new(ItemsQuery {
             imp: QueryImpl::new(QueryImpl::ITEMS_SQL_QUERY, ColSet::new(&ITEMS_QUERY_COLS)),
         }),
-        ("changes", _) => Box::new(ChangesQuery {
+        ("versions", _) => Box::new(VersionsQuery {
             imp: QueryImpl::new(
-                QueryImpl::CHANGES_SQL_QUERY,
-                ColSet::new(&CHANGES_QUERY_COLS),
+                QueryImpl::VERSIONS_SQL_QUERY,
+                ColSet::new(&VERSIONS_QUERY_COLS),
             ),
         }),
         ("alerts", _) => Box::new(AlertsQuery {
@@ -460,14 +458,17 @@ impl ItemsQuery {
                 "item_id" => Format::format_i64(item.item_id),
                 "root_id" => Format::format_i64(item.root_id),
                 "item_path" => Format::format_path(&item.item_path, col.format)?,
+                "item_name" => Format::format_path(&item.item_name, col.format)?,
                 "item_type" => Format::format_item_type(item.item_type, col.format)?,
-                "last_scan" => Format::format_i64(item.last_scan),
-                "is_ts" => Format::format_bool(item.is_ts, col.format)?,
+                "version_id" => Format::format_i64(item.version_id),
+                "first_scan_id" => Format::format_i64(item.first_scan_id),
+                "last_scan_id" => Format::format_i64(item.last_scan_id),
+                "is_deleted" => Format::format_bool(item.is_deleted, col.format)?,
                 "access" => Format::format_access(item.access, col.format)?,
                 "mod_date" => Format::format_opt_date(item.mod_date, col.format)?,
                 "size" => Format::format_opt_i64(item.size),
-                "file_hash" => Format::format_opt_string(&item.file_hash),
                 "last_hash_scan" => Format::format_opt_i64(item.last_hash_scan),
+                "file_hash" => Format::format_opt_string(&item.file_hash),
                 "last_val_scan" => Format::format_opt_i64(item.last_val_scan),
                 "val" => Format::format_val(ValidationState::from_i64(item.val), col.format)?,
                 "val_error" => Format::format_opt_string(&item.val_error),
@@ -558,7 +559,7 @@ impl ScansQuery {
     }
 }
 
-impl Query for ChangesQuery {
+impl Query for VersionsQuery {
     fn query_impl(&self) -> &QueryImpl {
         &self.imp
     }
@@ -568,72 +569,54 @@ impl Query for ChangesQuery {
 
     fn build_query_result(
         &mut self,
-        sql_statment: &mut Statement,
+        sql_statement: &mut Statement,
         sql_params: &[&dyn ToSql],
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
-        let rows = sql_statment.query_map(sql_params, ChangesQueryRow::from_row)?;
+        let rows = sql_statement.query_map(sql_params, VersionsQueryRow::from_row)?;
 
         query_result.prepare(&mut self.query_impl_mut().show);
 
         for row in rows {
-            let changes_query_row: ChangesQueryRow = row?;
-
-            self.append_changes_row(&changes_query_row, query_result)?;
+            let versions_query_row: VersionsQueryRow = row?;
+            self.append_versions_row(&versions_query_row, query_result)?;
         }
 
         Ok(())
     }
 }
-struct ChangesQuery {
+
+struct VersionsQuery {
     imp: QueryImpl,
 }
 
-impl ChangesQuery {
-    pub fn append_changes_row(
+impl VersionsQuery {
+    pub fn append_versions_row(
         &self,
-        change: &ChangesQueryRow,
+        version: &VersionsQueryRow,
         query_result: &mut dyn QueryResult,
     ) -> Result<(), FsPulseError> {
         let mut row: Vec<String> = Vec::new();
 
         for col in &self.show().display_cols {
-            //for col in &self.impl.display_cols {
             let col_string = match col.display_col {
-                "change_id" => Format::format_i64(change.change_id),
-                "root_id" => Format::format_i64(change.root_id),
-                "scan_id" => Format::format_i64(change.scan_id),
-                "item_id" => Format::format_i64(change.item_id),
-                "item_path" => Format::format_path(&change.item_path, col.format)?,
-                "change_type" => Format::format_change_type(change.change_type, col.format)?,
-                "access_old" => {
-                    Format::format_opt_access(change.access_old.map(Access::from_i64), col.format)?
-                }
-                "access_new" => {
-                    Format::format_opt_access(change.access_new.map(Access::from_i64), col.format)?
-                }
-                "is_undelete" => Format::format_opt_bool(change.is_undelete, col.format)?,
-                "meta_change" => Format::format_opt_bool(change.meta_change, col.format)?,
-                "mod_date_old" => Format::format_opt_date(change.mod_date_old, col.format)?,
-                "mod_date_new" => Format::format_opt_date(change.mod_date_new, col.format)?,
-                "size_old" => Format::format_opt_i64(change.size_old),
-                "size_new" => Format::format_opt_i64(change.size_new),
-                "hash_change" => Format::format_opt_bool(change.hash_change, col.format)?,
-                "last_hash_scan_old" => Format::format_opt_i64(change.last_hash_scan_old),
-                "hash_old" => Format::format_opt_string(&change.hash_old),
-                "hash_new" => Format::format_opt_string(&change.hash_new),
-                "val_change" => Format::format_opt_bool(change.val_change, col.format)?,
-                "last_val_scan_old" => Format::format_opt_i64(change.last_val_scan_old),
-                "val_old" => Format::format_opt_val(
-                    change.val_old.map(ValidationState::from_i64),
-                    col.format,
-                )?,
-                "val_new" => Format::format_opt_val(
-                    change.val_new.map(ValidationState::from_i64),
-                    col.format,
-                )?,
-                "val_error_old" => Format::format_opt_string(&change.val_error_old),
-                "val_error_new" => Format::format_opt_string(&change.val_error_new),
+                "version_id" => Format::format_i64(version.version_id),
+                "item_id" => Format::format_i64(version.item_id),
+                "root_id" => Format::format_i64(version.root_id),
+                "item_path" => Format::format_path(&version.item_path, col.format)?,
+                "item_name" => Format::format_path(&version.item_name, col.format)?,
+                "item_type" => Format::format_item_type(version.item_type, col.format)?,
+                "first_scan_id" => Format::format_i64(version.first_scan_id),
+                "last_scan_id" => Format::format_i64(version.last_scan_id),
+                "is_deleted" => Format::format_bool(version.is_deleted, col.format)?,
+                "access" => Format::format_access(version.access, col.format)?,
+                "mod_date" => Format::format_opt_date(version.mod_date, col.format)?,
+                "size" => Format::format_opt_i64(version.size),
+                "last_hash_scan" => Format::format_opt_i64(version.last_hash_scan),
+                "file_hash" => Format::format_opt_string(&version.file_hash),
+                "last_val_scan" => Format::format_opt_i64(version.last_val_scan),
+                "val" => Format::format_val(ValidationState::from_i64(version.val), col.format)?,
+                "val_error" => Format::format_opt_string(&version.val_error),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -685,16 +668,19 @@ impl QueryImpl {
         {offset_clause}";
 
     const ITEMS_SQL_QUERY: &str = "SELECT {select_list}
-        FROM items_old
+        FROM items i
+        JOIN item_versions iv ON iv.item_id = i.item_id
+            AND iv.first_scan_id = (
+                SELECT MAX(first_scan_id) FROM item_versions WHERE item_id = i.item_id
+            )
         {where_clause}
         {order_clause}
         {limit_clause}
         {offset_clause}";
 
-    const CHANGES_SQL_QUERY: &str = "SELECT {select_list}
-        FROM changes
-        JOIN items_old
-            ON changes.item_id = items_old.item_id
+    const VERSIONS_SQL_QUERY: &str = "SELECT {select_list}
+        FROM item_versions iv
+        JOIN items i ON i.item_id = iv.item_id
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -702,10 +688,10 @@ impl QueryImpl {
 
     const ALERTS_SQL_QUERY: &str = "SELECT {select_list}
         FROM alerts
-        JOIN items_old
-          ON alerts.item_id = items_old.item_id
+        JOIN items
+          ON alerts.item_id = items.item_id
         JOIN scans
-            on alerts.scan_id = scans.scan_id
+            ON alerts.scan_id = scans.scan_id
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -743,9 +729,12 @@ struct ItemsQueryRow {
     item_id: i64,
     root_id: i64,
     item_path: String,
+    item_name: String,
     item_type: ItemType,
-    last_scan: i64,
-    is_ts: bool,
+    version_id: i64,
+    first_scan_id: i64,
+    last_scan_id: i64,
+    is_deleted: bool,
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
@@ -762,76 +751,64 @@ impl ItemsQueryRow {
             item_id: row.get(0)?,
             root_id: row.get(1)?,
             item_path: row.get(2)?,
-            item_type: ItemType::from_i64(row.get(3)?),
-            last_scan: row.get(4)?,
-            is_ts: row.get(5)?,
-            access: Access::from_i64(row.get(6)?),
-            mod_date: row.get(7)?,
-            size: row.get(8)?,
-            last_hash_scan: row.get(9)?,
-            file_hash: row.get(10)?,
-            last_val_scan: row.get(11)?,
-            val: row.get(12)?,
-            val_error: row.get(13)?,
+            item_name: row.get(3)?,
+            item_type: ItemType::from_i64(row.get(4)?),
+            version_id: row.get(5)?,
+            first_scan_id: row.get(6)?,
+            last_scan_id: row.get(7)?,
+            is_deleted: row.get(8)?,
+            access: Access::from_i64(row.get(9)?),
+            mod_date: row.get(10)?,
+            size: row.get(11)?,
+            last_hash_scan: row.get(12)?,
+            file_hash: row.get(13)?,
+            last_val_scan: row.get(14)?,
+            val: row.get(15)?,
+            val_error: row.get(16)?,
         })
     }
 }
 
-pub struct ChangesQueryRow {
-    // changes properties
-    pub change_id: i64,
-    pub root_id: i64,
-    pub scan_id: i64,
-    pub item_id: i64,
-    pub item_path: String,
-    pub change_type: ChangeType,
-    pub access_old: Option<i64>,
-    pub access_new: Option<i64>,
-    pub is_undelete: Option<bool>,
-    pub meta_change: Option<bool>,
-    pub mod_date_old: Option<i64>,
-    pub mod_date_new: Option<i64>,
-    pub size_old: Option<i64>,
-    pub size_new: Option<i64>,
-    pub hash_change: Option<bool>,
-    pub last_hash_scan_old: Option<i64>,
-    pub hash_old: Option<String>,
-    pub hash_new: Option<String>,
-    pub val_change: Option<bool>,
-    pub last_val_scan_old: Option<i64>,
-    pub val_old: Option<i64>,
-    pub val_new: Option<i64>,
-    pub val_error_old: Option<String>,
-    pub val_error_new: Option<String>,
+struct VersionsQueryRow {
+    version_id: i64,
+    item_id: i64,
+    root_id: i64,
+    item_path: String,
+    item_name: String,
+    item_type: ItemType,
+    first_scan_id: i64,
+    last_scan_id: i64,
+    is_deleted: bool,
+    access: Access,
+    mod_date: Option<i64>,
+    size: Option<i64>,
+    last_hash_scan: Option<i64>,
+    file_hash: Option<String>,
+    last_val_scan: Option<i64>,
+    val: i64,
+    val_error: Option<String>,
 }
 
-impl ChangesQueryRow {
+impl VersionsQueryRow {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(ChangesQueryRow {
-            change_id: row.get(0)?,
-            root_id: row.get(1)?,
-            scan_id: row.get(2)?,
-            item_id: row.get(3)?,
-            item_path: row.get(4)?,
-            change_type: ChangeType::from_i64(row.get(5)?),
-            access_old: row.get(6)?,
-            access_new: row.get(7)?,
-            is_undelete: row.get(8)?,
-            meta_change: row.get(9)?,
-            mod_date_old: row.get(10)?,
-            mod_date_new: row.get(11)?,
-            size_old: row.get(12)?,
-            size_new: row.get(13)?,
-            hash_change: row.get(14)?,
-            last_hash_scan_old: row.get(15)?,
-            hash_old: row.get(16)?,
-            hash_new: row.get(17)?,
-            val_change: row.get(18)?,
-            last_val_scan_old: row.get(19)?,
-            val_old: row.get(20)?,
-            val_new: row.get(21)?,
-            val_error_old: row.get(22)?,
-            val_error_new: row.get(23)?,
+        Ok(VersionsQueryRow {
+            version_id: row.get(0)?,
+            item_id: row.get(1)?,
+            root_id: row.get(2)?,
+            item_path: row.get(3)?,
+            item_name: row.get(4)?,
+            item_type: ItemType::from_i64(row.get(5)?),
+            first_scan_id: row.get(6)?,
+            last_scan_id: row.get(7)?,
+            is_deleted: row.get(8)?,
+            access: Access::from_i64(row.get(9)?),
+            mod_date: row.get(10)?,
+            size: row.get(11)?,
+            last_hash_scan: row.get(12)?,
+            file_hash: row.get(13)?,
+            last_val_scan: row.get(14)?,
+            val: row.get(15)?,
+            val_error: row.get(16)?,
         })
     }
 }
@@ -1046,7 +1023,6 @@ impl QueryProcessor {
                 }
                 Rule::scan_state_filter
                 | Rule::item_type_filter
-                | Rule::change_type_filter
                 | Rule::alert_type_filter
                 | Rule::alert_status_filter
                 | Rule::val_filter

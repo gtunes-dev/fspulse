@@ -37,8 +37,8 @@ const SAMPLE_QUERIES = [
     query: 'alerts where alert_status:(O) show alert_type, item_path, created_at limit 15',
   },
   {
-    label: 'Changed to Invalid',
-    query: 'changes where val_change:(T), val_old:(I, N, U), val_new:(I) show root_id, scan_id, item_id, item_path, val_error_new order by item_path desc limit 20',
+    label: 'Deleted versions',
+    query: 'versions where is_deleted:(T) show item_path, item_type, first_scan_id, last_scan_id order by last_scan_id desc limit 20',
   },
 ]
 

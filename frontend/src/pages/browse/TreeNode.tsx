@@ -6,6 +6,7 @@ import type { FlatTreeItem } from '@/lib/pathUtils'
 interface TreeNodeProps {
   item: FlatTreeItem
   rootId: number
+  scanId: number
   onToggle?: (itemId: number) => void
   isLoading?: boolean
   /** When false, folders are not expandable (for flat search results) */
@@ -21,6 +22,7 @@ interface TreeNodeProps {
 export function TreeNode({
   item,
   rootId,
+  scanId,
   onToggle,
   isLoading = false,
   expandable = true,
@@ -105,6 +107,7 @@ export function TreeNode({
         itemType={item.item_type}
         isTombstone={item.is_deleted}
         rootId={rootId}
+        scanId={scanId}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />

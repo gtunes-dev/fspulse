@@ -1,5 +1,4 @@
 use crate::alerts::{AlertStatus, AlertType};
-use crate::changes::ChangeType;
 use crate::items::{Access, ItemType};
 use crate::query::columns::ColAlign;
 use crate::validate::validator::ValidationState;
@@ -88,13 +87,6 @@ impl Format {
         Ok(s.into())
     }
 
-    pub fn format_opt_bool(val: Option<bool>, format: Format) -> Result<String, FsPulseError> {
-        match val {
-            Some(val) => Self::format_bool(val, format),
-            None => Ok("-".into()),
-        }
-    }
-
     // $TODO format (need the root path)
     pub fn format_path(val: &str, format: Format) -> Result<String, FsPulseError> {
         match format {
@@ -114,17 +106,6 @@ impl Format {
         }
     }
 
-    pub fn format_change_type(
-        change_type: ChangeType,
-        format: Format,
-    ) -> Result<String, FsPulseError> {
-        match format {
-            Format::Short | Format::None => Ok(change_type.short_name().to_owned()),
-            Format::Full => Ok(change_type.full_name().to_owned()),
-            _ => Err(FsPulseError::Error("Invalid change_type format".into())),
-        }
-    }
-
     pub fn format_val(val: ValidationState, format: Format) -> Result<String, FsPulseError> {
         match format {
             Format::Short | Format::None => Ok(val.short_name().to_owned()),
@@ -132,16 +113,6 @@ impl Format {
             _ => Err(FsPulseError::Error(
                 "Invalid validation state format".into(),
             )),
-        }
-    }
-
-    pub fn format_opt_val(
-        val: Option<ValidationState>,
-        format: Format,
-    ) -> Result<String, FsPulseError> {
-        match val {
-            Some(val) => Self::format_val(val, format),
-            None => Ok("-".into()),
         }
     }
 
@@ -201,15 +172,6 @@ impl Format {
         }
     }
 
-    pub fn format_opt_access(
-        access: Option<Access>,
-        format: Format,
-    ) -> Result<String, FsPulseError> {
-        match access {
-            Some(access) => Self::format_access(access, format),
-            None => Ok("-".into()),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -317,7 +279,6 @@ impl Show {
                 | Rule::path_show
                 | Rule::val_show
                 | Rule::item_type_show
-                | Rule::change_type_show
                 | Rule::alert_type_show
                 | Rule::alert_status_show
                 | Rule::scan_state_show

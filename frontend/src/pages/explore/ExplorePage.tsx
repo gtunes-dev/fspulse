@@ -5,11 +5,11 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { RootsView } from './RootsView'
 import { ScansView } from './ScansView'
 import { ItemsView } from './ItemsView'
-import { ChangesView } from './ChangesView'
+import { VersionsView } from './VersionsView'
 import { AlertsView } from './AlertsView'
 import { QueryView } from './QueryView'
 
-const VALID_TABS = ['roots', 'scans', 'items', 'changes', 'alerts', 'query'] as const
+const VALID_TABS = ['roots', 'scans', 'items', 'versions', 'alerts', 'query'] as const
 type TabValue = typeof VALID_TABS[number]
 
 export function ExplorePage() {
@@ -54,8 +54,8 @@ export function ExplorePage() {
               <TabsTrigger value="items" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
                 Items
               </TabsTrigger>
-              <TabsTrigger value="changes" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Changes
+              <TabsTrigger value="versions" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                Versions
               </TabsTrigger>
               <TabsTrigger value="alerts" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
                 Alerts
@@ -80,8 +80,8 @@ export function ExplorePage() {
               <ItemsView />
             </div>
 
-            <div className={`flex-1 flex flex-col ${currentTab === 'changes' ? '' : 'hidden'}`}>
-              <ChangesView />
+            <div className={`flex-1 flex flex-col ${currentTab === 'versions' ? '' : 'hidden'}`}>
+              <VersionsView />
             </div>
 
             <div className={`flex-1 flex flex-col ${currentTab === 'alerts' ? '' : 'hidden'}`}>

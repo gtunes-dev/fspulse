@@ -226,6 +226,14 @@ impl WebServer {
                 "/api/items/{item_id}/size-history",
                 get(api::items::get_item_size_history),
             )
+            .route(
+                "/api/items/{item_id}/version-history",
+                get(api::items::get_version_history),
+            )
+            .route(
+                "/api/items/{item_id}/children-counts",
+                get(api::items::get_children_counts),
+            )
             // Temporal model item endpoints
             .route(
                 "/api/items/immediate-children",
@@ -236,10 +244,6 @@ impl WebServer {
                 get(api::items::search_items),
             )
             // Old model item endpoints (to be removed at cutover)
-            .route(
-                "/api/old_items/{item_id}/children-counts",
-                get(api::items::old_get_children_counts),
-            )
             .route(
                 "/api/old_items/immediate-children",
                 get(api::items::old_get_immediate_children),
