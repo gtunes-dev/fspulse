@@ -10,9 +10,12 @@ interface FileTreeViewProps {
   rootPath: string
   scanId: number
   showDeleted: boolean
+  isActive?: boolean
+  selectedItemId?: number | null
+  onItemSelect?: (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }) => void
 }
 
-export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTreeViewProps) {
+export function FileTreeView({ rootId, rootPath, scanId, showDeleted, isActive = true, selectedItemId, onItemSelect }: FileTreeViewProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,6 +44,8 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
   })
 
   useEffect(() => {
+    if (!isActive) return
+
     // Create a unique key for this root+scan combination
     const loadKey = `${rootId}:${rootPath}:${scanId}`
 
@@ -74,6 +79,8 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
           item_name: string
           item_type: string
           is_deleted: boolean
+          size: number | null
+          mod_date: number | null
         }>
 
         // Transform to TreeNodeData
@@ -83,6 +90,8 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
           item_name: item.item_name,
           item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
           is_deleted: item.is_deleted,
+          size: item.size,
+          mod_date: item.mod_date,
           name: item.item_name,
         }))
 
@@ -101,11 +110,11 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
     }
 
     loadRootLevelItems()
-  }, [rootId, rootPath, scanId, initializeTree])
+  }, [isActive, rootId, rootPath, scanId, initializeTree])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
+      <div className="flex items-center justify-center h-full text-muted-foreground">
         Loading file tree...
       </div>
     )
@@ -113,7 +122,7 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64 text-red-600">
+      <div className="flex items-center justify-center h-full text-red-600">
         {error}
       </div>
     )
@@ -121,7 +130,7 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
 
   if (visibleItems.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
+      <div className="flex items-center justify-center h-full text-muted-foreground">
         No items found in this root
       </div>
     )
@@ -130,8 +139,7 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
   return (
     <div
       ref={parentRef}
-      className="border border-border rounded-lg p-4 overflow-auto"
-      style={{ height: '600px' }}
+      className="h-full p-4 overflow-auto"
     >
       <div
         style={{
@@ -156,10 +164,10 @@ export function FileTreeView({ rootId, rootPath, scanId, showDeleted }: FileTree
             >
               <TreeNode
                 item={item}
-                rootId={rootId}
-                scanId={scanId}
                 onToggle={toggleNode}
                 isLoading={isNodeLoading(item.item_id)}
+                onItemSelect={onItemSelect}
+                isSelected={selectedItemId === item.item_id}
               />
             </div>
           )

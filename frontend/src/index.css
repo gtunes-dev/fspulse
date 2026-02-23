@@ -104,3 +104,99 @@
     transform: translateX(100%);
   }
 }
+
+/* Breadcrumb ribbon — arrow-shaped segments with chevron separators.
+   All dimensions derived from --bc-height so triangles stay centered. */
+.breadcrumb-ribbon {
+  --bc-height: 2.5rem;
+  --bc-arrow: calc(var(--bc-height) / 2);
+  display: flex;
+  align-items: center;
+}
+
+.breadcrumb-ribbon > * {
+  margin-right: 0.25rem;
+}
+
+.breadcrumb-ribbon > *:last-child {
+  margin-right: 0;
+}
+
+.breadcrumb-segment {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: var(--bc-height);
+  padding: 0 0.625rem 0 calc(var(--bc-arrow) + 0.5rem);
+  position: relative;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  cursor: pointer;
+  border: none;
+  border-radius: 0;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* Right-pointing arrow */
+.breadcrumb-segment::after {
+  content: "";
+  position: absolute;
+  right: calc(-1 * var(--bc-arrow));
+  top: 0;
+  z-index: 5;
+  border-top: var(--bc-arrow) solid transparent;
+  border-bottom: var(--bc-arrow) solid transparent;
+  border-left: var(--bc-arrow) solid var(--muted);
+  transition: border-left-color 0.15s ease;
+}
+
+/* Left V-notch in card background color */
+.breadcrumb-segment::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  border-top: var(--bc-arrow) solid transparent;
+  border-bottom: var(--bc-arrow) solid transparent;
+  border-left: var(--bc-arrow) solid var(--card);
+  transition: border-left-color 0.15s ease;
+}
+
+/* First segment: pill-shaped left edge, no notch */
+.breadcrumb-segment:first-child {
+  border-top-left-radius: var(--bc-arrow);
+  border-bottom-left-radius: var(--bc-arrow);
+  padding-left: 0.75rem;
+}
+
+.breadcrumb-segment:first-child::before {
+  display: none;
+}
+
+/* Last segment: pill-shaped right edge, no arrow, current location styling */
+.breadcrumb-segment:last-child {
+  border-top-right-radius: var(--bc-arrow);
+  border-bottom-right-radius: var(--bc-arrow);
+  padding-right: 0.75rem;
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.breadcrumb-segment:last-child::after {
+  display: none;
+}
+
+/* Hover on non-current (navigable) segments */
+.breadcrumb-segment:not(:last-child):hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.breadcrumb-segment:not(:last-child):hover::after {
+  border-left-color: var(--primary);
+}

@@ -90,6 +90,8 @@ pub struct ItemResponse {
     pub item_name: String,
     pub item_type: String,
     pub is_deleted: bool,
+    pub size: Option<i64>,
+    pub mod_date: Option<i64>,
 }
 
 /// GET /api/items/immediate-children?root_id=X&parent_path=/path&scan_id=Y
@@ -109,6 +111,8 @@ pub async fn get_immediate_children(
                     item_name: item.item_name.clone(),
                     item_type: item.item_type.short_name().to_string(),
                     is_deleted: item.is_deleted,
+                    size: item.size,
+                    mod_date: item.mod_date,
                 })
                 .collect();
             Ok(Json(response))
@@ -150,6 +154,8 @@ pub async fn search_items(
                     item_name: item.item_name.clone(),
                     item_type: item.item_type.short_name().to_string(),
                     is_deleted: item.is_deleted,
+                    size: item.size,
+                    mod_date: item.mod_date,
                 })
                 .collect();
             Ok(Json(response))

@@ -9,6 +9,9 @@ interface SearchResultsListProps {
   scanId: number
   searchQuery: string
   showDeleted: boolean
+  isActive?: boolean
+  selectedItemId?: number | null
+  onItemSelect?: (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }) => void
 }
 
 export function SearchResultsList({
@@ -17,6 +20,9 @@ export function SearchResultsList({
   scanId,
   searchQuery,
   showDeleted,
+  isActive = true,
+  selectedItemId,
+  onItemSelect,
 }: SearchResultsListProps) {
   const [results, setResults] = useState<FlatTreeItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -26,7 +32,14 @@ export function SearchResultsList({
   // Track last request to avoid stale responses
   const requestIdRef = useRef(0)
 
+  const lastFetchKeyRef = useRef<string | null>(null)
   useEffect(() => {
+    if (!isActive) return
+
+    const fetchKey = `${rootId}:${scanId}:${searchQuery}`
+    if (lastFetchKeyRef.current === fetchKey) return
+    lastFetchKeyRef.current = fetchKey
+
     const currentRequestId = ++requestIdRef.current
 
     async function search() {
@@ -53,6 +66,8 @@ export function SearchResultsList({
           item_name: string
           item_type: string
           is_deleted: boolean
+          size: number | null
+          mod_date: number | null
         }>
 
         const flatItems: FlatTreeItem[] = items.map((item) => ({
@@ -61,6 +76,8 @@ export function SearchResultsList({
           item_name: item.item_name,
           item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
           is_deleted: item.is_deleted,
+          size: item.size,
+          mod_date: item.mod_date,
           depth: 0,
           isExpanded: false,
           childrenLoaded: false,
@@ -70,6 +87,7 @@ export function SearchResultsList({
         setResults(flatItems)
       } catch (err) {
         if (currentRequestId !== requestIdRef.current) return
+        lastFetchKeyRef.current = null // Allow retry on error
         setError(err instanceof Error ? err.message : 'Search failed')
         console.error('Search error:', err)
       } finally {
@@ -80,7 +98,7 @@ export function SearchResultsList({
     }
 
     search()
-  }, [rootId, scanId, searchQuery])
+  }, [isActive, rootId, scanId, searchQuery])
 
   // Filter deleted items client-side
   const visibleResults = showDeleted
@@ -96,7 +114,7 @@ export function SearchResultsList({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
+      <div className="flex items-center justify-center h-full text-muted-foreground">
         Searching...
       </div>
     )
@@ -104,7 +122,7 @@ export function SearchResultsList({
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64 text-red-600">
+      <div className="flex items-center justify-center h-full text-red-600">
         {error}
       </div>
     )
@@ -112,7 +130,7 @@ export function SearchResultsList({
 
   if (visibleResults.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
+      <div className="flex items-center justify-center h-full text-muted-foreground">
         No results found
       </div>
     )
@@ -138,8 +156,7 @@ export function SearchResultsList({
   return (
     <div
       ref={parentRef}
-      className="border border-border rounded-lg p-4 overflow-auto"
-      style={{ height: '600px' }}
+      className="h-full p-4 overflow-auto"
     >
       <div
         style={{
@@ -165,10 +182,10 @@ export function SearchResultsList({
               <div className="flex flex-col">
                 <TreeNode
                   item={item}
-                  rootId={rootId}
-                  scanId={scanId}
                   expandable={false}
                   showPathTooltip={true}
+                  onItemSelect={onItemSelect}
+                  isSelected={selectedItemId === item.item_id}
                 />
                 <span className="text-xs text-muted-foreground pl-14 -mt-1">
                   {getParentPath(item.item_path)}

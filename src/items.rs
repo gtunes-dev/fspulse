@@ -98,6 +98,8 @@ pub struct TemporalTreeItem {
     pub item_name: String,
     pub item_type: ItemType,
     pub is_deleted: bool,
+    pub size: Option<i64>,
+    pub mod_date: Option<i64>,
 }
 
 /// Get immediate children at a point in time using items + item_versions.
@@ -117,7 +119,8 @@ pub fn get_temporal_immediate_children(
     };
 
     let sql = format!(
-        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, iv.is_deleted
+        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, iv.is_deleted,
+                iv.size, iv.mod_date
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          WHERE i.root_id = ?1
@@ -145,6 +148,8 @@ pub fn get_temporal_immediate_children(
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
                 is_deleted: row.get(4)?,
+                size: row.get(5)?,
+                mod_date: row.get(6)?,
             })
         },
     )?;
@@ -165,7 +170,8 @@ pub fn search_temporal_items(
     let conn = Database::get_connection()?;
 
     let sql =
-        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, iv.is_deleted
+        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, iv.is_deleted,
+                iv.size, iv.mod_date
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          WHERE i.root_id = ?1
@@ -190,6 +196,8 @@ pub fn search_temporal_items(
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
                 is_deleted: row.get(4)?,
+                size: row.get(5)?,
+                mod_date: row.get(6)?,
             })
         },
     )?;

@@ -17,6 +17,8 @@ interface ImmediateChildrenResponse {
   item_name: string
   item_type: string
   is_deleted: boolean
+  size: number | null
+  mod_date: number | null
 }
 
 /**
@@ -52,6 +54,8 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       item_name: item.item_name,
       item_type: item.item_type,
       is_deleted: item.is_deleted,
+      size: item.size,
+      mod_date: item.mod_date,
       depth: 0,
       isExpanded: false,
       childrenLoaded: false,
@@ -149,6 +153,8 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         item_name: item.item_name,
         item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
         is_deleted: item.is_deleted,
+        size: item.size,
+        mod_date: item.mod_date,
         name: item.item_name,
       }))
 
@@ -176,6 +182,8 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
           item_name: child.item_name,
           item_type: child.item_type,
           is_deleted: child.is_deleted,
+          size: child.size,
+          mod_date: child.mod_date,
           depth: parentDepth + 1,
           isExpanded: false,
           childrenLoaded: false,

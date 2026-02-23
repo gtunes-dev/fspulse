@@ -40,3 +40,23 @@ export function formatFileSize(bytes: number | null): string {
 
   return `${decimalPart} (${binaryPart})`
 }
+
+/**
+ * Compact file size format for table columns.
+ * Example: 754451 bytes -> "754 KB"
+ */
+export function formatFileSizeCompact(bytes: number | null): string {
+  if (bytes === null) return '\u2014'
+  if (bytes === 0) return '0 B'
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = bytes
+  let index = 0
+  while (size >= 1000 && index < units.length - 1) {
+    size /= 1000
+    index++
+  }
+
+  if (index === 0) return `${bytes} B`
+  return `${size.toFixed(1)} ${units[index]}`
+}

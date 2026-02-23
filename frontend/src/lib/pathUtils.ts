@@ -6,6 +6,8 @@ export interface ItemData {
   item_name: string // Filename/directory name (from backend using @name format)
   item_type: 'F' | 'D' | 'S' | 'O' // File, Directory, Symlink, Other
   is_deleted: boolean
+  size?: number | null
+  mod_date?: number | null
 }
 
 /**
@@ -18,6 +20,8 @@ export interface FlatTreeItem {
   item_name: string
   item_type: 'F' | 'D' | 'S' | 'O'
   is_deleted: boolean
+  size?: number | null
+  mod_date?: number | null
   depth: number
   isExpanded: boolean
   childrenLoaded: boolean

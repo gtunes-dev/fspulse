@@ -1,18 +1,28 @@
-import { useState } from 'react'
-import { ChevronRight, ChevronDown, Folder, FolderOpen, File, Trash2 } from 'lucide-react'
-import { ItemDetailSheet } from '@/components/shared/ItemDetailSheet'
+import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileSymlink, FileQuestion, Trash2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { FlatTreeItem } from '@/lib/pathUtils'
 
 interface TreeNodeProps {
   item: FlatTreeItem
-  rootId: number
-  scanId: number
   onToggle?: (itemId: number) => void
   isLoading?: boolean
   /** When false, folders are not expandable (for flat search results) */
   expandable?: boolean
   /** When true, shows full path as tooltip (for search results) */
   showPathTooltip?: boolean
+  /** Called when user clicks to select/inspect an item */
+  onItemSelect?: (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }) => void
+  /** Whether this node is the currently selected item */
+  isSelected?: boolean
+}
+
+function getFileIcon(type: string, deleted: boolean) {
+  const colorClass = deleted ? 'text-muted-foreground' : 'text-muted-foreground'
+  switch (type) {
+    case 'S': return <FileSymlink className={cn('h-4 w-4 flex-shrink-0', colorClass)} />
+    case 'O': return <FileQuestion className={cn('h-4 w-4 flex-shrink-0', colorClass)} />
+    default: return <File className={cn('h-4 w-4 flex-shrink-0', colorClass)} />
+  }
 }
 
 /**
@@ -21,17 +31,20 @@ interface TreeNodeProps {
  */
 export function TreeNode({
   item,
-  rootId,
-  scanId,
   onToggle,
   isLoading = false,
   expandable = true,
-  showPathTooltip = false
+  showPathTooltip = false,
+  onItemSelect,
+  isSelected = false,
 }: TreeNodeProps) {
-  const [sheetOpen, setSheetOpen] = useState(false)
-
   const handleItemClick = () => {
-    setSheetOpen(true)
+    onItemSelect?.({
+      itemId: item.item_id,
+      itemPath: item.item_path,
+      itemType: item.item_type,
+      isTombstone: item.is_deleted,
+    })
   }
 
   const handleToggle = () => {
@@ -41,19 +54,14 @@ export function TreeNode({
   }
 
   const paddingLeft = item.depth * 20 + 8
-
-  // Shared styling for tombstones (deleted items)
-  const tombstoneClass = item.is_deleted ? 'text-muted-foreground' : ''
-  const textClass = item.is_deleted ? 'line-through' : ''
+  const folderColor = item.is_deleted ? 'text-muted-foreground' : 'text-blue-500'
 
   // Render directory icon - expandable (button with chevron) or static (just folder icon)
   const DirectoryIcon = () => {
     if (!expandable) {
-      // Static folder icon for flat search results
-      return <Folder className="h-4 w-4 flex-shrink-0" />
+      return <Folder className={cn('h-4 w-4 flex-shrink-0', folderColor)} />
     }
 
-    // Expandable folder with chevron toggle
     return (
       <button
         onClick={handleToggle}
@@ -69,48 +77,37 @@ export function TreeNode({
           <ChevronRight className="h-4 w-4 flex-shrink-0" />
         )}
         {item.isExpanded ? (
-          <FolderOpen className="h-4 w-4 flex-shrink-0" />
+          <FolderOpen className={cn('h-4 w-4 flex-shrink-0', folderColor)} />
         ) : (
-          <Folder className="h-4 w-4 flex-shrink-0" />
+          <Folder className={cn('h-4 w-4 flex-shrink-0', folderColor)} />
         )}
       </button>
     )
   }
 
-  // Render file icon
-  const FileIcon = () => <File className="h-4 w-4 flex-shrink-0" />
-
   return (
-    <>
-      <div
-        className={`flex items-center gap-2 p-2 hover:bg-accent rounded ${tombstoneClass}`}
-        style={{ paddingLeft: `${paddingLeft}px` }}
+    <div
+      className={cn(
+        'flex items-center gap-2 p-2 hover:bg-accent rounded',
+        item.is_deleted && 'text-muted-foreground',
+        isSelected && 'bg-accent',
+      )}
+      style={{ paddingLeft: `${paddingLeft}px` }}
+    >
+      {item.hasChildren ? <DirectoryIcon /> : getFileIcon(item.item_type, item.is_deleted)}
+      <span
+        className={cn('cursor-pointer', item.is_deleted && 'line-through')}
+        onClick={handleItemClick}
+        title={showPathTooltip ? item.item_path : undefined}
       >
-        {item.hasChildren ? <DirectoryIcon /> : <FileIcon />}
-        <span
-          className={`cursor-pointer ${textClass}`}
-          onClick={handleItemClick}
-          title={showPathTooltip ? item.item_path : undefined}
-        >
-          {item.item_name}
-        </span>
-        {item.is_deleted && (
-          <Trash2
-            className="h-4 w-4 flex-shrink-0 ml-2 text-muted-foreground"
-            aria-label="Deleted item"
-          />
-        )}
-      </div>
-      <ItemDetailSheet
-        itemId={item.item_id}
-        itemPath={item.item_path}
-        itemType={item.item_type}
-        isTombstone={item.is_deleted}
-        rootId={rootId}
-        scanId={scanId}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-      />
-    </>
+        {item.item_name}
+      </span>
+      {item.is_deleted && (
+        <Trash2
+          className="h-4 w-4 flex-shrink-0 ml-2 text-muted-foreground"
+          aria-label="Deleted item"
+        />
+      )}
+    </div>
   )
 }
