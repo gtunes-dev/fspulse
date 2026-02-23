@@ -221,6 +221,14 @@ impl WebServer {
                 "/api/scans/resolve",
                 get(api::scans::resolve_scan),
             )
+            .route(
+                "/api/scans/scan_dates",
+                get(api::scans::get_scan_dates),
+            )
+            .route(
+                "/api/scans/by_date",
+                get(api::scans::get_scans_by_date),
+            )
             // Item endpoints
             .route(
                 "/api/items/{item_id}/size-history",

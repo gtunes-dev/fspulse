@@ -101,6 +101,18 @@ export function formatDateShort(timestampSeconds: number): string {
 }
 
 /**
+ * Format timestamp as time only: "1:30 PM"
+ * Used for: ScanPicker scan list within a date
+ */
+export function formatTime(timestampSeconds: number): string {
+  const date = new Date(timestampSeconds * 1000)
+  return date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/**
  * Format timestamp as compact date: "d MMM yyyy" (e.g. "1 Dec 2024")
  * Used for: Scan references throughout the UI
  */

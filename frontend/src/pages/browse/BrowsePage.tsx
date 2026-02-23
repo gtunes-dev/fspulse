@@ -5,7 +5,7 @@ import { RootCard } from '@/components/shared/RootCard'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { FileTreeView } from './FileTreeView'
 import { SearchResultsList } from './SearchResultsList'
-import { ScanDatePicker } from './ScanDatePicker'
+import { ScanPicker } from '@/components/shared/ScanPicker'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 
@@ -130,34 +130,33 @@ export function BrowsePage() {
         roots={roots}
         selectedRootId={selectedRootId}
         onRootChange={setSelectedRootId}
-        actionBar={
-          <>
-            {selectedRoot && (
-              <ScanDatePicker
-                rootId={selectedRoot.root_id}
-                onScanResolved={handleScanResolved}
-                onNoScan={handleNoScan}
-              />
-            )}
-
-            <SearchFilter
-              value={newSearchFilter}
-              onChange={setNewSearchFilter}
-            />
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="show-deleted-new"
-                checked={showDeleted}
-                onCheckedChange={(checked) => setShowDeleted(checked === true)}
-              />
-              <Label htmlFor="show-deleted-new" className="text-sm font-medium cursor-pointer">
-                Show deleted
-              </Label>
-            </div>
-          </>
-        }
       >
+        {selectedRoot && (
+          <ScanPicker
+            rootId={selectedRoot.root_id}
+            onScanResolved={handleScanResolved}
+            onNoScan={handleNoScan}
+          />
+        )}
+
+        <div className="flex items-center gap-4">
+          <SearchFilter
+            value={newSearchFilter}
+            onChange={setNewSearchFilter}
+          />
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="show-deleted-new"
+              checked={showDeleted}
+              onCheckedChange={(checked) => setShowDeleted(checked === true)}
+            />
+            <Label htmlFor="show-deleted-new" className="text-sm font-medium cursor-pointer">
+              Show deleted
+            </Label>
+          </div>
+        </div>
+
         {selectedRoot && resolvedScanId ? (
           <>
             {/* Tree View - hidden when searching */}

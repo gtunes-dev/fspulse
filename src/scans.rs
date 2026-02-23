@@ -3,6 +3,7 @@ use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::undo_log::UndoLog;
 
+use chrono::{Local, NaiveDate, TimeZone, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::Serialize;
 
@@ -785,6 +786,107 @@ impl ScanStats {
 
         Self::get_for_scan(conn, scan.scan_id())
     }
+}
+
+/// Compact scan summary for the ScanPicker component
+#[derive(Debug, Clone, Serialize)]
+pub struct ScanSummary {
+    pub scan_id: i64,
+    pub started_at: i64,
+    pub add_count: Option<i64>,
+    pub modify_count: Option<i64>,
+    pub delete_count: Option<i64>,
+}
+
+/// Get the distinct local-date strings (YYYY-MM-DD) that have completed scans
+/// for a given root within a calendar month.
+pub fn get_scan_dates_for_month(
+    conn: &Connection,
+    root_id: i64,
+    year: i32,
+    month: u32,
+) -> Result<Vec<String>, FsPulseError> {
+    use chrono::Datelike;
+
+    let first_day = NaiveDate::from_ymd_opt(year, month, 1).ok_or_else(|| {
+        FsPulseError::Error(format!("Invalid year/month: {year}-{month}"))
+    })?;
+    let last_day = if month == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 1, 1)
+    }
+    .unwrap()
+    .pred_opt()
+    .unwrap();
+
+    let first_str = first_day.format("%Y-%m-%d").to_string();
+    let last_str = last_day.format("%Y-%m-%d").to_string();
+    let (start_ts, end_ts) = crate::utils::Utils::range_date_bounds(&first_str, &last_str)?;
+
+    let mut stmt = conn.prepare(
+        "SELECT started_at FROM scans
+         WHERE root_id = ? AND state = 4 AND started_at >= ? AND started_at <= ?
+         ORDER BY started_at",
+    )?;
+
+    let timestamps: Vec<i64> = stmt
+        .query_map(params![root_id, start_ts, end_ts], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Convert UTC timestamps to local dates and deduplicate
+    let mut dates: Vec<String> = Vec::new();
+    for ts in timestamps {
+        let dt = Utc
+            .timestamp_opt(ts, 0)
+            .single()
+            .ok_or_else(|| FsPulseError::Error(format!("Invalid timestamp: {ts}")))?;
+        let local = dt.with_timezone(&Local);
+        let date_str = format!(
+            "{:04}-{:02}-{:02}",
+            local.year(),
+            local.month(),
+            local.day()
+        );
+        if dates.last().map_or(true, |last| last != &date_str) {
+            dates.push(date_str);
+        }
+    }
+
+    Ok(dates)
+}
+
+/// Get all completed scans for a root on a specific local date, most recent first.
+pub fn get_scans_for_date(
+    conn: &Connection,
+    root_id: i64,
+    date_str: &str,
+) -> Result<Vec<ScanSummary>, FsPulseError> {
+    let (start_ts, end_ts) = crate::utils::Utils::single_date_bounds(date_str)?;
+
+    let mut stmt = conn.prepare(
+        "SELECT scan_id, started_at, add_count, modify_count, delete_count
+         FROM scans
+         WHERE root_id = ? AND state = 4 AND started_at >= ? AND started_at <= ?
+         ORDER BY started_at DESC",
+    )?;
+
+    let rows = stmt.query_map(params![root_id, start_ts, end_ts], |row| {
+        Ok(ScanSummary {
+            scan_id: row.get(0)?,
+            started_at: row.get(1)?,
+            add_count: row.get(2)?,
+            modify_count: row.get(3)?,
+            delete_count: row.get(4)?,
+        })
+    })?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
 }
 
 /// Scan history row for the scan history table

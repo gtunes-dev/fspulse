@@ -265,6 +265,79 @@ pub async fn get_scan_history_fetch(
     Ok(Json(ScanHistoryFetchResponse { scans }))
 }
 
+/// Query parameters for scan dates within a month
+#[derive(Debug, Deserialize)]
+pub struct ScanDatesParams {
+    pub root_id: i64,
+    pub year: i32,
+    pub month: u32,
+}
+
+/// Response structure for scan dates
+#[derive(Debug, Serialize)]
+pub struct ScanDatesResponse {
+    pub dates: Vec<String>,
+}
+
+/// GET /api/scans/scan_dates?root_id=X&year=YYYY&month=MM
+/// Returns distinct local dates within a month that have completed scans for the root.
+pub async fn get_scan_dates(
+    Query(params): Query<ScanDatesParams>,
+) -> Result<Json<ScanDatesResponse>, (StatusCode, String)> {
+    let conn = Database::get_connection().map_err(|e| {
+        error!("Database error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?;
+
+    let dates =
+        crate::scans::get_scan_dates_for_month(&conn, params.root_id, params.year, params.month)
+            .map_err(|e| {
+                error!(
+                    "Failed to get scan dates for root_id={}, {}-{}: {}",
+                    params.root_id, params.year, params.month, e
+                );
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?;
+
+    Ok(Json(ScanDatesResponse { dates }))
+}
+
+/// Query parameters for scans on a specific date
+#[derive(Debug, Deserialize)]
+pub struct ScansByDateParams {
+    pub root_id: i64,
+    pub date: String,
+}
+
+/// Response structure for scans by date
+#[derive(Debug, Serialize)]
+pub struct ScansByDateResponse {
+    pub scans: Vec<crate::scans::ScanSummary>,
+}
+
+/// GET /api/scans/by_date?root_id=X&date=YYYY-MM-DD
+/// Returns all completed scans for a root on a specific date, most recent first.
+pub async fn get_scans_by_date(
+    Query(params): Query<ScansByDateParams>,
+) -> Result<Json<ScansByDateResponse>, (StatusCode, String)> {
+    let conn = Database::get_connection().map_err(|e| {
+        error!("Database error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?;
+
+    let scans = crate::scans::get_scans_for_date(&conn, params.root_id, &params.date).map_err(
+        |e| {
+            error!(
+                "Failed to get scans for root_id={}, date={}: {}",
+                params.root_id, params.date, e
+            );
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        },
+    )?;
+
+    Ok(Json(ScansByDateResponse { scans }))
+}
+
 /// Query parameters for scan resolution
 #[derive(Debug, Deserialize)]
 pub struct ResolveScanParams {
