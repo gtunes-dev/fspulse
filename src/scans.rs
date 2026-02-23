@@ -849,7 +849,7 @@ pub fn get_scan_dates_for_month(
             local.month(),
             local.day()
         );
-        if dates.last().map_or(true, |last| last != &date_str) {
+        if dates.last() != Some(&date_str) {
             dates.push(date_str);
         }
     }
