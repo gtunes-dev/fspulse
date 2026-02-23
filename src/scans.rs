@@ -824,7 +824,7 @@ pub fn get_scan_dates_for_month(
     let last_str = last_day.format("%Y-%m-%d").to_string();
     let (start_ts, end_ts) = crate::utils::Utils::range_date_bounds(&first_str, &last_str)?;
 
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare_cached(
         "SELECT started_at FROM scans
          WHERE root_id = ? AND state = 4 AND started_at >= ? AND started_at <= ?
          ORDER BY started_at",
@@ -865,7 +865,7 @@ pub fn get_scans_for_date(
 ) -> Result<Vec<ScanSummary>, FsPulseError> {
     let (start_ts, end_ts) = crate::utils::Utils::single_date_bounds(date_str)?;
 
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare_cached(
         "SELECT scan_id, started_at, add_count, modify_count, delete_count
          FROM scans
          WHERE root_id = ? AND state = 4 AND started_at >= ? AND started_at <= ?
@@ -943,7 +943,7 @@ pub fn get_scan_history(
     let mut result = Vec::new();
 
     if let Some(root_id) = root_id {
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT
                 s.scan_id,
                 s.root_id,
@@ -983,7 +983,7 @@ pub fn get_scan_history(
             result.push(row?);
         }
     } else {
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT
                 s.scan_id,
                 s.root_id,

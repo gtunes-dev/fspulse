@@ -163,7 +163,7 @@ pub async fn get_roots_with_scans(
 
     // Query all roots
     let mut stmt = conn
-        .prepare("SELECT root_id, root_path FROM roots ORDER BY root_path COLLATE natural_path")
+        .prepare_cached("SELECT root_id, root_path FROM roots ORDER BY root_path COLLATE natural_path")
         .map_err(|e| {
             error!("Failed to prepare query: {}", e);
             (

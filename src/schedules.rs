@@ -1516,7 +1516,7 @@ pub struct ScheduleWithRoot {
 pub fn list_schedules() -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
     let conn = Database::get_connection()?;
 
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare_cached(
         "SELECT
             s.schedule_id, s.root_id, s.enabled, s.schedule_name, s.schedule_type,
             s.time_of_day, s.days_of_week, s.day_of_month,

@@ -401,7 +401,7 @@ impl AnalysisItem {
                     THEN 1 ELSE 0 END), 0) AS total_done
             FROM candidates"#;
 
-        let mut stmt = conn.prepare(sql)?;
+        let mut stmt = conn.prepare_cached(sql)?;
         let mut rows = stmt.query(params![
             analysis_spec.is_hash() as i64,
             analysis_spec.hash_all() as i64,

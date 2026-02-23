@@ -53,7 +53,7 @@ pub fn get_size_history(
           AND s.started_at BETWEEN ? AND ?
         ORDER BY s.started_at ASC"#;
 
-    let mut stmt = conn.prepare(sql)?;
+    let mut stmt = conn.prepare_cached(sql)?;
     let rows = stmt.query_map(
         params![item_id, from_timestamp, to_timestamp],
         SizeHistoryPoint::from_row,
@@ -179,7 +179,7 @@ pub fn search_temporal_items(
          ORDER BY i.item_path COLLATE natural_path ASC
          LIMIT 200";
 
-    let mut stmt = conn.prepare(sql)?;
+    let mut stmt = conn.prepare_cached(sql)?;
 
     let rows = stmt.query_map(
         params![root_id, scan_id, query],
@@ -425,7 +425,7 @@ pub fn get_children_counts(
           AND (i.item_type = 0 OR i.item_type = 1)
         GROUP BY i.item_type"#;
 
-    let mut stmt = conn.prepare(sql)?;
+    let mut stmt = conn.prepare_cached(sql)?;
     let rows = stmt.query_map(params![root_id, scan_id, path_prefix, parent_path], |row| {
         let item_type: i64 = row.get(0)?;
         let count: i64 = row.get(1)?;
