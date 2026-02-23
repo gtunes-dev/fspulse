@@ -4,18 +4,22 @@
 /// SQLite collations to achieve human-friendly sorting of file paths.
 use std::cmp::Ordering;
 use std::path::Path;
-use icu_collator::{Collator, CollatorOptions, Strength, Numeric};
+use icu_collator::{Collator, CollatorBorrowed, CollatorPreferences};
+use icu_collator::options::{CollatorOptions, Strength};
+use icu_collator::preferences::CollationNumericOrdering;
 
 /// Create a collator for path segment comparison.
 /// Configured with:
 /// - Numeric ordering: treats digit sequences as numbers (file2 < file10)
 /// - Primary strength: case-insensitive comparison
-fn get_collator() -> Collator {
-    let mut options = CollatorOptions::new();
-    options.strength = Some(Strength::Primary); // Case-insensitive
-    options.numeric = Some(Numeric::On); // Natural number ordering
+fn get_collator() -> CollatorBorrowed<'static> {
+    let mut prefs = CollatorPreferences::default();
+    prefs.numeric_ordering = Some(CollationNumericOrdering::True);
 
-    Collator::try_new(Default::default(), options)
+    let mut options = CollatorOptions::default();
+    options.strength = Some(Strength::Primary); // Case-insensitive
+
+    Collator::try_new(prefs, options)
         .expect("Failed to create ICU collator")
 }
 
