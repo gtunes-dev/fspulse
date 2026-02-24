@@ -120,11 +120,12 @@ fspulse serve
 Then open your browser to **http://localhost:8080** to access the web interface.
 
 FsPulse is a **web-first application**. All functionality is available through the web UI:
-- Root management (create, view, delete roots)
-- Scan scheduling and initiation with real-time progress
-- Interactive data browsing and exploration
-- Powerful query interface
-- Alert management
+- Task monitoring and scan management with real-time progress
+- Root and schedule management
+- Interactive browsing with tree, folder, and search views
+- Point-in-time filesystem snapshots and comparison
+- Powerful query interface across five data domains
+- Alert management and configuration
 
 ### Configuration
 

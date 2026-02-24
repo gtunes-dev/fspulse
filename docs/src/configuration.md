@@ -2,6 +2,8 @@
 
 FsPulse supports persistent, user-defined configuration through a file named `config.toml`. This file allows you to control logging behavior, analysis settings, server configuration, and more.
 
+> **Web UI**: Most configuration settings can also be viewed and edited through the [Settings](web_ui/settings.md) page in the web interface, which shows the active value and its source (default, config file, or environment variable).
+
 > **📦 Docker Users**: If you're running FsPulse in Docker, see the [Docker Deployment](docker.md) chapter for Docker-specific configuration including environment variable overrides and volume management.
 
 ---
@@ -175,7 +177,7 @@ Configure scan behavior and performance:
 
 | Variable | Default | Valid Values | Description |
 |----------|---------|--------------|-------------|
-| `FSPULSE_ANALYSIS_THREADS` | `8` | 1-256 | Number of worker threads for analysis phase (hashing/validation) |
+| `FSPULSE_ANALYSIS_THREADS` | `8` | 1-24 | Number of worker threads for analysis phase (hashing/validation) |
 
 **Examples:**
 ```bash

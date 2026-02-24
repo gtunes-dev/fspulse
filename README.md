@@ -50,12 +50,13 @@ Whether you're managing storage capacity, tracking project evolution, or ensurin
 ## 🚀 Key Capabilities
 
 - **Continuous Monitoring** — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically
+- **Temporal Versioning** — Every item's state is tracked over time; browse your filesystem as it appeared at any past scan
 - **Size & Growth Tracking** — Monitor directory sizes and visualize storage trends over time with dual-format units
-- **Change Detection** — Track all file additions, modifications, and deletions with complete historical records
+- **Change Detection** — Track all file additions, modifications, and deletions through version history
 - **Integrity Verification** — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types
 - **Historical Analysis** — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts
 - **Alert System** — Suspicious hash changes and validation failures flagged immediately with status management
-- **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing your filesystem data
+- **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing across five data domains
 - **Web-First Design** — Elegant web UI for all operations including scanning, browsing, querying, and configuration
 
 ---
@@ -68,7 +69,7 @@ Quick start instructions are below, but full documentation is available in book 
 
 Key sections:
 - [Getting Started](https://gtunes-dev.github.io/fspulse/getting_started.html) — Installation, Docker deployment, and first steps
-- [Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Monitor, Browse, Insights, Alerts, and Explore pages
+- [Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Tasks, Scans, Monitor, Browse, Alerts, Insights, Explore, and Settings pages
 - [Scanning Concepts](https://gtunes-dev.github.io/fspulse/scanning.html) — How scans work, hashing, and validation
 - [Query Syntax](https://gtunes-dev.github.io/fspulse/query.html) — Powerful filtering and data exploration
 - [Configuration](https://gtunes-dev.github.io/fspulse/configuration.html) — Customizing FsPulse behavior
@@ -109,12 +110,13 @@ fspulse serve
 Open **http://127.0.0.1:8080** in your browser to access the web interface.
 
 All functionality is available through the web UI:
-- Configure and manage scan roots
-- Schedule automatic scans
-- Monitor scan progress in real-time
-- Browse your filesystem hierarchy
-- Query and explore your data
+- Configure and manage scan roots and schedules
+- Monitor task progress in real-time
+- Browse your filesystem with tree, folder, and search views
+- View point-in-time snapshots and compare across scans
+- Query and explore your data across five domains
 - Manage alerts and validation issues
+- Configure settings and manage the database
 
 ### Configuration
 
@@ -135,11 +137,12 @@ See the [Configuration Guide](https://gtunes-dev.github.io/fspulse/configuration
 
 The interface provides powerful visual tools for monitoring and exploring your data:
 
-- **Monitor** — Configure automatic scans with flexible scheduling options, view execution queue status, and manage scan roots
-- **Live Scan Progress** — Watch scan activity in real-time whether manually initiated or scheduled, with detailed phase-by-phase statistics
-- **Browse with Detail View** — Explore your filesystem hierarchy with elegant sliding panels showing item metadata, validation status, alerts, and complete change history
+- **Tasks** — Central dashboard showing active tasks, upcoming scheduled scans, and task history with real-time progress
+- **Monitor** — Configure automatic scans with flexible scheduling options and manage scan roots
+- **Browse** — Navigate your filesystem with tree, folder, and search views, inline detail panels, and side-by-side comparison across scans or roots
 - **Insights** — Interactive charts tracking file sizes, counts, change activity, and validation issues over time with customizable date ranges
 - **Alert Management** — Filter, flag, and dismiss integrity issues with context-aware views and status tracking
+- **Settings** — View and edit configuration with value precedence visualization, database management, and version info
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-monitor-schedules.png" alt="FsPulse Monitor Page - Scheduled Scans" width="90%" style="max-width: 900px;">
@@ -156,7 +159,7 @@ The interface provides powerful visual tools for monitoring and exploring your d
 <p align="center">
   <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="FsPulse Browse Page - Item Detail Panel" width="90%" style="max-width: 900px;">
   <br>
-  <em>Item detail panel showing metadata, validation status, and change history</em>
+  <em>Item detail panel showing metadata, validation status, and version history</em>
 </p>
 
 <p align="center">

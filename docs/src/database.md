@@ -1,6 +1,6 @@
 # Database
 
-FsPulse uses an embedded [SQLite](https://sqlite.org) database to store all scan-related data. The database schema mirrors the core domain concepts used in FsPulse: roots, scans, items, and changes.
+FsPulse uses an embedded [SQLite](https://sqlite.org) database to store all scan-related data. The database uses a **temporal versioning** model where item state is tracked through version rows rather than mutable updates.
 
 ---
 
@@ -80,14 +80,37 @@ See the [Configuration - Database Settings](configuration.md#database-settings) 
 
 ## Schema Overview
 
-The database schema is implemented using Rust and reflects the same logical structure used by the query interface:
+The database schema reflects FsPulse's temporal versioning model:
 
-- `roots` — scanned root directories
-- `scans` — individual scan snapshots
-- `items` — discovered files and folders with metadata
-- `changes` — additions, deletions, and modifications between scans
+| Table | Purpose |
+|-------|---------|
+| `roots` | Scanned root directories |
+| `scans` | Individual scan executions with timing, settings, and summary statistics |
+| `items` | Stable identity for each discovered file or folder (path, type, root) |
+| `item_versions` | Temporal state — one row per distinct state of an item, with full metadata snapshot |
+| `alerts` | Integrity issues (suspicious hashes, validation failures, access errors) |
+| `scan_schedules` | Recurring scan configurations (timing, options) |
+| `tasks` | Work queue entries for scans and other operations |
+| `scan_undo_log` | Transient rollback support for in-progress scans |
 
-The schema is versioned to allow future upgrades without requiring a full reset.
+### Temporal Versioning
+
+The `items` table stores only identity information (root, path, name, type). All mutable state lives in `item_versions`, where each row represents a distinct state with a temporal range:
+
+- `first_scan_id` — the scan where this state was first observed
+- `last_scan_id` — the most recent scan where this state was confirmed
+
+An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, hash, validation, or deletion status).
+
+### Schema Versioning
+
+The schema is versioned (currently version 17) and automatically migrated on startup. FsPulse handles all upgrades transparently — no manual migration steps are needed.
+
+---
+
+## Database Compaction
+
+Over time, deletions and updates can leave unused space in the database file. The Settings page provides a **Compact Database** action that reclaims this space by running SQLite's VACUUM command.
 
 ---
 
@@ -104,4 +127,3 @@ Because FsPulse uses SQLite, you can inspect the database using any compatible t
 ---
 
 FsPulse manages all internal data access automatically. Most users will not need to interact with the database directly.
-

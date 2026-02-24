@@ -22,16 +22,19 @@ FsPulse wouldn't be possible without the incredible open source ecosystem it's b
 - [Tailwind CSS](https://tailwindcss.com) — Utility-first CSS framework
 - [Lucide](https://lucide.dev) — Clean, consistent icon set
 - [React](https://react.dev) — UI framework
+- [Recharts](https://recharts.org) — Composable charting library
+- [TanStack Virtual](https://tanstack.com/virtual) — Virtualized list rendering
 
-**Backend & CLI:**
+**Backend:**
 - [rusqlite](https://github.com/rusqlite/rusqlite) — SQLite database interface
 - [axum](https://github.com/tokio-rs/axum) — Web framework
 - [tokio](https://tokio.rs) — Async runtime
 - [clap](https://github.com/clap-rs/clap) — Command-line argument parsing
-- [dialoguer](https://github.com/console-rs/dialoguer) — Interactive CLI prompts
-- [ratatui](https://ratatui.rs) — Terminal UI framework
+- [figment](https://github.com/SergioBenitez/Figment) — Configuration management
+- [flexi_logger](https://github.com/emabee/flexi_logger) — Flexible logging
+- [pest](https://pest.rs) — Parser generator (for query language)
 
-The complete list of dependencies is available in the project's [`Cargo.toml`](https://github.com/gtunes-dev/fspulse/blob/main/Cargo.toml) and [`package.json`](https://github.com/gtunes-dev/fspulse/blob/main/web/package.json).
+The complete list of dependencies is available in the project's [`Cargo.toml`](https://github.com/gtunes-dev/fspulse/blob/main/Cargo.toml) and [`package.json`](https://github.com/gtunes-dev/fspulse/blob/main/frontend/package.json).
 
 ---
 

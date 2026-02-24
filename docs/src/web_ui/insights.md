@@ -47,13 +47,14 @@ Select which scan root to analyze from the dropdown. Each root maintains indepen
 Customize the time window:
 - Last 7 days
 - Last 30 days
-- Last 90 days
-- All time
-- Custom range
+- Last 3 months
+- Last 6 months
+- Last year
+- Custom range (manual date pickers)
 
 ### Baseline Exclusion
 
-Toggle whether to include the initial (baseline) scan in trend calculations. Baseline scans often show large numbers of "additions" which can skew trend visualizations.
+The Changes and Alerts charts offer a checkbox to exclude the first scan from the visualization. The first scan of a root often shows large numbers of "additions" and alerts which can skew trend visualizations. This toggle only appears when the first scan falls within the selected date range.
 
 ### Interactive Charts
 

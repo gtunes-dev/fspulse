@@ -17,8 +17,8 @@ The Monitor page is your control center for managing scan roots, scheduling auto
 
 ### Managing Roots
 
-- **Scan Now**: Trigger an immediate one-time scan
-- **Delete**: Remove the root (also removes associated schedules and queue entries)
+- **Scan Now**: Create a manual scan task for the root
+- **Delete**: Remove the root (also removes associated schedules)
 - View root statistics and last scan time
 
 ## Scheduling Automatic Scans
@@ -48,15 +48,4 @@ FsPulse supports flexible scheduling options for automated monitoring:
 - **Edit**: Modify timing or scan options
 - **Delete**: Remove the schedule
 
-## Scan Queue
-
-The queue shows:
-- Pending scheduled scans waiting to execute
-- Currently running scans
-- Recent scan history
-
-Scans are queued and executed sequentially to prevent resource conflicts.
-
-## Configuration
-
-Scheduling and queue behavior can be customized via [Configuration](../configuration.md).
+Scans and other tasks are queued and executed sequentially to prevent resource conflicts. You can view upcoming and running tasks on the [Tasks](tasks.md) page.

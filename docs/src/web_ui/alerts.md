@@ -77,7 +77,7 @@ Click an alert to view:
 - Item path and metadata
 - Alert timestamp
 - Access error details (for access denied alerts)
-- Change details (for hash changes)
+- Hash change details: previous and new hash values (for suspicious hash alerts)
 - Validation error message (for invalid items)
 - Link to item in Browse view
 

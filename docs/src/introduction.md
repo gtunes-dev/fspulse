@@ -36,12 +36,13 @@ Whether you're managing storage capacity, tracking project evolution, or ensurin
 ## Key Capabilities
 
 - **Continuous Monitoring** — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically
+- **Temporal Versioning** — Every item's state is tracked over time; browse your filesystem as it appeared at any past scan
 - **Size & Growth Tracking** — Monitor directory sizes and visualize storage trends over time with dual-format units
-- **Change Detection** — Track all file additions, modifications, and deletions with complete historical records
+- **Change Detection** — Track all file additions, modifications, and deletions through version history
 - **Integrity Verification** — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types
 - **Historical Analysis** — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts
 - **Alert System** — Suspicious hash changes and validation failures flagged immediately with status management
-- **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing your filesystem data
+- **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing across five data domains
 - **Web-First Design** — Elegant web UI for all operations including scanning, browsing, querying, and configuration
 
 ## Running FsPulse

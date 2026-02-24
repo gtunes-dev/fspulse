@@ -1,21 +1,11 @@
 # Concepts
 
-FsPulse is centered around tracking and understanding the state of the file system over time. The core entities in FsPulse — roots, scans, items, and changes — represent a layered model of this information.
+FsPulse tracks the state of your filesystem over time using a **temporal versioning** model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.
 
 ---
-## Scans
-
-Scans are the units of work performed by FsPulse. A scan is performed on a file system tree specified by
-a path. A scan deeply traverses the specified path and its children, recording information on the
-files and directories discovered. The details of scanning are explained in [Scanning](scanning.md). 
-
----
-
 ## Root
 
-A **root** is the starting point for a scan. It represents a specific path on the file system that you explicitly tell FsPulse to track.
-
-Each root is stored persistently in the database, and every scan you perform refers back to a root.
+A **root** is the starting point for a scan. It represents a specific path on the filesystem that you tell FsPulse to track.
 
 - Paths are stored as absolute paths.
 - Each root has a unique ID.
@@ -27,54 +17,93 @@ Each root is stored persistently in the database, and every scan you perform ref
 
 A **scan** is a snapshot of a root directory at a specific point in time.
 
-Each scan records metadata about:
-- The time the scan was performed
+Each scan records:
+- The time the scan was started and ended
 - Whether hashing and validation were enabled
-- The collection of items (files and folders) found during the scan
+- Counts of files, folders, and total size discovered
+- Counts of additions, modifications, and deletions detected
+- Any alerts generated
 
-Scans are always tied to a root via `root_id`, and are ordered chronologically by `started_at`.
+Scans are always tied to a root via `root_id` and are ordered chronologically by `started_at`.
 
 ---
 
 ## Item
 
-An **item** represents a single file or folder discovered during a scan.
-
-Each item includes metadata such as:
+An **item** represents the stable identity of a single file or folder discovered during scanning. The `items` table stores only identity information:
+- Root
 - Path
-- Whether it's a file or directory
-- Last modified date
-- Size
-- Optional hash and validation info
+- Name (last path segment)
+- Type (File, Directory, Symlink, or Unknown)
 
-Items are created when newly seen, and marked with a tombstone (`is_ts = true`) if they were present in previous scans but no longer exist.
+An item's mutable state — metadata, hash, validation — is stored in **item versions**, not in the item row itself.
 
 ---
 
-## Change
+## Item Version
 
-A **change** represents a detected difference in an item between the current scan and a previous one.
+An **item version** captures the full known state of an item at a point in time. FsPulse uses temporal versioning: instead of maintaining one mutable row per item, the system stores one row per **distinct state**. A new version is created only when an item's observable state changes.
 
-Changes may reflect:
-- File additions
-- File deletions
-- Metadata or content modifications
+Each version contains:
+- **Temporal range** — `first_scan_id` (when this state was first observed) and `last_scan_id` (last scan where it was confirmed)
+- **Deletion status** — whether the item existed or had been deleted
+- **Access status** — whether the item could be read successfully
+- **Metadata** — modification date and size
+- **Hash** — SHA-256 content hash (if computed)
+- **Validation** — format validation state and any error message
 
-Each change is associated with both the scan and the item it affects.
+An item that exists unchanged across 50 scans has exactly **one version row**. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.
+
+### Deriving Change Types
+
+Change types are derived by comparing adjacent versions of an item:
+- **Add**: No previous version exists, or the previous version was a deletion
+- **Delete**: This version marks the item as deleted
+- **Modify**: Previous version exists, neither is deleted, and state differs
 
 ---
 
-## Entity Flow
+## Alert
 
-A simplified representation of how the entities relate:
+An **alert** flags a potential integrity issue detected during scanning. There are three alert types:
+- **Suspicious Hash** — file content hash changed but modification time did not, suggesting bit rot or tampering
+- **Invalid Item** — format validation detected corruption in a supported file type
+- **Access Denied** — FsPulse could not access the item's metadata or contents
+
+Alerts have statuses (Open, Flagged, Dismissed) for triage workflows.
+
+---
+
+## Schedule
+
+A **schedule** defines automatic recurring scans. Schedules specify:
+- Which root to scan
+- Timing (daily, weekly, monthly, or interval-based)
+- Scan options (hashing mode, validation mode)
+
+Schedules can be enabled or disabled independently.
+
+---
+
+## Task
+
+A **task** is a unit of work in the execution queue. Tasks are created from manual scan requests or triggered by schedules. The Tasks page shows active, upcoming, and completed tasks.
+
+Tasks can be paused globally, and individual tasks can be stopped while in progress.
+
+---
+
+## Entity Relationships
 
 ```text
 Root
- └── Scan (per run)
-      └── Item (files and folders)
-           └── Change (if the item changed)
+ ├── Schedule (recurring scan configuration)
+ ├── Scan (one per execution)
+ │    └── Alert (integrity issues found)
+ └── Item (stable identity)
+      └── Item Version (state at a point in time)
 ```
 
 ---
 
-These concepts form the foundation of FsPulse’s scan and query capabilities. Understanding them will help you make the most of both interactive and command-line modes.
+These concepts form the foundation of FsPulse's scanning, browsing, and query capabilities.

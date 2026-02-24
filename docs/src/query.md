@@ -6,131 +6,130 @@ FsPulse provides a flexible, SQL-like query language for exploring scan results.
 
 ## Query Structure
 
-Each query begins with one of the four supported domains:
+Each query begins with one of the five supported domains:
 
 - `roots`
 - `scans`
 - `items`
-- `changes`
+- `versions`
+- `alerts`
 
 You can then add any of the following optional clauses:
 
 ```text
-DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
+DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
 ```
 
 ---
 
 ## Column Availability
 
+Each domain has a set of available columns. Columns marked as **default** are shown when no `SHOW` clause is specified.
+
 ### `roots` Domain
 
-All queries that retrieve root information begin with the keyword `roots`:
-
-```text
-roots [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
-```
-
-| Property    | Type    |
-|-------------|---------|
-| `root_id`   | Integer |
-| `root_path` | Path    |
+| Column      | Type    | Default |
+|-------------|---------|---------|
+| `root_id`   | Integer | Yes     |
+| `root_path` | Path    | Yes     |
 
 ---
 
 ### `scans` Domain
 
-All queries that retrieve scan information begin with the keyword `scans`:
-
-```text
-scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
-```
-
-| Property          | Type     | Description                                    |
-|-------------------|----------|------------------------------------------------|
-| `scan_id`         | Integer  | Unique scan identifier                         |
-| `root_id`         | Integer  | Root directory identifier                      |
-| `schedule_id`     | Integer  | Schedule identifier (null for manual scans)    |
-| `started_at`      | Date     | Timestamp when scan started                    |
-| `ended_at`        | Date     | Timestamp when scan ended (null if incomplete) |
-| `was_restarted`   | Boolean  | True if scan was resumed after restart         |
-| `scan_state`      | Scan State Enum | State of the scan                       |
-| `is_hash`         | Boolean  | Hash new or changed files                      |
-| `hash_all`        | Boolean  | Hash all items including unchanged             |
-| `is_val`          | Boolean  | Validate new or changed files                  |
-| `val_all`         | Boolean  | Validate all items including unchanged         |
-| `file_count`      | Integer  | Count of files found in the scan               |
-| `folder_count`    | Integer  | Count of directories found in the scan         |
-| `total_size`      | Integer  | Total size in bytes of all files in the scan   |
-| `alert_count`     | Integer  | Number of alerts created during the scan       |
-| `add_count`       | Integer  | Number of items added in the scan              |
-| `modify_count`    | Integer  | Number of items modified in the scan           |
-| `delete_count`    | Integer  | Number of items deleted in the scan            |
-| `error`           | String   | Error message if scan failed                   |
+| Column          | Type            | Default | Description                                    |
+|-----------------|-----------------|---------|------------------------------------------------|
+| `scan_id`       | Integer         | Yes     | Unique scan identifier                         |
+| `root_id`       | Integer         | Yes     | Root directory identifier                      |
+| `schedule_id`   | Integer         | Yes     | Schedule identifier (null for manual scans)    |
+| `started_at`    | Date            | Yes     | Timestamp when scan started                    |
+| `ended_at`      | Date            | Yes     | Timestamp when scan ended (null if incomplete) |
+| `was_restarted` | Boolean         | Yes     | True if scan was resumed after restart         |
+| `scan_state`    | Scan State Enum | No      | State of the scan                              |
+| `is_hash`       | Boolean         | Yes     | Hash new or changed files                      |
+| `hash_all`      | Boolean         | No      | Hash all items including unchanged             |
+| `is_val`        | Boolean         | Yes     | Validate new or changed files                  |
+| `val_all`       | Boolean         | No      | Validate all items including unchanged         |
+| `file_count`    | Integer         | Yes     | Count of files found in the scan               |
+| `folder_count`  | Integer         | Yes     | Count of directories found in the scan         |
+| `total_size`    | Integer         | Yes     | Total size in bytes of all files               |
+| `alert_count`   | Integer         | Yes     | Number of alerts created during the scan       |
+| `add_count`     | Integer         | Yes     | Number of items added in the scan              |
+| `modify_count`  | Integer         | Yes     | Number of items modified in the scan           |
+| `delete_count`  | Integer         | Yes     | Number of items deleted in the scan            |
+| `error`         | String          | No      | Error message if scan failed                   |
 
 ---
 
 ### `items` Domain
 
-All queries that retrieve item information begin with the keyword `items`:
+The `items` domain queries each item's **latest version** — the most recent known state. Identity columns come from the `items` table; state columns come from the item's current version.
 
-```text
-items [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
-```
-
-| Property         | Type                |
-|------------------|---------------------|
-| `item_id`        | Integer             |
-| `root_id`        | Integer             |
-| `item_path`      | Path                |
-| `item_type`      | Item Type Enum      |
-| `access`         | Access Status       |
-| `last_scan`      | Integer             |
-| `is_ts`          | Boolean             |
-| `mod_date`       | Date                |
-| `size`           | Integer             |
-| `last_hash_scan` | Integer             |
-| `file_hash`      | String              |
-| `last_val_scan`  | Integer             |
-| `val`            | Validation Status   |
-| `val_error`      | String              |
+| Column          | Type              | Default | Description                              |
+|-----------------|-------------------|---------|------------------------------------------|
+| `item_id`       | Integer           | Yes     | Unique item identifier                   |
+| `root_id`       | Integer           | Yes     | Root directory identifier                |
+| `item_path`     | Path              | Yes     | Full path of the item                    |
+| `item_name`     | Path              | No      | Filename or directory name (last segment)|
+| `item_type`     | Item Type Enum    | Yes     | File, Directory, Symlink, or Unknown     |
+| `version_id`    | Integer           | No      | Current version identifier               |
+| `first_scan_id` | Integer           | No      | Scan where current version first appeared|
+| `last_scan_id`  | Integer           | Yes     | Last scan confirming current state       |
+| `is_deleted`    | Boolean           | Yes     | True if item is currently deleted        |
+| `access`        | Access Status     | No      | Access state (NoError, MetaError, ReadError) |
+| `mod_date`      | Date              | Yes     | Last modification date                   |
+| `size`          | Integer           | No      | File size in bytes                       |
+| `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash        |
+| `file_hash`     | String            | No      | SHA-256 content hash                     |
+| `last_val_scan` | Integer           | No      | Last scan that evaluated validation      |
+| `val`           | Validation Status | No      | Validation state                         |
+| `val_error`     | String            | No      | Validation error message                 |
 
 ---
 
-### `changes` Domain
+### `versions` Domain
 
-All queries that retrieve change history begin with the keyword `changes`:
+The `versions` domain queries individual item version rows — each representing a distinct state of an item over a temporal range. Use this domain to explore item history and state changes.
 
-```text
-changes [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
-```
+| Column          | Type              | Default | Description                              |
+|-----------------|-------------------|---------|------------------------------------------|
+| `version_id`    | Integer           | Yes     | Unique version identifier                |
+| `item_id`       | Integer           | Yes     | Item this version belongs to             |
+| `root_id`       | Integer           | Yes     | Root directory identifier                |
+| `item_path`     | Path              | No      | Full path of the item                    |
+| `item_name`     | Path              | No      | Filename or directory name (last segment)|
+| `item_type`     | Item Type Enum    | Yes     | File, Directory, Symlink, or Unknown     |
+| `first_scan_id` | Integer           | Yes     | Scan where this version was first observed |
+| `last_scan_id`  | Integer           | Yes     | Last scan confirming this version's state|
+| `is_deleted`    | Boolean           | Yes     | True if item was deleted in this version |
+| `access`        | Access Status     | No      | Access state                             |
+| `mod_date`      | Date              | No      | Last modification date                   |
+| `size`          | Integer           | No      | File size in bytes                       |
+| `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash        |
+| `file_hash`     | String            | No      | SHA-256 content hash                     |
+| `last_val_scan` | Integer           | No      | Last scan that evaluated validation      |
+| `val`           | Validation Status | No      | Validation state                         |
+| `val_error`     | String            | No      | Validation error message                 |
 
-| Property             | Type                |
-|----------------------|---------------------|
-| `change_id`          | Integer             |
-| `scan_id`            | Integer             |
-| `item_id`            | Integer             |
-| `change_type`        | Change Type Enum    |
-| `access_old`         | Access Status       |
-| `access_new`         | Access Status       |
-| `is_undelete`        | Boolean             |
-| `meta_change`        | Boolean             |
-| `mod_date_old`       | Date                |
-| `mod_date_new`       | Date                |
-| `size_old`           | Integer             |
-| `size_new`           | Integer             |
-| `hash_change`        | Boolean             |
-| `last_hash_scan_old` | Integer             |
-| `hash_old`           | String              |
-| `hash_new`           | String              |
-| `val_change`         | Boolean             |
-| `last_val_scan_old`  | Integer             |
-| `val_old`            | Validation Status   |
-| `val_new`            | Validation Status   |
-| `val_error_old`      | String              |
-| `val_error_new`      | String              |
-| `root_id`            | Integer             |
-| `item_path`          | Path                |
+---
+
+### `alerts` Domain
+
+| Column          | Type              | Default | Description                              |
+|-----------------|-------------------|---------|------------------------------------------|
+| `alert_id`      | Integer           | No      | Unique alert identifier                  |
+| `alert_type`    | Alert Type Enum   | Yes     | Type of alert                            |
+| `alert_status`  | Alert Status Enum | Yes     | Current status (Open, Flagged, Dismissed)|
+| `root_id`       | Integer           | No      | Root directory identifier                |
+| `scan_id`       | Integer           | No      | Scan that generated the alert            |
+| `item_id`       | Integer           | No      | Item the alert is about                  |
+| `item_path`     | Path              | Yes     | Path of the affected item                |
+| `created_at`    | Date              | Yes     | When the alert was created               |
+| `updated_at`    | Date              | No      | When the alert status was last changed   |
+| `prev_hash_scan`| Integer           | No      | Previous hash scan (for suspicious hash) |
+| `hash_old`      | String            | No      | Previous hash value                      |
+| `hash_new`      | String            | No      | New hash value                           |
+| `val_error`     | String            | Yes     | Validation error message                 |
 
 ---
 
@@ -142,20 +141,21 @@ The `WHERE` clause filters results using one or more filters. Each filter has th
 column_name:(value1, value2, ...)
 ```
 
-Values must match the column’s type. You can use individual values, ranges (when supported), or a comma-separated combination. Values are **not quoted** unless explicitly shown.
+Values must match the column's type. You can use individual values, ranges (when supported), or a comma-separated combination.
 
 | Type                | Examples                                              | Notes                                                                 |
 |---------------------|-------------------------------------------------------|-----------------------------------------------------------------------|
-| Integer             | `5`, `1..5`, `3, 5, 7..9`, `null`, `not null`, `NULL`, `NOT NULL` | Supports ranges and nullability. Ranges are inclusive.                |
-| Date                | `2024-01-01`, `2024-01-01..2024-06-30`, `null`, `not null`, `NULL`, `NOT NULL` | Use `YYYY-MM-DD`. Ranges are inclusive.                                |
-| Boolean             | `true`, `false`, `T`, `F`, `null`, `not null`, `NULL`, `NOT NULL` | Values are unquoted. Null values are allowed in all-lower or all-upper case. |
-| String              | `'example'`, `'error: missing EOF'`, `null`, `NULL`   | Quoted strings. Null values are allowed in all-lower or all-upper case.     |
+| Integer             | `5`, `1..5`, `3, 5, 7..9`, `> 1024`, `< 10`, `null`, `not null` | Supports ranges, comparators, and nullability. Ranges are inclusive. |
+| Date                | `2024-01-01`, `2024-01-01..2024-06-30`, `null`, `not null` | Use `YYYY-MM-DD`. Ranges are inclusive.                                |
+| Boolean             | `true`, `false`, `T`, `F`, `null`, `not null`         | Unquoted.                                                             |
+| String              | `'example'`, `'error: missing EOF'`, `null`, `not null` | Quoted strings.                                                     |
 | Path                | `'photos/reports'`, `'file.txt'`                      | Must be quoted. **Null values are not supported.**                    |
-| Validation Status   | `V`, `I`, `N`, `U`, `null`, `not null`, `NULL`, `NOT NULL` | Valid (V), Invalid (I), No Validator (N), Unknown (U). Unquoted. Ranges not supported. |
-| Item Type Enum      | `F`, `D`, `S`, `O`, `null`, `not null`, `NULL`, `NOT NULL` | File (F), Directory (D), Symlink (S), Other (O). Unquoted. Ranges not supported. |
-| Change Type Enum    | `N`, `A`, `M`, `D`, `null`, `not null`, `NULL`, `NOT NULL` | No Change (N), Add (A), Modify (M), Delete (D). Unquoted. Ranges not supported. |
-| Scan State Enum     | `S`, `W`, `A`, `C`, `P`, `E`, `null`, `not null`, `NULL`, `NOT NULL` | Scanning (S), Sweeping (W), Analyzing (A), Completed (C), Stopped (P), Error (E). Unquoted. Ranges not supported. |
-| Access Status       | `N`, `M`, `R`, `null`, `not null`, `NULL`, `NOT NULL` | No Error (N), Meta Error (M), Read Error (R). Unquoted. Ranges not supported. |
+| Validation Status   | `V`, `I`, `N`, `U`                                    | Valid, Invalid, No Validator, Unknown. Unquoted.                      |
+| Item Type Enum      | `F`, `D`, `S`, `U`                                    | File, Directory, Symlink, Unknown. Unquoted.                          |
+| Alert Type Enum     | `H`, `I`, `A`                                         | Suspicious Hash, Invalid Item, Access Denied. Unquoted.               |
+| Alert Status Enum   | `O`, `F`, `D`                                         | Open, Flagged, Dismissed. Unquoted.                                   |
+| Scan State Enum     | `S`, `W`, `A`, `C`, `P`, `E`                          | Scanning, Sweeping, Analyzing, Completed, Stopped, Error. Unquoted.   |
+| Access Status       | `N`, `M`, `R`                                         | No Error, Meta Error, Read Error. Unquoted.                           |
 
 ---
 
@@ -166,7 +166,7 @@ When specifying multiple values within a single filter, the match is logically *
 For example:
 
 ```text
-scans where started_at:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), hashing:(T)
+scans where started_at:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), is_hash:(T)
 ```
 
 This query matches scans that:
@@ -216,12 +216,12 @@ If direction is omitted, `ASC` is assumed.
 
 ---
 
-## The `LIMIT` Clause
+## The `LIMIT` and `OFFSET` Clauses
 
-Restricts the number of rows returned:
+`LIMIT` restricts the number of rows returned. `OFFSET` skips a number of rows before returning results.
 
 ```text
-items limit 50
+items limit 50 offset 100
 ```
 
 ---
@@ -232,17 +232,28 @@ items limit 50
 # Items whose path contains 'reports'
 items where item_path:('reports')
 
-# Changes involving validation failures
-changes where val_new:(I) show default, val_old, val_new order by change_id desc
+# Large files sorted by size
+items where item_type:(F), size:(> 1048576) show default, size order by size desc
 
-# Scans with timestamp for programmatic processing
+# Version history for a specific item
+versions where item_id:(42) order by first_scan_id
+
+# Deleted items across all roots
+items where is_deleted:(true)
+
+# Versions with validation failures
+versions where val:(I) show default, val_error order by first_scan_id desc
+
+# Open or flagged alerts for suspicious hashes
+alerts where alert_type:(H), alert_status:(O, F) order by created_at desc
+
+# Scans with timestamps for programmatic processing
 scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10
 
-# Scans with changes and alerts
+# Scans with change and alert counts
 scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by started_at desc
 ```
 
 ---
 
 See also: [Explore Page](web_ui/explore.md) · [Validators](validators.md) · [Configuration](configuration.md)
-

@@ -22,7 +22,7 @@ Open your browser to **http://127.0.0.1:8080**
 ## Running Your First Scan
 
 1. From the Monitor page, click **Scan Now** for your newly added root
-2. Watch the real-time progress on the **Home** page
+2. Watch the real-time progress on the **Tasks** page (the home page)
 3. Once complete, explore the results
 
 ## Exploring Your Data
