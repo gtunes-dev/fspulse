@@ -94,7 +94,14 @@ export function TreeNode({
       )}
       style={{ paddingLeft: `${paddingLeft}px` }}
     >
-      {item.hasChildren ? <DirectoryIcon /> : getFileIcon(item.item_type, item.is_deleted)}
+      {item.hasChildren ? (
+        <DirectoryIcon />
+      ) : (
+        <>
+          {expandable && <div className="w-4 flex-shrink-0" />}
+          {getFileIcon(item.item_type, item.is_deleted)}
+        </>
+      )}
       <span
         className={cn('cursor-pointer', item.is_deleted && 'line-through')}
         onClick={handleItemClick}

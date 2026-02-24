@@ -185,7 +185,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
 
   // Detail panel shows the active view's selection
   const detailPanel = activeSelection && selectedRoot && resolvedScanId ? (
-    <div className="w-80 flex-shrink-0 border border-border rounded-lg">
+    <div className="w-96 flex-shrink-0 border border-border rounded-lg">
       <ItemDetailPanel
         itemId={activeSelection.itemId}
         itemPath={activeSelection.itemPath}

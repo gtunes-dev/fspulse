@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { format } from 'date-fns'
-import { CalendarIcon, Check } from 'lucide-react'
+import { Check, ChevronDown, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Calendar, CalendarDayButton } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { formatScanDate, formatTime } from '@/lib/dateUtils'
 import type { DayButton } from 'react-day-picker'
@@ -31,7 +35,7 @@ function formatChanges(add: number | null, modify: number | null, del: number | 
 }
 
 export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScanBarProps) {
-  const [popoverOpen, setPopoverOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(true)
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
 
   // Calendar scan date highlighting
@@ -214,7 +218,6 @@ export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScan
     setResolvedStartedAt(scan.started_at)
     setIsFallback(false)
     onScanResolved(scan.scan_id, scan.started_at)
-    setPopoverOpen(false)
   }
 
   const handleMonthChange = (month: Date) => {
@@ -241,138 +244,130 @@ export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScan
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
-    <div className="flex items-center gap-3 px-3 py-2 border border-border rounded-lg bg-muted/30">
-      {/* Scan info */}
-      <div className="flex-1 min-w-0">
-        {resolving ? (
-          <p className="text-sm text-muted-foreground animate-pulse">Resolving...</p>
-        ) : resolvedScanId && resolvedStartedAt ? (
-          <p className="text-sm truncate">
-            <span className="font-medium">Scan #{resolvedScanId}</span>
-            <span className="text-muted-foreground">
-              {' \u2014 '}
-              {formatScanDate(resolvedStartedAt)} at {formatTime(resolvedStartedAt)}
-            </span>
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">No completed scans</p>
-        )}
-      </div>
+    <Collapsible open={pickerOpen} onOpenChange={setPickerOpen}>
+      <div className="border border-border rounded-lg bg-muted/30">
+        {/* Header row: scan info + collapse toggle + Latest button */}
+        <div className="flex items-center gap-1.5 px-3 py-2">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-2 min-w-0 text-left border-none bg-transparent p-0 cursor-pointer">
+              <ChevronDown className={cn("h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform", !pickerOpen && "-rotate-90")} />
+              {resolving ? (
+                <p className="text-sm font-medium text-muted-foreground animate-pulse">Resolving...</p>
+              ) : resolvedScanId && resolvedStartedAt ? (
+                <p className="text-sm font-medium truncate">
+                  Scan #{resolvedScanId} &mdash; {formatScanDate(resolvedStartedAt)} at {formatTime(resolvedStartedAt)}
+                </p>
+              ) : (
+                <p className="text-sm font-medium text-muted-foreground">No completed scans</p>
+              )}
+            </button>
+          </CollapsibleTrigger>
 
-      {/* Calendar popover trigger */}
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0"
+            className="h-6 w-6 p-0 flex-shrink-0 text-primary hover:text-primary"
+            onClick={jumpToLatest}
+            disabled={resolving}
+            title="Reset to latest scan"
           >
-            <CalendarIcon className="h-4 w-4" />
+            <RotateCcw className="h-3.5 w-3.5" />
           </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          className="w-auto p-0"
-        >
-          <div className="flex">
-            {/* Calendar */}
-            <div className="border-r border-border shrink-0">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={handleDateSelect}
-                month={displayMonth}
-                onMonthChange={handleMonthChange}
-                className="p-2 [--cell-size:1.625rem]"
-                classNames={{
-                  month: 'flex w-full flex-col gap-2',
-                  week: 'mt-1 flex w-full',
-                }}
-                components={{
-                  DayButton: ScanDayButton,
-                }}
-              />
-            </div>
+        </div>
 
-            {/* Scan list */}
-            <div className="w-52 flex flex-col">
-              <div className="px-3 py-2 border-b border-border">
-                <p className="text-xs font-medium text-muted-foreground">
-                  {selectedDate ? `Scans on ${format(selectedDate, 'MMM d, yyyy')}` : 'Select a date'}
-                </p>
+        {/* Collapsible picker: calendar + scan list side by side */}
+        <CollapsibleContent>
+          <div className="border-t border-border">
+            <div className="flex">
+              {/* Calendar */}
+              <div className="border-r border-border shrink-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={handleDateSelect}
+                  month={displayMonth}
+                  onMonthChange={handleMonthChange}
+                  className="p-2 [--cell-size:1.625rem]"
+                  classNames={{
+                    month: 'flex w-full flex-col gap-2',
+                    week: 'mt-1 flex w-full',
+                  }}
+                  components={{
+                    DayButton: ScanDayButton,
+                  }}
+                />
               </div>
 
-              <div className="flex-1 overflow-y-auto max-h-64 px-2 py-1">
-                {!selectedDate ? (
-                  <p className="text-xs text-muted-foreground px-1 py-6 text-center">
-                    Click a date to see scans
+              {/* Scan list */}
+              <div className="flex-1 min-w-0 flex flex-col">
+                <div className="px-3 py-2 border-b border-border">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {selectedDate ? `Scans on ${format(selectedDate, 'MMM d, yyyy')}` : 'Select a date'}
                   </p>
-                ) : loadingDateScans ? (
-                  <p className="text-xs text-muted-foreground px-1 py-6 text-center animate-pulse">
-                    Loading...
-                  </p>
-                ) : dateScans.length > 0 ? (
-                  <div className="space-y-0.5">
-                    {dateScans.map((scan) => (
-                      <button
-                        key={scan.scan_id}
-                        className={cn(
-                          'w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
-                          'hover:bg-accent',
-                          scan.scan_id === resolvedScanId
-                            ? 'bg-accent font-medium'
-                            : ''
-                        )}
-                        onClick={() => handleScanClick(scan)}
-                      >
-                        <span className="shrink-0 w-3.5">
-                          {scan.scan_id === resolvedScanId && (
-                            <Check className="h-3 w-3" />
-                          )}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-medium">#{scan.scan_id}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {formatTime(scan.started_at)}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {formatChanges(scan.add_count, scan.modify_count, scan.delete_count)}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : isFallback && resolvedScanId && resolvedStartedAt ? (
-                  <div className="px-1 py-4 text-xs text-muted-foreground space-y-1">
-                    <p>No scans on this date.</p>
-                    <p>
-                      Showing nearest:{' '}
-                      <span className="font-medium text-foreground">#{resolvedScanId}</span> from{' '}
-                      {formatScanDate(resolvedStartedAt)}
+                </div>
+
+                <div className="flex-1 overflow-y-auto max-h-64 px-2 py-1">
+                  {!selectedDate ? (
+                    <p className="text-xs text-muted-foreground px-1 py-6 text-center">
+                      Click a date to see scans
                     </p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground px-1 py-6 text-center">
-                    No scans found
-                  </p>
-                )}
+                  ) : loadingDateScans ? (
+                    <p className="text-xs text-muted-foreground px-1 py-6 text-center animate-pulse">
+                      Loading...
+                    </p>
+                  ) : dateScans.length > 0 ? (
+                    <div className="space-y-0.5">
+                      {dateScans.map((scan) => (
+                        <button
+                          key={scan.scan_id}
+                          className={cn(
+                            'w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+                            'hover:bg-accent',
+                            scan.scan_id === resolvedScanId
+                              ? 'bg-accent font-medium'
+                              : ''
+                          )}
+                          onClick={() => handleScanClick(scan)}
+                        >
+                          <span className="shrink-0 w-3.5">
+                            {scan.scan_id === resolvedScanId && (
+                              <Check className="h-3 w-3" />
+                            )}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-medium">#{scan.scan_id}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {formatTime(scan.started_at)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {formatChanges(scan.add_count, scan.modify_count, scan.delete_count)}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : isFallback && resolvedScanId && resolvedStartedAt ? (
+                    <div className="px-1 py-4 text-xs text-muted-foreground space-y-1">
+                      <p>No scans on this date.</p>
+                      <p>
+                        Showing nearest:{' '}
+                        <span className="font-medium text-foreground">#{resolvedScanId}</span> from{' '}
+                        {formatScanDate(resolvedStartedAt)}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground px-1 py-6 text-center">
+                      No scans found
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </PopoverContent>
-      </Popover>
-
-      {/* Latest button */}
-      <Button
-        variant="default"
-        size="sm"
-        onClick={jumpToLatest}
-        disabled={resolving}
-      >
-        Latest
-      </Button>
-    </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   )
 }

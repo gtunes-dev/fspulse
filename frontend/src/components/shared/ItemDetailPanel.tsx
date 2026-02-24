@@ -396,15 +396,15 @@ export function ItemDetailPanel({
   const getValidationBadge = (val: number) => {
     const short = valShort(val)
     switch (short) {
-      case 'V': return <Badge variant="success" className="gap-1 text-[10px]"><ShieldCheck className="h-2.5 w-2.5" />Valid</Badge>
-      case 'I': return <Badge variant="destructive" className="gap-1 text-[10px]"><ShieldAlert className="h-2.5 w-2.5" />Invalid</Badge>
-      case 'N': return <Badge variant="secondary" className="text-[10px]">No Validator</Badge>
-      default: return <Badge variant="secondary" className="gap-1 text-[10px]"><ShieldQuestion className="h-2.5 w-2.5" />Unknown</Badge>
+      case 'V': return <Badge variant="success" className="gap-1 text-xs"><ShieldCheck className="h-2.5 w-2.5" />Valid</Badge>
+      case 'I': return <Badge variant="destructive" className="gap-1 text-xs"><ShieldAlert className="h-2.5 w-2.5" />Invalid</Badge>
+      case 'N': return <Badge variant="secondary" className="text-xs">No Validator</Badge>
+      default: return <Badge variant="secondary" className="gap-1 text-xs"><ShieldQuestion className="h-2.5 w-2.5" />Unknown</Badge>
     }
   }
 
   const getChangeBadge = (kind: ChangeKind) => {
-    const cls = "text-[10px]"
+    const cls = "text-xs"
     switch (kind) {
       case 'initial': return <Badge className={cn("bg-blue-500 hover:bg-blue-600", cls)}>Initial</Badge>
       case 'modified': return <Badge className={cn("bg-amber-500 hover:bg-amber-600", cls)}>Modified</Badge>
@@ -414,7 +414,7 @@ export function ItemDetailPanel({
   }
 
   const getAlertTypeBadge = (type: string) => {
-    const cls = "text-[10px]"
+    const cls = "text-xs"
     switch (type) {
       case 'H': return <Badge variant="destructive" className={cls}>Hash</Badge>
       case 'I': return <Badge variant="destructive" className={cls}>Invalid</Badge>
@@ -424,7 +424,7 @@ export function ItemDetailPanel({
   }
 
   const getAlertStatusBadge = (status: string) => {
-    const cls = "text-[10px]"
+    const cls = "text-xs"
     switch (status) {
       case 'O': return <Badge variant="destructive" className={cls}>Open</Badge>
       case 'F': return <Badge className={cn("bg-amber-500 hover:bg-amber-600", cls)}>Flagged</Badge>
@@ -461,19 +461,19 @@ export function ItemDetailPanel({
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">{itemName}</p>
+            <p className="text-base font-semibold truncate">{itemName}</p>
           </div>
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0 flex-shrink-0" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground truncate mt-0.5 pl-7">{itemPath}</p>
+        <p className="text-xs text-muted-foreground truncate mt-0.5 pl-7">{itemPath}</p>
         {isTombstone && (
           <div className="mt-1 pl-7">
-            <Badge variant="destructive" className="text-[10px]">Deleted</Badge>
+            <Badge variant="destructive" className="text-xs">Deleted</Badge>
           </div>
         )}
-        <div className="text-[11px] text-muted-foreground mt-1 pl-7">
+        <div className="text-xs text-muted-foreground mt-1 pl-7">
           {firstSeenScanId > 0 && <>First seen #{firstSeenScanId}</>}
           {firstSeenScanId > 0 && totalVersionCount > 0 && <span className="mx-1">&middot;</span>}
           {totalVersionCount > 0 && <>{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</>}
@@ -491,14 +491,14 @@ export function ItemDetailPanel({
             <Card className="border">
               <CardHeader className="px-3 py-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs">
+                  <CardTitle className="text-sm">
                     {scanRef(scanId, anchorScanDate)}
                   </CardTitle>
-                  <span className="text-[10px] text-muted-foreground">v{anchorVersion.version_id}</span>
+                  <span className="text-xs text-muted-foreground">v{anchorVersion.version_id}</span>
                 </div>
               </CardHeader>
               <CardContent className="px-3 py-2">
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-muted-foreground">Type</p>
                     <p className="font-medium">{itemTypeLabel(itemType)}</p>
@@ -522,7 +522,7 @@ export function ItemDetailPanel({
                   {itemType === 'F' && anchorVersion.file_hash && (
                     <div className="col-span-2">
                       <p className="text-muted-foreground flex items-center gap-1"><Hash className="h-3 w-3" />Hash</p>
-                      <p className="font-mono text-[10px] break-all mt-0.5">{anchorVersion.file_hash}</p>
+                      <p className="font-mono text-xs break-all mt-0.5">{anchorVersion.file_hash}</p>
                     </div>
                   )}
                 </div>
@@ -530,9 +530,9 @@ export function ItemDetailPanel({
                 {itemType === 'D' && !isTombstone && (
                   <div className="mt-2 pt-2 border-t">
                     {loadingChildrenCounts ? (
-                      <p className="text-xs text-muted-foreground text-center">Loading...</p>
+                      <p className="text-sm text-muted-foreground text-center">Loading...</p>
                     ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
-                      <div className="flex items-center justify-center gap-4 text-xs">
+                      <div className="flex items-center justify-center gap-4 text-sm">
                         <span className="flex items-center gap-1">
                           <Folder className="h-3 w-3" style={{ color: 'hsl(142 71% 45%)' }} />
                           <span className="font-medium">{childrenCounts.directory_count.toLocaleString()}</span>
@@ -543,7 +543,7 @@ export function ItemDetailPanel({
                         </span>
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground text-center">Empty directory</p>
+                      <p className="text-sm text-muted-foreground text-center">Empty directory</p>
                     )}
                   </div>
                 )}
@@ -555,9 +555,9 @@ export function ItemDetailPanel({
           <Card className="border">
             <CardHeader className="px-3 py-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xs">Size History</CardTitle>
+                <CardTitle className="text-sm">Size History</CardTitle>
                 <Select value={timeWindow} onValueChange={(v) => setTimeWindow(v as TimeWindowPreset)}>
-                  <SelectTrigger className="h-6 w-[100px] text-[10px]">
+                  <SelectTrigger className="h-6 w-[100px] text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -572,9 +572,9 @@ export function ItemDetailPanel({
             </CardHeader>
             <CardContent className="px-3 py-2">
               {loadingSizeHistory ? (
-                <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">Loading...</div>
+                <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading...</div>
               ) : sizeHistory.length === 0 ? (
-                <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">No size history</div>
+                <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">No size history</div>
               ) : (
                 <ChartContainer
                   config={{ size: { label: 'Size', color: 'hsl(271 81% 56%)' } }}
@@ -605,9 +605,9 @@ export function ItemDetailPanel({
           <Card className="border">
             <CardHeader className="px-3 py-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xs">Version History</CardTitle>
+                <CardTitle className="text-sm">Version History</CardTitle>
                 {totalVersionCount > 0 && (
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {versions.length}/{totalVersionCount}
                   </p>
                 )}
@@ -615,7 +615,7 @@ export function ItemDetailPanel({
             </CardHeader>
             <CardContent className="px-3 py-2">
               {changes.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">No version history</p>
+                <p className="text-sm text-muted-foreground text-center py-4">No version history</p>
               ) : (
                 <>
                   <div className="border border-border rounded">
@@ -638,13 +638,13 @@ export function ItemDetailPanel({
                                     </Button>
                                   </CollapsibleTrigger>
                                   {getChangeBadge(change.kind)}
-                                  <p className="text-[10px] text-muted-foreground truncate flex-1">
+                                  <p className="text-xs text-muted-foreground truncate flex-1">
                                     {scanRangeLabel(v)}
                                   </p>
                                   {isAnchor && <Eye className="h-3 w-3 text-primary flex-shrink-0" />}
                                 </div>
                                 <CollapsibleContent className="mt-1 ml-5.5">
-                                  <div className="space-y-1 text-[10px]">
+                                  <div className="space-y-1 text-xs">
                                     {change.prev && v.mod_date !== change.prev.mod_date && (
                                       <div className="bg-muted/50 p-1.5 rounded">
                                         <p className="font-medium flex items-center gap-1"><CalendarIcon className="h-2.5 w-2.5" />Modified</p>
@@ -683,7 +683,7 @@ export function ItemDetailPanel({
                               <div className="flex items-center gap-1.5">
                                 <div className="h-4 w-4 flex-shrink-0" />
                                 {getChangeBadge(change.kind)}
-                                <p className="text-[10px] text-muted-foreground truncate flex-1">
+                                <p className="text-xs text-muted-foreground truncate flex-1">
                                   {scanRangeLabel(v)}
                                 </p>
                                 {isAnchor && <Eye className="h-3 w-3 text-primary flex-shrink-0" />}
@@ -697,7 +697,7 @@ export function ItemDetailPanel({
                   </div>
                   {hasMoreVersions && (
                     <div className="mt-2 flex justify-center">
-                      <Button variant="outline" size="sm" className="text-xs h-7" onClick={loadMoreVersions} disabled={loadingMoreVersions}>
+                      <Button variant="outline" size="sm" className="text-sm h-7" onClick={loadMoreVersions} disabled={loadingMoreVersions}>
                         {loadingMoreVersions ? 'Loading...' : 'Load older'}
                       </Button>
                     </div>
@@ -711,15 +711,15 @@ export function ItemDetailPanel({
           <Card className="border">
             <CardHeader className="px-3 py-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xs">Alerts</CardTitle>
+                <CardTitle className="text-sm">Alerts</CardTitle>
                 {totalAlerts > 0 && (
-                  <p className="text-[10px] text-muted-foreground">{alerts.length}/{totalAlerts}</p>
+                  <p className="text-xs text-muted-foreground">{alerts.length}/{totalAlerts}</p>
                 )}
               </div>
             </CardHeader>
             <CardContent className="px-3 py-2">
               {totalAlerts === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">No alerts</p>
+                <p className="text-sm text-muted-foreground text-center py-4">No alerts</p>
               ) : (
                 <>
                   <div className="border border-border rounded">
@@ -729,10 +729,10 @@ export function ItemDetailPanel({
                           <div className="flex items-center gap-1.5">
                             {getAlertTypeBadge(alert.alert_type)}
                             {getAlertStatusBadge(alert.alert_status)}
-                            <span className="text-[10px] text-muted-foreground">#{alert.scan_id}</span>
+                            <span className="text-xs text-muted-foreground">#{alert.scan_id}</span>
                           </div>
-                          {alert.val_error && <p className="text-[10px] text-red-600">{alert.val_error}</p>}
-                          <p className="text-[10px] text-muted-foreground">{formatDateFull(alert.created)}</p>
+                          {alert.val_error && <p className="text-xs text-red-600">{alert.val_error}</p>}
+                          <p className="text-xs text-muted-foreground">{formatDateFull(alert.created)}</p>
                         </div>
                         {idx < alerts.length - 1 && <Separator />}
                       </div>
@@ -740,7 +740,7 @@ export function ItemDetailPanel({
                   </div>
                   {totalAlerts > alerts.length && (
                     <div className="mt-2 flex justify-center">
-                      <Button variant="outline" size="sm" className="text-xs h-7" onClick={loadMoreAlerts} disabled={loadingMoreAlerts}>
+                      <Button variant="outline" size="sm" className="text-sm h-7" onClick={loadMoreAlerts} disabled={loadingMoreAlerts}>
                         {loadingMoreAlerts ? 'Loading...' : 'Load more'}
                       </Button>
                     </div>
