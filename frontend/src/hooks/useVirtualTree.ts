@@ -1,38 +1,25 @@
 import { useState, useCallback, useRef } from 'react'
-import { sortTreeItems, type TreeNodeData, type FlatTreeItem } from '@/lib/pathUtils'
+import { sortTreeItems, getAncestorChain, type TreeNodeData, type FlatTreeItem } from '@/lib/pathUtils'
+import type { CachedItem } from './useBrowseCache'
 
 export type { FlatTreeItem }
 
 interface UseVirtualTreeOptions {
-  rootId: number
-  scanId: number
+  loadChildrenFn: (parentPath: string) => Promise<CachedItem[]>
 }
 
 /**
- * Response type from the temporal /api/items/immediate-children endpoint
- */
-interface ImmediateChildrenResponse {
-  item_id: number
-  item_path: string
-  item_name: string
-  item_type: string
-  is_deleted: boolean
-  size: number | null
-  mod_date: number | null
-}
-
-/**
- * Hook for managing a virtualized tree structure with lazy loading
- * using the temporal item_versions model.
+ * Hook for managing a virtualized tree structure with lazy loading.
  *
  * This hook maintains a flat array of tree items and handles expansion/collapse
- * logic with on-demand loading of children from the backend API.
+ * logic with on-demand loading of children via the provided loadChildrenFn
+ * (typically backed by useBrowseCache).
  *
- * @param options - Configuration including rootId and scanId for API calls
- * @returns Tree state and operations (flatItems, initializeTree, toggleNode, isLoading)
+ * @param options - Configuration including loadChildrenFn for fetching children
+ * @returns Tree state and operations (flatItems, initializeTree, toggleNode, isLoading, revealPath)
  */
 export function useVirtualTree(options: UseVirtualTreeOptions) {
-  const { rootId, scanId } = options
+  const { loadChildrenFn } = options
   const [flatItems, setFlatItems] = useState<FlatTreeItem[]>([])
   const [loadingItems, setLoadingItems] = useState<Set<number>>(new Set())
 
@@ -40,7 +27,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
   const flatItemsRef = useRef<FlatTreeItem[]>([])
   const loadingItemsRef = useRef<Set<number>>(new Set())
 
-  // Keep ref in sync with state
+  // Keep ref in sync with state (also updated inside setFlatItems for revealPath)
   flatItemsRef.current = flatItems
 
   /**
@@ -61,12 +48,13 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       childrenLoaded: false,
       hasChildren: item.item_type === 'D',
     }))
+    flatItemsRef.current = initialFlatItems
     setFlatItems(initialFlatItems)
   }, [])
 
   /**
    * Collapses a directory node and removes all its descendants from the flat array.
-   * Also resets childrenLoaded flag so re-expansion will fetch fresh data.
+   * Also resets childrenLoaded flag so re-expansion will fetch again (cache makes this instant).
    */
   const collapseNode = useCallback((itemId: number) => {
     setFlatItems(prev => {
@@ -89,7 +77,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       updated[itemIndex] = {
         ...updated[itemIndex],
         isExpanded: false,
-        childrenLoaded: false // Reset so re-expand will fetch again
+        childrenLoaded: false // Reset so re-expand will load again (instant from cache)
       }
 
       // Remove descendants in reverse order to maintain indices
@@ -97,6 +85,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         updated.splice(descendants[i], 1)
       }
 
+      flatItemsRef.current = updated
       return updated
     })
   }, [])
@@ -113,12 +102,13 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       // Mark as expanded
       const updated = [...prev]
       updated[itemIndex] = { ...updated[itemIndex], isExpanded: true }
+      flatItemsRef.current = updated
       return updated
     })
   }, [])
 
   /**
-   * Loads children for a directory node from the temporal API.
+   * Loads children for a directory node from the shared cache.
    * Children are always loaded with deleted items - filtering happens client-side.
    */
   const loadChildren = useCallback(async (itemId: number, parentPath: string, parentDepth: number) => {
@@ -132,26 +122,14 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
     setLoadingItems(prev => new Set(prev).add(itemId))
 
     try {
-      const params = new URLSearchParams({
-        root_id: rootId.toString(),
-        parent_path: parentPath,
-        scan_id: scanId.toString(),
-      })
+      const items = await loadChildrenFn(parentPath)
 
-      const url = `/api/items/immediate-children?${params}`
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch children: ${response.statusText}`)
-      }
-
-      const items = await response.json() as ImmediateChildrenResponse[]
-
-      // Transform API response to TreeNodeData format
+      // Transform to TreeNodeData format for sorting
       const childItems: TreeNodeData[] = items.map(item => ({
         item_id: item.item_id,
         item_path: item.item_path,
         item_name: item.item_name,
-        item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
+        item_type: item.item_type,
         is_deleted: item.is_deleted,
         size: item.size,
         mod_date: item.mod_date,
@@ -193,6 +171,8 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         // Insert children after parent
         updated.splice(itemIndex + 1, 0, ...childFlatItems)
 
+        // Sync ref immediately so revealPath can read updated state
+        flatItemsRef.current = updated
         return updated
       })
     } catch (error) {
@@ -206,7 +186,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         return updated
       })
     }
-  }, [rootId, scanId])
+  }, [loadChildrenFn])
 
   /**
    * Toggles the expansion state of a directory node.
@@ -235,6 +215,31 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
   }, [collapseNode, loadChildren, expandNode])
 
   /**
+   * Reveals a target path in the tree by expanding all ancestor directories.
+   * Returns the item_id of the target if found, or null if the path doesn't exist.
+   *
+   * This is used for Folder → Tree sync: when switching from Folder view to Tree view,
+   * we expand the ancestors so the user's current folder location is visible.
+   */
+  const revealPath = useCallback(async (targetPath: string, rootPath: string): Promise<number | null> => {
+    const chain = getAncestorChain(rootPath, targetPath)
+
+    for (const ancestorPath of chain) {
+      const item = flatItemsRef.current.find(i => i.item_path === ancestorPath)
+      if (!item) return null // Path not found in tree
+
+      // Only expand directories that aren't already expanded
+      if (item.hasChildren && !item.isExpanded) {
+        await loadChildren(item.item_id, item.item_path, item.depth)
+      }
+    }
+
+    // Find the target item
+    const target = flatItemsRef.current.find(i => i.item_path === targetPath)
+    return target?.item_id ?? null
+  }, [loadChildren])
+
+  /**
    * Checks if a specific node is currently loading its children.
    */
   const isLoading = useCallback((itemId: number) => loadingItems.has(itemId), [loadingItems])
@@ -244,5 +249,6 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
     initializeTree,
     toggleNode,
     isLoading,
+    revealPath,
   }
 }

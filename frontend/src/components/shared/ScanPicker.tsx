@@ -218,19 +218,17 @@ export function ScanPicker({ rootId, onScanResolved, onNoScan }: ScanPickerProps
     setDisplayMonth(month)
   }
 
-  // ── Calendar day button with scan-date dot indicator ───────────────
+  // ── Calendar day button: bold + blue for dates with scans ──────────
   const ScanDayButton = useCallback(
     (props: React.ComponentProps<typeof DayButton>) => {
       const dateStr = format(props.day.date, 'yyyy-MM-dd')
       const hasScan = scanDates.has(dateStr)
 
       return (
-        <div className="relative flex flex-col items-center">
-          <CalendarDayButton {...props} />
-          {hasScan && (
-            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
-          )}
-        </div>
+        <CalendarDayButton
+          {...props}
+          className={hasScan ? 'font-bold text-primary' : undefined}
+        />
       )
     },
     [scanDates]

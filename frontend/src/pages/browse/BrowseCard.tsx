@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { FolderTree, FolderOpen, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -8,7 +8,10 @@ import { RootPicker } from '@/components/shared/RootPicker'
 import { CompactScanBar } from '@/components/shared/CompactScanBar'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { ItemDetailPanel } from '@/components/shared/ItemDetailPanel'
+import { useBrowseCache } from '@/hooks/useBrowseCache'
+import { getParentPath } from '@/lib/pathUtils'
 import { FileTreeView } from './FileTreeView'
+import type { FileTreeViewHandle } from './FileTreeView'
 import { FolderView } from './FolderView'
 import { SearchResultsList } from './SearchResultsList'
 
@@ -47,6 +50,17 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
     search: null,
   })
 
+  // Lifted folder navigation path
+  const [folderCurrentPath, setFolderCurrentPath] = useState<string>('')
+
+  // Refs for view sync
+  const treeRef = useRef<FileTreeViewHandle>(null)
+  const previousViewRef = useRef<ViewMode>('tree')
+
+  // Shared data cache for Tree and Folder views
+  const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
+  const cache = useBrowseCache(selectedRoot?.root_id ?? 0, resolvedScanId ?? 0)
+
   // Auto-select first root if no default provided
   useEffect(() => {
     if (!selectedRootId && roots.length > 0) {
@@ -54,14 +68,19 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
     }
   }, [roots, selectedRootId])
 
-  const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
-
-  // Reset resolved scan and all selections when root changes
+  // Reset resolved scan, all selections, and folder path when root changes
   useEffect(() => {
     setResolvedScanId(null)
     setScanStatus('resolving')
     setSelectedItems({ tree: null, folder: null, search: null })
   }, [selectedRootId])
+
+  // Reset folder path when root changes
+  useEffect(() => {
+    if (selectedRoot) {
+      setFolderCurrentPath(selectedRoot.root_path)
+    }
+  }, [selectedRoot])
 
   const handleScanResolved = useCallback((scanId: number) => {
     setResolvedScanId(scanId)
@@ -89,9 +108,48 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
     }
   }
 
-  const handleViewModeChange = (value: string) => {
-    setViewMode(value as ViewMode)
-  }
+  // ── View sync logic ──────────────────────────────────────────────────
+
+  const syncFolderToTree = useCallback(() => {
+    if (!selectedRoot) return
+
+    // Reveal the folder's current path in the tree (async, uses rAF to let
+    // the tree's isActive effect fire first on initial visit)
+    if (treeRef.current) {
+      requestAnimationFrame(() => {
+        treeRef.current?.revealPath(folderCurrentPath)
+      })
+    }
+  }, [folderCurrentPath, selectedRoot])
+
+  const handleViewModeChange = useCallback((value: string) => {
+    const newMode = value as ViewMode
+    const prevMode = previousViewRef.current
+    previousViewRef.current = newMode
+
+    // Copy selection synchronously BEFORE changing viewMode so the detail
+    // panel never unmounts/remounts when the same item stays selected.
+    if (prevMode === 'tree' && newMode === 'folder') {
+      const treeSelection = selectedItems.tree
+      if (treeSelection && selectedRoot) {
+        const targetPath = treeSelection.itemType === 'D'
+          ? treeSelection.itemPath
+          : getParentPath(treeSelection.itemPath)
+        setFolderCurrentPath(targetPath)
+        setSelectedItems(prev => ({ ...prev, folder: treeSelection }))
+      }
+    } else if (prevMode === 'folder' && newMode === 'tree') {
+      const folderSelection = selectedItems.folder
+      if (folderSelection) {
+        setSelectedItems(prev => ({ ...prev, tree: folderSelection }))
+      }
+      syncFolderToTree()
+    }
+
+    setViewMode(newMode)
+  }, [selectedItems.tree, selectedItems.folder, selectedRoot, syncFolderToTree])
+
+  // ── Selection handlers ───────────────────────────────────────────────
 
   const toSelectedItem = (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }): SelectedItem => ({
     itemId: item.itemId,
@@ -125,9 +183,10 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
       {/* Tree View — always rendered */}
       <div className={viewMode === 'tree' ? 'border border-border rounded-lg flex-1 min-h-0 overflow-hidden' : 'hidden'}>
         <FileTreeView
-          rootId={selectedRoot.root_id}
+          ref={treeRef}
           rootPath={selectedRoot.root_path}
           scanId={resolvedScanId}
+          cache={cache}
           showDeleted={showDeleted}
           isActive={viewMode === 'tree'}
           selectedItemId={selectedItems.tree?.itemId}
@@ -138,9 +197,11 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
       {/* Folder View — always rendered */}
       <div className={viewMode === 'folder' ? 'border border-border rounded-lg flex-1 min-h-0 overflow-hidden' : 'hidden'}>
         <FolderView
-          rootId={selectedRoot.root_id}
           rootPath={selectedRoot.root_path}
           scanId={resolvedScanId}
+          cache={cache}
+          currentPath={folderCurrentPath}
+          onNavigate={setFolderCurrentPath}
           showDeleted={showDeleted}
           isActive={viewMode === 'folder'}
           selectedItemId={selectedItems.folder?.itemId}

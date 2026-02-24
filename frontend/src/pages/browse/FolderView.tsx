@@ -4,11 +4,14 @@ import { Folder, File, FileSymlink, FileQuestion, Trash2, Home } from 'lucide-re
 import { cn } from '@/lib/utils'
 import { formatFileSizeCompact } from '@/lib/formatUtils'
 import { formatDateRelative } from '@/lib/dateUtils'
+import type { BrowseCache, CachedItem } from '@/hooks/useBrowseCache'
 
 interface FolderViewProps {
-  rootId: number
   rootPath: string
   scanId: number
+  cache: BrowseCache
+  currentPath: string
+  onNavigate: (path: string) => void
   showDeleted: boolean
   isActive?: boolean
   selectedItemId?: number | null
@@ -22,15 +25,7 @@ export interface SelectedFolderItem {
   isTombstone: boolean
 }
 
-interface FolderItem {
-  item_id: number
-  item_path: string
-  item_name: string
-  item_type: 'F' | 'D' | 'S' | 'O'
-  is_deleted: boolean
-  size: number | null
-  mod_date: number | null
-}
+type FolderItem = CachedItem
 
 type SortColumn = 'name' | 'size' | 'mod_date'
 type SortDir = 'asc' | 'desc'
@@ -67,15 +62,16 @@ function getItemIcon(type: string, deleted: boolean) {
 }
 
 export function FolderView({
-  rootId,
   rootPath,
   scanId,
+  cache,
+  currentPath,
+  onNavigate,
   showDeleted,
   isActive = true,
   selectedItemId,
   onItemSelect,
 }: FolderViewProps) {
-  const [currentPath, setCurrentPath] = useState(rootPath)
   const [items, setItems] = useState<FolderItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -83,72 +79,31 @@ export function FolderView({
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const parentRef = useRef<HTMLDivElement>(null)
-  const requestIdRef = useRef(0)
 
-  // Reset to root when rootPath changes
-  useEffect(() => {
-    setCurrentPath(rootPath)
-  }, [rootPath])
-
-  // Fetch items for currentPath (skip when not active)
+  // Fetch items for currentPath via shared cache (skip when not active)
   const lastFetchKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (!isActive) return
 
-    const fetchKey = `${rootId}:${currentPath}:${scanId}`
+    const fetchKey = `${currentPath}:${scanId}`
     if (lastFetchKeyRef.current === fetchKey) return
     lastFetchKeyRef.current = fetchKey
 
-    const currentRequestId = ++requestIdRef.current
+    setLoading(true)
+    setError(null)
 
-    async function loadItems() {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const params = new URLSearchParams({
-          root_id: rootId.toString(),
-          parent_path: currentPath,
-          scan_id: scanId.toString(),
-        })
-
-        const response = await fetch(`/api/items/immediate-children?${params}`)
-        if (currentRequestId !== requestIdRef.current) return
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch folder contents: ${response.statusText}`)
-        }
-
-        const data = (await response.json()) as Array<{
-          item_id: number
-          item_path: string
-          item_name: string
-          item_type: string
-          is_deleted: boolean
-          size: number | null
-          mod_date: number | null
-        }>
-
-        setItems(
-          data.map((item) => ({
-            ...item,
-            item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-          }))
-        )
-      } catch (err) {
-        if (currentRequestId !== requestIdRef.current) return
+    cache.loadChildren(currentPath)
+      .then(data => {
+        setItems(data)
+        setLoading(false)
+      })
+      .catch(err => {
         lastFetchKeyRef.current = null // Allow retry on error
         setError(err instanceof Error ? err.message : 'Failed to load folder')
+        setLoading(false)
         console.error('FolderView load error:', err)
-      } finally {
-        if (currentRequestId === requestIdRef.current) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadItems()
-  }, [isActive, rootId, currentPath, scanId])
+      })
+  }, [isActive, currentPath, scanId, cache])
 
   // Filter and sort
   const visibleItems = showDeleted ? items : items.filter((i) => !i.is_deleted)
@@ -198,7 +153,7 @@ export function FolderView({
   }
 
   const handleNavigate = (path: string) => {
-    setCurrentPath(path)
+    onNavigate(path)
   }
 
   const handleItemSelect = (item: FolderItem) => {

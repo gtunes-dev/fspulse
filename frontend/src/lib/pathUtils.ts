@@ -93,6 +93,38 @@ export function sortTreeItems(items: TreeNodeData[]): TreeNodeData[] {
 }
 
 /**
+ * Get the chain of ancestor directory paths that must be expanded
+ * to reveal targetPath in a tree rooted at rootPath.
+ *
+ * Returns paths from root's first child down to target's PARENT.
+ * Does not include rootPath (root items are already visible) or
+ * targetPath itself (we want to reveal it, not expand it).
+ *
+ * Example: getAncestorChain("/home", "/home/a/b/c") → ["/home/a", "/home/a/b"]
+ * Example: getAncestorChain("/home", "/home/a") → [] (a is a root item, already visible)
+ * Example: getAncestorChain("/home", "/home") → []
+ */
+export function getAncestorChain(rootPath: string, targetPath: string): string[] {
+  const normalizedRoot = rootPath.replace(/\/$/, '')
+  const normalizedTarget = targetPath.replace(/\/$/, '')
+  if (normalizedTarget === normalizedRoot) return []
+
+  const relative = normalizedTarget.substring(normalizedRoot.length)
+  const segments = relative.split('/').filter(Boolean)
+
+  // Remove the target itself — we only need ancestors
+  segments.pop()
+
+  const chain: string[] = []
+  let current = normalizedRoot
+  for (const seg of segments) {
+    current = current + '/' + seg
+    chain.push(current)
+  }
+  return chain
+}
+
+/**
  * Transform ItemData to TreeNodeData
  */
 export function itemToTreeNode(item: ItemData): TreeNodeData {
