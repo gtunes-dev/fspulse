@@ -82,7 +82,8 @@ FsPulse uses the Rust [`log`](https://docs.rs/log) crate, and so does the PDF va
 
 - Logs are written to `<data_dir>/logs/`
 - Each run of FsPulse creates a new log file, named using the current date and time
-- FsPulse retains up to **100** log files; older files are automatically deleted
+- Individual log files are capped at **50 MB**; if a single run exceeds this, it continues in a new file
+- FsPulse retains up to **20** log files; older files are automatically deleted
 
 ---
 

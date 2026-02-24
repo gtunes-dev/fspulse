@@ -97,9 +97,9 @@ pub fn setup_logging(_project_dirs: &ProjectDirs) {
         .format(perf_format)
         .log_to_file(FileSpec::default().directory(log_dir))
         .rotate(
-            Criterion::Size(u64::MAX),  // Effectively disables size-based rotation
-            Naming::TimestampsDirect,   // 💡 Directly logs to a timestamped file (no CURRENT)
-            Cleanup::KeepLogFiles(100), // Keep 100 most recent log files
+            Criterion::Size(50_000_000), // Rotate at 50 MB to limit individual log file size
+            Naming::TimestampsDirect,    // Directly logs to a timestamped file (no CURRENT)
+            Cleanup::KeepLogFiles(20),   // Keep 20 most recent log files (~1 GB max)
         )
         .start()
         .unwrap();
