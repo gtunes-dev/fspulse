@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2696134d.js";
+            window.path_to_searchindex_js = "../searchindex-f62de205.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d92bdd10.js"></script>
+        <script src="../toc-ae9385db.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,45 +175,33 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="scans"><a class="header" href="#scans">Scans</a></h1>
-<p>The Scans page serves as your central dashboard, providing an at-a-glance view of scan status and history.</p>
-<h2 id="features"><a class="header" href="#features">Features</a></h2>
-<h3 id="active-scan-monitoring"><a class="header" href="#active-scan-monitoring">Active Scan Monitoring</a></h3>
-<p>When a scan is running (manually initiated or scheduled), the Scans page displays:</p>
+<p>The Scans page displays a history of all completed and in-progress scans.</p>
+<h2 id="scan-history"><a class="header" href="#scan-history">Scan History</a></h2>
+<p>The page shows a paginated table of scans with key information:</p>
 <ul>
-<li>Real-time progress indicators</li>
-<li>Current scan phase (Discovery, Hash, Validation, Analysis)</li>
-<li>Statistics: files/folders processed, sizes calculated, changes detected</li>
-<li>Live updates via WebSocket connection</li>
-</ul>
-<h3 id="recent-scan-results"><a class="header" href="#recent-scan-results">Recent Scan Results</a></h3>
-<p>For completed scans, the Scans page shows:</p>
-<ul>
-<li>Scan completion time</li>
-<li>Total items scanned</li>
-<li>Change summary (additions, modifications, deletions)</li>
-<li>Alert count (validation failures, suspicious hash changes)</li>
-<li>Storage metrics</li>
-</ul>
-<h3 id="quick-access"><a class="header" href="#quick-access">Quick Access</a></h3>
-<p>From the Home page, you can quickly navigate to:</p>
-<ul>
-<li>Browse the scanned filesystem</li>
-<li>View detailed scan reports</li>
-<li>Investigate alerts</li>
-<li>Configure new scans</li>
+<li><strong>Scan ID</strong> and associated root</li>
+<li><strong>Start and end times</strong></li>
+<li><strong>State</strong> (Completed, Stopped, Error)</li>
+<li><strong>Item counts</strong> (files, folders, total size)</li>
+<li><strong>Change counts</strong> (additions, modifications, deletions)</li>
+<li><strong>Alert count</strong> (validation failures, suspicious hash changes)</li>
+<li><strong>Scan options</strong> (whether hashing and validation were enabled)</li>
 </ul>
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <ul>
-<li><strong>Monitoring</strong>: Keep the Home page open to watch long-running scans</li>
-<li><strong>Status Check</strong>: Quick view of your most recent scan activity</li>
-<li><strong>Alert Awareness</strong>: Immediate visibility into any detected issues</li>
+<li><strong>History review</strong>: See all past scans and their results at a glance</li>
+<li><strong>Trend awareness</strong>: Notice patterns in change counts or alert frequency across scans</li>
+<li><strong>Troubleshooting</strong>: Identify scans that stopped or errored</li>
 </ul>
+<blockquote>
+<p><strong>Note</strong>: For real-time monitoring of active scans, see the <a href="tasks.html">Tasks</a> page. For scheduling and root management, see <a href="monitor.html">Monitor</a>.</p>
+</blockquote>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../web_ui.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../web_ui/tasks.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -227,7 +215,7 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../web_ui.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../web_ui/tasks.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

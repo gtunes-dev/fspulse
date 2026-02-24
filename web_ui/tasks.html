@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Alerts - FsPulse</title>
+        <title>Tasks - FsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -174,102 +174,60 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="alerts"><a class="header" href="#alerts">Alerts</a></h1>
-<p>The Alerts page provides a centralized view for managing integrity issues detected during scans.</p>
-<h2 id="alert-types"><a class="header" href="#alert-types">Alert Types</a></h2>
-<p>FsPulse generates three types of alerts:</p>
-<h3 id="access-denied"><a class="header" href="#access-denied">Access Denied</a></h3>
-<p>Triggered when FsPulse is unable to access an item or folder. These alerts can occur during either the scan phase or the analysis phase:</p>
-<p><strong>During Scan Phase:</strong></p>
+                        <h1 id="tasks"><a class="header" href="#tasks">Tasks</a></h1>
+<p>The Tasks page is the home page of FsPulse. It provides a central view of what FsPulse is doing and what’s coming up next.</p>
+<hr>
+<h2 id="active-task"><a class="header" href="#active-task">Active Task</a></h2>
+<p>The top of the page shows the current task status:</p>
 <ul>
-<li>Unable to retrieve item metadata (type, size, or modification date)</li>
-<li>Unable to enumerate folder contents (typically due to permission restrictions)</li>
+<li><strong>Running task</strong>: Displays the task type (e.g., scanning a root), current phase, and real-time progress statistics including files and folders processed</li>
+<li><strong>Idle</strong>: When no task is running, shows an idle indicator with a button to initiate a manual scan</li>
 </ul>
-<p><strong>During Analysis Phase:</strong></p>
+<p>Progress updates are delivered in real time via WebSocket, so you can watch scanning phases (Scanning, Sweeping, Analyzing) progress live.</p>
+<hr>
+<h2 id="upcoming-tasks"><a class="header" href="#upcoming-tasks">Upcoming Tasks</a></h2>
+<p>Below the active task, a table shows tasks queued for execution. These are typically generated from schedules and include:</p>
 <ul>
-<li>Unable to read a file for hashing or validation</li>
+<li>Task type and target root</li>
+<li>Scheduled run time</li>
+<li>Source (which schedule created the task)</li>
 </ul>
-<p><strong>Notes:</strong></p>
+<p>Tasks execute sequentially — only one task runs at a time.</p>
+<hr>
+<h2 id="task-history"><a class="header" href="#task-history">Task History</a></h2>
+<p>A paginated table of completed tasks shows:</p>
 <ul>
-<li>If FsPulse cannot determine an item’s type from metadata, the item is recorded as an instance of the “Unknown” type</li>
-<li>Items with failed metadata retrieval, whether “Unknown” or otherwise, are not examined during the analysis phase</li>
+<li>Task type and target root</li>
+<li>Start and completion times</li>
+<li>Final status (Completed, Stopped, Error)</li>
 </ul>
-<h3 id="suspicious-hash-changes"><a class="header" href="#suspicious-hash-changes">Suspicious Hash Changes</a></h3>
-<p>Triggered when:</p>
+<hr>
+<h2 id="manual-scans"><a class="header" href="#manual-scans">Manual Scans</a></h2>
+<p>Click the scan button on the active task card to initiate a manual scan. You’ll select:</p>
 <ul>
-<li>A file’s hash changes between scans</li>
-<li>The file’s modification time has NOT changed</li>
+<li>Which root to scan</li>
+<li>Hashing mode (None, Hash changed items, Hash all items)</li>
+<li>Validation mode (None, Validate changed items, Validate all items)</li>
 </ul>
-<p>This pattern indicates potential:</p>
+<hr>
+<h2 id="pause--resume"><a class="header" href="#pause--resume">Pause / Resume</a></h2>
+<p>FsPulse supports pausing all task execution. When paused:</p>
 <ul>
-<li>Bit rot (silent data corruption)</li>
-<li>Tampering or malicious modification</li>
-<li>Filesystem anomalies</li>
+<li>A banner appears at the top of the page showing how long tasks have been paused and when the pause will expire (if a duration was set)</li>
+<li>No new tasks will start until resumed</li>
+<li>You can edit the pause duration or resume immediately</li>
 </ul>
-<h3 id="invalid-items"><a class="header" href="#invalid-items">Invalid Items</a></h3>
-<p>Triggered when format validation fails:</p>
-<ul>
-<li>FLAC audio files with invalid structure</li>
-<li>JPEG/PNG images that fail format checks</li>
-<li>PDF files with corruption</li>
-<li>Other validated file types with detected issues</li>
-</ul>
-<p>See <a href="../validators.html">Validators</a> for details on supported file types.</p>
-<h2 id="alert-status"><a class="header" href="#alert-status">Alert Status</a></h2>
-<p>Each alert can be in one of three states:</p>
-<ul>
-<li><strong>Open</strong>: New alert requiring attention</li>
-<li><strong>Flagged</strong>: Marked for follow-up or further investigation</li>
-<li><strong>Dismissed</strong>: Reviewed and determined to be non-critical</li>
-</ul>
-<h2 id="managing-alerts"><a class="header" href="#managing-alerts">Managing Alerts</a></h2>
-<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
-<p>Filter alerts by:</p>
-<ul>
-<li>Status (Open/Flagged/Dismissed)</li>
-<li>Alert type (Access denied/Hash change/Validation failure)</li>
-<li>Root</li>
-<li>Time range</li>
-<li>Path search</li>
-</ul>
-<h3 id="status-actions"><a class="header" href="#status-actions">Status Actions</a></h3>
-<ul>
-<li><strong>Flag</strong>: Mark alert for follow-up</li>
-<li><strong>Dismiss</strong>: Acknowledge and close the alert</li>
-<li><strong>Reopen</strong>: Change dismissed alert back to open</li>
-</ul>
-<h3 id="batch-operations"><a class="header" href="#batch-operations">Batch Operations</a></h3>
-<p>Select multiple alerts to update status in bulk.</p>
-<h2 id="alert-details"><a class="header" href="#alert-details">Alert Details</a></h2>
-<p>Click an alert to view:</p>
-<ul>
-<li>Item path and metadata</li>
-<li>Alert timestamp</li>
-<li>Access error details (for access denied alerts)</li>
-<li>Hash change details: previous and new hash values (for suspicious hash alerts)</li>
-<li>Validation error message (for invalid items)</li>
-<li>Link to item in Browse view</li>
-</ul>
-<h2 id="integration-with-browse"><a class="header" href="#integration-with-browse">Integration with Browse</a></h2>
-<p>Alerts are also displayed in the <a href="browse.html">Browse</a> page’s item detail panel, providing context when investigating specific files.</p>
-<h2 id="workflow-recommendations"><a class="header" href="#workflow-recommendations">Workflow Recommendations</a></h2>
-<ol>
-<li><strong>Review Open Alerts</strong>: Check new alerts regularly</li>
-<li><strong>Investigate</strong>: Use Browse to examine affected items</li>
-<li><strong>Triage</strong>: Flag important issues, dismiss false positives</li>
-<li><strong>Restore</strong>: Use backups to restore corrupted files if needed</li>
-<li><strong>Track</strong>: Monitor alert trends in <a href="insights.html">Insights</a></li>
-</ol>
+<p>This is useful when you want to temporarily prevent scans from running (for example, during a backup window or heavy system load).</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../web_ui/browse.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../web_ui.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../web_ui/insights.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../web_ui/scans.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -279,11 +237,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../web_ui/browse.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../web_ui.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../web_ui/insights.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../web_ui/scans.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

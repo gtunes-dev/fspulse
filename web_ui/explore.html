@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2696134d.js";
+            window.path_to_searchindex_js = "../searchindex-f62de205.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d92bdd10.js"></script>
+        <script src="../toc-ae9385db.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,11 +179,11 @@
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p>Explore offers two ways to query your data:</p>
 <ul>
-<li><strong>Structured tabs</strong> (Roots, Scans, Items, Changes, Alerts) — Visual query builder with column selection, sorting, and filtering</li>
+<li><strong>Structured tabs</strong> (Roots, Scans, Items, Versions, Alerts) — Visual query builder with column selection, sorting, and filtering</li>
 <li><strong>Query tab</strong> — Free-form query entry using FsPulse’s query language</li>
 </ul>
 <h2 id="structured-query-tabs"><a class="header" href="#structured-query-tabs">Structured Query Tabs</a></h2>
-<p>The <strong>Roots</strong>, <strong>Scans</strong>, <strong>Items</strong>, <strong>Changes</strong>, and <strong>Alerts</strong> tabs provide a visual interface for building queries without writing query syntax.</p>
+<p>The <strong>Roots</strong>, <strong>Scans</strong>, <strong>Items</strong>, <strong>Versions</strong>, and <strong>Alerts</strong> tabs provide a visual interface for building queries without writing query syntax.</p>
 <h3 id="layout"><a class="header" href="#layout">Layout</a></h3>
 <p>Each structured tab displays:</p>
 <ul>
@@ -200,7 +200,7 @@
 <tbody>
 <tr><td><strong>Checkbox</strong></td><td>Show or hide the column in results</td></tr>
 <tr><td><strong>Drag handle</strong></td><td>Reorder columns by dragging</td></tr>
-<tr><td><strong>Sort</strong></td><td>Click to cycle through ascending (↑), descending (↓), or no sort (⇅)</td></tr>
+<tr><td><strong>Sort</strong></td><td>Click to cycle through ascending, descending, or no sort</td></tr>
 <tr><td><strong>Filter</strong></td><td>Add a filter condition for this column</td></tr>
 </tbody>
 </table>
@@ -211,15 +211,9 @@ Check or uncheck the box next to any column name to include or exclude it from r
 <p><strong>Reorder Columns:</strong>
 Drag columns using the grip handle to change the display order in the results table.</p>
 <p><strong>Sort Results:</strong>
-Click the sort control to cycle through:</p>
-<ul>
-<li>⇅ No sort</li>
-<li>↑ Ascending</li>
-<li>↓ Descending</li>
-</ul>
-<p>Only one column can be sorted at a time.</p>
+Click the sort control to cycle through no sort, ascending, and descending. Only one column can be sorted at a time.</p>
 <p><strong>Filter Data:</strong>
-Click the filter button (+) to add a filter condition. Active filters display as badges showing the filter value. Click the X to remove a filter.</p>
+Click the filter button to add a filter condition. Active filters display as badges showing the filter value. Click the X to remove a filter.</p>
 <p><strong>Reset:</strong>
 Click the reset button in the column header to restore all columns to their default visibility, order, and clear all filters and sorts.</p>
 <h2 id="query-tab"><a class="header" href="#query-tab">Query Tab</a></h2>
@@ -238,6 +232,7 @@ Click the reset button in the column header to restore all columns to their defa
 items where item_type:(F) show item_path, size limit 25
 items where item_type:(F), size:(&gt;1000000) show item_path, size order by size desc limit 20
 alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
+versions where item_id:(42) order by first_scan_id
 </code></pre>
 <h2 id="query-domains"><a class="header" href="#query-domains">Query Domains</a></h2>
 <p>Both interfaces support querying five data domains:</p>
@@ -249,8 +244,8 @@ alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
 <tbody>
 <tr><td><strong>roots</strong></td><td>Configured scan roots</td></tr>
 <tr><td><strong>scans</strong></td><td>Scan metadata and statistics</td></tr>
-<tr><td><strong>items</strong></td><td>Files and folders from the most recent scan</td></tr>
-<tr><td><strong>changes</strong></td><td>Change records across all scans</td></tr>
+<tr><td><strong>items</strong></td><td>Files and folders with their latest version state</td></tr>
+<tr><td><strong>versions</strong></td><td>Item version history — one row per distinct state</td></tr>
 <tr><td><strong>alerts</strong></td><td>Integrity issues and validation failures</td></tr>
 </tbody>
 </table>
@@ -265,12 +260,12 @@ alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
 <p><strong>Use the Query tab when:</strong></p>
 <ul>
 <li>Writing complex queries with multiple conditions</li>
-<li>Using advanced query features (comparisons, multiple filters with AND/OR)</li>
+<li>Using advanced query features (comparisons, ranges, multiple filters)</li>
 <li>Reproducing a specific query you’ve used before</li>
 <li>Learning the query syntax with immediate feedback</li>
 </ul>
 <h2 id="query-syntax"><a class="header" href="#query-syntax">Query Syntax</a></h2>
-<p>For complete documentation on the query language including all operators, field names, and advanced features, see <a href="../query.html">Query Syntax</a>.</p>
+<p>For complete documentation on the query language including all operators, column names, and advanced features, see <a href="../query.html">Query Syntax</a>.</p>
 
                     </main>
 
@@ -280,7 +275,7 @@ alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../cli.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../web_ui/settings.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -294,7 +289,7 @@ alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../cli.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../web_ui/settings.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

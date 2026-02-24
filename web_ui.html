@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2696134d.js";
+            window.path_to_searchindex_js = "searchindex-f62de205.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d92bdd10.js"></script>
+        <script src="toc-ae9385db.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,20 +181,22 @@
 <pre><code class="language-sh">fspulse
 </code></pre>
 <p>By default, the interface is available at <strong>http://127.0.0.1:8080</strong>. You can customize the host and port through configuration or environment variables (see <a href="configuration.html">Configuration</a>).</p>
-<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
+<h2 id="pages"><a class="header" href="#pages">Pages</a></h2>
 <p>The web interface includes the following pages:</p>
 <ul>
-<li><strong><a href="web_ui/scans.html">Scans</a></strong> — Dashboard showing scan status and history</li>
-<li><strong><a href="web_ui/monitor.html">Monitor</a></strong> — Configure automatic scans and manage scan roots</li>
-<li><strong><a href="web_ui/browse.html">Browse</a></strong> — Navigate filesystem hierarchy with detailed item inspection</li>
+<li><strong><a href="web_ui/tasks.html">Tasks</a></strong> — Home page showing active tasks, upcoming scans, and task history</li>
+<li><strong><a href="web_ui/scans.html">Scans</a></strong> — Scan history with results and statistics</li>
+<li><strong><a href="web_ui/monitor.html">Monitor</a></strong> — Configure scan roots and automatic schedules</li>
+<li><strong><a href="web_ui/browse.html">Browse</a></strong> — Navigate filesystem hierarchy with tree, folder, and search views</li>
 <li><strong><a href="web_ui/alerts.html">Alerts</a></strong> — Manage integrity issues and validation failures</li>
 <li><strong><a href="web_ui/insights.html">Insights</a></strong> — Visualize historical data with interactive charts</li>
 <li><strong><a href="web_ui/explore.html">Explore</a></strong> — Query interface for advanced data analysis</li>
+<li><strong><a href="web_ui/settings.html">Settings</a></strong> — Application configuration, database management, and version info</li>
 </ul>
 <h2 id="live-updates"><a class="header" href="#live-updates">Live Updates</a></h2>
-<p>The web interface uses WebSocket connections to provide real-time updates during scan operations. When a scan is running (whether manually initiated or scheduled), you can watch progress updates, statistics, and phase transitions as they happen.</p>
+<p>The web interface uses WebSocket connections to provide real-time updates during task execution. When a scan is running (whether manually initiated or scheduled), you can watch progress updates, statistics, and phase transitions as they happen on the Tasks page.</p>
 <h2 id="navigation"><a class="header" href="#navigation">Navigation</a></h2>
-<p>The left sidebar provides access to all major sections. On smaller screens, the sidebar collapses into a hamburger menu for better mobile experience.</p>
+<p>The left sidebar provides icon-based access to all pages. The sidebar expands on hover to show page labels.</p>
 
                     </main>
 
@@ -204,7 +206,7 @@
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="web_ui/scans.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="web_ui/tasks.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -218,7 +220,7 @@
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="web_ui/scans.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="web_ui/tasks.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

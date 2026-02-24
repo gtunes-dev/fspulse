@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2696134d.js";
+            window.path_to_searchindex_js = "../searchindex-f62de205.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d92bdd10.js"></script>
+        <script src="../toc-ae9385db.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,62 +175,89 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="browse"><a class="header" href="#browse">Browse</a></h1>
-<p>The Browse page provides an intuitive interface for navigating your filesystem hierarchy and inspecting individual items in detail.</p>
-<h2 id="filesystem-tree"><a class="header" href="#filesystem-tree">Filesystem Tree</a></h2>
-<p>Navigate your scanned directories with a hierarchical tree view showing:</p>
+<p>The Browse page is an investigation workbench for navigating your filesystem hierarchy, comparing states across time, and inspecting individual items in detail.</p>
+<h2 id="browse-cards"><a class="header" href="#browse-cards">Browse Cards</a></h2>
+<p>Each browse card is a self-contained browsing environment with its own root selection, scan selection, view mode, and optional detail panel.</p>
+<h3 id="root-and-scan-selection"><a class="header" href="#root-and-scan-selection">Root and Scan Selection</a></h3>
+<p>At the top of each card:</p>
 <ul>
-<li>Folders and files from your most recent scan</li>
-<li>Item counts and sizes</li>
-<li>Visual indicators for items with alerts</li>
+<li><strong>Root picker</strong>: Select which root directory to browse</li>
+<li><strong>Scan bar</strong>: Shows the current scan (e.g., “Scan #42 — 15 Jan”) with a calendar button to pick a different scan and a “Latest” button to jump to the most recent scan</li>
 </ul>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-tree.png" alt="Browse Filesystem Tree" style="width: 90%; max-width: 900px;">
-</p>
-
-<h3 id="features"><a class="header" href="#features">Features</a></h3>
+<h3 id="view-modes"><a class="header" href="#view-modes">View Modes</a></h3>
+<p>Three view modes are available via tabs:</p>
+<h4 id="tree-view"><a class="header" href="#tree-view">Tree View</a></h4>
+<p>A hierarchical expand/collapse tree showing the filesystem structure at the selected scan point:</p>
 <ul>
-<li><strong>Search</strong>: Filter items by path using the search box</li>
-<li><strong>Expand/Collapse</strong>: Navigate the folder structure</li>
-<li><strong>Sort</strong>: Order by name, size, or modification time</li>
-<li><strong>Root Selection</strong>: Switch between different scan roots</li>
+<li>Click the <strong>chevron</strong> on folders to expand or collapse</li>
+<li>Click an <strong>item name</strong> to select it and open the detail panel</li>
+<li>Children are loaded on demand for performance</li>
+<li>Deleted items shown with strikethrough and a trash icon when “Show deleted” is enabled</li>
 </ul>
-<h2 id="item-detail-panel"><a class="header" href="#item-detail-panel">Item Detail Panel</a></h2>
-<p>Click any item to open the detail panel, which provides comprehensive information:</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="Item Detail Panel" style="width: 90%; max-width: 900px;">
-</p>
-
-<h3 id="metadata"><a class="header" href="#metadata">Metadata</a></h3>
+<h4 id="folder-view"><a class="header" href="#folder-view">Folder View</a></h4>
+<p>A flat, breadcrumb-navigated view similar to a file explorer:</p>
+<ul>
+<li><strong>Breadcrumb ribbon</strong> at the top shows the current path — click any segment to navigate up</li>
+<li><strong>Sortable columns</strong>: Name, Size, Modified Date — click column headers to sort (ascending/descending)</li>
+<li><strong>Folder navigation</strong>: Click a folder’s icon to navigate into it</li>
+<li><strong>Item selection</strong>: Click an item’s name to select it for the detail panel</li>
+<li>Directories are always sorted first, then by the selected column</li>
+</ul>
+<h4 id="search-view"><a class="header" href="#search-view">Search View</a></h4>
+<p>A text search across all items in the selected root and scan:</p>
+<ul>
+<li>Type in the search box to filter items by path (with 300ms debounce)</li>
+<li>Results appear as a flat list with full path tooltips</li>
+<li>Click any result to select it for the detail panel</li>
+</ul>
+<h3 id="controls"><a class="header" href="#controls">Controls</a></h3>
+<ul>
+<li><strong>Show deleted</strong>: Toggle checkbox to include or hide deleted items across all views</li>
+<li>Each view mode maintains its own independently selected item — switching tabs preserves your selection in each</li>
+</ul>
+<hr>
+<h2 id="detail-panel"><a class="header" href="#detail-panel">Detail Panel</a></h2>
+<p>Clicking any item opens an inline detail panel within the card. The panel shows comprehensive information about the selected item:</p>
+<h3 id="current-state"><a class="header" href="#current-state">Current State</a></h3>
 <ul>
 <li>File/folder size (dual format: decimal and binary units)</li>
 <li>Modification time</li>
 <li>Item type</li>
 <li>Current hash (if hashed)</li>
+<li>Validation state and error details</li>
 </ul>
-<h3 id="validation-status"><a class="header" href="#validation-status">Validation Status</a></h3>
+<h3 id="size-history"><a class="header" href="#size-history">Size History</a></h3>
 <ul>
-<li>Validation state (Valid, Invalid, NotValidated)</li>
-<li>Validation error details (if any)</li>
-<li>Last validation scan information</li>
+<li>Interactive chart showing how the item’s size has changed over time</li>
 </ul>
-<h3 id="change-history"><a class="header" href="#change-history">Change History</a></h3>
+<h3 id="version-history"><a class="header" href="#version-history">Version History</a></h3>
 <ul>
-<li>Change type across scans (Add, Modify, Delete, NoChange)</li>
-<li>Hash changes detected</li>
-<li>Modification timeline</li>
+<li>Paginated timeline of all item versions, showing what changed and when</li>
+<li>Each version displays its temporal range (first scan to last scan)</li>
 </ul>
-<h3 id="associated-alerts"><a class="header" href="#associated-alerts">Associated Alerts</a></h3>
+<h3 id="alerts"><a class="header" href="#alerts">Alerts</a></h3>
 <ul>
-<li>Suspicious hash changes</li>
-<li>Validation failures</li>
+<li>Any alerts associated with this item (suspicious hashes, validation failures, access errors)</li>
 <li>Alert status and timestamps</li>
 </ul>
+<p>Close the detail panel by clicking the close button. The panel scrolls independently from the navigation area.</p>
+<hr>
+<h2 id="comparison-mode"><a class="header" href="#comparison-mode">Comparison Mode</a></h2>
+<p>Click <strong>Show Compare</strong> in the page header to open a second browse card side by side. Each card operates independently — you can:</p>
+<ul>
+<li><strong>Compare across time</strong>: Same root, different scans — see how the filesystem changed</li>
+<li><strong>Compare across roots</strong>: Different roots (e.g., original vs. backup) at the same or different scans</li>
+</ul>
+<p>When both cards have detail panels open, the panels appear adjacent in the center for easy comparison (Card A’s panel is on the right, Card B’s panel is on the left).</p>
+<p>Close the second card by clicking <strong>Show Compare</strong> again.</p>
+<hr>
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <ul>
-<li><strong>Investigation</strong>: Drill down into specific files or folders when alerts are triggered</li>
-<li><strong>Verification</strong>: Check hash and validation status of critical files</li>
-<li><strong>Analysis</strong>: Understand what changed between scans</li>
-<li><strong>Navigation</strong>: Visual exploration of your monitored filesystems</li>
+<li><strong>Investigation</strong>: Drill into specific files when alerts are triggered — click an alert’s item, then inspect version history and validation errors</li>
+<li><strong>Capacity analysis</strong>: Use Folder view sorted by Size to find what’s consuming space</li>
+<li><strong>Change review</strong>: Browse at two scan points in comparison mode to see exactly what changed</li>
+<li><strong>Verification</strong>: Check hash and validation status of critical files in the detail panel</li>
+<li><strong>Point-in-time browsing</strong>: Use the scan picker to see the filesystem as it was at any past scan</li>
 </ul>
 
                     </main>

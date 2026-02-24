@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2696134d.js";
+            window.path_to_searchindex_js = "searchindex-f62de205.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d92bdd10.js"></script>
+        <script src="toc-ae9385db.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,53 +175,43 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="scanning"><a class="header" href="#scanning">Scanning</a></h1>
-<p>FsPulse scans are at the core of how it tracks changes to the file system over time. A scan creates a snapshot of a root directory and analyzes changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
+<p>FsPulse scans are at the core of how it tracks changes to the filesystem over time. A scan creates a snapshot of a root directory and detects changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
 <hr>
 <h2 id="initiating-a-scan"><a class="header" href="#initiating-a-scan">Initiating a Scan</a></h2>
 <p><strong>FsPulse runs as a web service, and scans are initiated through the web UI:</strong></p>
 <ol>
 <li>Start the server: <code>fspulse serve</code></li>
 <li>Open http://localhost:8080 in your browser (or the custom port you’ve configured)</li>
-<li>Navigate to the <strong>Monitor</strong> page</li>
-<li>Configure scan options (hashing, validation)</li>
-<li>Start the scan and monitor real-time progress on the <strong>Home</strong> page</li>
+<li>Navigate to the <strong>Monitor</strong> page to configure roots and schedules</li>
+<li>Start a manual scan or let a schedule trigger one</li>
+<li>Monitor real-time progress on the <strong>Tasks</strong> page</li>
 </ol>
 <p>The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules (daily, weekly, monthly, or custom intervals) or initiate individual scans as needed. See <a href="web_ui/monitor.html">Monitor</a> for details.</p>
 <p>Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.</p>
-<blockquote>
-<p><strong>Note</strong>: FsPulse is designed with the web UI as the primary interface for all users. A <a href="cli.html">command-line interface</a> is also available for expert users who prefer terminal workflows or need to integrate FsPulse into scripts and automation, but all functionality is accessible through the web UI.</p>
-</blockquote>
 <hr>
 <h2 id="hashing"><a class="header" href="#hashing">Hashing</a></h2>
-<p>Hashing is a key capabilities of FsPulse.</p>
-<p>FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents.
-The intent of hashing is to enable the detection of changes to file content in cases where the modification
-date and file size have not changed. One example of a case where this might occur is bit rot (data decay).</p>
+<p>Hashing is a key capability of FsPulse.</p>
+<p>FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents. The intent of hashing is to enable the detection of changes to file content in cases where the modification date and file size have not changed. One example of a case where this might occur is bit rot (data decay).</p>
 <p>When configuring a scan in the web UI, you can enable hashing with these options:</p>
 <ul>
 <li><strong>Hash changed items</strong> (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed</li>
 <li><strong>Hash all items</strong>: Hash all files, including those that have been previously hashed</li>
 </ul>
-<p>If a hash is detected to have changed, a change record is created and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>).</p>
+<p>If a hash is detected to have changed, a new item version is created and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>).</p>
 <h3 id="finding-hash-changes"><a class="header" href="#finding-hash-changes">Finding Hash Changes</a></h3>
 <p>You can investigate hash changes through the web UI:</p>
 <ul>
 <li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows suspicious hash changes where file metadata hasn’t changed</li>
+<li><strong><a href="web_ui/browse.html">Browse Page</a></strong>: Click any item to see its version history including hash changes</li>
 <li><strong><a href="web_ui/explore.html">Explore Page</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
-<p>Example query to find hash changes without metadata changes (run on the Explore page’s Query tab):</p>
-<pre><code class="language-text">changes where meta_change:(F), hash_change:(T) show default, item_path order by change_id desc
+<p>Example query to find items with suspicious hashes (run on the Explore page’s Query tab):</p>
+<pre><code class="language-text">alerts where alert_type:(H) order by created_at desc
 </code></pre>
 <h2 id="validating"><a class="header" href="#validating">Validating</a></h2>
 <p>FsPulse can attempt to assess the “validity” of files.</p>
-<p>FsPulse uses community-contributed libraries to “validate” files. Validation is implemented as
-opening and reading or traversing the file. These community libraries raise a variety of “errors”
-when invalid content is encountered.</p>
-<p>FsPulse’s ability to validate files is limited to the capabilities of the libraries that it uses,
-and these libraries vary in terms of completeness and accuracy. In some cases, such as FsPulse’s use
-of lopdf to validate PDF files, false positive “errors” may be detected as a consequence of lopdf
-encountering PDF file contents it does not yet understand. Despite these limitations, FsPulse
-offers a unique and effective view into potential validity issues in files.</p>
+<p>FsPulse uses community-contributed libraries to “validate” files. Validation is implemented as opening and reading or traversing the file. These community libraries raise a variety of “errors” when invalid content is encountered.</p>
+<p>FsPulse’s ability to validate files is limited to the capabilities of the libraries that it uses, and these libraries vary in terms of completeness and accuracy. In some cases, such as FsPulse’s use of lopdf to validate PDF files, false positive “errors” may be detected as a consequence of lopdf encountering PDF file contents it does not yet understand. Despite these limitations, FsPulse offers a unique and effective view into potential validity issues in files.</p>
 <p>See <a href="validators.html">Validators</a> for the complete list of supported file types.</p>
 <p>When configuring a scan in the web UI, you can enable validation with these options:</p>
 <ul>
@@ -236,19 +226,19 @@ offers a unique and effective view into potential validity issues in files.</p>
 <li><strong>V</strong>: Valid. Validation was performed and no errors were encountered</li>
 <li><strong>I</strong>: Invalid. Validation was performed and an error was encountered</li>
 </ul>
-<p>In the case of ‘I’ (Invalid), the validation error message is stored alongside the validation state. When an item’s validation state changes, the change is recorded and both old and new states are available for analysis.</p>
-<p>If a validation pass produces an error identical to a previously seen error, no new change is recorded.</p>
+<p>In the case of ‘I’ (Invalid), the validation error message is stored alongside the validation state. When an item’s validation state changes, a new item version is created capturing both the old and new states.</p>
+<p>If a validation pass produces an error identical to the existing error, no new version is created — only the <code>last_val_scan</code> bookkeeping field is updated.</p>
 <h3 id="finding-validation-issues"><a class="header" href="#finding-validation-issues">Finding Validation Issues</a></h3>
 <p>Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:</p>
 <ul>
 <li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows all items with validation failures, with filtering and status management</li>
-<li><strong><a href="web_ui/browse.html">Browse Page</a></strong>: Click any item to see its validation status and error details</li>
+<li><strong><a href="web_ui/browse.html">Browse Page</a></strong>: Click any item to see its validation status and error details in the inline detail panel</li>
 <li><strong><a href="web_ui/explore.html">Explore Page</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
-<p>Example query to find validation state changes (run on the Explore page’s Query tab):</p>
-<pre><code class="language-text">changes where val_change:(T) show default, item_path order by change_id desc
+<p>Example query to find items currently in an invalid validation state:</p>
+<pre><code class="language-text">items where val:(I) show default, val_error order by item_path
 </code></pre>
-<p>Additional queries can filter on specific old and new validation states. See <a href="query.html">Query Syntax</a> for details.</p>
+<p>Additional queries can filter on specific validation states. See <a href="query.html">Query Syntax</a> for details.</p>
 <hr>
 <h2 id="in-progress-scans"><a class="header" href="#in-progress-scans">In-Progress Scans</a></h2>
 <p>FsPulse is designed to be resilient to interruptions like system crashes or power loss. If a scan stops before completing, FsPulse saves its state so it can be resumed later.</p>
@@ -258,73 +248,69 @@ offers a unique and effective view into potential validity issues in files.</p>
 <li><strong>Stop</strong> the scan and discard its partial results</li>
 </ul>
 <blockquote>
-<p>Stopping a scan reverts the database to its pre-scan state. All detected changes, computed hashes, and validations from that partial scan will be discarded.</p>
+<p>Stopping a scan reverts the database to its pre-scan state using an undo log. All detected versions, computed hashes, and validations from that partial scan will be discarded.</p>
 </blockquote>
 <hr>
 <h2 id="phases-of-a-scan"><a class="header" href="#phases-of-a-scan">Phases of a Scan</a></h2>
 <p>Each scan proceeds in three main phases:</p>
-<h3 id="1-discovery"><a class="header" href="#1-discovery">1. Discovery</a></h3>
+<h3 id="1-scanning"><a class="header" href="#1-scanning">1. Scanning</a></h3>
 <p>The directory tree is deeply traversed. For each file or folder encountered:</p>
 <ul>
 <li>If not seen before:
 <ul>
-<li>A new item is created</li>
-<li>An <strong>Add</strong> change is recorded</li>
+<li>A new item identity is created</li>
+<li>A new item version is inserted with <code>first_scan_id = current_scan</code></li>
 </ul>
 </li>
 <li>If seen before:
 <ul>
-<li>FsPulse compares current file system metadata:
+<li>FsPulse compares current filesystem metadata:
 <ul>
 <li><strong>Modification date</strong> (files and folders)</li>
 <li><strong>File size</strong> (files only)</li>
 </ul>
 </li>
-<li>If metadata differs, the item is updated and a <strong>Modify</strong> change is recorded</li>
+<li>If metadata differs, a new item version is created carrying forward unchanged properties (hash, validation) from the previous version</li>
+<li>If unchanged, the existing version’s <code>last_scan_id</code> is updated in place</li>
 </ul>
 </li>
-<li>If the path matches a <strong>tombstoned</strong> item (previously deleted):
+<li>If the path matches a <strong>deleted</strong> item (previous version has <code>is_deleted = true</code>):
 <ul>
-<li>If type matches (file/folder), the tombstone is reactivated and an <strong>Add</strong> change is created</li>
-<li>If type differs, FsPulse creates a new item and new <strong>Add</strong> change</li>
+<li>A new version is created with <code>is_deleted = false</code> (rehydration)</li>
 </ul>
 </li>
 </ul>
 <blockquote>
 <p>Files and folders are treated as distinct types. A single path that appears as both a file and folder at different times results in two separate items.</p>
 </blockquote>
+<p>Writes are batched (100 items per transaction) for performance. An undo log records in-place updates to support rollback if the scan is stopped.</p>
 <hr>
-<h3 id="2-sweep"><a class="header" href="#2-sweep">2. Sweep</a></h3>
+<h3 id="2-sweeping"><a class="header" href="#2-sweeping">2. Sweeping</a></h3>
 <p>FsPulse identifies items not seen during the current scan:</p>
 <ul>
-<li>Any item that:
-<ul>
-<li>Is <strong>not</strong> a tombstone, and</li>
-<li>Was <strong>not visited</strong> in the scan</li>
+<li>Any item whose current version is not deleted and was not visited in this scan gets a new version with <code>is_deleted = true</code>.</li>
 </ul>
-</li>
-</ul>
-<p>…is marked as a <strong>tombstone</strong>, and a <strong>Delete</strong> change is created.</p>
-<p>Moved files appear as deletes and adds, as FsPulse does not yet track move operations.</p>
+<p>Moved files appear as deletes and adds, as FsPulse does not track move operations.</p>
 <hr>
-<h3 id="3-analysis"><a class="header" href="#3-analysis">3. Analysis</a></h3>
-<p>This phase runs only if hashing and/or validation is enabled when configuring the scan (see <a href="#hashing">Hashing</a> and <a href="#validating">Validating</a> above).</p>
+<h3 id="3-analyzing"><a class="header" href="#3-analyzing">3. Analyzing</a></h3>
+<p>This phase runs only if hashing and/or validation is enabled (see <a href="#hashing">Hashing</a> and <a href="#validating">Validating</a> above).</p>
 <ul>
-<li><strong>Hashing</strong> — Computes a SHA2 hash of file contents</li>
+<li><strong>Hashing</strong> — Computes a SHA-256 hash of file contents</li>
 <li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity (see <a href="validators.html">Validators</a>)</li>
 </ul>
-<p>If either the hash or validation result changes:</p>
+<p>If a hash or validation result changes:</p>
 <ul>
-<li>If an <strong>Add</strong> or <strong>Modify</strong> change already exists, the new data is attached to it</li>
-<li>Otherwise, a new <strong>Modify</strong> change is created</li>
+<li>If the item already received a new version in the scanning phase (same scan), the existing version is <strong>updated in place</strong></li>
+<li>Otherwise, the previous version’s <code>last_scan_id</code> is restored and a new version is created</li>
 </ul>
-<p>Each change record stores both the <strong>old</strong> and <strong>new</strong> values for comparison, allowing you to track exactly what changed.</p>
+<p>This guarantees <strong>at most one new version per item per scan</strong>.</p>
+<p>If the hash and validation results are unchanged, only the bookkeeping fields (<code>last_hash_scan</code>, <code>last_val_scan</code>) are updated on the existing version.</p>
 <hr>
 <h2 id="performance-and-threading"><a class="header" href="#performance-and-threading">Performance and Threading</a></h2>
 <p>The analysis phase runs in parallel:</p>
 <ul>
 <li>Default: <strong>8 threads</strong></li>
-<li>User-configurable in <a href="configuration.html">Configuration</a></li>
+<li>Configurable from 1 to 24 in <a href="configuration.html">Configuration</a></li>
 </ul>
 <hr>
 <h2 id="summary-of-phases"><a class="header" href="#summary-of-phases">Summary of Phases</a></h2>
@@ -334,13 +320,13 @@ offers a unique and effective view into potential validity issues in files.</p>
 <tr><th>Phase</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td>Discovery</td><td>Finds and records new or modified items</td></tr>
-<tr><td>Sweep</td><td>Marks missing items as tombstones and records deletions</td></tr>
-<tr><td>Analysis</td><td>Computes hashes/validations and records changes if values differ</td></tr>
+<tr><td>Scanning</td><td>Traverses the filesystem, creates or updates item versions</td></tr>
+<tr><td>Sweeping</td><td>Marks missing items as deleted with new version rows</td></tr>
+<tr><td>Analyzing</td><td>Computes hashes and validates files, updating or creating versions</td></tr>
 </tbody>
 </table>
 </div>
-<p>Each scan provides a consistent view of the file system at a moment in time and captures important differences across revisions.</p>
+<p>Each scan provides a consistent view of the filesystem at a moment in time. The temporal versioning model means you can reconstruct the exact state of any item at any scan point.</p>
 
                     </main>
 

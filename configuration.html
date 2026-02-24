@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2696134d.js";
+            window.path_to_searchindex_js = "searchindex-f62de205.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d92bdd10.js"></script>
+        <script src="toc-ae9385db.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -176,6 +176,9 @@
                     <main>
                         <h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
 <p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior, analysis settings, server configuration, and more.</p>
+<blockquote>
+<p><strong>Web UI</strong>: Most configuration settings can also be viewed and edited through the <a href="web_ui/settings.html">Settings</a> page in the web interface, which shows the active value and its source (default, config file, or environment variable).</p>
+</blockquote>
 <blockquote>
 <p><strong>📦 Docker Users</strong>: If you’re running FsPulse in Docker, see the <a href="docker.html">Docker Deployment</a> chapter for Docker-specific configuration including environment variable overrides and volume management.</p>
 </blockquote>
@@ -334,7 +337,7 @@ docker run -e FSPULSE_LOGGING_FSPULSE=debug ...
 <tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-256</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
+<tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-24</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
 </tbody>
 </table>
 </div>

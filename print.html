@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2696134d.js";
+            window.path_to_searchindex_js = "searchindex-f62de205.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d92bdd10.js"></script>
+        <script src="toc-ae9385db.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -210,12 +210,13 @@ FsPulse makes no outbound network requests. All functionality runs entirely on y
 <h2 id="key-capabilities"><a class="header" href="#key-capabilities">Key Capabilities</a></h2>
 <ul>
 <li><strong>Continuous Monitoring</strong> — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically</li>
+<li><strong>Temporal Versioning</strong> — Every item’s state is tracked over time; browse your filesystem as it appeared at any past scan</li>
 <li><strong>Size &amp; Growth Tracking</strong> — Monitor directory sizes and visualize storage trends over time with dual-format units</li>
-<li><strong>Change Detection</strong> — Track all file additions, modifications, and deletions with complete historical records</li>
+<li><strong>Change Detection</strong> — Track all file additions, modifications, and deletions through version history</li>
 <li><strong>Integrity Verification</strong> — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types</li>
 <li><strong>Historical Analysis</strong> — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts</li>
 <li><strong>Alert System</strong> — Suspicious hash changes and validation failures flagged immediately with status management</li>
-<li><strong>Powerful Query Language</strong> — SQL-inspired syntax for filtering, sorting, and analyzing your filesystem data</li>
+<li><strong>Powerful Query Language</strong> — SQL-inspired syntax for filtering, sorting, and analyzing across five data domains</li>
 <li><strong>Web-First Design</strong> — Elegant web UI for all operations including scanning, browsing, querying, and configuration</li>
 </ul>
 <h2 id="running-fspulse"><a class="header" href="#running-fspulse">Running FsPulse</a></h2>
@@ -306,11 +307,12 @@ cargo build --release
 <p>Then open your browser to <strong>http://localhost:8080</strong> to access the web interface.</p>
 <p>FsPulse is a <strong>web-first application</strong>. All functionality is available through the web UI:</p>
 <ul>
-<li>Root management (create, view, delete roots)</li>
-<li>Scan scheduling and initiation with real-time progress</li>
-<li>Interactive data browsing and exploration</li>
-<li>Powerful query interface</li>
-<li>Alert management</li>
+<li>Task monitoring and scan management with real-time progress</li>
+<li>Root and schedule management</li>
+<li>Interactive browsing with tree, folder, and search views</li>
+<li>Point-in-time filesystem snapshots and comparison</li>
+<li>Powerful query interface across five data domains</li>
+<li>Alert management and configuration</li>
 </ul>
 <h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
 <p>FsPulse is configured through environment variables or a config file, not command-line flags:</p>
@@ -843,7 +845,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <h2 id="running-your-first-scan"><a class="header" href="#running-your-first-scan">Running Your First Scan</a></h2>
 <ol>
 <li>From the Monitor page, click <strong>Scan Now</strong> for your newly added root</li>
-<li>Watch the real-time progress on the <strong>Home</strong> page</li>
+<li>Watch the real-time progress on the <strong>Tasks</strong> page (the home page)</li>
 <li>Once complete, explore the results</li>
 </ol>
 <h2 id="exploring-your-data"><a class="header" href="#exploring-your-data">Exploring Your Data</a></h2>
@@ -876,53 +878,43 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="scanning"><a class="header" href="#scanning">Scanning</a></h1>
-<p>FsPulse scans are at the core of how it tracks changes to the file system over time. A scan creates a snapshot of a root directory and analyzes changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
+<p>FsPulse scans are at the core of how it tracks changes to the filesystem over time. A scan creates a snapshot of a root directory and detects changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
 <hr>
 <h2 id="initiating-a-scan"><a class="header" href="#initiating-a-scan">Initiating a Scan</a></h2>
 <p><strong>FsPulse runs as a web service, and scans are initiated through the web UI:</strong></p>
 <ol>
 <li>Start the server: <code>fspulse serve</code></li>
 <li>Open http://localhost:8080 in your browser (or the custom port you’ve configured)</li>
-<li>Navigate to the <strong>Monitor</strong> page</li>
-<li>Configure scan options (hashing, validation)</li>
-<li>Start the scan and monitor real-time progress on the <strong>Home</strong> page</li>
+<li>Navigate to the <strong>Monitor</strong> page to configure roots and schedules</li>
+<li>Start a manual scan or let a schedule trigger one</li>
+<li>Monitor real-time progress on the <strong>Tasks</strong> page</li>
 </ol>
 <p>The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules (daily, weekly, monthly, or custom intervals) or initiate individual scans as needed. See <a href="#monitor">Monitor</a> for details.</p>
 <p>Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.</p>
-<blockquote>
-<p><strong>Note</strong>: FsPulse is designed with the web UI as the primary interface for all users. A <a href="#command-line-interface">command-line interface</a> is also available for expert users who prefer terminal workflows or need to integrate FsPulse into scripts and automation, but all functionality is accessible through the web UI.</p>
-</blockquote>
 <hr>
 <h2 id="hashing"><a class="header" href="#hashing">Hashing</a></h2>
-<p>Hashing is a key capabilities of FsPulse.</p>
-<p>FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents.
-The intent of hashing is to enable the detection of changes to file content in cases where the modification
-date and file size have not changed. One example of a case where this might occur is bit rot (data decay).</p>
+<p>Hashing is a key capability of FsPulse.</p>
+<p>FsPulse uses the standard SHA2 (256) message-digest algorithm to compute digital fingerprints of file contents. The intent of hashing is to enable the detection of changes to file content in cases where the modification date and file size have not changed. One example of a case where this might occur is bit rot (data decay).</p>
 <p>When configuring a scan in the web UI, you can enable hashing with these options:</p>
 <ul>
 <li><strong>Hash changed items</strong> (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed</li>
 <li><strong>Hash all items</strong>: Hash all files, including those that have been previously hashed</li>
 </ul>
-<p>If a hash is detected to have changed, a change record is created and an alert is generated (see <a href="#alerts">Alerts</a>).</p>
+<p>If a hash is detected to have changed, a new item version is created and an alert is generated (see <a href="#alerts-1">Alerts</a>).</p>
 <h3 id="finding-hash-changes"><a class="header" href="#finding-hash-changes">Finding Hash Changes</a></h3>
 <p>You can investigate hash changes through the web UI:</p>
 <ul>
-<li><strong><a href="#alerts">Alerts Page</a></strong>: Shows suspicious hash changes where file metadata hasn’t changed</li>
+<li><strong><a href="#alerts-1">Alerts Page</a></strong>: Shows suspicious hash changes where file metadata hasn’t changed</li>
+<li><strong><a href="#browse">Browse Page</a></strong>: Click any item to see its version history including hash changes</li>
 <li><strong><a href="#explore">Explore Page</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
-<p>Example query to find hash changes without metadata changes (run on the Explore page’s Query tab):</p>
-<pre><code class="language-text">changes where meta_change:(F), hash_change:(T) show default, item_path order by change_id desc
+<p>Example query to find items with suspicious hashes (run on the Explore page’s Query tab):</p>
+<pre><code class="language-text">alerts where alert_type:(H) order by created_at desc
 </code></pre>
 <h2 id="validating"><a class="header" href="#validating">Validating</a></h2>
 <p>FsPulse can attempt to assess the “validity” of files.</p>
-<p>FsPulse uses community-contributed libraries to “validate” files. Validation is implemented as
-opening and reading or traversing the file. These community libraries raise a variety of “errors”
-when invalid content is encountered.</p>
-<p>FsPulse’s ability to validate files is limited to the capabilities of the libraries that it uses,
-and these libraries vary in terms of completeness and accuracy. In some cases, such as FsPulse’s use
-of lopdf to validate PDF files, false positive “errors” may be detected as a consequence of lopdf
-encountering PDF file contents it does not yet understand. Despite these limitations, FsPulse
-offers a unique and effective view into potential validity issues in files.</p>
+<p>FsPulse uses community-contributed libraries to “validate” files. Validation is implemented as opening and reading or traversing the file. These community libraries raise a variety of “errors” when invalid content is encountered.</p>
+<p>FsPulse’s ability to validate files is limited to the capabilities of the libraries that it uses, and these libraries vary in terms of completeness and accuracy. In some cases, such as FsPulse’s use of lopdf to validate PDF files, false positive “errors” may be detected as a consequence of lopdf encountering PDF file contents it does not yet understand. Despite these limitations, FsPulse offers a unique and effective view into potential validity issues in files.</p>
 <p>See <a href="#validators">Validators</a> for the complete list of supported file types.</p>
 <p>When configuring a scan in the web UI, you can enable validation with these options:</p>
 <ul>
@@ -937,19 +929,19 @@ offers a unique and effective view into potential validity issues in files.</p>
 <li><strong>V</strong>: Valid. Validation was performed and no errors were encountered</li>
 <li><strong>I</strong>: Invalid. Validation was performed and an error was encountered</li>
 </ul>
-<p>In the case of ‘I’ (Invalid), the validation error message is stored alongside the validation state. When an item’s validation state changes, the change is recorded and both old and new states are available for analysis.</p>
-<p>If a validation pass produces an error identical to a previously seen error, no new change is recorded.</p>
+<p>In the case of ‘I’ (Invalid), the validation error message is stored alongside the validation state. When an item’s validation state changes, a new item version is created capturing both the old and new states.</p>
+<p>If a validation pass produces an error identical to the existing error, no new version is created — only the <code>last_val_scan</code> bookkeeping field is updated.</p>
 <h3 id="finding-validation-issues"><a class="header" href="#finding-validation-issues">Finding Validation Issues</a></h3>
 <p>Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:</p>
 <ul>
-<li><strong><a href="#alerts">Alerts Page</a></strong>: Shows all items with validation failures, with filtering and status management</li>
-<li><strong><a href="#browse">Browse Page</a></strong>: Click any item to see its validation status and error details</li>
+<li><strong><a href="#alerts-1">Alerts Page</a></strong>: Shows all items with validation failures, with filtering and status management</li>
+<li><strong><a href="#browse">Browse Page</a></strong>: Click any item to see its validation status and error details in the inline detail panel</li>
 <li><strong><a href="#explore">Explore Page</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
-<p>Example query to find validation state changes (run on the Explore page’s Query tab):</p>
-<pre><code class="language-text">changes where val_change:(T) show default, item_path order by change_id desc
+<p>Example query to find items currently in an invalid validation state:</p>
+<pre><code class="language-text">items where val:(I) show default, val_error order by item_path
 </code></pre>
-<p>Additional queries can filter on specific old and new validation states. See <a href="#query-syntax-1">Query Syntax</a> for details.</p>
+<p>Additional queries can filter on specific validation states. See <a href="#query-syntax-1">Query Syntax</a> for details.</p>
 <hr>
 <h2 id="in-progress-scans"><a class="header" href="#in-progress-scans">In-Progress Scans</a></h2>
 <p>FsPulse is designed to be resilient to interruptions like system crashes or power loss. If a scan stops before completing, FsPulse saves its state so it can be resumed later.</p>
@@ -959,73 +951,69 @@ offers a unique and effective view into potential validity issues in files.</p>
 <li><strong>Stop</strong> the scan and discard its partial results</li>
 </ul>
 <blockquote>
-<p>Stopping a scan reverts the database to its pre-scan state. All detected changes, computed hashes, and validations from that partial scan will be discarded.</p>
+<p>Stopping a scan reverts the database to its pre-scan state using an undo log. All detected versions, computed hashes, and validations from that partial scan will be discarded.</p>
 </blockquote>
 <hr>
 <h2 id="phases-of-a-scan"><a class="header" href="#phases-of-a-scan">Phases of a Scan</a></h2>
 <p>Each scan proceeds in three main phases:</p>
-<h3 id="1-discovery"><a class="header" href="#1-discovery">1. Discovery</a></h3>
+<h3 id="1-scanning"><a class="header" href="#1-scanning">1. Scanning</a></h3>
 <p>The directory tree is deeply traversed. For each file or folder encountered:</p>
 <ul>
 <li>If not seen before:
 <ul>
-<li>A new item is created</li>
-<li>An <strong>Add</strong> change is recorded</li>
+<li>A new item identity is created</li>
+<li>A new item version is inserted with <code>first_scan_id = current_scan</code></li>
 </ul>
 </li>
 <li>If seen before:
 <ul>
-<li>FsPulse compares current file system metadata:
+<li>FsPulse compares current filesystem metadata:
 <ul>
 <li><strong>Modification date</strong> (files and folders)</li>
 <li><strong>File size</strong> (files only)</li>
 </ul>
 </li>
-<li>If metadata differs, the item is updated and a <strong>Modify</strong> change is recorded</li>
+<li>If metadata differs, a new item version is created carrying forward unchanged properties (hash, validation) from the previous version</li>
+<li>If unchanged, the existing version’s <code>last_scan_id</code> is updated in place</li>
 </ul>
 </li>
-<li>If the path matches a <strong>tombstoned</strong> item (previously deleted):
+<li>If the path matches a <strong>deleted</strong> item (previous version has <code>is_deleted = true</code>):
 <ul>
-<li>If type matches (file/folder), the tombstone is reactivated and an <strong>Add</strong> change is created</li>
-<li>If type differs, FsPulse creates a new item and new <strong>Add</strong> change</li>
+<li>A new version is created with <code>is_deleted = false</code> (rehydration)</li>
 </ul>
 </li>
 </ul>
 <blockquote>
 <p>Files and folders are treated as distinct types. A single path that appears as both a file and folder at different times results in two separate items.</p>
 </blockquote>
+<p>Writes are batched (100 items per transaction) for performance. An undo log records in-place updates to support rollback if the scan is stopped.</p>
 <hr>
-<h3 id="2-sweep"><a class="header" href="#2-sweep">2. Sweep</a></h3>
+<h3 id="2-sweeping"><a class="header" href="#2-sweeping">2. Sweeping</a></h3>
 <p>FsPulse identifies items not seen during the current scan:</p>
 <ul>
-<li>Any item that:
-<ul>
-<li>Is <strong>not</strong> a tombstone, and</li>
-<li>Was <strong>not visited</strong> in the scan</li>
+<li>Any item whose current version is not deleted and was not visited in this scan gets a new version with <code>is_deleted = true</code>.</li>
 </ul>
-</li>
-</ul>
-<p>…is marked as a <strong>tombstone</strong>, and a <strong>Delete</strong> change is created.</p>
-<p>Moved files appear as deletes and adds, as FsPulse does not yet track move operations.</p>
+<p>Moved files appear as deletes and adds, as FsPulse does not track move operations.</p>
 <hr>
-<h3 id="3-analysis"><a class="header" href="#3-analysis">3. Analysis</a></h3>
-<p>This phase runs only if hashing and/or validation is enabled when configuring the scan (see <a href="#hashing">Hashing</a> and <a href="#validating">Validating</a> above).</p>
+<h3 id="3-analyzing"><a class="header" href="#3-analyzing">3. Analyzing</a></h3>
+<p>This phase runs only if hashing and/or validation is enabled (see <a href="#hashing">Hashing</a> and <a href="#validating">Validating</a> above).</p>
 <ul>
-<li><strong>Hashing</strong> — Computes a SHA2 hash of file contents</li>
+<li><strong>Hashing</strong> — Computes a SHA-256 hash of file contents</li>
 <li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity (see <a href="#validators">Validators</a>)</li>
 </ul>
-<p>If either the hash or validation result changes:</p>
+<p>If a hash or validation result changes:</p>
 <ul>
-<li>If an <strong>Add</strong> or <strong>Modify</strong> change already exists, the new data is attached to it</li>
-<li>Otherwise, a new <strong>Modify</strong> change is created</li>
+<li>If the item already received a new version in the scanning phase (same scan), the existing version is <strong>updated in place</strong></li>
+<li>Otherwise, the previous version’s <code>last_scan_id</code> is restored and a new version is created</li>
 </ul>
-<p>Each change record stores both the <strong>old</strong> and <strong>new</strong> values for comparison, allowing you to track exactly what changed.</p>
+<p>This guarantees <strong>at most one new version per item per scan</strong>.</p>
+<p>If the hash and validation results are unchanged, only the bookkeeping fields (<code>last_hash_scan</code>, <code>last_val_scan</code>) are updated on the existing version.</p>
 <hr>
 <h2 id="performance-and-threading"><a class="header" href="#performance-and-threading">Performance and Threading</a></h2>
 <p>The analysis phase runs in parallel:</p>
 <ul>
 <li>Default: <strong>8 threads</strong></li>
-<li>User-configurable in <a href="#configuration-4">Configuration</a></li>
+<li>Configurable from 1 to 24 in <a href="#configuration-4">Configuration</a></li>
 </ul>
 <hr>
 <h2 id="summary-of-phases"><a class="header" href="#summary-of-phases">Summary of Phases</a></h2>
@@ -1035,13 +1023,13 @@ offers a unique and effective view into potential validity issues in files.</p>
 <tr><th>Phase</th><th>Purpose</th></tr>
 </thead>
 <tbody>
-<tr><td>Discovery</td><td>Finds and records new or modified items</td></tr>
-<tr><td>Sweep</td><td>Marks missing items as tombstones and records deletions</td></tr>
-<tr><td>Analysis</td><td>Computes hashes/validations and records changes if values differ</td></tr>
+<tr><td>Scanning</td><td>Traverses the filesystem, creates or updates item versions</td></tr>
+<tr><td>Sweeping</td><td>Marks missing items as deleted with new version rows</td></tr>
+<tr><td>Analyzing</td><td>Computes hashes and validates files, updating or creating versions</td></tr>
 </tbody>
 </table>
 </div>
-<p>Each scan provides a consistent view of the file system at a moment in time and captures important differences across revisions.</p>
+<p>Each scan provides a consistent view of the filesystem at a moment in time. The temporal versioning model means you can reconstruct the exact state of any item at any scan point.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="interface"><a class="header" href="#interface">Interface</a></h1>
 <p>The FsPulse interface provides a comprehensive visual environment for monitoring your filesystems, managing scans, analyzing trends, and investigating issues.</p>
@@ -1050,55 +1038,90 @@ offers a unique and effective view into potential validity issues in files.</p>
 <pre><code class="language-sh">fspulse
 </code></pre>
 <p>By default, the interface is available at <strong>http://127.0.0.1:8080</strong>. You can customize the host and port through configuration or environment variables (see <a href="#configuration-4">Configuration</a>).</p>
-<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
+<h2 id="pages"><a class="header" href="#pages">Pages</a></h2>
 <p>The web interface includes the following pages:</p>
 <ul>
-<li><strong><a href="#scans">Scans</a></strong> — Dashboard showing scan status and history</li>
-<li><strong><a href="#monitor">Monitor</a></strong> — Configure automatic scans and manage scan roots</li>
-<li><strong><a href="#browse">Browse</a></strong> — Navigate filesystem hierarchy with detailed item inspection</li>
-<li><strong><a href="#alerts">Alerts</a></strong> — Manage integrity issues and validation failures</li>
+<li><strong><a href="#tasks">Tasks</a></strong> — Home page showing active tasks, upcoming scans, and task history</li>
+<li><strong><a href="#scans">Scans</a></strong> — Scan history with results and statistics</li>
+<li><strong><a href="#monitor">Monitor</a></strong> — Configure scan roots and automatic schedules</li>
+<li><strong><a href="#browse">Browse</a></strong> — Navigate filesystem hierarchy with tree, folder, and search views</li>
+<li><strong><a href="#alerts-1">Alerts</a></strong> — Manage integrity issues and validation failures</li>
 <li><strong><a href="#insights">Insights</a></strong> — Visualize historical data with interactive charts</li>
 <li><strong><a href="#explore">Explore</a></strong> — Query interface for advanced data analysis</li>
+<li><strong><a href="#settings">Settings</a></strong> — Application configuration, database management, and version info</li>
 </ul>
 <h2 id="live-updates"><a class="header" href="#live-updates">Live Updates</a></h2>
-<p>The web interface uses WebSocket connections to provide real-time updates during scan operations. When a scan is running (whether manually initiated or scheduled), you can watch progress updates, statistics, and phase transitions as they happen.</p>
+<p>The web interface uses WebSocket connections to provide real-time updates during task execution. When a scan is running (whether manually initiated or scheduled), you can watch progress updates, statistics, and phase transitions as they happen on the Tasks page.</p>
 <h2 id="navigation"><a class="header" href="#navigation">Navigation</a></h2>
-<p>The left sidebar provides access to all major sections. On smaller screens, the sidebar collapses into a hamburger menu for better mobile experience.</p>
+<p>The left sidebar provides icon-based access to all pages. The sidebar expands on hover to show page labels.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tasks"><a class="header" href="#tasks">Tasks</a></h1>
+<p>The Tasks page is the home page of FsPulse. It provides a central view of what FsPulse is doing and what’s coming up next.</p>
+<hr>
+<h2 id="active-task"><a class="header" href="#active-task">Active Task</a></h2>
+<p>The top of the page shows the current task status:</p>
+<ul>
+<li><strong>Running task</strong>: Displays the task type (e.g., scanning a root), current phase, and real-time progress statistics including files and folders processed</li>
+<li><strong>Idle</strong>: When no task is running, shows an idle indicator with a button to initiate a manual scan</li>
+</ul>
+<p>Progress updates are delivered in real time via WebSocket, so you can watch scanning phases (Scanning, Sweeping, Analyzing) progress live.</p>
+<hr>
+<h2 id="upcoming-tasks"><a class="header" href="#upcoming-tasks">Upcoming Tasks</a></h2>
+<p>Below the active task, a table shows tasks queued for execution. These are typically generated from schedules and include:</p>
+<ul>
+<li>Task type and target root</li>
+<li>Scheduled run time</li>
+<li>Source (which schedule created the task)</li>
+</ul>
+<p>Tasks execute sequentially — only one task runs at a time.</p>
+<hr>
+<h2 id="task-history"><a class="header" href="#task-history">Task History</a></h2>
+<p>A paginated table of completed tasks shows:</p>
+<ul>
+<li>Task type and target root</li>
+<li>Start and completion times</li>
+<li>Final status (Completed, Stopped, Error)</li>
+</ul>
+<hr>
+<h2 id="manual-scans"><a class="header" href="#manual-scans">Manual Scans</a></h2>
+<p>Click the scan button on the active task card to initiate a manual scan. You’ll select:</p>
+<ul>
+<li>Which root to scan</li>
+<li>Hashing mode (None, Hash changed items, Hash all items)</li>
+<li>Validation mode (None, Validate changed items, Validate all items)</li>
+</ul>
+<hr>
+<h2 id="pause--resume"><a class="header" href="#pause--resume">Pause / Resume</a></h2>
+<p>FsPulse supports pausing all task execution. When paused:</p>
+<ul>
+<li>A banner appears at the top of the page showing how long tasks have been paused and when the pause will expire (if a duration was set)</li>
+<li>No new tasks will start until resumed</li>
+<li>You can edit the pause duration or resume immediately</li>
+</ul>
+<p>This is useful when you want to temporarily prevent scans from running (for example, during a backup window or heavy system load).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="scans"><a class="header" href="#scans">Scans</a></h1>
-<p>The Scans page serves as your central dashboard, providing an at-a-glance view of scan status and history.</p>
-<h2 id="features"><a class="header" href="#features">Features</a></h2>
-<h3 id="active-scan-monitoring"><a class="header" href="#active-scan-monitoring">Active Scan Monitoring</a></h3>
-<p>When a scan is running (manually initiated or scheduled), the Scans page displays:</p>
+<p>The Scans page displays a history of all completed and in-progress scans.</p>
+<h2 id="scan-history"><a class="header" href="#scan-history">Scan History</a></h2>
+<p>The page shows a paginated table of scans with key information:</p>
 <ul>
-<li>Real-time progress indicators</li>
-<li>Current scan phase (Discovery, Hash, Validation, Analysis)</li>
-<li>Statistics: files/folders processed, sizes calculated, changes detected</li>
-<li>Live updates via WebSocket connection</li>
-</ul>
-<h3 id="recent-scan-results"><a class="header" href="#recent-scan-results">Recent Scan Results</a></h3>
-<p>For completed scans, the Scans page shows:</p>
-<ul>
-<li>Scan completion time</li>
-<li>Total items scanned</li>
-<li>Change summary (additions, modifications, deletions)</li>
-<li>Alert count (validation failures, suspicious hash changes)</li>
-<li>Storage metrics</li>
-</ul>
-<h3 id="quick-access"><a class="header" href="#quick-access">Quick Access</a></h3>
-<p>From the Home page, you can quickly navigate to:</p>
-<ul>
-<li>Browse the scanned filesystem</li>
-<li>View detailed scan reports</li>
-<li>Investigate alerts</li>
-<li>Configure new scans</li>
+<li><strong>Scan ID</strong> and associated root</li>
+<li><strong>Start and end times</strong></li>
+<li><strong>State</strong> (Completed, Stopped, Error)</li>
+<li><strong>Item counts</strong> (files, folders, total size)</li>
+<li><strong>Change counts</strong> (additions, modifications, deletions)</li>
+<li><strong>Alert count</strong> (validation failures, suspicious hash changes)</li>
+<li><strong>Scan options</strong> (whether hashing and validation were enabled)</li>
 </ul>
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <ul>
-<li><strong>Monitoring</strong>: Keep the Home page open to watch long-running scans</li>
-<li><strong>Status Check</strong>: Quick view of your most recent scan activity</li>
-<li><strong>Alert Awareness</strong>: Immediate visibility into any detected issues</li>
+<li><strong>History review</strong>: See all past scans and their results at a glance</li>
+<li><strong>Trend awareness</strong>: Notice patterns in change counts or alert frequency across scans</li>
+<li><strong>Troubleshooting</strong>: Identify scans that stopped or errored</li>
 </ul>
+<blockquote>
+<p><strong>Note</strong>: For real-time monitoring of active scans, see the <a href="#tasks">Tasks</a> page. For scheduling and root management, see <a href="#monitor">Monitor</a>.</p>
+</blockquote>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="monitor"><a class="header" href="#monitor">Monitor</a></h1>
 <p>The Monitor page is your control center for managing scan roots, scheduling automatic scans, and viewing the scan queue.</p>
@@ -1116,8 +1139,8 @@ offers a unique and effective view into potential validity issues in files.</p>
 </ol>
 <h3 id="managing-roots"><a class="header" href="#managing-roots">Managing Roots</a></h3>
 <ul>
-<li><strong>Scan Now</strong>: Trigger an immediate one-time scan</li>
-<li><strong>Delete</strong>: Remove the root (also removes associated schedules and queue entries)</li>
+<li><strong>Scan Now</strong>: Create a manual scan task for the root</li>
+<li><strong>Delete</strong>: Remove the root (also removes associated schedules)</li>
 <li>View root statistics and last scan time</li>
 </ul>
 <h2 id="scheduling-automatic-scans"><a class="header" href="#scheduling-automatic-scans">Scheduling Automatic Scans</a></h2>
@@ -1148,77 +1171,95 @@ offers a unique and effective view into potential validity issues in files.</p>
 <li><strong>Edit</strong>: Modify timing or scan options</li>
 <li><strong>Delete</strong>: Remove the schedule</li>
 </ul>
-<h2 id="scan-queue"><a class="header" href="#scan-queue">Scan Queue</a></h2>
-<p>The queue shows:</p>
-<ul>
-<li>Pending scheduled scans waiting to execute</li>
-<li>Currently running scans</li>
-<li>Recent scan history</li>
-</ul>
-<p>Scans are queued and executed sequentially to prevent resource conflicts.</p>
-<h2 id="configuration-2"><a class="header" href="#configuration-2">Configuration</a></h2>
-<p>Scheduling and queue behavior can be customized via <a href="#configuration-4">Configuration</a>.</p>
+<p>Scans and other tasks are queued and executed sequentially to prevent resource conflicts. You can view upcoming and running tasks on the <a href="#tasks">Tasks</a> page.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="browse"><a class="header" href="#browse">Browse</a></h1>
-<p>The Browse page provides an intuitive interface for navigating your filesystem hierarchy and inspecting individual items in detail.</p>
-<h2 id="filesystem-tree"><a class="header" href="#filesystem-tree">Filesystem Tree</a></h2>
-<p>Navigate your scanned directories with a hierarchical tree view showing:</p>
+<p>The Browse page is an investigation workbench for navigating your filesystem hierarchy, comparing states across time, and inspecting individual items in detail.</p>
+<h2 id="browse-cards"><a class="header" href="#browse-cards">Browse Cards</a></h2>
+<p>Each browse card is a self-contained browsing environment with its own root selection, scan selection, view mode, and optional detail panel.</p>
+<h3 id="root-and-scan-selection"><a class="header" href="#root-and-scan-selection">Root and Scan Selection</a></h3>
+<p>At the top of each card:</p>
 <ul>
-<li>Folders and files from your most recent scan</li>
-<li>Item counts and sizes</li>
-<li>Visual indicators for items with alerts</li>
+<li><strong>Root picker</strong>: Select which root directory to browse</li>
+<li><strong>Scan bar</strong>: Shows the current scan (e.g., “Scan #42 — 15 Jan”) with a calendar button to pick a different scan and a “Latest” button to jump to the most recent scan</li>
 </ul>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-tree.png" alt="Browse Filesystem Tree" style="width: 90%; max-width: 900px;">
-</p>
-
-<h3 id="features-1"><a class="header" href="#features-1">Features</a></h3>
+<h3 id="view-modes"><a class="header" href="#view-modes">View Modes</a></h3>
+<p>Three view modes are available via tabs:</p>
+<h4 id="tree-view"><a class="header" href="#tree-view">Tree View</a></h4>
+<p>A hierarchical expand/collapse tree showing the filesystem structure at the selected scan point:</p>
 <ul>
-<li><strong>Search</strong>: Filter items by path using the search box</li>
-<li><strong>Expand/Collapse</strong>: Navigate the folder structure</li>
-<li><strong>Sort</strong>: Order by name, size, or modification time</li>
-<li><strong>Root Selection</strong>: Switch between different scan roots</li>
+<li>Click the <strong>chevron</strong> on folders to expand or collapse</li>
+<li>Click an <strong>item name</strong> to select it and open the detail panel</li>
+<li>Children are loaded on demand for performance</li>
+<li>Deleted items shown with strikethrough and a trash icon when “Show deleted” is enabled</li>
 </ul>
-<h2 id="item-detail-panel"><a class="header" href="#item-detail-panel">Item Detail Panel</a></h2>
-<p>Click any item to open the detail panel, which provides comprehensive information:</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="Item Detail Panel" style="width: 90%; max-width: 900px;">
-</p>
-
-<h3 id="metadata"><a class="header" href="#metadata">Metadata</a></h3>
+<h4 id="folder-view"><a class="header" href="#folder-view">Folder View</a></h4>
+<p>A flat, breadcrumb-navigated view similar to a file explorer:</p>
+<ul>
+<li><strong>Breadcrumb ribbon</strong> at the top shows the current path — click any segment to navigate up</li>
+<li><strong>Sortable columns</strong>: Name, Size, Modified Date — click column headers to sort (ascending/descending)</li>
+<li><strong>Folder navigation</strong>: Click a folder’s icon to navigate into it</li>
+<li><strong>Item selection</strong>: Click an item’s name to select it for the detail panel</li>
+<li>Directories are always sorted first, then by the selected column</li>
+</ul>
+<h4 id="search-view"><a class="header" href="#search-view">Search View</a></h4>
+<p>A text search across all items in the selected root and scan:</p>
+<ul>
+<li>Type in the search box to filter items by path (with 300ms debounce)</li>
+<li>Results appear as a flat list with full path tooltips</li>
+<li>Click any result to select it for the detail panel</li>
+</ul>
+<h3 id="controls"><a class="header" href="#controls">Controls</a></h3>
+<ul>
+<li><strong>Show deleted</strong>: Toggle checkbox to include or hide deleted items across all views</li>
+<li>Each view mode maintains its own independently selected item — switching tabs preserves your selection in each</li>
+</ul>
+<hr>
+<h2 id="detail-panel"><a class="header" href="#detail-panel">Detail Panel</a></h2>
+<p>Clicking any item opens an inline detail panel within the card. The panel shows comprehensive information about the selected item:</p>
+<h3 id="current-state"><a class="header" href="#current-state">Current State</a></h3>
 <ul>
 <li>File/folder size (dual format: decimal and binary units)</li>
 <li>Modification time</li>
 <li>Item type</li>
 <li>Current hash (if hashed)</li>
+<li>Validation state and error details</li>
 </ul>
-<h3 id="validation-status"><a class="header" href="#validation-status">Validation Status</a></h3>
+<h3 id="size-history"><a class="header" href="#size-history">Size History</a></h3>
 <ul>
-<li>Validation state (Valid, Invalid, NotValidated)</li>
-<li>Validation error details (if any)</li>
-<li>Last validation scan information</li>
+<li>Interactive chart showing how the item’s size has changed over time</li>
 </ul>
-<h3 id="change-history"><a class="header" href="#change-history">Change History</a></h3>
+<h3 id="version-history"><a class="header" href="#version-history">Version History</a></h3>
 <ul>
-<li>Change type across scans (Add, Modify, Delete, NoChange)</li>
-<li>Hash changes detected</li>
-<li>Modification timeline</li>
+<li>Paginated timeline of all item versions, showing what changed and when</li>
+<li>Each version displays its temporal range (first scan to last scan)</li>
 </ul>
-<h3 id="associated-alerts"><a class="header" href="#associated-alerts">Associated Alerts</a></h3>
+<h3 id="alerts"><a class="header" href="#alerts">Alerts</a></h3>
 <ul>
-<li>Suspicious hash changes</li>
-<li>Validation failures</li>
+<li>Any alerts associated with this item (suspicious hashes, validation failures, access errors)</li>
 <li>Alert status and timestamps</li>
 </ul>
+<p>Close the detail panel by clicking the close button. The panel scrolls independently from the navigation area.</p>
+<hr>
+<h2 id="comparison-mode"><a class="header" href="#comparison-mode">Comparison Mode</a></h2>
+<p>Click <strong>Show Compare</strong> in the page header to open a second browse card side by side. Each card operates independently — you can:</p>
+<ul>
+<li><strong>Compare across time</strong>: Same root, different scans — see how the filesystem changed</li>
+<li><strong>Compare across roots</strong>: Different roots (e.g., original vs. backup) at the same or different scans</li>
+</ul>
+<p>When both cards have detail panels open, the panels appear adjacent in the center for easy comparison (Card A’s panel is on the right, Card B’s panel is on the left).</p>
+<p>Close the second card by clicking <strong>Show Compare</strong> again.</p>
+<hr>
 <h2 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h2>
 <ul>
-<li><strong>Investigation</strong>: Drill down into specific files or folders when alerts are triggered</li>
-<li><strong>Verification</strong>: Check hash and validation status of critical files</li>
-<li><strong>Analysis</strong>: Understand what changed between scans</li>
-<li><strong>Navigation</strong>: Visual exploration of your monitored filesystems</li>
+<li><strong>Investigation</strong>: Drill into specific files when alerts are triggered — click an alert’s item, then inspect version history and validation errors</li>
+<li><strong>Capacity analysis</strong>: Use Folder view sorted by Size to find what’s consuming space</li>
+<li><strong>Change review</strong>: Browse at two scan points in comparison mode to see exactly what changed</li>
+<li><strong>Verification</strong>: Check hash and validation status of critical files in the detail panel</li>
+<li><strong>Point-in-time browsing</strong>: Use the scan picker to see the filesystem as it was at any past scan</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="alerts"><a class="header" href="#alerts">Alerts</a></h1>
+<h1 id="alerts-1"><a class="header" href="#alerts-1">Alerts</a></h1>
 <p>The Alerts page provides a centralized view for managing integrity issues detected during scans.</p>
 <h2 id="alert-types"><a class="header" href="#alert-types">Alert Types</a></h2>
 <p>FsPulse generates three types of alerts:</p>
@@ -1290,7 +1331,7 @@ offers a unique and effective view into potential validity issues in files.</p>
 <li>Item path and metadata</li>
 <li>Alert timestamp</li>
 <li>Access error details (for access denied alerts)</li>
-<li>Change details (for hash changes)</li>
+<li>Hash change details: previous and new hash values (for suspicious hash alerts)</li>
 <li>Validation error message (for invalid items)</li>
 <li>Link to item in Browse view</li>
 </ul>
@@ -1340,7 +1381,7 @@ offers a unique and effective view into potential validity issues in files.</p>
 <li>Suspicious hash changes</li>
 <li>Alert resolution patterns</li>
 </ul>
-<h2 id="features-2"><a class="header" href="#features-2">Features</a></h2>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
 <h3 id="root-selection"><a class="header" href="#root-selection">Root Selection</a></h3>
 <p>Select which scan root to analyze from the dropdown. Each root maintains independent trend data.</p>
 <h3 id="date-range-filtering"><a class="header" href="#date-range-filtering">Date Range Filtering</a></h3>
@@ -1348,12 +1389,13 @@ offers a unique and effective view into potential validity issues in files.</p>
 <ul>
 <li>Last 7 days</li>
 <li>Last 30 days</li>
-<li>Last 90 days</li>
-<li>All time</li>
-<li>Custom range</li>
+<li>Last 3 months</li>
+<li>Last 6 months</li>
+<li>Last year</li>
+<li>Custom range (manual date pickers)</li>
 </ul>
 <h3 id="baseline-exclusion"><a class="header" href="#baseline-exclusion">Baseline Exclusion</a></h3>
-<p>Toggle whether to include the initial (baseline) scan in trend calculations. Baseline scans often show large numbers of “additions” which can skew trend visualizations.</p>
+<p>The Changes and Alerts charts offer a checkbox to exclude the first scan from the visualization. The first scan of a root often shows large numbers of “additions” and alerts which can skew trend visualizations. This toggle only appears when the first scan falls within the selected date range.</p>
 <h3 id="interactive-charts"><a class="header" href="#interactive-charts">Interactive Charts</a></h3>
 <ul>
 <li>Hover for detailed values</li>
@@ -1375,11 +1417,11 @@ offers a unique and effective view into potential validity issues in files.</p>
 <h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
 <p>Explore offers two ways to query your data:</p>
 <ul>
-<li><strong>Structured tabs</strong> (Roots, Scans, Items, Changes, Alerts) — Visual query builder with column selection, sorting, and filtering</li>
+<li><strong>Structured tabs</strong> (Roots, Scans, Items, Versions, Alerts) — Visual query builder with column selection, sorting, and filtering</li>
 <li><strong>Query tab</strong> — Free-form query entry using FsPulse’s query language</li>
 </ul>
 <h2 id="structured-query-tabs"><a class="header" href="#structured-query-tabs">Structured Query Tabs</a></h2>
-<p>The <strong>Roots</strong>, <strong>Scans</strong>, <strong>Items</strong>, <strong>Changes</strong>, and <strong>Alerts</strong> tabs provide a visual interface for building queries without writing query syntax.</p>
+<p>The <strong>Roots</strong>, <strong>Scans</strong>, <strong>Items</strong>, <strong>Versions</strong>, and <strong>Alerts</strong> tabs provide a visual interface for building queries without writing query syntax.</p>
 <h3 id="layout"><a class="header" href="#layout">Layout</a></h3>
 <p>Each structured tab displays:</p>
 <ul>
@@ -1396,7 +1438,7 @@ offers a unique and effective view into potential validity issues in files.</p>
 <tbody>
 <tr><td><strong>Checkbox</strong></td><td>Show or hide the column in results</td></tr>
 <tr><td><strong>Drag handle</strong></td><td>Reorder columns by dragging</td></tr>
-<tr><td><strong>Sort</strong></td><td>Click to cycle through ascending (↑), descending (↓), or no sort (⇅)</td></tr>
+<tr><td><strong>Sort</strong></td><td>Click to cycle through ascending, descending, or no sort</td></tr>
 <tr><td><strong>Filter</strong></td><td>Add a filter condition for this column</td></tr>
 </tbody>
 </table>
@@ -1407,20 +1449,14 @@ Check or uncheck the box next to any column name to include or exclude it from r
 <p><strong>Reorder Columns:</strong>
 Drag columns using the grip handle to change the display order in the results table.</p>
 <p><strong>Sort Results:</strong>
-Click the sort control to cycle through:</p>
-<ul>
-<li>⇅ No sort</li>
-<li>↑ Ascending</li>
-<li>↓ Descending</li>
-</ul>
-<p>Only one column can be sorted at a time.</p>
+Click the sort control to cycle through no sort, ascending, and descending. Only one column can be sorted at a time.</p>
 <p><strong>Filter Data:</strong>
-Click the filter button (+) to add a filter condition. Active filters display as badges showing the filter value. Click the X to remove a filter.</p>
+Click the filter button to add a filter condition. Active filters display as badges showing the filter value. Click the X to remove a filter.</p>
 <p><strong>Reset:</strong>
 Click the reset button in the column header to restore all columns to their default visibility, order, and clear all filters and sorts.</p>
 <h2 id="query-tab"><a class="header" href="#query-tab">Query Tab</a></h2>
 <p>The <strong>Query</strong> tab provides a free-form interface for writing queries using FsPulse’s SQL-inspired query language.</p>
-<h3 id="features-3"><a class="header" href="#features-3">Features</a></h3>
+<h3 id="features-1"><a class="header" href="#features-1">Features</a></h3>
 <ul>
 <li><strong>Query input</strong> — Text area for entering queries</li>
 <li><strong>Execute</strong> — Run the query (or press Cmd/Ctrl + Enter)</li>
@@ -1434,6 +1470,7 @@ Click the reset button in the column header to restore all columns to their defa
 items where item_type:(F) show item_path, size limit 25
 items where item_type:(F), size:(&gt;1000000) show item_path, size order by size desc limit 20
 alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
+versions where item_id:(42) order by first_scan_id
 </code></pre>
 <h2 id="query-domains"><a class="header" href="#query-domains">Query Domains</a></h2>
 <p>Both interfaces support querying five data domains:</p>
@@ -1445,8 +1482,8 @@ alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
 <tbody>
 <tr><td><strong>roots</strong></td><td>Configured scan roots</td></tr>
 <tr><td><strong>scans</strong></td><td>Scan metadata and statistics</td></tr>
-<tr><td><strong>items</strong></td><td>Files and folders from the most recent scan</td></tr>
-<tr><td><strong>changes</strong></td><td>Change records across all scans</td></tr>
+<tr><td><strong>items</strong></td><td>Files and folders with their latest version state</td></tr>
+<tr><td><strong>versions</strong></td><td>Item version history — one row per distinct state</td></tr>
 <tr><td><strong>alerts</strong></td><td>Integrity issues and validation failures</td></tr>
 </tbody>
 </table>
@@ -1461,12 +1498,59 @@ alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
 <p><strong>Use the Query tab when:</strong></p>
 <ul>
 <li>Writing complex queries with multiple conditions</li>
-<li>Using advanced query features (comparisons, multiple filters with AND/OR)</li>
+<li>Using advanced query features (comparisons, ranges, multiple filters)</li>
 <li>Reproducing a specific query you’ve used before</li>
 <li>Learning the query syntax with immediate feedback</li>
 </ul>
 <h2 id="query-syntax"><a class="header" href="#query-syntax">Query Syntax</a></h2>
-<p>For complete documentation on the query language including all operators, field names, and advanced features, see <a href="#query-syntax-1">Query Syntax</a>.</p>
+<p>For complete documentation on the query language including all operators, column names, and advanced features, see <a href="#query-syntax-1">Query Syntax</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="settings"><a class="header" href="#settings">Settings</a></h1>
+<p>The Settings page provides application configuration, database management, and version information.</p>
+<hr>
+<h2 id="configuration-2"><a class="header" href="#configuration-2">Configuration</a></h2>
+<p>A table displays all configurable settings with their values from each source:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Column</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Setting</td><td>The setting name</td></tr>
+<tr><td>Default</td><td>Built-in default value</td></tr>
+<tr><td>Config File</td><td>Value from <code>config.toml</code> (if set)</td></tr>
+<tr><td>Environment</td><td>Value from environment variable (if set)</td></tr>
+</tbody>
+</table>
+</div>
+<p>The <strong>active value</strong> (the one FsPulse actually uses) is highlighted with a green border. Configuration precedence follows: Environment variable &gt; Config file &gt; Default.</p>
+<p>Settings that require a server restart to take effect are marked with a restart indicator.</p>
+<h3 id="editing-settings"><a class="header" href="#editing-settings">Editing Settings</a></h3>
+<p>Click <strong>Edit</strong> on any setting to modify its value in <code>config.toml</code>. The edit dialog provides:</p>
+<ul>
+<li>Input validation (numeric ranges, valid log levels, etc.)</li>
+<li>A <strong>Delete</strong> option to remove the setting from <code>config.toml</code> and revert to the default</li>
+</ul>
+<p>See <a href="#configuration-4">Configuration</a> for details on all available settings and environment variables.</p>
+<hr>
+<h2 id="database"><a class="header" href="#database">Database</a></h2>
+<p>Shows database statistics and maintenance tools:</p>
+<ul>
+<li><strong>Database path</strong>: Location of the <code>fspulse.db</code> file</li>
+<li><strong>Total size</strong>: Current size of the database file</li>
+<li><strong>Wasted space</strong>: Space that can be reclaimed through compaction</li>
+</ul>
+<h3 id="compact-database"><a class="header" href="#compact-database">Compact Database</a></h3>
+<p>Over time, deletions and updates leave unused space in the SQLite database. The <strong>Compact Database</strong> button runs SQLite’s VACUUM command to reclaim this space. This operation runs as a background task.</p>
+<hr>
+<h2 id="about"><a class="header" href="#about">About</a></h2>
+<p>Displays application metadata:</p>
+<ul>
+<li>FsPulse version</li>
+<li>Database schema version</li>
+<li>Build date and git commit information</li>
+<li>Links to documentation and the GitHub repository</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h1>
 <p>FsPulse is a <strong>web-first application</strong>. The CLI exists solely to launch the web server—all functionality including scanning, querying, browsing, and configuration is accessed through the <a href="#interface">Interface</a>.</p>
@@ -1533,129 +1617,141 @@ fspulse --version
 <p>FsPulse provides a flexible, SQL-like query language for exploring scan results. This language supports filtering, custom column selection, ordering, and limiting the number of results.</p>
 <hr>
 <h2 id="query-structure"><a class="header" href="#query-structure">Query Structure</a></h2>
-<p>Each query begins with one of the four supported domains:</p>
+<p>Each query begins with one of the five supported domains:</p>
 <ul>
 <li><code>roots</code></li>
 <li><code>scans</code></li>
 <li><code>items</code></li>
-<li><code>changes</code></li>
+<li><code>versions</code></li>
+<li><code>alerts</code></li>
 </ul>
 <p>You can then add any of the following optional clauses:</p>
-<pre><code class="language-text">DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
+<pre><code class="language-text">DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
 </code></pre>
 <hr>
 <h2 id="column-availability"><a class="header" href="#column-availability">Column Availability</a></h2>
+<p>Each domain has a set of available columns. Columns marked as <strong>default</strong> are shown when no <code>SHOW</code> clause is specified.</p>
 <h3 id="roots-domain"><a class="header" href="#roots-domain"><code>roots</code> Domain</a></h3>
-<p>All queries that retrieve root information begin with the keyword <code>roots</code>:</p>
-<pre><code class="language-text">roots [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
-</code></pre>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Property</th><th>Type</th></tr>
+<tr><th>Column</th><th>Type</th><th>Default</th></tr>
 </thead>
 <tbody>
-<tr><td><code>root_id</code></td><td>Integer</td></tr>
-<tr><td><code>root_path</code></td><td>Path</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td><td>Yes</td></tr>
+<tr><td><code>root_path</code></td><td>Path</td><td>Yes</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
 <h3 id="scans-domain"><a class="header" href="#scans-domain"><code>scans</code> Domain</a></h3>
-<p>All queries that retrieve scan information begin with the keyword <code>scans</code>:</p>
-<pre><code class="language-text">scans [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
-</code></pre>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Property</th><th>Type</th><th>Description</th></tr>
+<tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>scan_id</code></td><td>Integer</td><td>Unique scan identifier</td></tr>
-<tr><td><code>root_id</code></td><td>Integer</td><td>Root directory identifier</td></tr>
-<tr><td><code>schedule_id</code></td><td>Integer</td><td>Schedule identifier (null for manual scans)</td></tr>
-<tr><td><code>started_at</code></td><td>Date</td><td>Timestamp when scan started</td></tr>
-<tr><td><code>ended_at</code></td><td>Date</td><td>Timestamp when scan ended (null if incomplete)</td></tr>
-<tr><td><code>was_restarted</code></td><td>Boolean</td><td>True if scan was resumed after restart</td></tr>
-<tr><td><code>scan_state</code></td><td>Scan State Enum</td><td>State of the scan</td></tr>
-<tr><td><code>is_hash</code></td><td>Boolean</td><td>Hash new or changed files</td></tr>
-<tr><td><code>hash_all</code></td><td>Boolean</td><td>Hash all items including unchanged</td></tr>
-<tr><td><code>is_val</code></td><td>Boolean</td><td>Validate new or changed files</td></tr>
-<tr><td><code>val_all</code></td><td>Boolean</td><td>Validate all items including unchanged</td></tr>
-<tr><td><code>file_count</code></td><td>Integer</td><td>Count of files found in the scan</td></tr>
-<tr><td><code>folder_count</code></td><td>Integer</td><td>Count of directories found in the scan</td></tr>
-<tr><td><code>total_size</code></td><td>Integer</td><td>Total size in bytes of all files in the scan</td></tr>
-<tr><td><code>alert_count</code></td><td>Integer</td><td>Number of alerts created during the scan</td></tr>
-<tr><td><code>add_count</code></td><td>Integer</td><td>Number of items added in the scan</td></tr>
-<tr><td><code>modify_count</code></td><td>Integer</td><td>Number of items modified in the scan</td></tr>
-<tr><td><code>delete_count</code></td><td>Integer</td><td>Number of items deleted in the scan</td></tr>
-<tr><td><code>error</code></td><td>String</td><td>Error message if scan failed</td></tr>
+<tr><td><code>scan_id</code></td><td>Integer</td><td>Yes</td><td>Unique scan identifier</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td><td>Yes</td><td>Root directory identifier</td></tr>
+<tr><td><code>schedule_id</code></td><td>Integer</td><td>Yes</td><td>Schedule identifier (null for manual scans)</td></tr>
+<tr><td><code>started_at</code></td><td>Date</td><td>Yes</td><td>Timestamp when scan started</td></tr>
+<tr><td><code>ended_at</code></td><td>Date</td><td>Yes</td><td>Timestamp when scan ended (null if incomplete)</td></tr>
+<tr><td><code>was_restarted</code></td><td>Boolean</td><td>Yes</td><td>True if scan was resumed after restart</td></tr>
+<tr><td><code>scan_state</code></td><td>Scan State Enum</td><td>No</td><td>State of the scan</td></tr>
+<tr><td><code>is_hash</code></td><td>Boolean</td><td>Yes</td><td>Hash new or changed files</td></tr>
+<tr><td><code>hash_all</code></td><td>Boolean</td><td>No</td><td>Hash all items including unchanged</td></tr>
+<tr><td><code>is_val</code></td><td>Boolean</td><td>Yes</td><td>Validate new or changed files</td></tr>
+<tr><td><code>val_all</code></td><td>Boolean</td><td>No</td><td>Validate all items including unchanged</td></tr>
+<tr><td><code>file_count</code></td><td>Integer</td><td>Yes</td><td>Count of files found in the scan</td></tr>
+<tr><td><code>folder_count</code></td><td>Integer</td><td>Yes</td><td>Count of directories found in the scan</td></tr>
+<tr><td><code>total_size</code></td><td>Integer</td><td>Yes</td><td>Total size in bytes of all files</td></tr>
+<tr><td><code>alert_count</code></td><td>Integer</td><td>Yes</td><td>Number of alerts created during the scan</td></tr>
+<tr><td><code>add_count</code></td><td>Integer</td><td>Yes</td><td>Number of items added in the scan</td></tr>
+<tr><td><code>modify_count</code></td><td>Integer</td><td>Yes</td><td>Number of items modified in the scan</td></tr>
+<tr><td><code>delete_count</code></td><td>Integer</td><td>Yes</td><td>Number of items deleted in the scan</td></tr>
+<tr><td><code>error</code></td><td>String</td><td>No</td><td>Error message if scan failed</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
 <h3 id="items-domain"><a class="header" href="#items-domain"><code>items</code> Domain</a></h3>
-<p>All queries that retrieve item information begin with the keyword <code>items</code>:</p>
-<pre><code class="language-text">items [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
-</code></pre>
+<p>The <code>items</code> domain queries each item’s <strong>latest version</strong> — the most recent known state. Identity columns come from the <code>items</code> table; state columns come from the item’s current version.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Property</th><th>Type</th></tr>
+<tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>item_id</code></td><td>Integer</td></tr>
-<tr><td><code>root_id</code></td><td>Integer</td></tr>
-<tr><td><code>item_path</code></td><td>Path</td></tr>
-<tr><td><code>item_type</code></td><td>Item Type Enum</td></tr>
-<tr><td><code>access</code></td><td>Access Status</td></tr>
-<tr><td><code>last_scan</code></td><td>Integer</td></tr>
-<tr><td><code>is_ts</code></td><td>Boolean</td></tr>
-<tr><td><code>mod_date</code></td><td>Date</td></tr>
-<tr><td><code>size</code></td><td>Integer</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td></tr>
-<tr><td><code>val</code></td><td>Validation Status</td></tr>
-<tr><td><code>val_error</code></td><td>String</td></tr>
+<tr><td><code>item_id</code></td><td>Integer</td><td>Yes</td><td>Unique item identifier</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td><td>Yes</td><td>Root directory identifier</td></tr>
+<tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Full path of the item</td></tr>
+<tr><td><code>item_name</code></td><td>Path</td><td>No</td><td>Filename or directory name (last segment)</td></tr>
+<tr><td><code>item_type</code></td><td>Item Type Enum</td><td>Yes</td><td>File, Directory, Symlink, or Unknown</td></tr>
+<tr><td><code>version_id</code></td><td>Integer</td><td>No</td><td>Current version identifier</td></tr>
+<tr><td><code>first_scan_id</code></td><td>Integer</td><td>No</td><td>Scan where current version first appeared</td></tr>
+<tr><td><code>last_scan_id</code></td><td>Integer</td><td>Yes</td><td>Last scan confirming current state</td></tr>
+<tr><td><code>is_deleted</code></td><td>Boolean</td><td>Yes</td><td>True if item is currently deleted</td></tr>
+<tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state (NoError, MetaError, ReadError)</td></tr>
+<tr><td><code>mod_date</code></td><td>Date</td><td>Yes</td><td>Last modification date</td></tr>
+<tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
+<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash</td></tr>
+<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation</td></tr>
+<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
-<h3 id="changes-domain"><a class="header" href="#changes-domain"><code>changes</code> Domain</a></h3>
-<p>All queries that retrieve change history begin with the keyword <code>changes</code>:</p>
-<pre><code class="language-text">changes [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...]
-</code></pre>
+<h3 id="versions-domain"><a class="header" href="#versions-domain"><code>versions</code> Domain</a></h3>
+<p>The <code>versions</code> domain queries individual item version rows — each representing a distinct state of an item over a temporal range. Use this domain to explore item history and state changes.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Property</th><th>Type</th></tr>
+<tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>change_id</code></td><td>Integer</td></tr>
-<tr><td><code>scan_id</code></td><td>Integer</td></tr>
-<tr><td><code>item_id</code></td><td>Integer</td></tr>
-<tr><td><code>change_type</code></td><td>Change Type Enum</td></tr>
-<tr><td><code>access_old</code></td><td>Access Status</td></tr>
-<tr><td><code>access_new</code></td><td>Access Status</td></tr>
-<tr><td><code>is_undelete</code></td><td>Boolean</td></tr>
-<tr><td><code>meta_change</code></td><td>Boolean</td></tr>
-<tr><td><code>mod_date_old</code></td><td>Date</td></tr>
-<tr><td><code>mod_date_new</code></td><td>Date</td></tr>
-<tr><td><code>size_old</code></td><td>Integer</td></tr>
-<tr><td><code>size_new</code></td><td>Integer</td></tr>
-<tr><td><code>hash_change</code></td><td>Boolean</td></tr>
-<tr><td><code>last_hash_scan_old</code></td><td>Integer</td></tr>
-<tr><td><code>hash_old</code></td><td>String</td></tr>
-<tr><td><code>hash_new</code></td><td>String</td></tr>
-<tr><td><code>val_change</code></td><td>Boolean</td></tr>
-<tr><td><code>last_val_scan_old</code></td><td>Integer</td></tr>
-<tr><td><code>val_old</code></td><td>Validation Status</td></tr>
-<tr><td><code>val_new</code></td><td>Validation Status</td></tr>
-<tr><td><code>val_error_old</code></td><td>String</td></tr>
-<tr><td><code>val_error_new</code></td><td>String</td></tr>
-<tr><td><code>root_id</code></td><td>Integer</td></tr>
-<tr><td><code>item_path</code></td><td>Path</td></tr>
+<tr><td><code>version_id</code></td><td>Integer</td><td>Yes</td><td>Unique version identifier</td></tr>
+<tr><td><code>item_id</code></td><td>Integer</td><td>Yes</td><td>Item this version belongs to</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td><td>Yes</td><td>Root directory identifier</td></tr>
+<tr><td><code>item_path</code></td><td>Path</td><td>No</td><td>Full path of the item</td></tr>
+<tr><td><code>item_name</code></td><td>Path</td><td>No</td><td>Filename or directory name (last segment)</td></tr>
+<tr><td><code>item_type</code></td><td>Item Type Enum</td><td>Yes</td><td>File, Directory, Symlink, or Unknown</td></tr>
+<tr><td><code>first_scan_id</code></td><td>Integer</td><td>Yes</td><td>Scan where this version was first observed</td></tr>
+<tr><td><code>last_scan_id</code></td><td>Integer</td><td>Yes</td><td>Last scan confirming this version’s state</td></tr>
+<tr><td><code>is_deleted</code></td><td>Boolean</td><td>Yes</td><td>True if item was deleted in this version</td></tr>
+<tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state</td></tr>
+<tr><td><code>mod_date</code></td><td>Date</td><td>No</td><td>Last modification date</td></tr>
+<tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
+<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash</td></tr>
+<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation</td></tr>
+<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h3 id="alerts-domain"><a class="header" href="#alerts-domain"><code>alerts</code> Domain</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>alert_id</code></td><td>Integer</td><td>No</td><td>Unique alert identifier</td></tr>
+<tr><td><code>alert_type</code></td><td>Alert Type Enum</td><td>Yes</td><td>Type of alert</td></tr>
+<tr><td><code>alert_status</code></td><td>Alert Status Enum</td><td>Yes</td><td>Current status (Open, Flagged, Dismissed)</td></tr>
+<tr><td><code>root_id</code></td><td>Integer</td><td>No</td><td>Root directory identifier</td></tr>
+<tr><td><code>scan_id</code></td><td>Integer</td><td>No</td><td>Scan that generated the alert</td></tr>
+<tr><td><code>item_id</code></td><td>Integer</td><td>No</td><td>Item the alert is about</td></tr>
+<tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Path of the affected item</td></tr>
+<tr><td><code>created_at</code></td><td>Date</td><td>Yes</td><td>When the alert was created</td></tr>
+<tr><td><code>updated_at</code></td><td>Date</td><td>No</td><td>When the alert status was last changed</td></tr>
+<tr><td><code>prev_hash_scan</code></td><td>Integer</td><td>No</td><td>Previous hash scan (for suspicious hash)</td></tr>
+<tr><td><code>hash_old</code></td><td>String</td><td>No</td><td>Previous hash value</td></tr>
+<tr><td><code>hash_new</code></td><td>String</td><td>No</td><td>New hash value</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>Yes</td><td>Validation error message</td></tr>
 </tbody>
 </table>
 </div>
@@ -1664,23 +1760,24 @@ fspulse --version
 <p>The <code>WHERE</code> clause filters results using one or more filters. Each filter has the structure:</p>
 <pre><code class="language-text">column_name:(value1, value2, ...)
 </code></pre>
-<p>Values must match the column’s type. You can use individual values, ranges (when supported), or a comma-separated combination. Values are <strong>not quoted</strong> unless explicitly shown.</p>
+<p>Values must match the column’s type. You can use individual values, ranges (when supported), or a comma-separated combination.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Type</th><th>Examples</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td>Integer</td><td><code>5</code>, <code>1..5</code>, <code>3, 5, 7..9</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Supports ranges and nullability. Ranges are inclusive.</td></tr>
-<tr><td>Date</td><td><code>2024-01-01</code>, <code>2024-01-01..2024-06-30</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Use <code>YYYY-MM-DD</code>. Ranges are inclusive.</td></tr>
-<tr><td>Boolean</td><td><code>true</code>, <code>false</code>, <code>T</code>, <code>F</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Values are unquoted. Null values are allowed in all-lower or all-upper case.</td></tr>
-<tr><td>String</td><td><code>'example'</code>, <code>'error: missing EOF'</code>, <code>null</code>, <code>NULL</code></td><td>Quoted strings. Null values are allowed in all-lower or all-upper case.</td></tr>
+<tr><td>Integer</td><td><code>5</code>, <code>1..5</code>, <code>3, 5, 7..9</code>, <code>&gt; 1024</code>, <code>&lt; 10</code>, <code>null</code>, <code>not null</code></td><td>Supports ranges, comparators, and nullability. Ranges are inclusive.</td></tr>
+<tr><td>Date</td><td><code>2024-01-01</code>, <code>2024-01-01..2024-06-30</code>, <code>null</code>, <code>not null</code></td><td>Use <code>YYYY-MM-DD</code>. Ranges are inclusive.</td></tr>
+<tr><td>Boolean</td><td><code>true</code>, <code>false</code>, <code>T</code>, <code>F</code>, <code>null</code>, <code>not null</code></td><td>Unquoted.</td></tr>
+<tr><td>String</td><td><code>'example'</code>, <code>'error: missing EOF'</code>, <code>null</code>, <code>not null</code></td><td>Quoted strings.</td></tr>
 <tr><td>Path</td><td><code>'photos/reports'</code>, <code>'file.txt'</code></td><td>Must be quoted. <strong>Null values are not supported.</strong></td></tr>
-<tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Valid (V), Invalid (I), No Validator (N), Unknown (U). Unquoted. Ranges not supported.</td></tr>
-<tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>S</code>, <code>O</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>File (F), Directory (D), Symlink (S), Other (O). Unquoted. Ranges not supported.</td></tr>
-<tr><td>Change Type Enum</td><td><code>N</code>, <code>A</code>, <code>M</code>, <code>D</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>No Change (N), Add (A), Modify (M), Delete (D). Unquoted. Ranges not supported.</td></tr>
-<tr><td>Scan State Enum</td><td><code>S</code>, <code>W</code>, <code>A</code>, <code>C</code>, <code>P</code>, <code>E</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>Scanning (S), Sweeping (W), Analyzing (A), Completed (C), Stopped (P), Error (E). Unquoted. Ranges not supported.</td></tr>
-<tr><td>Access Status</td><td><code>N</code>, <code>M</code>, <code>R</code>, <code>null</code>, <code>not null</code>, <code>NULL</code>, <code>NOT NULL</code></td><td>No Error (N), Meta Error (M), Read Error (R). Unquoted. Ranges not supported.</td></tr>
+<tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code></td><td>Valid, Invalid, No Validator, Unknown. Unquoted.</td></tr>
+<tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>S</code>, <code>U</code></td><td>File, Directory, Symlink, Unknown. Unquoted.</td></tr>
+<tr><td>Alert Type Enum</td><td><code>H</code>, <code>I</code>, <code>A</code></td><td>Suspicious Hash, Invalid Item, Access Denied. Unquoted.</td></tr>
+<tr><td>Alert Status Enum</td><td><code>O</code>, <code>F</code>, <code>D</code></td><td>Open, Flagged, Dismissed. Unquoted.</td></tr>
+<tr><td>Scan State Enum</td><td><code>S</code>, <code>W</code>, <code>A</code>, <code>C</code>, <code>P</code>, <code>E</code></td><td>Scanning, Sweeping, Analyzing, Completed, Stopped, Error. Unquoted.</td></tr>
+<tr><td>Access Status</td><td><code>N</code>, <code>M</code>, <code>R</code></td><td>No Error, Meta Error, Read Error. Unquoted.</td></tr>
 </tbody>
 </table>
 </div>
@@ -1688,7 +1785,7 @@ fspulse --version
 <h2 id="combining-filters"><a class="header" href="#combining-filters">Combining Filters</a></h2>
 <p>When specifying multiple values within a single filter, the match is logically <strong>OR</strong>. When specifying multiple filters across different columns, the match is logically <strong>AND</strong>.</p>
 <p>For example:</p>
-<pre><code class="language-text">scans where started_at:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), hashing:(T)
+<pre><code class="language-text">scans where started_at:(2025-01-01..2025-01-07, 2025-02-01..2025-02-07), is_hash:(T)
 </code></pre>
 <p>This query matches scans that:</p>
 <ul>
@@ -1729,22 +1826,34 @@ fspulse --version
 </code></pre>
 <p>If direction is omitted, <code>ASC</code> is assumed.</p>
 <hr>
-<h2 id="the-limit-clause"><a class="header" href="#the-limit-clause">The <code>LIMIT</code> Clause</a></h2>
-<p>Restricts the number of rows returned:</p>
-<pre><code class="language-text">items limit 50
+<h2 id="the-limit-and-offset-clauses"><a class="header" href="#the-limit-and-offset-clauses">The <code>LIMIT</code> and <code>OFFSET</code> Clauses</a></h2>
+<p><code>LIMIT</code> restricts the number of rows returned. <code>OFFSET</code> skips a number of rows before returning results.</p>
+<pre><code class="language-text">items limit 50 offset 100
 </code></pre>
 <hr>
 <h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
 <pre><code class="language-text"># Items whose path contains 'reports'
 items where item_path:('reports')
 
-# Changes involving validation failures
-changes where val_new:(I) show default, val_old, val_new order by change_id desc
+# Large files sorted by size
+items where item_type:(F), size:(&gt; 1048576) show default, size order by size desc
 
-# Scans with timestamp for programmatic processing
+# Version history for a specific item
+versions where item_id:(42) order by first_scan_id
+
+# Deleted items across all roots
+items where is_deleted:(true)
+
+# Versions with validation failures
+versions where val:(I) show default, val_error order by first_scan_id desc
+
+# Open or flagged alerts for suspicious hashes
+alerts where alert_type:(H), alert_status:(O, F) order by created_at desc
+
+# Scans with timestamps for programmatic processing
 scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10
 
-# Scans with changes and alerts
+# Scans with change and alert counts
 scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by started_at desc
 </code></pre>
 <hr>
@@ -1752,6 +1861,9 @@ scans show scan_id, file_count, total_size, add_count, modify_count, delete_coun
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="configuration-4"><a class="header" href="#configuration-4">Configuration</a></h1>
 <p>FsPulse supports persistent, user-defined configuration through a file named <code>config.toml</code>. This file allows you to control logging behavior, analysis settings, server configuration, and more.</p>
+<blockquote>
+<p><strong>Web UI</strong>: Most configuration settings can also be viewed and edited through the <a href="#settings">Settings</a> page in the web interface, which shows the active value and its source (default, config file, or environment variable).</p>
+</blockquote>
 <blockquote>
 <p><strong>📦 Docker Users</strong>: If you’re running FsPulse in Docker, see the <a href="#docker-deployment">Docker Deployment</a> chapter for Docker-specific configuration including environment variable overrides and volume management.</p>
 </blockquote>
@@ -1910,7 +2022,7 @@ docker run -e FSPULSE_LOGGING_FSPULSE=debug ...
 <tr><th>Variable</th><th>Default</th><th>Valid Values</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-256</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
+<tr><td><code>FSPULSE_ANALYSIS_THREADS</code></td><td><code>8</code></td><td>1-24</td><td>Number of worker threads for analysis phase (hashing/validation)</td></tr>
 </tbody>
 </table>
 </div>
@@ -2074,21 +2186,15 @@ fspulse serve
 <h2 id="contents"><a class="header" href="#contents">Contents</a></h2>
 <ul>
 <li><strong><a href="#concepts">Concepts</a></strong> — Core concepts and terminology</li>
-<li><strong><a href="#database">Database Schema</a></strong> — SQLite schema structure and migrations</li>
+<li><strong><a href="#database-1">Database Schema</a></strong> — SQLite schema structure and migrations</li>
 </ul>
 <p>These topics are useful for developers, contributors, or users who want to understand FsPulse’s architecture more deeply.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="concepts"><a class="header" href="#concepts">Concepts</a></h1>
-<p>FsPulse is centered around tracking and understanding the state of the file system over time. The core entities in FsPulse — roots, scans, items, and changes — represent a layered model of this information.</p>
-<hr>
-<h2 id="scans-1"><a class="header" href="#scans-1">Scans</a></h2>
-<p>Scans are the units of work performed by FsPulse. A scan is performed on a file system tree specified by
-a path. A scan deeply traverses the specified path and its children, recording information on the
-files and directories discovered. The details of scanning are explained in <a href="#scanning">Scanning</a>.</p>
+<p>FsPulse tracks the state of your filesystem over time using a <strong>temporal versioning</strong> model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.</p>
 <hr>
 <h2 id="root"><a class="header" href="#root">Root</a></h2>
-<p>A <strong>root</strong> is the starting point for a scan. It represents a specific path on the file system that you explicitly tell FsPulse to track.</p>
-<p>Each root is stored persistently in the database, and every scan you perform refers back to a root.</p>
+<p>A <strong>root</strong> is the starting point for a scan. It represents a specific path on the filesystem that you tell FsPulse to track.</p>
 <ul>
 <li>Paths are stored as absolute paths.</li>
 <li>Each root has a unique ID.</li>
@@ -2097,48 +2203,81 @@ files and directories discovered. The details of scanning are explained in <a hr
 <hr>
 <h2 id="scan"><a class="header" href="#scan">Scan</a></h2>
 <p>A <strong>scan</strong> is a snapshot of a root directory at a specific point in time.</p>
-<p>Each scan records metadata about:</p>
+<p>Each scan records:</p>
 <ul>
-<li>The time the scan was performed</li>
+<li>The time the scan was started and ended</li>
 <li>Whether hashing and validation were enabled</li>
-<li>The collection of items (files and folders) found during the scan</li>
+<li>Counts of files, folders, and total size discovered</li>
+<li>Counts of additions, modifications, and deletions detected</li>
+<li>Any alerts generated</li>
 </ul>
-<p>Scans are always tied to a root via <code>root_id</code>, and are ordered chronologically by <code>started_at</code>.</p>
+<p>Scans are always tied to a root via <code>root_id</code> and are ordered chronologically by <code>started_at</code>.</p>
 <hr>
 <h2 id="item"><a class="header" href="#item">Item</a></h2>
-<p>An <strong>item</strong> represents a single file or folder discovered during a scan.</p>
-<p>Each item includes metadata such as:</p>
+<p>An <strong>item</strong> represents the stable identity of a single file or folder discovered during scanning. The <code>items</code> table stores only identity information:</p>
 <ul>
+<li>Root</li>
 <li>Path</li>
-<li>Whether it’s a file or directory</li>
-<li>Last modified date</li>
-<li>Size</li>
-<li>Optional hash and validation info</li>
+<li>Name (last path segment)</li>
+<li>Type (File, Directory, Symlink, or Unknown)</li>
 </ul>
-<p>Items are created when newly seen, and marked with a tombstone (<code>is_ts = true</code>) if they were present in previous scans but no longer exist.</p>
+<p>An item’s mutable state — metadata, hash, validation — is stored in <strong>item versions</strong>, not in the item row itself.</p>
 <hr>
-<h2 id="change"><a class="header" href="#change">Change</a></h2>
-<p>A <strong>change</strong> represents a detected difference in an item between the current scan and a previous one.</p>
-<p>Changes may reflect:</p>
+<h2 id="item-version"><a class="header" href="#item-version">Item Version</a></h2>
+<p>An <strong>item version</strong> captures the full known state of an item at a point in time. FsPulse uses temporal versioning: instead of maintaining one mutable row per item, the system stores one row per <strong>distinct state</strong>. A new version is created only when an item’s observable state changes.</p>
+<p>Each version contains:</p>
 <ul>
-<li>File additions</li>
-<li>File deletions</li>
-<li>Metadata or content modifications</li>
+<li><strong>Temporal range</strong> — <code>first_scan_id</code> (when this state was first observed) and <code>last_scan_id</code> (last scan where it was confirmed)</li>
+<li><strong>Deletion status</strong> — whether the item existed or had been deleted</li>
+<li><strong>Access status</strong> — whether the item could be read successfully</li>
+<li><strong>Metadata</strong> — modification date and size</li>
+<li><strong>Hash</strong> — SHA-256 content hash (if computed)</li>
+<li><strong>Validation</strong> — format validation state and any error message</li>
 </ul>
-<p>Each change is associated with both the scan and the item it affects.</p>
+<p>An item that exists unchanged across 50 scans has exactly <strong>one version row</strong>. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.</p>
+<h3 id="deriving-change-types"><a class="header" href="#deriving-change-types">Deriving Change Types</a></h3>
+<p>Change types are derived by comparing adjacent versions of an item:</p>
+<ul>
+<li><strong>Add</strong>: No previous version exists, or the previous version was a deletion</li>
+<li><strong>Delete</strong>: This version marks the item as deleted</li>
+<li><strong>Modify</strong>: Previous version exists, neither is deleted, and state differs</li>
+</ul>
 <hr>
-<h2 id="entity-flow"><a class="header" href="#entity-flow">Entity Flow</a></h2>
-<p>A simplified representation of how the entities relate:</p>
+<h2 id="alert"><a class="header" href="#alert">Alert</a></h2>
+<p>An <strong>alert</strong> flags a potential integrity issue detected during scanning. There are three alert types:</p>
+<ul>
+<li><strong>Suspicious Hash</strong> — file content hash changed but modification time did not, suggesting bit rot or tampering</li>
+<li><strong>Invalid Item</strong> — format validation detected corruption in a supported file type</li>
+<li><strong>Access Denied</strong> — FsPulse could not access the item’s metadata or contents</li>
+</ul>
+<p>Alerts have statuses (Open, Flagged, Dismissed) for triage workflows.</p>
+<hr>
+<h2 id="schedule"><a class="header" href="#schedule">Schedule</a></h2>
+<p>A <strong>schedule</strong> defines automatic recurring scans. Schedules specify:</p>
+<ul>
+<li>Which root to scan</li>
+<li>Timing (daily, weekly, monthly, or interval-based)</li>
+<li>Scan options (hashing mode, validation mode)</li>
+</ul>
+<p>Schedules can be enabled or disabled independently.</p>
+<hr>
+<h2 id="task"><a class="header" href="#task">Task</a></h2>
+<p>A <strong>task</strong> is a unit of work in the execution queue. Tasks are created from manual scan requests or triggered by schedules. The Tasks page shows active, upcoming, and completed tasks.</p>
+<p>Tasks can be paused globally, and individual tasks can be stopped while in progress.</p>
+<hr>
+<h2 id="entity-relationships"><a class="header" href="#entity-relationships">Entity Relationships</a></h2>
 <pre><code class="language-text">Root
- └── Scan (per run)
-      └── Item (files and folders)
-           └── Change (if the item changed)
+ ├── Schedule (recurring scan configuration)
+ ├── Scan (one per execution)
+ │    └── Alert (integrity issues found)
+ └── Item (stable identity)
+      └── Item Version (state at a point in time)
 </code></pre>
 <hr>
-<p>These concepts form the foundation of FsPulse’s scan and query capabilities. Understanding them will help you make the most of both interactive and command-line modes.</p>
+<p>These concepts form the foundation of FsPulse’s scanning, browsing, and query capabilities.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="database"><a class="header" href="#database">Database</a></h1>
-<p>FsPulse uses an embedded <a href="https://sqlite.org">SQLite</a> database to store all scan-related data. The database schema mirrors the core domain concepts used in FsPulse: roots, scans, items, and changes.</p>
+<h1 id="database-1"><a class="header" href="#database-1">Database</a></h1>
+<p>FsPulse uses an embedded <a href="https://sqlite.org">SQLite</a> database to store all scan-related data. The database uses a <strong>temporal versioning</strong> model where item state is tracked through version rows rather than mutable updates.</p>
 <hr>
 <h2 id="database-name-and-location"><a class="header" href="#database-name-and-location">Database Name and Location</a></h2>
 <p>The database file is always named:</p>
@@ -2199,14 +2338,36 @@ dir = "/path/to/custom/directory"
 <p>See the <a href="#database-settings">Configuration - Database Settings</a> section for more details.</p>
 <hr>
 <h2 id="schema-overview"><a class="header" href="#schema-overview">Schema Overview</a></h2>
-<p>The database schema is implemented using Rust and reflects the same logical structure used by the query interface:</p>
+<p>The database schema reflects FsPulse’s temporal versioning model:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Table</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>roots</code></td><td>Scanned root directories</td></tr>
+<tr><td><code>scans</code></td><td>Individual scan executions with timing, settings, and summary statistics</td></tr>
+<tr><td><code>items</code></td><td>Stable identity for each discovered file or folder (path, type, root)</td></tr>
+<tr><td><code>item_versions</code></td><td>Temporal state — one row per distinct state of an item, with full metadata snapshot</td></tr>
+<tr><td><code>alerts</code></td><td>Integrity issues (suspicious hashes, validation failures, access errors)</td></tr>
+<tr><td><code>scan_schedules</code></td><td>Recurring scan configurations (timing, options)</td></tr>
+<tr><td><code>tasks</code></td><td>Work queue entries for scans and other operations</td></tr>
+<tr><td><code>scan_undo_log</code></td><td>Transient rollback support for in-progress scans</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="temporal-versioning"><a class="header" href="#temporal-versioning">Temporal Versioning</a></h3>
+<p>The <code>items</code> table stores only identity information (root, path, name, type). All mutable state lives in <code>item_versions</code>, where each row represents a distinct state with a temporal range:</p>
 <ul>
-<li><code>roots</code> — scanned root directories</li>
-<li><code>scans</code> — individual scan snapshots</li>
-<li><code>items</code> — discovered files and folders with metadata</li>
-<li><code>changes</code> — additions, deletions, and modifications between scans</li>
+<li><code>first_scan_id</code> — the scan where this state was first observed</li>
+<li><code>last_scan_id</code> — the most recent scan where this state was confirmed</li>
 </ul>
-<p>The schema is versioned to allow future upgrades without requiring a full reset.</p>
+<p>An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, hash, validation, or deletion status).</p>
+<h3 id="schema-versioning"><a class="header" href="#schema-versioning">Schema Versioning</a></h3>
+<p>The schema is versioned (currently version 17) and automatically migrated on startup. FsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
+<hr>
+<h2 id="database-compaction"><a class="header" href="#database-compaction">Database Compaction</a></h2>
+<p>Over time, deletions and updates can leave unused space in the database file. The Settings page provides a <strong>Compact Database</strong> action that reclaims this space by running SQLite’s VACUUM command.</p>
 <hr>
 <h2 id="exploring-the-database"><a class="header" href="#exploring-the-database">Exploring the Database</a></h2>
 <p>Because FsPulse uses SQLite, you can inspect the database using any compatible tool, such as:</p>
@@ -2282,17 +2443,20 @@ SOFTWARE.
 <li><a href="https://tailwindcss.com">Tailwind CSS</a> — Utility-first CSS framework</li>
 <li><a href="https://lucide.dev">Lucide</a> — Clean, consistent icon set</li>
 <li><a href="https://react.dev">React</a> — UI framework</li>
+<li><a href="https://recharts.org">Recharts</a> — Composable charting library</li>
+<li><a href="https://tanstack.com/virtual">TanStack Virtual</a> — Virtualized list rendering</li>
 </ul>
-<p><strong>Backend &amp; CLI:</strong></p>
+<p><strong>Backend:</strong></p>
 <ul>
 <li><a href="https://github.com/rusqlite/rusqlite">rusqlite</a> — SQLite database interface</li>
 <li><a href="https://github.com/tokio-rs/axum">axum</a> — Web framework</li>
 <li><a href="https://tokio.rs">tokio</a> — Async runtime</li>
 <li><a href="https://github.com/clap-rs/clap">clap</a> — Command-line argument parsing</li>
-<li><a href="https://github.com/console-rs/dialoguer">dialoguer</a> — Interactive CLI prompts</li>
-<li><a href="https://ratatui.rs">ratatui</a> — Terminal UI framework</li>
+<li><a href="https://github.com/SergioBenitez/Figment">figment</a> — Configuration management</li>
+<li><a href="https://github.com/emabee/flexi_logger">flexi_logger</a> — Flexible logging</li>
+<li><a href="https://pest.rs">pest</a> — Parser generator (for query language)</li>
 </ul>
-<p>The complete list of dependencies is available in the project’s <a href="https://github.com/gtunes-dev/fspulse/blob/main/Cargo.toml"><code>Cargo.toml</code></a> and <a href="https://github.com/gtunes-dev/fspulse/blob/main/web/package.json"><code>package.json</code></a>.</p>
+<p>The complete list of dependencies is available in the project’s <a href="https://github.com/gtunes-dev/fspulse/blob/main/Cargo.toml"><code>Cargo.toml</code></a> and <a href="https://github.com/gtunes-dev/fspulse/blob/main/frontend/package.json"><code>package.json</code></a>.</p>
 <hr>
 <p>Thank you to all the open source maintainers whose work makes FsPulse possible.</p>
 
