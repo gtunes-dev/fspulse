@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f62de205.js";
+            window.path_to_searchindex_js = "searchindex-a1e36410.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ae9385db.js"></script>
@@ -244,7 +244,8 @@ threads = 8
 <ul>
 <li>Logs are written to <code>&lt;data_dir&gt;/logs/</code></li>
 <li>Each run of FsPulse creates a new log file, named using the current date and time</li>
-<li>FsPulse retains up to <strong>100</strong> log files; older files are automatically deleted</li>
+<li>Individual log files are capped at <strong>50 MB</strong>; if a single run exceeds this, it continues in a new file</li>
+<li>FsPulse retains up to <strong>20</strong> log files; older files are automatically deleted</li>
 </ul>
 <hr>
 <h2 id="server-settings"><a class="header" href="#server-settings">Server Settings</a></h2>
