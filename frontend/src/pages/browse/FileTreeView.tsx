@@ -5,6 +5,7 @@ import type { TreeNodeData } from '@/lib/pathUtils'
 import { sortTreeItems } from '@/lib/pathUtils'
 import { useVirtualTree } from '@/hooks/useVirtualTree'
 import type { BrowseCache } from '@/hooks/useBrowseCache'
+import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 
 interface FileTreeViewProps {
   rootPath: string
@@ -26,6 +27,7 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
     const [error, setError] = useState<string | null>(null)
 
     const parentRef = useRef<HTMLDivElement>(null)
+    const scrollElement = useScrollElement()
 
     // Track what we've loaded to prevent duplicate fetches
     const loadedKeyRef = useRef<string | null>(null)
@@ -40,11 +42,14 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
       ? flatItems
       : flatItems.filter(item => !item.is_deleted)
 
-    // TanStack Virtual virtualizer
+    const scrollMargin = useScrollMargin(parentRef)
+
+    // TanStack Virtual virtualizer — uses <main> as scroll element
     const virtualizer = useVirtualizer({
       count: visibleItems.length,
-      getScrollElement: () => parentRef.current,
+      getScrollElement: () => isActive ? scrollElement : null,
       estimateSize: () => 36,
+      scrollMargin,
       overscan: 5,
     })
 
@@ -128,67 +133,57 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
       loadRootLevelItems()
     }, [isActive, rootPath, scanId, cache, initializeTree])
 
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-          Loading file tree...
-        </div>
-      )
-    }
-
-    if (error) {
-      return (
-        <div className="flex items-center justify-center h-full text-red-600">
-          {error}
-        </div>
-      )
-    }
-
-    if (visibleItems.length === 0) {
-      return (
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-          No items found in this root
-        </div>
-      )
-    }
-
     return (
       <div
         ref={parentRef}
-        className="h-full p-4 overflow-auto"
+        className="p-4"
       >
-        <div
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
-          }}
-        >
-          {virtualizer.getVirtualItems().map(virtualItem => {
-            const item = visibleItems[virtualItem.index]
-            return (
-              <div
-                key={item.item_id}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: `${virtualItem.size}px`,
-                  transform: `translateY(${virtualItem.start}px)`,
-                }}
-              >
-                <TreeNode
-                  item={item}
-                  onToggle={toggleNode}
-                  isLoading={isNodeLoading(item.item_id)}
-                  onItemSelect={onItemSelect}
-                  isSelected={selectedItemId === item.item_id}
-                />
-              </div>
-            )
-          })}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
+            Loading file tree...
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center h-32 text-red-600">
+            {error}
+          </div>
+        ) : visibleItems.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
+            No items found in this root
+          </div>
+        ) : (
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualizer.getVirtualItems().map(virtualItem => {
+              const item = visibleItems[virtualItem.index]
+              return (
+                <div
+                  key={item.item_id}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${virtualItem.size}px`,
+                    transform: `translateY(${virtualItem.start - scrollMargin}px)`,
+                  }}
+                >
+                  <TreeNode
+                    item={item}
+                    onToggle={toggleNode}
+                    isLoading={isNodeLoading(item.item_id)}
+                    onItemSelect={onItemSelect}
+                    isSelected={selectedItemId === item.item_id}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     )
   }

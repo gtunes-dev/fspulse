@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { formatFileSizeCompact } from '@/lib/formatUtils'
 import { formatDateRelative } from '@/lib/dateUtils'
 import type { BrowseCache, CachedItem } from '@/hooks/useBrowseCache'
+import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 
 interface FolderViewProps {
   rootPath: string
@@ -79,6 +80,7 @@ export function FolderView({
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const parentRef = useRef<HTMLDivElement>(null)
+  const scrollElement = useScrollElement()
 
   // Fetch items for currentPath via shared cache (skip when not active)
   const lastFetchKeyRef = useRef<string | null>(null)
@@ -109,10 +111,14 @@ export function FolderView({
   const visibleItems = showDeleted ? items : items.filter((i) => !i.is_deleted)
   const sortedItems = sortItems(visibleItems, sortColumn, sortDir)
 
+  const scrollMargin = useScrollMargin(parentRef)
+
+  // TanStack Virtual virtualizer — uses <main> as scroll element
   const virtualizer = useVirtualizer({
     count: sortedItems.length,
-    getScrollElement: () => parentRef.current,
+    getScrollElement: () => isActive ? scrollElement : null,
     estimateSize: () => 36,
+    scrollMargin,
     overscan: 5,
   })
 
@@ -171,7 +177,7 @@ export function FolderView({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       {/* Breadcrumb ribbon */}
       <div className="flex items-center px-3 py-2 border-b border-border min-h-[40px]">
         <nav className="breadcrumb-ribbon">
@@ -212,23 +218,20 @@ export function FolderView({
       </div>
 
       {/* Content */}
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground">
-          Loading...
-        </div>
-      ) : error ? (
-        <div className="flex-1 flex items-center justify-center text-red-600">
-          {error}
-        </div>
-      ) : sortedItems.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground">
-          Empty folder
-        </div>
-      ) : (
-        <div
-          ref={parentRef}
-          className="flex-1 min-h-0 overflow-auto"
-        >
+      <div ref={parentRef}>
+        {loading ? (
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
+            Loading...
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center h-32 text-red-600">
+            {error}
+          </div>
+        ) : sortedItems.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
+            Empty folder
+          </div>
+        ) : (
           <div
             style={{
               height: `${virtualizer.getTotalSize()}px`,
@@ -250,7 +253,7 @@ export function FolderView({
                     left: 0,
                     width: '100%',
                     height: `${virtualItem.size}px`,
-                    transform: `translateY(${virtualItem.start}px)`,
+                    transform: `translateY(${virtualItem.start - scrollMargin}px)`,
                   }}
                 >
                   <div
@@ -298,8 +301,8 @@ export function FolderView({
               )
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

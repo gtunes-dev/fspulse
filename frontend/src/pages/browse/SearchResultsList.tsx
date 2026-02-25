@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
 import type { FlatTreeItem } from '@/lib/pathUtils'
+import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 
 interface SearchResultsListProps {
   rootId: number
@@ -28,6 +29,7 @@ export function SearchResultsList({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const parentRef = useRef<HTMLDivElement>(null)
+  const scrollElement = useScrollElement()
 
   // Track last request to avoid stale responses
   const requestIdRef = useRef(0)
@@ -105,36 +107,16 @@ export function SearchResultsList({
     ? results
     : results.filter((item) => !item.is_deleted)
 
+  const scrollMargin = useScrollMargin(parentRef)
+
+  // TanStack Virtual virtualizer — uses <main> as scroll element
   const virtualizer = useVirtualizer({
     count: visibleResults.length,
-    getScrollElement: () => parentRef.current,
+    getScrollElement: () => isActive ? scrollElement : null,
     estimateSize: () => 52, // Taller rows to accommodate parent path
+    scrollMargin,
     overscan: 5,
   })
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        Searching...
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full text-red-600">
-        {error}
-      </div>
-    )
-  }
-
-  if (visibleResults.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        No results found
-      </div>
-    )
-  }
 
   // Extract parent path relative to root for display
   const getParentPath = (itemPath: string) => {
@@ -156,45 +138,59 @@ export function SearchResultsList({
   return (
     <div
       ref={parentRef}
-      className="h-full p-4 overflow-auto"
+      className="p-4"
     >
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {virtualizer.getVirtualItems().map((virtualItem) => {
-          const item = visibleResults[virtualItem.index]
-          return (
-            <div
-              key={item.item_id}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: `${virtualItem.size}px`,
-                transform: `translateY(${virtualItem.start}px)`,
-              }}
-            >
-              <div className="flex flex-col">
-                <TreeNode
-                  item={item}
-                  expandable={false}
-                  showPathTooltip={true}
-                  onItemSelect={onItemSelect}
-                  isSelected={selectedItemId === item.item_id}
-                />
-                <span className="text-xs text-muted-foreground pl-14 -mt-1">
-                  {getParentPath(item.item_path)}
-                </span>
+      {loading ? (
+        <div className="flex items-center justify-center h-32 text-muted-foreground">
+          Searching...
+        </div>
+      ) : error ? (
+        <div className="flex items-center justify-center h-32 text-red-600">
+          {error}
+        </div>
+      ) : visibleResults.length === 0 ? (
+        <div className="flex items-center justify-center h-32 text-muted-foreground">
+          No results found
+        </div>
+      ) : (
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const item = visibleResults[virtualItem.index]
+            return (
+              <div
+                key={item.item_id}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${virtualItem.size}px`,
+                  transform: `translateY(${virtualItem.start - scrollMargin}px)`,
+                }}
+              >
+                <div className="flex flex-col">
+                  <TreeNode
+                    item={item}
+                    expandable={false}
+                    showPathTooltip={true}
+                    onItemSelect={onItemSelect}
+                    isSelected={selectedItemId === item.item_id}
+                  />
+                  <span className="text-xs text-muted-foreground pl-14 -mt-1">
+                    {getParentPath(item.item_path)}
+                  </span>
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

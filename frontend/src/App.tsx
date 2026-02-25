@@ -1,5 +1,7 @@
+import { useState, useCallback } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { TaskProvider } from './contexts/TaskContext'
+import { ScrollProvider } from './contexts/ScrollContext'
 import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
 import { TasksPage } from './pages/tasks/TasksPage'
@@ -12,6 +14,11 @@ import { BrowsePage } from './pages/browse/BrowsePage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 
 function App() {
+  const [mainElement, setMainElement] = useState<HTMLElement | null>(null)
+  const mainRef = useCallback((node: HTMLElement | null) => {
+    setMainElement(node)
+  }, [])
+
   return (
     <BrowserRouter>
       <TaskProvider>
@@ -19,7 +26,8 @@ function App() {
           <Header />
           <div className="flex flex-1 overflow-hidden">
             <Sidebar />
-            <main className="flex-1 overflow-auto bg-background p-6">
+            <main ref={mainRef} className="flex-1 overflow-auto bg-background p-6">
+              <ScrollProvider value={mainElement}>
               <Routes>
                 <Route path="/" element={<TasksPage />} />
                 <Route path="/scans" element={<ScansPage />} />
@@ -30,6 +38,7 @@ function App() {
                 <Route path="/browse" element={<BrowsePage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
+              </ScrollProvider>
             </main>
           </div>
         </div>

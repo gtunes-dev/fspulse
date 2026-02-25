@@ -179,9 +179,9 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
 
   // Build the content view — all views always mounted, toggled via CSS
   const contentView = selectedRoot && resolvedScanId ? (
-    <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+    <div className="flex-1 min-w-0 flex flex-col">
       {/* Tree View — always rendered */}
-      <div className={viewMode === 'tree' ? 'border border-border rounded-lg flex-1 min-h-0 overflow-hidden' : 'hidden'}>
+      <div className={viewMode === 'tree' ? 'border border-border rounded-lg' : 'hidden'}>
         <FileTreeView
           ref={treeRef}
           rootPath={selectedRoot.root_path}
@@ -195,7 +195,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
       </div>
 
       {/* Folder View — always rendered */}
-      <div className={viewMode === 'folder' ? 'border border-border rounded-lg flex-1 min-h-0 overflow-hidden' : 'hidden'}>
+      <div className={viewMode === 'folder' ? 'border border-border rounded-lg' : 'hidden'}>
         <FolderView
           rootPath={selectedRoot.root_path}
           scanId={resolvedScanId}
@@ -210,7 +210,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
       </div>
 
       {/* Search Results — always rendered */}
-      <div className={viewMode === 'search' && hasSearchQuery ? 'border border-border rounded-lg flex-1 min-h-0 overflow-hidden' : 'hidden'}>
+      <div className={viewMode === 'search' && hasSearchQuery ? 'border border-border rounded-lg' : 'hidden'}>
         <SearchResultsList
           rootId={selectedRoot.root_id}
           rootPath={selectedRoot.root_path}
@@ -246,7 +246,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
 
   // Detail panel shows the active view's selection
   const detailPanel = activeSelection && selectedRoot && resolvedScanId ? (
-    <div className="w-96 flex-shrink-0 border border-border rounded-lg">
+    <div className="w-96 flex-shrink-0 sticky top-0 self-start border border-border rounded-lg">
       <ItemDetailPanel
         itemId={activeSelection.itemId}
         itemPath={activeSelection.itemPath}
