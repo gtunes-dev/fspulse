@@ -1,16 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { FolderTree, FolderOpen, Search, ArrowLeftRight } from 'lucide-react'
+import { FolderTree, FolderOpen, Search, ArrowLeftRight, ListFilter } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { RootPicker } from '@/components/shared/RootPicker'
 import { CompactScanBar } from '@/components/shared/CompactScanBar'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { ItemDetailPanel } from '@/components/shared/ItemDetailPanel'
 import { useBrowseCache } from '@/hooks/useBrowseCache'
-import { getParentPath } from '@/lib/pathUtils'
+import { getParentPath, type ChangeKind } from '@/lib/pathUtils'
 import { FileTreeView } from './FileTreeView'
 import type { FileTreeViewHandle } from './FileTreeView'
 import { FolderView } from './FolderView'
@@ -32,16 +31,15 @@ interface SelectedItem {
 
 interface BrowseCardProps {
   roots: Root[]
-  position: 'left' | 'right'
   defaultRootId?: string
 }
 
-export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) {
+export function BrowseCard({ roots, defaultRootId }: BrowseCardProps) {
   const [selectedRootId, setSelectedRootId] = useState<string>(defaultRootId ?? '')
   const [resolvedScanId, setResolvedScanId] = useState<number | null>(null)
   const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
-  const [showDeleted, setShowDeleted] = useState(false)
+  const [hiddenKinds, setHiddenKinds] = useState<Set<ChangeKind>>(new Set())
   const [searchFilter, setSearchFilter] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   // Per-view selection: each tab has its own independently selected item
@@ -191,7 +189,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
           rootPath={selectedRoot.root_path}
           scanId={resolvedScanId}
           cache={cache}
-          showDeleted={showDeleted}
+          hiddenKinds={hiddenKinds}
           isActive={viewMode === 'tree'}
           selectedItemId={selectedItems.tree?.itemId}
           onItemSelect={handleTreeSelect}
@@ -206,7 +204,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
           cache={cache}
           currentPath={folderCurrentPath}
           onNavigate={setFolderCurrentPath}
-          showDeleted={showDeleted}
+          hiddenKinds={hiddenKinds}
           isActive={viewMode === 'folder'}
           selectedItemId={selectedItems.folder?.itemId}
           onItemSelect={handleFolderSelect}
@@ -220,7 +218,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
           rootPath={selectedRoot.root_path}
           scanId={resolvedScanId}
           searchQuery={debouncedSearch}
-          showDeleted={showDeleted}
+          hiddenKinds={hiddenKinds}
           isActive={viewMode === 'search' && hasSearchQuery}
           selectedItemId={selectedItems.search?.itemId}
           onItemSelect={handleSearchSelect}
@@ -307,25 +305,69 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
             </TabsList>
           </Tabs>
 
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+                  'hover:bg-accent text-muted-foreground hover:text-foreground',
+                  hiddenKinds.size > 0 && 'text-foreground'
+                )}
+              >
+                <ListFilter className="h-3.5 w-3.5" />
+                Filter
+                {hiddenKinds.size > 0 && (
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
+                    {hiddenKinds.size}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto p-2">
+              <div className="flex flex-col gap-1">
+                {([
+                  { kind: 'changed' as ChangeKind, label: 'Changed', activeClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30', dotClass: 'bg-blue-500' },
+                  { kind: 'deleted' as ChangeKind, label: 'Deleted', activeClass: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30', dotClass: 'bg-red-500' },
+                  { kind: 'unchanged' as ChangeKind, label: 'Unchanged', activeClass: 'bg-muted text-muted-foreground border-border', dotClass: 'bg-muted-foreground' },
+                ]).map(({ kind, label, activeClass, dotClass }) => {
+                  const visible = !hiddenKinds.has(kind)
+                  return (
+                    <button
+                      key={kind}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+                        visible
+                          ? activeClass
+                          : 'bg-transparent text-muted-foreground/50 border-border/50'
+                      )}
+                      onClick={() => setHiddenKinds(prev => {
+                        const next = new Set(prev)
+                        if (next.has(kind)) {
+                          next.delete(kind)
+                        } else {
+                          next.add(kind)
+                        }
+                        return next
+                      })}
+                    >
+                      <span className={cn('inline-block w-1.5 h-1.5 rounded-full', visible ? dotClass : 'bg-muted-foreground/30')} />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <div className="flex-1" />
 
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id={`show-deleted-${position}`}
-              checked={showDeleted}
-              onCheckedChange={(checked) => setShowDeleted(checked === true)}
-            />
-            <Label htmlFor={`show-deleted-${position}`} className="text-sm font-medium cursor-pointer">
-              Show deleted
-            </Label>
-            <button
-              className="ml-1 p-1 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-              onClick={() => setDetailOnRight(prev => !prev)}
-              aria-label="Flip detail panel side"
-            >
-              <ArrowLeftRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <button
+            className="p-1 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+            onClick={() => setDetailOnRight(prev => !prev)}
+            aria-label="Flip detail panel side"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         {/* Search filter — visible in search mode */}

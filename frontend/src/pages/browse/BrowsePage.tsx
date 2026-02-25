@@ -96,12 +96,10 @@ export function BrowsePage() {
       <div className="flex gap-4 flex-1">
         <BrowseCard
           roots={roots}
-          position="left"
         />
         <div className={showCompare ? 'flex-1 min-w-0 flex' : 'hidden'}>
           <BrowseCard
             roots={roots}
-            position="right"
           />
         </div>
       </div>

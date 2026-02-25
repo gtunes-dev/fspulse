@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
-import type { TreeNodeData } from '@/lib/pathUtils'
+import type { TreeNodeData, ChangeKind } from '@/lib/pathUtils'
 import { sortTreeItems } from '@/lib/pathUtils'
 import { useVirtualTree } from '@/hooks/useVirtualTree'
 import type { BrowseCache } from '@/hooks/useBrowseCache'
@@ -11,7 +11,7 @@ interface FileTreeViewProps {
   rootPath: string
   scanId: number
   cache: BrowseCache
-  showDeleted: boolean
+  hiddenKinds: Set<ChangeKind>
   isActive?: boolean
   selectedItemId?: number | null
   onItemSelect?: (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }) => void
@@ -22,7 +22,7 @@ export interface FileTreeViewHandle {
 }
 
 export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
-  function FileTreeView({ rootPath, scanId, cache, showDeleted, isActive = true, selectedItemId, onItemSelect }, ref) {
+  function FileTreeView({ rootPath, scanId, cache, hiddenKinds, isActive = true, selectedItemId, onItemSelect }, ref) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -37,10 +37,11 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
       loadChildrenFn: cache.loadChildren,
     })
 
-    // Filter deleted items client-side based on showDeleted toggle
-    const visibleItems = showDeleted
-      ? flatItems
-      : flatItems.filter(item => !item.is_deleted)
+    // Filter items client-side based on change kind toggles
+    // Non-deleted directories are always visible for navigation; deleted dirs respect the filter
+    const visibleItems = flatItems.filter(item =>
+      (item.item_type === 'D' && item.change_kind !== 'deleted') || !hiddenKinds.has(item.change_kind)
+    )
 
     const scrollMargin = useScrollMargin(parentRef)
 
@@ -113,6 +114,7 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
             is_deleted: item.is_deleted,
             size: item.size,
             mod_date: item.mod_date,
+            change_kind: item.change_kind,
             name: item.item_name,
           }))
 

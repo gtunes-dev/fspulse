@@ -43,6 +43,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       is_deleted: item.is_deleted,
       size: item.size,
       mod_date: item.mod_date,
+      change_kind: item.change_kind,
       depth: 0,
       isExpanded: false,
       childrenLoaded: false,
@@ -133,6 +134,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         is_deleted: item.is_deleted,
         size: item.size,
         mod_date: item.mod_date,
+        change_kind: item.change_kind,
         name: item.item_name,
       }))
 
@@ -162,6 +164,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
           is_deleted: child.is_deleted,
           size: child.size,
           mod_date: child.mod_date,
+          change_kind: child.change_kind,
           depth: parentDepth + 1,
           isExpanded: false,
           childrenLoaded: false,

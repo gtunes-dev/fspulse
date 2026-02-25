@@ -97,9 +97,10 @@ pub struct TemporalTreeItem {
     pub item_path: String,
     pub item_name: String,
     pub item_type: ItemType,
+    pub first_scan_id: i64,
     pub is_deleted: bool,
-    pub size: Option<i64>,
     pub mod_date: Option<i64>,
+    pub size: Option<i64>,
 }
 
 /// Get immediate children at a point in time using items + item_versions.
@@ -119,8 +120,8 @@ pub fn get_temporal_immediate_children(
     };
 
     let sql = format!(
-        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, iv.is_deleted,
-                iv.size, iv.mod_date
+        "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
+                iv.first_scan_id, iv.is_deleted, iv.mod_date, iv.size
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          WHERE i.root_id = ?1
@@ -130,6 +131,7 @@ pub fn get_temporal_immediate_children(
                WHERE item_id = i.item_id
                  AND first_scan_id <= ?2
            )
+           AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
            AND i.item_path LIKE ?3 || '%'
            AND i.item_path != ?4
            AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'
@@ -147,9 +149,10 @@ pub fn get_temporal_immediate_children(
                 item_path: row.get(1)?,
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
-                is_deleted: row.get(4)?,
-                size: row.get(5)?,
+                first_scan_id: row.get(4)?,
+                is_deleted: row.get(5)?,
                 mod_date: row.get(6)?,
+                size: row.get(7)?,
             })
         },
     )?;
@@ -170,8 +173,8 @@ pub fn search_temporal_items(
     let conn = Database::get_connection()?;
 
     let sql =
-        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, iv.is_deleted,
-                iv.size, iv.mod_date
+        "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
+                iv.first_scan_id, iv.is_deleted, iv.mod_date, iv.size
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          WHERE i.root_id = ?1
@@ -181,6 +184,7 @@ pub fn search_temporal_items(
                WHERE item_id = i.item_id
                  AND first_scan_id <= ?2
            )
+           AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
            AND i.item_name LIKE '%' || ?3 || '%'
          ORDER BY i.item_path COLLATE natural_path ASC
          LIMIT 200";
@@ -195,9 +199,10 @@ pub fn search_temporal_items(
                 item_path: row.get(1)?,
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
-                is_deleted: row.get(4)?,
-                size: row.get(5)?,
+                first_scan_id: row.get(4)?,
+                is_deleted: row.get(5)?,
                 mod_date: row.get(6)?,
+                size: row.get(7)?,
             })
         },
     )?;

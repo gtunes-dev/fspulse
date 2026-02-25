@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { formatFileSizeCompact } from '@/lib/formatUtils'
 import { formatDateRelative } from '@/lib/dateUtils'
 import type { BrowseCache, CachedItem } from '@/hooks/useBrowseCache'
+import type { ChangeKind } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 
 interface FolderViewProps {
@@ -13,7 +14,7 @@ interface FolderViewProps {
   cache: BrowseCache
   currentPath: string
   onNavigate: (path: string) => void
-  showDeleted: boolean
+  hiddenKinds: Set<ChangeKind>
   isActive?: boolean
   selectedItemId?: number | null
   onItemSelect?: (item: SelectedFolderItem) => void
@@ -68,7 +69,7 @@ export function FolderView({
   cache,
   currentPath,
   onNavigate,
-  showDeleted,
+  hiddenKinds,
   isActive = true,
   selectedItemId,
   onItemSelect,
@@ -107,8 +108,10 @@ export function FolderView({
       })
   }, [isActive, currentPath, scanId, cache])
 
-  // Filter and sort
-  const visibleItems = showDeleted ? items : items.filter((i) => !i.is_deleted)
+  // Filter and sort — non-deleted directories always visible for navigation
+  const visibleItems = items.filter((i) =>
+    (i.item_type === 'D' && i.change_kind !== 'deleted') || !hiddenKinds.has(i.change_kind)
+  )
   const sortedItems = sortItems(visibleItems, sortColumn, sortDir)
 
   const scrollMargin = useScrollMargin(parentRef)
@@ -280,11 +283,14 @@ export function FolderView({
 
                     {/* Name — click selects */}
                     <div
-                      className={cn('flex-1 text-sm truncate cursor-pointer', item.is_deleted && 'line-through')}
+                      className={cn('flex-1 flex items-center gap-1.5 text-sm truncate cursor-pointer', item.is_deleted && 'line-through')}
                       onClick={() => handleItemSelect(item)}
                     >
-                      {item.item_name}
-                      {item.is_deleted && <Trash2 className="inline h-3 w-3 ml-1.5 text-muted-foreground" />}
+                      {item.change_kind === 'changed' && (
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                      )}
+                      <span className="truncate">{item.item_name}</span>
+                      {item.is_deleted && <Trash2 className="inline h-3 w-3 ml-1.5 flex-shrink-0 text-muted-foreground" />}
                     </div>
 
                     {/* Size */}

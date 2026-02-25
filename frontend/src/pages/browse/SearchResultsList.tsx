@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
-import type { FlatTreeItem } from '@/lib/pathUtils'
+import type { FlatTreeItem, ChangeKind } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 
 interface SearchResultsListProps {
@@ -9,7 +9,7 @@ interface SearchResultsListProps {
   rootPath: string
   scanId: number
   searchQuery: string
-  showDeleted: boolean
+  hiddenKinds: Set<ChangeKind>
   isActive?: boolean
   selectedItemId?: number | null
   onItemSelect?: (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }) => void
@@ -20,7 +20,7 @@ export function SearchResultsList({
   rootPath,
   scanId,
   searchQuery,
-  showDeleted,
+  hiddenKinds,
   isActive = true,
   selectedItemId,
   onItemSelect,
@@ -70,6 +70,7 @@ export function SearchResultsList({
           is_deleted: boolean
           size: number | null
           mod_date: number | null
+          first_scan_id: number
         }>
 
         const flatItems: FlatTreeItem[] = items.map((item) => ({
@@ -80,6 +81,9 @@ export function SearchResultsList({
           is_deleted: item.is_deleted,
           size: item.size,
           mod_date: item.mod_date,
+          change_kind: item.is_deleted ? 'deleted' as const
+            : item.first_scan_id === scanId ? 'changed' as const
+            : 'unchanged' as const,
           depth: 0,
           isExpanded: false,
           childrenLoaded: false,
@@ -102,10 +106,8 @@ export function SearchResultsList({
     search()
   }, [isActive, rootId, scanId, searchQuery])
 
-  // Filter deleted items client-side
-  const visibleResults = showDeleted
-    ? results
-    : results.filter((item) => !item.is_deleted)
+  // Filter items client-side based on change kind toggles
+  const visibleResults = results.filter((item) => !hiddenKinds.has(item.change_kind))
 
   const scrollMargin = useScrollMargin(parentRef)
 

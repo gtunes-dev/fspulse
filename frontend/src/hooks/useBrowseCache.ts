@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import type { ChangeKind } from '@/lib/pathUtils'
 
 /**
  * Raw item data cached by parent path.
@@ -12,6 +13,7 @@ export interface CachedItem {
   is_deleted: boolean
   size: number | null
   mod_date: number | null
+  change_kind: ChangeKind
 }
 
 export interface BrowseCache {
@@ -89,11 +91,20 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
           is_deleted: boolean
           size: number | null
           mod_date: number | null
+          first_scan_id: number
         }>
 
         const items: CachedItem[] = data.map(item => ({
-          ...item,
+          item_id: item.item_id,
+          item_path: item.item_path,
+          item_name: item.item_name,
           item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
+          is_deleted: item.is_deleted,
+          size: item.size,
+          mod_date: item.mod_date,
+          change_kind: item.is_deleted ? 'deleted'
+            : item.first_scan_id === capturedScanId ? 'changed'
+            : 'unchanged',
         }))
 
         // Guard against stale writes after root/scan change

@@ -1,5 +1,7 @@
 // Path utility functions for file tree navigation
 
+export type ChangeKind = 'changed' | 'deleted' | 'unchanged'
+
 export interface ItemData {
   item_id: number
   item_path: string
@@ -8,6 +10,7 @@ export interface ItemData {
   is_deleted: boolean
   size?: number | null
   mod_date?: number | null
+  change_kind: ChangeKind
 }
 
 /**
@@ -22,6 +25,7 @@ export interface FlatTreeItem {
   is_deleted: boolean
   size?: number | null
   mod_date?: number | null
+  change_kind: ChangeKind
   depth: number
   isExpanded: boolean
   childrenLoaded: boolean
