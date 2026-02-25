@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { FolderTree, FolderOpen, Search } from 'lucide-react'
+import { FolderTree, FolderOpen, Search, ArrowLeftRight } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -49,6 +50,9 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
     folder: null,
     search: null,
   })
+
+  // Detail panel placement (right card can flip)
+  const [detailOnRight, setDetailOnRight] = useState(true)
 
   // Lifted folder navigation path
   const [folderCurrentPath, setFolderCurrentPath] = useState<string>('')
@@ -181,7 +185,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
   const contentView = selectedRoot && resolvedScanId ? (
     <div className="flex-1 min-w-0 flex flex-col">
       {/* Tree View — always rendered */}
-      <div className={viewMode === 'tree' ? 'border border-border rounded-lg' : 'hidden'}>
+      <div className={viewMode === 'tree' ? '' : 'hidden'}>
         <FileTreeView
           ref={treeRef}
           rootPath={selectedRoot.root_path}
@@ -195,7 +199,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
       </div>
 
       {/* Folder View — always rendered */}
-      <div className={viewMode === 'folder' ? 'border border-border rounded-lg' : 'hidden'}>
+      <div className={viewMode === 'folder' ? '' : 'hidden'}>
         <FolderView
           rootPath={selectedRoot.root_path}
           scanId={resolvedScanId}
@@ -210,7 +214,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
       </div>
 
       {/* Search Results — always rendered */}
-      <div className={viewMode === 'search' && hasSearchQuery ? 'border border-border rounded-lg' : 'hidden'}>
+      <div className={viewMode === 'search' && hasSearchQuery ? '' : 'hidden'}>
         <SearchResultsList
           rootId={selectedRoot.root_id}
           rootPath={selectedRoot.root_path}
@@ -225,7 +229,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
 
       {/* Search placeholder when no query */}
       {viewMode === 'search' && !hasSearchQuery && (
-        <div className="border border-border rounded-lg flex-1 min-h-0">
+        <div className="flex-1 min-h-0">
           <div className="flex items-center justify-center h-full text-muted-foreground">
             Type a search query to find files and folders
           </div>
@@ -233,7 +237,7 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
       )}
     </div>
   ) : (
-    <div className="border border-border rounded-lg flex-1 min-h-0 min-w-0">
+    <div className="flex-1 min-h-0 min-w-0">
       <div className="flex items-center justify-center h-full text-muted-foreground">
         {!selectedRoot
           ? 'Select a root'
@@ -246,16 +250,21 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
 
   // Detail panel shows the active view's selection
   const detailPanel = activeSelection && selectedRoot && resolvedScanId ? (
-    <div className="w-96 flex-shrink-0 sticky top-0 self-start border border-border rounded-lg">
-      <ItemDetailPanel
-        itemId={activeSelection.itemId}
-        itemPath={activeSelection.itemPath}
-        itemType={activeSelection.itemType}
-        isTombstone={activeSelection.isTombstone}
-        rootId={selectedRoot.root_id}
-        scanId={resolvedScanId}
-        onClose={handleDetailClose}
-      />
+    <div className={cn(
+      "w-96 flex-shrink-0",
+      detailOnRight ? 'border-l border-border' : 'border-r border-border'
+    )}>
+      <div className="sticky top-0">
+        <ItemDetailPanel
+          itemId={activeSelection.itemId}
+          itemPath={activeSelection.itemPath}
+          itemType={activeSelection.itemType}
+          isTombstone={activeSelection.isTombstone}
+          rootId={selectedRoot.root_id}
+          scanId={resolvedScanId}
+          onClose={handleDetailClose}
+        />
+      </div>
     </div>
   ) : null
 
@@ -309,6 +318,13 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
             <Label htmlFor={`show-deleted-${position}`} className="text-sm font-medium cursor-pointer">
               Show deleted
             </Label>
+            <button
+              className="ml-1 p-1 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+              onClick={() => setDetailOnRight(prev => !prev)}
+              aria-label="Flip detail panel side"
+            >
+              <ArrowLeftRight className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
@@ -322,11 +338,10 @@ export function BrowseCard({ roots, position, defaultRootId }: BrowseCardProps) 
         )}
 
         {/* Content area: content view + detail panel side by side */}
-        <div className="flex-1 flex gap-3">
-          {/* For left card: content then detail. For right card: detail then content. */}
-          {position === 'right' && detailPanel}
+        <div className="flex-1 flex border border-border rounded-lg">
+          {!detailOnRight && detailPanel}
           {contentView}
-          {position === 'left' && detailPanel}
+          {detailOnRight && detailPanel}
         </div>
       </CardContent>
     </Card>

@@ -7,8 +7,6 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import {
   Select,
   SelectContent,
@@ -485,270 +483,248 @@ export function ItemDetailPanel({
           Loading...
         </div>
       ) : (
-        <div className="space-y-3 p-3">
+        <div className="divide-y divide-border">
           {/* Current State */}
           {anchorVersion && (
-            <Card className="border">
-              <CardHeader className="px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">
-                    {scanRef(scanId, anchorScanDate)}
-                  </CardTitle>
-                  <span className="text-xs text-muted-foreground">v{anchorVersion.version_id}</span>
+            <div className="px-3 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold">
+                  {scanRef(scanId, anchorScanDate)}
+                </p>
+                <span className="text-xs text-muted-foreground">v{anchorVersion.version_id}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm pl-2">
+                <div>
+                  <p className="text-muted-foreground">Type</p>
+                  <p className="font-medium">{itemTypeLabel(itemType)}</p>
                 </div>
-              </CardHeader>
-              <CardContent className="px-3 py-2">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Type</p>
-                    <p className="font-medium">{itemTypeLabel(itemType)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Modified</p>
-                    <p className="font-medium">{anchorVersion.mod_date ? formatDateFull(anchorVersion.mod_date) : 'N/A'}</p>
-                  </div>
-                  {anchorVersion.size !== null && (
-                    <div>
-                      <p className="text-muted-foreground">Size</p>
-                      <p className="font-medium">{formatFileSize(anchorVersion.size)}</p>
-                    </div>
-                  )}
-                  {itemType === 'F' && (
-                    <div>
-                      <p className="text-muted-foreground">Validation</p>
-                      <div className="mt-0.5">{getValidationBadge(anchorVersion.val)}</div>
-                    </div>
-                  )}
-                  {itemType === 'F' && anchorVersion.file_hash && (
-                    <div className="col-span-2">
-                      <p className="text-muted-foreground flex items-center gap-1"><Hash className="h-3 w-3" />Hash</p>
-                      <p className="font-mono text-xs break-all mt-0.5">{anchorVersion.file_hash}</p>
-                    </div>
-                  )}
+                <div>
+                  <p className="text-muted-foreground">Modified</p>
+                  <p className="font-medium">{anchorVersion.mod_date ? formatDateFull(anchorVersion.mod_date) : 'N/A'}</p>
                 </div>
-
-                {itemType === 'D' && !isTombstone && (
-                  <div className="mt-2 pt-2 border-t">
-                    {loadingChildrenCounts ? (
-                      <p className="text-sm text-muted-foreground text-center">Loading...</p>
-                    ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
-                      <div className="flex items-center justify-center gap-4 text-sm">
-                        <span className="flex items-center gap-1">
-                          <Folder className="h-3 w-3" style={{ color: 'hsl(142 71% 45%)' }} />
-                          <span className="font-medium">{childrenCounts.directory_count.toLocaleString()}</span>
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <File className="h-3 w-3" style={{ color: 'hsl(221 83% 53%)' }} />
-                          <span className="font-medium">{childrenCounts.file_count.toLocaleString()}</span>
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground text-center">Empty directory</p>
-                    )}
+                {anchorVersion.size !== null && (
+                  <div>
+                    <p className="text-muted-foreground">Size</p>
+                    <p className="font-medium">{formatFileSize(anchorVersion.size)}</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+                {itemType === 'F' && (
+                  <div>
+                    <p className="text-muted-foreground">Validation</p>
+                    <div className="mt-0.5">{getValidationBadge(anchorVersion.val)}</div>
+                  </div>
+                )}
+                {itemType === 'F' && anchorVersion.file_hash && (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground flex items-center gap-1"><Hash className="h-3 w-3" />Hash</p>
+                    <p className="font-mono text-xs break-all mt-0.5">{anchorVersion.file_hash}</p>
+                  </div>
+                )}
+              </div>
+
+              {itemType === 'D' && !isTombstone && (
+                <div className="mt-2 pt-2 border-t pl-2">
+                  {loadingChildrenCounts ? (
+                    <p className="text-sm text-muted-foreground text-center">Loading...</p>
+                  ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
+                    <div className="flex items-center justify-center gap-4 text-sm">
+                      <span className="flex items-center gap-1">
+                        <Folder className="h-3 w-3" style={{ color: 'hsl(142 71% 45%)' }} />
+                        <span className="font-medium">{childrenCounts.directory_count.toLocaleString()}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <File className="h-3 w-3" style={{ color: 'hsl(221 83% 53%)' }} />
+                        <span className="font-medium">{childrenCounts.file_count.toLocaleString()}</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center">Empty directory</p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Size History */}
-          <Card className="border">
-            <CardHeader className="px-3 py-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">Size History</CardTitle>
-                <Select value={timeWindow} onValueChange={(v) => setTimeWindow(v as TimeWindowPreset)}>
-                  <SelectTrigger className="h-6 w-[100px] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7d">7 Days</SelectItem>
-                    <SelectItem value="30d">30 Days</SelectItem>
-                    <SelectItem value="3m">3 Months</SelectItem>
-                    <SelectItem value="6m">6 Months</SelectItem>
-                    <SelectItem value="1y">1 Year</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent className="px-3 py-2">
-              {loadingSizeHistory ? (
-                <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading...</div>
-              ) : sizeHistory.length === 0 ? (
-                <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">No size history</div>
-              ) : (
-                <ChartContainer
-                  config={{ size: { label: 'Size', color: 'hsl(271 81% 56%)' } }}
-                  className="aspect-auto h-[180px]"
-                >
-                  <LineChart data={sizeHistory.map(p => ({ date: format(new Date(p.started_at * 1000), 'MMM dd'), size: p.size }))}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
-                    <YAxis
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
-                      tickFormatter={(value) => {
-                        const units = ['B', 'KB', 'MB', 'GB', 'TB']
-                        let i = 0; let s = value as number
-                        while (s >= 1024 && i < units.length - 1) { s /= 1024; i++ }
-                        return `${s.toFixed(0)} ${units[i]}`
-                      }}
-                      width={50}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} formatter={(v) => formatFileSize(v as number)} />
-                    <Line type="step" dataKey="size" stroke="var(--color-size)" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ChartContainer>
-              )}
-            </CardContent>
-          </Card>
+          <div className="px-3 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold">Size History</p>
+              <Select value={timeWindow} onValueChange={(v) => setTimeWindow(v as TimeWindowPreset)}>
+                <SelectTrigger className="h-6 w-[100px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7d">7 Days</SelectItem>
+                  <SelectItem value="30d">30 Days</SelectItem>
+                  <SelectItem value="3m">3 Months</SelectItem>
+                  <SelectItem value="6m">6 Months</SelectItem>
+                  <SelectItem value="1y">1 Year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {loadingSizeHistory ? (
+              <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading...</div>
+            ) : sizeHistory.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">No size history</div>
+            ) : (
+              <ChartContainer
+                config={{ size: { label: 'Size', color: 'hsl(271 81% 56%)' } }}
+                className="aspect-auto h-[180px]"
+              >
+                <LineChart data={sizeHistory.map(p => ({ date: format(new Date(p.started_at * 1000), 'MMM dd'), size: p.size }))}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                  <YAxis
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    tickFormatter={(value) => {
+                      const units = ['B', 'KB', 'MB', 'GB', 'TB']
+                      let i = 0; let s = value as number
+                      while (s >= 1024 && i < units.length - 1) { s /= 1024; i++ }
+                      return `${s.toFixed(0)} ${units[i]}`
+                    }}
+                    width={50}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} formatter={(v) => formatFileSize(v as number)} />
+                  <Line type="step" dataKey="size" stroke="var(--color-size)" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ChartContainer>
+            )}
+          </div>
 
           {/* Version History */}
-          <Card className="border">
-            <CardHeader className="px-3 py-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">Version History</CardTitle>
-                {totalVersionCount > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {versions.length}/{totalVersionCount}
-                  </p>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="px-3 py-2">
-              {changes.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No version history</p>
-              ) : (
-                <>
-                  <div className="border border-border rounded">
-                    {changes.map((change, idx) => {
-                      const v = change.version
-                      const isAnchor = idx === 0
-                      const isOpen = openVersions[v.version_id] || false
-                      const setIsOpen = (open: boolean) => setOpenVersions(prev => ({ ...prev, [v.version_id]: open }))
-                      const isExpandable = change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)
-
-                      return (
-                        <div key={v.version_id}>
-                          <div className={cn("px-2 py-1.5", isAnchor && "bg-accent/30")}>
-                            {isExpandable ? (
-                              <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                                <div className="flex items-center gap-1.5">
-                                  <CollapsibleTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-4 w-4 p-0 flex-shrink-0">
-                                      <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", !isOpen && "-rotate-90")} />
-                                    </Button>
-                                  </CollapsibleTrigger>
-                                  {getChangeBadge(change.kind)}
-                                  <p className="text-xs text-muted-foreground truncate flex-1">
-                                    {scanRangeLabel(v)}
-                                  </p>
-                                  {isAnchor && <Eye className="h-3 w-3 text-primary flex-shrink-0" />}
-                                </div>
-                                <CollapsibleContent className="mt-1 ml-5.5">
-                                  <div className="space-y-1 text-xs">
-                                    {change.prev && v.mod_date !== change.prev.mod_date && (
-                                      <div className="bg-muted/50 p-1.5 rounded">
-                                        <p className="font-medium flex items-center gap-1"><CalendarIcon className="h-2.5 w-2.5" />Modified</p>
-                                        <p className="text-muted-foreground">{change.prev.mod_date ? formatDateFull(change.prev.mod_date) : 'N/A'} &rarr; {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
-                                      </div>
-                                    )}
-                                    {change.prev && v.size !== change.prev.size && (
-                                      <div className="bg-muted/50 p-1.5 rounded">
-                                        <p className="font-medium flex items-center gap-1"><HardDrive className="h-2.5 w-2.5" />Size</p>
-                                        <p className="text-muted-foreground">{formatFileSize(change.prev.size)} &rarr; {formatFileSize(v.size)}</p>
-                                      </div>
-                                    )}
-                                    {change.prev && v.file_hash !== change.prev.file_hash && (
-                                      <div className="bg-muted/50 p-1.5 rounded">
-                                        <p className="font-medium flex items-center gap-1"><Hash className="h-2.5 w-2.5" />Hash</p>
-                                        <p className="font-mono break-all text-muted-foreground">{change.prev.file_hash || 'N/A'}</p>
-                                        <p className="font-mono break-all">{v.file_hash || 'N/A'}</p>
-                                      </div>
-                                    )}
-                                    {change.prev && v.access !== change.prev.access && (
-                                      <div className="bg-muted/50 p-1.5 rounded">
-                                        <p className="font-medium">Access</p>
-                                        <p className="text-muted-foreground">{accessLabel(change.prev.access)} &rarr; {accessLabel(v.access)}</p>
-                                      </div>
-                                    )}
-                                    {change.prev && v.val !== change.prev.val && (
-                                      <div className="bg-muted/50 p-1.5 rounded">
-                                        <p className="font-medium">Validation</p>
-                                        <div className="flex items-center gap-1 mt-0.5">{getValidationBadge(change.prev.val)} <span>&rarr;</span> {getValidationBadge(v.val)}</div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
-                                <div className="h-4 w-4 flex-shrink-0" />
-                                {getChangeBadge(change.kind)}
-                                <p className="text-xs text-muted-foreground truncate flex-1">
-                                  {scanRangeLabel(v)}
-                                </p>
-                                {isAnchor && <Eye className="h-3 w-3 text-primary flex-shrink-0" />}
-                              </div>
-                            )}
-                          </div>
-                          {idx < changes.length - 1 && <Separator />}
-                        </div>
-                      )
-                    })}
-                  </div>
-                  {hasMoreVersions && (
-                    <div className="mt-2 flex justify-center">
-                      <Button variant="outline" size="sm" className="text-sm h-7" onClick={loadMoreVersions} disabled={loadingMoreVersions}>
-                        {loadingMoreVersions ? 'Loading...' : 'Load older'}
-                      </Button>
-                    </div>
-                  )}
-                </>
+          <div className="px-3 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold">Version History</p>
+              {totalVersionCount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {versions.length}/{totalVersionCount}
+                </p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+            {changes.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No version history</p>
+            ) : (
+              <>
+                <div className="divide-y divide-border">
+                  {changes.map((change) => {
+                    const v = change.version
+                    const isAnchor = changes[0].version.version_id === v.version_id
+                    const isOpen = openVersions[v.version_id] || false
+                    const setIsOpen = (open: boolean) => setOpenVersions(prev => ({ ...prev, [v.version_id]: open }))
+                    const isExpandable = change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)
+
+                    return (
+                      <div key={v.version_id} className={cn("px-2 py-1.5", isAnchor && "bg-accent/30")}>
+                        {isExpandable ? (
+                          <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+                            <div className="flex items-center gap-1.5">
+                              <CollapsibleTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-4 w-4 p-0 flex-shrink-0">
+                                  <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", !isOpen && "-rotate-90")} />
+                                </Button>
+                              </CollapsibleTrigger>
+                              {getChangeBadge(change.kind)}
+                              <p className="text-xs text-muted-foreground truncate flex-1">
+                                {scanRangeLabel(v)}
+                              </p>
+                              {isAnchor && <Eye className="h-3 w-3 text-primary flex-shrink-0" />}
+                            </div>
+                            <CollapsibleContent className="mt-1 ml-5.5">
+                              <div className="space-y-1 text-xs">
+                                {change.prev && v.mod_date !== change.prev.mod_date && (
+                                  <div className="bg-muted/50 p-1.5 rounded">
+                                    <p className="font-medium flex items-center gap-1"><CalendarIcon className="h-2.5 w-2.5" />Modified</p>
+                                    <p className="text-muted-foreground">{change.prev.mod_date ? formatDateFull(change.prev.mod_date) : 'N/A'} &rarr; {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
+                                  </div>
+                                )}
+                                {change.prev && v.size !== change.prev.size && (
+                                  <div className="bg-muted/50 p-1.5 rounded">
+                                    <p className="font-medium flex items-center gap-1"><HardDrive className="h-2.5 w-2.5" />Size</p>
+                                    <p className="text-muted-foreground">{formatFileSize(change.prev.size)} &rarr; {formatFileSize(v.size)}</p>
+                                  </div>
+                                )}
+                                {change.prev && v.file_hash !== change.prev.file_hash && (
+                                  <div className="bg-muted/50 p-1.5 rounded">
+                                    <p className="font-medium flex items-center gap-1"><Hash className="h-2.5 w-2.5" />Hash</p>
+                                    <p className="font-mono break-all text-muted-foreground">{change.prev.file_hash || 'N/A'}</p>
+                                    <p className="font-mono break-all">{v.file_hash || 'N/A'}</p>
+                                  </div>
+                                )}
+                                {change.prev && v.access !== change.prev.access && (
+                                  <div className="bg-muted/50 p-1.5 rounded">
+                                    <p className="font-medium">Access</p>
+                                    <p className="text-muted-foreground">{accessLabel(change.prev.access)} &rarr; {accessLabel(v.access)}</p>
+                                  </div>
+                                )}
+                                {change.prev && v.val !== change.prev.val && (
+                                  <div className="bg-muted/50 p-1.5 rounded">
+                                    <p className="font-medium">Validation</p>
+                                    <div className="flex items-center gap-1 mt-0.5">{getValidationBadge(change.prev.val)} <span>&rarr;</span> {getValidationBadge(v.val)}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-4 w-4 flex-shrink-0" />
+                            {getChangeBadge(change.kind)}
+                            <p className="text-xs text-muted-foreground truncate flex-1">
+                              {scanRangeLabel(v)}
+                            </p>
+                            {isAnchor && <Eye className="h-3 w-3 text-primary flex-shrink-0" />}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {hasMoreVersions && (
+                  <div className="mt-2 flex justify-center">
+                    <Button variant="outline" size="sm" className="text-sm h-7" onClick={loadMoreVersions} disabled={loadingMoreVersions}>
+                      {loadingMoreVersions ? 'Loading...' : 'Load older'}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Alerts */}
-          <Card className="border">
-            <CardHeader className="px-3 py-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">Alerts</CardTitle>
-                {totalAlerts > 0 && (
-                  <p className="text-xs text-muted-foreground">{alerts.length}/{totalAlerts}</p>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="px-3 py-2">
-              {totalAlerts === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No alerts</p>
-              ) : (
-                <>
-                  <div className="border border-border rounded">
-                    {alerts.map((alert, idx) => (
-                      <div key={alert.alert_id}>
-                        <div className="px-2 py-1.5 space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            {getAlertTypeBadge(alert.alert_type)}
-                            {getAlertStatusBadge(alert.alert_status)}
-                            <span className="text-xs text-muted-foreground">#{alert.scan_id}</span>
-                          </div>
-                          {alert.val_error && <p className="text-xs text-red-600">{alert.val_error}</p>}
-                          <p className="text-xs text-muted-foreground">{formatDateFull(alert.created)}</p>
-                        </div>
-                        {idx < alerts.length - 1 && <Separator />}
-                      </div>
-                    ))}
-                  </div>
-                  {totalAlerts > alerts.length && (
-                    <div className="mt-2 flex justify-center">
-                      <Button variant="outline" size="sm" className="text-sm h-7" onClick={loadMoreAlerts} disabled={loadingMoreAlerts}>
-                        {loadingMoreAlerts ? 'Loading...' : 'Load more'}
-                      </Button>
-                    </div>
-                  )}
-                </>
+          <div className="px-3 py-3 border-b border-border">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold">Alerts</p>
+              {totalAlerts > 0 && (
+                <p className="text-xs text-muted-foreground">{alerts.length}/{totalAlerts}</p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+            {totalAlerts === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No alerts</p>
+            ) : (
+              <>
+                <div className="divide-y divide-border">
+                  {alerts.map((alert) => (
+                    <div key={alert.alert_id} className="px-2 py-1.5 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        {getAlertTypeBadge(alert.alert_type)}
+                        {getAlertStatusBadge(alert.alert_status)}
+                        <span className="text-xs text-muted-foreground">#{alert.scan_id}</span>
+                      </div>
+                      {alert.val_error && <p className="text-xs text-red-600">{alert.val_error}</p>}
+                      <p className="text-xs text-muted-foreground">{formatDateFull(alert.created)}</p>
+                    </div>
+                  ))}
+                </div>
+                {totalAlerts > alerts.length && (
+                  <div className="mt-2 flex justify-center">
+                    <Button variant="outline" size="sm" className="text-sm h-7" onClick={loadMoreAlerts} disabled={loadingMoreAlerts}>
+                      {loadingMoreAlerts ? 'Loading...' : 'Load more'}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
