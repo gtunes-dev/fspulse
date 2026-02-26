@@ -12,6 +12,7 @@ pub struct ItemVersion {
     version_id: i64,
     first_scan_id: i64,
     last_scan_id: i64,
+    is_added: bool,
     is_deleted: bool,
     access: Access,
     mod_date: Option<i64>,
@@ -38,6 +39,10 @@ impl ItemVersion {
 
     pub fn last_scan_id(&self) -> i64 {
         self.last_scan_id
+    }
+
+    pub fn is_added(&self) -> bool {
+        self.is_added
     }
 
     pub fn is_deleted(&self) -> bool {
@@ -94,7 +99,7 @@ impl ItemVersion {
         item_id: i64,
     ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
-            "SELECT version_id, first_scan_id, last_scan_id, is_deleted, access,
+            "SELECT version_id, first_scan_id, last_scan_id, is_added, is_deleted, access,
                     mod_date, size, file_hash, val, val_error,
                     last_hash_scan, last_val_scan,
                     add_count, modify_count, delete_count
@@ -128,9 +133,9 @@ impl ItemVersion {
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
-                is_deleted, access, mod_date, size, val,
+                is_added, is_deleted, access, mod_date, size, val,
                 add_count, modify_count, delete_count
-             ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)",
+             ) VALUES (?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?)",
             params![item_id, scan_id, scan_id, access.as_i64(), mod_date, size,
                     ValidationState::Unknown.as_i64(),
                     add_count, modify_count, delete_count],
@@ -149,6 +154,7 @@ impl ItemVersion {
         conn: &Connection,
         item_id: i64,
         scan_id: i64,
+        is_added: bool,
         is_deleted: bool,
         access: Access,
         mod_date: Option<i64>,
@@ -167,13 +173,13 @@ impl ItemVersion {
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
-                is_deleted, access, mod_date, size,
+                is_added, is_deleted, access, mod_date, size,
                 file_hash, val, val_error,
                 last_hash_scan, last_val_scan,
                 add_count, modify_count, delete_count
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
-                item_id, scan_id, scan_id, is_deleted, access.as_i64(),
+                item_id, scan_id, scan_id, is_added, is_deleted, access.as_i64(),
                 mod_date, size, file_hash, val.as_i64(), val_error,
                 last_hash_scan, last_val_scan,
                 add_count, modify_count, delete_count,
@@ -184,8 +190,8 @@ impl ItemVersion {
 
     /// Insert a new version when state changes, carrying forward fields from the previous version.
     ///
-    /// Used by tombstone rehydration and item modification. The caller provides the new
-    /// observable state; unchanged fields are carried forward from `prev`.
+    /// Used by item modification. The caller provides the new observable state;
+    /// unchanged fields are carried forward from `prev`.
     /// Counts are per-scan and never carried forward — folders get `(0,0,0)`, files get `None`.
     pub fn insert_with_carry_forward(
         conn: &Connection,
@@ -200,7 +206,7 @@ impl ItemVersion {
     ) -> Result<(), FsPulseError> {
         let counts = if is_folder { Some((0, 0, 0)) } else { None };
         Self::insert_full(
-            conn, item_id, scan_id, is_deleted, access, mod_date, size,
+            conn, item_id, scan_id, false, is_deleted, access, mod_date, size,
             prev.file_hash(), prev.val(), prev.val_error(),
             prev.last_hash_scan(), prev.last_val_scan(),
             counts,
@@ -293,18 +299,19 @@ impl ItemVersion {
             version_id: row.get(0)?,
             first_scan_id: row.get(1)?,
             last_scan_id: row.get(2)?,
-            is_deleted: row.get(3)?,
-            access: Access::from_i64(row.get(4)?),
-            mod_date: row.get(5)?,
-            size: row.get(6)?,
-            file_hash: row.get(7)?,
-            val: ValidationState::from_i64(row.get(8)?),
-            val_error: row.get(9)?,
-            last_hash_scan: row.get(10)?,
-            last_val_scan: row.get(11)?,
-            add_count: row.get(12)?,
-            modify_count: row.get(13)?,
-            delete_count: row.get(14)?,
+            is_added: row.get(3)?,
+            is_deleted: row.get(4)?,
+            access: Access::from_i64(row.get(5)?),
+            mod_date: row.get(6)?,
+            size: row.get(7)?,
+            file_hash: row.get(8)?,
+            val: ValidationState::from_i64(row.get(9)?),
+            val_error: row.get(10)?,
+            last_hash_scan: row.get(11)?,
+            last_val_scan: row.get(12)?,
+            add_count: row.get(13)?,
+            modify_count: row.get(14)?,
+            delete_count: row.get(15)?,
         })
     }
 }

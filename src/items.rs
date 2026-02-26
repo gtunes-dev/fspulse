@@ -98,9 +98,13 @@ pub struct TemporalTreeItem {
     pub item_name: String,
     pub item_type: ItemType,
     pub first_scan_id: i64,
+    pub is_added: bool,
     pub is_deleted: bool,
     pub mod_date: Option<i64>,
     pub size: Option<i64>,
+    pub add_count: Option<i64>,
+    pub modify_count: Option<i64>,
+    pub delete_count: Option<i64>,
 }
 
 /// Get immediate children at a point in time using items + item_versions.
@@ -129,7 +133,8 @@ pub fn get_temporal_immediate_children(
 
     let sql = format!(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
-                iv.first_scan_id, iv.is_deleted, iv.mod_date, iv.size
+                iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
+                iv.add_count, iv.modify_count, iv.delete_count
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          WHERE i.root_id = ?1
@@ -159,9 +164,13 @@ pub fn get_temporal_immediate_children(
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
                 first_scan_id: row.get(4)?,
-                is_deleted: row.get(5)?,
-                mod_date: row.get(6)?,
-                size: row.get(7)?,
+                is_added: row.get(5)?,
+                is_deleted: row.get(6)?,
+                mod_date: row.get(7)?,
+                size: row.get(8)?,
+                add_count: row.get(9)?,
+                modify_count: row.get(10)?,
+                delete_count: row.get(11)?,
             })
         },
     )?;
@@ -183,7 +192,8 @@ pub fn search_temporal_items(
 
     let sql =
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
-                iv.first_scan_id, iv.is_deleted, iv.mod_date, iv.size
+                iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
+                iv.add_count, iv.modify_count, iv.delete_count
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          WHERE i.root_id = ?1
@@ -209,9 +219,13 @@ pub fn search_temporal_items(
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
                 first_scan_id: row.get(4)?,
-                is_deleted: row.get(5)?,
-                mod_date: row.get(6)?,
-                size: row.get(7)?,
+                is_added: row.get(5)?,
+                is_deleted: row.get(6)?,
+                mod_date: row.get(7)?,
+                size: row.get(8)?,
+                add_count: row.get(9)?,
+                modify_count: row.get(10)?,
+                delete_count: row.get(11)?,
             })
         },
     )?;

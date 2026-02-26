@@ -67,10 +67,14 @@ export function SearchResultsList({
           item_path: string
           item_name: string
           item_type: string
+          is_added: boolean
           is_deleted: boolean
           size: number | null
           mod_date: number | null
           first_scan_id: number
+          add_count: number | null
+          modify_count: number | null
+          delete_count: number | null
         }>
 
         const flatItems: FlatTreeItem[] = items.map((item) => ({
@@ -82,8 +86,12 @@ export function SearchResultsList({
           size: item.size,
           mod_date: item.mod_date,
           change_kind: item.is_deleted ? 'deleted' as const
-            : item.first_scan_id === scanId ? 'changed' as const
+            : item.first_scan_id === scanId && item.is_added ? 'added' as const
+            : item.first_scan_id === scanId ? 'modified' as const
             : 'unchanged' as const,
+          add_count: item.add_count,
+          modify_count: item.modify_count,
+          delete_count: item.delete_count,
           depth: 0,
           isExpanded: false,
           childrenLoaded: false,

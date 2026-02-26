@@ -14,6 +14,9 @@ export interface CachedItem {
   size: number | null
   mod_date: number | null
   change_kind: ChangeKind
+  add_count: number | null
+  modify_count: number | null
+  delete_count: number | null
 }
 
 export interface BrowseCache {
@@ -40,10 +43,18 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
   const contextRef = useRef({ rootId, scanId })
   contextRef.current = { rootId, scanId }
 
-  // Reset cache when root or scan changes
-  useEffect(() => {
+  // Clear cache refs synchronously during render when root/scan changes.
+  // This prevents a race where child effects call loadChildren() before
+  // the cleanup useEffect has fired, returning stale cached data.
+  const prevContextRef = useRef({ rootId, scanId })
+  if (prevContextRef.current.rootId !== rootId || prevContextRef.current.scanId !== scanId) {
     cacheRef.current.clear()
     inflightRef.current.clear()
+    prevContextRef.current = { rootId, scanId }
+  }
+
+  // Reset loading state after render (state updates can't happen during render)
+  useEffect(() => {
     setLoadingPaths(new Set())
   }, [rootId, scanId])
 
@@ -88,10 +99,14 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
           item_path: string
           item_name: string
           item_type: string
+          is_added: boolean
           is_deleted: boolean
           size: number | null
           mod_date: number | null
           first_scan_id: number
+          add_count: number | null
+          modify_count: number | null
+          delete_count: number | null
         }>
 
         const items: CachedItem[] = data.map(item => ({
@@ -103,8 +118,12 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
           size: item.size,
           mod_date: item.mod_date,
           change_kind: item.is_deleted ? 'deleted'
-            : item.first_scan_id === capturedScanId ? 'changed'
+            : item.first_scan_id === capturedScanId && item.is_added ? 'added'
+            : item.first_scan_id === capturedScanId ? 'modified'
             : 'unchanged',
+          add_count: item.add_count,
+          modify_count: item.modify_count,
+          delete_count: item.delete_count,
         }))
 
         // Guard against stale writes after root/scan change

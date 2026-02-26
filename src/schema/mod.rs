@@ -8,6 +8,7 @@ mod v15_to_v16;
 mod v16_to_v17;
 mod v17_to_v18;
 mod v18_to_v19;
+mod v19_to_v20;
 mod v2_to_v3;
 mod v3_to_v4;
 mod v4_to_v5;
@@ -33,6 +34,7 @@ use v15_to_v16::{migrate_15_to_16, UPGRADE_15_TO_16_POST_SQL, UPGRADE_15_TO_16_P
 use v16_to_v17::{migrate_16_to_17, UPGRADE_16_TO_17_POST_SQL, UPGRADE_16_TO_17_PRE_SQL};
 use v17_to_v18::{migrate_17_to_18, UPGRADE_17_TO_18_POST_SQL, UPGRADE_17_TO_18_PRE_SQL};
 use v18_to_v19::run_backfill_folder_counts;
+use v19_to_v20::{UPGRADE_19_TO_20_POST_SQL, UPGRADE_19_TO_20_PRE_SQL};
 use v2_to_v3::UPGRADE_2_TO_3_SQL;
 use v3_to_v4::UPGRADE_3_TO_4_SQL;
 use v4_to_v5::UPGRADE_4_TO_5_SQL;
@@ -120,3 +122,8 @@ pub const MIGRATION_17_TO_18: Migration = Migration::Transacted {
     post_sql: Some(UPGRADE_17_TO_18_POST_SQL),
 };
 pub const MIGRATION_18_TO_19: Migration = Migration::standalone(run_backfill_folder_counts);
+pub const MIGRATION_19_TO_20: Migration = Migration::Transacted {
+    pre_sql: Some(UPGRADE_19_TO_20_PRE_SQL),
+    code_fn: None,
+    post_sql: Some(UPGRADE_19_TO_20_POST_SQL),
+};

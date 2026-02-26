@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS item_versions (
     item_id         INTEGER NOT NULL,
     first_scan_id   INTEGER NOT NULL,
     last_scan_id    INTEGER NOT NULL,
+    is_added        BOOLEAN NOT NULL DEFAULT 0,
     is_deleted      BOOLEAN NOT NULL DEFAULT 0,
     access          INTEGER NOT NULL DEFAULT 0,
     mod_date        INTEGER,

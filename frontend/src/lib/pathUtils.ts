@@ -1,6 +1,36 @@
 // Path utility functions for file tree navigation
 
-export type ChangeKind = 'changed' | 'deleted' | 'unchanged'
+export type ChangeKind = 'added' | 'modified' | 'deleted' | 'unchanged'
+
+/**
+ * Determines if an item should be visible given the set of hidden change kinds.
+ *
+ * For files: visible if their change_kind is not hidden.
+ * For folders: visible if their own change_kind is not hidden, OR if they have
+ * descendant changes of any visible kind (based on add_count/modify_count/delete_count).
+ */
+export function isItemVisible(
+  item: { item_type: string; change_kind: ChangeKind; add_count?: number | null; modify_count?: number | null; delete_count?: number | null },
+  hiddenKinds: Set<ChangeKind>,
+): boolean {
+  // Own change_kind is visible — always show
+  if (!hiddenKinds.has(item.change_kind)) return true
+
+  // For non-directories, that's the only check
+  if (item.item_type !== 'D') return false
+
+  // Unchanged directories have stale counts from the scan that created their version,
+  // not the current scan. If the folder had any descendant changes in the current scan,
+  // the scan analysis phase would have created a new version (making it non-unchanged).
+  if (item.change_kind === 'unchanged') return false
+
+  // Directory with hidden own kind — check if it has visible descendant changes
+  if (!hiddenKinds.has('added') && (item.add_count ?? 0) > 0) return true
+  if (!hiddenKinds.has('modified') && (item.modify_count ?? 0) > 0) return true
+  if (!hiddenKinds.has('deleted') && (item.delete_count ?? 0) > 0) return true
+
+  return false
+}
 
 export interface ItemData {
   item_id: number
@@ -11,6 +41,9 @@ export interface ItemData {
   size?: number | null
   mod_date?: number | null
   change_kind: ChangeKind
+  add_count?: number | null    // Folder descendant add count (null for files)
+  modify_count?: number | null // Folder descendant modify count (null for files)
+  delete_count?: number | null // Folder descendant delete count (null for files)
 }
 
 /**
@@ -26,6 +59,9 @@ export interface FlatTreeItem {
   size?: number | null
   mod_date?: number | null
   change_kind: ChangeKind
+  add_count?: number | null
+  modify_count?: number | null
+  delete_count?: number | null
   depth: number
   isExpanded: boolean
   childrenLoaded: boolean

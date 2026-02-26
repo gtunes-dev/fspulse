@@ -90,9 +90,13 @@ pub struct ItemResponse {
     pub item_name: String,
     pub item_type: String,
     pub first_scan_id: i64,
+    pub is_added: bool,
     pub is_deleted: bool,
     pub mod_date: Option<i64>,
     pub size: Option<i64>,
+    pub add_count: Option<i64>,
+    pub modify_count: Option<i64>,
+    pub delete_count: Option<i64>,
 }
 
 /// GET /api/items/immediate-children?root_id=X&parent_path=/path&scan_id=Y
@@ -112,9 +116,13 @@ pub async fn get_immediate_children(
                     item_name: item.item_name.clone(),
                     item_type: item.item_type.short_name().to_string(),
                     first_scan_id: item.first_scan_id,
+                    is_added: item.is_added,
                     is_deleted: item.is_deleted,
                     mod_date: item.mod_date,
                     size: item.size,
+                    add_count: item.add_count,
+                    modify_count: item.modify_count,
+                    delete_count: item.delete_count,
                 })
                 .collect();
             Ok(Json(response))
@@ -156,9 +164,13 @@ pub async fn search_items(
                     item_name: item.item_name.clone(),
                     item_type: item.item_type.short_name().to_string(),
                     first_scan_id: item.first_scan_id,
+                    is_added: item.is_added,
                     is_deleted: item.is_deleted,
                     mod_date: item.mod_date,
                     size: item.size,
+                    add_count: item.add_count,
+                    modify_count: item.modify_count,
+                    delete_count: item.delete_count,
                 })
                 .collect();
             Ok(Json(response))

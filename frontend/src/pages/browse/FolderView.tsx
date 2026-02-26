@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { formatFileSizeCompact } from '@/lib/formatUtils'
 import { formatDateRelative } from '@/lib/dateUtils'
 import type { BrowseCache, CachedItem } from '@/hooks/useBrowseCache'
-import type { ChangeKind } from '@/lib/pathUtils'
+import { isItemVisible, type ChangeKind } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 
 interface FolderViewProps {
@@ -108,10 +108,8 @@ export function FolderView({
       })
   }, [isActive, currentPath, scanId, cache])
 
-  // Filter and sort — non-deleted directories always visible for navigation
-  const visibleItems = items.filter((i) =>
-    (i.item_type === 'D' && i.change_kind !== 'deleted') || !hiddenKinds.has(i.change_kind)
-  )
+  // Filter and sort — folders visible if they have descendant changes matching any visible kind
+  const visibleItems = items.filter((i) => isItemVisible(i, hiddenKinds))
   const sortedItems = sortItems(visibleItems, sortColumn, sortDir)
 
   const scrollMargin = useScrollMargin(parentRef)
@@ -286,7 +284,10 @@ export function FolderView({
                       className={cn('flex-1 flex items-center gap-1.5 text-sm truncate cursor-pointer', item.is_deleted && 'line-through')}
                       onClick={() => handleItemSelect(item)}
                     >
-                      {item.change_kind === 'changed' && (
+                      {item.change_kind === 'added' && (
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                      )}
+                      {item.change_kind === 'modified' && (
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
                       )}
                       <span className="truncate">{item.item_name}</span>

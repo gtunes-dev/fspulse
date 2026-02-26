@@ -102,7 +102,10 @@ export function TreeNode({
           {getFileIcon(item.item_type, item.is_deleted)}
         </>
       )}
-      {item.change_kind === 'changed' && (
+      {item.change_kind === 'added' && (
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+      )}
+      {item.change_kind === 'modified' && (
         <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
       )}
       <span

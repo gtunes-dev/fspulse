@@ -326,7 +326,8 @@ export function BrowseCard({ roots, defaultRootId }: BrowseCardProps) {
             <PopoverContent align="start" className="w-auto p-2">
               <div className="flex flex-col gap-1">
                 {([
-                  { kind: 'changed' as ChangeKind, label: 'Changed', activeClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30', dotClass: 'bg-blue-500' },
+                  { kind: 'added' as ChangeKind, label: 'Added', activeClass: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30', dotClass: 'bg-green-500' },
+                  { kind: 'modified' as ChangeKind, label: 'Modified', activeClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30', dotClass: 'bg-blue-500' },
                   { kind: 'deleted' as ChangeKind, label: 'Deleted', activeClass: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30', dotClass: 'bg-red-500' },
                   { kind: 'unchanged' as ChangeKind, label: 'Unchanged', activeClass: 'bg-muted text-muted-foreground border-border', dotClass: 'bg-muted-foreground' },
                 ]).map(({ kind, label, activeClass, dotClass }) => {

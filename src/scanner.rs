@@ -480,14 +480,14 @@ impl Scanner {
             c.execute(
                 "INSERT INTO item_versions (
                     item_id, first_scan_id, last_scan_id,
-                    is_deleted, access, mod_date, size,
+                    is_added, is_deleted, access, mod_date, size,
                     file_hash, val, val_error,
                     last_hash_scan, last_val_scan,
                     add_count, modify_count, delete_count
                  )
                  SELECT
                     iv.item_id, ?, ?,
-                    1, iv.access, iv.mod_date, iv.size,
+                    0, 1, iv.access, iv.mod_date, iv.size,
                     iv.file_hash, iv.val, iv.val_error,
                     iv.last_hash_scan, iv.last_val_scan,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
@@ -987,6 +987,7 @@ impl Scanner {
                     conn,
                     w.folder_item_id,
                     scan_id,
+                    false,
                     version.is_deleted(),
                     version.access(),
                     version.mod_date(),
@@ -1534,7 +1535,7 @@ impl Scanner {
 
                 ItemVersion::insert_full(
                     c, analysis_item.item_id(), scan.scan_id(),
-                    false, i_access,
+                    false, false, i_access,
                     current_version.mod_date(), current_version.size(),
                     i_hash, i_val, i_val_error,
                     i_last_hash_scan, i_last_val_scan,
