@@ -122,12 +122,13 @@ pub struct Scan {
     error: Option<String>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(i64)] // Ensures explicit numeric representation
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(i64)]
 pub enum ScanState {
     Scanning = 1,
     Sweeping = 2,
-    Analyzing = 3,
+    AnalyzingFiles = 3,
+    AnalyzingScan = 7,
     Completed = 4,
     Stopped = 5,
     Error = 6,
@@ -138,7 +139,8 @@ impl ScanState {
         match value {
             1 => ScanState::Scanning,
             2 => ScanState::Sweeping,
-            3 => ScanState::Analyzing,
+            3 => ScanState::AnalyzingFiles,
+            7 => ScanState::AnalyzingScan,
             4 => ScanState::Completed,
             5 => ScanState::Stopped,
             6 => ScanState::Error,
@@ -154,7 +156,8 @@ impl ScanState {
         match self {
             ScanState::Scanning => "S",
             ScanState::Sweeping => "W",
-            ScanState::Analyzing => "A",
+            ScanState::AnalyzingFiles => "AF",
+            ScanState::AnalyzingScan => "AS",
             ScanState::Completed => "C",
             ScanState::Stopped => "P",
             ScanState::Error => "E",
@@ -165,7 +168,8 @@ impl ScanState {
         match self {
             ScanState::Scanning => "Scanning",
             ScanState::Sweeping => "Sweeping",
-            ScanState::Analyzing => "Analyzing",
+            ScanState::AnalyzingFiles => "Analyzing Files",
+            ScanState::AnalyzingScan => "Analyzing Scan",
             ScanState::Completed => "Completed",
             ScanState::Stopped => "Stopped",
             ScanState::Error => "Error",
@@ -178,14 +182,16 @@ impl ScanState {
             // Full names
             "SCANNING" => Some(ScanState::Scanning),
             "SWEEPING" => Some(ScanState::Sweeping),
-            "ANALYZING" => Some(ScanState::Analyzing),
+            "ANALYZING FILES" | "ANALYZINGFILES" | "ANALYZING" => Some(ScanState::AnalyzingFiles),
+            "ANALYZING SCAN" | "ANALYZINGSCAN" => Some(ScanState::AnalyzingScan),
             "COMPLETED" => Some(ScanState::Completed),
             "STOPPED" => Some(ScanState::Stopped),
             "ERROR" => Some(ScanState::Error),
             // Short names
             "S" => Some(ScanState::Scanning),
             "W" => Some(ScanState::Sweeping),
-            "A" => Some(ScanState::Analyzing),
+            "AF" | "A" => Some(ScanState::AnalyzingFiles),
+            "AS" => Some(ScanState::AnalyzingScan),
             "C" => Some(ScanState::Completed),
             "P" => Some(ScanState::Stopped),
             "E" => Some(ScanState::Error),
@@ -461,11 +467,22 @@ impl Scan {
         }
     }
 
-    pub fn set_state_analyzing(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
+    pub fn set_state_analyzing_files(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::Sweeping => self.set_state(conn, ScanState::Analyzing),
+            ScanState::Sweeping => self.set_state(conn, ScanState::AnalyzingFiles),
             _ => Err(FsPulseError::Error(format!(
-                "Can't set Scan Id {} to state analyzing from state {}",
+                "Can't set Scan Id {} to state analyzing_files from state {}",
+                self.scan_id(),
+                self.state().as_i64()
+            ))),
+        }
+    }
+
+    pub fn set_state_analyzing_scan(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
+        match self.state() {
+            ScanState::AnalyzingFiles => self.set_state(conn, ScanState::AnalyzingScan),
+            _ => Err(FsPulseError::Error(format!(
+                "Can't set Scan Id {} to state analyzing_scan from state {}",
                 self.scan_id(),
                 self.state().as_i64()
             ))),
@@ -474,7 +491,7 @@ impl Scan {
 
     pub fn set_state_completed(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::Analyzing => {
+            ScanState::AnalyzingScan => {
                 // Use IMMEDIATE transaction for read-then-write pattern
                 let (file_count, folder_count, alert_count, add_count, modify_count, delete_count) =
                     Database::immediate_transaction(conn, |c| {
@@ -583,7 +600,7 @@ impl Scan {
 
     pub fn set_state_stopped(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::Scanning | ScanState::Sweeping | ScanState::Analyzing => {
+            ScanState::Scanning | ScanState::Sweeping | ScanState::AnalyzingFiles | ScanState::AnalyzingScan => {
                 Scan::stop_scan(conn, self, None)?;
                 self.state = ScanState::Stopped;
                 Ok(())
@@ -1035,7 +1052,8 @@ mod tests {
     fn test_scan_state_as_i64() {
         assert_eq!(ScanState::Scanning.as_i64(), 1);
         assert_eq!(ScanState::Sweeping.as_i64(), 2);
-        assert_eq!(ScanState::Analyzing.as_i64(), 3);
+        assert_eq!(ScanState::AnalyzingFiles.as_i64(), 3);
+        assert_eq!(ScanState::AnalyzingScan.as_i64(), 7);
         assert_eq!(ScanState::Completed.as_i64(), 4);
         assert_eq!(ScanState::Stopped.as_i64(), 5);
         assert_eq!(ScanState::Error.as_i64(), 6);
@@ -1045,7 +1063,8 @@ mod tests {
     fn test_scan_state_from_i64() {
         assert_eq!(ScanState::from_i64(1), ScanState::Scanning);
         assert_eq!(ScanState::from_i64(2), ScanState::Sweeping);
-        assert_eq!(ScanState::from_i64(3), ScanState::Analyzing);
+        assert_eq!(ScanState::from_i64(3), ScanState::AnalyzingFiles);
+        assert_eq!(ScanState::from_i64(7), ScanState::AnalyzingScan);
         assert_eq!(ScanState::from_i64(4), ScanState::Completed);
         assert_eq!(ScanState::from_i64(5), ScanState::Stopped);
         assert_eq!(ScanState::from_i64(6), ScanState::Error);
@@ -1056,7 +1075,8 @@ mod tests {
         let states = [
             ScanState::Scanning,
             ScanState::Sweeping,
-            ScanState::Analyzing,
+            ScanState::AnalyzingFiles,
+            ScanState::AnalyzingScan,
             ScanState::Completed,
             ScanState::Stopped,
             ScanState::Error,
@@ -1073,20 +1093,11 @@ mod tests {
     fn test_scan_state_display() {
         assert_eq!(ScanState::Scanning.to_string(), "Scanning");
         assert_eq!(ScanState::Sweeping.to_string(), "Sweeping");
-        assert_eq!(ScanState::Analyzing.to_string(), "Analyzing");
+        assert_eq!(ScanState::AnalyzingFiles.to_string(), "Analyzing Files");
+        assert_eq!(ScanState::AnalyzingScan.to_string(), "Analyzing Scan");
         assert_eq!(ScanState::Completed.to_string(), "Completed");
         assert_eq!(ScanState::Stopped.to_string(), "Stopped");
         assert_eq!(ScanState::Error.to_string(), "Error");
-    }
-
-    #[test]
-    fn test_scan_state_ordering() {
-        // Test that enum ordering works as expected
-        assert!(ScanState::Scanning < ScanState::Sweeping);
-        assert!(ScanState::Sweeping < ScanState::Analyzing);
-        assert!(ScanState::Analyzing < ScanState::Completed);
-        assert!(ScanState::Completed < ScanState::Stopped);
-        assert!(ScanState::Stopped < ScanState::Error);
     }
 
     #[test]

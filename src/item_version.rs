@@ -21,6 +21,9 @@ pub struct ItemVersion {
     val_error: Option<String>,
     last_hash_scan: Option<i64>,
     last_val_scan: Option<i64>,
+    add_count: Option<i64>,
+    modify_count: Option<i64>,
+    delete_count: Option<i64>,
 }
 
 #[allow(dead_code, clippy::too_many_arguments)]
@@ -73,6 +76,18 @@ impl ItemVersion {
         self.last_val_scan
     }
 
+    pub fn add_count(&self) -> Option<i64> {
+        self.add_count
+    }
+
+    pub fn modify_count(&self) -> Option<i64> {
+        self.modify_count
+    }
+
+    pub fn delete_count(&self) -> Option<i64> {
+        self.delete_count
+    }
+
     /// Get the current (latest) version of an item.
     pub fn get_current(
         conn: &Connection,
@@ -81,7 +96,8 @@ impl ItemVersion {
         conn.query_row(
             "SELECT version_id, first_scan_id, last_scan_id, is_deleted, access,
                     mod_date, size, file_hash, val, val_error,
-                    last_hash_scan, last_val_scan
+                    last_hash_scan, last_val_scan,
+                    add_count, modify_count, delete_count
              FROM item_versions
              WHERE item_id = ?
              ORDER BY first_scan_id DESC
@@ -94,6 +110,8 @@ impl ItemVersion {
     }
 
     /// Insert the first version for a newly discovered item.
+    ///
+    /// `counts` should be `Some((0, 0, 0))` for folders, `None` for files.
     pub fn insert_initial(
         conn: &Connection,
         item_id: i64,
@@ -101,14 +119,21 @@ impl ItemVersion {
         access: Access,
         mod_date: Option<i64>,
         size: Option<i64>,
+        counts: Option<(i64, i64, i64)>,
     ) -> Result<(), FsPulseError> {
+        let (add_count, modify_count, delete_count) = match counts {
+            Some((a, m, d)) => (Some(a), Some(m), Some(d)),
+            None => (None, None, None),
+        };
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
-                is_deleted, access, mod_date, size, val
-             ) VALUES (?, ?, ?, 0, ?, ?, ?, ?)",
+                is_deleted, access, mod_date, size, val,
+                add_count, modify_count, delete_count
+             ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)",
             params![item_id, scan_id, scan_id, access.as_i64(), mod_date, size,
-                    ValidationState::Unknown.as_i64()],
+                    ValidationState::Unknown.as_i64(),
+                    add_count, modify_count, delete_count],
         )?;
         Ok(())
     }
@@ -117,6 +142,9 @@ impl ItemVersion {
     ///
     /// Common INSERT used by `insert_with_carry_forward` (scan phase) and
     /// analysis-phase state changes.
+    ///
+    /// `counts` should be `Some((a, m, d))` for folders (0,0,0 for walk/sweep,
+    /// actual values for scan analysis), `None` for files.
     pub fn insert_full(
         conn: &Connection,
         item_id: i64,
@@ -130,18 +158,25 @@ impl ItemVersion {
         val_error: Option<&str>,
         last_hash_scan: Option<i64>,
         last_val_scan: Option<i64>,
+        counts: Option<(i64, i64, i64)>,
     ) -> Result<(), FsPulseError> {
+        let (add_count, modify_count, delete_count) = match counts {
+            Some((a, m, d)) => (Some(a), Some(m), Some(d)),
+            None => (None, None, None),
+        };
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
                 is_deleted, access, mod_date, size,
                 file_hash, val, val_error,
-                last_hash_scan, last_val_scan
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                last_hash_scan, last_val_scan,
+                add_count, modify_count, delete_count
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 item_id, scan_id, scan_id, is_deleted, access.as_i64(),
                 mod_date, size, file_hash, val.as_i64(), val_error,
                 last_hash_scan, last_val_scan,
+                add_count, modify_count, delete_count,
             ],
         )?;
         Ok(())
@@ -151,6 +186,7 @@ impl ItemVersion {
     ///
     /// Used by tombstone rehydration and item modification. The caller provides the new
     /// observable state; unchanged fields are carried forward from `prev`.
+    /// Counts are per-scan and never carried forward — folders get `(0,0,0)`, files get `None`.
     pub fn insert_with_carry_forward(
         conn: &Connection,
         item_id: i64,
@@ -160,11 +196,14 @@ impl ItemVersion {
         mod_date: Option<i64>,
         size: Option<i64>,
         prev: &ItemVersion,
+        is_folder: bool,
     ) -> Result<(), FsPulseError> {
+        let counts = if is_folder { Some((0, 0, 0)) } else { None };
         Self::insert_full(
             conn, item_id, scan_id, is_deleted, access, mod_date, size,
             prev.file_hash(), prev.val(), prev.val_error(),
             prev.last_hash_scan(), prev.last_val_scan(),
+            counts,
         )
     }
 
@@ -263,6 +302,9 @@ impl ItemVersion {
             val_error: row.get(9)?,
             last_hash_scan: row.get(10)?,
             last_val_scan: row.get(11)?,
+            add_count: row.get(12)?,
+            modify_count: row.get(13)?,
+            delete_count: row.get(14)?,
         })
     }
 }

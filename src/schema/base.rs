@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '17');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '19');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS scans (
     started_at INTEGER NOT NULL,       -- Timestamp when scan started (UTC)
     ended_at INTEGER DEFAULT NULL,     -- Timestamp when scan completed (UTC, NULL if in progress or incomplete)
     was_restarted BOOLEAN NOT NULL DEFAULT 0,  -- True if scan was interrupted and resumed
-    state INTEGER NOT NULL,            -- The state of the scan (1 = Scanning, 2 = Sweeping, 3 = Analyzing, 4 = Completed, 5 = Stopped, 6 = Error)
+    state INTEGER NOT NULL,            -- The state of the scan (1 = Scanning, 2 = Sweeping, 3 = Analyzing Files, 7 = Analyzing Scan, 4 = Completed, 5 = Stopped, 6 = Error)
     is_hash BOOLEAN NOT NULL,          -- Hash new or changed files
     hash_all BOOLEAN NOT NULL,         -- Hash all items including unchanged and previously hashed
     is_val BOOLEAN NOT NULL,           -- Validate the contents of files
@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS item_versions (
     val_error       TEXT,
     last_hash_scan  INTEGER,
     last_val_scan   INTEGER,
+    add_count       INTEGER,
+    modify_count    INTEGER,
+    delete_count    INTEGER,
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)

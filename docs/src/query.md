@@ -154,7 +154,7 @@ Values must match the column's type. You can use individual values, ranges (when
 | Item Type Enum      | `F`, `D`, `S`, `U`                                    | File, Directory, Symlink, Unknown. Unquoted.                          |
 | Alert Type Enum     | `H`, `I`, `A`                                         | Suspicious Hash, Invalid Item, Access Denied. Unquoted.               |
 | Alert Status Enum   | `O`, `F`, `D`                                         | Open, Flagged, Dismissed. Unquoted.                                   |
-| Scan State Enum     | `S`, `W`, `A`, `C`, `P`, `E`                          | Scanning, Sweeping, Analyzing, Completed, Stopped, Error. Unquoted.   |
+| Scan State Enum     | `S`, `W`, `AF`, `AS`, `C`, `P`, `E`                   | Scanning, Sweeping, Analyzing Files, Analyzing Scan, Completed, Stopped, Error. `A` is shorthand for `AF`. Unquoted. |
 | Access Status       | `N`, `M`, `R`                                         | No Error, Meta Error, Read Error. Unquoted.                           |
 
 ---

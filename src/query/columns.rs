@@ -102,7 +102,7 @@ impl ColType {
             ColType::ScanState => ColTypeInfo::new(
                 Rule::scan_state_filter_EOI,
                 "Scan State",
-                "Scan states: S (Scanning), W (Sweeping), A (Analyzing), C (Completed), P (Stopped), E (Error)\nComma-separated values",
+                "Scan states: S (Scanning), W (Sweeping), AF (Analyzing Files), AS (Analyzing Scan), C (Completed), P (Stopped), E (Error)\nA is shorthand for AF. Comma-separated values",
             ),
             ColType::Access => ColTypeInfo::new(
                 Rule::access_filter_EOI,

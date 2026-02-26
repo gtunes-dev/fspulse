@@ -1328,6 +1328,20 @@ mod tests {
             "Failed to parse 'P' (Stopped): {:?}",
             result.err()
         );
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "AF");
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'AF' (Analyzing Files): {:?}",
+            result.err()
+        );
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "AS");
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'AS' (Analyzing Scan): {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1408,10 +1422,24 @@ mod tests {
             result.err()
         );
 
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Analyzing Files");
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Analyzing Files': {:?}",
+            result.err()
+        );
+
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Analyzing");
         assert!(
             result.is_ok(),
-            "Failed to parse 'Analyzing': {:?}",
+            "Failed to parse 'Analyzing' (backward compat): {:?}",
+            result.err()
+        );
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Analyzing Scan");
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'Analyzing Scan': {:?}",
             result.err()
         );
 
@@ -1442,8 +1470,14 @@ mod tests {
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "W");
         assert!(result.is_ok(), "Failed to parse 'W': {:?}", result.err());
 
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "AF");
+        assert!(result.is_ok(), "Failed to parse 'AF': {:?}", result.err());
+
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "A");
         assert!(result.is_ok(), "Failed to parse 'A': {:?}", result.err());
+
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "AS");
+        assert!(result.is_ok(), "Failed to parse 'AS': {:?}", result.err());
 
         let result = QueryParser::parse(Rule::scan_state_filter_EOI, "C");
         assert!(result.is_ok(), "Failed to parse 'C': {:?}", result.err());

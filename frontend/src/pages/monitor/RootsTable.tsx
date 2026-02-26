@@ -212,7 +212,7 @@ export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger
                           </div>
                         </div>
                       )
-                    } else if (['Pending', 'Scanning', 'Sweeping', 'Analyzing'].includes(scanInfo.state)) {
+                    } else if (['Pending', 'Scanning', 'Sweeping', 'Analyzing Files', 'Analyzing Scan'].includes(scanInfo.state)) {
                       // Check if this is the currently active scan
                       const isActiveScan = activeRootId === root.root_id
 

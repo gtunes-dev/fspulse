@@ -3,13 +3,13 @@ use crate::{
     error::FsPulseError,
     schema::{
         Migration, CREATE_SCHEMA_SQL, MIGRATION_10_TO_11, MIGRATION_11_TO_12, MIGRATION_12_TO_13,
-        MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17, MIGRATION_2_TO_3, MIGRATION_3_TO_4,
+        MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17, MIGRATION_17_TO_18, MIGRATION_18_TO_19, MIGRATION_2_TO_3, MIGRATION_3_TO_4,
         MIGRATION_4_TO_5, MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8, MIGRATION_8_TO_9,
         MIGRATION_9_TO_10,
     },
     sort::compare_paths,
 };
-use log::info;
+use log::{error, info};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, OptionalExtension};
@@ -21,7 +21,7 @@ use std::time::Duration;
 use std::env;
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 17;
+const CURRENT_SCHEMA_VERSION: u32 = 19;
 
 // Connection pool configuration
 const POOL_MAX_SIZE: u32 = 15;
@@ -340,6 +340,20 @@ fn validate_directory(path: &Path) -> Result<(), FsPulseError> {
     }
 }
 
+/// Log an informational message to both the log file and stderr.
+/// Used during schema migration so progress is visible on the console.
+pub(crate) fn migration_info(msg: &str) {
+    info!("{}", msg);
+    eprintln!("{}", msg);
+}
+
+/// Log an error message to both the log file and stderr.
+/// Used during schema migration so failures are visible on the console.
+pub(crate) fn migration_error(msg: &str) {
+    error!("{}", msg);
+    eprintln!("{}", msg);
+}
+
 /// Ensure the database schema is current.
 /// This is called by init() and should not be called directly.
 fn ensure_schema_current() -> Result<(), FsPulseError> {
@@ -376,6 +390,13 @@ fn ensure_schema_current() -> Result<(), FsPulseError> {
             Err(_) => return Err(FsPulseError::Error("Schema version mismatch".to_string())),
         };
 
+        if db_version < CURRENT_SCHEMA_VERSION {
+            migration_info(&format!(
+                "Database schema upgrade required: v{} -> v{}",
+                db_version, CURRENT_SCHEMA_VERSION
+            ));
+        }
+
         loop {
             db_version = match db_version {
                 CURRENT_SCHEMA_VERSION => break,
@@ -394,10 +415,15 @@ fn ensure_schema_current() -> Result<(), FsPulseError> {
                 14 => upgrade_schema(&conn, db_version, &MIGRATION_14_TO_15)?,
                 15 => upgrade_schema(&conn, db_version, &MIGRATION_15_TO_16)?,
                 16 => upgrade_schema(&conn, db_version, &MIGRATION_16_TO_17)?,
+                17 => upgrade_schema(&conn, db_version, &MIGRATION_17_TO_18)?,
+                18 => upgrade_schema(&conn, db_version, &MIGRATION_18_TO_19)?,
                 _ => {
-                    return Err(FsPulseError::Error(
-                        "No valid database update available".to_string(),
-                    ))
+                    let msg = format!(
+                        "No migration path from schema v{} to v{}",
+                        db_version, CURRENT_SCHEMA_VERSION
+                    );
+                    migration_error(&msg);
+                    return Err(FsPulseError::Error(msg));
                 }
             }
         }
@@ -407,9 +433,11 @@ fn ensure_schema_current() -> Result<(), FsPulseError> {
 }
 
 fn create_schema(conn: &Connection) -> Result<(), FsPulseError> {
-    info!("Database is uninitialized - creating schema at version {CURRENT_SCHEMA_VERSION}");
+    migration_info(&format!(
+        "Creating database schema at v{CURRENT_SCHEMA_VERSION}"
+    ));
     conn.execute_batch(CREATE_SCHEMA_SQL)?;
-    info!("Database successfully initialized");
+    migration_info("Database schema created");
     Ok(())
 }
 
@@ -419,48 +447,64 @@ fn upgrade_schema(
     migration: &Migration,
 ) -> Result<u32, FsPulseError> {
     let next_version = current_version + 1;
-    info!(
-        "Upgrading database schema {} => {}",
+    migration_info(&format!(
+        "  Upgrading schema v{} -> v{}...",
         current_version, next_version
-    );
+    ));
 
-    // Disable foreign key constraints during migration (required for table reconstruction)
-    conn.execute("PRAGMA foreign_keys = OFF", [])
-        .map_err(FsPulseError::DatabaseError)?;
+    let result = match migration {
+        Migration::Transacted {
+            pre_sql,
+            code_fn,
+            post_sql,
+        } => {
+            // Disable foreign key constraints during migration (required for table reconstruction)
+            conn.execute("PRAGMA foreign_keys = OFF", [])
+                .map_err(FsPulseError::DatabaseError)?;
 
-    // Run all migration phases within a transaction for atomicity
-    let result =
-        Database::immediate_transaction(conn, |conn| run_migration_phases(conn, migration));
+            // Run all migration phases within a transaction for atomicity
+            let result = Database::immediate_transaction(conn, |conn| {
+                if let Some(pre_sql) = pre_sql {
+                    conn.execute_batch(pre_sql)?;
+                }
+                if let Some(code_fn) = code_fn {
+                    code_fn(conn)?;
+                }
+                if let Some(post_sql) = post_sql {
+                    conn.execute_batch(post_sql)?;
+                }
+                Ok(())
+            });
 
-    // Re-enable foreign key constraints (always, even on error)
-    conn.execute("PRAGMA foreign_keys = ON", [])
-        .map_err(FsPulseError::DatabaseError)?;
+            // Re-enable foreign key constraints (always, even on error)
+            conn.execute("PRAGMA foreign_keys = ON", [])
+                .map_err(FsPulseError::DatabaseError)?;
 
-    // Propagate any error from the migration
-    result?;
+            result
+        }
+        Migration::Standalone { code_fn } => {
+            // Code manages its own transactions and bumps the schema version
+            // itself (typically in the same transaction as its final cleanup).
+            code_fn(conn)
+        }
+    };
 
-    info!("Database successfully upgraded");
-
-    Ok(next_version)
-}
-
-fn run_migration_phases(conn: &Connection, migration: &Migration) -> Result<(), FsPulseError> {
-    // Phase 1: Pre-SQL (if present)
-    if let Some(pre_sql) = migration.pre_sql {
-        conn.execute_batch(pre_sql)?;
+    match result {
+        Ok(()) => {
+            migration_info(&format!(
+                "  Schema v{} -> v{} complete",
+                current_version, next_version
+            ));
+            Ok(next_version)
+        }
+        Err(e) => {
+            migration_error(&format!(
+                "  Schema upgrade v{} -> v{} failed: {}",
+                current_version, next_version, e
+            ));
+            Err(e)
+        }
     }
-
-    // Phase 2: Rust code (if present)
-    if let Some(code_fn) = migration.code_fn {
-        code_fn(conn)?;
-    }
-
-    // Phase 3: Post-SQL (if present)
-    if let Some(post_sql) = migration.post_sql {
-        conn.execute_batch(post_sql)?;
-    }
-
-    Ok(())
 }
 
 // ============================================================================

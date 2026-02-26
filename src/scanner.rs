@@ -26,25 +26,37 @@ use crate::scans::ScanState;
 use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
 use crate::undo_log::UndoLog;
 use crate::validate::validator::{from_path, ValidationState};
+use crate::utils::Utils;
 use crate::{database::Database, error::FsPulseError, scans::Scan};
 
 use crossbeam_channel::bounded;
 use log::{error, info, trace, warn, Level};
 use logging_timer::timer;
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 use threadpool::ThreadPool;
 
 use std::fs::Metadata;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::path::MAIN_SEPARATOR_STR;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use std::{cmp, fs};
 
 pub struct Scanner {}
 
 /// Batch size for database write operations during scanning
 const SCAN_BATCH_SIZE: usize = 100;
+
+/// A pending folder count write, collected during the recursive walk and
+/// applied in batched transactions afterward.
+struct FolderCountWrite {
+    folder_item_id: i64,
+    adds: i64,
+    mods: i64,
+    dels: i64,
+}
 
 /// Context passed through recursive directory scanning to avoid large parameter lists
 struct ScanContext<'a> {
@@ -185,28 +197,31 @@ impl Scanner {
 
             match loop_state {
                 ScanState::Scanning => {
-                    task_progress.set_phase("Phase 1 of 3: Scanning");
+                    task_progress.set_phase("Phase 1 of 4: Scanning");
                     if scan.state() == ScanState::Scanning {
                         Scanner::do_state_scanning(root, scan, task_progress.clone(), &interrupt_token)?;
                     }
                     loop_state = ScanState::Sweeping;
                 }
                 ScanState::Sweeping => {
-                    task_progress.set_phase("Phase 2 of 3: Sweeping");
+                    task_progress.set_phase("Phase 2 of 4: Sweeping");
                     if scan.state() == ScanState::Sweeping {
                         Scanner::do_state_sweeping(scan, task_progress.clone(), &interrupt_token)?;
                     }
-                    loop_state = ScanState::Analyzing;
+                    loop_state = ScanState::AnalyzingFiles;
                 }
-                ScanState::Analyzing => {
-                    task_progress.set_phase("Phase 3 of 3: Analyzing");
-                    let analysis_result = if scan.state() == ScanState::Analyzing {
-                        Scanner::do_state_analyzing(scan, task_id, initial_task_state.take(), task_progress.clone(), &interrupt_token)
-                    } else {
-                        Ok(())
-                    };
-
-                    analysis_result?;
+                ScanState::AnalyzingFiles => {
+                    task_progress.set_phase("Phase 3 of 4: Analyzing Files");
+                    if scan.state() == ScanState::AnalyzingFiles {
+                        Scanner::do_state_analyzing_files(scan, task_id, initial_task_state.take(), task_progress.clone(), &interrupt_token)?;
+                    }
+                    loop_state = ScanState::AnalyzingScan;
+                }
+                ScanState::AnalyzingScan => {
+                    task_progress.set_phase("Phase 4 of 4: Analyzing Scan");
+                    if scan.state() == ScanState::AnalyzingScan {
+                        Scanner::do_state_analyzing_scan(scan, task_progress.clone(), &interrupt_token)?;
+                    }
                     loop_state = ScanState::Completed;
                 }
                 unexpected => {
@@ -467,13 +482,17 @@ impl Scanner {
                     item_id, first_scan_id, last_scan_id,
                     is_deleted, access, mod_date, size,
                     file_hash, val, val_error,
-                    last_hash_scan, last_val_scan
+                    last_hash_scan, last_val_scan,
+                    add_count, modify_count, delete_count
                  )
                  SELECT
                     iv.item_id, ?, ?,
                     1, iv.access, iv.mod_date, iv.size,
                     iv.file_hash, iv.val, iv.val_error,
-                    iv.last_hash_scan, iv.last_val_scan
+                    iv.last_hash_scan, iv.last_val_scan,
+                    CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
+                    CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
+                    CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END
                  FROM items i
                  JOIN item_versions iv ON iv.item_id = i.item_id
                  WHERE i.root_id = ?
@@ -487,7 +506,7 @@ impl Scanner {
                 (scan.scan_id(), scan.scan_id(), scan.root_id(), scan.scan_id()),
             )?;
 
-            scan.set_state_analyzing(c)?;
+            scan.set_state_analyzing_files(c)?;
 
             Ok(())
         })?;
@@ -497,7 +516,7 @@ impl Scanner {
         Ok(())
     }
 
-    fn do_state_analyzing(
+    fn do_state_analyzing_files(
         scan: &mut Scan,
         task_id: i64,
         initial_task_state: Option<String>,
@@ -510,11 +529,10 @@ impl Scanner {
         let is_hash = scan.analysis_spec().is_hash();
         let is_val = scan.analysis_spec().is_val();
 
-        // If the scan doesn't hash or validate, then the scan
-        // can be marked complete and we just return
+        // If the scan doesn't hash or validate, skip to scan analyzing
         if !is_hash && !is_val {
             Scanner::check_interrupted(interrupt_token)?;
-            scan.set_state_completed(&conn)?;
+            scan.set_state_analyzing_scan(&conn)?;
             return Ok(());
         }
 
@@ -615,12 +633,10 @@ impl Scanner {
         // Wait for all tasks to complete.
         pool.join();
 
-        // It is critical that we check for completion and return the interrupt error
-        // without marking the scan completed. Once the scan is marked completed, attempting to
-        // "stop" the scan will be a no-op and the scan will remain in a completed state.
-        // Because we may have detected the interrupt and correctly interrupted or never started
-        // some hashing or validation operations, we have to be careful to not allow it to
-        // appear complete
+        // It is critical that we check for interruption before advancing to the next state
+        // (AnalyzingScan). If the interrupt was detected during this phase, some hashing or
+        // validation operations may have been skipped, so we must not allow the scan to
+        // progress further.
         Scanner::check_interrupted(interrupt_token)?;
 
         // If we got here without interruption, all items should have been processed.
@@ -631,7 +647,360 @@ impl Scanner {
         task_progress.clear_thread_states();
         task_progress.add_breadcrumb(&format!("Analyzed {} files", analyze_total));
 
+        scan.set_state_analyzing_scan(&conn)?;
+        Ok(())
+    }
+
+    /// Phase 4: Compute folder descendant change counts for the current scan.
+    ///
+    /// Walks the folder tree in the database depth-first, computing add/modify/delete
+    /// counts for each folder's immediate children, then writing those counts to
+    /// the folder's version row for this scan. Runs on a worker thread with
+    /// elapsed-time progress reporting.
+    fn do_state_analyzing_scan(
+        scan: &mut Scan,
+        task_progress: Arc<TaskProgress>,
+        interrupt_token: &Arc<AtomicBool>,
+    ) -> Result<(), FsPulseError> {
+        Scanner::check_interrupted(interrupt_token)?;
+
+        task_progress.set_indeterminate_progress("Computing folder counts...");
+
+        let token = Arc::clone(interrupt_token);
+        let scan_id = scan.scan_id();
+        let root_id = scan.root_id();
+
+        // Look up the root path
+        let conn = Database::get_connection()?;
+        let root = Root::get_by_id(&conn, root_id)?
+            .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", root_id)))?;
+        let root_path = root.root_path().to_string();
+        drop(conn);
+
+        let handle = std::thread::spawn(move || {
+            Scanner::scan_analysis_worker(root_id, scan_id, &root_path, &token)
+        });
+
+        let start = Instant::now();
+        loop {
+            if handle.is_finished() {
+                handle.join().unwrap()?;
+                break;
+            }
+            let elapsed = Utils::format_elapsed(start.elapsed());
+            task_progress.set_indeterminate_progress(&format!("Computing folder counts... {}", elapsed));
+            std::thread::sleep(Duration::from_millis(250));
+        }
+
+        task_progress.add_breadcrumb("Computed folder change counts");
+
+        let conn = Database::get_connection()?;
         scan.set_state_completed(&conn)?;
+        Ok(())
+    }
+
+    /// Worker function for scan analysis — runs on a spawned thread.
+    ///
+    /// Performs the recursive walk to compute folder counts, then writes them
+    /// in batched transactions. Also used by the v18→v19 migration backfill.
+    pub(crate) fn scan_analysis_worker(
+        root_id: i64,
+        scan_id: i64,
+        root_path: &str,
+        interrupt_token: &Arc<AtomicBool>,
+    ) -> Result<(), FsPulseError> {
+        let conn = Database::get_connection()?;
+        let prev_scan_id = Scanner::query_prev_completed_scan(&conn, root_id, scan_id)?;
+
+        let mut writes = Vec::new();
+        Scanner::walk_folder_counts(&conn, root_id, scan_id, root_path, interrupt_token, &mut writes)?;
+
+        info!("Scan analysis: {} folders have descendant changes", writes.len());
+
+        Scanner::apply_folder_count_writes(&conn, scan_id, &writes, prev_scan_id, interrupt_token)?;
+        Ok(())
+    }
+
+    /// Find the most recent completed scan before the current one for this root.
+    ///
+    /// Used by Case B writes to restore `last_scan_id` without depending on the undo log.
+    fn query_prev_completed_scan(
+        conn: &Connection,
+        root_id: i64,
+        scan_id: i64,
+    ) -> Result<Option<i64>, FsPulseError> {
+        let prev: Option<i64> = conn
+            .query_row(
+                "SELECT MAX(scan_id) FROM scans
+                 WHERE root_id = ? AND scan_id < ? AND state = 4",
+                params![root_id, scan_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        Ok(prev)
+    }
+
+    /// Recursive depth-first walk of the folder tree, computing descendant change counts.
+    ///
+    /// Returns the cumulative (adds, mods, dels) for all descendants under `parent_path`.
+    /// Appends a `FolderCountWrite` entry for each folder that has non-zero counts.
+    fn walk_folder_counts(
+        conn: &Connection,
+        root_id: i64,
+        scan_id: i64,
+        parent_path: &str,
+        interrupt_token: &Arc<AtomicBool>,
+        writes: &mut Vec<FolderCountWrite>,
+    ) -> Result<(i64, i64, i64), FsPulseError> {
+        Scanner::check_interrupted(interrupt_token)?;
+
+        let mut adds = 0i64;
+        let mut mods = 0i64;
+        let mut dels = 0i64;
+
+        // 1. Get immediate directory children alive at this scan
+        //    (including dirs deleted AT this scan — needed to recurse into deleted subtrees)
+        let dir_children = Scanner::query_immediate_dir_children(conn, root_id, parent_path, scan_id)?;
+
+        // 2. Recurse into each directory child
+        for (_child_id, child_path) in &dir_children {
+            let (sa, sm, sd) = Scanner::walk_folder_counts(
+                conn, root_id, scan_id, child_path, interrupt_token, writes,
+            )?;
+            adds += sa;
+            mods += sm;
+            dels += sd;
+        }
+
+        // 3. Count direct children that changed in this scan
+        let (da, dm, dd) = Scanner::query_direct_change_counts(conn, root_id, parent_path, scan_id)?;
+        adds += da;
+        mods += dm;
+        dels += dd;
+
+        // 4. Record write if any descendant changes
+        if adds > 0 || mods > 0 || dels > 0 {
+            if let Some(folder_item_id) = Scanner::lookup_folder_item_id(conn, root_id, parent_path)? {
+                writes.push(FolderCountWrite {
+                    folder_item_id,
+                    adds,
+                    mods,
+                    dels,
+                });
+            }
+        }
+
+        Ok((adds, mods, dels))
+    }
+
+    /// Query immediate directory children of `parent_path` that are alive at `scan_id`
+    /// (or deleted AT `scan_id`, so we can recurse into deleted subtrees).
+    fn query_immediate_dir_children(
+        conn: &Connection,
+        root_id: i64,
+        parent_path: &str,
+        scan_id: i64,
+    ) -> Result<Vec<(i64, String)>, FsPulseError> {
+        let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
+            parent_path.to_string()
+        } else {
+            format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
+        };
+
+        // Upper bound for range scan: replace trailing separator with next ASCII char.
+        // Unix: '/' (0x2F) + 1 = '0' (0x30). Windows: '\' (0x5C) + 1 = ']' (0x5D).
+        let path_upper = format!(
+            "{}{}",
+            &path_prefix[..path_prefix.len() - MAIN_SEPARATOR_STR.len()],
+            char::from(std::path::MAIN_SEPARATOR as u8 + 1)
+        );
+
+        let sql = format!(
+            "SELECT i.item_id, i.item_path
+             FROM items i
+             JOIN item_versions iv ON iv.item_id = i.item_id
+             WHERE i.root_id = ?1
+               AND i.item_type = 1
+               AND iv.first_scan_id = (
+                   SELECT MAX(first_scan_id) FROM item_versions
+                   WHERE item_id = i.item_id AND first_scan_id <= ?2
+               )
+               AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
+               AND i.item_path >= ?3
+               AND i.item_path < ?4
+               AND i.item_path != ?5
+               AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'",
+            MAIN_SEPARATOR_STR
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(FsPulseError::DatabaseError)
+    }
+
+    /// Count direct children of `parent_path` that changed in this scan, classified
+    /// as add/modify/delete by comparing the current version with the previous version.
+    fn query_direct_change_counts(
+        conn: &Connection,
+        root_id: i64,
+        parent_path: &str,
+        scan_id: i64,
+    ) -> Result<(i64, i64, i64), FsPulseError> {
+        let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
+            parent_path.to_string()
+        } else {
+            format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
+        };
+
+        // Upper bound for range scan: replace trailing separator with next ASCII char.
+        // Unix: '/' (0x2F) + 1 = '0' (0x30). Windows: '\' (0x5C) + 1 = ']' (0x5D).
+        let path_upper = format!(
+            "{}{}",
+            &path_prefix[..path_prefix.len() - MAIN_SEPARATOR_STR.len()],
+            char::from(std::path::MAIN_SEPARATOR as u8 + 1)
+        );
+
+        let sql = format!(
+            "SELECT
+                COALESCE(SUM(CASE WHEN cv.is_deleted = 0
+                    AND (pv.version_id IS NULL OR pv.is_deleted = 1) THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN cv.is_deleted = 0
+                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN cv.is_deleted = 1
+                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0)
+             FROM items i
+             JOIN item_versions cv ON cv.item_id = i.item_id AND cv.first_scan_id = ?1
+             LEFT JOIN item_versions pv ON pv.item_id = i.item_id
+                 AND pv.first_scan_id = (
+                     SELECT MAX(first_scan_id) FROM item_versions
+                     WHERE item_id = i.item_id AND first_scan_id < cv.first_scan_id
+                 )
+             WHERE i.root_id = ?2
+               AND i.item_path >= ?3
+               AND i.item_path < ?4
+               AND i.item_path != ?5
+               AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'",
+            MAIN_SEPARATOR_STR
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+        let result = stmt.query_row(
+            params![scan_id, root_id, &path_prefix, &path_upper, parent_path],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+
+        Ok(result)
+    }
+
+    /// Look up the item_id for a folder by its path.
+    fn lookup_folder_item_id(
+        conn: &Connection,
+        root_id: i64,
+        path: &str,
+    ) -> Result<Option<i64>, FsPulseError> {
+        let item_id: Option<i64> = conn
+            .query_row(
+                "SELECT item_id FROM items
+                 WHERE root_id = ? AND item_path = ? AND item_type = 1",
+                params![root_id, path],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(item_id)
+    }
+
+    /// Apply folder count writes in batched transactions.
+    ///
+    /// Each batch is committed independently; interrupts are checked between batches.
+    fn apply_folder_count_writes(
+        conn: &Connection,
+        scan_id: i64,
+        writes: &[FolderCountWrite],
+        prev_scan_id: Option<i64>,
+        interrupt_token: &Arc<AtomicBool>,
+    ) -> Result<(), FsPulseError> {
+        const BATCH_SIZE: usize = 500;
+
+        for batch in writes.chunks(BATCH_SIZE) {
+            Scanner::check_interrupted(interrupt_token)?;
+            Database::immediate_transaction(conn, |c| {
+                for w in batch {
+                    Scanner::write_single_folder_count(c, scan_id, prev_scan_id, w)?;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Write counts for a single folder.
+    ///
+    /// - **Case A**: Folder already has a version with `first_scan_id = scan_id` → UPDATE counts.
+    /// - **Case B**: No version for this scan → close the pre-existing version by restoring
+    ///   `last_scan_id` to `prev_scan_id`, then INSERT a new version carrying forward all
+    ///   metadata with the computed counts.
+    fn write_single_folder_count(
+        conn: &Connection,
+        scan_id: i64,
+        prev_scan_id: Option<i64>,
+        w: &FolderCountWrite,
+    ) -> Result<(), FsPulseError> {
+        // Check if folder already has a version for this scan
+        let existing_version_id: Option<i64> = conn
+            .query_row(
+                "SELECT version_id FROM item_versions
+                 WHERE item_id = ? AND first_scan_id = ?",
+                params![w.folder_item_id, scan_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        if let Some(version_id) = existing_version_id {
+            // Case A: UPDATE the existing version's counts
+            conn.execute(
+                "UPDATE item_versions SET add_count = ?, modify_count = ?, delete_count = ?
+                 WHERE version_id = ?",
+                params![w.adds, w.mods, w.dels, version_id],
+            )?;
+        } else {
+            // Case B: Folder metadata unchanged but descendants changed.
+            // Get the current (latest) version for this folder.
+            let current = ItemVersion::get_current(conn, w.folder_item_id)?;
+
+            if let Some(version) = current {
+                // Restore last_scan_id to previous completed scan (avoids undo log dependency)
+                if let Some(prev) = prev_scan_id {
+                    conn.execute(
+                        "UPDATE item_versions SET last_scan_id = ? WHERE version_id = ?",
+                        params![prev, version.version_id()],
+                    )?;
+                }
+
+                // Insert new version carrying forward all metadata with computed counts
+                ItemVersion::insert_full(
+                    conn,
+                    w.folder_item_id,
+                    scan_id,
+                    version.is_deleted(),
+                    version.access(),
+                    version.mod_date(),
+                    version.size(),
+                    version.file_hash(),
+                    version.val(),
+                    version.val_error(),
+                    version.last_hash_scan(),
+                    version.last_val_scan(),
+                    Some((w.adds, w.mods, w.dels)),
+                )?;
+            }
+        }
+
         Ok(())
     }
 
@@ -946,6 +1315,7 @@ impl Scanner {
             Scanner::handle_tombstone_rehydration(
                 ctx,
                 existing_item,
+                item_type,
                 mod_date,
                 size,
                 new_access,
@@ -954,6 +1324,7 @@ impl Scanner {
             Scanner::handle_item_modification(
                 ctx,
                 existing_item,
+                item_type,
                 mod_date,
                 size,
                 old_access,
@@ -969,6 +1340,7 @@ impl Scanner {
     fn handle_tombstone_rehydration(
         ctx: &mut ScanContext,
         existing_item: &ExistingItem,
+        item_type: ItemType,
         mod_date: Option<i64>,
         size: Option<i64>,
         new_access: Access,
@@ -977,8 +1349,9 @@ impl Scanner {
             // Insert new alive version (old deleted version is not modified —
             // its last_scan_id already reflects when the deletion was last confirmed,
             // and temporal queries resolve via MAX(first_scan_id), not last_scan_id)
+            let counts = if item_type == ItemType::Directory { Some((0, 0, 0)) } else { None };
             ItemVersion::insert_initial(
-                c, existing_item.item_id, ctx.scan.scan_id(), new_access, mod_date, size,
+                c, existing_item.item_id, ctx.scan.scan_id(), new_access, mod_date, size, counts,
             )?;
 
             // For rehydration, we alert whenever new_access is not Ok, regardless of what
@@ -996,6 +1369,7 @@ impl Scanner {
     fn handle_item_modification(
         ctx: &mut ScanContext,
         existing_item: &ExistingItem,
+        item_type: ItemType,
         mod_date: Option<i64>,
         size: Option<i64>,
         old_access: Access,
@@ -1008,6 +1382,7 @@ impl Scanner {
             ItemVersion::insert_with_carry_forward(
                 c, existing_item.item_id, ctx.scan.scan_id(),
                 false, new_access, mod_date, size, &existing_item.version,
+                item_type == ItemType::Directory,
             )?;
 
             if Scanner::should_alert_access_denied(old_access, new_access) {
@@ -1053,7 +1428,8 @@ impl Scanner {
 
         ctx.execute_batch_write(|c| {
             let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type)?;
-            ItemVersion::insert_initial(c, item_id, ctx.scan.scan_id(), new_access, mod_date, size)?;
+            let counts = if item_type == ItemType::Directory { Some((0, 0, 0)) } else { None };
+            ItemVersion::insert_initial(c, item_id, ctx.scan.scan_id(), new_access, mod_date, size, counts)?;
 
             if new_access != Access::Ok {
                 Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), item_id)?;
@@ -1162,6 +1538,7 @@ impl Scanner {
                     current_version.mod_date(), current_version.size(),
                     i_hash, i_val, i_val_error,
                     i_last_hash_scan, i_last_val_scan,
+                    None, // counts: analysis only processes files
                 )?;
             } else if i_last_hash_scan != current_version.last_hash_scan()
                 || i_last_val_scan != current_version.last_val_scan()
@@ -1215,8 +1592,9 @@ impl Scanner {
         Ok(())
     }
 
-    /// Check if scan has been interrupted, returning error if so
-    fn check_interrupted(interrupt_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
+
+    /// Check if scan has been interrupted, returning error if so.
+    pub(crate) fn check_interrupted(interrupt_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
         if interrupt_token.load(Ordering::Acquire) {
             Err(FsPulseError::TaskInterrupted)
         } else {

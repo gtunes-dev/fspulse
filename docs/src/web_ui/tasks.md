@@ -11,7 +11,7 @@ The top of the page shows the current task status:
 - **Running task**: Displays the task type (e.g., scanning a root), current phase, and real-time progress statistics including files and folders processed
 - **Idle**: When no task is running, shows an idle indicator with a button to initiate a manual scan
 
-Progress updates are delivered in real time via WebSocket, so you can watch scanning phases (Scanning, Sweeping, Analyzing) progress live.
+Progress updates are delivered in real time via WebSocket, so you can watch scanning phases (Scanning, Sweeping, Analyzing Files, Analyzing Scan) progress live.
 
 ---
 

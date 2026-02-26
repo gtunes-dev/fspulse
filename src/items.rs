@@ -113,11 +113,19 @@ pub fn get_temporal_immediate_children(
 ) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
     let conn = Database::get_connection()?;
 
-    let path_prefix = if parent_path == MAIN_SEPARATOR_STR {
-        MAIN_SEPARATOR_STR.to_string()
+    let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
+        parent_path.to_string()
     } else {
         format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
     };
+
+    // Upper bound for range scan: replace trailing separator with next ASCII char.
+    // Unix: '/' (0x2F) + 1 = '0' (0x30). Windows: '\' (0x5C) + 1 = ']' (0x5D).
+    let path_upper = format!(
+        "{}{}",
+        &path_prefix[..path_prefix.len() - MAIN_SEPARATOR_STR.len()],
+        char::from(std::path::MAIN_SEPARATOR as u8 + 1)
+    );
 
     let sql = format!(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
@@ -132,8 +140,9 @@ pub fn get_temporal_immediate_children(
                  AND first_scan_id <= ?2
            )
            AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
-           AND i.item_path LIKE ?3 || '%'
-           AND i.item_path != ?4
+           AND i.item_path >= ?3
+           AND i.item_path < ?4
+           AND i.item_path != ?5
            AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'
          ORDER BY i.item_path COLLATE natural_path ASC",
         MAIN_SEPARATOR_STR
@@ -142,7 +151,7 @@ pub fn get_temporal_immediate_children(
     let mut stmt = conn.prepare(&sql)?;
 
     let rows = stmt.query_map(
-        params![root_id, scan_id, &path_prefix, parent_path],
+        params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
         |row| {
             Ok(TemporalTreeItem {
                 item_id: row.get(0)?,
@@ -415,11 +424,19 @@ pub fn get_children_counts(
         .optional()?
         .ok_or_else(|| FsPulseError::Error(format!("Item not found: item_id={}", item_id)))?;
 
-    let path_prefix = if parent_path == MAIN_SEPARATOR_STR {
-        MAIN_SEPARATOR_STR.to_string()
+    let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
+        parent_path.to_string()
     } else {
         format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
     };
+
+    // Upper bound for range scan: replace trailing separator with next ASCII char.
+    // Unix: '/' (0x2F) + 1 = '0' (0x30). Windows: '\' (0x5C) + 1 = ']' (0x5D).
+    let path_upper = format!(
+        "{}{}",
+        &path_prefix[..path_prefix.len() - MAIN_SEPARATOR_STR.len()],
+        char::from(std::path::MAIN_SEPARATOR as u8 + 1)
+    );
 
     let sql = r#"
         SELECT
@@ -433,13 +450,14 @@ pub fn get_children_counts(
               WHERE item_id = i.item_id AND first_scan_id <= ?2
           )
           AND iv.is_deleted = 0
-          AND i.item_path LIKE ?3 || '%'
-          AND i.item_path != ?4
+          AND i.item_path >= ?3
+          AND i.item_path < ?4
+          AND i.item_path != ?5
           AND (i.item_type = 0 OR i.item_type = 1)
         GROUP BY i.item_type"#;
 
     let mut stmt = conn.prepare_cached(sql)?;
-    let rows = stmt.query_map(params![root_id, scan_id, path_prefix, parent_path], |row| {
+    let rows = stmt.query_map(params![root_id, scan_id, path_prefix, path_upper, parent_path], |row| {
         let item_type: i64 = row.get(0)?;
         let count: i64 = row.get(1)?;
         Ok((item_type, count))
