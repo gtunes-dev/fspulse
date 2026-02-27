@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-eb1e34c8.js";
+            window.path_to_searchindex_js = "searchindex-ede332e8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ae9385db.js"></script>
@@ -255,11 +255,11 @@
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state (NoError, MetaError, ReadError)</td></tr>
 <tr><td><code>mod_date</code></td><td>Date</td><td>Yes</td><td>Last modification date</td></tr>
 <tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation</td></tr>
-<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message</td></tr>
+<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash (files only; null for folders)</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash (files only; null for folders)</td></tr>
+<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation (files only; null for folders)</td></tr>
+<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
 </tbody>
 </table>
 </div>
@@ -284,11 +284,11 @@
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state</td></tr>
 <tr><td><code>mod_date</code></td><td>Date</td><td>No</td><td>Last modification date</td></tr>
 <tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation</td></tr>
-<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message</td></tr>
+<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash (files only; null for folders)</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash (files only; null for folders)</td></tr>
+<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation (files only; null for folders)</td></tr>
+<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
 </tbody>
 </table>
 </div>
@@ -333,7 +333,7 @@
 <tr><td>Boolean</td><td><code>true</code>, <code>false</code>, <code>T</code>, <code>F</code>, <code>null</code>, <code>not null</code></td><td>Unquoted.</td></tr>
 <tr><td>String</td><td><code>'example'</code>, <code>'error: missing EOF'</code>, <code>null</code>, <code>not null</code></td><td>Quoted strings.</td></tr>
 <tr><td>Path</td><td><code>'photos/reports'</code>, <code>'file.txt'</code></td><td>Must be quoted. <strong>Null values are not supported.</strong></td></tr>
-<tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code></td><td>Valid, Invalid, No Validator, Unknown. Unquoted.</td></tr>
+<tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code>, <code>null</code>, <code>not null</code></td><td>Valid, Invalid, No Validator, Unknown. Null for folders. Unquoted.</td></tr>
 <tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>S</code>, <code>U</code></td><td>File, Directory, Symlink, Unknown. Unquoted.</td></tr>
 <tr><td>Alert Type Enum</td><td><code>H</code>, <code>I</code>, <code>A</code></td><td>Suspicious Hash, Invalid Item, Access Denied. Unquoted.</td></tr>
 <tr><td>Alert Status Enum</td><td><code>O</code>, <code>F</code>, <code>D</code></td><td>Open, Flagged, Dismissed. Unquoted.</td></tr>

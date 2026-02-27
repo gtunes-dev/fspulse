@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-eb1e34c8.js";
+            window.path_to_searchindex_js = "searchindex-ede332e8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ae9385db.js"></script>
@@ -922,7 +922,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>Validate all items</strong>: Validate all files regardless of previous validation status</li>
 </ul>
 <h3 id="validation-states"><a class="header" href="#validation-states">Validation States</a></h3>
-<p>Validation states are stored in the database as:</p>
+<p>Validation applies only to files — folders do not have a validation state. Validation states are stored in the database as:</p>
 <ul>
 <li><strong>U</strong>: Unknown. No validation has been performed</li>
 <li><strong>N</strong>: No Validator. No validator exists for this file type</li>
@@ -1694,11 +1694,11 @@ fspulse --version
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state (NoError, MetaError, ReadError)</td></tr>
 <tr><td><code>mod_date</code></td><td>Date</td><td>Yes</td><td>Last modification date</td></tr>
 <tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation</td></tr>
-<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message</td></tr>
+<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash (files only; null for folders)</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash (files only; null for folders)</td></tr>
+<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation (files only; null for folders)</td></tr>
+<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1723,11 +1723,11 @@ fspulse --version
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state</td></tr>
 <tr><td><code>mod_date</code></td><td>Date</td><td>No</td><td>Last modification date</td></tr>
 <tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation</td></tr>
-<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message</td></tr>
+<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash (files only; null for folders)</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash (files only; null for folders)</td></tr>
+<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation (files only; null for folders)</td></tr>
+<tr><td><code>val</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1772,7 +1772,7 @@ fspulse --version
 <tr><td>Boolean</td><td><code>true</code>, <code>false</code>, <code>T</code>, <code>F</code>, <code>null</code>, <code>not null</code></td><td>Unquoted.</td></tr>
 <tr><td>String</td><td><code>'example'</code>, <code>'error: missing EOF'</code>, <code>null</code>, <code>not null</code></td><td>Quoted strings.</td></tr>
 <tr><td>Path</td><td><code>'photos/reports'</code>, <code>'file.txt'</code></td><td>Must be quoted. <strong>Null values are not supported.</strong></td></tr>
-<tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code></td><td>Valid, Invalid, No Validator, Unknown. Unquoted.</td></tr>
+<tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code>, <code>null</code>, <code>not null</code></td><td>Valid, Invalid, No Validator, Unknown. Null for folders. Unquoted.</td></tr>
 <tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>S</code>, <code>U</code></td><td>File, Directory, Symlink, Unknown. Unquoted.</td></tr>
 <tr><td>Alert Type Enum</td><td><code>H</code>, <code>I</code>, <code>A</code></td><td>Suspicious Hash, Invalid Item, Access Denied. Unquoted.</td></tr>
 <tr><td>Alert Status Enum</td><td><code>O</code>, <code>F</code>, <code>D</code></td><td>Open, Flagged, Dismissed. Unquoted.</td></tr>
@@ -2145,7 +2145,7 @@ fspulse serve
 <p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file’s contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
 <hr>
 <h2 id="validation-status-codes"><a class="header" href="#validation-status-codes">Validation Status Codes</a></h2>
-<p>Each item in the database has an associated <strong>validation status</strong>:</p>
+<p>Each <strong>file</strong> in the database has an associated <strong>validation status</strong> (folders do not have a validation state):</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2232,8 +2232,9 @@ fspulse serve
 <li><strong>Deletion status</strong> — whether the item existed or had been deleted</li>
 <li><strong>Access status</strong> — whether the item could be read successfully</li>
 <li><strong>Metadata</strong> — modification date and size</li>
-<li><strong>Hash</strong> — SHA-256 content hash (if computed)</li>
-<li><strong>Validation</strong> — format validation state and any error message</li>
+<li><strong>Hash</strong> — SHA-256 content hash, if computed (files only; null for folders)</li>
+<li><strong>Validation</strong> — format validation state and any error message (files only; null for folders)</li>
+<li><strong>Descendant change counts</strong> — add, modify, and delete counts for child items (folders only; null for files)</li>
 </ul>
 <p>An item that exists unchanged across 50 scans has exactly <strong>one version row</strong>. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.</p>
 <h3 id="deriving-change-types"><a class="header" href="#deriving-change-types">Deriving Change Types</a></h3>
@@ -2365,7 +2366,7 @@ dir = "/path/to/custom/directory"
 </ul>
 <p>An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, hash, validation, or deletion status).</p>
 <h3 id="schema-versioning"><a class="header" href="#schema-versioning">Schema Versioning</a></h3>
-<p>The schema is versioned (currently version 17) and automatically migrated on startup. FsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
+<p>The schema is versioned (currently version 21) and automatically migrated on startup. FsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
 <hr>
 <h2 id="database-compaction"><a class="header" href="#database-compaction">Database Compaction</a></h2>
 <p>Over time, deletions and updates can leave unused space in the database file. The Settings page provides a <strong>Compact Database</strong> action that reclaims this space by running SQLite’s VACUUM command.</p>

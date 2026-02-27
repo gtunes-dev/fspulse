@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-eb1e34c8.js";
+            window.path_to_searchindex_js = "searchindex-ede332e8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ae9385db.js"></script>
@@ -215,8 +215,9 @@
 <li><strong>Deletion status</strong> — whether the item existed or had been deleted</li>
 <li><strong>Access status</strong> — whether the item could be read successfully</li>
 <li><strong>Metadata</strong> — modification date and size</li>
-<li><strong>Hash</strong> — SHA-256 content hash (if computed)</li>
-<li><strong>Validation</strong> — format validation state and any error message</li>
+<li><strong>Hash</strong> — SHA-256 content hash, if computed (files only; null for folders)</li>
+<li><strong>Validation</strong> — format validation state and any error message (files only; null for folders)</li>
+<li><strong>Descendant change counts</strong> — add, modify, and delete counts for child items (folders only; null for files)</li>
 </ul>
 <p>An item that exists unchanged across 50 scans has exactly <strong>one version row</strong>. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.</p>
 <h3 id="deriving-change-types"><a class="header" href="#deriving-change-types">Deriving Change Types</a></h3>
