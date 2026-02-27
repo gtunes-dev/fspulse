@@ -1537,7 +1537,7 @@ impl Scanner {
                     c, analysis_item.item_id(), scan.scan_id(),
                     false, false, i_access,
                     current_version.mod_date(), current_version.size(),
-                    i_hash, i_val, i_val_error,
+                    i_hash, Some(i_val), i_val_error,
                     i_last_hash_scan, i_last_val_scan,
                     None, // counts: analysis only processes files
                 )?;

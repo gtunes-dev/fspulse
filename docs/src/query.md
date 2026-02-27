@@ -79,11 +79,11 @@ The `items` domain queries each item's **latest version** — the most recent kn
 | `access`        | Access Status     | No      | Access state (NoError, MetaError, ReadError) |
 | `mod_date`      | Date              | Yes     | Last modification date                   |
 | `size`          | Integer           | No      | File size in bytes                       |
-| `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash        |
-| `file_hash`     | String            | No      | SHA-256 content hash                     |
-| `last_val_scan` | Integer           | No      | Last scan that evaluated validation      |
-| `val`           | Validation Status | No      | Validation state                         |
-| `val_error`     | String            | No      | Validation error message                 |
+| `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash (files only; null for folders) |
+| `file_hash`     | String            | No      | SHA-256 content hash (files only; null for folders) |
+| `last_val_scan` | Integer           | No      | Last scan that evaluated validation (files only; null for folders) |
+| `val`           | Validation Status | No      | Validation state (files only; null for folders) |
+| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
 
 ---
 
@@ -105,11 +105,11 @@ The `versions` domain queries individual item version rows — each representing
 | `access`        | Access Status     | No      | Access state                             |
 | `mod_date`      | Date              | No      | Last modification date                   |
 | `size`          | Integer           | No      | File size in bytes                       |
-| `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash        |
-| `file_hash`     | String            | No      | SHA-256 content hash                     |
-| `last_val_scan` | Integer           | No      | Last scan that evaluated validation      |
-| `val`           | Validation Status | No      | Validation state                         |
-| `val_error`     | String            | No      | Validation error message                 |
+| `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash (files only; null for folders) |
+| `file_hash`     | String            | No      | SHA-256 content hash (files only; null for folders) |
+| `last_val_scan` | Integer           | No      | Last scan that evaluated validation (files only; null for folders) |
+| `val`           | Validation Status | No      | Validation state (files only; null for folders) |
+| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
 
 ---
 
@@ -150,7 +150,7 @@ Values must match the column's type. You can use individual values, ranges (when
 | Boolean             | `true`, `false`, `T`, `F`, `null`, `not null`         | Unquoted.                                                             |
 | String              | `'example'`, `'error: missing EOF'`, `null`, `not null` | Quoted strings.                                                     |
 | Path                | `'photos/reports'`, `'file.txt'`                      | Must be quoted. **Null values are not supported.**                    |
-| Validation Status   | `V`, `I`, `N`, `U`                                    | Valid, Invalid, No Validator, Unknown. Unquoted.                      |
+| Validation Status   | `V`, `I`, `N`, `U`, `null`, `not null`                 | Valid, Invalid, No Validator, Unknown. Null for folders. Unquoted.     |
 | Item Type Enum      | `F`, `D`, `S`, `U`                                    | File, Directory, Symlink, Unknown. Unquoted.                          |
 | Alert Type Enum     | `H`, `I`, `A`                                         | Suspicious Hash, Invalid Item, Access Denied. Unquoted.               |
 | Alert Status Enum   | `O`, `F`, `D`                                         | Open, Flagged, Dismissed. Unquoted.                                   |

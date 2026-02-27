@@ -49,8 +49,9 @@ Each version contains:
 - **Deletion status** — whether the item existed or had been deleted
 - **Access status** — whether the item could be read successfully
 - **Metadata** — modification date and size
-- **Hash** — SHA-256 content hash (if computed)
-- **Validation** — format validation state and any error message
+- **Hash** — SHA-256 content hash, if computed (files only; null for folders)
+- **Validation** — format validation state and any error message (files only; null for folders)
+- **Descendant change counts** — add, modify, and delete counts for child items (folders only; null for files)
 
 An item that exists unchanged across 50 scans has exactly **one version row**. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.
 

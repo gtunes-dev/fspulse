@@ -60,7 +60,7 @@ interface VersionEntry {
   mod_date: number | null
   size: number | null
   file_hash: string | null
-  val: number
+  val: number | null
   val_error: string | null
   last_hash_scan: number | null
   last_val_scan: number | null
@@ -147,7 +147,7 @@ function accessLabel(access: number): string {
   }
 }
 
-function valShort(val: number): string {
+function valShort(val: number | null): string {
   switch (val) {
     case 0: return 'V'
     case 1: return 'I'
@@ -391,7 +391,7 @@ export function ItemDetailPanel({
 
   // ---- Badge renderers ----
 
-  const getValidationBadge = (val: number) => {
+  const getValidationBadge = (val: number | null) => {
     const short = valShort(val)
     switch (short) {
       case 'V': return <Badge variant="success" className="gap-1 text-xs"><ShieldCheck className="h-2.5 w-2.5" />Valid</Badge>

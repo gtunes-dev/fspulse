@@ -104,7 +104,7 @@ An item that remains unchanged across many scans has a single version row. A new
 
 ### Schema Versioning
 
-The schema is versioned (currently version 17) and automatically migrated on startup. FsPulse handles all upgrades transparently — no manual migration steps are needed.
+The schema is versioned (currently version 21) and automatically migrated on startup. FsPulse handles all upgrades transparently — no manual migration steps are needed.
 
 ---
 

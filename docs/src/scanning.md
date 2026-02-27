@@ -60,7 +60,7 @@ When configuring a scan in the web UI, you can enable validation with these opti
 
 ### Validation States
 
-Validation states are stored in the database as:
+Validation applies only to files — folders do not have a validation state. Validation states are stored in the database as:
 - **U**: Unknown. No validation has been performed
 - **N**: No Validator. No validator exists for this file type
 - **V**: Valid. Validation was performed and no errors were encountered

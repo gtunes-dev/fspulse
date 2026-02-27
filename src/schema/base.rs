@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '19');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '21');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -69,19 +69,26 @@ CREATE TABLE IF NOT EXISTS item_versions (
     item_id         INTEGER NOT NULL,
     first_scan_id   INTEGER NOT NULL,
     last_scan_id    INTEGER NOT NULL,
+
+    -- Shared fields (all item types)
     is_added        BOOLEAN NOT NULL DEFAULT 0,
     is_deleted      BOOLEAN NOT NULL DEFAULT 0,
     access          INTEGER NOT NULL DEFAULT 0,
     mod_date        INTEGER,
     size            INTEGER,
+
+    -- File-specific fields (NULL for folders)
     file_hash       TEXT,
-    val             INTEGER NOT NULL DEFAULT 3,
+    val             INTEGER,
     val_error       TEXT,
     last_hash_scan  INTEGER,
     last_val_scan   INTEGER,
+
+    -- Folder-specific fields (NULL for files)
     add_count       INTEGER,
     modify_count    INTEGER,
     delete_count    INTEGER,
+
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)

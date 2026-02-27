@@ -8,7 +8,7 @@ Validation allows FsPulse to go beyond basic metadata inspection and attempt to 
 
 ## Validation Status Codes
 
-Each item in the database has an associated **validation status**:
+Each **file** in the database has an associated **validation status** (folders do not have a validation state):
 
 | Status Code | Meaning                                                       |
 |-------------|---------------------------------------------------------------|

@@ -250,7 +250,7 @@ pub struct VersionHistoryEntry {
     pub mod_date: Option<i64>,
     pub size: Option<i64>,
     pub file_hash: Option<String>,
-    pub val: i64,
+    pub val: Option<i64>,
     pub val_error: Option<String>,
     pub last_hash_scan: Option<i64>,
     pub last_val_scan: Option<i64>,

@@ -470,7 +470,10 @@ impl ItemsQuery {
                 "last_hash_scan" => Format::format_opt_i64(item.last_hash_scan),
                 "file_hash" => Format::format_opt_string(&item.file_hash),
                 "last_val_scan" => Format::format_opt_i64(item.last_val_scan),
-                "val" => Format::format_val(ValidationState::from_i64(item.val), col.format)?,
+                "val" => match item.val {
+                    Some(v) => Format::format_val(ValidationState::from_i64(v), col.format)?,
+                    None => String::new(),
+                },
                 "val_error" => Format::format_opt_string(&item.val_error),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
@@ -615,7 +618,10 @@ impl VersionsQuery {
                 "last_hash_scan" => Format::format_opt_i64(version.last_hash_scan),
                 "file_hash" => Format::format_opt_string(&version.file_hash),
                 "last_val_scan" => Format::format_opt_i64(version.last_val_scan),
-                "val" => Format::format_val(ValidationState::from_i64(version.val), col.format)?,
+                "val" => match version.val {
+                    Some(v) => Format::format_val(ValidationState::from_i64(v), col.format)?,
+                    None => String::new(),
+                },
                 "val_error" => Format::format_opt_string(&version.val_error),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
@@ -741,7 +747,7 @@ struct ItemsQueryRow {
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
     last_val_scan: Option<i64>,
-    val: i64,
+    val: Option<i64>,
     val_error: Option<String>,
 }
 
@@ -785,7 +791,7 @@ struct VersionsQueryRow {
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
     last_val_scan: Option<i64>,
-    val: i64,
+    val: Option<i64>,
     val_error: Option<String>,
 }
 

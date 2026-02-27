@@ -18,7 +18,7 @@ pub struct ItemVersion {
     mod_date: Option<i64>,
     size: Option<i64>,
     file_hash: Option<String>,
-    val: ValidationState,
+    val: Option<ValidationState>,
     val_error: Option<String>,
     last_hash_scan: Option<i64>,
     last_val_scan: Option<i64>,
@@ -65,7 +65,7 @@ impl ItemVersion {
         self.file_hash.as_deref()
     }
 
-    pub fn val(&self) -> ValidationState {
+    pub fn val(&self) -> Option<ValidationState> {
         self.val
     }
 
@@ -130,6 +130,12 @@ impl ItemVersion {
             Some((a, m, d)) => (Some(a), Some(m), Some(d)),
             None => (None, None, None),
         };
+        // Folders (counts.is_some()) get NULL val; files get Unknown
+        let val_value = if counts.is_some() {
+            None
+        } else {
+            Some(ValidationState::Unknown.as_i64())
+        };
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
@@ -137,7 +143,7 @@ impl ItemVersion {
                 add_count, modify_count, delete_count
              ) VALUES (?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?)",
             params![item_id, scan_id, scan_id, access.as_i64(), mod_date, size,
-                    ValidationState::Unknown.as_i64(),
+                    val_value,
                     add_count, modify_count, delete_count],
         )?;
         Ok(())
@@ -160,7 +166,7 @@ impl ItemVersion {
         mod_date: Option<i64>,
         size: Option<i64>,
         file_hash: Option<&str>,
-        val: ValidationState,
+        val: Option<ValidationState>,
         val_error: Option<&str>,
         last_hash_scan: Option<i64>,
         last_val_scan: Option<i64>,
@@ -180,7 +186,7 @@ impl ItemVersion {
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 item_id, scan_id, scan_id, is_added, is_deleted, access.as_i64(),
-                mod_date, size, file_hash, val.as_i64(), val_error,
+                mod_date, size, file_hash, val.map(|v| v.as_i64()), val_error,
                 last_hash_scan, last_val_scan,
                 add_count, modify_count, delete_count,
             ],
@@ -305,7 +311,7 @@ impl ItemVersion {
             mod_date: row.get(6)?,
             size: row.get(7)?,
             file_hash: row.get(8)?,
-            val: ValidationState::from_i64(row.get(9)?),
+            val: row.get::<_, Option<i64>>(9)?.map(ValidationState::from_i64),
             val_error: row.get(10)?,
             last_hash_scan: row.get(11)?,
             last_val_scan: row.get(12)?,
