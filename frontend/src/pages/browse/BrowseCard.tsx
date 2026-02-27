@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { FolderTree, FolderOpen, Search, ArrowLeftRight, ListFilter } from 'lucide-react'
+import { FolderTree, FolderOpen, Search, ArrowLeftRight } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { RootPicker } from '@/components/shared/RootPicker'
 import { CompactScanBar } from '@/components/shared/CompactScanBar'
 import { SearchFilter } from '@/components/shared/SearchFilter'
@@ -305,60 +304,50 @@ export function BrowseCard({ roots, defaultRootId }: BrowseCardProps) {
             </TabsList>
           </Tabs>
 
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
-                  'hover:bg-accent text-muted-foreground hover:text-foreground',
-                  hiddenKinds.size > 0 && 'text-foreground'
-                )}
-              >
-                <ListFilter className="h-3.5 w-3.5" />
-                Filter
-                {hiddenKinds.size > 0 && (
-                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
-                    {hiddenKinds.size}
-                  </span>
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-auto p-2">
-              <div className="flex flex-col gap-1">
-                {([
-                  { kind: 'added' as ChangeKind, label: 'Added', activeClass: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30', dotClass: 'bg-green-500' },
-                  { kind: 'modified' as ChangeKind, label: 'Modified', activeClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30', dotClass: 'bg-blue-500' },
-                  { kind: 'deleted' as ChangeKind, label: 'Deleted', activeClass: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30', dotClass: 'bg-red-500' },
-                  { kind: 'unchanged' as ChangeKind, label: 'Unchanged', activeClass: 'bg-muted text-muted-foreground border-border', dotClass: 'bg-muted-foreground' },
-                ]).map(({ kind, label, activeClass, dotClass }) => {
-                  const visible = !hiddenKinds.has(kind)
-                  return (
-                    <button
-                      key={kind}
+          {/* Change kind toggles */}
+          <div className="relative border border-border rounded-lg px-1 pb-1 pt-2.5">
+            <span className="absolute -top-2 left-2.5 px-1 bg-card text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Show</span>
+            <div className="flex items-center gap-0.5">
+              {([
+                { kind: 'added' as ChangeKind, label: 'Adds', color: 'bg-green-500', ring: 'ring-green-500/40' },
+                { kind: 'modified' as ChangeKind, label: 'Mods', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
+                { kind: 'deleted' as ChangeKind, label: 'Dels', color: 'bg-red-500', ring: 'ring-red-500/40' },
+                { kind: 'unchanged' as ChangeKind, label: 'Unchanged', color: 'bg-zinc-400', ring: 'ring-zinc-400/40' },
+              ]).map(({ kind, label, color, ring }) => {
+                const visible = !hiddenKinds.has(kind)
+                return (
+                  <button
+                    key={kind}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium cursor-pointer transition-colors',
+                      visible
+                        ? 'text-foreground hover:bg-accent'
+                        : 'text-muted-foreground/40 hover:bg-accent/50'
+                    )}
+                    onClick={() => setHiddenKinds(prev => {
+                      const next = new Set(prev)
+                      if (next.has(kind)) {
+                        next.delete(kind)
+                      } else {
+                        next.add(kind)
+                      }
+                      return next
+                    })}
+                  >
+                    <span
                       className={cn(
-                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+                        'inline-block w-2.5 h-2.5 rounded-full transition-all',
                         visible
-                          ? activeClass
-                          : 'bg-transparent text-muted-foreground/50 border-border/50'
+                          ? `${color} ring-2 ${ring}`
+                          : 'bg-transparent ring-1 ring-muted-foreground/25'
                       )}
-                      onClick={() => setHiddenKinds(prev => {
-                        const next = new Set(prev)
-                        if (next.has(kind)) {
-                          next.delete(kind)
-                        } else {
-                          next.add(kind)
-                        }
-                        return next
-                      })}
-                    >
-                      <span className={cn('inline-block w-1.5 h-1.5 rounded-full', visible ? dotClass : 'bg-muted-foreground/30')} />
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-            </PopoverContent>
-          </Popover>
+                    />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           <div className="flex-1" />
 

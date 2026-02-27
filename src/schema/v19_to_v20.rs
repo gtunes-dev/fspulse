@@ -12,7 +12,6 @@
 ///
 /// Phase 2 (post-SQL):
 ///   - Updates schema version to 20.
-
 pub const UPGRADE_19_TO_20_PRE_SQL: &str = r#"
 -- Schema Upgrade: Version 19 → 20 (Pre-SQL Phase)
 -- Verify schema version is exactly 19

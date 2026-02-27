@@ -56,6 +56,7 @@ struct FolderCountWrite {
     adds: i64,
     mods: i64,
     dels: i64,
+    unchanged: i64,
 }
 
 /// Context passed through recursive directory scanning to avoid large parameter lists
@@ -483,13 +484,14 @@ impl Scanner {
                     is_added, is_deleted, access, mod_date, size,
                     file_hash, val, val_error,
                     last_hash_scan, last_val_scan,
-                    add_count, modify_count, delete_count
+                    add_count, modify_count, delete_count, unchanged_count
                  )
                  SELECT
                     iv.item_id, ?, ?,
                     0, 1, iv.access, iv.mod_date, iv.size,
                     iv.file_hash, iv.val, iv.val_error,
                     iv.last_hash_scan, iv.last_val_scan,
+                    CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END
@@ -702,8 +704,8 @@ impl Scanner {
     /// Worker function for scan analysis — runs on a spawned thread.
     ///
     /// Performs the recursive walk to compute folder counts, then writes them
-    /// in batched transactions. Also used by the v18→v19 migration backfill.
-    pub(crate) fn scan_analysis_worker(
+    /// in batched transactions.
+    fn scan_analysis_worker(
         root_id: i64,
         scan_id: i64,
         root_path: &str,
@@ -743,8 +745,15 @@ impl Scanner {
 
     /// Recursive depth-first walk of the folder tree, computing descendant change counts.
     ///
-    /// Returns the cumulative (adds, mods, dels) for all descendants under `parent_path`.
-    /// Appends a `FolderCountWrite` entry for each folder that has non-zero counts.
+    /// Returns the cumulative `(adds, mods, dels)` for all descendants under `parent_path`.
+    /// Appends a `FolderCountWrite` entry for each folder that has non-zero change counts
+    /// (adds > 0 || mods > 0 || dels > 0).
+    ///
+    /// The `unchanged` count is derived per-folder at write time from the previous version:
+    ///   `unchanged = prev_alive - mods - dels`
+    /// where `prev_alive = prev_adds + prev_mods + prev_unchanged` from the folder's
+    /// temporal version before this scan. Everyone alive previously was either modified,
+    /// deleted, or unchanged in this scan — so unchanged is the remainder.
     fn walk_folder_counts(
         conn: &Connection,
         root_id: i64,
@@ -782,11 +791,17 @@ impl Scanner {
         // 4. Record write if any descendant changes
         if adds > 0 || mods > 0 || dels > 0 {
             if let Some(folder_item_id) = Scanner::lookup_folder_item_id(conn, root_id, parent_path)? {
+                // Derive unchanged from previous version's alive count:
+                // everyone alive before was either modified, deleted, or unchanged.
+                let prev_alive = Scanner::query_prev_alive(conn, folder_item_id, scan_id)?;
+                let unchanged = prev_alive - mods - dels;
+
                 writes.push(FolderCountWrite {
                     folder_item_id,
                     adds,
                     mods,
                     dels,
+                    unchanged,
                 });
             }
         }
@@ -898,6 +913,35 @@ impl Scanner {
         Ok(result)
     }
 
+    /// Query the total alive descendant count from a folder's previous version.
+    ///
+    /// Returns `add_count + modify_count + unchanged_count` from the version just before
+    /// `scan_id`. Returns 0 if no previous version exists (first scan or new folder).
+    ///
+    /// Used to derive: `unchanged = prev_alive - mods - dels` — everyone alive in the
+    /// previous scan was either modified, deleted, or unchanged in this scan.
+    fn query_prev_alive(
+        conn: &Connection,
+        folder_item_id: i64,
+        scan_id: i64,
+    ) -> Result<i64, FsPulseError> {
+        let alive: Option<i64> = conn
+            .query_row(
+                "SELECT COALESCE(iv.add_count, 0) + COALESCE(iv.modify_count, 0) + COALESCE(iv.unchanged_count, 0)
+                 FROM item_versions iv
+                 WHERE iv.item_id = ?1
+                   AND iv.first_scan_id = (
+                       SELECT MAX(first_scan_id) FROM item_versions
+                       WHERE item_id = ?1 AND first_scan_id < ?2
+                   )",
+                params![folder_item_id, scan_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        Ok(alive.unwrap_or(0))
+    }
+
     /// Look up the item_id for a folder by its path.
     fn lookup_folder_item_id(
         conn: &Connection,
@@ -964,9 +1008,9 @@ impl Scanner {
         if let Some(version_id) = existing_version_id {
             // Case A: UPDATE the existing version's counts
             conn.execute(
-                "UPDATE item_versions SET add_count = ?, modify_count = ?, delete_count = ?
+                "UPDATE item_versions SET add_count = ?, modify_count = ?, delete_count = ?, unchanged_count = ?
                  WHERE version_id = ?",
-                params![w.adds, w.mods, w.dels, version_id],
+                params![w.adds, w.mods, w.dels, w.unchanged, version_id],
             )?;
         } else {
             // Case B: Folder metadata unchanged but descendants changed.
@@ -997,7 +1041,7 @@ impl Scanner {
                     version.val_error(),
                     version.last_hash_scan(),
                     version.last_val_scan(),
-                    Some((w.adds, w.mods, w.dels)),
+                    Some((w.adds, w.mods, w.dels, w.unchanged)),
                 )?;
             }
         }
@@ -1350,7 +1394,7 @@ impl Scanner {
             // Insert new alive version (old deleted version is not modified —
             // its last_scan_id already reflects when the deletion was last confirmed,
             // and temporal queries resolve via MAX(first_scan_id), not last_scan_id)
-            let counts = if item_type == ItemType::Directory { Some((0, 0, 0)) } else { None };
+            let counts = if item_type == ItemType::Directory { Some((0, 0, 0, 0)) } else { None };
             ItemVersion::insert_initial(
                 c, existing_item.item_id, ctx.scan.scan_id(), new_access, mod_date, size, counts,
             )?;
@@ -1429,7 +1473,7 @@ impl Scanner {
 
         ctx.execute_batch_write(|c| {
             let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type)?;
-            let counts = if item_type == ItemType::Directory { Some((0, 0, 0)) } else { None };
+            let counts = if item_type == ItemType::Directory { Some((0, 0, 0, 0)) } else { None };
             ItemVersion::insert_initial(c, item_id, ctx.scan.scan_id(), new_access, mod_date, size, counts)?;
 
             if new_access != Access::Ok {
@@ -1595,7 +1639,7 @@ impl Scanner {
 
 
     /// Check if scan has been interrupted, returning error if so.
-    pub(crate) fn check_interrupted(interrupt_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
+    fn check_interrupted(interrupt_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
         if interrupt_token.load(Ordering::Acquire) {
             Err(FsPulseError::TaskInterrupted)
         } else {

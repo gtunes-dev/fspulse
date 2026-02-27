@@ -116,6 +116,7 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
             add_count: item.add_count,
             modify_count: item.modify_count,
             delete_count: item.delete_count,
+            unchanged_count: item.unchanged_count,
             name: item.item_name,
           }))
 
@@ -141,7 +142,7 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
         ref={parentRef}
         className="p-4"
       >
-        {loading ? (
+        {loading && visibleItems.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-muted-foreground">
             Loading file tree...
           </div>

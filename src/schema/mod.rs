@@ -10,6 +10,8 @@ mod v17_to_v18;
 mod v18_to_v19;
 mod v19_to_v20;
 mod v20_to_v21;
+mod v21_to_v22;
+mod v22_to_v23;
 mod v2_to_v3;
 mod v3_to_v4;
 mod v4_to_v5;
@@ -39,6 +41,8 @@ use v19_to_v20::{UPGRADE_19_TO_20_POST_SQL, UPGRADE_19_TO_20_PRE_SQL};
 use v20_to_v21::{
     collapse_folder_versions, UPGRADE_20_TO_21_POST_SQL, UPGRADE_20_TO_21_PRE_SQL,
 };
+use v21_to_v22::{migrate_21_to_22, UPGRADE_21_TO_22_POST_SQL, UPGRADE_21_TO_22_PRE_SQL};
+use v22_to_v23::run_backfill_unchanged_count;
 use v2_to_v3::UPGRADE_2_TO_3_SQL;
 use v3_to_v4::UPGRADE_3_TO_4_SQL;
 use v4_to_v5::UPGRADE_4_TO_5_SQL;
@@ -136,3 +140,9 @@ pub const MIGRATION_20_TO_21: Migration = Migration::Transacted {
     code_fn: Some(collapse_folder_versions),
     post_sql: Some(UPGRADE_20_TO_21_POST_SQL),
 };
+pub const MIGRATION_21_TO_22: Migration = Migration::Transacted {
+    pre_sql: Some(UPGRADE_21_TO_22_PRE_SQL),
+    code_fn: Some(migrate_21_to_22),
+    post_sql: Some(UPGRADE_21_TO_22_POST_SQL),
+};
+pub const MIGRATION_22_TO_23: Migration = Migration::standalone(run_backfill_unchanged_count);

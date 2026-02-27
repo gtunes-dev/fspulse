@@ -75,28 +75,38 @@ export function SearchResultsList({
           add_count: number | null
           modify_count: number | null
           delete_count: number | null
+          unchanged_count: number | null
         }>
 
-        const flatItems: FlatTreeItem[] = items.map((item) => ({
-          item_id: item.item_id,
-          item_path: item.item_path,
-          item_name: item.item_name,
-          item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-          is_deleted: item.is_deleted,
-          size: item.size,
-          mod_date: item.mod_date,
-          change_kind: item.is_deleted ? 'deleted' as const
+        const flatItems: FlatTreeItem[] = items.map((item) => {
+          const change_kind = item.is_deleted ? 'deleted' as const
             : item.first_scan_id === scanId && item.is_added ? 'added' as const
             : item.first_scan_id === scanId ? 'modified' as const
-            : 'unchanged' as const,
-          add_count: item.add_count,
-          modify_count: item.modify_count,
-          delete_count: item.delete_count,
-          depth: 0,
-          isExpanded: false,
-          childrenLoaded: false,
-          hasChildren: item.item_type === 'D',
-        }))
+            : 'unchanged' as const
+
+          const isUnchangedDir = change_kind === 'unchanged' && item.item_type === 'D'
+
+          return {
+            item_id: item.item_id,
+            item_path: item.item_path,
+            item_name: item.item_name,
+            item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
+            is_deleted: item.is_deleted,
+            size: item.size,
+            mod_date: item.mod_date,
+            change_kind,
+            add_count: isUnchangedDir ? 0 : item.add_count,
+            modify_count: isUnchangedDir ? 0 : item.modify_count,
+            delete_count: isUnchangedDir ? 0 : item.delete_count,
+            unchanged_count: isUnchangedDir
+              ? (item.add_count ?? 0) + (item.modify_count ?? 0) + (item.unchanged_count ?? 0)
+              : item.unchanged_count,
+            depth: 0,
+            isExpanded: false,
+            childrenLoaded: false,
+            hasChildren: item.item_type === 'D',
+          }
+        })
 
         setResults(flatItems)
       } catch (err) {

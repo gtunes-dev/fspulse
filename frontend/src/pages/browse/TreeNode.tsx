@@ -1,6 +1,7 @@
-import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileSymlink, FileQuestion, Trash2 } from 'lucide-react'
+import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileSymlink, FileQuestion } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FlatTreeItem } from '@/lib/pathUtils'
+import { ChangeDots } from '@/components/shared/ChangeDots'
 
 interface TreeNodeProps {
   item: FlatTreeItem
@@ -19,9 +20,9 @@ interface TreeNodeProps {
 function getFileIcon(type: string, deleted: boolean) {
   const colorClass = deleted ? 'text-muted-foreground' : 'text-muted-foreground'
   switch (type) {
-    case 'S': return <FileSymlink className={cn('h-4 w-4 flex-shrink-0', colorClass)} />
-    case 'O': return <FileQuestion className={cn('h-4 w-4 flex-shrink-0', colorClass)} />
-    default: return <File className={cn('h-4 w-4 flex-shrink-0', colorClass)} />
+    case 'S': return <FileSymlink className={cn('h-5 w-5 flex-shrink-0', colorClass)} />
+    case 'O': return <FileQuestion className={cn('h-5 w-5 flex-shrink-0', colorClass)} />
+    default: return <File className={cn('h-5 w-5 flex-shrink-0', colorClass)} />
   }
 }
 
@@ -54,12 +55,16 @@ export function TreeNode({
   }
 
   const paddingLeft = item.depth * 20 + 8
-  const folderColor = item.is_deleted ? 'text-muted-foreground' : 'text-blue-500'
+  const folderColor = item.is_deleted ? 'text-muted-foreground' :
+    item.change_kind === 'added' ? 'text-green-500' :
+    item.change_kind === 'modified' ? 'text-blue-500' :
+    item.change_kind === 'deleted' ? 'text-red-500' :
+    'text-foreground'
 
   // Render directory icon - expandable (button with chevron) or static (just folder icon)
   const DirectoryIcon = () => {
     if (!expandable) {
-      return <Folder className={cn('h-4 w-4 flex-shrink-0', folderColor)} />
+      return <Folder className={cn('h-5 w-5 flex-shrink-0', folderColor)} />
     }
 
     return (
@@ -77,9 +82,9 @@ export function TreeNode({
           <ChevronRight className="h-4 w-4 flex-shrink-0" />
         )}
         {item.isExpanded ? (
-          <FolderOpen className={cn('h-4 w-4 flex-shrink-0', folderColor)} />
+          <FolderOpen className={cn('h-5 w-5 flex-shrink-0', folderColor)} />
         ) : (
-          <Folder className={cn('h-4 w-4 flex-shrink-0', folderColor)} />
+          <Folder className={cn('h-5 w-5 flex-shrink-0', folderColor)} />
         )}
       </button>
     )
@@ -89,7 +94,6 @@ export function TreeNode({
     <div
       className={cn(
         'flex items-center gap-2 p-2 hover:bg-accent rounded',
-        item.is_deleted && 'text-muted-foreground',
         isSelected && 'bg-accent',
       )}
       style={{ paddingLeft: `${paddingLeft}px` }}
@@ -102,25 +106,21 @@ export function TreeNode({
           {getFileIcon(item.item_type, item.is_deleted)}
         </>
       )}
-      {item.change_kind === 'added' && (
-        <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-      )}
-      {item.change_kind === 'modified' && (
-        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
-      )}
+      <ChangeDots
+        changeKind={item.change_kind}
+        isDir={item.item_type === 'D'}
+        addCount={item.add_count}
+        modifyCount={item.modify_count}
+        deleteCount={item.delete_count}
+        unchangedCount={item.unchanged_count}
+      />
       <span
-        className={cn('cursor-pointer', item.is_deleted && 'line-through')}
+        className="cursor-pointer"
         onClick={handleItemClick}
         title={showPathTooltip ? item.item_path : undefined}
       >
         {item.item_name}
       </span>
-      {item.is_deleted && (
-        <Trash2
-          className="h-4 w-4 flex-shrink-0 ml-2 text-muted-foreground"
-          aria-label="Deleted item"
-        />
-      )}
     </div>
   )
 }

@@ -47,6 +47,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
       add_count: item.add_count,
       modify_count: item.modify_count,
       delete_count: item.delete_count,
+      unchanged_count: item.unchanged_count,
       depth: 0,
       isExpanded: false,
       childrenLoaded: false,
@@ -141,6 +142,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
         add_count: item.add_count,
         modify_count: item.modify_count,
         delete_count: item.delete_count,
+        unchanged_count: item.unchanged_count,
         name: item.item_name,
       }))
 
@@ -174,6 +176,7 @@ export function useVirtualTree(options: UseVirtualTreeOptions) {
           add_count: child.add_count,
           modify_count: child.modify_count,
           delete_count: child.delete_count,
+          unchanged_count: child.unchanged_count,
           depth: parentDepth + 1,
           isExpanded: false,
           childrenLoaded: false,

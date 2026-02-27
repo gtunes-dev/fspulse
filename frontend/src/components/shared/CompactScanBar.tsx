@@ -85,8 +85,6 @@ export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScan
     async (date: Date, autoSelectScanId?: number) => {
       const currentId = ++dateScansIdRef.current
       setLoadingDateScans(true)
-      setDateScans([])
-      setIsFallback(false)
 
       const dateStr = format(date, 'yyyy-MM-dd')
 
@@ -103,6 +101,7 @@ export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScan
 
           if (data.scans.length > 0) {
             setDateScans(data.scans)
+            setIsFallback(false)
             const target = autoSelectScanId
               ? data.scans.find((s) => s.scan_id === autoSelectScanId) ?? data.scans[0]
               : data.scans[0]
@@ -249,12 +248,12 @@ export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScan
           <CollapsibleTrigger asChild>
             <button className="flex items-center gap-2 min-w-0 text-left border-none bg-transparent p-0 cursor-pointer">
               <ChevronDown className={cn("h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform", !pickerOpen && "-rotate-90")} />
-              {resolving ? (
-                <p className="text-sm font-medium text-muted-foreground animate-pulse">Resolving...</p>
-              ) : resolvedScanId && resolvedStartedAt ? (
+              {resolvedScanId && resolvedStartedAt ? (
                 <p className="text-sm font-medium truncate">
                   Scan #{resolvedScanId} &mdash; {formatScanDate(resolvedStartedAt)} at {formatTime(resolvedStartedAt)}
                 </p>
+              ) : resolving ? (
+                <p className="text-sm font-medium text-muted-foreground animate-pulse">Resolving...</p>
               ) : (
                 <p className="text-sm font-medium text-muted-foreground">No completed scans</p>
               )}
@@ -309,7 +308,7 @@ export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScan
                     <p className="text-xs text-muted-foreground px-1 py-6 text-center">
                       Click a date to see scans
                     </p>
-                  ) : loadingDateScans ? (
+                  ) : loadingDateScans && dateScans.length === 0 && !isFallback ? (
                     <p className="text-xs text-muted-foreground px-1 py-6 text-center animate-pulse">
                       Loading...
                     </p>

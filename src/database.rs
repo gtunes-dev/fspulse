@@ -3,7 +3,7 @@ use crate::{
     error::FsPulseError,
     schema::{
         Migration, CREATE_SCHEMA_SQL, MIGRATION_10_TO_11, MIGRATION_11_TO_12, MIGRATION_12_TO_13,
-        MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17, MIGRATION_17_TO_18, MIGRATION_18_TO_19, MIGRATION_19_TO_20, MIGRATION_20_TO_21, MIGRATION_2_TO_3, MIGRATION_3_TO_4,
+        MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17, MIGRATION_17_TO_18, MIGRATION_18_TO_19, MIGRATION_19_TO_20, MIGRATION_20_TO_21, MIGRATION_21_TO_22, MIGRATION_22_TO_23, MIGRATION_2_TO_3, MIGRATION_3_TO_4,
         MIGRATION_4_TO_5, MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8, MIGRATION_8_TO_9,
         MIGRATION_9_TO_10,
     },
@@ -21,7 +21,7 @@ use std::time::Duration;
 use std::env;
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 21;
+const CURRENT_SCHEMA_VERSION: u32 = 23;
 
 // Connection pool configuration
 const POOL_MAX_SIZE: u32 = 15;
@@ -419,6 +419,8 @@ fn ensure_schema_current() -> Result<(), FsPulseError> {
                 18 => upgrade_schema(&conn, db_version, &MIGRATION_18_TO_19)?,
                 19 => upgrade_schema(&conn, db_version, &MIGRATION_19_TO_20)?,
                 20 => upgrade_schema(&conn, db_version, &MIGRATION_20_TO_21)?,
+                21 => upgrade_schema(&conn, db_version, &MIGRATION_21_TO_22)?,
+                22 => upgrade_schema(&conn, db_version, &MIGRATION_22_TO_23)?,
                 _ => {
                     let msg = format!(
                         "No migration path from schema v{} to v{}",

@@ -97,6 +97,7 @@ pub struct ItemResponse {
     pub add_count: Option<i64>,
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
+    pub unchanged_count: Option<i64>,
 }
 
 /// GET /api/items/immediate-children?root_id=X&parent_path=/path&scan_id=Y
@@ -123,6 +124,7 @@ pub async fn get_immediate_children(
                     add_count: item.add_count,
                     modify_count: item.modify_count,
                     delete_count: item.delete_count,
+                    unchanged_count: item.unchanged_count,
                 })
                 .collect();
             Ok(Json(response))
@@ -171,6 +173,7 @@ pub async fn search_items(
                     add_count: item.add_count,
                     modify_count: item.modify_count,
                     delete_count: item.delete_count,
+                    unchanged_count: item.unchanged_count,
                 })
                 .collect();
             Ok(Json(response))

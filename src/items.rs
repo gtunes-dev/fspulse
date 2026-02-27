@@ -105,6 +105,7 @@ pub struct TemporalTreeItem {
     pub add_count: Option<i64>,
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
+    pub unchanged_count: Option<i64>,
 }
 
 /// Get immediate children at a point in time using items + item_versions.
@@ -134,7 +135,7 @@ pub fn get_temporal_immediate_children(
     let sql = format!(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
-                iv.add_count, iv.modify_count, iv.delete_count
+                iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          WHERE i.root_id = ?1
@@ -171,6 +172,7 @@ pub fn get_temporal_immediate_children(
                 add_count: row.get(9)?,
                 modify_count: row.get(10)?,
                 delete_count: row.get(11)?,
+                unchanged_count: row.get(12)?,
             })
         },
     )?;
@@ -193,7 +195,7 @@ pub fn search_temporal_items(
     let sql =
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
-                iv.add_count, iv.modify_count, iv.delete_count
+                iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          WHERE i.root_id = ?1
@@ -226,6 +228,7 @@ pub fn search_temporal_items(
                 add_count: row.get(9)?,
                 modify_count: row.get(10)?,
                 delete_count: row.get(11)?,
+                unchanged_count: row.get(12)?,
             })
         },
     )?;

@@ -401,14 +401,24 @@ export function ItemDetailPanel({
     }
   }
 
-  const getChangeBadge = (kind: ChangeKind) => {
-    const cls = "text-xs"
-    switch (kind) {
-      case 'initial': return <Badge className={cn("bg-blue-500 hover:bg-blue-600", cls)}>Initial</Badge>
-      case 'modified': return <Badge className={cn("bg-amber-500 hover:bg-amber-600", cls)}>Modified</Badge>
-      case 'deleted': return <Badge variant="destructive" className={cls}>Deleted</Badge>
-      case 'restored': return <Badge variant="success" className={cls}>Restored</Badge>
-    }
+  const getChangeIndicator = (kind: ChangeKind) => {
+    const dotColor =
+      kind === 'initial' ? 'bg-green-500' :
+      kind === 'modified' ? 'bg-blue-500' :
+      kind === 'deleted' ? 'bg-red-500' :
+      'bg-green-500' // restored
+    const label =
+      kind === 'initial' ? 'Added' :
+      kind === 'modified' ? 'Modified' :
+      kind === 'deleted' ? 'Deleted' :
+      'Restored'
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs flex-shrink-0">
+        <span className={`inline-block w-[7px] h-[7px] rounded-full ${dotColor}`} />
+        <span>{label}</span>
+        <span className="text-muted-foreground/50">&middot;</span>
+      </span>
+    )
   }
 
   const getAlertTypeBadge = (type: string) => {
@@ -455,7 +465,7 @@ export function ItemDetailPanel({
             {isTombstone ? (
               itemType === 'D' ? <FolderX className="h-5 w-5 text-destructive" /> : <FileX className="h-5 w-5 text-destructive" />
             ) : (
-              itemType === 'D' ? <Folder className="h-5 w-5 text-blue-500" /> : <File className="h-5 w-5 text-muted-foreground" />
+              itemType === 'D' ? <Folder className="h-5 w-5 text-foreground" /> : <File className="h-5 w-5 text-muted-foreground" />
             )}
           </div>
           <div className="flex-1 min-w-0">
@@ -529,11 +539,11 @@ export function ItemDetailPanel({
                   ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
                     <div className="flex items-center justify-center gap-4 text-sm">
                       <span className="flex items-center gap-1">
-                        <Folder className="h-3 w-3" style={{ color: 'hsl(142 71% 45%)' }} />
+                        <Folder className="h-3 w-3 text-muted-foreground" />
                         <span className="font-medium">{childrenCounts.directory_count.toLocaleString()}</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <File className="h-3 w-3" style={{ color: 'hsl(221 83% 53%)' }} />
+                        <File className="h-3 w-3 text-muted-foreground" />
                         <span className="font-medium">{childrenCounts.file_count.toLocaleString()}</span>
                       </span>
                     </div>
@@ -623,7 +633,7 @@ export function ItemDetailPanel({
                                   <ChevronDown className={cn("h-2.5 w-2.5 transition-transform", !isOpen && "-rotate-90")} />
                                 </Button>
                               </CollapsibleTrigger>
-                              {getChangeBadge(change.kind)}
+                              {getChangeIndicator(change.kind)}
                               <p className="text-xs text-muted-foreground truncate flex-1">
                                 {scanRangeLabel(v)}
                               </p>
@@ -668,7 +678,7 @@ export function ItemDetailPanel({
                         ) : (
                           <div className="flex items-center gap-1.5">
                             <div className="h-4 w-4 flex-shrink-0" />
-                            {getChangeBadge(change.kind)}
+                            {getChangeIndicator(change.kind)}
                             <p className="text-xs text-muted-foreground truncate flex-1">
                               {scanRangeLabel(v)}
                             </p>

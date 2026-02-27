@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Folder, File, FileSymlink, FileQuestion, Trash2, Home } from 'lucide-react'
+import { Folder, File, FileSymlink, FileQuestion, Home } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatFileSizeCompact } from '@/lib/formatUtils'
 import { formatDateRelative } from '@/lib/dateUtils'
 import type { BrowseCache, CachedItem } from '@/hooks/useBrowseCache'
 import { isItemVisible, type ChangeKind } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
+import { ChangeDots } from '@/components/shared/ChangeDots'
 
 interface FolderViewProps {
   rootPath: string
@@ -55,9 +56,16 @@ function sortItems(items: FolderItem[], column: SortColumn, dir: SortDir): Folde
   })
 }
 
-function getItemIcon(type: string, deleted: boolean) {
-  const cls = 'h-4 w-4'
-  if (type === 'D') return <Folder className={cn(cls, deleted ? 'text-muted-foreground' : 'text-blue-500')} />
+function getItemIcon(type: string, deleted: boolean, changeKind?: string) {
+  const cls = 'h-5 w-5'
+  if (type === 'D') {
+    const color = deleted ? 'text-muted-foreground' :
+      changeKind === 'added' ? 'text-green-500' :
+      changeKind === 'modified' ? 'text-blue-500' :
+      changeKind === 'deleted' ? 'text-red-500' :
+      'text-foreground'
+    return <Folder className={cn(cls, color)} />
+  }
   if (type === 'S') return <FileSymlink className={cn(cls, 'text-muted-foreground')} />
   if (type === 'O') return <FileQuestion className={cn(cls, 'text-muted-foreground')} />
   return <File className={cn(cls, 'text-muted-foreground')} />
@@ -220,7 +228,7 @@ export function FolderView({
 
       {/* Content */}
       <div ref={parentRef}>
-        {loading ? (
+        {loading && items.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-muted-foreground">
             Loading...
           </div>
@@ -260,8 +268,7 @@ export function FolderView({
                   <div
                     className={cn(
                       'flex items-center gap-2 px-3 py-1.5 hover:bg-accent transition-colors rounded-sm',
-                      isSelected && 'bg-accent',
-                      item.is_deleted && 'text-muted-foreground'
+                      isSelected && 'bg-accent'
                     )}
                   >
                     {/* Icon — click navigates into folders */}
@@ -272,26 +279,27 @@ export function FolderView({
                           onClick={() => handleNavigate(item.item_path)}
                           aria-label={`Open ${item.item_name}`}
                         >
-                          {getItemIcon(item.item_type, item.is_deleted)}
+                          {getItemIcon(item.item_type, item.is_deleted, item.change_kind)}
                         </button>
                       ) : (
-                        getItemIcon(item.item_type, item.is_deleted)
+                        getItemIcon(item.item_type, item.is_deleted, item.change_kind)
                       )}
                     </div>
 
                     {/* Name — click selects */}
                     <div
-                      className={cn('flex-1 flex items-center gap-1.5 text-sm truncate cursor-pointer', item.is_deleted && 'line-through')}
+                      className="flex-1 flex items-center gap-1.5 text-sm truncate cursor-pointer"
                       onClick={() => handleItemSelect(item)}
                     >
-                      {item.change_kind === 'added' && (
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                      )}
-                      {item.change_kind === 'modified' && (
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
-                      )}
+                      <ChangeDots
+                        changeKind={item.change_kind}
+                        isDir={item.item_type === 'D'}
+                        addCount={item.add_count}
+                        modifyCount={item.modify_count}
+                        deleteCount={item.delete_count}
+                        unchangedCount={item.unchanged_count}
+                      />
                       <span className="truncate">{item.item_name}</span>
-                      {item.is_deleted && <Trash2 className="inline h-3 w-3 ml-1.5 flex-shrink-0 text-muted-foreground" />}
                     </div>
 
                     {/* Size */}

@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '21');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '23');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -84,10 +84,19 @@ CREATE TABLE IF NOT EXISTS item_versions (
     last_hash_scan  INTEGER,
     last_val_scan   INTEGER,
 
-    -- Folder-specific fields (NULL for files)
+    -- Folder-specific descendant change counts (NULL for files).
+    -- Each count reflects the scan that created this version:
+    --   add_count       — descendants that were added (new or restored)
+    --   modify_count    — descendants that were modified (alive before and after)
+    --   delete_count    — descendants that were deleted (alive → not alive)
+    --   unchanged_count — descendants that were alive but didn't change
+    -- Total alive descendants = add_count + modify_count + unchanged_count.
+    -- For an unchanged folder whose temporal version is from scan M,
+    -- the real unchanged count at scan N is: adds_M + mods_M + unchanged_M.
     add_count       INTEGER,
     modify_count    INTEGER,
     delete_count    INTEGER,
+    unchanged_count INTEGER,
 
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),

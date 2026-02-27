@@ -10,7 +10,7 @@ export type ChangeKind = 'added' | 'modified' | 'deleted' | 'unchanged'
  * descendant changes of any visible kind (based on add_count/modify_count/delete_count).
  */
 export function isItemVisible(
-  item: { item_type: string; change_kind: ChangeKind; add_count?: number | null; modify_count?: number | null; delete_count?: number | null },
+  item: { item_type: string; change_kind: ChangeKind; add_count?: number | null; modify_count?: number | null; delete_count?: number | null; unchanged_count?: number | null },
   hiddenKinds: Set<ChangeKind>,
 ): boolean {
   // Own change_kind is visible — always show
@@ -19,15 +19,14 @@ export function isItemVisible(
   // For non-directories, that's the only check
   if (item.item_type !== 'D') return false
 
-  // Unchanged directories have stale counts from the scan that created their version,
-  // not the current scan. If the folder had any descendant changes in the current scan,
-  // the scan analysis phase would have created a new version (making it non-unchanged).
-  if (item.change_kind === 'unchanged') return false
-
-  // Directory with hidden own kind — check if it has visible descendant changes
+  // Directory with hidden own kind — check if it has visible descendant changes.
+  // Counts are always accurate: changed folders have per-scan counts from the
+  // backend; unchanged folders have derived counts (0 adds/mods/dels, unchanged
+  // = total alive from the temporal version) computed at the data mapping layer.
   if (!hiddenKinds.has('added') && (item.add_count ?? 0) > 0) return true
   if (!hiddenKinds.has('modified') && (item.modify_count ?? 0) > 0) return true
   if (!hiddenKinds.has('deleted') && (item.delete_count ?? 0) > 0) return true
+  if (!hiddenKinds.has('unchanged') && (item.unchanged_count ?? 0) > 0) return true
 
   return false
 }
@@ -41,9 +40,10 @@ export interface ItemData {
   size?: number | null
   mod_date?: number | null
   change_kind: ChangeKind
-  add_count?: number | null    // Folder descendant add count (null for files)
-  modify_count?: number | null // Folder descendant modify count (null for files)
-  delete_count?: number | null // Folder descendant delete count (null for files)
+  add_count?: number | null       // Folder descendant add count (null for files)
+  modify_count?: number | null    // Folder descendant modify count (null for files)
+  delete_count?: number | null    // Folder descendant delete count (null for files)
+  unchanged_count?: number | null // Folder descendant unchanged count (null for files)
 }
 
 /**
@@ -62,6 +62,7 @@ export interface FlatTreeItem {
   add_count?: number | null
   modify_count?: number | null
   delete_count?: number | null
+  unchanged_count?: number | null
   depth: number
   isExpanded: boolean
   childrenLoaded: boolean
