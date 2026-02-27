@@ -27,7 +27,7 @@ use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
 use crate::undo_log::UndoLog;
 use crate::validate::validator::{from_path, ValidationState};
 use crate::utils::Utils;
-use crate::{database::Database, error::FsPulseError, scans::Scan};
+use crate::{db::Database, error::FsPulseError, scans::Scan};
 
 use crossbeam_channel::bounded;
 use log::{error, info, trace, warn, Level};

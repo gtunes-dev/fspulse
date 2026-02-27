@@ -1,4 +1,4 @@
-use crate::database::Database;
+use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::task::{BroadcastMessage, TaskProgress, TaskStatus};
 use crate::scans::{HashMode, ValidateMode};

@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::database::Database;
+use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::scanner::Scanner;

@@ -1,4 +1,4 @@
-use crate::database::Database;
+use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::undo_log::UndoLog;

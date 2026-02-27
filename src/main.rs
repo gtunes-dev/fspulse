@@ -2,7 +2,7 @@ mod alerts;
 mod api;
 mod cli;
 mod config;
-mod database;
+mod db;
 mod error;
 mod hash;
 mod item_identity;
@@ -14,7 +14,6 @@ mod task_manager;
 mod scanner;
 mod scans;
 mod schedules;
-mod schema;
 mod server;
 mod sort;
 mod task;
@@ -28,7 +27,7 @@ use std::time::Instant;
 use chrono::Local;
 use cli::Cli;
 use config::Config;
-use database::Database;
+use db::{Database, SchemaStatus};
 use directories::ProjectDirs;
 use flexi_logger::{Cleanup, Criterion, DeferredNow, FileSpec, Logger, Naming, Record};
 use log::{error, info};
@@ -56,8 +55,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     setup_logging(&project_dirs);
 
-    // Initialize database connection pool
-    Database::init()?;
+    // Initialize database connection pool (no schema operations yet)
+    Database::init_pool()?;
+
+    // Check schema status and decide startup path
+    match Database::check_schema_status()? {
+        SchemaStatus::NeedsCreation => {
+            // Fresh database — create schema inline (fast, no maintenance page needed)
+            db::ensure_schema_current()?;
+        }
+        SchemaStatus::Current => {
+            // Schema is up to date — nothing to do
+        }
+        SchemaStatus::NeedsMigration { .. } => {
+            // Migration required — flag it so server starts in maintenance mode
+            Database::set_migration_needed();
+        }
+    }
 
     // Mark the start time and log a timestamped message
     let start = Instant::now();

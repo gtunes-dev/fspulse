@@ -1,7 +1,7 @@
 use axum::Json;
 use serde::Serialize;
 
-use crate::database::Database;
+use crate::db::Database;
 
 /// Response structure for app information
 #[derive(Debug, Serialize)]

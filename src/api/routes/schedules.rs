@@ -1,4 +1,4 @@
-use crate::database::Database;
+use crate::db::Database;
 use crate::task_manager::TaskManager;
 use crate::scans::{HashMode, ValidateMode};
 use crate::schedules::{

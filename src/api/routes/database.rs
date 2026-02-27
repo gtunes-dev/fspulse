@@ -1,7 +1,7 @@
 use axum::{http::StatusCode, Json};
 use log::error;
 
-use crate::database::{Database, DbStats};
+use crate::db::{Database, DbStats};
 
 /// GET /api/database/stats
 ///

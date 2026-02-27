@@ -1,13 +1,14 @@
-use crate::{
-    config::Config,
-    error::FsPulseError,
-    schema::{
-        Migration, CREATE_SCHEMA_SQL, MIGRATION_10_TO_11, MIGRATION_11_TO_12, MIGRATION_12_TO_13,
-        MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17, MIGRATION_17_TO_18, MIGRATION_18_TO_19, MIGRATION_19_TO_20, MIGRATION_20_TO_21, MIGRATION_21_TO_22, MIGRATION_22_TO_23, MIGRATION_2_TO_3, MIGRATION_3_TO_4,
-        MIGRATION_4_TO_5, MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8, MIGRATION_8_TO_9,
-        MIGRATION_9_TO_10,
-    },
-    sort::compare_paths,
+pub mod migration;
+mod schema;
+
+use crate::{config::Config, error::FsPulseError, sort::compare_paths};
+use migration::MigrationProgress;
+use schema::{
+    Migration, CREATE_SCHEMA_SQL, MIGRATION_10_TO_11, MIGRATION_11_TO_12, MIGRATION_12_TO_13,
+    MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17,
+    MIGRATION_17_TO_18, MIGRATION_18_TO_19, MIGRATION_19_TO_20, MIGRATION_20_TO_21,
+    MIGRATION_21_TO_22, MIGRATION_22_TO_23, MIGRATION_2_TO_3, MIGRATION_3_TO_4, MIGRATION_4_TO_5,
+    MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8, MIGRATION_8_TO_9, MIGRATION_9_TO_10,
 };
 use log::{error, info};
 use r2d2::Pool;
@@ -15,6 +16,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 #[cfg(test)]
@@ -35,20 +37,26 @@ pub type PooledConnection = r2d2::PooledConnection<SqliteConnectionManager>;
 // Global connection pool
 static GLOBAL_POOL: OnceLock<DbPool> = OnceLock::new();
 
+// Migration-needed flag — set by main(), read by server
+static MIGRATION_NEEDED: AtomicBool = AtomicBool::new(false);
+
+/// Result of checking whether the database schema needs migration.
+pub enum SchemaStatus {
+    /// No meta table exists — fresh database, will be created (fast).
+    NeedsCreation,
+    /// Schema version matches CURRENT_SCHEMA_VERSION.
+    Current,
+    /// Schema version is behind and needs migration.
+    NeedsMigration { from_version: u32, to_version: u32 },
+}
+
 /// Database access and management
 pub struct Database;
 
 impl Database {
-    /// Initialize the database system.
-    /// This must be called once at application startup before any database operations.
-    /// It will:
-    /// - Initialize the connection pool
-    /// - Validate the database file path
-    /// - Create the schema if it doesn't exist
-    /// - Run any pending schema migrations
-    ///
-    /// This function fails fast if any initialization step fails.
-    pub fn init() -> Result<(), FsPulseError> {
+    /// Initialize the database connection pool only (no schema operations).
+    /// Call `check_schema_status()` and `ensure_schema_current()` separately.
+    pub fn init_pool() -> Result<(), FsPulseError> {
         let db_path = Self::get_path()?;
 
         info!("Initializing database at: {}", db_path.display());
@@ -79,12 +87,78 @@ impl Database {
 
         info!("Database connection pool initialized");
 
-        // Ensure schema is current (create or migrate)
-        ensure_schema_current()?;
-
-        info!("Database initialization complete");
-
         Ok(())
+    }
+
+    /// Initialize the database system (pool + schema).
+    /// Convenience method that combines `init_pool()` + `ensure_schema_current()`.
+    /// Used by tests that want the original all-in-one behavior.
+    #[cfg(test)]
+    pub fn init() -> Result<(), FsPulseError> {
+        Self::init_pool()?;
+        ensure_schema_current()?;
+        info!("Database initialization complete");
+        Ok(())
+    }
+
+    /// Fast check of schema status. Requires pool to be initialized.
+    /// Does NOT modify the database.
+    pub fn check_schema_status() -> Result<SchemaStatus, FsPulseError> {
+        let conn = Self::get_connection()?;
+
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='meta'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !table_exists {
+            return Ok(SchemaStatus::NeedsCreation);
+        }
+
+        let db_version_str: Option<String> = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        let db_version_str = match db_version_str {
+            Some(s) => s,
+            None => return Err(FsPulseError::Error("Schema version missing".to_string())),
+        };
+
+        let db_version: u32 = db_version_str
+            .parse()
+            .map_err(|_| FsPulseError::Error("Schema version mismatch".to_string()))?;
+
+        if db_version == CURRENT_SCHEMA_VERSION {
+            Ok(SchemaStatus::Current)
+        } else if db_version < CURRENT_SCHEMA_VERSION {
+            Ok(SchemaStatus::NeedsMigration {
+                from_version: db_version,
+                to_version: CURRENT_SCHEMA_VERSION,
+            })
+        } else {
+            Err(FsPulseError::Error(format!(
+                "Database schema v{} is newer than application v{}",
+                db_version, CURRENT_SCHEMA_VERSION
+            )))
+        }
+    }
+
+    /// Set the migration-needed flag. Called by main() when schema upgrade is required.
+    pub fn set_migration_needed() {
+        MIGRATION_NEEDED.store(true, Ordering::Release);
+    }
+
+    /// Check if migration is needed. Called by server startup to decide maintenance mode.
+    pub fn migration_needed() -> bool {
+        MIGRATION_NEEDED.load(Ordering::Acquire)
     }
 
     /// Get a connection from the global pool.
@@ -340,98 +414,93 @@ fn validate_directory(path: &Path) -> Result<(), FsPulseError> {
     }
 }
 
-/// Log an informational message to both the log file and stderr.
-/// Used during schema migration so progress is visible on the console.
+/// Log an informational message to both the log file, stderr, and SSE clients.
+/// Used during schema migration so progress is visible on the console and web UI.
 pub(crate) fn migration_info(msg: &str) {
     info!("{}", msg);
     eprintln!("{}", msg);
+    MigrationProgress::send(msg);
 }
 
-/// Log an error message to both the log file and stderr.
-/// Used during schema migration so failures are visible on the console.
+/// Log an error message to both the log file, stderr, and SSE clients.
+/// Used during schema migration so failures are visible on the console and web UI.
 pub(crate) fn migration_error(msg: &str) {
     error!("{}", msg);
     eprintln!("{}", msg);
+    MigrationProgress::send_error(msg);
 }
 
 /// Ensure the database schema is current.
-/// This is called by init() and should not be called directly.
-fn ensure_schema_current() -> Result<(), FsPulseError> {
+/// Creates the schema if it doesn't exist, or runs any pending migrations.
+pub fn ensure_schema_current() -> Result<(), FsPulseError> {
     let conn = Database::get_connection()?;
 
-    let table_exists: bool = conn
-        .query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='meta'",
-            [],
-            |row| row.get::<_, i32>(0),
-        )
-        .map(|count| count > 0)
-        .unwrap_or(false);
-
-    if !table_exists {
-        create_schema(&conn)?;
-    } else {
-        // Get the stored schema version
-        let db_version_str: Option<String> = conn
-            .query_row(
-                "SELECT value FROM meta WHERE key = 'schema_version'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()?;
-
-        let db_version_str = match db_version_str {
-            Some(s) => s,
-            None => return Err(FsPulseError::Error("Schema version missing".to_string())),
-        };
-
-        let mut db_version: u32 = match db_version_str.parse() {
-            Ok(num) => num,
-            Err(_) => return Err(FsPulseError::Error("Schema version mismatch".to_string())),
-        };
-
-        if db_version < CURRENT_SCHEMA_VERSION {
+    match Database::check_schema_status()? {
+        SchemaStatus::NeedsCreation => create_schema(&conn)?,
+        SchemaStatus::Current => {}
+        SchemaStatus::NeedsMigration {
+            from_version,
+            to_version,
+        } => {
+            let total_steps = to_version - from_version;
             migration_info(&format!(
-                "Database schema upgrade required: v{} -> v{}",
-                db_version, CURRENT_SCHEMA_VERSION
+                "Database schema upgrade: v{} -> v{} ({} {})",
+                from_version,
+                to_version,
+                total_steps,
+                if total_steps == 1 { "step" } else { "steps" }
             ));
+            run_migrations(&conn, from_version, total_steps)?;
         }
+    }
 
-        loop {
-            db_version = match db_version {
-                CURRENT_SCHEMA_VERSION => break,
-                2 => upgrade_schema(&conn, db_version, &MIGRATION_2_TO_3)?,
-                3 => upgrade_schema(&conn, db_version, &MIGRATION_3_TO_4)?,
-                4 => upgrade_schema(&conn, db_version, &MIGRATION_4_TO_5)?,
-                5 => upgrade_schema(&conn, db_version, &MIGRATION_5_TO_6)?,
-                6 => upgrade_schema(&conn, db_version, &MIGRATION_6_TO_7)?,
-                7 => upgrade_schema(&conn, db_version, &MIGRATION_7_TO_8)?,
-                8 => upgrade_schema(&conn, db_version, &MIGRATION_8_TO_9)?,
-                9 => upgrade_schema(&conn, db_version, &MIGRATION_9_TO_10)?,
-                10 => upgrade_schema(&conn, db_version, &MIGRATION_10_TO_11)?,
-                11 => upgrade_schema(&conn, db_version, &MIGRATION_11_TO_12)?,
-                12 => upgrade_schema(&conn, db_version, &MIGRATION_12_TO_13)?,
-                13 => upgrade_schema(&conn, db_version, &MIGRATION_13_TO_14)?,
-                14 => upgrade_schema(&conn, db_version, &MIGRATION_14_TO_15)?,
-                15 => upgrade_schema(&conn, db_version, &MIGRATION_15_TO_16)?,
-                16 => upgrade_schema(&conn, db_version, &MIGRATION_16_TO_17)?,
-                17 => upgrade_schema(&conn, db_version, &MIGRATION_17_TO_18)?,
-                18 => upgrade_schema(&conn, db_version, &MIGRATION_18_TO_19)?,
-                19 => upgrade_schema(&conn, db_version, &MIGRATION_19_TO_20)?,
-                20 => upgrade_schema(&conn, db_version, &MIGRATION_20_TO_21)?,
-                21 => upgrade_schema(&conn, db_version, &MIGRATION_21_TO_22)?,
-                22 => upgrade_schema(&conn, db_version, &MIGRATION_22_TO_23)?,
-                _ => {
-                    let msg = format!(
-                        "No migration path from schema v{} to v{}",
-                        db_version, CURRENT_SCHEMA_VERSION
-                    );
-                    migration_error(&msg);
-                    return Err(FsPulseError::Error(msg));
-                }
+    Ok(())
+}
+
+fn run_migrations(conn: &Connection, from_version: u32, total_steps: u32) -> Result<(), FsPulseError> {
+    let mut db_version = from_version;
+    let mut step: u32 = 0;
+
+    loop {
+        step += 1;
+        db_version = match db_version {
+            CURRENT_SCHEMA_VERSION => break,
+            2 => upgrade_schema(conn, db_version, &MIGRATION_2_TO_3, step, total_steps)?,
+            3 => upgrade_schema(conn, db_version, &MIGRATION_3_TO_4, step, total_steps)?,
+            4 => upgrade_schema(conn, db_version, &MIGRATION_4_TO_5, step, total_steps)?,
+            5 => upgrade_schema(conn, db_version, &MIGRATION_5_TO_6, step, total_steps)?,
+            6 => upgrade_schema(conn, db_version, &MIGRATION_6_TO_7, step, total_steps)?,
+            7 => upgrade_schema(conn, db_version, &MIGRATION_7_TO_8, step, total_steps)?,
+            8 => upgrade_schema(conn, db_version, &MIGRATION_8_TO_9, step, total_steps)?,
+            9 => upgrade_schema(conn, db_version, &MIGRATION_9_TO_10, step, total_steps)?,
+            10 => upgrade_schema(conn, db_version, &MIGRATION_10_TO_11, step, total_steps)?,
+            11 => upgrade_schema(conn, db_version, &MIGRATION_11_TO_12, step, total_steps)?,
+            12 => upgrade_schema(conn, db_version, &MIGRATION_12_TO_13, step, total_steps)?,
+            13 => upgrade_schema(conn, db_version, &MIGRATION_13_TO_14, step, total_steps)?,
+            14 => upgrade_schema(conn, db_version, &MIGRATION_14_TO_15, step, total_steps)?,
+            15 => upgrade_schema(conn, db_version, &MIGRATION_15_TO_16, step, total_steps)?,
+            16 => upgrade_schema(conn, db_version, &MIGRATION_16_TO_17, step, total_steps)?,
+            17 => upgrade_schema(conn, db_version, &MIGRATION_17_TO_18, step, total_steps)?,
+            18 => upgrade_schema(conn, db_version, &MIGRATION_18_TO_19, step, total_steps)?,
+            19 => upgrade_schema(conn, db_version, &MIGRATION_19_TO_20, step, total_steps)?,
+            20 => upgrade_schema(conn, db_version, &MIGRATION_20_TO_21, step, total_steps)?,
+            21 => upgrade_schema(conn, db_version, &MIGRATION_21_TO_22, step, total_steps)?,
+            22 => upgrade_schema(conn, db_version, &MIGRATION_22_TO_23, step, total_steps)?,
+            _ => {
+                let msg = format!(
+                    "No migration path from schema v{} to v{}",
+                    db_version, CURRENT_SCHEMA_VERSION
+                );
+                migration_error(&msg);
+                return Err(FsPulseError::Error(msg));
             }
         }
     }
+
+    migration_info(&format!(
+        "All {} migrations completed successfully",
+        total_steps
+    ));
 
     Ok(())
 }
@@ -449,11 +518,13 @@ fn upgrade_schema(
     conn: &Connection,
     current_version: u32,
     migration: &Migration,
+    step: u32,
+    total_steps: u32,
 ) -> Result<u32, FsPulseError> {
     let next_version = current_version + 1;
     migration_info(&format!(
-        "  Upgrading schema v{} -> v{}...",
-        current_version, next_version
+        "  [{}/{}] Upgrading schema v{} -> v{}...",
+        step, total_steps, current_version, next_version
     ));
 
     let result = match migration {
@@ -496,15 +567,15 @@ fn upgrade_schema(
     match result {
         Ok(()) => {
             migration_info(&format!(
-                "  Schema v{} -> v{} complete",
-                current_version, next_version
+                "  [{}/{}] Schema v{} -> v{} complete",
+                step, total_steps, current_version, next_version
             ));
             Ok(next_version)
         }
         Err(e) => {
             migration_error(&format!(
-                "  Schema upgrade v{} -> v{} failed: {}",
-                current_version, next_version, e
+                "  [{}/{}] Schema upgrade v{} -> v{} failed: {}",
+                step, total_steps, current_version, next_version, e
             ));
             Err(e)
         }

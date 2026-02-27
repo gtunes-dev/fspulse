@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use crate::database::Database;
+use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::schedules::{delete_schedules_for_root_immediate, root_has_active_scan_immediate};
 use rusqlite::{Connection, OptionalExtension};

@@ -3,7 +3,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::alerts::{AlertStatus, Alerts};
-use crate::database::Database;
+use crate::db::Database;
 
 /// Request structure for updating alert status
 #[derive(Debug, Deserialize)]

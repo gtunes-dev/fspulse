@@ -24,7 +24,8 @@ use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
 use crate::api;
-use crate::database::Database;
+use crate::db::{self, Database};
+use crate::db::migration::{maintenance, MigrationProgress, ReadyFlag};
 use crate::error::FsPulseError;
 use crate::task_manager::TaskManager;
 
@@ -48,13 +49,27 @@ impl WebServer {
     }
 
     pub async fn start(&self) -> Result<(), FsPulseError> {
-        let app = self.create_router()?;
+        let migration_needed = Database::migration_needed();
 
         let addr: SocketAddr = format!("{}:{}", self.host, self.port)
             .parse()
             .map_err(|e| FsPulseError::Error(format!("Invalid address: {}", e)))?;
 
-        println!("🚀 FsPulse server starting on http://{}", addr);
+        // Create shutdown channel for background tasks
+        let (shutdown_tx, _) = broadcast::channel::<()>(1);
+        let shutdown_tx_for_services = shutdown_tx.clone();
+
+        // Build the appropriate router
+        let (app, ready_flag) = if migration_needed {
+            let ready_flag = ReadyFlag::new(false);
+            let app = self.create_maintenance_router(ready_flag.clone())?;
+            (app, Some(ready_flag))
+        } else {
+            let app = self.create_router()?;
+            (app, None)
+        };
+
+        println!("FsPulse server starting on http://{}", addr);
 
         #[cfg(debug_assertions)]
         println!("   Running in DEVELOPMENT mode - serving assets from frontend/dist/");
@@ -62,48 +77,66 @@ impl WebServer {
         #[cfg(not(debug_assertions))]
         println!("   Running in PRODUCTION mode - serving embedded assets");
 
-        // Initialize pause state from database
-        let conn = Database::get_connection()?;
-        TaskManager::init_pause_state(&conn)?;
-
-        // Create shutdown channel for background tasks
-        let (shutdown_tx, _) = broadcast::channel::<()>(1);
-
-        // Start background queue processor with shutdown handling
-        let shutdown_rx = shutdown_tx.subscribe();
-        tokio::spawn(async move {
-            println!("   Starting background queue processor (polling every 20 seconds)");
-            let mut interval = tokio::time::interval(Duration::from_secs(20));
-            let mut shutdown_rx = shutdown_rx;
-
-            loop {
-                tokio::select! {
-                    _ = interval.tick() => {
-                        let conn = match Database::get_connection() {
-                            Ok(conn) => conn,
-                            Err(e) => {
-                                log::error!("Queue processor: Failed to get database connection: {}", e);
-                                continue;
-                            }
-                        };
-
-                        if let Err(e) = TaskManager::poll_queue(&conn) {
-                            log::error!("Queue processor error: {}", e);
-                        }
-                    }
-                    _ = shutdown_rx.recv() => {
-                        log::info!("Background queue processor shutting down gracefully");
-                        TaskManager::do_shutdown().await;
-                        println!("   Background queue processor stopped");
-                        break;
-                    }
-                }
-            }
-        });
-
+        // Bind the listener early so the port is available during migration
         let listener = TcpListener::bind(addr)
             .await
             .map_err(|e| FsPulseError::Error(format!("Failed to bind to {}: {}", addr, e)))?;
+
+        if migration_needed {
+            let ready_flag = ready_flag.unwrap();
+
+            // Initialize the migration broadcast channel
+            MigrationProgress::init();
+
+            println!("   Database migration required - serving maintenance page");
+
+            // Spawn migrations in a blocking task
+            let ready_flag_clone = ready_flag.clone();
+            let shutdown_tx_clone = shutdown_tx_for_services;
+            tokio::spawn(async move {
+                let result = tokio::task::spawn_blocking(|| {
+                    db::ensure_schema_current()
+                })
+                .await;
+
+                match result {
+                    Ok(Ok(())) => {
+                        log::info!("Migrations completed successfully");
+                        MigrationProgress::send_complete();
+
+                        // Brief delay so SSE clients receive the "complete" event
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+
+                        // Initialize TaskManager and background services
+                        if let Err(e) = start_app_services(shutdown_tx_clone) {
+                            log::error!("Failed to initialize app services: {}", e);
+                        }
+
+                        // Flip the ready flag — middleware now passes through
+                        ready_flag_clone.set_ready();
+                        log::info!("Application ready - maintenance mode disabled");
+                        println!("   Database migration complete - application ready");
+                    }
+                    Ok(Err(e)) => {
+                        log::error!("Migration failed: {}", e);
+                        MigrationProgress::send_failed(&e.to_string());
+
+                        // Give SSE clients time to see the error before exiting
+                        tokio::time::sleep(Duration::from_secs(10)).await;
+                        std::process::exit(1);
+                    }
+                    Err(join_error) => {
+                        log::error!("Migration task panicked: {}", join_error);
+                        MigrationProgress::send_failed(&format!("Migration panicked: {}", join_error));
+                        tokio::time::sleep(Duration::from_secs(10)).await;
+                        std::process::exit(1);
+                    }
+                }
+            });
+        } else {
+            // Normal startup — initialize services immediately
+            start_app_services(shutdown_tx_for_services)?;
+        }
 
         // Set up graceful shutdown handling
         let shutdown_signal = shutdown_signal();
@@ -115,7 +148,7 @@ impl WebServer {
             .with_graceful_shutdown(async move {
                 shutdown_signal.await;
                 log::info!("Shutdown signal received, stopping background tasks...");
-                println!("\n🛑 Shutdown signal received - stopping server gracefully...");
+                println!("\nShutdown signal received - stopping server gracefully...");
 
                 // Signal background tasks to stop
                 let _ = shutdown_tx.send(());
@@ -130,6 +163,23 @@ impl WebServer {
             .map_err(|e| FsPulseError::Error(format!("Server error: {}", e)))?;
 
         Ok(())
+    }
+
+    /// Build a router wrapped with maintenance middleware for migration mode.
+    /// Includes the SSE endpoint and intercepts all requests until ready.
+    fn create_maintenance_router(&self, ready_flag: ReadyFlag) -> Result<Router, FsPulseError> {
+        let app = self
+            .create_router()?
+            .route(
+                "/maintenance/events",
+                get(maintenance::migration_events_handler),
+            )
+            .layer(axum::middleware::from_fn_with_state(
+                ready_flag,
+                maintenance::maintenance_middleware,
+            ));
+
+        Ok(app)
     }
 
     fn create_router(&self) -> Result<Router, FsPulseError> {
@@ -280,6 +330,48 @@ impl WebServer {
             Ok(app)
         }
     }
+}
+
+/// Initialize TaskManager pause state and start the background queue processor.
+/// Called after migrations complete (or immediately if no migration needed).
+fn start_app_services(shutdown_tx: broadcast::Sender<()>) -> Result<(), FsPulseError> {
+    // Initialize pause state from database
+    let conn = Database::get_connection()?;
+    TaskManager::init_pause_state(&conn)?;
+
+    // Start background queue processor with shutdown handling
+    let shutdown_rx = shutdown_tx.subscribe();
+    tokio::spawn(async move {
+        println!("   Starting background queue processor (polling every 20 seconds)");
+        let mut interval = tokio::time::interval(Duration::from_secs(20));
+        let mut shutdown_rx = shutdown_rx;
+
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    let conn = match Database::get_connection() {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            log::error!("Queue processor: Failed to get database connection: {}", e);
+                            continue;
+                        }
+                    };
+
+                    if let Err(e) = TaskManager::poll_queue(&conn) {
+                        log::error!("Queue processor error: {}", e);
+                    }
+                }
+                _ = shutdown_rx.recv() => {
+                    log::info!("Background queue processor shutting down gracefully");
+                    TaskManager::do_shutdown().await;
+                    println!("   Background queue processor stopped");
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(())
 }
 
 async fn health_check() -> Result<(StatusCode, Html<String>), StatusCode> {

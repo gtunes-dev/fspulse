@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::MAIN_SEPARATOR_STR;
 
 use crate::{
-    database::Database, error::FsPulseError, utils::Utils,
+    db::Database, error::FsPulseError, utils::Utils,
 };
 
 // Re-export types that were moved to item_identity.rs.

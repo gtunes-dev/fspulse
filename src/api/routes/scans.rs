@@ -1,4 +1,4 @@
-use crate::database::Database;
+use crate::db::Database;
 use crate::scans::{Scan, ScanHistoryRow, ScanStats};
 use axum::{
     extract::{

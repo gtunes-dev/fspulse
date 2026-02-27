@@ -2,7 +2,7 @@ use axum::{extract::Path, http::StatusCode, Json};
 use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::database::Database;
+use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::scans::Scan;

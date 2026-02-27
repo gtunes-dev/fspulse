@@ -13,7 +13,7 @@ use super::{
 
 use crate::{
     alerts::{AlertStatus, AlertType},
-    database::Database,
+    db::Database,
     error::FsPulseError,
     items::{Access, ItemType},
     scans::ScanState,

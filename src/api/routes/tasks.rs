@@ -5,7 +5,7 @@ use axum::{
 use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::database::Database;
+use crate::db::Database;
 use crate::schedules::{TaskEntry, TaskHistoryRow};
 use crate::scans::{HashMode, ValidateMode};
 use crate::task::TaskType;

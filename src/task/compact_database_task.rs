@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use crate::database::Database;
+use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::utils::Utils;
 

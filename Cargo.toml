@@ -53,6 +53,7 @@ tico = "2.0"
 tokio = { version = "1.48", features = ["full"] }
 toml = "1.0"
 axum = { version = "0.8", features = ["ws"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 rust-embed = { version = "8.5", features = ["debug-embed"] }
 mime_guess = "2.0"
 
