@@ -13,15 +13,17 @@ This is a major release that fundamentally rearchitects how FsPulse stores and p
 
 **Upgrade note:** The database migration from v0.3.x involves restructuring all historical scan data into the new temporal model (schema v14→v23). For databases with significant scan history, this migration may take several minutes. A maintenance page with real-time progress streaming is shown automatically during the upgrade — the application will reload itself once migration completes.
 
-### Highlights
+**Key themes in this release:**
 
-- **Temporal data model** — Items now track full version history through an `item_versions` table (replacing the old `changes` table). Every scan produces a point-in-time snapshot, enabling you to browse the filesystem as it appeared at any past scan. Database is automatically migrated on upgrade (schema v14→v23).
+- **Temporal data model** — Items now track full version history through an `item_versions` table (replacing the old `changes` table). Every scan produces a point-in-time snapshot, enabling you to browse the filesystem as it appeared at any past scan.
 
 - **Redesigned Browse page** — Two view modes (tree and folder) with a detail panel alongside. Select any scan date via an inline calendar with date highlighting to see the filesystem at that point in time. Filter by change kind (added, modified, deleted, unchanged). Folders show descendant change counts. A flip button lets you move the detail panel to either side.
 
 - **Batch alert management** — The Alerts page now supports bulk status actions. Select individual alerts or act on all filtered alerts at once with Dismiss All / Flag All / Open All.
 
 - **Generic task system** — Scanning is now one of several task types in a unified execution system. A new Tasks page shows all task types with shared progress tracking. Database compaction runs as a managed task with exclusive locking.
+
+This release also includes all features from the v0.3 series: access error tracking, web-first architecture (TUI removed), connection pooling, and query pagination.
 
 ### Added
 - **Temporal versioning**: Full version history for all items via `item_versions` table with point-in-time filesystem views
@@ -38,7 +40,7 @@ This is a major release that fundamentally rearchitects how FsPulse stores and p
 - **`change_kind` in query language**: New filter for querying by change type
 
 ### Changed
-- **Data model**: `changes` table replaced by `item_versions` with temporal semantics; old `items` and `changes` tables dropped after migration
+- **Data model**: `changes` table replaced by `item_versions` with temporal semantics; old `items` and `changes` tables dropped after migration. Queries referencing `changes` columns will need to be updated to use `versions`.
 - **Task system**: `ScanManager` → `TaskManager`; `scan_queue` → `tasks` table with full lifecycle tracking for multiple task types
 - **Multi-phase migrations**: Schema updates now support migrations that require application code, not just SQL
 - **Validation**: Now file-only; `val` column is nullable (NULL for folders, non-null for files)
@@ -54,18 +56,6 @@ This is a major release that fundamentally rearchitects how FsPulse stores and p
 - RootDetailSheet schedule count no longer uses unsupported query domain
 - Security vulnerabilities in minimatch and rollup frontend dependencies
 - CVE-2026-22029 addressed
-
-### Breaking Changes
-- **Database schema v14→v23**: Automatic migration on first run. The `changes` table is replaced by `item_versions`, and old tables are dropped. Queries referencing `changes` columns will need to be updated to use `versions`.
-- **macOS x86 dropped**: Only Apple Silicon (ARM64) builds are provided for macOS.
-
-### Highlights from v0.3.x
-
-This release includes all features from the v0.3 series:
-- **Access error tracking**: Files with permission issues tracked with amber badge alerts
-- **Web-first architecture**: Terminal UI removed; all features in web UI
-- **Connection pooling**: R2D2 connection pool for improved concurrency
-- **Query pagination**: Explore query tab paginated at 25 rows per page
 
 ## [v0.3.3] - 2025-11-29
 
