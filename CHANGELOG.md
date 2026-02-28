@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix SQLite WAL/SHM files not being cleaned up on shutdown by properly closing the connection pool; the pool is now taken out of its global slot during shutdown, a WAL checkpoint is performed, and all connections are closed so SQLite removes the `-wal` and `-shm` files
+
 ### Changed
 - Upgrade `static_vcruntime` from v2 to v3 and add recommended `+crt-static` rustflag for Windows MSVC builds, ensuring binaries work on machines without the Visual C++ Redistributable installed
 

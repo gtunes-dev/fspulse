@@ -15,7 +15,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -34,8 +34,8 @@ const DB_BUSY_TIMEOUT_SECS: u64 = 5;
 pub type DbPool = Pool<SqliteConnectionManager>;
 pub type PooledConnection = r2d2::PooledConnection<SqliteConnectionManager>;
 
-// Global connection pool
-static GLOBAL_POOL: OnceLock<DbPool> = OnceLock::new();
+// Global connection pool — Mutex<Option<>> so shutdown() can take() and drop it
+static GLOBAL_POOL: Mutex<Option<DbPool>> = Mutex::new(None);
 
 // Migration-needed flag — set by main(), read by server
 static MIGRATION_NEEDED: AtomicBool = AtomicBool::new(false);
@@ -81,9 +81,11 @@ impl Database {
             .build(manager)
             .map_err(|e| FsPulseError::Error(format!("Failed to create connection pool: {}", e)))?;
 
-        GLOBAL_POOL
-            .set(pool)
-            .map_err(|_| FsPulseError::Error("Connection pool already initialized".into()))?;
+        let mut guard = GLOBAL_POOL.lock().unwrap();
+        if guard.is_some() {
+            return Err(FsPulseError::Error("Connection pool already initialized".into()));
+        }
+        *guard = Some(pool);
 
         info!("Database connection pool initialized");
 
@@ -165,16 +167,20 @@ impl Database {
     /// The connection will be automatically returned to the pool when dropped (RAII).
     ///
     /// # Errors
-    /// Returns an error if the pool has not been initialized via `Database::init()`.
+    /// Returns an error if the pool has been shut down or has not been initialized.
     pub fn get_connection() -> Result<PooledConnection, FsPulseError> {
-        GLOBAL_POOL
-            .get()
+        // Clone the pool (cheap Arc clone) so we don't hold the mutex during .get()
+        let pool = GLOBAL_POOL
+            .lock()
+            .unwrap()
+            .clone()
             .ok_or_else(|| {
                 FsPulseError::Error(
-                    "Connection pool not initialized - call Database::init() first".into(),
+                    "Database pool not available (not initialized or shut down)".into(),
                 )
-            })?
-            .get()
+            })?;
+
+        pool.get()
             .map_err(|e| FsPulseError::Error(format!("Failed to get connection from pool: {}", e)))
     }
 
@@ -291,6 +297,43 @@ impl Database {
             total_size,
             wasted_size,
         })
+    }
+
+    /// Perform a clean shutdown of the database.
+    /// Takes the pool out of the global slot (preventing future connections),
+    /// checkpoints the WAL, then drops the pool. When the last connection closes,
+    /// SQLite removes the `-shm` and `-wal` files.
+    pub fn shutdown() {
+        // Take the pool out — all subsequent get_connection() calls will fail
+        let pool = GLOBAL_POOL.lock().unwrap().take();
+
+        let Some(pool) = pool else {
+            info!("Database pool already shut down or not initialized");
+            return;
+        };
+
+        info!("Database pool marked as shut down");
+
+        // Get one last connection for the WAL checkpoint
+        match pool.get() {
+            Ok(conn) => {
+                // Checkpoint the WAL to flush all data back to the main database file.
+                // Use execute_batch since pragma_update binds values as parameters,
+                // but wal_checkpoint expects a bare keyword (TRUNCATE).
+                match conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)") {
+                    Ok(_) => info!("Database WAL checkpoint completed"),
+                    Err(e) => error!("Failed to checkpoint WAL during shutdown: {}", e),
+                }
+                // Drop the connection back into the pool before we drop the pool
+                drop(conn);
+            }
+            Err(e) => error!("Failed to get connection for shutdown checkpoint: {}", e),
+        }
+
+        // Drop the pool — closes all idle connections. When the last connection
+        // closes, SQLite removes the -wal and -shm files.
+        drop(pool);
+        info!("Database pool shut down, all connections closed");
     }
 
     /// Compact the database using VACUUM.

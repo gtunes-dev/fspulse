@@ -83,6 +83,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let duration = start.elapsed();
 
+    // Checkpoint the WAL so -shm/-wal files are cleaned up on exit
+    Database::shutdown();
+
     match result {
         Ok(()) => {
             info!("fspulse completed successfully in {duration:.2?}");
