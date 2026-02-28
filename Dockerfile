@@ -24,6 +24,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
 
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
+COPY .cargo ./.cargo
 
 # Copy build script
 COPY build.rs ./

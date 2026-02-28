@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Upgrade `static_vcruntime` from v2 to v3 and add recommended `+crt-static` rustflag for Windows MSVC builds, ensuring binaries work on machines without the Visual C++ Redistributable installed
+
 ## [v0.4.0] - 2026-02-28
 
 This is a major release that fundamentally rearchitects how FsPulse stores and presents filesystem data, redesigns the Browse experience, and introduces a generic task execution system.

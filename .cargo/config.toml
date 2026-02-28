@@ -1,2 +1,8 @@
 # Removed global codegen-units=1 flag
 # Now using per-package optimization in Cargo.toml for performance-critical dependencies
+
+# Statically link the VC runtime on Windows MSVC targets so that binaries
+# work on machines without the Visual C++ Redistributable installed.
+# Recommended by the static_vcruntime crate for best compatibility.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
