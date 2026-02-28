@@ -7,10 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-02-28
+
+This is a major release that fundamentally rearchitects how FsPulse stores and presents filesystem data, redesigns the Browse experience, and introduces a generic task execution system.
+
+**Upgrade note:** The database migration from v0.3.x involves restructuring all historical scan data into the new temporal model (schema v14→v23). For databases with significant scan history, this migration may take several minutes. A maintenance page with real-time progress streaming is shown automatically during the upgrade — the application will reload itself once migration completes.
+
+### Highlights
+
+- **Temporal data model** — Items now track full version history through an `item_versions` table (replacing the old `changes` table). Every scan produces a point-in-time snapshot, enabling you to browse the filesystem as it appeared at any past scan. Database is automatically migrated on upgrade (schema v14→v23).
+
+- **Redesigned Browse page** — Two view modes (tree and folder) with a detail panel alongside. Select any scan date via an inline calendar with date highlighting to see the filesystem at that point in time. Filter by change kind (added, modified, deleted, unchanged). Folders show descendant change counts. A flip button lets you move the detail panel to either side.
+
+- **Batch alert management** — The Alerts page now supports bulk status actions. Select individual alerts or act on all filtered alerts at once with Dismiss All / Flag All / Open All.
+
+- **Generic task system** — Scanning is now one of several task types in a unified execution system. A new Tasks page shows all task types with shared progress tracking. Database compaction runs as a managed task with exclusive locking.
+
+### Added
+- **Temporal versioning**: Full version history for all items via `item_versions` table with point-in-time filesystem views
+- **Browse folder view**: Folder-based navigation with breadcrumb ribbon, sortable columns, and double-click navigation
+- **Inline ScanPicker**: Calendar widget highlighting days with scans, per-day scan list, and "Latest" button
+- **Side-by-side detail panel**: Sticky detail panel alongside tree/folder view with flip button to swap sides
+- **Change kind filtering**: Filter Browse views by added, modified, deleted, or unchanged items
+- **Folder descendant counts**: Folders display counts of added/modified/deleted/unchanged items in their subtree
+- **Bulk alert actions**: Select multiple alerts or act on all filtered alerts to set status in batch
+- **Tasks page**: Dedicated page for viewing and managing all task types (scans, compaction, etc.)
+- **Maintenance page**: Migration UI with SSE progress streaming for long-running schema upgrades; auto-reloads when complete
+- **Schema version display**: Current database schema version shown on the Settings page
+- **`item_name` column**: Precomputed last path segment for faster search queries
+- **`change_kind` in query language**: New filter for querying by change type
+
 ### Changed
-- **Generic task progress system**: Refactored backend progress reporting from scan-specific to generic task-based architecture, enabling future support for multiple task types (export, maintenance, etc.)
-- **Frontend context renamed**: `ScanManagerContext` → `TaskContext` with updated types for generic task progress
-- **Indeterminate progress bar**: Scanning phase now shows shimmer animation instead of percentage (since file count is unknown until scan completes)
+- **Data model**: `changes` table replaced by `item_versions` with temporal semantics; old `items` and `changes` tables dropped after migration
+- **Task system**: `ScanManager` → `TaskManager`; `scan_queue` → `tasks` table with full lifecycle tracking for multiple task types
+- **Multi-phase migrations**: Schema updates now support migrations that require application code, not just SQL
+- **Validation**: Now file-only; `val` column is nullable (NULL for folders, non-null for files)
+- **Browse UI**: Larger detail panel, unified content/detail borders, flat detail sections
+- **Health endpoint**: Returns 200 during migrations for Docker/Traefik compatibility
+- **Log retention**: Capped at ~1 GB disk usage (50 MB per file, 20 files)
+- **Dependency upgrades**: rusqlite 0.37→0.38, icu_collator 1.5→2.1, lopdf 0.38→0.39, strum 0.27→0.28, toml 0.9→1.0
+- **Docker**: Replaced gosu with setpriv to eliminate Go CVEs in container image
+- **macOS builds**: Removed x86 build target (Apple Silicon only going forward)
+
+### Fixed
+- File-not-found errors during analysis phase no longer cause transaction poisoning
+- RootDetailSheet schedule count no longer uses unsupported query domain
+- Security vulnerabilities in minimatch and rollup frontend dependencies
+- CVE-2026-22029 addressed
+
+### Breaking Changes
+- **Database schema v14→v23**: Automatic migration on first run. The `changes` table is replaced by `item_versions`, and old tables are dropped. Queries referencing `changes` columns will need to be updated to use `versions`.
+- **macOS x86 dropped**: Only Apple Silicon (ARM64) builds are provided for macOS.
+
+### Highlights from v0.3.x
+
+This release includes all features from the v0.3 series:
+- **Access error tracking**: Files with permission issues tracked with amber badge alerts
+- **Web-first architecture**: Terminal UI removed; all features in web UI
+- **Connection pooling**: R2D2 connection pool for improved concurrency
+- **Query pagination**: Explore query tab paginated at 25 rows per page
 
 ## [v0.3.3] - 2025-11-29
 
