@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use directories::ProjectDirs;
 
 use crate::config::{self, MIN_ANALYSIS_THREADS, MAX_ANALYSIS_THREADS};
-use crate::api::scans::AppState;
+use crate::api::state::AppState;
 
 /// Represents a single configuration setting with complete ConfigValue information
 #[derive(Serialize, Deserialize, Debug, Clone)]

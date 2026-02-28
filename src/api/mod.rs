@@ -11,3 +11,5 @@ pub use routes::items;
 pub use routes::database;
 pub use routes::tasks;
 pub use routes::settings;
+pub use routes::state;
+pub use routes::server;

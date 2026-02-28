@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Shutdown button**: Power icon in the header bar initiates graceful server shutdown via `POST /api/server/shutdown`, triggering the same shutdown sequence as Ctrl+C (SIGINT)
+- **Backend unavailable page**: When the backend is unreachable, the frontend shows a "Server Unavailable" page instead of silently falling into the first-run experience; automatically recovers when the backend comes back online
+- **Theme flash prevention**: Dark/light theme is now applied in index.html before React loads, eliminating the flash of wrong theme on page load
+
 ### Fixed
 - Fix SQLite WAL/SHM files not being cleaned up on shutdown by properly closing the connection pool; the pool is now taken out of its global slot during shutdown, a WAL checkpoint is performed, and all connections are closed so SQLite removes the `-wal` and `-shm` files
+- Fix `react-refresh/only-export-components` lint warnings in ScrollContext.tsx by exporting the context object directly instead of aliasing the Provider
 
 ### Changed
 - Upgrade `static_vcruntime` from v2 to v3 and add recommended `+crt-static` rustflag for Windows MSVC builds, ensuring binaries work on machines without the Visual C++ Redistributable installed
+- Move `AppState` from `api/routes/scans.rs` to its own `api/routes/state.rs` module for better separation of concerns
 
 ## [v0.4.0] - 2026-02-28
 

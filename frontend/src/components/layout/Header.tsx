@@ -1,7 +1,9 @@
-import { Moon, Sun } from 'lucide-react'
+import { useState } from 'react'
+import { Moon, Sun, Power } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { useTaskContext } from '@/contexts/TaskContext'
 import { useNavigate } from 'react-router-dom'
+import { ShutdownDialog } from './ShutdownDialog'
 
 function shortenPath(path: string, maxLength = 50): string {
   if (!path || path.length <= maxLength) return path
@@ -14,6 +16,7 @@ export function Header() {
   const { theme, toggleTheme } = useTheme()
   const { activeTask } = useTaskContext()
   const navigate = useNavigate()
+  const [showShutdownDialog, setShowShutdownDialog] = useState(false)
 
   const isRunning = activeTask !== null
   const isError = activeTask?.status === 'error'
@@ -99,7 +102,19 @@ export function Header() {
               <Sun className="h-5 w-5" />
             )}
           </button>
+          <button
+            onClick={() => setShowShutdownDialog(true)}
+            className="rounded-md p-2 hover:bg-muted transition-colors text-muted-foreground hover:text-destructive"
+            title="Shut down server"
+          >
+            <Power className="h-5 w-5" />
+          </button>
         </div>
+
+        <ShutdownDialog
+          open={showShutdownDialog}
+          onOpenChange={setShowShutdownDialog}
+        />
       </div>
     </header>
   )

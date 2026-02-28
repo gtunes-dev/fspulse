@@ -11,7 +11,7 @@ use crate::scans::{HashMode, ValidateMode};
 use crate::task::TaskType;
 use crate::task_manager::TaskManager;
 
-use super::scans::AppState;
+use super::state::AppState;
 
 /// Request structure for scheduling a scan
 #[derive(Debug, Deserialize)]

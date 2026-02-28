@@ -16,6 +16,7 @@ interface TaskContextType {
   pauseUntil: number | null
   lastTaskCompletedAt: number | null
   lastTaskScheduledAt: number | null
+  backendConnected: boolean
   stopTask: (taskId: number) => Promise<void>
   pauseTasks: (durationSeconds: number) => Promise<void>
   unpauseTasks: () => Promise<void>
@@ -35,6 +36,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const [pauseState, setPauseState] = useState<PauseState | null>(null)
   const [lastTaskCompletedAt, setLastTaskCompletedAt] = useState<number | null>(null)
   const [lastTaskScheduledAt, setLastTaskScheduledAt] = useState<number | null>(null)
+  const [backendConnected, setBackendConnected] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
@@ -115,6 +117,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     wsRef.current = ws
 
     ws.onopen = () => {
+      setBackendConnected(true)
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current)
         reconnectTimerRef.current = null
@@ -132,6 +135,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     ws.onerror = (error) => console.error('WebSocket error:', error)
 
     ws.onclose = () => {
+      setBackendConnected(false)
       if (!reconnectTimerRef.current) {
         reconnectTimerRef.current = window.setTimeout(() => {
           reconnectTimerRef.current = null
@@ -185,6 +189,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     pauseUntil,
     lastTaskCompletedAt,
     lastTaskScheduledAt,
+    backendConnected,
     stopTask,
     pauseTasks,
     unpauseTasks,

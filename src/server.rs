@@ -19,9 +19,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Notify};
 
 use crate::api;
 use crate::db::{self, Database};
@@ -59,13 +60,16 @@ impl WebServer {
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
         let shutdown_tx_for_services = shutdown_tx.clone();
 
+        // Create shutdown notify for API-initiated shutdown
+        let shutdown_notify = Arc::new(Notify::new());
+
         // Build the appropriate router
         let (app, ready_flag) = if migration_needed {
             let ready_flag = ReadyFlag::new(false);
-            let app = self.create_maintenance_router(ready_flag.clone())?;
+            let app = self.create_maintenance_router(ready_flag.clone(), shutdown_notify.clone())?;
             (app, Some(ready_flag))
         } else {
-            let app = self.create_router()?;
+            let app = self.create_router(shutdown_notify.clone())?;
             (app, None)
         };
 
@@ -138,15 +142,21 @@ impl WebServer {
             start_app_services(shutdown_tx_for_services)?;
         }
 
-        // Set up graceful shutdown handling
-        let shutdown_signal = shutdown_signal();
-
         log::info!("Server ready to handle requests");
 
         // Start the server with graceful shutdown
         axum::serve(listener, app)
             .with_graceful_shutdown(async move {
-                shutdown_signal.await;
+                // Wait for either an OS signal or an API-initiated shutdown
+                tokio::select! {
+                    _ = shutdown_signal() => {
+                        log::info!("Shutdown via OS signal");
+                    }
+                    _ = shutdown_notify.notified() => {
+                        log::info!("Shutdown via API request");
+                    }
+                }
+
                 log::info!("Shutdown signal received, stopping background tasks...");
                 println!("\nShutdown signal received - stopping server gracefully...");
 
@@ -167,9 +177,9 @@ impl WebServer {
 
     /// Build a router wrapped with maintenance middleware for migration mode.
     /// Includes the SSE endpoint and intercepts all requests until ready.
-    fn create_maintenance_router(&self, ready_flag: ReadyFlag) -> Result<Router, FsPulseError> {
+    fn create_maintenance_router(&self, ready_flag: ReadyFlag, shutdown_notify: Arc<Notify>) -> Result<Router, FsPulseError> {
         let app = self
-            .create_router()?
+            .create_router(shutdown_notify)?
             .route(
                 "/maintenance/events",
                 get(maintenance::migration_events_handler),
@@ -182,13 +192,14 @@ impl WebServer {
         Ok(app)
     }
 
-    fn create_router(&self) -> Result<Router, FsPulseError> {
-        // Create shared application state for scan management
-        let app_state = api::scans::AppState::new();
+    fn create_router(&self, shutdown_notify: Arc<Notify>) -> Result<Router, FsPulseError> {
+        let app_state = api::state::AppState::new(shutdown_notify);
 
         let app = Router::new()
             // Health check
             .route("/health", get(health_check))
+            // Server management
+            .route("/api/server/shutdown", post(api::server::shutdown))
             // App info
             .route("/api/app-info", get(api::app::get_app_info))
             // Home/Dashboard API

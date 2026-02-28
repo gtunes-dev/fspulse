@@ -6,9 +6,7 @@ import type { RefObject } from 'react'
  * Used by virtualized list views to scroll at the page level
  * instead of using their own internal scroll containers.
  */
-const ScrollContext = createContext<HTMLElement | null>(null)
-
-export const ScrollProvider = ScrollContext.Provider
+export const ScrollContext = createContext<HTMLElement | null>(null)
 
 export function useScrollElement(): HTMLElement | null {
   return useContext(ScrollContext)

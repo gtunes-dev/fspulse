@@ -13,16 +13,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-/// Shared application state
-/// TaskManager is now a global singleton, so AppState is empty
-#[derive(Clone)]
-pub struct AppState {}
-
-impl AppState {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
+use super::state::AppState;
 
 /// WebSocket endpoint for streaming task progress
 /// GET /ws/tasks/progress
