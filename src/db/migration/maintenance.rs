@@ -45,7 +45,9 @@ impl ReadyFlag {
 
 /// Axum middleware that intercepts requests during migration.
 ///
-/// - `/health` returns 503 during migration, passes through after.
+/// - `/health` returns 200 during migration (server is up, accepting connections).
+///   This ensures Docker marks the container as healthy so reverse proxies
+///   (e.g. Traefik) route traffic to it — allowing users to see the maintenance page.
 /// - `/maintenance/events` is always passed through (SSE endpoint).
 /// - All other requests return the maintenance HTML page during migration,
 ///   and pass through after migration completes.
@@ -63,9 +65,8 @@ pub async fn maintenance_middleware(
     match path {
         "/maintenance/events" => next.run(request).await,
         "/health" => Response::builder()
-            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "text/plain")
-            .header(header::RETRY_AFTER, "30")
             .body(Body::from("migrating"))
             .unwrap()
             .into_response(),
