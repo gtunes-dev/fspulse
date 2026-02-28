@@ -214,6 +214,14 @@ impl WebServer {
                 "/api/alerts/{alert_id}/status",
                 put(api::alerts::update_alert_status),
             )
+            .route(
+                "/api/alerts/bulk-status",
+                put(api::alerts::bulk_update_alert_status),
+            )
+            .route(
+                "/api/alerts/bulk-status-by-filter",
+                put(api::alerts::bulk_update_alert_status_by_filter),
+            )
             // Task scheduling endpoints
             .route("/api/tasks/scan", post(api::tasks::schedule_scan))
             .route("/api/tasks/compact-database", post(api::tasks::schedule_compact_database))

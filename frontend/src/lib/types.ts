@@ -213,3 +213,21 @@ export interface UpdateAlertStatusRequest {
 export interface UpdateAlertStatusResponse {
   success: boolean
 }
+
+export interface BulkUpdateAlertStatusRequest {
+  alert_ids: number[]
+  status: AlertStatusValue
+}
+
+export interface BulkUpdateAlertStatusByFilterRequest {
+  status: AlertStatusValue
+  status_filter?: string
+  type_filter?: string
+  root_id?: number
+  item_path?: string
+}
+
+export interface BulkUpdateAlertStatusResponse {
+  success: boolean
+  updated_count: number
+}

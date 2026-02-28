@@ -6,7 +6,10 @@ import type {
   ValidateFilterRequest,
   ValidateFilterResponse,
   UpdateAlertStatusRequest,
-  UpdateAlertStatusResponse
+  UpdateAlertStatusResponse,
+  BulkUpdateAlertStatusRequest,
+  BulkUpdateAlertStatusByFilterRequest,
+  BulkUpdateAlertStatusResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -111,6 +114,38 @@ export async function updateAlertStatus(
     body: JSON.stringify(request),
   })
   return handleResponse<UpdateAlertStatusResponse>(response)
+}
+
+/**
+ * Bulk update the status of multiple alerts by their IDs
+ */
+export async function bulkUpdateAlertStatus(
+  request: BulkUpdateAlertStatusRequest
+): Promise<BulkUpdateAlertStatusResponse> {
+  const response = await fetch(`${API_BASE}/alerts/bulk-status`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+  return handleResponse<BulkUpdateAlertStatusResponse>(response)
+}
+
+/**
+ * Bulk update the status of all alerts matching filter criteria
+ */
+export async function bulkUpdateAlertStatusByFilter(
+  request: BulkUpdateAlertStatusByFilterRequest
+): Promise<BulkUpdateAlertStatusResponse> {
+  const response = await fetch(`${API_BASE}/alerts/bulk-status-by-filter`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+  return handleResponse<BulkUpdateAlertStatusResponse>(response)
 }
 
 /**

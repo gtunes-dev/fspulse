@@ -334,6 +334,98 @@ impl Alerts {
 
         Ok(())
     }
+
+    /// Update the status of multiple alerts by their IDs.
+    /// Returns the number of rows updated.
+    pub fn set_bulk_alert_status(
+        conn: &Connection,
+        alert_ids: &[i64],
+        new_status: AlertStatus,
+    ) -> Result<usize, FsPulseError> {
+        if alert_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let placeholders: Vec<&str> = vec!["?"; alert_ids.len()];
+        let sql = format!(
+            "UPDATE alerts SET alert_status = ?, updated_at = strftime('%s', 'now', 'utc') WHERE alert_id IN ({})",
+            placeholders.join(", ")
+        );
+
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(alert_ids.len() + 1);
+        params.push(Box::new(new_status.as_i64()));
+        for id in alert_ids {
+            params.push(Box::new(*id));
+        }
+
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| &**p).collect();
+        let updated = conn.execute(&sql, param_refs.as_slice())?;
+
+        Ok(updated)
+    }
+
+    /// Update the status of all alerts matching the given filter criteria.
+    /// Returns the number of rows updated.
+    pub fn set_filtered_alert_status(
+        conn: &Connection,
+        new_status: AlertStatus,
+        status_filter: Option<&str>,
+        type_filter: Option<&str>,
+        root_id: Option<i64>,
+        item_path: Option<&str>,
+    ) -> Result<usize, FsPulseError> {
+        let mut conditions = Vec::new();
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        // new_status is always the first param (for SET clause)
+        params.push(Box::new(new_status.as_i64()));
+
+        if let Some(status) = status_filter {
+            let status_val = AlertStatus::from_string(status)
+                .ok_or_else(|| FsPulseError::Error(format!("Invalid alert status filter: '{status}'")))?;
+            conditions.push("alerts.alert_status = ?".to_string());
+            params.push(Box::new(status_val.as_i64()));
+        }
+
+        if let Some(atype) = type_filter {
+            let type_val = AlertType::from_string(atype)
+                .ok_or_else(|| FsPulseError::Error(format!("Invalid alert type filter: '{atype}'")))?;
+            conditions.push("alerts.alert_type = ?".to_string());
+            params.push(Box::new(type_val.as_i64()));
+        }
+
+        if let Some(rid) = root_id {
+            conditions.push("items.root_id = ?".to_string());
+            params.push(Box::new(rid));
+        }
+
+        if let Some(path) = item_path {
+            conditions.push("items.item_path LIKE ?".to_string());
+            params.push(Box::new(format!("%{path}%")));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!(
+            r#"UPDATE alerts
+            SET alert_status = ?, updated_at = strftime('%s', 'now', 'utc')
+            WHERE alert_id IN (
+                SELECT alerts.alert_id
+                FROM alerts
+                JOIN items ON alerts.item_id = items.item_id
+                {where_clause}
+            )"#,
+        );
+
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| &**p).collect();
+        let updated = conn.execute(&sql, param_refs.as_slice())?;
+
+        Ok(updated)
+    }
 }
 
 #[cfg(test)]

@@ -1,10 +1,19 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Info } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { Info, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { RootCard } from '@/components/shared/RootCard'
 import { ItemDetailSheet } from '@/components/shared/ItemDetailSheet'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -20,9 +29,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { updateAlertStatus, fetchMetadata, fetchQuery } from '@/lib/api'
+import {
+  updateAlertStatus,
+  bulkUpdateAlertStatus,
+  bulkUpdateAlertStatusByFilter,
+  fetchMetadata,
+  fetchQuery,
+} from '@/lib/api'
 import { formatTimeAgo } from '@/lib/dateUtils'
-import type { AlertStatusValue, AlertTypeValue, ColumnState, ColumnSpec } from '@/lib/types'
+import type { AlertStatusValue, AlertTypeValue, ColumnState, ColumnSpec, FilterSpec } from '@/lib/types'
 
 interface Root {
   root_id: number
@@ -46,6 +61,26 @@ interface AlertRow {
 
 const ITEMS_PER_PAGE = 25
 
+const STATUS_LABELS: Record<string, string> = {
+  'all': 'All Status',
+  'O': 'Open',
+  'F': 'Flagged',
+  'D': 'Dismissed',
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  'all': 'All Types',
+  'H': 'Suspicious Hash',
+  'I': 'Invalid Item',
+  'A': 'Access Denied',
+}
+
+const ACTION_LABELS: Record<AlertStatusValue, string> = {
+  'D': 'Dismiss',
+  'F': 'Flag',
+  'O': 'Open',
+}
+
 export function AlertsPage() {
   const [selectedRootId, setSelectedRootId] = useState<string>('all')
   const [roots, setRoots] = useState<Root[]>([])
@@ -54,17 +89,66 @@ export function AlertsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('O') // Default to "Open"
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [pathSearch, setPathSearch] = useState('')
+  const [debouncedPathSearch, setDebouncedPathSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [totalCount, setTotalCount] = useState(0)
-  const [searchDebounce, setSearchDebounce] = useState<number | null>(null)
+  const searchDebounceRef = useRef<number | null>(null)
   const [updatingAlertId, setUpdatingAlertId] = useState<number | null>(null)
   const [selectedItem, setSelectedItem] = useState<{ itemId: number; itemPath: string; rootId: number; scanId: number } | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
 
+  // Selection state — just a set of checked alert IDs
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkUpdating, setBulkUpdating] = useState(false)
+
+  // Confirmation dialog state (for "All matching" bulk actions)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    status: AlertStatusValue
+  }>({ open: false, status: 'D' })
+
   // Track last filter key to avoid redundant count queries
   const lastFilterKeyRef = useRef<string>('')
+
+  // Build the current filters array
+  const buildFilters = useCallback((): FilterSpec[] => {
+    const filters: FilterSpec[] = []
+    if (selectedRootId !== 'all') {
+      filters.push({ column: 'root_id', value: selectedRootId })
+    }
+    if (statusFilter && statusFilter !== 'all') {
+      filters.push({ column: 'alert_status', value: statusFilter })
+    }
+    if (typeFilter && typeFilter !== 'all') {
+      filters.push({ column: 'alert_type', value: typeFilter })
+    }
+    if (debouncedPathSearch.trim()) {
+      filters.push({ column: 'item_path', value: `'${debouncedPathSearch.trim()}'` })
+    }
+    return filters
+  }, [selectedRootId, statusFilter, typeFilter, debouncedPathSearch])
+
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [statusFilter, typeFilter, debouncedPathSearch, selectedRootId])
+
+  // Compute header checkbox state
+  const pageAlertIds = useMemo(() => alerts.map(a => a.alert_id), [alerts])
+
+  const headerCheckboxState = useMemo((): boolean | 'indeterminate' => {
+    if (alerts.length === 0) return false
+    const selectedOnPage = pageAlertIds.filter(id => selectedIds.has(id))
+    if (selectedOnPage.length === 0) return false
+    if (selectedOnPage.length === pageAlertIds.length) return true
+    return 'indeterminate'
+  }, [alerts, pageAlertIds, selectedIds])
+
+  const allOnPageSelected = useMemo(() => {
+    return alerts.length > 0 && pageAlertIds.every(id => selectedIds.has(id))
+  }, [alerts, pageAlertIds, selectedIds])
 
   // Load roots on mount
   useEffect(() => {
@@ -142,28 +226,7 @@ export function AlertsPage() {
       setLoading(true)
       setError(null)
 
-      // Build filters array
-      const filters: Array<{ column: string; value: string }> = []
-
-      // Add root filter if not "all"
-      if (selectedRootId !== 'all') {
-        filters.push({ column: 'root_id', value: selectedRootId })
-      }
-
-      // Add status filter
-      if (statusFilter && statusFilter !== 'all') {
-        filters.push({ column: 'alert_status', value: statusFilter })
-      }
-
-      // Add type filter
-      if (typeFilter && typeFilter !== 'all') {
-        filters.push({ column: 'alert_type', value: typeFilter })
-      }
-
-      // Add path search
-      if (pathSearch.trim()) {
-        filters.push({ column: 'item_path', value: `'${pathSearch.trim()}'` })
-      }
+      const filters = buildFilters()
 
       // Build filter key to detect when filters change
       const filterKey = JSON.stringify(filters)
@@ -215,11 +278,10 @@ export function AlertsPage() {
       const fetchData = await fetchResponse.json()
 
       // Build index map from the columns WE sent (which include format specifiers like @name)
-      // This way we can distinguish between item_path and item_path@name
       const sortedCols = columns.filter(c => c.visible).sort((a, b) => a.position - b.position)
       const colIndexMap: Record<string, number> = {}
       sortedCols.forEach((col, idx) => {
-        colIndexMap[col.name] = idx  // Uses full name like "item_path@name"
+        colIndexMap[col.name] = idx
       })
 
       // Map response to AlertRow format
@@ -247,7 +309,7 @@ export function AlertsPage() {
     } finally {
       setLoading(false)
     }
-  }, [columns, selectedRootId, statusFilter, typeFilter, pathSearch, currentPage])
+  }, [columns, buildFilters, currentPage])
 
   // Load alerts when filters or page changes
   useEffect(() => {
@@ -257,37 +319,120 @@ export function AlertsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [statusFilter, typeFilter, pathSearch, selectedRootId])
+  }, [statusFilter, typeFilter, debouncedPathSearch, selectedRootId])
 
-  // Debounce path search
   const handlePathSearchChange = (value: string) => {
     setPathSearch(value)
-    if (searchDebounce) {
-      clearTimeout(searchDebounce)
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current)
     }
-    const timeout = setTimeout(() => {
-      // Trigger reload via useEffect
+    searchDebounceRef.current = window.setTimeout(() => {
+      setDebouncedPathSearch(value)
     }, 500)
-    setSearchDebounce(timeout)
   }
 
   const handleStatusUpdate = async (alertId: number, newStatus: AlertStatusValue) => {
     setUpdatingAlertId(alertId)
     try {
       await updateAlertStatus(alertId, { status: newStatus })
-      // Update local state
-      setAlerts((prev) =>
-        prev.map((alert) =>
-          alert.alert_id === alertId ? { ...alert, alert_status: newStatus } : alert
-        )
-      )
+      // Remove from selection since the user handled this alert individually
+      if (selectedIds.has(alertId)) {
+        setSelectedIds(prev => {
+          const next = new Set(prev)
+          next.delete(alertId)
+          return next
+        })
+      }
+      // Re-query so the view stays consistent with active filters
+      lastFilterKeyRef.current = '' // Force count refresh
+      await loadAlerts()
     } catch (err) {
       console.error('Error updating alert status:', err)
       alert('Failed to update alert status. Please try again.')
-      // Reload to reset
       loadAlerts()
     } finally {
       setUpdatingAlertId(null)
+    }
+  }
+
+  // Selection handlers
+  const handleHeaderCheckboxChange = () => {
+    if (allOnPageSelected) {
+      // Deselect all on this page (keep cross-page selections)
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        pageAlertIds.forEach(id => next.delete(id))
+        return next
+      })
+    } else {
+      // Select all on page
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        pageAlertIds.forEach(id => next.add(id))
+        return next
+      })
+    }
+  }
+
+  const handleRowCheckboxChange = (alertId: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(alertId)) {
+        next.delete(alertId)
+      } else {
+        next.add(alertId)
+      }
+      return next
+    })
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+  }
+
+  // Bulk action on checked IDs
+  const handleBulkAction = async (newStatus: AlertStatusValue) => {
+    setBulkUpdating(true)
+    try {
+      await bulkUpdateAlertStatus({
+        alert_ids: Array.from(selectedIds),
+        status: newStatus,
+      })
+      clearSelection()
+      lastFilterKeyRef.current = '' // Force count refresh
+      await loadAlerts()
+    } catch (err) {
+      console.error('Error bulk updating alerts:', err)
+      alert('Failed to update alerts. Please try again.')
+    } finally {
+      setBulkUpdating(false)
+    }
+  }
+
+  // "All matching" action → confirmation dialog → filter-based action
+  const handleAllMatchingAction = (newStatus: AlertStatusValue) => {
+    setConfirmDialog({ open: true, status: newStatus })
+  }
+
+  const handleConfirmBulkAction = async () => {
+    setBulkUpdating(true)
+    try {
+      await bulkUpdateAlertStatusByFilter({
+        status: confirmDialog.status,
+        status_filter: statusFilter !== 'all' ? statusFilter : undefined,
+        type_filter: typeFilter !== 'all' ? typeFilter : undefined,
+        root_id: selectedRootId !== 'all' ? Number(selectedRootId) : undefined,
+        item_path: debouncedPathSearch.trim() || undefined,
+      })
+      setConfirmDialog({ open: false, status: 'D' })
+      clearSelection()
+      lastFilterKeyRef.current = '' // Force count refresh
+      await loadAlerts()
+    } catch (err) {
+      console.error('Error bulk updating alerts by filter:', err)
+      alert('Failed to update alerts. Please try again.')
+    } finally {
+      setBulkUpdating(false)
     }
   }
 
@@ -302,25 +447,43 @@ export function AlertsPage() {
     }
   }
 
-  const getAlertDetails = (alert: AlertRow) => {
-    switch (alert.alert_type) {
+  const getAlertDetails = (alertRow: AlertRow) => {
+    switch (alertRow.alert_type) {
       case 'H':
         return (
           <div className="text-xs space-y-1">
             <div>Hash changed</div>
-            <div className="font-mono text-muted-foreground">Old: {alert.hash_old || 'N/A'}</div>
-            <div className="font-mono text-muted-foreground">New: {alert.hash_new || 'N/A'}</div>
+            <div className="font-mono text-muted-foreground">Old: {alertRow.hash_old || 'N/A'}</div>
+            <div className="font-mono text-muted-foreground">New: {alertRow.hash_new || 'N/A'}</div>
           </div>
         )
       case 'I':
-        return <div className="text-xs">{alert.val_error || 'Validation error'}</div>
+        return <div className="text-xs">{alertRow.val_error || 'Validation error'}</div>
       case 'A':
         return <div className="text-xs">File could not be read</div>
     }
   }
 
+  // Build filter summary for confirmation dialog
+  const getFilterSummary = () => {
+    const items: string[] = []
+    items.push(`Status: ${STATUS_LABELS[statusFilter] || statusFilter}`)
+    items.push(`Type: ${TYPE_LABELS[typeFilter] || typeFilter}`)
+    if (selectedRootId !== 'all') {
+      const root = roots.find(r => r.root_id === parseInt(selectedRootId))
+      items.push(`Root: ${root?.root_path || selectedRootId}`)
+    } else {
+      items.push('Root: All Roots')
+    }
+    if (debouncedPathSearch.trim()) {
+      items.push(`Path contains: "${debouncedPathSearch.trim()}"`)
+    }
+    return items
+  }
+
   const start = (currentPage - 1) * ITEMS_PER_PAGE + 1
   const end = Math.min(start + ITEMS_PER_PAGE - 1, totalCount)
+  const colSpan = 9 // checkbox + 8 data columns
 
   if (loading && roots.length === 0) {
     return (
@@ -379,12 +542,78 @@ export function AlertsPage() {
             </>
           }
         >
+          {/* Status Action Bar — always visible, scope adapts to selection state */}
+          <div className="bg-muted/50 border border-border rounded-lg px-4 py-3">
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium">
+                {selectedIds.size > 0
+                  ? `${selectedIds.size.toLocaleString()} Selected`
+                  : `${totalCount.toLocaleString()} Matching Alerts`
+                }
+              </span>
+              <div className="h-5 w-px bg-border" />
+              {selectedIds.size > 0 ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Button onClick={() => handleBulkAction('D')} disabled={bulkUpdating}>
+                      Dismiss
+                    </Button>
+                    <Button onClick={() => handleBulkAction('F')} disabled={bulkUpdating}>
+                      Flag
+                    </Button>
+                    <Button onClick={() => handleBulkAction('O')} disabled={bulkUpdating}>
+                      Open
+                    </Button>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    onClick={clearSelection}
+                    disabled={bulkUpdating}
+                    className="text-muted-foreground"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => handleAllMatchingAction('D')}
+                    disabled={totalCount === 0 || bulkUpdating}
+                  >
+                    Dismiss All
+                  </Button>
+                  <Button
+                    onClick={() => handleAllMatchingAction('F')}
+                    disabled={totalCount === 0 || bulkUpdating}
+                  >
+                    Flag All
+                  </Button>
+                  <Button
+                    onClick={() => handleAllMatchingAction('O')}
+                    disabled={totalCount === 0 || bulkUpdating}
+                  >
+                    Open All
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Bordered Table */}
           <div className="border border-border rounded-lg">
             <div className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="bg-muted w-[40px] text-center">
+                      <Checkbox
+                        checked={headerCheckboxState}
+                        onCheckedChange={handleHeaderCheckboxChange}
+                        disabled={loading || alerts.length === 0}
+                        aria-label="Select all alerts on this page"
+                      />
+                    </TableHead>
                     <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[120px]">Status</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[180px]">Alert Type</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide bg-muted text-center w-[80px]">Root ID</TableHead>
@@ -398,30 +627,37 @@ export function AlertsPage() {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground">
                         Loading...
                       </TableCell>
                     </TableRow>
                   ) : error ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-red-600">
+                      <TableCell colSpan={colSpan} className="text-center py-8 text-red-600">
                         {error}
                       </TableCell>
                     </TableRow>
                   ) : alerts.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground">
                         No alerts found.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    alerts.map((alert) => (
-                      <TableRow key={alert.alert_id}>
+                    alerts.map((alertRow) => (
+                      <TableRow key={alertRow.alert_id}>
+                        <TableCell className="text-center">
+                          <Checkbox
+                            checked={selectedIds.has(alertRow.alert_id)}
+                            onCheckedChange={() => handleRowCheckboxChange(alertRow.alert_id)}
+                            aria-label={`Select alert ${alertRow.alert_id}`}
+                          />
+                        </TableCell>
                         <TableCell>
                           <Select
-                            value={alert.alert_status}
-                            onValueChange={(value) => handleStatusUpdate(alert.alert_id, value as AlertStatusValue)}
-                            disabled={updatingAlertId === alert.alert_id}
+                            value={alertRow.alert_status}
+                            onValueChange={(value) => handleStatusUpdate(alertRow.alert_id, value as AlertStatusValue)}
+                            disabled={updatingAlertId === alertRow.alert_id}
                           >
                             <SelectTrigger className="w-[110px]">
                               <SelectValue />
@@ -433,28 +669,28 @@ export function AlertsPage() {
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell className="text-center">{getAlertTypeBadge(alert.alert_type)}</TableCell>
-                        <TableCell className="text-center text-muted-foreground">{alert.root_id}</TableCell>
-                        <TableCell className="text-center text-muted-foreground">{alert.item_id}</TableCell>
-                        <TableCell className="text-center text-muted-foreground">{alert.scan_id}</TableCell>
+                        <TableCell className="text-center">{getAlertTypeBadge(alertRow.alert_type)}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{alertRow.root_id}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{alertRow.item_id}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{alertRow.scan_id}</TableCell>
                         <TableCell>
                           <div
                             className="group flex items-center gap-2 cursor-pointer hover:bg-accent/50 -mx-2 px-2 py-1 rounded transition-colors"
                             onClick={() => {
-                              setSelectedItem({ itemId: alert.item_id, itemPath: alert.item_path, rootId: alert.root_id, scanId: alert.scan_id })
+                              setSelectedItem({ itemId: alertRow.item_id, itemPath: alertRow.item_path, rootId: alertRow.root_id, scanId: alertRow.scan_id })
                               setSheetOpen(true)
                             }}
-                            title={alert.item_path}
+                            title={alertRow.item_path}
                           >
                             <Info className="h-5 w-5 flex-shrink-0 text-muted-foreground group-hover:text-primary transition-colors translate-y-[0.5px]" />
                             <span className="font-mono text-sm group-hover:text-foreground group-hover:underline transition-colors truncate">
-                              {alert.item_name}
+                              {alertRow.item_name}
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell>{getAlertDetails(alert)}</TableCell>
+                        <TableCell>{getAlertDetails(alertRow)}</TableCell>
                         <TableCell className="text-center text-sm text-muted-foreground">
-                          {formatTimeAgo(alert.created_at)}
+                          {formatTimeAgo(alertRow.created_at)}
                         </TableCell>
                       </TableRow>
                     ))
@@ -503,6 +739,44 @@ export function AlertsPage() {
             onOpenChange={setSheetOpen}
           />
         )}
+
+        {/* Confirmation Dialog for Actions dropdown (filter-based bulk actions) */}
+        <Dialog
+          open={confirmDialog.open}
+          onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {ACTION_LABELS[confirmDialog.status]} All Matching Alerts?
+              </DialogTitle>
+              <DialogDescription>
+                This will {ACTION_LABELS[confirmDialog.status].toLowerCase()} {totalCount.toLocaleString()} alerts
+                matching your current filters:
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 py-2">
+              {getFilterSummary().map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
+                disabled={bulkUpdating}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleConfirmBulkAction} disabled={bulkUpdating}>
+                {bulkUpdating
+                  ? 'Updating...'
+                  : `${ACTION_LABELS[confirmDialog.status]} ${totalCount.toLocaleString()}`
+                }
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
