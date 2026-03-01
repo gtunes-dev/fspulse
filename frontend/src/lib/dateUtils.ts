@@ -113,6 +113,21 @@ export function formatTime(timestampSeconds: number): string {
 }
 
 /**
+ * Format timestamp as short date + time: "Feb 18, 2:30 PM"
+ * Used for: Scan History table "Started" column
+ */
+export function formatDateTimeShort(timestampSeconds: number): string {
+  const date = new Date(timestampSeconds * 1000)
+  return date.toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/**
  * Format timestamp as compact date: "d MMM yyyy" (e.g. "1 Dec 2024")
  * Used for: Scan references throughout the UI
  */

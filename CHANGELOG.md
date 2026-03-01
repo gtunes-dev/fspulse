@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Scan History deep links**: Added a "Scan" column to the Scan History table on the Scans page with clickable links (e.g., "Scan #42") that navigate directly to the Browse page with the correct root and scan pre-selected
+- **Scan History date formatting**: The "Started" column in the Scan History table now shows a readable date+time with day of week (e.g., "Fri, Feb 28, 2:30 PM") instead of relative time
+
+### Changed
+- Rename Scans page title from "Scan History" to "Scans" for consistency with sidebar navigation
+
 ## [v0.4.1] - 2026-02-28
 
 ### Added

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatTimeAgo } from '@/lib/dateUtils'
+import { formatDateTimeShort } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import { CheckCircle, XCircle, AlertTriangle, Calendar, Play } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
@@ -311,6 +312,7 @@ export function ScanHistoryTable() {
               <TableHeader className="bg-muted">
                 <TableRow>
                   <TableHead className="uppercase text-xs tracking-wide">Started</TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide">Scan</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide w-[120px]">Duration</TableHead>
@@ -322,7 +324,15 @@ export function ScanHistoryTable() {
                 {scans.map((scan) => (
                   <TableRow key={scan.scan_id}>
                     <TableCell className="font-medium">
-                      {formatTimeAgo(scan.started_at)}
+                      {formatDateTimeShort(scan.started_at)}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        to={`/browse?root_id=${scan.root_id}&scan_id=${scan.scan_id}`}
+                        className="hover:underline hover:text-primary"
+                      >
+                        Scan #{scan.scan_id}
+                      </Link>
                     </TableCell>
                     <TableCell
                       className="max-w-[200px] truncate"
