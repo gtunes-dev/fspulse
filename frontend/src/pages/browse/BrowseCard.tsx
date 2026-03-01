@@ -31,9 +31,10 @@ interface SelectedItem {
 interface BrowseCardProps {
   roots: Root[]
   defaultRootId?: string
+  defaultScanId?: number
 }
 
-export function BrowseCard({ roots, defaultRootId }: BrowseCardProps) {
+export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardProps) {
   const [selectedRootId, setSelectedRootId] = useState<string>(defaultRootId ?? '')
   const [resolvedScanId, setResolvedScanId] = useState<number | null>(null)
   const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
@@ -280,6 +281,7 @@ export function BrowseCard({ roots, defaultRootId }: BrowseCardProps) {
         {selectedRoot && (
           <CompactScanBar
             rootId={selectedRoot.root_id}
+            initialScanId={defaultScanId}
             onScanResolved={handleScanResolved}
             onNoScan={handleNoScan}
           />

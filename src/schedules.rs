@@ -1360,7 +1360,8 @@ impl TaskEntry {
                 t.source,
                 t.status,
                 t.started_at,
-                t.completed_at
+                t.completed_at,
+                t.task_state
              FROM tasks t
              LEFT JOIN roots r ON t.root_id = r.root_id
              LEFT JOIN scan_schedules s ON t.schedule_id = s.schedule_id
@@ -1376,7 +1377,6 @@ impl TaskEntry {
             .query_map(rusqlite::params![limit, offset], |row| {
                 let source: i32 = row.get(5)?;
                 let status: i64 = row.get(6)?;
-
                 Ok(TaskHistoryRow {
                     task_id: row.get(0)?,
                     task_type: TaskType::from_i64(row.get(1)?),
@@ -1393,6 +1393,7 @@ impl TaskEntry {
                     status: TaskStatus::from_i64(status),
                     started_at: row.get(7)?,
                     completed_at: row.get(8)?,
+                    task_state: row.get(9)?,
                 })
             })
             .map_err(FsPulseError::DatabaseError)?
@@ -1488,8 +1489,8 @@ pub struct UpcomingTask {
     pub status: i64,     // TaskStatus as integer (0=Pending, 1=Running)
 }
 
-/// A completed task for history display
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A completed task for history display (internal — mapped to API response type before serialization)
+#[derive(Debug, Clone)]
 pub struct TaskHistoryRow {
     pub task_id: i64,
     pub task_type: TaskType,
@@ -1500,6 +1501,8 @@ pub struct TaskHistoryRow {
     pub status: TaskStatus,
     pub started_at: Option<i64>,
     pub completed_at: Option<i64>,
+    /// Opaque task state JSON blob — interpretation is task-type-specific
+    pub task_state: Option<String>,
 }
 
 /// Schedule with root path and next scan time

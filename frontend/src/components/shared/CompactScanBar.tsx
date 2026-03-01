@@ -14,6 +14,7 @@ import type { DayButton } from 'react-day-picker'
 
 interface CompactScanBarProps {
   rootId: number
+  initialScanId?: number
   onScanResolved: (scanId: number, startedAt: number) => void
   onNoScan: () => void
 }
@@ -34,8 +35,8 @@ function formatChanges(add: number | null, modify: number | null, del: number | 
   return parts.length > 0 ? parts.join(', ') : 'no changes'
 }
 
-export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScanBarProps) {
-  const [pickerOpen, setPickerOpen] = useState(true)
+export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan }: CompactScanBarProps) {
+  const [pickerOpen, setPickerOpen] = useState(!initialScanId)
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
 
   // Calendar scan date highlighting
@@ -191,14 +192,60 @@ export function CompactScanBar({ rootId, onScanResolved, onNoScan }: CompactScan
     }
   }, [rootId, onScanResolved, onNoScan, fetchScanDates, fetchScansForDate])
 
+  // ── Jump to a specific scan by ID ──────────────────────────────────
+  const jumpToScan = useCallback(async (scanId: number) => {
+    const currentId = ++resolveIdRef.current
+    setResolving(true)
+
+    try {
+      const params = new URLSearchParams({ scan_id: scanId.toString() })
+      const response = await fetch(`/api/scans/resolve?${params}`)
+
+      if (currentId !== resolveIdRef.current) return
+
+      if (response.ok) {
+        const data = (await response.json()) as { scan_id: number; started_at: number }
+        const scanDate = new Date(data.started_at * 1000)
+
+        setDisplayMonth(new Date(scanDate.getFullYear(), scanDate.getMonth(), 1))
+        setSelectedDate(new Date(scanDate.getFullYear(), scanDate.getMonth(), scanDate.getDate()))
+
+        setResolvedScanId(data.scan_id)
+        setResolvedStartedAt(data.started_at)
+        setIsFallback(false)
+        onScanResolved(data.scan_id, data.started_at)
+
+        const monthDate = new Date(scanDate.getFullYear(), scanDate.getMonth(), 1)
+        fetchScanDates(monthDate)
+        const dayDate = new Date(scanDate.getFullYear(), scanDate.getMonth(), scanDate.getDate())
+        fetchScansForDate(dayDate, data.scan_id)
+      } else {
+        // Scan not found, fall back to latest
+        jumpToLatest()
+      }
+    } catch {
+      if (currentId !== resolveIdRef.current) return
+      jumpToLatest()
+    } finally {
+      if (currentId === resolveIdRef.current) {
+        setResolving(false)
+      }
+    }
+  }, [onScanResolved, fetchScanDates, fetchScansForDate, jumpToLatest])
+
   // ── Initialize on mount / rootId change ────────────────────────────
   useEffect(() => {
     setScanDates(new Set())
     setDateScans([])
     setSelectedDate(undefined)
     setIsFallback(false)
-    jumpToLatest()
-  }, [rootId, jumpToLatest])
+    if (initialScanId) {
+      jumpToScan(initialScanId)
+    } else {
+      jumpToLatest()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootId])
 
   // ── Fetch scan dates when calendar month changes ───────────────────
   useEffect(() => {

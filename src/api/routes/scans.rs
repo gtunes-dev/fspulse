@@ -332,8 +332,9 @@ pub async fn get_scans_by_date(
 /// Query parameters for scan resolution
 #[derive(Debug, Deserialize)]
 pub struct ResolveScanParams {
-    pub root_id: i64,
-    pub date: Option<String>, // "YYYY-MM-DD", omit for latest
+    pub root_id: Option<i64>,
+    pub date: Option<String>,    // "YYYY-MM-DD", omit for latest
+    pub scan_id: Option<i64>,    // Look up a specific scan by ID
 }
 
 /// Response structure for resolved scan
@@ -344,12 +345,44 @@ pub struct ResolvedScanResponse {
 }
 
 /// GET /api/scans/resolve?root_id=X&date=YYYY-MM-DD
-/// Resolves a date to the most recent completed scan for a root at or before that date.
-/// If date is omitted, returns the latest completed scan.
+/// GET /api/scans/resolve?scan_id=Y
+/// Resolves to a scan. If scan_id is provided, looks up that scan directly.
+/// Otherwise requires root_id and optionally date to find the most recent completed scan.
 pub async fn resolve_scan(
     Query(params): Query<ResolveScanParams>,
 ) -> Result<Json<ResolvedScanResponse>, (StatusCode, String)> {
-    match Scan::resolve_scan_for_date(params.root_id, params.date.as_deref()) {
+    // If scan_id is provided, look up that specific scan
+    if let Some(scan_id) = params.scan_id {
+        let conn = Database::get_connection().map_err(|e| {
+            error!("Database error: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        })?;
+
+        return match Scan::get_by_id_or_latest(&conn, Some(scan_id), None) {
+            Ok(Some(scan)) => Ok(Json(ResolvedScanResponse {
+                scan_id: scan.scan_id(),
+                started_at: scan.started_at(),
+            })),
+            Ok(None) => Err((
+                StatusCode::NOT_FOUND,
+                format!("Scan {} not found", scan_id),
+            )),
+            Err(e) => {
+                error!("Failed to resolve scan_id={}: {}", scan_id, e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to resolve scan: {}", e),
+                ))
+            }
+        };
+    }
+
+    // Otherwise, resolve by root_id (required) and optional date
+    let root_id = params.root_id.ok_or_else(|| {
+        (StatusCode::BAD_REQUEST, "root_id or scan_id is required".to_string())
+    })?;
+
+    match Scan::resolve_scan_for_date(root_id, params.date.as_deref()) {
         Ok(Some((scan_id, started_at))) => Ok(Json(ResolvedScanResponse {
             scan_id,
             started_at,
@@ -361,7 +394,7 @@ pub async fn resolve_scan(
         Err(e) => {
             error!(
                 "Failed to resolve scan for root_id={}, date={:?}: {}",
-                params.root_id, params.date, e
+                root_id, params.date, e
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,

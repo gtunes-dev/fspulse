@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,6 +26,7 @@ interface TaskHistoryRow {
   status: string          // "completed", "stopped", "error"
   started_at: number | null
   completed_at: number | null
+  scan_id: number | null
 }
 
 const ITEMS_PER_PAGE = 25
@@ -252,7 +254,7 @@ export function TaskHistoryTable() {
               <TableHeader className="bg-muted">
                 <TableRow>
                   <TableHead className="uppercase text-xs tracking-wide">Started</TableHead>
-                  <TableHead className="uppercase text-xs tracking-wide">Type</TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide">Task</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide w-[120px]">Duration</TableHead>
                   <TableHead className="text-right uppercase text-xs tracking-wide">Status</TableHead>
@@ -265,7 +267,16 @@ export function TaskHistoryTable() {
                       {task.started_at ? formatTimeAgo(task.started_at) : '-'}
                     </TableCell>
                     <TableCell>
-                      {taskTypeDisplayName(task.task_type)}
+                      {task.task_type === 'scan' && task.scan_id != null && task.root_id != null ? (
+                        <Link
+                          to={`/browse?root_id=${task.root_id}&scan_id=${task.scan_id}`}
+                          className="hover:underline hover:text-primary"
+                        >
+                          Scan #{task.scan_id}
+                        </Link>
+                      ) : (
+                        taskTypeDisplayName(task.task_type)
+                      )}
                     </TableCell>
                     <TableCell
                       className="max-w-[200px] truncate"

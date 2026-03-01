@@ -6,9 +6,9 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::db::Database;
-use crate::schedules::{TaskEntry, TaskHistoryRow};
+use crate::schedules::{SourceType, TaskEntry};
 use crate::scans::{HashMode, ValidateMode};
-use crate::task::TaskType;
+use crate::task::{ScanTaskState, TaskStatus, TaskType};
 use crate::task_manager::TaskManager;
 
 use super::state::AppState;
@@ -105,10 +105,27 @@ pub struct TaskHistoryFetchParams {
     pub offset: i64,
 }
 
+/// A task history row enriched with task-type-specific fields for the API response.
+/// Decouples the API shape from the internal `TaskHistoryRow` (which carries an opaque task_state blob).
+#[derive(Debug, Serialize)]
+pub struct TaskHistoryResponseRow {
+    pub task_id: i64,
+    pub task_type: TaskType,
+    pub root_id: Option<i64>,
+    pub root_path: Option<String>,
+    pub schedule_name: Option<String>,
+    pub source: SourceType,
+    pub status: TaskStatus,
+    pub started_at: Option<i64>,
+    pub completed_at: Option<i64>,
+    /// Extracted from task_state for scan tasks; None for other task types
+    pub scan_id: Option<i64>,
+}
+
 /// Response structure for task history fetch
 #[derive(Debug, Serialize)]
 pub struct TaskHistoryFetchResponse {
-    pub tasks: Vec<TaskHistoryRow>,
+    pub tasks: Vec<TaskHistoryResponseRow>,
 }
 
 /// GET /api/tasks/history/count?task_type=0
@@ -135,11 +152,38 @@ pub async fn get_task_history_fetch(
 ) -> Result<Json<TaskHistoryFetchResponse>, StatusCode> {
     let task_type = params.task_type.map(TaskType::from_i64);
 
-    let tasks = TaskEntry::get_task_history(task_type, params.limit, params.offset)
+    let rows = TaskEntry::get_task_history(task_type, params.limit, params.offset)
         .map_err(|e| {
             error!("Failed to get task history: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    // Enrich rows with task-type-specific fields extracted from the opaque task_state
+    let tasks = rows
+        .into_iter()
+        .map(|row| {
+            let scan_id = if row.task_type == TaskType::Scan {
+                ScanTaskState::from_task_state(row.task_state.as_deref())
+                    .ok()
+                    .and_then(|s| s.scan_id)
+            } else {
+                None
+            };
+
+            TaskHistoryResponseRow {
+                task_id: row.task_id,
+                task_type: row.task_type,
+                root_id: row.root_id,
+                root_path: row.root_path,
+                schedule_name: row.schedule_name,
+                source: row.source,
+                status: row.status,
+                started_at: row.started_at,
+                completed_at: row.completed_at,
+                scan_id,
+            }
+        })
+        .collect();
 
     Ok(Json(TaskHistoryFetchResponse { tasks }))
 }
