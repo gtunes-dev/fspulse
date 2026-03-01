@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-02-28
+
 ### Added
 - **Shutdown button**: Power icon in the header bar initiates graceful server shutdown via `POST /api/server/shutdown`, triggering the same shutdown sequence as Ctrl+C (SIGINT)
 - **Backend unavailable page**: When the backend is unreachable, the frontend shows a "Server Unavailable" page instead of silently falling into the first-run experience; automatically recovers when the backend comes back online
