@@ -137,8 +137,20 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     ws.onclose = () => {
       setBackendConnected(false)
       if (!reconnectTimerRef.current) {
-        reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = window.setTimeout(async () => {
           reconnectTimerRef.current = null
+          // Check if the server is migrating before attempting WebSocket reconnect.
+          // During migration, the maintenance middleware intercepts WebSocket upgrades,
+          // so we navigate to let the browser load the server's maintenance page instead.
+          try {
+            const resp = await fetch('/health')
+            if (resp.ok && (await resp.text()) === 'migrating') {
+              window.location.href = '/'
+              return
+            }
+          } catch {
+            // Server unreachable — fall through to WebSocket reconnect
+          }
           connectWebSocket()
         }, 2000)
       }
