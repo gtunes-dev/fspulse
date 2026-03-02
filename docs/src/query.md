@@ -57,6 +57,13 @@ Each domain has a set of available columns. Columns marked as **default** are sh
 | `add_count`     | Integer         | Yes     | Number of items added in the scan              |
 | `modify_count`  | Integer         | Yes     | Number of items modified in the scan           |
 | `delete_count`  | Integer         | Yes     | Number of items deleted in the scan            |
+| `val_unknown_count` | Integer     | No      | Files with unknown validation state            |
+| `val_valid_count` | Integer       | No      | Files with valid validation state              |
+| `val_invalid_count` | Integer     | No      | Files with invalid validation state            |
+| `val_no_validator_count` | Integer | No     | Files with no available validator              |
+| `hash_unknown_count` | Integer    | No      | Files with unknown hash state                  |
+| `hash_valid_count` | Integer      | No      | Files with valid hash state                    |
+| `hash_suspicious_count` | Integer | No      | Files with suspicious hash state               |
 | `error`         | String          | No      | Error message if scan failed                   |
 
 ---
@@ -79,11 +86,12 @@ The `items` domain queries each item's **latest version** — the most recent kn
 | `access`        | Access Status     | No      | Access state (NoError, MetaError, ReadError) |
 | `mod_date`      | Date              | Yes     | Last modification date                   |
 | `size`          | Integer           | No      | File size in bytes                       |
+| `last_val_scan` | Integer           | No      | Last scan that evaluated validation (files only; null for folders) |
+| `val_state`     | Validation Status | No      | Validation state (files only; null for folders) |
+| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
 | `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash (files only; null for folders) |
 | `file_hash`     | String            | No      | SHA-256 content hash (files only; null for folders) |
-| `last_val_scan` | Integer           | No      | Last scan that evaluated validation (files only; null for folders) |
-| `val`           | Validation Status | No      | Validation state (files only; null for folders) |
-| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
+| `hash_state`    | Hash State        | No      | Hash integrity state (files only; null for folders) |
 
 ---
 
@@ -105,11 +113,23 @@ The `versions` domain queries individual item version rows — each representing
 | `access`        | Access Status     | No      | Access state                             |
 | `mod_date`      | Date              | No      | Last modification date                   |
 | `size`          | Integer           | No      | File size in bytes                       |
+| `last_val_scan` | Integer           | No      | Last scan that evaluated validation (files only; null for folders) |
+| `val_state`     | Validation Status | No      | Validation state (files only; null for folders) |
+| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
 | `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash (files only; null for folders) |
 | `file_hash`     | String            | No      | SHA-256 content hash (files only; null for folders) |
-| `last_val_scan` | Integer           | No      | Last scan that evaluated validation (files only; null for folders) |
-| `val`           | Validation Status | No      | Validation state (files only; null for folders) |
-| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
+| `hash_state`    | Hash State        | No      | Hash integrity state (files only; null for folders) |
+| `add_count`     | Integer           | No      | Descendant items added (folders only; null for files) |
+| `modify_count`  | Integer           | No      | Descendant items modified (folders only; null for files) |
+| `delete_count`  | Integer           | No      | Descendant items deleted (folders only; null for files) |
+| `unchanged_count` | Integer         | No      | Descendant items unchanged (folders only; null for files) |
+| `val_unknown_count` | Integer       | No      | Descendant files with unknown validation (folders only) |
+| `val_valid_count` | Integer         | No      | Descendant files with valid validation (folders only) |
+| `val_invalid_count` | Integer       | No      | Descendant files with invalid validation (folders only) |
+| `val_no_validator_count` | Integer  | No      | Descendant files with no validator (folders only) |
+| `hash_unknown_count` | Integer      | No      | Descendant files with unknown hash state (folders only) |
+| `hash_valid_count` | Integer        | No      | Descendant files with valid hash state (folders only) |
+| `hash_suspicious_count` | Integer   | No      | Descendant files with suspicious hash state (folders only) |
 
 ---
 
@@ -151,6 +171,7 @@ Values must match the column's type. You can use individual values, ranges (when
 | String              | `'example'`, `'error: missing EOF'`, `null`, `not null` | Quoted strings.                                                     |
 | Path                | `'photos/reports'`, `'file.txt'`                      | Must be quoted. **Null values are not supported.**                    |
 | Validation Status   | `V`, `I`, `N`, `U`, `null`, `not null`                 | Valid, Invalid, No Validator, Unknown. Null for folders. Unquoted.     |
+| Hash State          | `V`, `S`, `U`, `null`, `not null`                      | Valid, Suspicious, Unknown. Null for folders. Unquoted.               |
 | Item Type Enum      | `F`, `D`, `S`, `U`                                    | File, Directory, Symlink, Unknown. Unquoted.                          |
 | Alert Type Enum     | `H`, `I`, `A`                                         | Suspicious Hash, Invalid Item, Access Denied. Unquoted.               |
 | Alert Status Enum   | `O`, `F`, `D`                                         | Open, Flagged, Dismissed. Unquoted.                                   |
@@ -197,7 +218,7 @@ item_path@name, mod_date@short
 |------------------------------|---------------------------------------------------|
 | Date                         | `full`, `short`, `timestamp`                      |
 | Path                         | `full`, `relative`, `short`, `name`               |
-| Validation / Enum / Boolean  | `full`, `short`                                   |
+| Validation / Hash State / Enum / Boolean  | `full`, `short`                          |
 | Integer / String             | *(no formatting options)*                         |
 
 The `timestamp` format modifier converts dates to UTC timestamps (seconds since Unix epoch), which is useful for programmatic processing or web applications that need to format dates in the user's local timezone.
@@ -242,7 +263,10 @@ versions where item_id:(42) order by first_scan_id
 items where is_deleted:(true)
 
 # Versions with validation failures
-versions where val:(I) show default, val_error order by first_scan_id desc
+versions where val_state:(I) show default, val_error order by first_scan_id desc
+
+# Items with suspicious hash state
+items where hash_state:(S) show default, hash_state, file_hash order by item_path
 
 # Open or flagged alerts for suspicious hashes
 alerts where alert_type:(H), alert_status:(O, F) order by created_at desc

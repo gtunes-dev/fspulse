@@ -252,11 +252,11 @@ pub struct VersionHistoryEntry {
     pub access: i64,
     pub mod_date: Option<i64>,
     pub size: Option<i64>,
-    pub file_hash: Option<String>,
-    pub val: Option<i64>,
+    pub last_val_scan: Option<i64>,
+    pub val_state: Option<i64>,
     pub val_error: Option<String>,
     pub last_hash_scan: Option<i64>,
-    pub last_val_scan: Option<i64>,
+    pub file_hash: Option<String>,
 }
 
 impl VersionHistoryEntry {
@@ -271,11 +271,11 @@ impl VersionHistoryEntry {
             access: row.get(6)?,
             mod_date: row.get(7)?,
             size: row.get(8)?,
-            file_hash: row.get(9)?,
-            val: row.get(10)?,
+            last_val_scan: row.get(9)?,
+            val_state: row.get(10)?,
             val_error: row.get(11)?,
             last_hash_scan: row.get(12)?,
-            last_val_scan: row.get(13)?,
+            file_hash: row.get(13)?,
         })
     }
 }
@@ -303,7 +303,7 @@ const VERSION_HISTORY_COLUMNS: &str =
     "v.version_id, v.first_scan_id, v.last_scan_id, \
      s1.started_at, s2.started_at, \
      v.is_deleted, v.access, \
-     v.mod_date, v.size, v.file_hash, v.val, v.val_error, v.last_hash_scan, v.last_val_scan";
+     v.mod_date, v.size, v.last_val_scan, v.val_state, v.val_error, v.last_hash_scan, v.file_hash";
 
 /// Get version history for an item, starting from a specific scan going backwards.
 /// Returns up to `limit` versions ordered by first_scan_id DESC.

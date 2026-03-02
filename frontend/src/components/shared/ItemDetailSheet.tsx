@@ -75,11 +75,11 @@ interface VersionEntry {
   access: number
   mod_date: number | null
   size: number | null
-  file_hash: string | null
-  val: number | null
+  last_val_scan: number | null
+  val_state: number | null
   val_error: string | null
   last_hash_scan: number | null
-  last_val_scan: number | null
+  file_hash: string | null
 }
 
 interface VersionHistoryInitResponse {
@@ -214,7 +214,7 @@ function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
     v.size !== prev.size ||
     v.file_hash !== prev.file_hash ||
     v.access !== prev.access ||
-    v.val !== prev.val ||
+    v.val_state !== prev.val_state ||
     v.val_error !== prev.val_error
   )
 }
@@ -624,7 +624,7 @@ export function ItemDetailSheet({
                           <ShieldCheck className="h-4 w-4" />
                           Validation
                         </p>
-                        <div className="mt-1">{getValidationBadge(anchorVersion.val)}</div>
+                        <div className="mt-1">{getValidationBadge(anchorVersion.val_state)}</div>
                       </div>
                     )}
                     {itemType === 'F' && anchorVersion.file_hash && (
@@ -935,16 +935,16 @@ export function ItemDetailSheet({
                                           </div>
                                         )}
 
-                                        {change.prev && v.val !== change.prev.val && (
+                                        {change.prev && v.val_state !== change.prev.val_state && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 flex items-center gap-1">
                                               <ShieldCheck className="h-3 w-3" />
                                               Validation Status
                                             </p>
                                             <div className="flex items-center gap-2">
-                                              {getValidationBadge(change.prev.val)}
+                                              {getValidationBadge(change.prev.val_state)}
                                               <span className="text-muted-foreground">&rarr;</span>
-                                              {getValidationBadge(v.val)}
+                                              {getValidationBadge(v.val_state)}
                                             </div>
                                           </div>
                                         )}

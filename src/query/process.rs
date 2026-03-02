@@ -467,14 +467,15 @@ impl ItemsQuery {
                 "access" => Format::format_access(item.access, col.format)?,
                 "mod_date" => Format::format_opt_date(item.mod_date, col.format)?,
                 "size" => Format::format_opt_i64(item.size),
-                "last_hash_scan" => Format::format_opt_i64(item.last_hash_scan),
-                "file_hash" => Format::format_opt_string(&item.file_hash),
                 "last_val_scan" => Format::format_opt_i64(item.last_val_scan),
-                "val" => match item.val {
-                    Some(v) => Format::format_val(ValidationState::from_i64(v), col.format)?,
+                "val_state" => match item.val_state {
+                    Some(v) => Format::format_val_state(ValidationState::from_i64(v), col.format)?,
                     None => String::new(),
                 },
                 "val_error" => Format::format_opt_string(&item.val_error),
+                "last_hash_scan" => Format::format_opt_i64(item.last_hash_scan),
+                "file_hash" => Format::format_opt_string(&item.file_hash),
+                "hash_state" => Format::format_hash_state(item.hash_state, col.format)?,
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -547,6 +548,13 @@ impl ScansQuery {
                 "add_count" => Format::format_opt_i64(scan.add_count),
                 "modify_count" => Format::format_opt_i64(scan.modify_count),
                 "delete_count" => Format::format_opt_i64(scan.delete_count),
+                "val_unknown_count" => Format::format_opt_i64(scan.val_unknown_count),
+                "val_valid_count" => Format::format_opt_i64(scan.val_valid_count),
+                "val_invalid_count" => Format::format_opt_i64(scan.val_invalid_count),
+                "val_no_validator_count" => Format::format_opt_i64(scan.val_no_validator_count),
+                "hash_unknown_count" => Format::format_opt_i64(scan.hash_unknown_count),
+                "hash_valid_count" => Format::format_opt_i64(scan.hash_valid_count),
+                "hash_suspicious_count" => Format::format_opt_i64(scan.hash_suspicious_count),
                 "error" => Format::format_opt_string(&scan.error),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
@@ -615,14 +623,26 @@ impl VersionsQuery {
                 "access" => Format::format_access(version.access, col.format)?,
                 "mod_date" => Format::format_opt_date(version.mod_date, col.format)?,
                 "size" => Format::format_opt_i64(version.size),
-                "last_hash_scan" => Format::format_opt_i64(version.last_hash_scan),
-                "file_hash" => Format::format_opt_string(&version.file_hash),
                 "last_val_scan" => Format::format_opt_i64(version.last_val_scan),
-                "val" => match version.val {
-                    Some(v) => Format::format_val(ValidationState::from_i64(v), col.format)?,
+                "val_state" => match version.val_state {
+                    Some(v) => Format::format_val_state(ValidationState::from_i64(v), col.format)?,
                     None => String::new(),
                 },
                 "val_error" => Format::format_opt_string(&version.val_error),
+                "last_hash_scan" => Format::format_opt_i64(version.last_hash_scan),
+                "file_hash" => Format::format_opt_string(&version.file_hash),
+                "hash_state" => Format::format_hash_state(version.hash_state, col.format)?,
+                "add_count" => Format::format_opt_i64(version.add_count),
+                "modify_count" => Format::format_opt_i64(version.modify_count),
+                "delete_count" => Format::format_opt_i64(version.delete_count),
+                "unchanged_count" => Format::format_opt_i64(version.unchanged_count),
+                "val_unknown_count" => Format::format_opt_i64(version.val_unknown_count),
+                "val_valid_count" => Format::format_opt_i64(version.val_valid_count),
+                "val_invalid_count" => Format::format_opt_i64(version.val_invalid_count),
+                "val_no_validator_count" => Format::format_opt_i64(version.val_no_validator_count),
+                "hash_unknown_count" => Format::format_opt_i64(version.hash_unknown_count),
+                "hash_valid_count" => Format::format_opt_i64(version.hash_valid_count),
+                "hash_suspicious_count" => Format::format_opt_i64(version.hash_suspicious_count),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -744,11 +764,12 @@ struct ItemsQueryRow {
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
+    last_val_scan: Option<i64>,
+    val_state: Option<i64>,
+    val_error: Option<String>,
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
-    last_val_scan: Option<i64>,
-    val: Option<i64>,
-    val_error: Option<String>,
+    hash_state: Option<i64>,
 }
 
 impl ItemsQueryRow {
@@ -766,11 +787,12 @@ impl ItemsQueryRow {
             access: Access::from_i64(row.get(9)?),
             mod_date: row.get(10)?,
             size: row.get(11)?,
-            last_hash_scan: row.get(12)?,
-            file_hash: row.get(13)?,
-            last_val_scan: row.get(14)?,
-            val: row.get(15)?,
-            val_error: row.get(16)?,
+            last_val_scan: row.get(12)?,
+            val_state: row.get(13)?,
+            val_error: row.get(14)?,
+            last_hash_scan: row.get(15)?,
+            file_hash: row.get(16)?,
+            hash_state: row.get(17)?,
         })
     }
 }
@@ -788,11 +810,23 @@ struct VersionsQueryRow {
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
+    last_val_scan: Option<i64>,
+    val_state: Option<i64>,
+    val_error: Option<String>,
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
-    last_val_scan: Option<i64>,
-    val: Option<i64>,
-    val_error: Option<String>,
+    hash_state: Option<i64>,
+    add_count: Option<i64>,
+    modify_count: Option<i64>,
+    delete_count: Option<i64>,
+    unchanged_count: Option<i64>,
+    val_unknown_count: Option<i64>,
+    val_valid_count: Option<i64>,
+    val_invalid_count: Option<i64>,
+    val_no_validator_count: Option<i64>,
+    hash_unknown_count: Option<i64>,
+    hash_valid_count: Option<i64>,
+    hash_suspicious_count: Option<i64>,
 }
 
 impl VersionsQueryRow {
@@ -810,11 +844,23 @@ impl VersionsQueryRow {
             access: Access::from_i64(row.get(9)?),
             mod_date: row.get(10)?,
             size: row.get(11)?,
-            last_hash_scan: row.get(12)?,
-            file_hash: row.get(13)?,
-            last_val_scan: row.get(14)?,
-            val: row.get(15)?,
-            val_error: row.get(16)?,
+            last_val_scan: row.get(12)?,
+            val_state: row.get(13)?,
+            val_error: row.get(14)?,
+            last_hash_scan: row.get(15)?,
+            file_hash: row.get(16)?,
+            hash_state: row.get(17)?,
+            add_count: row.get(18)?,
+            modify_count: row.get(19)?,
+            delete_count: row.get(20)?,
+            unchanged_count: row.get(21)?,
+            val_unknown_count: row.get(22)?,
+            val_valid_count: row.get(23)?,
+            val_invalid_count: row.get(24)?,
+            val_no_validator_count: row.get(25)?,
+            hash_unknown_count: row.get(26)?,
+            hash_valid_count: row.get(27)?,
+            hash_suspicious_count: row.get(28)?,
         })
     }
 }
@@ -838,6 +884,13 @@ pub struct ScansQueryRow {
     add_count: Option<i64>,
     modify_count: Option<i64>,
     delete_count: Option<i64>,
+    val_unknown_count: Option<i64>,
+    val_valid_count: Option<i64>,
+    val_invalid_count: Option<i64>,
+    val_no_validator_count: Option<i64>,
+    hash_unknown_count: Option<i64>,
+    hash_valid_count: Option<i64>,
+    hash_suspicious_count: Option<i64>,
     error: Option<String>,
 }
 
@@ -863,7 +916,14 @@ impl ScansQueryRow {
             add_count: row.get(15)?,
             modify_count: row.get(16)?,
             delete_count: row.get(17)?,
-            error: row.get(18)?,
+            val_unknown_count: row.get(18)?,
+            val_valid_count: row.get(19)?,
+            val_invalid_count: row.get(20)?,
+            val_no_validator_count: row.get(21)?,
+            hash_unknown_count: row.get(22)?,
+            hash_valid_count: row.get(23)?,
+            hash_suspicious_count: row.get(24)?,
+            error: row.get(25)?,
         })
     }
 }
@@ -1031,8 +1091,9 @@ impl QueryProcessor {
                 | Rule::item_type_filter
                 | Rule::alert_type_filter
                 | Rule::alert_status_filter
-                | Rule::val_filter
-                | Rule::access_filter => {
+                | Rule::val_state_filter
+                | Rule::access_filter
+                | Rule::hash_state_filter => {
                     EnumFilter::add_enum_filter_to_query(token, query)?;
                 }
                 Rule::path_filter => {

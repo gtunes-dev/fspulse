@@ -10,12 +10,12 @@ use serde::Serialize;
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_valid_count, hash_suspicious_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_valid_count, hash_suspicious_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -119,6 +119,13 @@ pub struct Scan {
     add_count: Option<i64>,
     modify_count: Option<i64>,
     delete_count: Option<i64>,
+    val_unknown_count: Option<i64>,
+    val_valid_count: Option<i64>,
+    val_invalid_count: Option<i64>,
+    val_no_validator_count: Option<i64>,
+    hash_unknown_count: Option<i64>,
+    hash_valid_count: Option<i64>,
+    hash_suspicious_count: Option<i64>,
     error: Option<String>,
 }
 
@@ -239,6 +246,13 @@ impl Scan {
             add_count: None,
             modify_count: None,
             delete_count: None,
+            val_unknown_count: None,
+            val_valid_count: None,
+            val_invalid_count: None,
+            val_no_validator_count: None,
+            hash_unknown_count: None,
+            hash_valid_count: None,
+            hash_suspicious_count: None,
             error: None,
         }
     }
@@ -332,7 +346,14 @@ impl Scan {
                     add_count: row.get(15)?,
                     modify_count: row.get(16)?,
                     delete_count: row.get(17)?,
-                    error: row.get(18)?,
+                    val_unknown_count: row.get(18)?,
+                    val_valid_count: row.get(19)?,
+                    val_invalid_count: row.get(20)?,
+                    val_no_validator_count: row.get(21)?,
+                    hash_unknown_count: row.get(22)?,
+                    hash_valid_count: row.get(23)?,
+                    hash_suspicious_count: row.get(24)?,
+                    error: row.get(25)?,
                 })
             })
             .optional()?;
@@ -493,7 +514,7 @@ impl Scan {
         match self.state() {
             ScanState::AnalyzingScan => {
                 // Use IMMEDIATE transaction for read-then-write pattern
-                let (file_count, folder_count, alert_count, add_count, modify_count, delete_count) =
+                let result =
                     Database::immediate_transaction(conn, |c| {
                         // Compute file_count and folder_count from current versions (exclude deleted)
                         let (file_count, folder_count): (i64, i64) = c
@@ -540,6 +561,27 @@ impl Scan {
                             )
                             .unwrap_or((0, 0, 0));
 
+                        // Compute val/hash state counts for alive files at this scan
+                        let (vu, vv, vi, vn, hu, hv, hs): (i64, i64, i64, i64, i64, i64, i64) = c
+                            .query_row(
+                                "SELECT
+                                    COALESCE(SUM(CASE WHEN COALESCE(iv.val_state, 0) = 0 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN iv.val_state = 1 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN iv.val_state = 2 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN iv.val_state = 3 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN COALESCE(iv.hash_state, 0) = 0 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN iv.hash_state = 1 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN iv.hash_state = 2 THEN 1 ELSE 0 END), 0)
+                                 FROM items i
+                                 JOIN item_versions iv ON iv.item_id = i.item_id
+                                 WHERE i.root_id = ? AND i.item_type = 0
+                                   AND iv.last_scan_id = ? AND iv.is_deleted = 0",
+                                params![self.root_id, self.scan_id],
+                                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?,
+                                          row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+                            )
+                            .unwrap_or((0, 0, 0, 0, 0, 0, 0));
+
                         // Update the scan with all counts and set state to Completed in one operation
                         c.execute(
                             "UPDATE scans SET
@@ -549,19 +591,23 @@ impl Scan {
                                 add_count = ?,
                                 modify_count = ?,
                                 delete_count = ?,
+                                val_unknown_count = ?,
+                                val_valid_count = ?,
+                                val_invalid_count = ?,
+                                val_no_validator_count = ?,
+                                hash_unknown_count = ?,
+                                hash_valid_count = ?,
+                                hash_suspicious_count = ?,
                                 state = ?,
                                 ended_at = strftime('%s', 'now', 'utc')
                             WHERE scan_id = ?",
-                            (
-                                file_count,
-                                folder_count,
-                                alert_count,
-                                add_count,
-                                modify_count,
-                                delete_count,
+                            params![
+                                file_count, folder_count, alert_count,
+                                add_count, modify_count, delete_count,
+                                vu, vv, vi, vn, hu, hv, hs,
                                 ScanState::Completed.as_i64(),
                                 self.scan_id,
-                            ),
+                            ],
                         )?;
 
                         // Clear the undo log atomically with the state transition.
@@ -569,15 +615,14 @@ impl Scan {
                         // scan with a stale undo log.
                         UndoLog::clear(c)?;
 
-                        Ok((
-                            file_count,
-                            folder_count,
-                            alert_count,
-                            add_count,
-                            modify_count,
-                            delete_count,
-                        ))
+                        Ok((file_count, folder_count, alert_count,
+                            add_count, modify_count, delete_count,
+                            vu, vv, vi, vn, hu, hv, hs))
                     })?;
+
+                let (file_count, folder_count, alert_count,
+                     add_count, modify_count, delete_count,
+                     vu, vv, vi, vn, hu, hv, hs) = result;
 
                 // Update in-memory struct
                 self.state = ScanState::Completed;
@@ -587,6 +632,13 @@ impl Scan {
                 self.add_count = Some(add_count);
                 self.modify_count = Some(modify_count);
                 self.delete_count = Some(delete_count);
+                self.val_unknown_count = Some(vu);
+                self.val_valid_count = Some(vv);
+                self.val_invalid_count = Some(vi);
+                self.val_no_validator_count = Some(vn);
+                self.hash_unknown_count = Some(hu);
+                self.hash_valid_count = Some(hv);
+                self.hash_suspicious_count = Some(hs);
 
                 Ok(())
             }

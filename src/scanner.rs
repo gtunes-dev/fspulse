@@ -18,9 +18,9 @@
 // 5. Stopped
 
 use crate::alerts::Alerts;
-use crate::hash::Hash;
+use crate::hash::{Hash, HashState};
 use crate::item_identity::{Access, ExistingItem, ItemIdentity, ItemType};
-use crate::item_version::{AnalysisItem, ItemVersion};
+use crate::item_version::{AnalysisItem, ItemVersion, StateCounts};
 use crate::roots::Root;
 use crate::scans::ScanState;
 use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
@@ -57,6 +57,7 @@ struct FolderCountWrite {
     mods: i64,
     dels: i64,
     unchanged: i64,
+    state_counts: StateCounts,
 }
 
 /// Context passed through recursive directory scanning to avoid large parameter lists
@@ -482,15 +483,15 @@ impl Scanner {
                 "INSERT INTO item_versions (
                     item_id, first_scan_id, last_scan_id,
                     is_added, is_deleted, access, mod_date, size,
-                    file_hash, val, val_error,
-                    last_hash_scan, last_val_scan,
+                    last_val_scan, val_state, val_error,
+                    last_hash_scan, file_hash, hash_state,
                     add_count, modify_count, delete_count, unchanged_count
                  )
                  SELECT
                     iv.item_id, ?, ?,
                     0, 1, iv.access, iv.mod_date, iv.size,
-                    iv.file_hash, iv.val, iv.val_error,
-                    iv.last_hash_scan, iv.last_val_scan,
+                    iv.last_val_scan, iv.val_state, iv.val_error,
+                    iv.last_hash_scan, iv.file_hash, iv.hash_state,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
@@ -717,7 +718,7 @@ impl Scanner {
         let mut writes = Vec::new();
         Scanner::walk_folder_counts(&conn, root_id, scan_id, root_path, interrupt_token, &mut writes)?;
 
-        info!("Scan analysis: {} folders have descendant changes", writes.len());
+        info!("Scan analysis: {} folders have descendant changes or state counts", writes.len());
 
         Scanner::apply_folder_count_writes(&conn, scan_id, &writes, prev_scan_id, interrupt_token)?;
         Ok(())
@@ -743,17 +744,12 @@ impl Scanner {
         Ok(prev)
     }
 
-    /// Recursive depth-first walk of the folder tree, computing descendant change counts.
+    /// Recursive depth-first walk of the folder tree, computing descendant change counts
+    /// and state snapshot counts.
     ///
-    /// Returns the cumulative `(adds, mods, dels)` for all descendants under `parent_path`.
+    /// Returns the cumulative `(adds, mods, dels, state_counts)` for all descendants.
     /// Appends a `FolderCountWrite` entry for each folder that has non-zero change counts
-    /// (adds > 0 || mods > 0 || dels > 0).
-    ///
-    /// The `unchanged` count is derived per-folder at write time from the previous version:
-    ///   `unchanged = prev_alive - mods - dels`
-    /// where `prev_alive = prev_adds + prev_mods + prev_unchanged` from the folder's
-    /// temporal version before this scan. Everyone alive previously was either modified,
-    /// deleted, or unchanged in this scan — so unchanged is the remainder.
+    /// or non-zero state counts.
     fn walk_folder_counts(
         conn: &Connection,
         root_id: i64,
@@ -761,12 +757,13 @@ impl Scanner {
         parent_path: &str,
         interrupt_token: &Arc<AtomicBool>,
         writes: &mut Vec<FolderCountWrite>,
-    ) -> Result<(i64, i64, i64), FsPulseError> {
+    ) -> Result<(i64, i64, i64, StateCounts), FsPulseError> {
         Scanner::check_interrupted(interrupt_token)?;
 
         let mut adds = 0i64;
         let mut mods = 0i64;
         let mut dels = 0i64;
+        let mut state_counts = StateCounts::default();
 
         // 1. Get immediate directory children alive at this scan
         //    (including dirs deleted AT this scan — needed to recurse into deleted subtrees)
@@ -774,12 +771,13 @@ impl Scanner {
 
         // 2. Recurse into each directory child
         for (_child_id, child_path) in &dir_children {
-            let (sa, sm, sd) = Scanner::walk_folder_counts(
+            let (sa, sm, sd, sc) = Scanner::walk_folder_counts(
                 conn, root_id, scan_id, child_path, interrupt_token, writes,
             )?;
             adds += sa;
             mods += sm;
             dels += sd;
+            state_counts.add(&sc);
         }
 
         // 3. Count direct children that changed in this scan
@@ -788,8 +786,12 @@ impl Scanner {
         mods += dm;
         dels += dd;
 
-        // 4. Record write if any descendant changes
-        if adds > 0 || mods > 0 || dels > 0 {
+        // 4. Count direct file children's val/hash_state
+        let direct_sc = Scanner::query_direct_file_state_counts(conn, root_id, parent_path, scan_id)?;
+        state_counts.add(&direct_sc);
+
+        // 5. Record write if any descendant changes or state counts are non-zero
+        if adds > 0 || mods > 0 || dels > 0 || !state_counts.is_zero() {
             if let Some(folder_item_id) = Scanner::lookup_folder_item_id(conn, root_id, parent_path)? {
                 // Derive unchanged from previous version's alive count:
                 // everyone alive before was either modified, deleted, or unchanged.
@@ -802,11 +804,12 @@ impl Scanner {
                     mods,
                     dels,
                     unchanged,
+                    state_counts,
                 });
             }
         }
 
-        Ok((adds, mods, dels))
+        Ok((adds, mods, dels, state_counts))
     }
 
     /// Query immediate directory children of `parent_path` that are alive at `scan_id`
@@ -942,6 +945,67 @@ impl Scanner {
         Ok(alive.unwrap_or(0))
     }
 
+    /// Count the val/hash_state of alive direct file children for a given parent path at this scan.
+    fn query_direct_file_state_counts(
+        conn: &Connection,
+        root_id: i64,
+        parent_path: &str,
+        scan_id: i64,
+    ) -> Result<StateCounts, FsPulseError> {
+        let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
+            parent_path.to_string()
+        } else {
+            format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
+        };
+
+        let path_upper = format!(
+            "{}{}",
+            &path_prefix[..path_prefix.len() - MAIN_SEPARATOR_STR.len()],
+            char::from(std::path::MAIN_SEPARATOR as u8 + 1)
+        );
+
+        let sql = format!(
+            "SELECT
+                COALESCE(SUM(CASE WHEN COALESCE(iv.val_state, 0) = 0 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN iv.val_state = 1 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN iv.val_state = 2 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN iv.val_state = 3 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN COALESCE(iv.hash_state, 0) = 0 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN iv.hash_state = 1 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN iv.hash_state = 2 THEN 1 ELSE 0 END), 0)
+             FROM items i
+             JOIN item_versions iv ON iv.item_id = i.item_id
+             WHERE i.root_id = ?1
+               AND i.item_type = 0
+               AND iv.is_deleted = 0
+               AND iv.last_scan_id >= ?2
+               AND iv.first_scan_id <= ?2
+               AND i.item_path >= ?3
+               AND i.item_path < ?4
+               AND i.item_path != ?5
+               AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'",
+            MAIN_SEPARATOR_STR
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+        let result = stmt.query_row(
+            params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
+            |row| {
+                Ok(StateCounts {
+                    val_unknown: row.get(0)?,
+                    val_valid: row.get(1)?,
+                    val_invalid: row.get(2)?,
+                    val_no_validator: row.get(3)?,
+                    hash_unknown: row.get(4)?,
+                    hash_valid: row.get(5)?,
+                    hash_suspicious: row.get(6)?,
+                })
+            },
+        )?;
+
+        Ok(result)
+    }
+
     /// Look up the item_id for a folder by its path.
     fn lookup_folder_item_id(
         conn: &Connection,
@@ -1008,9 +1072,17 @@ impl Scanner {
         if let Some(version_id) = existing_version_id {
             // Case A: UPDATE the existing version's counts
             conn.execute(
-                "UPDATE item_versions SET add_count = ?, modify_count = ?, delete_count = ?, unchanged_count = ?
+                "UPDATE item_versions SET
+                    add_count = ?, modify_count = ?, delete_count = ?, unchanged_count = ?,
+                    val_unknown_count = ?, val_valid_count = ?, val_invalid_count = ?, val_no_validator_count = ?,
+                    hash_unknown_count = ?, hash_valid_count = ?, hash_suspicious_count = ?
                  WHERE version_id = ?",
-                params![w.adds, w.mods, w.dels, w.unchanged, version_id],
+                params![w.adds, w.mods, w.dels, w.unchanged,
+                        w.state_counts.val_unknown, w.state_counts.val_valid,
+                        w.state_counts.val_invalid, w.state_counts.val_no_validator,
+                        w.state_counts.hash_unknown, w.state_counts.hash_valid,
+                        w.state_counts.hash_suspicious,
+                        version_id],
             )?;
         } else {
             // Case B: Folder metadata unchanged but descendants changed.
@@ -1037,11 +1109,13 @@ impl Scanner {
                     version.mod_date(),
                     version.size(),
                     version.file_hash(),
-                    version.val(),
+                    version.val_state(),
                     version.val_error(),
                     version.last_hash_scan(),
                     version.last_val_scan(),
+                    version.hash_state(),
                     Some((w.adds, w.mods, w.dels, w.unchanged)),
+                    Some(w.state_counts),
                 )?;
             }
         }
@@ -1497,11 +1571,12 @@ impl Scanner {
 
         // values to use in the version update
         let mut i_hash = analysis_item.file_hash();
-        let mut i_val = analysis_item.val();
+        let mut i_val = analysis_item.val_state();
         let mut i_val_error = analysis_item.val_error();
         let mut i_last_hash_scan = analysis_item.last_hash_scan();
         let mut i_last_val_scan = analysis_item.last_val_scan();
         let mut i_access = analysis_item.access();
+        let mut i_hash_state = analysis_item.hash_state_enum();
 
         let mut alert_possible_hash = false;
         let mut alert_invalid_item = false;
@@ -1524,20 +1599,24 @@ impl Scanner {
                 update_changes = true;
                 i_hash = new_hash.as_deref();
 
-                // The hash changed. It's suspicious if metadata never changed
-                // between the last hash scan and now. Only check if there was
-                // a previous hash (otherwise it's the first hash, not suspicious).
-                if analysis_item.last_hash_scan().is_some() {
+                if analysis_item.last_hash_scan().is_none() {
+                    // First hash — transition Unknown → Valid
+                    i_hash_state = HashState::Valid;
+                } else {
+                    // Hash changed with previous hash — check metadata
                     alert_possible_hash = true;
+                    // Will be resolved to Valid or Suspicious inside the transaction
+                    // after checking meta_changed_between
                 }
             }
+            // If hash unchanged: preserve existing hash_state (already set above)
 
             // Update the last scan id whether or not anything changed
             i_last_hash_scan = Some(scan.scan_id());
         }
 
         if analysis_item.needs_val() {
-            if (analysis_item.val() != new_val)
+            if (analysis_item.val_state() != new_val)
                 || (analysis_item.val_error() != new_val_error.as_deref())
             {
                 if new_val == ValidationState::Invalid {
@@ -1559,6 +1638,38 @@ impl Scanner {
 
         // Use IMMEDIATE transaction for read-then-write pattern
         Database::immediate_transaction(&conn, |c| {
+            // Resolve hash_state for hash-changed case before writing
+            if alert_possible_hash {
+                let last_hash_scan = analysis_item.last_hash_scan().unwrap();
+                let meta_changed = Alerts::meta_changed_between(
+                    c,
+                    analysis_item.item_id(),
+                    last_hash_scan,
+                    scan.scan_id(),
+                )?;
+
+                if meta_changed {
+                    // Metadata changed — legitimate modification
+                    i_hash_state = HashState::Valid;
+                } else {
+                    // Metadata unchanged — suspicious
+                    i_hash_state = HashState::Suspicious;
+                    Alerts::add_suspicious_hash_alert(
+                        c,
+                        scan.scan_id(),
+                        analysis_item.item_id(),
+                        analysis_item.last_hash_scan(),
+                        analysis_item.file_hash(),
+                        new_hash.as_deref().unwrap(),
+                    )?;
+                }
+            }
+
+            // hash_state changed from what was on the analysis_item means we need to write
+            if i_hash_state != analysis_item.hash_state_enum() {
+                update_changes = true;
+            }
+
             let current_version = ItemVersion::get_current(c, analysis_item.item_id())?
                 .ok_or_else(|| FsPulseError::Error(format!(
                     "No current version for item {} during analysis",
@@ -1570,7 +1681,7 @@ impl Scanner {
                 ItemVersion::update_analysis_in_place(
                     c, current_version.version_id(),
                     i_access, i_hash, i_val, i_val_error,
-                    i_last_hash_scan, i_last_val_scan,
+                    i_last_hash_scan, i_last_val_scan, i_hash_state,
                 )?;
             } else if update_changes {
                 // Pre-existing version with state change: undo the walk-phase touch,
@@ -1583,7 +1694,8 @@ impl Scanner {
                     current_version.mod_date(), current_version.size(),
                     i_hash, Some(i_val), i_val_error,
                     i_last_hash_scan, i_last_val_scan,
-                    None, // counts: analysis only processes files
+                    Some(i_hash_state),
+                    None, None, // counts: analysis only processes files
                 )?;
             } else if i_last_hash_scan != current_version.last_hash_scan()
                 || i_last_val_scan != current_version.last_val_scan()
@@ -1595,27 +1707,6 @@ impl Scanner {
                     c, current_version.version_id(),
                     i_last_hash_scan, i_last_val_scan,
                 )?;
-            }
-
-            // Alerts
-            // alert_possible_hash is only set when last_hash_scan is Some
-            if alert_possible_hash {
-                let last_hash_scan = analysis_item.last_hash_scan().unwrap();
-                if !Alerts::meta_changed_between(
-                    c,
-                    analysis_item.item_id(),
-                    last_hash_scan,
-                    scan.scan_id(),
-                )? {
-                    Alerts::add_suspicious_hash_alert(
-                        c,
-                        scan.scan_id(),
-                        analysis_item.item_id(),
-                        analysis_item.last_hash_scan(),
-                        analysis_item.file_hash(),
-                        new_hash.as_deref().unwrap(),
-                    )?;
-                }
             }
 
             if alert_invalid_item {

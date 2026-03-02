@@ -1,4 +1,5 @@
 use crate::alerts::{AlertStatus, AlertType};
+use crate::hash::HashState;
 use crate::items::{Access, ItemType};
 use crate::query::columns::ColAlign;
 use crate::validate::validator::ValidationState;
@@ -106,7 +107,7 @@ impl Format {
         }
     }
 
-    pub fn format_val(val: ValidationState, format: Format) -> Result<String, FsPulseError> {
+    pub fn format_val_state(val: ValidationState, format: Format) -> Result<String, FsPulseError> {
         match format {
             Format::Short | Format::None => Ok(val.short_name().to_owned()),
             Format::Full => Ok(val.full_name().to_owned()),
@@ -172,6 +173,22 @@ impl Format {
         }
     }
 
+    pub fn format_hash_state(
+        hash_state: Option<i64>,
+        format: Format,
+    ) -> Result<String, FsPulseError> {
+        match hash_state {
+            Some(v) => {
+                let hs = HashState::from_i64(v);
+                match format {
+                    Format::Short | Format::None => Ok(hs.short_name().to_owned()),
+                    Format::Full => Ok(hs.full_name().to_owned()),
+                    _ => Err(FsPulseError::Error("Invalid hash_state format".into())),
+                }
+            }
+            None => Ok("-".into()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -277,12 +294,13 @@ impl Show {
                 | Rule::bool_show
                 | Rule::string_show
                 | Rule::path_show
-                | Rule::val_show
+                | Rule::val_state_show
                 | Rule::item_type_show
                 | Rule::alert_type_show
                 | Rule::alert_status_show
                 | Rule::scan_state_show
-                | Rule::access_show => {
+                | Rule::access_show
+                | Rule::hash_state_show => {
                     let mut path_show_parts = element.into_inner();
                     let display_col = path_show_parts.next().unwrap().as_str();
 

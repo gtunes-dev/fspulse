@@ -10,18 +10,18 @@ query_type = { "roots" | "scans" | "items" | "versions" | "alerts" }
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_filter | item_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | access_filter | int_filter }
+filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_state_filter | hash_state_filter | item_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | access_filter | int_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_show | item_type_show | alert_type_show | alert_status_show | scan_state_show | access_show | int_show }
+show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_state_show | hash_state_show | item_type_show | alert_type_show | alert_status_show | scan_state_show | access_show | int_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { id_col | date_col | bool_col | string_col | path_col | val_col | item_type_col | alert_type_col | alert_status_col | scan_state_col | access_col | int_col }
+order_column =  { id_col | date_col | bool_col | string_col | path_col | val_state_col | hash_state_col | item_type_col | alert_type_col | alert_status_col | scan_state_col | access_col | int_col }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause
@@ -40,7 +40,8 @@ date_filter_EOI         = { WS* ~ date_filter_values ~ WS* ~ EOI }
 bool_filter_EOI         = { bool_filter_values ~ WS* ~ EOI }
 string_filter_EOI       = { string_filter_values ~ WS* ~ EOI }
 path_filter_EOI         = { WS* ~ path_filter_values ~ WS* ~ EOI }
-val_filter_EOI          = { WS* ~ val_filter_values ~ WS* ~ EOI }
+val_state_filter_EOI    = { WS* ~ val_state_filter_values ~ WS* ~ EOI }
+hash_state_filter_EOI   = { WS* ~ hash_state_filter_values ~ WS* ~ EOI }
 item_type_filter_EOI    = { WS* ~ item_type_filter_values ~ WS* ~ EOI }
 alert_type_filter_EOI   = { WS* ~ alert_type_filter_values ~ WS* ~ EOI }
 alert_status_filter_EOI = { WS* ~ alert_status_filter_values ~ WS* ~ EOI }
@@ -111,18 +112,18 @@ path_filter_values = _{ WS* ~ path_spec ~ (WS* ~ COMMA ~ WS* ~ path_spec)* }
 path_spec          = _{ "'" ~ path ~ "'" }
 path               =  { (("\\'" | (!"'" ~ ANY)))* }
 
-// Val Columns
-val_col = { "val" }
+// Val State Columns
+val_state_col = { "val_state" }
 
-val_show             =  { val_col ~ val_display_modifier? }
-val_display_modifier = _{ WS* ~ "@" ~ WS* ~ val_display_mode }
-val_display_mode     =  { full | short }
+val_state_show             =  { val_state_col ~ val_state_display_modifier? }
+val_state_display_modifier = _{ WS* ~ "@" ~ WS* ~ val_state_display_mode }
+val_state_display_mode     =  { full | short }
 
-val_filter        =  { val_col ~ val_filter_body }
-val_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_filter_values ~ WS* ~ RPAREN }
-val_filter_values = _{ val_spec ~ (WS* ~ COMMA ~ WS* ~ val_spec)* }
-val_spec          = _{ null | not_null | val }
-val               =  {
+val_state_filter        =  { val_state_col ~ val_state_filter_body }
+val_state_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ val_state_filter_values ~ WS* ~ RPAREN }
+val_state_filter_values = _{ val_state_spec ~ (WS* ~ COMMA ~ WS* ~ val_state_spec)* }
+val_state_spec          = _{ null | not_null | val_state }
+val_state               =  {
     "UNKNOWN"
   | "unknown"
   | "Unknown"
@@ -142,6 +143,32 @@ val               =  {
   | ^"V"
   | ^"I"
   | ^"N"
+}
+
+// Hash State Columns
+hash_state_col = { "hash_state" }
+
+hash_state_show             =  { hash_state_col ~ hash_state_display_modifier? }
+hash_state_display_modifier = _{ WS* ~ "@" ~ WS* ~ hash_state_display_mode }
+hash_state_display_mode     =  { full | short }
+
+hash_state_filter        =  { hash_state_col ~ hash_state_filter_body }
+hash_state_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ hash_state_filter_values ~ WS* ~ RPAREN }
+hash_state_filter_values = _{ hash_state_spec ~ (WS* ~ COMMA ~ WS* ~ hash_state_spec)* }
+hash_state_spec          = _{ null | not_null | hash_state }
+hash_state               =  {
+    "UNKNOWN"
+  | "unknown"
+  | "Unknown"
+  | "VALID"
+  | "valid"
+  | "Valid"
+  | "SUSPICIOUS"
+  | "suspicious"
+  | "Suspicious"
+  | ^"U"
+  | ^"V"
+  | ^"S"
 }
 
 // Item Type Columns
@@ -322,7 +349,7 @@ access               =  {
 }
 
 // Integer columns
-int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" }
+int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_valid_count" | "hash_suspicious_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

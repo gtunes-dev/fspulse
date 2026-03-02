@@ -1,6 +1,37 @@
 use rusqlite::{self, params, Connection, OptionalExtension};
 
-use crate::{error::FsPulseError, item_identity::Access, scans::AnalysisSpec, undo_log::UndoLog, validate::validator::ValidationState};
+use crate::{error::FsPulseError, hash::HashState, item_identity::Access, scans::AnalysisSpec, undo_log::UndoLog, validate::validator::ValidationState};
+
+/// Folder-level state snapshot counts — how many alive descendant files
+/// are in each validation/hash state at a given scan.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StateCounts {
+    pub val_unknown: i64,
+    pub val_valid: i64,
+    pub val_invalid: i64,
+    pub val_no_validator: i64,
+    pub hash_unknown: i64,
+    pub hash_valid: i64,
+    pub hash_suspicious: i64,
+}
+
+impl StateCounts {
+    pub fn add(&mut self, other: &StateCounts) {
+        self.val_unknown += other.val_unknown;
+        self.val_valid += other.val_valid;
+        self.val_invalid += other.val_invalid;
+        self.val_no_validator += other.val_no_validator;
+        self.hash_unknown += other.hash_unknown;
+        self.hash_valid += other.hash_valid;
+        self.hash_suspicious += other.hash_suspicious;
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.val_unknown == 0 && self.val_valid == 0 && self.val_invalid == 0
+            && self.val_no_validator == 0 && self.hash_unknown == 0
+            && self.hash_valid == 0 && self.hash_suspicious == 0
+    }
+}
 
 /// A single temporal version of an item.
 ///
@@ -17,15 +48,23 @@ pub struct ItemVersion {
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
-    file_hash: Option<String>,
-    val: Option<ValidationState>,
+    last_val_scan: Option<i64>,
+    val_state: Option<ValidationState>,
     val_error: Option<String>,
     last_hash_scan: Option<i64>,
-    last_val_scan: Option<i64>,
+    file_hash: Option<String>,
+    hash_state: Option<HashState>,
     add_count: Option<i64>,
     modify_count: Option<i64>,
     delete_count: Option<i64>,
     unchanged_count: Option<i64>,
+    val_unknown_count: Option<i64>,
+    val_valid_count: Option<i64>,
+    val_invalid_count: Option<i64>,
+    val_no_validator_count: Option<i64>,
+    hash_unknown_count: Option<i64>,
+    hash_valid_count: Option<i64>,
+    hash_suspicious_count: Option<i64>,
 }
 
 #[allow(dead_code, clippy::too_many_arguments)]
@@ -62,12 +101,12 @@ impl ItemVersion {
         self.size
     }
 
-    pub fn file_hash(&self) -> Option<&str> {
-        self.file_hash.as_deref()
+    pub fn last_val_scan(&self) -> Option<i64> {
+        self.last_val_scan
     }
 
-    pub fn val(&self) -> Option<ValidationState> {
-        self.val
+    pub fn val_state(&self) -> Option<ValidationState> {
+        self.val_state
     }
 
     pub fn val_error(&self) -> Option<&str> {
@@ -78,8 +117,12 @@ impl ItemVersion {
         self.last_hash_scan
     }
 
-    pub fn last_val_scan(&self) -> Option<i64> {
-        self.last_val_scan
+    pub fn file_hash(&self) -> Option<&str> {
+        self.file_hash.as_deref()
+    }
+
+    pub fn hash_state(&self) -> Option<HashState> {
+        self.hash_state
     }
 
     pub fn add_count(&self) -> Option<i64> {
@@ -105,9 +148,12 @@ impl ItemVersion {
     ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
             "SELECT version_id, first_scan_id, last_scan_id, is_added, is_deleted, access,
-                    mod_date, size, file_hash, val, val_error,
-                    last_hash_scan, last_val_scan,
-                    add_count, modify_count, delete_count, unchanged_count
+                    mod_date, size,
+                    last_val_scan, val_state, val_error,
+                    last_hash_scan, file_hash, hash_state,
+                    add_count, modify_count, delete_count, unchanged_count,
+                    val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
+                    hash_unknown_count, hash_valid_count, hash_suspicious_count
              FROM item_versions
              WHERE item_id = ?
              ORDER BY first_scan_id DESC
@@ -136,20 +182,20 @@ impl ItemVersion {
             Some((a, m, d, u)) => (Some(a), Some(m), Some(d), Some(u)),
             None => (None, None, None, None),
         };
-        // Folders (counts.is_some()) get NULL val; files get Unknown
-        let val_value = if counts.is_some() {
-            None
+        // Folders (counts.is_some()) get NULL val/hash_state; files get Unknown
+        let (val_value, hash_state_value) = if counts.is_some() {
+            (None, None)
         } else {
-            Some(ValidationState::Unknown.as_i64())
+            (Some(ValidationState::Unknown.as_i64()), Some(HashState::Unknown.as_i64()))
         };
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
-                is_added, is_deleted, access, mod_date, size, val,
+                is_added, is_deleted, access, mod_date, size, val_state, hash_state,
                 add_count, modify_count, delete_count, unchanged_count
-             ) VALUES (?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?)",
+             ) VALUES (?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![item_id, scan_id, scan_id, access.as_i64(), mod_date, size,
-                    val_value,
+                    val_value, hash_state_value,
                     add_count, modify_count, delete_count, unchanged_count],
         )?;
         Ok(())
@@ -162,6 +208,7 @@ impl ItemVersion {
     ///
     /// `counts` should be `Some((a, m, d, u))` for folders (0,0,0,0 for walk/sweep,
     /// actual values for scan analysis), `None` for files.
+    /// `state_counts` should be `Some(...)` for folders, `None` for files.
     pub fn insert_full(
         conn: &Connection,
         item_id: i64,
@@ -176,25 +223,36 @@ impl ItemVersion {
         val_error: Option<&str>,
         last_hash_scan: Option<i64>,
         last_val_scan: Option<i64>,
+        hash_state: Option<HashState>,
         counts: Option<(i64, i64, i64, i64)>,
+        state_counts: Option<StateCounts>,
     ) -> Result<(), FsPulseError> {
         let (add_count, modify_count, delete_count, unchanged_count) = match counts {
             Some((a, m, d, u)) => (Some(a), Some(m), Some(d), Some(u)),
             None => (None, None, None, None),
         };
+        let (vu, vv, vi, vn, hu, hv, hs) = match state_counts {
+            Some(sc) => (Some(sc.val_unknown), Some(sc.val_valid), Some(sc.val_invalid),
+                         Some(sc.val_no_validator), Some(sc.hash_unknown), Some(sc.hash_valid),
+                         Some(sc.hash_suspicious)),
+            None => (None, None, None, None, None, None, None),
+        };
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
                 is_added, is_deleted, access, mod_date, size,
-                file_hash, val, val_error,
-                last_hash_scan, last_val_scan,
-                add_count, modify_count, delete_count, unchanged_count
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                last_val_scan, val_state, val_error,
+                last_hash_scan, file_hash, hash_state,
+                add_count, modify_count, delete_count, unchanged_count,
+                val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
+                hash_unknown_count, hash_valid_count, hash_suspicious_count
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 item_id, scan_id, scan_id, is_added, is_deleted, access.as_i64(),
-                mod_date, size, file_hash, val.map(|v| v.as_i64()), val_error,
-                last_hash_scan, last_val_scan,
+                mod_date, size, last_val_scan, val.map(|v| v.as_i64()), val_error,
+                last_hash_scan, file_hash, hash_state.map(|h| h.as_i64()),
                 add_count, modify_count, delete_count, unchanged_count,
+                vu, vv, vi, vn, hu, hv, hs,
             ],
         )?;
         Ok(())
@@ -219,9 +277,10 @@ impl ItemVersion {
         let counts = if is_folder { Some((0, 0, 0, 0)) } else { None };
         Self::insert_full(
             conn, item_id, scan_id, false, is_deleted, access, mod_date, size,
-            prev.file_hash(), prev.val(), prev.val_error(),
+            prev.file_hash(), prev.val_state(), prev.val_error(),
             prev.last_hash_scan(), prev.last_val_scan(),
-            counts,
+            prev.hash_state(),
+            counts, None,
         )
     }
 
@@ -271,15 +330,16 @@ impl ItemVersion {
         val_error: Option<&str>,
         last_hash_scan: Option<i64>,
         last_val_scan: Option<i64>,
+        hash_state: HashState,
     ) -> Result<(), FsPulseError> {
         conn.execute(
             "UPDATE item_versions SET
-                access = ?, file_hash = ?, val = ?, val_error = ?,
-                last_hash_scan = ?, last_val_scan = ?
+                access = ?, file_hash = ?, val_state = ?, val_error = ?,
+                last_hash_scan = ?, last_val_scan = ?, hash_state = ?
              WHERE version_id = ?",
             params![
                 access.as_i64(), file_hash, val.as_i64(), val_error,
-                last_hash_scan, last_val_scan, version_id,
+                last_hash_scan, last_val_scan, hash_state.as_i64(), version_id,
             ],
         )?;
         Ok(())
@@ -316,15 +376,23 @@ impl ItemVersion {
             access: Access::from_i64(row.get(5)?),
             mod_date: row.get(6)?,
             size: row.get(7)?,
-            file_hash: row.get(8)?,
-            val: row.get::<_, Option<i64>>(9)?.map(ValidationState::from_i64),
+            last_val_scan: row.get(8)?,
+            val_state: row.get::<_, Option<i64>>(9)?.map(ValidationState::from_i64),
             val_error: row.get(10)?,
             last_hash_scan: row.get(11)?,
-            last_val_scan: row.get(12)?,
-            add_count: row.get(13)?,
-            modify_count: row.get(14)?,
-            delete_count: row.get(15)?,
-            unchanged_count: row.get(16)?,
+            file_hash: row.get(12)?,
+            hash_state: row.get::<_, Option<i64>>(13)?.map(HashState::from_i64),
+            add_count: row.get(14)?,
+            modify_count: row.get(15)?,
+            delete_count: row.get(16)?,
+            unchanged_count: row.get(17)?,
+            val_unknown_count: row.get(18)?,
+            val_valid_count: row.get(19)?,
+            val_invalid_count: row.get(20)?,
+            val_no_validator_count: row.get(21)?,
+            hash_unknown_count: row.get(22)?,
+            hash_valid_count: row.get(23)?,
+            hash_suspicious_count: row.get(24)?,
         })
     }
 }
@@ -339,8 +407,9 @@ pub struct AnalysisItem {
     last_hash_scan: Option<i64>,
     file_hash: Option<String>,
     last_val_scan: Option<i64>,
-    val: i64,
+    val_state: i64,
     val_error: Option<String>,
+    hash_state: i64,
     needs_hash: bool,
     needs_val: bool,
 }
@@ -369,12 +438,16 @@ impl AnalysisItem {
         self.last_val_scan
     }
 
-    pub fn val(&self) -> ValidationState {
-        ValidationState::from_i64(self.val)
+    pub fn val_state(&self) -> ValidationState {
+        ValidationState::from_i64(self.val_state)
     }
 
     pub fn val_error(&self) -> Option<&str> {
         self.val_error.as_deref()
+    }
+
+    pub fn hash_state_enum(&self) -> HashState {
+        HashState::from_i64(self.hash_state)
     }
 
     pub fn needs_hash(&self) -> bool {
@@ -401,10 +474,11 @@ impl AnalysisItem {
             last_hash_scan: row.get(3)?,
             file_hash: row.get(4)?,
             last_val_scan: row.get(5)?,
-            val: row.get(6)?,
+            val_state: row.get(6)?,
             val_error: row.get(7)?,
-            needs_hash: row.get(8)?,
-            needs_val: row.get(9)?,
+            hash_state: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
+            needs_hash: row.get(9)?,
+            needs_val: row.get(10)?,
         })
     }
 
@@ -430,8 +504,8 @@ impl AnalysisItem {
                     END AS needs_hash,
                     CASE
                         WHEN $4 = 0 THEN 0
-                        WHEN $5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
-                        WHEN cv.val = 0 THEN 1
+                        WHEN $5 = 1 AND (cv.val_state = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
+                        WHEN cv.val_state = 0 THEN 1
                         WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
                         WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
                         WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
@@ -497,8 +571,9 @@ impl AnalysisItem {
                 cv.last_hash_scan,
                 cv.file_hash,
                 cv.last_val_scan,
-                cv.val,
+                cv.val_state,
                 cv.val_error,
+                cv.hash_state,
                 CASE
                     WHEN $1 = 0 THEN 0
                     WHEN $2 = 1 AND (cv.file_hash IS NULL OR cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3) THEN 1
@@ -510,8 +585,8 @@ impl AnalysisItem {
                 END AS needs_hash,
                 CASE
                     WHEN $4 = 0 THEN 0
-                    WHEN $5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
-                    WHEN cv.val = 0 THEN 1
+                    WHEN $5 = 1 AND (cv.val_state = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3) THEN 1
+                    WHEN cv.val_state = 0 THEN 1
                     WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
                     WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
                     WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
@@ -543,8 +618,8 @@ impl AnalysisItem {
                         (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (cv.last_hash_scan IS NULL OR cv.last_hash_scan < $3))
                     )) OR
                     ($4 = 1 AND (
-                        ($5 = 1 AND (cv.val = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
-                        cv.val = 0 OR
+                        ($5 = 1 AND (cv.val_state = 0 OR cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
+                        cv.val_state = 0 OR
                         (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
                         (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3)) OR
                         (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (cv.last_val_scan IS NULL OR cv.last_val_scan < $3))
@@ -587,8 +662,9 @@ mod tests {
             last_hash_scan: Some(456),
             file_hash: Some("abc123".to_string()),
             last_val_scan: Some(789),
-            val: ValidationState::Valid.as_i64(),
+            val_state: ValidationState::Valid.as_i64(),
             val_error: Some("test error".to_string()),
+            hash_state: HashState::Valid.as_i64(),
             needs_hash: true,
             needs_val: false,
         };

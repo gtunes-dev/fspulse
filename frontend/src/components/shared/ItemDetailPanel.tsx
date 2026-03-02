@@ -59,11 +59,11 @@ interface VersionEntry {
   access: number
   mod_date: number | null
   size: number | null
-  file_hash: string | null
-  val: number | null
+  last_val_scan: number | null
+  val_state: number | null
   val_error: string | null
   last_hash_scan: number | null
-  last_val_scan: number | null
+  file_hash: string | null
 }
 
 interface VersionHistoryInitResponse {
@@ -190,7 +190,7 @@ function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
     v.size !== prev.size ||
     v.file_hash !== prev.file_hash ||
     v.access !== prev.access ||
-    v.val !== prev.val ||
+    v.val_state !== prev.val_state ||
     v.val_error !== prev.val_error
   )
 }
@@ -521,7 +521,7 @@ export function ItemDetailPanel({
                 {itemType === 'F' && (
                   <div>
                     <p className="text-muted-foreground">Validation</p>
-                    <div className="mt-0.5">{getValidationBadge(anchorVersion.val)}</div>
+                    <div className="mt-0.5">{getValidationBadge(anchorVersion.val_state)}</div>
                   </div>
                 )}
                 {itemType === 'F' && anchorVersion.file_hash && (
@@ -666,10 +666,10 @@ export function ItemDetailPanel({
                                     <p className="text-muted-foreground">{accessLabel(change.prev.access)} &rarr; {accessLabel(v.access)}</p>
                                   </div>
                                 )}
-                                {change.prev && v.val !== change.prev.val && (
+                                {change.prev && v.val_state !== change.prev.val_state && (
                                   <div className="bg-muted/50 p-1.5 rounded">
                                     <p className="font-medium">Validation</p>
-                                    <div className="flex items-center gap-1 mt-0.5">{getValidationBadge(change.prev.val)} <span>&rarr;</span> {getValidationBadge(v.val)}</div>
+                                    <div className="flex items-center gap-1 mt-0.5">{getValidationBadge(change.prev.val_state)} <span>&rarr;</span> {getValidationBadge(v.val_state)}</div>
                                   </div>
                                 )}
                               </div>

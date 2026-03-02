@@ -37,12 +37,13 @@ pub enum ColType {
     Bool,
     String,
     Path,
-    Val,
+    ValState,
     ItemType,
     AlertType,
     AlertStatus,
     ScanState,
     Access,
+    HashState,
     Int,
 }
 
@@ -79,9 +80,9 @@ impl ColType {
                 "Path",
                 "Single-quoted substring(s) e.g. '/var/log', 'docs/report.pdf'",
             ),
-            ColType::Val => ColTypeInfo::new(
-                Rule::val_filter_EOI,
-                "Val",
+            ColType::ValState => ColTypeInfo::new(
+                Rule::val_state_filter_EOI,
+                "Val State",
                 "Validity codes: V (valid), I (invalid), N (no validator), U (unknown)\nComma-separate codes (null and not_null also ok)",
             ),
             ColType::ItemType => ColTypeInfo::new(
@@ -108,6 +109,11 @@ impl ColType {
                 Rule::access_filter_EOI,
                 "Access",
                 "Access states: N (No Error), M (Meta Error), R (Read Error)\nComma-separated values (null and not null also ok)",
+            ),
+            ColType::HashState => ColTypeInfo::new(
+                Rule::hash_state_filter_EOI,
+                "Hash State",
+                "Hash states: U (Unknown), V (Valid), S (Suspicious)\nComma-separated values (null and not null also ok)",
             ),
         }
     }
@@ -171,6 +177,13 @@ pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {
     "add_count" => ColSpec::new("add_count", "Adds", true, ColType::Int, ColAlign::Right),
     "modify_count" => ColSpec::new("modify_count", "Modifies", true, ColType::Int, ColAlign::Right),
     "delete_count" => ColSpec::new("delete_count", "Deletes", true, ColType::Int, ColAlign::Right),
+    "val_unknown_count" => ColSpec::new("val_unknown_count", "Val Unknown", false, ColType::Int, ColAlign::Right),
+    "val_valid_count" => ColSpec::new("val_valid_count", "Val Valid", false, ColType::Int, ColAlign::Right),
+    "val_invalid_count" => ColSpec::new("val_invalid_count", "Val Invalid", false, ColType::Int, ColAlign::Right),
+    "val_no_validator_count" => ColSpec::new("val_no_validator_count", "Val No Validator", false, ColType::Int, ColAlign::Right),
+    "hash_unknown_count" => ColSpec::new("hash_unknown_count", "Hash Unknown", false, ColType::Int, ColAlign::Right),
+    "hash_valid_count" => ColSpec::new("hash_valid_count", "Hash Valid", false, ColType::Int, ColAlign::Right),
+    "hash_suspicious_count" => ColSpec::new("hash_suspicious_count", "Hash Suspicious", false, ColType::Int, ColAlign::Right),
     "error" => ColSpec::new("error", "Error", false, ColType::String, ColAlign::Left),
 };
 
@@ -187,11 +200,12 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "access" => ColSpec::new("iv.access", "Access", false, ColType::Access, ColAlign::Center),
     "mod_date" => ColSpec::new("iv.mod_date", "Mod Date", true, ColType::Date, ColAlign::Center),
     "size" => ColSpec::new("iv.size", "Size", false, ColType::Int, ColAlign::Right),
+    "last_val_scan" => ColSpec::new("iv.last_val_scan", "Last Val Scan", false, ColType::Id, ColAlign::Right),
+    "val_state" => ColSpec::new("iv.val_state", "Val State", false, ColType::ValState, ColAlign::Center),
+    "val_error" => ColSpec::new("iv.val_error", "Val Error", false, ColType::String, ColAlign::Left),
     "last_hash_scan" => ColSpec::new("iv.last_hash_scan", "Last Hash Scan", false, ColType::Id, ColAlign::Right),
     "file_hash" => ColSpec::new("iv.file_hash", "File Hash", false, ColType::String, ColAlign::Left),
-    "last_val_scan" => ColSpec::new("iv.last_val_scan", "Last Val Scan", false, ColType::Id, ColAlign::Right),
-    "val" => ColSpec::new("iv.val", "Val", false, ColType::Val, ColAlign::Center),
-    "val_error" => ColSpec::new("iv.val_error", "Val Error", false, ColType::String, ColAlign::Left),
+    "hash_state" => ColSpec::new("iv.hash_state", "Hash State", false, ColType::HashState, ColAlign::Center),
 };
 
 pub const VERSIONS_QUERY_COLS: ColMap = phf_ordered_map! {
@@ -207,11 +221,23 @@ pub const VERSIONS_QUERY_COLS: ColMap = phf_ordered_map! {
     "access" => ColSpec::new("iv.access", "Access", false, ColType::Access, ColAlign::Center),
     "mod_date" => ColSpec::new("iv.mod_date", "Mod Date", false, ColType::Date, ColAlign::Center),
     "size" => ColSpec::new("iv.size", "Size", false, ColType::Int, ColAlign::Right),
+    "last_val_scan" => ColSpec::new("iv.last_val_scan", "Last Val Scan", false, ColType::Id, ColAlign::Right),
+    "val_state" => ColSpec::new("iv.val_state", "Val State", false, ColType::ValState, ColAlign::Center),
+    "val_error" => ColSpec::new("iv.val_error", "Val Error", false, ColType::String, ColAlign::Left),
     "last_hash_scan" => ColSpec::new("iv.last_hash_scan", "Last Hash Scan", false, ColType::Id, ColAlign::Right),
     "file_hash" => ColSpec::new("iv.file_hash", "File Hash", false, ColType::String, ColAlign::Left),
-    "last_val_scan" => ColSpec::new("iv.last_val_scan", "Last Val Scan", false, ColType::Id, ColAlign::Right),
-    "val" => ColSpec::new("iv.val", "Val", false, ColType::Val, ColAlign::Center),
-    "val_error" => ColSpec::new("iv.val_error", "Val Error", false, ColType::String, ColAlign::Left),
+    "hash_state" => ColSpec::new("iv.hash_state", "Hash State", false, ColType::HashState, ColAlign::Center),
+    "add_count" => ColSpec::new("iv.add_count", "Adds", false, ColType::Int, ColAlign::Right),
+    "modify_count" => ColSpec::new("iv.modify_count", "Modifies", false, ColType::Int, ColAlign::Right),
+    "delete_count" => ColSpec::new("iv.delete_count", "Deletes", false, ColType::Int, ColAlign::Right),
+    "unchanged_count" => ColSpec::new("iv.unchanged_count", "Unchanged", false, ColType::Int, ColAlign::Right),
+    "val_unknown_count" => ColSpec::new("iv.val_unknown_count", "Val Unknown", false, ColType::Int, ColAlign::Right),
+    "val_valid_count" => ColSpec::new("iv.val_valid_count", "Val Valid", false, ColType::Int, ColAlign::Right),
+    "val_invalid_count" => ColSpec::new("iv.val_invalid_count", "Val Invalid", false, ColType::Int, ColAlign::Right),
+    "val_no_validator_count" => ColSpec::new("iv.val_no_validator_count", "Val No Validator", false, ColType::Int, ColAlign::Right),
+    "hash_unknown_count" => ColSpec::new("iv.hash_unknown_count", "Hash Unknown", false, ColType::Int, ColAlign::Right),
+    "hash_valid_count" => ColSpec::new("iv.hash_valid_count", "Hash Valid", false, ColType::Int, ColAlign::Right),
+    "hash_suspicious_count" => ColSpec::new("iv.hash_suspicious_count", "Hash Suspicious", false, ColType::Int, ColAlign::Right),
 };
 
 pub const ALERTS_QUERY_COLS: ColMap = phf_ordered_map! {

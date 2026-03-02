@@ -22,6 +22,7 @@ Each scan records:
 - Whether hashing and validation were enabled
 - Counts of files, folders, and total size discovered
 - Counts of additions, modifications, and deletions detected
+- Counts of files in each validation state and hash state
 - Any alerts generated
 
 Scans are always tied to a root via `root_id` and are ordered chronologically by `started_at`.
@@ -49,9 +50,10 @@ Each version contains:
 - **Deletion status** — whether the item existed or had been deleted
 - **Access status** — whether the item could be read successfully
 - **Metadata** — modification date and size
-- **Hash** — SHA-256 content hash, if computed (files only; null for folders)
-- **Validation** — format validation state and any error message (files only; null for folders)
-- **Descendant change counts** — add, modify, and delete counts for child items (folders only; null for files)
+- **Validation state** — format validation state and any error message (files only; null for folders)
+- **Hash and hash state** — SHA-256 content hash and hash integrity state (files only; null for folders). See [Scanning - Hash States](scanning.md#hash-states)
+- **Descendant change counts** — add, modify, delete, and unchanged counts for child items (folders only; null for files)
+- **Descendant state counts** — counts of descendant files in each validation and hash state (folders only; null for files)
 
 An item that exists unchanged across 50 scans has exactly **one version row**. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.
 

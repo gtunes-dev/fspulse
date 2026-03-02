@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     fs::File,
     io::Read,
     path::Path,
@@ -9,9 +10,79 @@ use std::{
 };
 
 use hex::encode;
+use log::warn;
 use sha2::{Digest, Sha256};
 
 use crate::error::FsPulseError;
+
+/// Represents the hash integrity state of a file.
+/// Stored as integer in the database.
+/// Unknown or invalid values in the database default to `Unknown`.
+#[repr(i64)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum HashState {
+    Unknown = 0,
+    Valid = 1,
+    Suspicious = 2,
+}
+
+impl HashState {
+    pub fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+
+    pub fn from_i64(value: i64) -> Self {
+        match value {
+            0 => HashState::Unknown,
+            1 => HashState::Valid,
+            2 => HashState::Suspicious,
+            _ => {
+                warn!("Invalid HashState value in database: {}, defaulting to Unknown", value);
+                HashState::Unknown
+            }
+        }
+    }
+
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            HashState::Unknown => "U",
+            HashState::Valid => "V",
+            HashState::Suspicious => "S",
+        }
+    }
+
+    pub fn full_name(&self) -> &'static str {
+        match self {
+            HashState::Unknown => "Unknown",
+            HashState::Valid => "Valid",
+            HashState::Suspicious => "Suspicious",
+        }
+    }
+
+    pub fn from_string(s: &str) -> Option<Self> {
+        match s.to_ascii_uppercase().as_str() {
+            "UNKNOWN" => Some(HashState::Unknown),
+            "VALID" => Some(HashState::Valid),
+            "SUSPICIOUS" => Some(HashState::Suspicious),
+            "U" => Some(HashState::Unknown),
+            "V" => Some(HashState::Valid),
+            "S" => Some(HashState::Suspicious),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for HashState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.full_name())
+    }
+}
+
+impl crate::query::QueryEnum for HashState {
+    fn from_token(s: &str) -> Option<i64> {
+        Self::from_string(s).map(|state| state.as_i64())
+    }
+}
 
 pub struct Hash;
 

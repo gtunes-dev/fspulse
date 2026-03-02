@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '23');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '24');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS scans (
     add_count INTEGER DEFAULT NULL,    -- Count of items added in the scan
     modify_count INTEGER DEFAULT NULL, -- Count of items modified in the scan
     delete_count INTEGER DEFAULT NULL, -- Count of items deleted in the scan
+    val_unknown_count INTEGER DEFAULT NULL,       -- Count of files with unknown validation state
+    val_valid_count INTEGER DEFAULT NULL,         -- Count of files with valid validation state
+    val_invalid_count INTEGER DEFAULT NULL,       -- Count of files with invalid validation state
+    val_no_validator_count INTEGER DEFAULT NULL,   -- Count of files with no available validator
+    hash_unknown_count INTEGER DEFAULT NULL,       -- Count of files with unknown hash state
+    hash_valid_count INTEGER DEFAULT NULL,         -- Count of files with valid (unchanged) hash state
+    hash_suspicious_count INTEGER DEFAULT NULL,    -- Count of files with suspicious (changed) hash state
     error TEXT DEFAULT NULL,           -- Error message if scan failed
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id)
@@ -77,12 +84,15 @@ CREATE TABLE IF NOT EXISTS item_versions (
     mod_date        INTEGER,
     size            INTEGER,
 
-    -- File-specific fields (NULL for folders)
-    file_hash       TEXT,
-    val             INTEGER,
-    val_error       TEXT,
-    last_hash_scan  INTEGER,
+    -- Validation fields (NULL for folders)
     last_val_scan   INTEGER,
+    val_state       INTEGER,
+    val_error       TEXT,
+
+    -- Hash fields (NULL for folders)
+    last_hash_scan  INTEGER,
+    file_hash       TEXT,
+    hash_state      INTEGER,
 
     -- Folder-specific descendant change counts (NULL for files).
     -- Each count reflects the scan that created this version:
@@ -97,6 +107,17 @@ CREATE TABLE IF NOT EXISTS item_versions (
     modify_count    INTEGER,
     delete_count    INTEGER,
     unchanged_count INTEGER,
+
+    -- Folder-specific descendant state snapshot counts (NULL for files).
+    -- Count of alive descendant files in each validation/hash state
+    -- at the scan that created this version.
+    val_unknown_count        INTEGER,
+    val_valid_count          INTEGER,
+    val_invalid_count        INTEGER,
+    val_no_validator_count   INTEGER,
+    hash_unknown_count       INTEGER,
+    hash_valid_count         INTEGER,
+    hash_suspicious_count    INTEGER,
 
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),

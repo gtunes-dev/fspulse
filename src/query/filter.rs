@@ -1,6 +1,7 @@
 use crate::{
     alerts::{AlertStatus, AlertType},
     error::FsPulseError,
+    hash::HashState,
     items::{Access, ItemType},
     scans::ScanState,
     utils::Utils,
@@ -506,8 +507,9 @@ static ENUM_PARSERS: Map<&'static str, EnumParser> = phf_map! {
 "item_type" => ItemType::from_token,
 "alert_type" => AlertType::from_token,
 "alert_status" => AlertStatus::from_token,
-"val" => ValidationState::from_token,
+"val_state" => ValidationState::from_token,
 "access" => Access::from_token,
+"hash_state" => HashState::from_token,
 };
 
 /// Filter for integer-backed enums (like scan_state)
@@ -1088,66 +1090,66 @@ mod tests {
 
     #[test]
     fn test_val_filter_valid() {
-        let result = QueryParser::parse(Rule::val_filter_EOI, "Valid");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "Valid");
         assert!(
             result.is_ok(),
             "Failed to parse 'Valid': {:?}",
             result.err()
         );
 
-        let result = QueryParser::parse(Rule::val_filter_EOI, "V");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "V");
         assert!(result.is_ok(), "Failed to parse 'V': {:?}", result.err());
     }
 
     #[test]
     fn test_val_filter_invalid() {
-        let result = QueryParser::parse(Rule::val_filter_EOI, "Invalid");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "Invalid");
         assert!(
             result.is_ok(),
             "Failed to parse 'Invalid': {:?}",
             result.err()
         );
 
-        let result = QueryParser::parse(Rule::val_filter_EOI, "I");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "I");
         assert!(result.is_ok(), "Failed to parse 'I': {:?}", result.err());
     }
 
     #[test]
     fn test_val_filter_no_validator() {
-        let result = QueryParser::parse(Rule::val_filter_EOI, "No Validator");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "No Validator");
         assert!(
             result.is_ok(),
             "Failed to parse 'No Validator': {:?}",
             result.err()
         );
 
-        let result = QueryParser::parse(Rule::val_filter_EOI, "N");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "N");
         assert!(result.is_ok(), "Failed to parse 'N': {:?}", result.err());
     }
 
     #[test]
     fn test_val_filter_unknown() {
-        let result = QueryParser::parse(Rule::val_filter_EOI, "Unknown");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "Unknown");
         assert!(
             result.is_ok(),
             "Failed to parse 'Unknown': {:?}",
             result.err()
         );
 
-        let result = QueryParser::parse(Rule::val_filter_EOI, "U");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "U");
         assert!(result.is_ok(), "Failed to parse 'U': {:?}", result.err());
     }
 
     #[test]
     fn test_val_filter_multiple() {
-        let result = QueryParser::parse(Rule::val_filter_EOI, "Valid, Invalid");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "Valid, Invalid");
         assert!(
             result.is_ok(),
             "Failed to parse multiple values: {:?}",
             result.err()
         );
 
-        let result = QueryParser::parse(Rule::val_filter_EOI, "V, I, N");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "V, I, N");
         assert!(
             result.is_ok(),
             "Failed to parse multiple short codes: {:?}",
@@ -1157,7 +1159,7 @@ mod tests {
 
     #[test]
     fn test_val_filter_null() {
-        let result = QueryParser::parse(Rule::val_filter_EOI, "null");
+        let result = QueryParser::parse(Rule::val_state_filter_EOI, "null");
         assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
     }
 

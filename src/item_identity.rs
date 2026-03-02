@@ -190,9 +190,12 @@ impl ExistingItem {
         conn.query_row(
             "SELECT iv.version_id, iv.first_scan_id, iv.last_scan_id,
                     iv.is_added, iv.is_deleted, iv.access,
-                    iv.mod_date, iv.size, iv.file_hash, iv.val, iv.val_error,
-                    iv.last_hash_scan, iv.last_val_scan,
+                    iv.mod_date, iv.size,
+                    iv.last_val_scan, iv.val_state, iv.val_error,
+                    iv.last_hash_scan, iv.file_hash, iv.hash_state,
                     iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
+                    iv.val_unknown_count, iv.val_valid_count, iv.val_invalid_count, iv.val_no_validator_count,
+                    iv.hash_unknown_count, iv.hash_valid_count, iv.hash_suspicious_count,
                     i.item_id
              FROM items i
              JOIN item_versions iv ON iv.item_id = i.item_id
@@ -203,7 +206,7 @@ impl ExistingItem {
             params![root_id, path, item_type.as_i64()],
             |row| {
                 let version = ItemVersion::from_row(row)?;
-                let item_id: i64 = row.get(17)?;
+                let item_id: i64 = row.get(25)?;
                 Ok(ExistingItem { item_id, version })
             },
         )

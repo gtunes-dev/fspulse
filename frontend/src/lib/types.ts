@@ -15,7 +15,7 @@ export type ColumnType =
   | 'ChangeType'
   | 'AlertType'
   | 'AlertStatus'
-  | 'Val'
+  | 'ValState'
 
 export interface FilterInfo {
   type_name: string
