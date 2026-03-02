@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ede332e8.js";
+            window.path_to_searchindex_js = "searchindex-cf6a1674.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ae9385db.js"></script>
@@ -197,15 +197,23 @@
 <li><strong>Hash changed items</strong> (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed</li>
 <li><strong>Hash all items</strong>: Hash all files, including those that have been previously hashed</li>
 </ul>
-<p>If a hash is detected to have changed, a new item version is created and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>).</p>
+<p>If a hash is detected to have changed, a new item version is created. If the hash changed without a corresponding metadata change (modification date or size), the file’s <code>hash_state</code> is set to <strong>Suspect</strong> and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>). If metadata did change, the hash change is considered legitimate and <code>hash_state</code> remains <strong>Valid</strong>.</p>
+<h3 id="hash-states"><a class="header" href="#hash-states">Hash States</a></h3>
+<p>Hash state tracks the integrity of a file’s content hash over time. Hash states are stored in the database as:</p>
+<ul>
+<li><strong>U</strong>: Unknown. No hash has been computed for this file</li>
+<li><strong>V</strong>: Valid. Hash exists, no unexplained changes detected</li>
+<li><strong>S</strong>: Suspect. Hash changed without a corresponding metadata change</li>
+</ul>
+<p>Unlike validation state (which reflects the latest analysis result), hash state is <strong>sticky</strong> — once a file is marked Suspect, it remains Suspect until the file is legitimately modified (metadata change detected during a subsequent scan with hashing enabled).</p>
 <h3 id="finding-hash-changes"><a class="header" href="#finding-hash-changes">Finding Hash Changes</a></h3>
 <p>You can investigate hash changes through the web UI:</p>
 <ul>
-<li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows suspicious hash changes where file metadata hasn’t changed</li>
+<li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows suspect hash changes where file metadata hasn’t changed</li>
 <li><strong><a href="web_ui/browse.html">Browse Page</a></strong>: Click any item to see its version history including hash changes</li>
 <li><strong><a href="web_ui/explore.html">Explore Page</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
-<p>Example query to find items with suspicious hashes (run on the Explore page’s Query tab):</p>
+<p>Example query to find items with suspect hashes (run on the Explore page’s Query tab):</p>
 <pre><code class="language-text">alerts where alert_type:(H) order by created_at desc
 </code></pre>
 <h2 id="validating"><a class="header" href="#validating">Validating</a></h2>
@@ -236,7 +244,7 @@
 <li><strong><a href="web_ui/explore.html">Explore Page</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
 <p>Example query to find items currently in an invalid validation state:</p>
-<pre><code class="language-text">items where val:(I) show default, val_error order by item_path
+<pre><code class="language-text">items where val_state:(I) show default, val_error order by item_path
 </code></pre>
 <p>Additional queries can filter on specific validation states. See <a href="query.html">Query Syntax</a> for details.</p>
 <hr>

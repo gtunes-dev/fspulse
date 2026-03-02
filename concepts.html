@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ede332e8.js";
+            window.path_to_searchindex_js = "searchindex-cf6a1674.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-ae9385db.js"></script>
@@ -193,6 +193,7 @@
 <li>Whether hashing and validation were enabled</li>
 <li>Counts of files, folders, and total size discovered</li>
 <li>Counts of additions, modifications, and deletions detected</li>
+<li>Counts of files in each validation state and hash state</li>
 <li>Any alerts generated</li>
 </ul>
 <p>Scans are always tied to a root via <code>root_id</code> and are ordered chronologically by <code>started_at</code>.</p>
@@ -215,9 +216,10 @@
 <li><strong>Deletion status</strong> — whether the item existed or had been deleted</li>
 <li><strong>Access status</strong> — whether the item could be read successfully</li>
 <li><strong>Metadata</strong> — modification date and size</li>
-<li><strong>Hash</strong> — SHA-256 content hash, if computed (files only; null for folders)</li>
-<li><strong>Validation</strong> — format validation state and any error message (files only; null for folders)</li>
-<li><strong>Descendant change counts</strong> — add, modify, and delete counts for child items (folders only; null for files)</li>
+<li><strong>Validation state</strong> — format validation state and any error message (files only; null for folders)</li>
+<li><strong>Hash and hash state</strong> — SHA-256 content hash and hash integrity state (files only; null for folders). See <a href="scanning.html#hash-states">Scanning - Hash States</a></li>
+<li><strong>Descendant change counts</strong> — add, modify, delete, and unchanged counts for child items (folders only; null for files)</li>
+<li><strong>Descendant state counts</strong> — counts of descendant files in each validation and hash state (folders only; null for files)</li>
 </ul>
 <p>An item that exists unchanged across 50 scans has exactly <strong>one version row</strong>. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.</p>
 <h3 id="deriving-change-types"><a class="header" href="#deriving-change-types">Deriving Change Types</a></h3>
@@ -231,7 +233,7 @@
 <h2 id="alert"><a class="header" href="#alert">Alert</a></h2>
 <p>An <strong>alert</strong> flags a potential integrity issue detected during scanning. There are three alert types:</p>
 <ul>
-<li><strong>Suspicious Hash</strong> — file content hash changed but modification time did not, suggesting bit rot or tampering</li>
+<li><strong>Suspect Hash</strong> — file content hash changed but modification time did not, suggesting bit rot or tampering</li>
 <li><strong>Invalid Item</strong> — format validation detected corruption in a supported file type</li>
 <li><strong>Access Denied</strong> — FsPulse could not access the item’s metadata or contents</li>
 </ul>
