@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Change and integrity tooltips**: Colored change dots and integrity icons show descriptive tooltips on hover; directory change dots show descendant counts (e.g., "3 added, 12 modified, 1 deleted, 45 unchanged")
 - **Scan History deep links**: Added a "Scan" column to the Scan History table on the Scans page with clickable links (e.g., "Scan #42") that navigate directly to the Browse page with the correct root and scan pre-selected
 - **Scan History date formatting**: The "Started" column in the Scan History table now shows a readable date+time with day of week (e.g., "Fri, Feb 28, 2:30 PM") instead of relative time
+- **Item detail hash state**: File item detail views show hash state and validation state in an "Integrity" section with truncated expandable hash values
+- **Item detail folder counts**: Directory item detail views show change type counts (added/deleted/modified/unchanged) and integrity counts (suspect hash/invalid item) from the version data
+- **Item detail version diffs for counts**: Version history diffs for folders show folder count and integrity count transitions, including on initial (Added) versions
+- **Editable alert status**: Alert status can be changed directly from the item detail view via a dropdown instead of navigating to the Alerts page
 
 ### Fixed
 - Fix incorrect validation state display in item detail panels where val_state integers were mapped to wrong labels (e.g., Invalid files showing as "No Validator")

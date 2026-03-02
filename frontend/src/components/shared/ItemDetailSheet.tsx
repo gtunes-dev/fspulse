@@ -3,7 +3,7 @@ import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
   File, Folder, FileX, FolderX, Calendar as CalendarIcon,
   HardDrive, Hash, ShieldAlert, ShieldCheck, ShieldQuestion,
-  ChevronDown, Eye,
+  AlertTriangle, CircleX, ChevronDown, Eye,
 } from 'lucide-react'
 import {
   Sheet,
@@ -46,9 +46,9 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts'
-import { fetchQuery, countQuery } from '@/lib/api'
-import type { ColumnSpec } from '@/lib/types'
-import { formatDateFull, formatScanDate } from '@/lib/dateUtils'
+import { fetchQuery, countQuery, updateAlertStatus } from '@/lib/api'
+import type { ColumnSpec, AlertStatusValue } from '@/lib/types'
+import { formatDateFull, formatDateTimeShort, formatScanDate } from '@/lib/dateUtils'
 import { formatFileSize } from '@/lib/formatUtils'
 import { cn } from '@/lib/utils'
 
@@ -80,6 +80,13 @@ interface VersionEntry {
   val_error: string | null
   last_hash_scan: number | null
   file_hash: string | null
+  hash_state: number | null
+  add_count: number | null
+  modify_count: number | null
+  delete_count: number | null
+  unchanged_count: number | null
+  hash_suspect_count: number | null
+  val_invalid_count: number | null
 }
 
 interface VersionHistoryInitResponse {
@@ -173,6 +180,43 @@ function valShort(val: number | null): string {
   }
 }
 
+function hashShort(hash: number | null): string {
+  switch (hash) {
+    case 0: return 'U'
+    case 1: return 'V'
+    case 2: return 'S'
+    default: return 'U'
+  }
+}
+
+function hashStateName(hash: number | null): string {
+  switch (hash) {
+    case 0: return 'Unknown'
+    case 1: return 'Valid'
+    case 2: return 'Suspect'
+    default: return 'Unknown'
+  }
+}
+
+function valStateName(val: number | null): string {
+  switch (val) {
+    case 0: return 'Unknown'
+    case 1: return 'Valid'
+    case 2: return 'Invalid'
+    case 3: return 'No Validator'
+    default: return 'Unknown'
+  }
+}
+
+function alertTypeLabel(type: string): string {
+  switch (type) {
+    case 'H': return 'Suspect Hash'
+    case 'I': return 'Invalid Item'
+    case 'A': return 'Access Denied'
+    default: return type
+  }
+}
+
 function itemTypeLabel(type: string): string {
   switch (type) {
     case 'F': return 'File'
@@ -207,6 +251,28 @@ function buildChanges(versions: VersionEntry[]): VersionChange[] {
   return changes
 }
 
+function hasNonZeroFolderCounts(v: VersionEntry): boolean {
+  return (
+    (v.add_count ?? 0) > 0 ||
+    (v.modify_count ?? 0) > 0 ||
+    (v.delete_count ?? 0) > 0 ||
+    (v.unchanged_count ?? 0) > 0 ||
+    (v.hash_suspect_count ?? 0) > 0 ||
+    (v.val_invalid_count ?? 0) > 0
+  )
+}
+
+function hasFolderCountChanges(v: VersionEntry, prev: VersionEntry): boolean {
+  return (
+    v.add_count !== prev.add_count ||
+    v.modify_count !== prev.modify_count ||
+    v.delete_count !== prev.delete_count ||
+    v.unchanged_count !== prev.unchanged_count ||
+    v.hash_suspect_count !== prev.hash_suspect_count ||
+    v.val_invalid_count !== prev.val_invalid_count
+  )
+}
+
 /** Check if two versions differ in any visible field */
 function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
   return (
@@ -215,7 +281,9 @@ function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
     v.file_hash !== prev.file_hash ||
     v.access !== prev.access ||
     v.val_state !== prev.val_state ||
-    v.val_error !== prev.val_error
+    v.val_error !== prev.val_error ||
+    v.hash_state !== prev.hash_state ||
+    hasFolderCountChanges(v, prev)
   )
 }
 
@@ -241,10 +309,14 @@ export function ItemDetailSheet({
   const [anchorScanDate, setAnchorScanDate] = useState(0)
   const [openVersions, setOpenVersions] = useState<Record<number, boolean>>({})
 
+  // Hash expand state
+  const [hashExpanded, setHashExpanded] = useState(false)
+
   // Alerts state
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [totalAlerts, setTotalAlerts] = useState(0)
   const [loadingMoreAlerts, setLoadingMoreAlerts] = useState(false)
+  const [updatingAlertId, setUpdatingAlertId] = useState<number | null>(null)
 
   // Size history state
   const [sizeHistory, setSizeHistory] = useState<SizeHistoryPoint[]>([])
@@ -354,6 +426,20 @@ export function ItemDetailSheet({
       setLoadingMoreAlerts(false)
     }
   }
+
+  const handleAlertStatusUpdate = useCallback(async (alertId: number, newStatus: AlertStatusValue) => {
+    setUpdatingAlertId(alertId)
+    try {
+      await updateAlertStatus(alertId, { status: newStatus })
+      setAlerts(prev => prev.map(a =>
+        a.alert_id === alertId ? { ...a, alert_status: newStatus } : a
+      ))
+    } catch (error) {
+      console.error('Error updating alert status:', error)
+    } finally {
+      setUpdatingAlertId(null)
+    }
+  }, [])
 
   // ---- Size history ----
 
@@ -466,6 +552,18 @@ export function ItemDetailSheet({
     }
   }
 
+  const getHashStateBadge = (hash: number | null) => {
+    const short = hashShort(hash)
+    switch (short) {
+      case 'V':
+        return <Badge variant="success" className="gap-1"><ShieldCheck className="h-3 w-3" />Valid</Badge>
+      case 'S':
+        return <Badge className={cn("bg-amber-500 hover:bg-amber-600 gap-1")}><AlertTriangle className="h-3 w-3" />Suspect</Badge>
+      default:
+        return <Badge variant="secondary" className="gap-1"><ShieldQuestion className="h-3 w-3" />Unknown</Badge>
+    }
+  }
+
   const getChangeBadge = (kind: ChangeKind) => {
     switch (kind) {
       case 'initial':
@@ -479,31 +577,7 @@ export function ItemDetailSheet({
     }
   }
 
-  const getAlertTypeBadge = (type: string) => {
-    switch (type) {
-      case 'H':
-        return <Badge variant="destructive">Suspect Hash</Badge>
-      case 'I':
-        return <Badge variant="destructive">Invalid Item</Badge>
-      case 'A':
-        return <Badge variant="warning">Access Denied</Badge>
-      default:
-        return <Badge variant="secondary">{type}</Badge>
-    }
-  }
 
-  const getAlertStatusBadge = (status: string) => {
-    switch (status) {
-      case 'O':
-        return <Badge variant="destructive">Open</Badge>
-      case 'F':
-        return <Badge className="bg-amber-500 hover:bg-amber-600">Flagged</Badge>
-      case 'D':
-        return <Badge variant="secondary">Dismissed</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
-  }
 
   // ---- Scan reference helpers ----
 
@@ -618,31 +692,43 @@ export function ItemDetailSheet({
                         <p className="text-base font-semibold mt-1">{formatFileSize(anchorVersion.size)}</p>
                       </div>
                     )}
-                    {itemType === 'F' && (
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4" />
-                          Validation
-                        </p>
-                        <div className="mt-1">{getValidationBadge(anchorVersion.val_state)}</div>
-                      </div>
-                    )}
-                    {itemType === 'F' && anchorVersion.file_hash && (
-                      <div className="col-span-2">
-                        <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                          <Hash className="h-4 w-4" />
-                          Hash
-                        </p>
-                        <p className="text-xs font-mono mt-1 break-all">{anchorVersion.file_hash}</p>
-                      </div>
-                    )}
-                    {itemType === 'F' && anchorVersion.val_error && anchorVersion.val_error.trim() !== '' && (
-                      <div className="col-span-2">
-                        <p className="text-sm font-medium text-destructive">Validation Error</p>
-                        <p className="text-xs font-mono mt-1 bg-destructive/10 p-2 rounded">{anchorVersion.val_error}</p>
-                      </div>
-                    )}
                   </div>
+
+                  {itemType === 'F' && (
+                    <div className="mt-4 pt-4 border-t">
+                      <p className="text-base font-semibold mb-2">Integrity</p>
+                      <div className="text-sm pl-2 space-y-3">
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">Hash State :</span>
+                            <span>{hashStateName(anchorVersion.hash_state)}</span>
+                            {anchorVersion.hash_state === 2 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                          </div>
+                          {anchorVersion.file_hash && (
+                            <div
+                              className="flex items-center gap-1 mt-1 cursor-pointer"
+                              onClick={() => setHashExpanded(!hashExpanded)}
+                            >
+                              <p className="text-xs font-mono break-all">
+                                {hashExpanded ? anchorVersion.file_hash : anchorVersion.file_hash.slice(0, 8) + '…'}
+                              </p>
+                              <ChevronDown className={cn("h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform", !hashExpanded && "-rotate-90")} />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">Validation State :</span>
+                            <span>{valStateName(anchorVersion.val_state)}</span>
+                            {anchorVersion.val_state === 2 && <CircleX className="h-3.5 w-3.5 text-rose-500" />}
+                          </div>
+                          {anchorVersion.val_error && anchorVersion.val_error.trim() !== '' && (
+                            <p className="text-xs font-mono mt-1">{anchorVersion.val_error}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Children counts for directories */}
                   {itemType === 'D' && !isTombstone && (
@@ -652,20 +738,61 @@ export function ItemDetailSheet({
                           <p className="text-sm text-muted-foreground">Loading...</p>
                         </div>
                       ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
-                        <div className="flex items-center justify-center gap-6">
-                          <div className="flex items-center gap-2">
-                            <Folder className="h-4 w-4" style={{ color: 'hsl(142 71% 45%)' }} />
-                            <span className="text-base font-semibold">
-                              {childrenCounts.directory_count.toLocaleString()}
-                            </span>
+                        <>
+                          <div className="flex items-center justify-center gap-6">
+                            <div className="flex items-center gap-2">
+                              <Folder className="h-4 w-4" style={{ color: 'hsl(142 71% 45%)' }} />
+                              <span className="text-base font-semibold">
+                                {childrenCounts.directory_count.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <File className="h-4 w-4" style={{ color: 'hsl(221 83% 53%)' }} />
+                              <span className="text-base font-semibold">
+                                {childrenCounts.file_count.toLocaleString()}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <File className="h-4 w-4" style={{ color: 'hsl(221 83% 53%)' }} />
-                            <span className="text-base font-semibold">
-                              {childrenCounts.file_count.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
+                          {anchorVersion && (
+                            <div className="mt-4 text-sm px-2">
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                                  <span className="text-muted-foreground">Added :</span>
+                                  <span className="font-medium">{(anchorVersion.add_count ?? 0).toLocaleString()}</span>
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                                  <span className="text-muted-foreground">Deleted :</span>
+                                  <span className="font-medium">{(anchorVersion.delete_count ?? 0).toLocaleString()}</span>
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                                  <span className="text-muted-foreground">Modified :</span>
+                                  <span className="font-medium">{(anchorVersion.modify_count ?? 0).toLocaleString()}</span>
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <span className="inline-block w-2 h-2 rounded-full bg-zinc-400" />
+                                  <span className="text-muted-foreground">Unchanged :</span>
+                                  <span className="font-medium">{(anchorVersion.unchanged_count ?? 0).toLocaleString()}</span>
+                                </span>
+                              </div>
+                              <div className="border-t my-2" />
+                              <div className="grid grid-cols-2 gap-x-6">
+                                <span className="flex items-center gap-1">
+                                  <AlertTriangle className={cn("h-3.5 w-3.5", (anchorVersion.hash_suspect_count ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground/40")} />
+                                  <span className="text-muted-foreground">Suspect Hash :</span>
+                                  <span className="font-medium">{(anchorVersion.hash_suspect_count ?? 0).toLocaleString()}</span>
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <CircleX className={cn("h-3.5 w-3.5", (anchorVersion.val_invalid_count ?? 0) > 0 ? "text-rose-500" : "text-muted-foreground/40")} />
+                                  <span className="text-muted-foreground">Invalid Item :</span>
+                                  <span className="font-medium">{(anchorVersion.val_invalid_count ?? 0).toLocaleString()}</span>
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <div className="flex items-center justify-center py-4">
                           <p className="text-sm text-muted-foreground">No items in this directory</p>
@@ -838,7 +965,12 @@ export function ItemDetailSheet({
 
                           // Determine if this entry is expandable
                           const isExpandable =
-                            change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)
+                            (change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)) ||
+                            (change.kind === 'initial' && hasNonZeroFolderCounts(v))
+                          const prevForCounts = change.prev ?? {
+                            add_count: 0, modify_count: 0, delete_count: 0, unchanged_count: 0,
+                            hash_suspect_count: 0, val_invalid_count: 0,
+                          }
 
                           return (
                             <div key={v.version_id}>
@@ -949,6 +1081,89 @@ export function ItemDetailSheet({
                                           </div>
                                         )}
 
+                                        {change.prev && v.hash_state !== change.prev.hash_state && (
+                                          <div className="bg-muted/50 p-2 rounded">
+                                            <p className="font-medium mb-1 flex items-center gap-1">
+                                              <Hash className="h-3 w-3" />
+                                              Hash State
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                              {getHashStateBadge(change.prev.hash_state)}
+                                              <span className="text-muted-foreground">&rarr;</span>
+                                              {getHashStateBadge(v.hash_state)}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {((v.add_count ?? 0) !== (prevForCounts.add_count ?? 0) || (v.delete_count ?? 0) !== (prevForCounts.delete_count ?? 0) || (v.modify_count ?? 0) !== (prevForCounts.modify_count ?? 0) || (v.unchanged_count ?? 0) !== (prevForCounts.unchanged_count ?? 0)) && (
+                                          <div className="bg-muted/50 p-2 rounded">
+                                            <p className="font-medium mb-1">Folder Counts</p>
+                                            <div className="mt-1 space-y-0.5">
+                                              {(v.add_count ?? 0) !== (prevForCounts.add_count ?? 0) && (
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                                                  <span className="text-muted-foreground">Added :</span>
+                                                  <span className="text-muted-foreground">{(prevForCounts.add_count ?? 0).toLocaleString()}</span>
+                                                  <span>&rarr;</span>
+                                                  <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
+                                                </div>
+                                              )}
+                                              {(v.delete_count ?? 0) !== (prevForCounts.delete_count ?? 0) && (
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                                                  <span className="text-muted-foreground">Deleted :</span>
+                                                  <span className="text-muted-foreground">{(prevForCounts.delete_count ?? 0).toLocaleString()}</span>
+                                                  <span>&rarr;</span>
+                                                  <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
+                                                </div>
+                                              )}
+                                              {(v.modify_count ?? 0) !== (prevForCounts.modify_count ?? 0) && (
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                                                  <span className="text-muted-foreground">Modified :</span>
+                                                  <span className="text-muted-foreground">{(prevForCounts.modify_count ?? 0).toLocaleString()}</span>
+                                                  <span>&rarr;</span>
+                                                  <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
+                                                </div>
+                                              )}
+                                              {(v.unchanged_count ?? 0) !== (prevForCounts.unchanged_count ?? 0) && (
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="inline-block w-2 h-2 rounded-full bg-zinc-400" />
+                                                  <span className="text-muted-foreground">Unchanged :</span>
+                                                  <span className="text-muted-foreground">{(prevForCounts.unchanged_count ?? 0).toLocaleString()}</span>
+                                                  <span>&rarr;</span>
+                                                  <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {((v.hash_suspect_count ?? 0) !== (prevForCounts.hash_suspect_count ?? 0) || (v.val_invalid_count ?? 0) !== (prevForCounts.val_invalid_count ?? 0)) && (
+                                          <div className="bg-muted/50 p-2 rounded">
+                                            <p className="font-medium mb-1">Integrity</p>
+                                            <div className="mt-1 space-y-0.5">
+                                              {(v.hash_suspect_count ?? 0) !== (prevForCounts.hash_suspect_count ?? 0) && (
+                                                <div className="flex items-center gap-1">
+                                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                                                  <span className="text-muted-foreground">Suspect Hash :</span>
+                                                  <span className="text-muted-foreground">{(prevForCounts.hash_suspect_count ?? 0).toLocaleString()}</span>
+                                                  <span>&rarr;</span>
+                                                  <span className="font-medium">{(v.hash_suspect_count ?? 0).toLocaleString()}</span>
+                                                </div>
+                                              )}
+                                              {(v.val_invalid_count ?? 0) !== (prevForCounts.val_invalid_count ?? 0) && (
+                                                <div className="flex items-center gap-1">
+                                                  <CircleX className="h-3.5 w-3.5 text-rose-500" />
+                                                  <span className="text-muted-foreground">Invalid Item :</span>
+                                                  <span className="text-muted-foreground">{(prevForCounts.val_invalid_count ?? 0).toLocaleString()}</span>
+                                                  <span>&rarr;</span>
+                                                  <span className="font-medium">{(v.val_invalid_count ?? 0).toLocaleString()}</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+
                                         {change.prev && v.val_error !== change.prev.val_error && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 text-destructive">Validation Error</p>
@@ -1026,31 +1241,41 @@ export function ItemDetailSheet({
                   </div>
                 ) : (
                   <>
-                    <div className="border border-border rounded-lg">
-                      <div className="p-0">
-                        {alerts.map((alert, idx) => (
-                          <div key={alert.alert_id}>
-                            <div className="p-4">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  {getAlertTypeBadge(alert.alert_type)}
-                                  {getAlertStatusBadge(alert.alert_status)}
-                                  <p className="text-xs text-muted-foreground">
-                                    Scan <span className="font-mono font-semibold">#{alert.scan_id}</span>
-                                  </p>
-                                </div>
-                                {alert.val_error && (
-                                  <p className="text-sm text-red-600">{alert.val_error}</p>
-                                )}
-                                <p className="text-xs text-muted-foreground">
-                                  Created on {formatDateFull(alert.created)}
-                                </p>
-                              </div>
+                    <div className="border border-border rounded-lg divide-y divide-border">
+                      {alerts.map((alert) => (
+                        <div key={alert.alert_id} className="p-4 space-y-2">
+                          <p className="text-sm">
+                            <span className="font-mono font-semibold">#{alert.alert_id}</span>
+                            {' '}<span className="text-muted-foreground">{formatDateTimeShort(alert.created)}</span>
+                          </p>
+                          <div className="text-sm space-y-1.5 pl-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Status :</span>
+                              <Select
+                                value={alert.alert_status}
+                                onValueChange={(value) => handleAlertStatusUpdate(alert.alert_id, value as AlertStatusValue)}
+                                disabled={updatingAlertId === alert.alert_id}
+                              >
+                                <SelectTrigger className="h-7 w-[110px] text-xs border-dashed">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="O">Open</SelectItem>
+                                  <SelectItem value="F">Flagged</SelectItem>
+                                  <SelectItem value="D">Dismissed</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
-                            {idx < alerts.length - 1 && <Separator />}
+                            <div className="flex items-center gap-1">
+                              <span className="text-muted-foreground">Type :</span>
+                              <span>{alertTypeLabel(alert.alert_type)}</span>
+                              {alert.alert_type === 'H' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                              {alert.alert_type === 'I' && <CircleX className="h-3.5 w-3.5 text-rose-500" />}
+                            </div>
+                            {alert.val_error && <p className="text-muted-foreground">{alert.val_error}</p>}
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
                     {totalAlerts > alerts.length && alerts.length >= ALERTS_PER_PAGE && (
                       <div className="mt-4 flex justify-center">

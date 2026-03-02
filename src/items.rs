@@ -292,6 +292,14 @@ pub struct VersionHistoryEntry {
     pub val_error: Option<String>,
     pub last_hash_scan: Option<i64>,
     pub file_hash: Option<String>,
+    pub hash_state: Option<i64>,
+    // Folder counts (NULL for files)
+    pub add_count: Option<i64>,
+    pub modify_count: Option<i64>,
+    pub delete_count: Option<i64>,
+    pub unchanged_count: Option<i64>,
+    pub hash_suspect_count: Option<i64>,
+    pub val_invalid_count: Option<i64>,
 }
 
 impl VersionHistoryEntry {
@@ -311,6 +319,13 @@ impl VersionHistoryEntry {
             val_error: row.get(11)?,
             last_hash_scan: row.get(12)?,
             file_hash: row.get(13)?,
+            hash_state: row.get(14)?,
+            add_count: row.get(15)?,
+            modify_count: row.get(16)?,
+            delete_count: row.get(17)?,
+            unchanged_count: row.get(18)?,
+            hash_suspect_count: row.get(19)?,
+            val_invalid_count: row.get(20)?,
         })
     }
 }
@@ -338,7 +353,8 @@ const VERSION_HISTORY_COLUMNS: &str =
     "v.version_id, v.first_scan_id, v.last_scan_id, \
      s1.started_at, s2.started_at, \
      v.is_deleted, v.access, \
-     v.mod_date, v.size, v.last_val_scan, v.val_state, v.val_error, v.last_hash_scan, v.file_hash";
+     v.mod_date, v.size, v.last_val_scan, v.val_state, v.val_error, v.last_hash_scan, v.file_hash, v.hash_state, \
+     v.add_count, v.modify_count, v.delete_count, v.unchanged_count, v.hash_suspect_count, v.val_invalid_count";
 
 /// Get version history for an item, starting from a specific scan going backwards.
 /// Returns up to `limit` versions ordered by first_scan_id DESC.
