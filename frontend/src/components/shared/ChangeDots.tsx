@@ -39,8 +39,13 @@ export function ChangeDots({ changeKind, isDir, addCount, modifyCount, deleteCou
       changeKind === 'modified' ? 'bg-blue-500' :
       changeKind === 'deleted' ? 'bg-red-500' :
       'bg-zinc-400'
+    const tooltip =
+      changeKind === 'added' ? 'Added' :
+      changeKind === 'modified' ? 'Modified' :
+      changeKind === 'deleted' ? 'Deleted' :
+      'Unchanged'
     return (
-      <span className={DOT_BOX}>
+      <span className={DOT_BOX} title={tooltip}>
         <span className={`absolute left-[4.5px] top-[4.5px] ${DOT} ${color}`} />
       </span>
     )
@@ -53,8 +58,15 @@ export function ChangeDots({ changeKind, isDir, addCount, modifyCount, deleteCou
   const hasDel = deleteCount != null && deleteCount > 0
   const hasUnch = unchangedCount != null && unchangedCount > 0
 
+  const parts: string[] = []
+  if (hasAdd) parts.push(`${addCount} added`)
+  if (hasMod) parts.push(`${modifyCount} modified`)
+  if (hasDel) parts.push(`${deleteCount} deleted`)
+  if (hasUnch) parts.push(`${unchangedCount} unchanged`)
+  const dirTooltip = parts.length > 0 ? parts.join(', ') : 'No descendants'
+
   return (
-    <span className="inline-grid grid-cols-2 gap-[2px] w-4 h-4 flex-shrink-0 p-[1px] rounded-[3px] border border-zinc-500">
+    <span className="inline-grid grid-cols-2 gap-[2px] w-4 h-4 flex-shrink-0 p-[1px] rounded-[3px] border border-zinc-500" title={dirTooltip}>
       <span className={`rounded-[1px] ${hasAdd ? 'bg-green-500' : 'bg-green-500/15'}`} />
       <span className={`rounded-[1px] ${hasMod ? 'bg-blue-500' : 'bg-blue-500/15'}`} />
       <span className={`rounded-[1px] ${hasDel ? 'bg-red-500' : 'bg-red-500/15'}`} />

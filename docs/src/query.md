@@ -63,7 +63,7 @@ Each domain has a set of available columns. Columns marked as **default** are sh
 | `val_no_validator_count` | Integer | No     | Files with no available validator              |
 | `hash_unknown_count` | Integer    | No      | Files with unknown hash state                  |
 | `hash_valid_count` | Integer      | No      | Files with valid hash state                    |
-| `hash_suspicious_count` | Integer | No      | Files with suspicious hash state               |
+| `hash_suspect_count` | Integer | No      | Files with suspect hash state               |
 | `error`         | String          | No      | Error message if scan failed                   |
 
 ---
@@ -129,7 +129,7 @@ The `versions` domain queries individual item version rows — each representing
 | `val_no_validator_count` | Integer  | No      | Descendant files with no validator (folders only) |
 | `hash_unknown_count` | Integer      | No      | Descendant files with unknown hash state (folders only) |
 | `hash_valid_count` | Integer        | No      | Descendant files with valid hash state (folders only) |
-| `hash_suspicious_count` | Integer   | No      | Descendant files with suspicious hash state (folders only) |
+| `hash_suspect_count` | Integer   | No      | Descendant files with suspect hash state (folders only) |
 
 ---
 
@@ -146,7 +146,7 @@ The `versions` domain queries individual item version rows — each representing
 | `item_path`     | Path              | Yes     | Path of the affected item                |
 | `created_at`    | Date              | Yes     | When the alert was created               |
 | `updated_at`    | Date              | No      | When the alert status was last changed   |
-| `prev_hash_scan`| Integer           | No      | Previous hash scan (for suspicious hash) |
+| `prev_hash_scan`| Integer           | No      | Previous hash scan (for suspect hash) |
 | `hash_old`      | String            | No      | Previous hash value                      |
 | `hash_new`      | String            | No      | New hash value                           |
 | `val_error`     | String            | Yes     | Validation error message                 |
@@ -171,9 +171,9 @@ Values must match the column's type. You can use individual values, ranges (when
 | String              | `'example'`, `'error: missing EOF'`, `null`, `not null` | Quoted strings.                                                     |
 | Path                | `'photos/reports'`, `'file.txt'`                      | Must be quoted. **Null values are not supported.**                    |
 | Validation Status   | `V`, `I`, `N`, `U`, `null`, `not null`                 | Valid, Invalid, No Validator, Unknown. Null for folders. Unquoted.     |
-| Hash State          | `V`, `S`, `U`, `null`, `not null`                      | Valid, Suspicious, Unknown. Null for folders. Unquoted.               |
+| Hash State          | `V`, `S`, `U`, `null`, `not null`                      | Valid, Suspect, Unknown. Null for folders. Unquoted.               |
 | Item Type Enum      | `F`, `D`, `S`, `U`                                    | File, Directory, Symlink, Unknown. Unquoted.                          |
-| Alert Type Enum     | `H`, `I`, `A`                                         | Suspicious Hash, Invalid Item, Access Denied. Unquoted.               |
+| Alert Type Enum     | `H`, `I`, `A`                                         | Suspect Hash, Invalid Item, Access Denied. Unquoted.               |
 | Alert Status Enum   | `O`, `F`, `D`                                         | Open, Flagged, Dismissed. Unquoted.                                   |
 | Scan State Enum     | `S`, `W`, `AF`, `AS`, `C`, `P`, `E`                   | Scanning, Sweeping, Analyzing Files, Analyzing Scan, Completed, Stopped, Error. `A` is shorthand for `AF`. Unquoted. |
 | Access Status       | `N`, `M`, `R`                                         | No Error, Meta Error, Read Error. Unquoted.                           |
@@ -265,10 +265,10 @@ items where is_deleted:(true)
 # Versions with validation failures
 versions where val_state:(I) show default, val_error order by first_scan_id desc
 
-# Items with suspicious hash state
+# Items with suspect hash state
 items where hash_state:(S) show default, hash_state, file_hash order by item_path
 
-# Open or flagged alerts for suspicious hashes
+# Open or flagged alerts for suspect hashes
 alerts where alert_type:(H), alert_status:(O, F) order by created_at desc
 
 # Scans with timestamps for programmatic processing

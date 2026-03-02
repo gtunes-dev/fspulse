@@ -8,10 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Hash state tracking**: New `hash_state` column on file item versions tracks hash integrity over time (Unknown → Valid → Suspicious). Suspicious state is sticky until a legitimate file modification is detected
-- **Validation and hash state counts**: Scans and folder versions now record counts of descendant files in each validation state (Unknown, Valid, Invalid, No Validator) and hash state (Unknown, Valid, Suspicious)
+- **Hash state tracking**: New `hash_state` column on file item versions tracks hash integrity over time (Unknown → Valid → Suspect). Suspect state is sticky until a legitimate file modification is detected
+- **Validation and hash state counts**: Scans and folder versions now record counts of descendant files in each validation state (Unknown, Valid, Invalid, No Validator) and hash state (Unknown, Valid, Suspect)
+- **Browse page filter panel**: Collapsible "Filters" panel on the Browse page with three filter dimensions — Change Type (colored dot toggles for added/modified/deleted/unchanged), Hash State (checkboxes for unknown/valid/suspect), and Validation State (checkboxes for unknown/valid/invalid/no validator). Filters apply across tree, folder, and search views with AND logic across dimensions
+- **Integrity icons**: Files with suspect hashes show an amber warning triangle and files with invalid validation show a rose circle-X icon next to their name in tree, folder, and search views
+- **Change and integrity tooltips**: Colored change dots and integrity icons show descriptive tooltips on hover; directory change dots show descendant counts (e.g., "3 added, 12 modified, 1 deleted, 45 unchanged")
 - **Scan History deep links**: Added a "Scan" column to the Scan History table on the Scans page with clickable links (e.g., "Scan #42") that navigate directly to the Browse page with the correct root and scan pre-selected
 - **Scan History date formatting**: The "Started" column in the Scan History table now shows a readable date+time with day of week (e.g., "Fri, Feb 28, 2:30 PM") instead of relative time
+
+### Fixed
+- Fix incorrect validation state display in item detail panels where val_state integers were mapped to wrong labels (e.g., Invalid files showing as "No Validator")
 
 ### Changed
 - Rename `val` column to `val_state` across the schema, query language, and frontend for symmetry with `hash_state`

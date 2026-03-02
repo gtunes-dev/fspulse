@@ -10,12 +10,12 @@ use serde::Serialize;
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_valid_count, hash_suspicious_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_valid_count, hash_suspect_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_valid_count, hash_suspicious_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_valid_count, hash_suspect_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -125,7 +125,7 @@ pub struct Scan {
     val_no_validator_count: Option<i64>,
     hash_unknown_count: Option<i64>,
     hash_valid_count: Option<i64>,
-    hash_suspicious_count: Option<i64>,
+    hash_suspect_count: Option<i64>,
     error: Option<String>,
 }
 
@@ -252,7 +252,7 @@ impl Scan {
             val_no_validator_count: None,
             hash_unknown_count: None,
             hash_valid_count: None,
-            hash_suspicious_count: None,
+            hash_suspect_count: None,
             error: None,
         }
     }
@@ -352,7 +352,7 @@ impl Scan {
                     val_no_validator_count: row.get(21)?,
                     hash_unknown_count: row.get(22)?,
                     hash_valid_count: row.get(23)?,
-                    hash_suspicious_count: row.get(24)?,
+                    hash_suspect_count: row.get(24)?,
                     error: row.get(25)?,
                 })
             })
@@ -597,7 +597,7 @@ impl Scan {
                                 val_no_validator_count = ?,
                                 hash_unknown_count = ?,
                                 hash_valid_count = ?,
-                                hash_suspicious_count = ?,
+                                hash_suspect_count = ?,
                                 state = ?,
                                 ended_at = strftime('%s', 'now', 'utc')
                             WHERE scan_id = ?",
@@ -638,7 +638,7 @@ impl Scan {
                 self.val_no_validator_count = Some(vn);
                 self.hash_unknown_count = Some(hu);
                 self.hash_valid_count = Some(hv);
-                self.hash_suspicious_count = Some(hs);
+                self.hash_suspect_count = Some(hs);
 
                 Ok(())
             }

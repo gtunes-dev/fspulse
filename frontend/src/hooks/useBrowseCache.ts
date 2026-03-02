@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { ChangeKind } from '@/lib/pathUtils'
+import { hashStateFromInt, valStateFromInt, type ChangeKind, type HashState, type ValState } from '@/lib/pathUtils'
 
 /**
  * Raw item data cached by parent path.
@@ -18,6 +18,15 @@ export interface CachedItem {
   modify_count: number | null
   delete_count: number | null
   unchanged_count: number | null
+  hash_state: HashState | null
+  val_state: ValState | null
+  val_unknown_count: number | null
+  val_valid_count: number | null
+  val_invalid_count: number | null
+  val_no_validator_count: number | null
+  hash_unknown_count: number | null
+  hash_valid_count: number | null
+  hash_suspect_count: number | null
 }
 
 export interface BrowseCache {
@@ -109,6 +118,15 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
           modify_count: number | null
           delete_count: number | null
           unchanged_count: number | null
+          val_state: number | null
+          hash_state: number | null
+          val_unknown_count: number | null
+          val_valid_count: number | null
+          val_invalid_count: number | null
+          val_no_validator_count: number | null
+          hash_unknown_count: number | null
+          hash_valid_count: number | null
+          hash_suspect_count: number | null
         }>
 
         const items: CachedItem[] = data.map(item => {
@@ -137,6 +155,15 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
             unchanged_count: isUnchangedDir
               ? (item.add_count ?? 0) + (item.modify_count ?? 0) + (item.unchanged_count ?? 0)
               : item.unchanged_count,
+            hash_state: hashStateFromInt(item.hash_state),
+            val_state: valStateFromInt(item.val_state),
+            val_unknown_count: item.val_unknown_count,
+            val_valid_count: item.val_valid_count,
+            val_invalid_count: item.val_invalid_count,
+            val_no_validator_count: item.val_no_validator_count,
+            hash_unknown_count: item.hash_unknown_count,
+            hash_valid_count: item.hash_valid_count,
+            hash_suspect_count: item.hash_suspect_count,
           }
         })
 

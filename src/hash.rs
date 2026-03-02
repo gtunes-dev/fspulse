@@ -23,7 +23,7 @@ use crate::error::FsPulseError;
 pub enum HashState {
     Unknown = 0,
     Valid = 1,
-    Suspicious = 2,
+    Suspect = 2,
 }
 
 impl HashState {
@@ -35,7 +35,7 @@ impl HashState {
         match value {
             0 => HashState::Unknown,
             1 => HashState::Valid,
-            2 => HashState::Suspicious,
+            2 => HashState::Suspect,
             _ => {
                 warn!("Invalid HashState value in database: {}, defaulting to Unknown", value);
                 HashState::Unknown
@@ -47,7 +47,7 @@ impl HashState {
         match self {
             HashState::Unknown => "U",
             HashState::Valid => "V",
-            HashState::Suspicious => "S",
+            HashState::Suspect => "S",
         }
     }
 
@@ -55,7 +55,7 @@ impl HashState {
         match self {
             HashState::Unknown => "Unknown",
             HashState::Valid => "Valid",
-            HashState::Suspicious => "Suspicious",
+            HashState::Suspect => "Suspect",
         }
     }
 
@@ -63,10 +63,10 @@ impl HashState {
         match s.to_ascii_uppercase().as_str() {
             "UNKNOWN" => Some(HashState::Unknown),
             "VALID" => Some(HashState::Valid),
-            "SUSPICIOUS" => Some(HashState::Suspicious),
+            "SUSPECT" => Some(HashState::Suspect),
             "U" => Some(HashState::Unknown),
             "V" => Some(HashState::Valid),
-            "S" => Some(HashState::Suspicious),
+            "S" => Some(HashState::Suspect),
             _ => None,
         }
     }

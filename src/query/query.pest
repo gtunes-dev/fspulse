@@ -163,9 +163,9 @@ hash_state               =  {
   | "VALID"
   | "valid"
   | "Valid"
-  | "SUSPICIOUS"
-  | "suspicious"
-  | "Suspicious"
+  | "SUSPECT"
+  | "suspect"
+  | "Suspect"
   | ^"U"
   | ^"V"
   | ^"S"
@@ -217,9 +217,9 @@ alert_type               =  {
     "SUSPICIOUS HASH"
   | "suspicious hash"
   | "Suspicious Hash"
-  | "SUSPICIOUSHASH"
-  | "suspicioushash"
-  | "SuspiciousHash"
+  | "SUSPECTHASH"
+  | "suspecthash"
+  | "SuspectHash"
   | "INVALID ITEM"
   | "invalid item"
   | "Invalid Item"
@@ -349,7 +349,7 @@ access               =  {
 }
 
 // Integer columns
-int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_valid_count" | "hash_suspicious_count" }
+int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_valid_count" | "hash_suspect_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

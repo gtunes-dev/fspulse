@@ -203,7 +203,7 @@ export interface ScheduleWithRoot extends Schedule {
 // Insights Page Types
 
 export type AlertStatusValue = 'O' | 'F' | 'D' // Open, Flagged, Dismissed
-export type AlertTypeValue = 'H' | 'I' | 'A' // Suspicious Hash, Invalid Item, Access Denied
+export type AlertTypeValue = 'H' | 'I' | 'A' // Suspect Hash, Invalid Item, Access Denied
 export type ContextFilterType = 'all' | 'root' | 'scan'
 
 export interface UpdateAlertStatusRequest {

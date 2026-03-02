@@ -44,7 +44,6 @@ interface ItemDetailPanelProps {
   itemPath: string
   itemType: 'F' | 'D' | 'S' | 'O'
   isTombstone: boolean
-  rootId: number
   scanId: number
   onClose: () => void
 }
@@ -149,10 +148,10 @@ function accessLabel(access: number): string {
 
 function valShort(val: number | null): string {
   switch (val) {
-    case 0: return 'V'
-    case 1: return 'I'
-    case 2: return 'N'
-    case 3: return 'U'
+    case 0: return 'U'
+    case 1: return 'V'
+    case 2: return 'I'
+    case 3: return 'N'
     default: return 'U'
   }
 }

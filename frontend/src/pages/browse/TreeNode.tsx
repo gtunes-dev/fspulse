@@ -2,6 +2,7 @@ import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileSymlink, FileQ
 import { cn } from '@/lib/utils'
 import type { FlatTreeItem } from '@/lib/pathUtils'
 import { ChangeDots } from '@/components/shared/ChangeDots'
+import { IntegrityIcons } from '@/components/shared/IntegrityIcons'
 
 interface TreeNodeProps {
   item: FlatTreeItem
@@ -17,8 +18,8 @@ interface TreeNodeProps {
   isSelected?: boolean
 }
 
-function getFileIcon(type: string, deleted: boolean) {
-  const colorClass = deleted ? 'text-muted-foreground' : 'text-muted-foreground'
+function getFileIcon(type: string) {
+  const colorClass = 'text-muted-foreground'
   switch (type) {
     case 'S': return <FileSymlink className={cn('h-5 w-5 flex-shrink-0', colorClass)} />
     case 'O': return <FileQuestion className={cn('h-5 w-5 flex-shrink-0', colorClass)} />
@@ -103,7 +104,7 @@ export function TreeNode({
       ) : (
         <>
           {expandable && <div className="w-4 flex-shrink-0" />}
-          {getFileIcon(item.item_type, item.is_deleted)}
+          {getFileIcon(item.item_type)}
         </>
       )}
       <ChangeDots
@@ -121,6 +122,7 @@ export function TreeNode({
       >
         {item.item_name}
       </span>
+      <IntegrityIcons hashState={item.hash_state} valState={item.val_state} />
     </div>
   )
 }

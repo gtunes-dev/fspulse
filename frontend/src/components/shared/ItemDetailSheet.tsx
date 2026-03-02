@@ -165,10 +165,10 @@ function accessLabel(access: number): string {
 
 function valShort(val: number | null): string {
   switch (val) {
-    case 0: return 'V'
-    case 1: return 'I'
-    case 2: return 'N'
-    case 3: return 'U'
+    case 0: return 'U'
+    case 1: return 'V'
+    case 2: return 'I'
+    case 3: return 'N'
     default: return 'U'
   }
 }
@@ -482,7 +482,7 @@ export function ItemDetailSheet({
   const getAlertTypeBadge = (type: string) => {
     switch (type) {
       case 'H':
-        return <Badge variant="destructive">Suspicious Hash</Badge>
+        return <Badge variant="destructive">Suspect Hash</Badge>
       case 'I':
         return <Badge variant="destructive">Invalid Item</Badge>
       case 'A':

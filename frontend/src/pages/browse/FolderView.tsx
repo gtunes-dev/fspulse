@@ -5,9 +5,10 @@ import { cn } from '@/lib/utils'
 import { formatFileSizeCompact } from '@/lib/formatUtils'
 import { formatDateRelative } from '@/lib/dateUtils'
 import type { BrowseCache, CachedItem } from '@/hooks/useBrowseCache'
-import { isItemVisible, type ChangeKind } from '@/lib/pathUtils'
+import { isItemVisible, type ChangeKind, type HashState, type ValState } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 import { ChangeDots } from '@/components/shared/ChangeDots'
+import { IntegrityIcons } from '@/components/shared/IntegrityIcons'
 
 interface FolderViewProps {
   rootPath: string
@@ -16,6 +17,8 @@ interface FolderViewProps {
   currentPath: string
   onNavigate: (path: string) => void
   hiddenKinds: Set<ChangeKind>
+  hiddenHashStates: Set<HashState>
+  hiddenValStates: Set<ValState>
   isActive?: boolean
   selectedItemId?: number | null
   onItemSelect?: (item: SelectedFolderItem) => void
@@ -78,6 +81,8 @@ export function FolderView({
   currentPath,
   onNavigate,
   hiddenKinds,
+  hiddenHashStates,
+  hiddenValStates,
   isActive = true,
   selectedItemId,
   onItemSelect,
@@ -117,7 +122,7 @@ export function FolderView({
   }, [isActive, currentPath, scanId, cache])
 
   // Filter and sort — folders visible if they have descendant changes matching any visible kind
-  const visibleItems = items.filter((i) => isItemVisible(i, hiddenKinds))
+  const visibleItems = items.filter((i) => isItemVisible(i, hiddenKinds, hiddenHashStates, hiddenValStates))
   const sortedItems = sortItems(visibleItems, sortColumn, sortDir)
 
   const scrollMargin = useScrollMargin(parentRef)
@@ -300,6 +305,7 @@ export function FolderView({
                         unchangedCount={item.unchanged_count}
                       />
                       <span className="truncate">{item.item_name}</span>
+                      <IntegrityIcons hashState={item.hash_state} valState={item.val_state} />
                     </div>
 
                     {/* Size */}

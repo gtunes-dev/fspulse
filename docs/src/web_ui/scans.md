@@ -11,7 +11,7 @@ The page shows a paginated table of scans with key information:
 - **State** (Completed, Stopped, Error)
 - **Item counts** (files, folders, total size)
 - **Change counts** (additions, modifications, deletions)
-- **Alert count** (validation failures, suspicious hash changes)
+- **Alert count** (validation failures, suspect hash changes)
 - **Scan options** (whether hashing and validation were enabled)
 
 ## Use Cases

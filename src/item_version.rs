@@ -12,7 +12,7 @@ pub struct StateCounts {
     pub val_no_validator: i64,
     pub hash_unknown: i64,
     pub hash_valid: i64,
-    pub hash_suspicious: i64,
+    pub hash_suspect: i64,
 }
 
 impl StateCounts {
@@ -23,13 +23,13 @@ impl StateCounts {
         self.val_no_validator += other.val_no_validator;
         self.hash_unknown += other.hash_unknown;
         self.hash_valid += other.hash_valid;
-        self.hash_suspicious += other.hash_suspicious;
+        self.hash_suspect += other.hash_suspect;
     }
 
     pub fn is_zero(&self) -> bool {
         self.val_unknown == 0 && self.val_valid == 0 && self.val_invalid == 0
             && self.val_no_validator == 0 && self.hash_unknown == 0
-            && self.hash_valid == 0 && self.hash_suspicious == 0
+            && self.hash_valid == 0 && self.hash_suspect == 0
     }
 }
 
@@ -64,7 +64,7 @@ pub struct ItemVersion {
     val_no_validator_count: Option<i64>,
     hash_unknown_count: Option<i64>,
     hash_valid_count: Option<i64>,
-    hash_suspicious_count: Option<i64>,
+    hash_suspect_count: Option<i64>,
 }
 
 #[allow(dead_code, clippy::too_many_arguments)]
@@ -153,7 +153,7 @@ impl ItemVersion {
                     last_hash_scan, file_hash, hash_state,
                     add_count, modify_count, delete_count, unchanged_count,
                     val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
-                    hash_unknown_count, hash_valid_count, hash_suspicious_count
+                    hash_unknown_count, hash_valid_count, hash_suspect_count
              FROM item_versions
              WHERE item_id = ?
              ORDER BY first_scan_id DESC
@@ -234,7 +234,7 @@ impl ItemVersion {
         let (vu, vv, vi, vn, hu, hv, hs) = match state_counts {
             Some(sc) => (Some(sc.val_unknown), Some(sc.val_valid), Some(sc.val_invalid),
                          Some(sc.val_no_validator), Some(sc.hash_unknown), Some(sc.hash_valid),
-                         Some(sc.hash_suspicious)),
+                         Some(sc.hash_suspect)),
             None => (None, None, None, None, None, None, None),
         };
         conn.execute(
@@ -245,7 +245,7 @@ impl ItemVersion {
                 last_hash_scan, file_hash, hash_state,
                 add_count, modify_count, delete_count, unchanged_count,
                 val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
-                hash_unknown_count, hash_valid_count, hash_suspicious_count
+                hash_unknown_count, hash_valid_count, hash_suspect_count
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 item_id, scan_id, scan_id, is_added, is_deleted, access.as_i64(),
@@ -392,7 +392,7 @@ impl ItemVersion {
             val_no_validator_count: row.get(21)?,
             hash_unknown_count: row.get(22)?,
             hash_valid_count: row.get(23)?,
-            hash_suspicious_count: row.get(24)?,
+            hash_suspect_count: row.get(24)?,
         })
     }
 }

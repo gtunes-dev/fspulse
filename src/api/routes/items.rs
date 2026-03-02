@@ -98,6 +98,15 @@ pub struct ItemResponse {
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
     pub unchanged_count: Option<i64>,
+    pub val_state: Option<i64>,
+    pub hash_state: Option<i64>,
+    pub val_unknown_count: Option<i64>,
+    pub val_valid_count: Option<i64>,
+    pub val_invalid_count: Option<i64>,
+    pub val_no_validator_count: Option<i64>,
+    pub hash_unknown_count: Option<i64>,
+    pub hash_valid_count: Option<i64>,
+    pub hash_suspect_count: Option<i64>,
 }
 
 /// GET /api/items/immediate-children?root_id=X&parent_path=/path&scan_id=Y
@@ -125,6 +134,15 @@ pub async fn get_immediate_children(
                     modify_count: item.modify_count,
                     delete_count: item.delete_count,
                     unchanged_count: item.unchanged_count,
+                    val_state: item.val_state,
+                    hash_state: item.hash_state,
+                    val_unknown_count: item.val_unknown_count,
+                    val_valid_count: item.val_valid_count,
+                    val_invalid_count: item.val_invalid_count,
+                    val_no_validator_count: item.val_no_validator_count,
+                    hash_unknown_count: item.hash_unknown_count,
+                    hash_valid_count: item.hash_valid_count,
+                    hash_suspect_count: item.hash_suspect_count,
                 })
                 .collect();
             Ok(Json(response))
@@ -174,6 +192,15 @@ pub async fn search_items(
                     modify_count: item.modify_count,
                     delete_count: item.delete_count,
                     unchanged_count: item.unchanged_count,
+                    val_state: item.val_state,
+                    hash_state: item.hash_state,
+                    val_unknown_count: item.val_unknown_count,
+                    val_valid_count: item.val_valid_count,
+                    val_invalid_count: item.val_invalid_count,
+                    val_no_validator_count: item.val_no_validator_count,
+                    hash_unknown_count: item.hash_unknown_count,
+                    hash_valid_count: item.hash_valid_count,
+                    hash_suspect_count: item.hash_suspect_count,
                 })
                 .collect();
             Ok(Json(response))

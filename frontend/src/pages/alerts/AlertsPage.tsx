@@ -70,7 +70,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const TYPE_LABELS: Record<string, string> = {
   'all': 'All Types',
-  'H': 'Suspicious Hash',
+  'H': 'Suspect Hash',
   'I': 'Invalid Item',
   'A': 'Access Denied',
 }
@@ -439,7 +439,7 @@ export function AlertsPage() {
   const getAlertTypeBadge = (type: AlertTypeValue) => {
     switch (type) {
       case 'H':
-        return <Badge variant="error">Suspicious Hash</Badge>
+        return <Badge variant="error">Suspect Hash</Badge>
       case 'I':
         return <Badge variant="error">Invalid Item</Badge>
       case 'A':
@@ -528,7 +528,7 @@ export function AlertsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="H">Suspicious Hash</SelectItem>
+                    <SelectItem value="H">Suspect Hash</SelectItem>
                     <SelectItem value="I">Invalid Item</SelectItem>
                     <SelectItem value="A">Access Denied</SelectItem>
                   </SelectContent>

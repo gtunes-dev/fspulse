@@ -33,7 +33,7 @@ Visualize filesystem activity:
 
 Track integrity issues over time:
 - Validation failures
-- Suspicious hash changes
+- Suspect hash changes
 - Alert resolution patterns
 
 ## Features

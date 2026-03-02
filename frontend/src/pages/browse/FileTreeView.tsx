@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
-import type { TreeNodeData, ChangeKind } from '@/lib/pathUtils'
+import type { TreeNodeData, ChangeKind, HashState, ValState } from '@/lib/pathUtils'
 import { sortTreeItems, isItemVisible } from '@/lib/pathUtils'
 import { useVirtualTree } from '@/hooks/useVirtualTree'
 import type { BrowseCache } from '@/hooks/useBrowseCache'
@@ -12,6 +12,8 @@ interface FileTreeViewProps {
   scanId: number
   cache: BrowseCache
   hiddenKinds: Set<ChangeKind>
+  hiddenHashStates: Set<HashState>
+  hiddenValStates: Set<ValState>
   isActive?: boolean
   selectedItemId?: number | null
   onItemSelect?: (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }) => void
@@ -22,7 +24,7 @@ export interface FileTreeViewHandle {
 }
 
 export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
-  function FileTreeView({ rootPath, scanId, cache, hiddenKinds, isActive = true, selectedItemId, onItemSelect }, ref) {
+  function FileTreeView({ rootPath, scanId, cache, hiddenKinds, hiddenHashStates, hiddenValStates, isActive = true, selectedItemId, onItemSelect }, ref) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -39,7 +41,7 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
 
     // Filter items client-side based on change kind toggles
     // Folders are visible if they have descendant changes matching any visible kind
-    const visibleItems = flatItems.filter(item => isItemVisible(item, hiddenKinds))
+    const visibleItems = flatItems.filter(item => isItemVisible(item, hiddenKinds, hiddenHashStates, hiddenValStates))
 
     const scrollMargin = useScrollMargin(parentRef)
 
@@ -117,6 +119,15 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
             modify_count: item.modify_count,
             delete_count: item.delete_count,
             unchanged_count: item.unchanged_count,
+            hash_state: item.hash_state,
+            val_state: item.val_state,
+            val_unknown_count: item.val_unknown_count,
+            val_valid_count: item.val_valid_count,
+            val_invalid_count: item.val_invalid_count,
+            val_no_validator_count: item.val_no_validator_count,
+            hash_unknown_count: item.hash_unknown_count,
+            hash_valid_count: item.hash_valid_count,
+            hash_suspect_count: item.hash_suspect_count,
             name: item.item_name,
           }))
 

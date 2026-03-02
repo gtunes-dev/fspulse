@@ -93,7 +93,7 @@ impl ColType {
             ColType::AlertType => ColTypeInfo::new(
                 Rule::alert_type_filter_EOI,
                 "Alert Type",
-                "Alert types: H (suspicious hash), I (invalid item), A (access denied)\nComma-separated values",
+                "Alert types: H (suspect hash), I (invalid item), A (access denied)\nComma-separated values",
             ),
             ColType::AlertStatus => ColTypeInfo::new(
                 Rule::alert_status_filter_EOI,
@@ -113,7 +113,7 @@ impl ColType {
             ColType::HashState => ColTypeInfo::new(
                 Rule::hash_state_filter_EOI,
                 "Hash State",
-                "Hash states: U (Unknown), V (Valid), S (Suspicious)\nComma-separated values (null and not null also ok)",
+                "Hash states: U (Unknown), V (Valid), S (Suspect)\nComma-separated values (null and not null also ok)",
             ),
         }
     }
@@ -183,7 +183,7 @@ pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_no_validator_count" => ColSpec::new("val_no_validator_count", "Val No Validator", false, ColType::Int, ColAlign::Right),
     "hash_unknown_count" => ColSpec::new("hash_unknown_count", "Hash Unknown", false, ColType::Int, ColAlign::Right),
     "hash_valid_count" => ColSpec::new("hash_valid_count", "Hash Valid", false, ColType::Int, ColAlign::Right),
-    "hash_suspicious_count" => ColSpec::new("hash_suspicious_count", "Hash Suspicious", false, ColType::Int, ColAlign::Right),
+    "hash_suspect_count" => ColSpec::new("hash_suspect_count", "Hash Suspect", false, ColType::Int, ColAlign::Right),
     "error" => ColSpec::new("error", "Error", false, ColType::String, ColAlign::Left),
 };
 
@@ -237,7 +237,7 @@ pub const VERSIONS_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_no_validator_count" => ColSpec::new("iv.val_no_validator_count", "Val No Validator", false, ColType::Int, ColAlign::Right),
     "hash_unknown_count" => ColSpec::new("iv.hash_unknown_count", "Hash Unknown", false, ColType::Int, ColAlign::Right),
     "hash_valid_count" => ColSpec::new("iv.hash_valid_count", "Hash Valid", false, ColType::Int, ColAlign::Right),
-    "hash_suspicious_count" => ColSpec::new("iv.hash_suspicious_count", "Hash Suspicious", false, ColType::Int, ColAlign::Right),
+    "hash_suspect_count" => ColSpec::new("iv.hash_suspect_count", "Hash Suspect", false, ColType::Int, ColAlign::Right),
 };
 
 pub const ALERTS_QUERY_COLS: ColMap = phf_ordered_map! {

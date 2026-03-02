@@ -1227,7 +1227,7 @@ mod tests {
     // ==================================================================================
 
     #[test]
-    fn test_alert_type_filter_suspicious_hash() {
+    fn test_alert_type_filter_suspect_hash() {
         let result = QueryParser::parse(Rule::alert_type_filter_EOI, "H");
         assert!(result.is_ok(), "Failed to parse 'H': {:?}", result.err());
 

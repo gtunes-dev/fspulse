@@ -66,7 +66,7 @@ Clicking any item opens an inline detail panel within the card. The panel shows 
 - Each version displays its temporal range (first scan to last scan)
 
 ### Alerts
-- Any alerts associated with this item (suspicious hashes, validation failures, access errors)
+- Any alerts associated with this item (suspect hashes, validation failures, access errors)
 - Alert status and timestamps
 
 Close the detail panel by clicking the close button. The panel scrolls independently from the navigation area.

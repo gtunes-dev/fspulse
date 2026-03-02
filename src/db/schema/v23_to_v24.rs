@@ -48,7 +48,7 @@ struct StateCountUpdate {
     val_no_validator: i64,
     hash_unknown: i64,
     hash_valid: i64,
-    hash_suspicious: i64,
+    hash_suspect: i64,
 }
 
 // ---- Phase 1: DDL ----
@@ -107,7 +107,7 @@ fn run_ddl(conn: &Connection) -> Result<(), FsPulseError> {
                 val_no_validator_count   INTEGER,
                 hash_unknown_count       INTEGER,
                 hash_valid_count         INTEGER,
-                hash_suspicious_count    INTEGER,
+                hash_suspect_count    INTEGER,
 
                 FOREIGN KEY (item_id) REFERENCES items(item_id),
                 FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
@@ -166,7 +166,7 @@ fn run_ddl(conn: &Connection) -> Result<(), FsPulseError> {
             "ALTER TABLE scans ADD COLUMN hash_valid_count INTEGER DEFAULT NULL;",
         )?;
         c.execute_batch(
-            "ALTER TABLE scans ADD COLUMN hash_suspicious_count INTEGER DEFAULT NULL;",
+            "ALTER TABLE scans ADD COLUMN hash_suspect_count INTEGER DEFAULT NULL;",
         )?;
 
         Database::set_meta_value_locked(c, DDL_DONE_META_KEY, "1")?;
@@ -231,7 +231,7 @@ fn backfill_scan_state_counts(
             val_no_validator_count = ?,
             hash_unknown_count = ?,
             hash_valid_count = ?,
-            hash_suspicious_count = ?
+            hash_suspect_count = ?
          WHERE scan_id = ?",
         params![
             counts.0, counts.1, counts.2, counts.3,
@@ -440,7 +440,7 @@ fn v24_walk_state_counts(
                 val_no_validator: vnv,
                 hash_unknown: hu,
                 hash_valid: hv,
-                hash_suspicious: hs,
+                hash_suspect: hs,
             });
         }
     }
@@ -466,7 +466,7 @@ fn v24_apply_state_count_updates(
                         val_no_validator_count = ?,
                         hash_unknown_count = ?,
                         hash_valid_count = ?,
-                        hash_suspicious_count = ?
+                        hash_suspect_count = ?
                      WHERE version_id = ?",
                     params![
                         u.val_unknown,
@@ -475,7 +475,7 @@ fn v24_apply_state_count_updates(
                         u.val_no_validator,
                         u.hash_unknown,
                         u.hash_valid,
-                        u.hash_suspicious,
+                        u.hash_suspect,
                         u.version_id
                     ],
                 )?;

@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS scans (
     val_no_validator_count INTEGER DEFAULT NULL,   -- Count of files with no available validator
     hash_unknown_count INTEGER DEFAULT NULL,       -- Count of files with unknown hash state
     hash_valid_count INTEGER DEFAULT NULL,         -- Count of files with valid (unchanged) hash state
-    hash_suspicious_count INTEGER DEFAULT NULL,    -- Count of files with suspicious (changed) hash state
+    hash_suspect_count INTEGER DEFAULT NULL,    -- Count of files with suspicious (changed) hash state
     error TEXT DEFAULT NULL,           -- Error message if scan failed
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id)
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS item_versions (
     val_no_validator_count   INTEGER,
     hash_unknown_count       INTEGER,
     hash_valid_count         INTEGER,
-    hash_suspicious_count    INTEGER,
+    hash_suspect_count    INTEGER,
 
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
@@ -140,14 +140,14 @@ CREATE TABLE IF NOT EXISTS scan_undo_log (
 
 CREATE TABLE IF NOT EXISTS alerts (
   alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  alert_type INTEGER NOT NULL,              -- Alert type enum (0=SuspiciousHash, 1=InvalidItem)
+  alert_type INTEGER NOT NULL,              -- Alert type enum (0=SuspectHash, 1=InvalidItem)
   alert_status INTEGER NOT NULL,            -- Alert status enum (0=Open, 1=Flagged, 2=Dismissed)
   scan_id INTEGER NOT NULL,
   item_id INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER DEFAULT NULL,
 
-  -- suspicious hash
+  -- suspect hash
   prev_hash_scan INTEGER DEFAULT NULL,
   hash_old TEXT DEFAULT NULL,
   hash_new TEXT DEFAULT NULL,

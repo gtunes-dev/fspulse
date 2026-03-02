@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { FolderTree, FolderOpen, Search, ArrowLeftRight } from 'lucide-react'
+import { FolderTree, FolderOpen, Search, ArrowLeftRight, AlertTriangle, CircleX, Check, ChevronDown, SlidersHorizontal } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { RootPicker } from '@/components/shared/RootPicker'
 import { CompactScanBar } from '@/components/shared/CompactScanBar'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { ItemDetailPanel } from '@/components/shared/ItemDetailPanel'
 import { useBrowseCache } from '@/hooks/useBrowseCache'
-import { getParentPath, type ChangeKind } from '@/lib/pathUtils'
+import { getParentPath, type ChangeKind, type HashState, type ValState } from '@/lib/pathUtils'
 import { FileTreeView } from './FileTreeView'
 import type { FileTreeViewHandle } from './FileTreeView'
 import { FolderView } from './FolderView'
@@ -40,6 +41,9 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
   const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hiddenKinds, setHiddenKinds] = useState<Set<ChangeKind>>(new Set())
+  const [hiddenHashStates, setHiddenHashStates] = useState<Set<HashState>>(new Set())
+  const [hiddenValStates, setHiddenValStates] = useState<Set<ValState>>(new Set())
+  const [filtersOpen, setFiltersOpen] = useState(true)
   const [searchFilter, setSearchFilter] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   // Per-view selection: each tab has its own independently selected item
@@ -190,6 +194,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
           scanId={resolvedScanId}
           cache={cache}
           hiddenKinds={hiddenKinds}
+          hiddenHashStates={hiddenHashStates}
+          hiddenValStates={hiddenValStates}
           isActive={viewMode === 'tree'}
           selectedItemId={selectedItems.tree?.itemId}
           onItemSelect={handleTreeSelect}
@@ -205,6 +211,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
           currentPath={folderCurrentPath}
           onNavigate={setFolderCurrentPath}
           hiddenKinds={hiddenKinds}
+          hiddenHashStates={hiddenHashStates}
+          hiddenValStates={hiddenValStates}
           isActive={viewMode === 'folder'}
           selectedItemId={selectedItems.folder?.itemId}
           onItemSelect={handleFolderSelect}
@@ -219,6 +227,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
           scanId={resolvedScanId}
           searchQuery={debouncedSearch}
           hiddenKinds={hiddenKinds}
+          hiddenHashStates={hiddenHashStates}
+          hiddenValStates={hiddenValStates}
           isActive={viewMode === 'search' && hasSearchQuery}
           selectedItemId={selectedItems.search?.itemId}
           onItemSelect={handleSearchSelect}
@@ -258,7 +268,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
           itemPath={activeSelection.itemPath}
           itemType={activeSelection.itemType}
           isTombstone={activeSelection.isTombstone}
-          rootId={selectedRoot.root_id}
           scanId={resolvedScanId}
           onClose={handleDetailClose}
         />
@@ -287,7 +296,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
           />
         )}
 
-        {/* View mode tabs + controls */}
+        {/* View mode tabs + layout control */}
         <div className="flex items-center gap-3">
           <Tabs value={viewMode} onValueChange={handleViewModeChange}>
             <TabsList>
@@ -306,51 +315,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
             </TabsList>
           </Tabs>
 
-          {/* Change kind toggles */}
-          <div className="relative border border-border rounded-lg px-1 pb-1 pt-2.5">
-            <span className="absolute -top-2 left-2.5 px-1 bg-card text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Show</span>
-            <div className="flex items-center gap-0.5">
-              {([
-                { kind: 'added' as ChangeKind, label: 'Adds', color: 'bg-green-500', ring: 'ring-green-500/40' },
-                { kind: 'modified' as ChangeKind, label: 'Mods', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
-                { kind: 'deleted' as ChangeKind, label: 'Dels', color: 'bg-red-500', ring: 'ring-red-500/40' },
-                { kind: 'unchanged' as ChangeKind, label: 'Unchanged', color: 'bg-zinc-400', ring: 'ring-zinc-400/40' },
-              ]).map(({ kind, label, color, ring }) => {
-                const visible = !hiddenKinds.has(kind)
-                return (
-                  <button
-                    key={kind}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium cursor-pointer transition-colors',
-                      visible
-                        ? 'text-foreground hover:bg-accent'
-                        : 'text-muted-foreground/40 hover:bg-accent/50'
-                    )}
-                    onClick={() => setHiddenKinds(prev => {
-                      const next = new Set(prev)
-                      if (next.has(kind)) {
-                        next.delete(kind)
-                      } else {
-                        next.add(kind)
-                      }
-                      return next
-                    })}
-                  >
-                    <span
-                      className={cn(
-                        'inline-block w-2.5 h-2.5 rounded-full transition-all',
-                        visible
-                          ? `${color} ring-2 ${ring}`
-                          : 'bg-transparent ring-1 ring-muted-foreground/25'
-                      )}
-                    />
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           <div className="flex-1" />
 
           <button
@@ -361,6 +325,158 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
             <ArrowLeftRight className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        {/* Collapsible filter panel */}
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <div className="border border-border rounded-lg bg-muted/30">
+            {/* Header row — always visible */}
+            <div className="flex items-center px-3 py-1.5">
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-2 border-none bg-transparent p-0 cursor-pointer">
+                  <ChevronDown className={cn("h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform", !filtersOpen && "-rotate-90")} />
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-sm font-medium">Filters</span>
+                </button>
+              </CollapsibleTrigger>
+            </div>
+
+            {/* Expandable content — three vertical columns */}
+            <CollapsibleContent>
+              <div className="flex gap-5 px-4 pb-3">
+                {/* Change column */}
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground border-b border-border pb-1 mb-1.5">Change Type</div>
+                  <div className="flex flex-col gap-0.5">
+                    {([
+                      { kind: 'added' as ChangeKind, label: 'Added', color: 'bg-green-500', ring: 'ring-green-500/40' },
+                      { kind: 'modified' as ChangeKind, label: 'Modified', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
+                      { kind: 'deleted' as ChangeKind, label: 'Deleted', color: 'bg-red-500', ring: 'ring-red-500/40' },
+                      { kind: 'unchanged' as ChangeKind, label: 'Unchanged', color: 'bg-zinc-400', ring: 'ring-zinc-400/40' },
+                    ]).map(({ kind, label, color, ring }) => {
+                      const visible = !hiddenKinds.has(kind)
+                      return (
+                        <button
+                          key={kind}
+                          className={cn(
+                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left',
+                            visible
+                              ? 'text-foreground hover:bg-accent'
+                              : 'text-muted-foreground/40 hover:bg-accent/50'
+                          )}
+                          onClick={() => setHiddenKinds(prev => {
+                            const next = new Set(prev)
+                            if (next.has(kind)) next.delete(kind)
+                            else next.add(kind)
+                            return next
+                          })}
+                        >
+                          <span
+                            className={cn(
+                              'inline-block w-3 h-3 rounded-full transition-all flex-shrink-0',
+                              visible
+                                ? `${color} ring-2 ${ring}`
+                                : 'bg-transparent ring-1 ring-muted-foreground/25'
+                            )}
+                          />
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="w-px bg-border" />
+
+                {/* Hash column */}
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground border-b border-border pb-1 mb-1.5">Hash State</div>
+                  <div className="flex flex-col gap-0.5">
+                    {([
+                      { state: 'suspect' as HashState, label: 'Suspect', icon: AlertTriangle },
+                      { state: 'unknown' as HashState, label: 'Unknown', icon: null },
+                      { state: 'valid' as HashState, label: 'Valid', icon: null },
+                    ] as const).map(({ state, label, icon: Icon }) => {
+                      const visible = !hiddenHashStates.has(state)
+                      return (
+                        <button
+                          key={state}
+                          className={cn(
+                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left',
+                            visible
+                              ? 'text-foreground hover:bg-accent'
+                              : 'text-muted-foreground/40 hover:bg-accent/50'
+                          )}
+                          onClick={() => setHiddenHashStates(prev => {
+                            const next = new Set(prev)
+                            if (next.has(state)) next.delete(state)
+                            else next.add(state)
+                            return next
+                          })}
+                        >
+                          <span className={cn(
+                            'inline-flex items-center justify-center w-4 h-4 rounded border transition-all flex-shrink-0',
+                            visible
+                              ? 'border-foreground/50 bg-foreground/10'
+                              : 'border-muted-foreground/25 bg-transparent'
+                          )}>
+                            {visible && <Check className="h-3 w-3" />}
+                          </span>
+                          {label}
+                          {Icon && <Icon className={cn('h-3.5 w-3.5', visible ? 'text-amber-500' : 'text-muted-foreground/30')} />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="w-px bg-border" />
+
+                {/* Validation column */}
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground border-b border-border pb-1 mb-1.5">Validation State</div>
+                  <div className="flex flex-col gap-0.5">
+                    {([
+                      { state: 'invalid' as ValState, label: 'Invalid', icon: CircleX },
+                      { state: 'unknown' as ValState, label: 'Unknown', icon: null },
+                      { state: 'valid' as ValState, label: 'Valid', icon: null },
+                      { state: 'no_validator' as ValState, label: 'No Validator', icon: null },
+                    ] as const).map(({ state, label, icon: Icon }) => {
+                      const visible = !hiddenValStates.has(state)
+                      return (
+                        <button
+                          key={state}
+                          className={cn(
+                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left',
+                            visible
+                              ? 'text-foreground hover:bg-accent'
+                              : 'text-muted-foreground/40 hover:bg-accent/50'
+                          )}
+                          onClick={() => setHiddenValStates(prev => {
+                            const next = new Set(prev)
+                            if (next.has(state)) next.delete(state)
+                            else next.add(state)
+                            return next
+                          })}
+                        >
+                          <span className={cn(
+                            'inline-flex items-center justify-center w-4 h-4 rounded border transition-all flex-shrink-0',
+                            visible
+                              ? 'border-foreground/50 bg-foreground/10'
+                              : 'border-muted-foreground/25 bg-transparent'
+                          )}>
+                            {visible && <Check className="h-3 w-3" />}
+                          </span>
+                          {label}
+                          {Icon && <Icon className={cn('h-3.5 w-3.5', visible ? 'text-rose-500' : 'text-muted-foreground/30')} />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
 
         {/* Search filter — visible in search mode */}
         {viewMode === 'search' && (

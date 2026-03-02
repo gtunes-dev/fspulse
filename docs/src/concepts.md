@@ -69,7 +69,7 @@ Change types are derived by comparing adjacent versions of an item:
 ## Alert
 
 An **alert** flags a potential integrity issue detected during scanning. There are three alert types:
-- **Suspicious Hash** — file content hash changed but modification time did not, suggesting bit rot or tampering
+- **Suspect Hash** — file content hash changed but modification time did not, suggesting bit rot or tampering
 - **Invalid Item** — format validation detected corruption in a supported file type
 - **Access Denied** — FsPulse could not access the item's metadata or contents
 

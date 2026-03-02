@@ -195,7 +195,7 @@ impl ExistingItem {
                     iv.last_hash_scan, iv.file_hash, iv.hash_state,
                     iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
                     iv.val_unknown_count, iv.val_valid_count, iv.val_invalid_count, iv.val_no_validator_count,
-                    iv.hash_unknown_count, iv.hash_valid_count, iv.hash_suspicious_count,
+                    iv.hash_unknown_count, iv.hash_valid_count, iv.hash_suspect_count,
                     i.item_id
              FROM items i
              JOIN item_versions iv ON iv.item_id = i.item_id

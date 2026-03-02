@@ -30,25 +30,25 @@ When configuring a scan in the web UI, you can enable hashing with these options
 - **Hash changed items** (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed
 - **Hash all items**: Hash all files, including those that have been previously hashed
 
-If a hash is detected to have changed, a new item version is created. If the hash changed without a corresponding metadata change (modification date or size), the file's `hash_state` is set to **Suspicious** and an alert is generated (see [Alerts](web_ui/alerts.md)). If metadata did change, the hash change is considered legitimate and `hash_state` remains **Valid**.
+If a hash is detected to have changed, a new item version is created. If the hash changed without a corresponding metadata change (modification date or size), the file's `hash_state` is set to **Suspect** and an alert is generated (see [Alerts](web_ui/alerts.md)). If metadata did change, the hash change is considered legitimate and `hash_state` remains **Valid**.
 
 ### Hash States
 
 Hash state tracks the integrity of a file's content hash over time. Hash states are stored in the database as:
 - **U**: Unknown. No hash has been computed for this file
 - **V**: Valid. Hash exists, no unexplained changes detected
-- **S**: Suspicious. Hash changed without a corresponding metadata change
+- **S**: Suspect. Hash changed without a corresponding metadata change
 
-Unlike validation state (which reflects the latest analysis result), hash state is **sticky** — once a file is marked Suspicious, it remains Suspicious until the file is legitimately modified (metadata change detected during a subsequent scan with hashing enabled).
+Unlike validation state (which reflects the latest analysis result), hash state is **sticky** — once a file is marked Suspect, it remains Suspect until the file is legitimately modified (metadata change detected during a subsequent scan with hashing enabled).
 
 ### Finding Hash Changes
 
 You can investigate hash changes through the web UI:
-- **[Alerts Page](web_ui/alerts.md)**: Shows suspicious hash changes where file metadata hasn't changed
+- **[Alerts Page](web_ui/alerts.md)**: Shows suspect hash changes where file metadata hasn't changed
 - **[Browse Page](web_ui/browse.md)**: Click any item to see its version history including hash changes
 - **[Explore Page](web_ui/explore.md)**: Use the **Query** tab to run custom queries
 
-Example query to find items with suspicious hashes (run on the Explore page's Query tab):
+Example query to find items with suspect hashes (run on the Explore page's Query tab):
 ```text
 alerts where alert_type:(H) order by created_at desc
 ```

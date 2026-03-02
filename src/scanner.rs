@@ -998,7 +998,7 @@ impl Scanner {
                     val_no_validator: row.get(3)?,
                     hash_unknown: row.get(4)?,
                     hash_valid: row.get(5)?,
-                    hash_suspicious: row.get(6)?,
+                    hash_suspect: row.get(6)?,
                 })
             },
         )?;
@@ -1075,13 +1075,13 @@ impl Scanner {
                 "UPDATE item_versions SET
                     add_count = ?, modify_count = ?, delete_count = ?, unchanged_count = ?,
                     val_unknown_count = ?, val_valid_count = ?, val_invalid_count = ?, val_no_validator_count = ?,
-                    hash_unknown_count = ?, hash_valid_count = ?, hash_suspicious_count = ?
+                    hash_unknown_count = ?, hash_valid_count = ?, hash_suspect_count = ?
                  WHERE version_id = ?",
                 params![w.adds, w.mods, w.dels, w.unchanged,
                         w.state_counts.val_unknown, w.state_counts.val_valid,
                         w.state_counts.val_invalid, w.state_counts.val_no_validator,
                         w.state_counts.hash_unknown, w.state_counts.hash_valid,
-                        w.state_counts.hash_suspicious,
+                        w.state_counts.hash_suspect,
                         version_id],
             )?;
         } else {
@@ -1605,7 +1605,7 @@ impl Scanner {
                 } else {
                     // Hash changed with previous hash — check metadata
                     alert_possible_hash = true;
-                    // Will be resolved to Valid or Suspicious inside the transaction
+                    // Will be resolved to Valid or Suspect inside the transaction
                     // after checking meta_changed_between
                 }
             }
@@ -1652,9 +1652,9 @@ impl Scanner {
                     // Metadata changed — legitimate modification
                     i_hash_state = HashState::Valid;
                 } else {
-                    // Metadata unchanged — suspicious
-                    i_hash_state = HashState::Suspicious;
-                    Alerts::add_suspicious_hash_alert(
+                    // Metadata unchanged — suspect
+                    i_hash_state = HashState::Suspect;
+                    Alerts::add_suspect_hash_alert(
                         c,
                         scan.scan_id(),
                         analysis_item.item_id(),

@@ -554,7 +554,7 @@ impl ScansQuery {
                 "val_no_validator_count" => Format::format_opt_i64(scan.val_no_validator_count),
                 "hash_unknown_count" => Format::format_opt_i64(scan.hash_unknown_count),
                 "hash_valid_count" => Format::format_opt_i64(scan.hash_valid_count),
-                "hash_suspicious_count" => Format::format_opt_i64(scan.hash_suspicious_count),
+                "hash_suspect_count" => Format::format_opt_i64(scan.hash_suspect_count),
                 "error" => Format::format_opt_string(&scan.error),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
@@ -642,7 +642,7 @@ impl VersionsQuery {
                 "val_no_validator_count" => Format::format_opt_i64(version.val_no_validator_count),
                 "hash_unknown_count" => Format::format_opt_i64(version.hash_unknown_count),
                 "hash_valid_count" => Format::format_opt_i64(version.hash_valid_count),
-                "hash_suspicious_count" => Format::format_opt_i64(version.hash_suspicious_count),
+                "hash_suspect_count" => Format::format_opt_i64(version.hash_suspect_count),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -826,7 +826,7 @@ struct VersionsQueryRow {
     val_no_validator_count: Option<i64>,
     hash_unknown_count: Option<i64>,
     hash_valid_count: Option<i64>,
-    hash_suspicious_count: Option<i64>,
+    hash_suspect_count: Option<i64>,
 }
 
 impl VersionsQueryRow {
@@ -860,7 +860,7 @@ impl VersionsQueryRow {
             val_no_validator_count: row.get(25)?,
             hash_unknown_count: row.get(26)?,
             hash_valid_count: row.get(27)?,
-            hash_suspicious_count: row.get(28)?,
+            hash_suspect_count: row.get(28)?,
         })
     }
 }
@@ -890,7 +890,7 @@ pub struct ScansQueryRow {
     val_no_validator_count: Option<i64>,
     hash_unknown_count: Option<i64>,
     hash_valid_count: Option<i64>,
-    hash_suspicious_count: Option<i64>,
+    hash_suspect_count: Option<i64>,
     error: Option<String>,
 }
 
@@ -922,7 +922,7 @@ impl ScansQueryRow {
             val_no_validator_count: row.get(21)?,
             hash_unknown_count: row.get(22)?,
             hash_valid_count: row.get(23)?,
-            hash_suspicious_count: row.get(24)?,
+            hash_suspect_count: row.get(24)?,
             error: row.get(25)?,
         })
     }

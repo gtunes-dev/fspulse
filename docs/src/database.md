@@ -88,7 +88,7 @@ The database schema reflects FsPulse's temporal versioning model:
 | `scans` | Individual scan executions with timing, settings, and summary statistics |
 | `items` | Stable identity for each discovered file or folder (path, type, root) |
 | `item_versions` | Temporal state — one row per distinct state of an item, with full metadata snapshot |
-| `alerts` | Integrity issues (suspicious hashes, validation failures, access errors) |
+| `alerts` | Integrity issues (suspect hashes, validation failures, access errors) |
 | `scan_schedules` | Recurring scan configurations (timing, options) |
 | `tasks` | Work queue entries for scans and other operations |
 | `scan_undo_log` | Transient rollback support for in-progress scans |

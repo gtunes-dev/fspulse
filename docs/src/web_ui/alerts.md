@@ -21,7 +21,7 @@ Triggered when FsPulse is unable to access an item or folder. These alerts can o
 - If FsPulse cannot determine an item's type from metadata, the item is recorded as an instance of the "Unknown" type
 - Items with failed metadata retrieval, whether "Unknown" or otherwise, are not examined during the analysis phase
 
-### Suspicious Hash Changes
+### Suspect Hash Changes
 
 Triggered when:
 - A file's hash changes between scans
@@ -77,7 +77,7 @@ Click an alert to view:
 - Item path and metadata
 - Alert timestamp
 - Access error details (for access denied alerts)
-- Hash change details: previous and new hash values (for suspicious hash alerts)
+- Hash change details: previous and new hash values (for suspect hash alerts)
 - Validation error message (for invalid items)
 - Link to item in Browse view
 

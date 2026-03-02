@@ -7,7 +7,7 @@ use crate::error::FsPulseError;
 #[repr(i64)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlertType {
-    SuspiciousHash = 0,
+    SuspectHash = 0,
     InvalidItem = 1,
     AccessDenied = 2,
 }
@@ -27,22 +27,22 @@ impl AlertType {
 
     pub fn from_i64(value: i64) -> Self {
         match value {
-            0 => AlertType::SuspiciousHash,
+            0 => AlertType::SuspectHash,
             1 => AlertType::InvalidItem,
             2 => AlertType::AccessDenied,
             _ => {
                 warn!(
-                    "Invalid AlertType value in database: {}, defaulting to SuspiciousHash",
+                    "Invalid AlertType value in database: {}, defaulting to SuspectHash",
                     value
                 );
-                AlertType::SuspiciousHash
+                AlertType::SuspectHash
             }
         }
     }
 
     pub fn short_name(&self) -> &'static str {
         match self {
-            AlertType::SuspiciousHash => "H",
+            AlertType::SuspectHash => "H",
             AlertType::InvalidItem => "I",
             AlertType::AccessDenied => "A",
         }
@@ -50,7 +50,7 @@ impl AlertType {
 
     pub fn full_name(&self) -> &'static str {
         match self {
-            AlertType::SuspiciousHash => "Suspicious Hash",
+            AlertType::SuspectHash => "Suspect Hash",
             AlertType::InvalidItem => "Invalid Item",
             AlertType::AccessDenied => "Access Denied",
         }
@@ -59,11 +59,11 @@ impl AlertType {
     pub fn from_string(s: &str) -> Option<Self> {
         match s.to_ascii_uppercase().as_str() {
             // Full names
-            "SUSPICIOUS HASH" | "SUSPICIOUSHASH" => Some(AlertType::SuspiciousHash),
+            "SUSPECT HASH" | "SUSPECTHASH" => Some(AlertType::SuspectHash),
             "INVALID ITEM" | "INVALIDITEM" => Some(AlertType::InvalidItem),
             "ACCESS DENIED" | "ACCESSDENIED" => Some(AlertType::AccessDenied),
             // Short names
-            "H" => Some(AlertType::SuspiciousHash),
+            "H" => Some(AlertType::SuspectHash),
             "I" => Some(AlertType::InvalidItem),
             "A" => Some(AlertType::AccessDenied),
             _ => None,
@@ -191,7 +191,7 @@ impl Alerts {
         Ok(has_meta_change)
     }
 
-    pub fn add_suspicious_hash_alert(
+    pub fn add_suspect_hash_alert(
         conn: &Connection,
         scan_id: i64,
         item_id: i64,
@@ -225,7 +225,7 @@ impl Alerts {
         conn.execute(
             sql,
             named_params! {
-                ":alert_type":      AlertType::SuspiciousHash.as_i64(),
+                ":alert_type":      AlertType::SuspectHash.as_i64(),
                 ":alert_status":    AlertStatus::Open.as_i64(),
                 ":scan_id":         scan_id,
                 ":item_id":         item_id,
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn test_alert_type_integer_values() {
         // Verify the integer values match the expected order
-        assert_eq!(AlertType::SuspiciousHash.as_i64(), 0);
+        assert_eq!(AlertType::SuspectHash.as_i64(), 0);
         assert_eq!(AlertType::InvalidItem.as_i64(), 1);
         assert_eq!(AlertType::AccessDenied.as_i64(), 2);
     }
@@ -443,53 +443,53 @@ mod tests {
     #[test]
     fn test_alert_type_from_i64() {
         // Verify round-trip conversion
-        assert_eq!(AlertType::from_i64(0), AlertType::SuspiciousHash);
+        assert_eq!(AlertType::from_i64(0), AlertType::SuspectHash);
         assert_eq!(AlertType::from_i64(1), AlertType::InvalidItem);
         assert_eq!(AlertType::from_i64(2), AlertType::AccessDenied);
 
-        // Invalid values should default to SuspiciousHash
-        assert_eq!(AlertType::from_i64(999), AlertType::SuspiciousHash);
-        assert_eq!(AlertType::from_i64(-1), AlertType::SuspiciousHash);
+        // Invalid values should default to SuspectHash
+        assert_eq!(AlertType::from_i64(999), AlertType::SuspectHash);
+        assert_eq!(AlertType::from_i64(-1), AlertType::SuspectHash);
     }
 
     #[test]
     fn test_alert_type_short_name() {
-        assert_eq!(AlertType::SuspiciousHash.short_name(), "H");
+        assert_eq!(AlertType::SuspectHash.short_name(), "H");
         assert_eq!(AlertType::InvalidItem.short_name(), "I");
         assert_eq!(AlertType::AccessDenied.short_name(), "A");
     }
 
     #[test]
     fn test_alert_type_full_name() {
-        assert_eq!(AlertType::SuspiciousHash.full_name(), "Suspicious Hash");
+        assert_eq!(AlertType::SuspectHash.full_name(), "Suspect Hash");
         assert_eq!(AlertType::InvalidItem.full_name(), "Invalid Item");
         assert_eq!(AlertType::AccessDenied.full_name(), "Access Denied");
     }
 
     #[test]
     fn test_alert_type_traits() {
-        let suspicious = AlertType::SuspiciousHash;
+        let suspect = AlertType::SuspectHash;
         let invalid = AlertType::InvalidItem;
         let access = AlertType::AccessDenied;
 
         // Test PartialEq
-        assert_eq!(suspicious, AlertType::SuspiciousHash);
+        assert_eq!(suspect, AlertType::SuspectHash);
         assert_eq!(invalid, AlertType::InvalidItem);
         assert_eq!(access, AlertType::AccessDenied);
-        assert_ne!(suspicious, invalid);
+        assert_ne!(suspect, invalid);
         assert_ne!(invalid, access);
 
         // Test Copy
-        let suspicious_copy = suspicious;
-        assert_eq!(suspicious, suspicious_copy);
+        let suspect_copy = suspicious;
+        assert_eq!(suspect, suspect_copy);
 
         // Test Clone
         let invalid_clone = invalid;
         assert_eq!(invalid, invalid_clone);
 
         // Test Debug (just ensure it doesn't panic)
-        let debug_str = format!("{suspicious:?}");
-        assert!(debug_str.contains("SuspiciousHash"));
+        let debug_str = format!("{suspect:?}");
+        assert!(debug_str.contains("SuspectHash"));
     }
 
     #[test]
@@ -557,7 +557,7 @@ mod tests {
     fn test_alert_type_completeness() {
         // Verify we can convert all enum variants to strings
         let all_types = [
-            AlertType::SuspiciousHash,
+            AlertType::SuspectHash,
             AlertType::InvalidItem,
             AlertType::AccessDenied,
         ];
