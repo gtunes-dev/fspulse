@@ -480,7 +480,7 @@ mod tests {
         assert_ne!(invalid, access);
 
         // Test Copy
-        let suspect_copy = suspicious;
+        let suspect_copy = suspect;
         assert_eq!(suspect, suspect_copy);
 
         // Test Clone
