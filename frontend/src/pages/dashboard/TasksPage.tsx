@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CirclePause } from 'lucide-react'
 import { TaskCard } from './TaskCard'
-import { TaskHistoryTable } from './TaskHistoryTable'
+import { RecentActivityCard } from './RecentActivityCard'
 import { UpcomingTasksTable } from './UpcomingTasksTable'
 import { EmptyStateNoRoots } from './EmptyStateNoRoots'
 import { EmptyStateNoTasks } from './EmptyStateNoTasks'
@@ -157,7 +157,7 @@ export function TasksPage() {
   // Normal operational state
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Tasks</h1>
+      <h1 className="text-2xl font-semibold">Dashboard</h1>
 
       {/* Global Pause Banner - Only when paused */}
       {isPaused && (
@@ -181,8 +181,8 @@ export function TasksPage() {
       {/* Upcoming Tasks */}
       <UpcomingTasksTable />
 
-      {/* Task History */}
-      <TaskHistoryTable />
+      {/* Recent Activity - compact view, links to full History page */}
+      <RecentActivityCard />
 
       {/* Pause Dialog */}
       <PauseDialog open={showPauseDialog} onOpenChange={setShowPauseDialog} />
