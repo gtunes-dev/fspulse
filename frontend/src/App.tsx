@@ -2,7 +2,6 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { TaskProvider, useTaskContext } from './contexts/TaskContext'
 import { ScrollContext } from './contexts/ScrollContext'
-import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
 import { DashboardPage } from './pages/dashboard/DashboardPage'
 import { SetupPage } from './pages/setup/SetupPage'
@@ -52,27 +51,24 @@ function AppContent() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <Header />
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <main ref={mainRef} className="flex-1 overflow-auto bg-background p-6">
-          <ScrollContext.Provider value={mainElement}>
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/setup" element={<SetupPage />} />
-            <Route path="/explore/*" element={<ExplorePage />} />
-            <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/trends/*" element={<TrendsPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/browse" element={null} />
-          </Routes>
-          <KeepAlivePage isActive={location.pathname === '/browse'}>
-            {(active) => <BrowsePage isActive={active} />}
-          </KeepAlivePage>
-          </ScrollContext.Provider>
-        </main>
-      </div>
+    <div className="flex h-screen bg-background overflow-hidden">
+      <Sidebar />
+      <main ref={mainRef} className="flex-1 overflow-auto bg-background p-6">
+        <ScrollContext.Provider value={mainElement}>
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/explore/*" element={<ExplorePage />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/trends/*" element={<TrendsPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/browse" element={null} />
+        </Routes>
+        <KeepAlivePage isActive={location.pathname === '/browse'}>
+          {(active) => <BrowsePage isActive={active} />}
+        </KeepAlivePage>
+        </ScrollContext.Provider>
+      </main>
     </div>
   )
 }
