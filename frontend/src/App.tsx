@@ -4,14 +4,14 @@ import { TaskProvider, useTaskContext } from './contexts/TaskContext'
 import { ScrollContext } from './contexts/ScrollContext'
 import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
-import { TasksPage } from './pages/tasks/TasksPage'
-import { ScansPage } from './pages/scans/ScansPage'
-import { MonitorPage } from './pages/monitor/MonitorPage'
+import { TasksPage } from './pages/dashboard/TasksPage'
+import { MonitorPage } from './pages/setup/MonitorPage'
 import { ExplorePage } from './pages/explore/ExplorePage'
 import { AlertsPage } from './pages/alerts/AlertsPage'
-import { InsightsPage } from './pages/insights/InsightsPage'
+import { InsightsPage } from './pages/trends/InsightsPage'
 import { BrowsePage } from './pages/browse/BrowsePage'
 import { SettingsPage } from './pages/settings/SettingsPage'
+import { HistoryPage } from './pages/history/HistoryPage'
 import { KeepAlivePage } from './components/layout/KeepAlivePage'
 import { BackendUnavailablePage } from './components/layout/BackendUnavailablePage'
 
@@ -61,11 +61,11 @@ function AppContent() {
           <ScrollContext.Provider value={mainElement}>
           <Routes>
             <Route path="/" element={<TasksPage />} />
-            <Route path="/scans" element={<ScansPage />} />
-            <Route path="/monitor" element={<MonitorPage />} />
+            <Route path="/setup" element={<MonitorPage />} />
             <Route path="/explore/*" element={<ExplorePage />} />
             <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/insights/*" element={<InsightsPage />} />
+            <Route path="/trends/*" element={<InsightsPage />} />
+            <Route path="/history" element={<HistoryPage />} />
             <Route path="/browse" element={null} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

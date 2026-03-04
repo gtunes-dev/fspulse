@@ -3,11 +3,7 @@ import { Button } from '@/components/ui/button'
 import { useNavigate } from 'react-router-dom'
 import { ExternalLink } from 'lucide-react'
 
-interface EmptyStateNoTasksProps {
-  rootCount: number
-}
-
-export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
+export function EmptyStateNoRoots() {
   const navigate = useNavigate()
 
   return (
@@ -15,13 +11,18 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <h3 className="text-xl font-semibold mb-3">Ready to get started?</h3>
+            <h3 className="text-xl font-semibold mb-3">Welcome to FsPulse</h3>
             <p className="text-base text-muted-foreground mb-6 max-w-md">
-              You've configured {rootCount === 1 ? 'a root' : 'roots'}! Use the Manual Scan button above to start scanning, or visit Monitor to add more roots and configure schedules.
+              Get started by adding a root directory to monitor.
             </p>
-            <Button size="lg" onClick={() => navigate('/monitor')}>
-              Go to Monitor
+            <Button size="lg" onClick={() => navigate('/setup')}>
+              Go to Setup
             </Button>
+            <div className="mt-8 text-sm text-muted-foreground space-y-1">
+              <p>FsPulse never modifies your files</p>
+              <p>FsPulse makes no outbound requests</p>
+              <p>FsPulse only scans what you tell it to</p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -37,11 +38,11 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
                 </span>
                 <div className="flex-1 min-w-0">
                   <button
-                    onClick={() => navigate('/monitor')}
+                    onClick={() => navigate('/setup')}
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Add a directory to <strong>Monitor</strong>. FsPulse calls the directories it monitors "Roots"
+                      Add a directory in <strong>Setup</strong>. FsPulse calls the directories it monitors "Roots"
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>
@@ -53,11 +54,11 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
                 </span>
                 <div className="flex-1 min-w-0">
                   <button
-                    onClick={() => navigate('/monitor')}
+                    onClick={() => navigate('/setup')}
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Use the <strong>Monitor</strong> page to immediately scan a Root or to set up a recurring schedule
+                      Use the <strong>Setup</strong> page to immediately scan a Root or to set up a recurring schedule
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>
@@ -69,11 +70,11 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
                 </span>
                 <div className="flex-1 min-w-0">
                   <button
-                    onClick={() => navigate('/insights/scan-trends')}
+                    onClick={() => navigate('/trends/scan-trends')}
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Use <strong>Insights</strong> to see historic scan trends and key information
+                      Use <strong>Trends</strong> to see historic scan trends and key information
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>

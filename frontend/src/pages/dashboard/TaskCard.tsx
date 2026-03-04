@@ -87,7 +87,7 @@ export function TaskCard() {
                   No task in progress
                 </p>
                 <InfoBar variant="info" icon={Lightbulb}>
-                  Configure recurring scans on the <a href="/monitor" className="underline hover:text-primary">Monitor</a> page
+                  Configure recurring scans on the <a href="/setup" className="underline hover:text-primary">Setup</a> page
                 </InfoBar>
               </div>
             ) : (

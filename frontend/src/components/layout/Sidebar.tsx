@@ -1,23 +1,54 @@
-import { ListTodo, Activity, Radar, TriangleAlert, Lightbulb, Database, Settings, FolderTree } from 'lucide-react'
+import { LayoutDashboard, FolderTree, TriangleAlert, TrendingUp, Clock, Database, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 
 export function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(false)
 
-  const mainNavItems = [
-    { icon: ListTodo, label: 'Tasks', to: '/', end: true },
-    { icon: Activity, label: 'Scans', to: '/scans', end: true },
-    { icon: Radar, label: 'Monitor', to: '/monitor', end: false },
+  // Primary navigation: user goals — "why I opened the app"
+  const primaryNavItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', to: '/', end: true },
     { icon: FolderTree, label: 'Browse', to: '/browse', end: true },
     { icon: TriangleAlert, label: 'Alerts', to: '/alerts', end: true },
-    { icon: Lightbulb, label: 'Insights', to: '/insights/scan-trends', end: false },
-    { icon: Database, label: 'Explore', to: '/explore/roots', end: false },
+    { icon: TrendingUp, label: 'Trends', to: '/trends/scan-trends', end: false },
   ]
 
-  const settingsItems = [
-    { icon: Settings, label: 'Settings', to: '/settings' },
+  // Utility navigation: operational/investigative — "when I need to go deeper"
+  const utilityNavItems = [
+    { icon: Clock, label: 'History', to: '/history', end: true },
+    { icon: Database, label: 'Data Explorer', to: '/explore/roots', end: false },
+    { icon: Wrench, label: 'Setup', to: '/setup', end: false },
   ]
+
+  const renderNavItems = (items: typeof primaryNavItems) =>
+    items.map((item) => {
+      const Icon = item.icon
+      return (
+        <NavLink
+          key={item.label}
+          to={item.to}
+          end={item.end}
+          className={({ isActive }) =>
+            `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+              isActive
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            }`
+          }
+        >
+          <Icon className="h-5 w-5 flex-shrink-0" />
+          <span
+            className="whitespace-nowrap overflow-hidden transition-all"
+            style={{
+              opacity: isExpanded ? 1 : 0,
+              width: isExpanded ? 'auto' : 0,
+            }}
+          >
+            {item.label}
+          </span>
+        </NavLink>
+      )
+    })
 
   return (
     <aside
@@ -27,65 +58,12 @@ export function Sidebar() {
       onMouseLeave={() => setIsExpanded(false)}
     >
       <nav className="flex flex-col gap-1 p-2">
-        {mainNavItems.map((item) => {
-          const Icon = item.icon
-          return (
-            <NavLink
-              key={item.label}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
-                  isActive
-                    ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                }`
-              }
-            >
-              <Icon className="h-5 w-5 flex-shrink-0" />
-              <span
-                className="whitespace-nowrap overflow-hidden transition-all"
-                style={{
-                  opacity: isExpanded ? 1 : 0,
-                  width: isExpanded ? 'auto' : 0,
-                }}
-              >
-                {item.label}
-              </span>
-            </NavLink>
-          )
-        })}
+        {renderNavItems(primaryNavItems)}
 
-        {/* Separator */}
+        {/* Separator between primary and utility navigation */}
         <div className="my-2 border-t border-border" />
 
-        {settingsItems.map((item) => {
-          const Icon = item.icon
-          return (
-            <NavLink
-              key={item.label}
-              to={item.to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
-                  isActive
-                    ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                }`
-              }
-            >
-              <Icon className="h-5 w-5 flex-shrink-0" />
-              <span
-                className="whitespace-nowrap overflow-hidden transition-all"
-                style={{
-                  opacity: isExpanded ? 1 : 0,
-                  width: isExpanded ? 'auto' : 0,
-                }}
-              >
-                {item.label}
-              </span>
-            </NavLink>
-          )
-        })}
+        {renderNavItems(utilityNavItems)}
       </nav>
     </aside>
   )

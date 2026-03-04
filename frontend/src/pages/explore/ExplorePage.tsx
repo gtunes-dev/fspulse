@@ -39,7 +39,7 @@ export function ExplorePage() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <h1 className="text-2xl font-semibold mb-8">Explore</h1>
+      <h1 className="text-2xl font-semibold mb-8">Data Explorer</h1>
 
       <Card className="flex-1 flex flex-col min-h-0">
         <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col">

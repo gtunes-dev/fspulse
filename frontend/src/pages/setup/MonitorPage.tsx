@@ -12,7 +12,7 @@ export function MonitorPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Monitor</h1>
+      <h1 className="text-2xl font-semibold">Setup</h1>
 
       <RootsTable
         onAddRoot={() => setAddRootDialogOpen(true)}

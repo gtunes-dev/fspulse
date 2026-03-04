@@ -99,7 +99,7 @@ export function TasksPage() {
   if (loading && !stateOverride) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Tasks</h1>
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground text-center py-8">
@@ -115,7 +115,7 @@ export function TasksPage() {
   if (stateOverride === 'no-roots') {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Tasks</h1>
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
         <EmptyStateNoRoots />
       </div>
     )
@@ -124,7 +124,7 @@ export function TasksPage() {
   if (stateOverride === 'no-tasks') {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Tasks</h1>
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
         <TaskCard />
         <EmptyStateNoTasks rootCount={rootCount || 2} />
       </div>
@@ -136,7 +136,7 @@ export function TasksPage() {
   if (rootCount === 0 && taskCount === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Tasks</h1>
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
         <EmptyStateNoRoots />
       </div>
     )
@@ -147,7 +147,7 @@ export function TasksPage() {
   if (taskCount === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Tasks</h1>
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
         <TaskCard />
         <EmptyStateNoTasks rootCount={rootCount} />
       </div>
