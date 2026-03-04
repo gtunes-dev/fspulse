@@ -1,32 +1,32 @@
-<img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="FsPulse logo" width="100%" style="max-width: 600px;">
+<img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="fsPulse logo" width="100%" style="max-width: 600px;">
 
-# FsPulse
+# fsPulse
 
 > **⚠️ Early Development Notice**
-> FsPulse is under active development and is not yet feature-complete. Core functionality is stable, but expect continued evolution and occasional breaking changes. Feedback and issue reports are welcome as we work toward a 1.0 release.
+> fsPulse is under active development and is not yet feature-complete. Core functionality is stable, but expect continued evolution and occasional breaking changes. Feedback and issue reports are welcome as we work toward a 1.0 release.
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/gtunesdev/fspulse)](https://hub.docker.com/r/gtunesdev/fspulse)
 [![GitHub release](https://img.shields.io/github/v/release/gtunes-dev/fspulse)](https://github.com/gtunes-dev/fspulse/releases)
 
 ---
 
-> **📖 FsPulse has comprehensive documentation.** [Jump straight to the docs →](https://gtunes-dev.github.io/fspulse/)
+> **📖 fsPulse has comprehensive documentation.** [Jump straight to the docs →](https://gtunes-dev.github.io/fspulse/)
 
 ---
 
 > **Read-Only Guarantee.**
-> FsPulse **never modifies your files**. It requires only read access to the directories you configure for scanning. Write access is required only for FsPulse's own database, configuration files, and logs — never for your data.
+> fsPulse **never modifies your files**. It requires only read access to the directories you configure for scanning. Write access is required only for fsPulse's own database, configuration files, and logs — never for your data.
 
 > **Local-Only Guarantee.**
-> FsPulse makes no outbound network requests. All functionality runs entirely on your local system, with no external dependencies or telemetry.
+> fsPulse makes no outbound network requests. All functionality runs entirely on your local system, with no external dependencies or telemetry.
 
-## What is FsPulse?
+## What is fsPulse?
 
-**FsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. FsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.**
+**fsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. fsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.**
 
 Your filesystem is constantly evolving—files are added, modified, and deleted. Storage grows. But **invisible problems** hide beneath the surface: bit rot silently corrupts data, ransomware alters files while preserving timestamps, and you don't realize directories have bloated.
 
-FsPulse gives you **continuous awareness** of both the visible and invisible:
+fsPulse gives you **continuous awareness** of both the visible and invisible:
 
 **Monitor Change & Growth:**
 - Track directory sizes and growth trends over time
@@ -37,10 +37,10 @@ FsPulse gives you **continuous awareness** of both the visible and invisible:
 - **Content Hashing (SHA2)**: Catches when file contents change even though metadata stays the same—the signature of bit rot or tampering
 - **Format Validation**: Reads and validates file structures to detect corruption in FLAC, JPEG, PNG, PDF, and more
 
-Whether you're managing storage capacity, tracking project evolution, or ensuring data integrity, FsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.
+Whether you're managing storage capacity, tracking project evolution, or ensuring data integrity, fsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-scan-progress.png" alt="FsPulse Web UI - Real-time Scan Monitoring" width="90%" style="max-width: 900px;">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-scan-progress.png" alt="fsPulse Web UI - Real-time Scan Monitoring" width="90%" style="max-width: 900px;">
   <br>
   <em>Web UI showing real-time scan progress with live statistics</em>
 </p>
@@ -65,14 +65,14 @@ Whether you're managing storage capacity, tracking project evolution, or ensurin
 
 Quick start instructions are below, but full documentation is available in book form:
 
-👉 **[FsPulse Documentation](https://gtunes-dev.github.io/fspulse/)**
+👉 **[fsPulse Documentation](https://gtunes-dev.github.io/fspulse/)**
 
 Key sections:
 - [Getting Started](https://gtunes-dev.github.io/fspulse/getting_started.html) — Installation, Docker deployment, and first steps
 - [Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Tasks, Scans, Monitor, Browse, Alerts, Insights, Explore, and Settings pages
 - [Scanning Concepts](https://gtunes-dev.github.io/fspulse/scanning.html) — How scans work, hashing, and validation
 - [Query Syntax](https://gtunes-dev.github.io/fspulse/query.html) — Powerful filtering and data exploration
-- [Configuration](https://gtunes-dev.github.io/fspulse/configuration.html) — Customizing FsPulse behavior
+- [Configuration](https://gtunes-dev.github.io/fspulse/configuration.html) — Customizing fsPulse behavior
 
 ---
 
@@ -93,9 +93,9 @@ The [Docker Deployment Guide](https://gtunes-dev.github.io/fspulse/docker.html) 
 
 ---
 
-## ⚡ Running FsPulse
+## ⚡ Running fsPulse
 
-Start the FsPulse server:
+Start the fsPulse server:
 
 ```sh
 fspulse
@@ -120,7 +120,7 @@ All functionality is available through the web UI:
 
 ### Configuration
 
-FsPulse is configured through environment variables or a config file:
+fsPulse is configured through environment variables or a config file:
 
 ```sh
 # Example: Change port and enable debug logging
@@ -145,25 +145,25 @@ The interface provides powerful visual tools for monitoring and exploring your d
 - **Settings** — View and edit configuration with value precedence visualization, database management, and version info
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-monitor-schedules.png" alt="FsPulse Monitor Page - Scheduled Scans" width="90%" style="max-width: 900px;">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-monitor-schedules.png" alt="fsPulse Monitor Page - Scheduled Scans" width="90%" style="max-width: 900px;">
   <br>
   <em>Monitor page showing scheduled scans and queue management</em>
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-tree.png" alt="FsPulse Browse Page - Filesystem Tree" width="90%" style="max-width: 900px;">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-tree.png" alt="fsPulse Browse Page - Filesystem Tree" width="90%" style="max-width: 900px;">
   <br>
   <em>Browse page showing filesystem hierarchy navigation</em>
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="FsPulse Browse Page - Item Detail Panel" width="90%" style="max-width: 900px;">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="fsPulse Browse Page - Item Detail Panel" width="90%" style="max-width: 900px;">
   <br>
   <em>Item detail panel showing metadata, validation status, and version history</em>
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-insights-trends.png" alt="FsPulse Insights - Trend Analysis" width="90%" style="max-width: 900px;">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-insights-trends.png" alt="fsPulse Insights - Trend Analysis" width="90%" style="max-width: 900px;">
   <br>
   <em>Insights page with interactive charts for historical trend analysis</em>
 </p>
@@ -172,7 +172,7 @@ The interface provides powerful visual tools for monitoring and exploring your d
 
 ## 📦 Installation Options
 
-FsPulse can be installed in several ways depending on your preferences and environment:
+fsPulse can be installed in several ways depending on your preferences and environment:
 
 ### Docker Hub (Recommended)
 
@@ -227,14 +227,14 @@ See the [Building from Source Guide](https://gtunes-dev.github.io/fspulse/buildi
 ## 💬 Getting Help
 
 - **Report issues:** [GitHub Issues](https://github.com/gtunes-dev/fspulse/issues)
-- **Documentation:** [FsPulse Book](https://gtunes-dev.github.io/fspulse/)
+- **Documentation:** [fsPulse Book](https://gtunes-dev.github.io/fspulse/)
 - **Docker Hub:** [gtunesdev/fspulse](https://hub.docker.com/r/gtunesdev/fspulse)
 
 ---
 
 ## 🤝 Contributions
 
-FsPulse is under active development, but is **not currently accepting external contributions**. This may change in the future — see our [Development Guide](https://gtunes-dev.github.io/fspulse/development.html) for details.
+fsPulse is under active development, but is **not currently accepting external contributions**. This may change in the future — see our [Development Guide](https://gtunes-dev.github.io/fspulse/development.html) for details.
 
 ---
 

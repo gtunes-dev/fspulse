@@ -11,7 +11,7 @@ export function EmptyStateNoRoots() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <h3 className="text-xl font-semibold mb-3">Welcome to FsPulse</h3>
+            <h3 className="text-xl font-semibold mb-3">Welcome to fsPulse</h3>
             <p className="text-base text-muted-foreground mb-6 max-w-md">
               Get started by adding a root directory to monitor.
             </p>
@@ -19,9 +19,9 @@ export function EmptyStateNoRoots() {
               Go to Setup
             </Button>
             <div className="mt-8 text-sm text-muted-foreground space-y-1">
-              <p>FsPulse never modifies your files</p>
-              <p>FsPulse makes no outbound requests</p>
-              <p>FsPulse only scans what you tell it to</p>
+              <p>fsPulse never modifies your files</p>
+              <p>fsPulse makes no outbound requests</p>
+              <p>fsPulse only scans what you tell it to</p>
             </div>
           </div>
         </CardContent>
@@ -42,7 +42,7 @@ export function EmptyStateNoRoots() {
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Add a directory in <strong>Setup</strong>. FsPulse calls the directories it monitors "Roots"
+                      Add a directory in <strong>Setup</strong>. fsPulse calls the directories it monitors "Roots"
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>

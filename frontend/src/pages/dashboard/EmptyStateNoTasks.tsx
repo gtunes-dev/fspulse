@@ -41,7 +41,7 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Add a directory in <strong>Setup</strong>. FsPulse calls the directories it monitors "Roots"
+                      Add a directory in <strong>Setup</strong>. fsPulse calls the directories it monitors "Roots"
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>

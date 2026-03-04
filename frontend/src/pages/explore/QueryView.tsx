@@ -156,14 +156,14 @@ export function QueryView() {
       {/* Query Input Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Execute FsPulse Query</CardTitle>
+          <CardTitle>Execute fsPulse Query</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Query Textarea */}
           <Textarea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter your FsPulse query here... (e.g., items where item_type:(F) show item_path, size limit 10)"
+            placeholder="Enter your fsPulse query here... (e.g., items where item_type:(F) show item_path, size limit 10)"
             className="min-h-[120px] font-mono text-sm resize-y"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

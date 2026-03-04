@@ -126,7 +126,7 @@ const MAINTENANCE_HTML: &str = r#"<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FsPulse - Database Maintenance</title>
+<title>fsPulse - Database Maintenance</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -174,7 +174,7 @@ const MAINTENANCE_HTML: &str = r#"<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>FsPulse - Database Maintenance</h1>
+<h1>fsPulse - Database Maintenance</h1>
 <p class="subtitle">A schema migration is in progress. This page will refresh automatically when complete.</p>
 <div class="console" id="console"></div>
 <div class="status running" id="status">

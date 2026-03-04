@@ -220,7 +220,7 @@ pub async fn fetch_query(
 }
 
 /// POST /api/query/fetch_override
-/// Accepts raw FsPulse query text and executes it with limit/offset overrides (for Query tab)
+/// Accepts raw fsPulse query text and executes it with limit/offset overrides (for Query tab)
 pub async fn fetch_override_query(
     Json(req): Json<RawQueryRequest>,
 ) -> Result<Json<RawQueryResponse>, (StatusCode, String)> {
@@ -244,7 +244,7 @@ pub async fn fetch_override_query(
 }
 
 /// POST /api/query/count_raw
-/// Returns count for a raw FsPulse query (for Query tab)
+/// Returns count for a raw fsPulse query (for Query tab)
 pub async fn count_raw_query(
     Json(req): Json<RawCountRequest>,
 ) -> Result<Json<CountResponse>, (StatusCode, String)> {
@@ -334,7 +334,7 @@ fn is_date_column(col_map: &ColMap, col_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Builds a full FsPulse query string from structured request data
+/// Builds a full fsPulse query string from structured request data
 fn build_query_string(domain: &str, req: &QueryRequest) -> Result<String, FsPulseError> {
     let mut query = domain.to_lowercase();
 

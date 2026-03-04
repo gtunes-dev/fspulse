@@ -9,7 +9,7 @@ PUID=${PUID:-1000}
 PGID=${PGID:-1000}
 
 # Display startup message
-echo "FsPulse Docker Container"
+echo "fsPulse Docker Container"
 echo "Data directory: ${FSPULSE_DATA_DIR}"
 echo "Running as UID:GID ${PUID}:${PGID}"
 
@@ -41,7 +41,7 @@ fi
 # The app will auto-create config.toml and database if they don't exist
 #
 # Note: setpriv may fail on some platforms (e.g., Synology DSM). If it fails,
-# we fall back to running as root, which is safe since FsPulse only reads files.
+# we fall back to running as root, which is safe since fsPulse only reads files.
 set +e  # Disable exit-on-error for setpriv test
 if setpriv --reuid=fspulse --regid=fspulse --init-groups true 2>/dev/null; then
     # setpriv works - use it to run as non-root user

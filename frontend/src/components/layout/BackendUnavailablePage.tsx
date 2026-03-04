@@ -8,7 +8,7 @@ export function BackendUnavailablePage() {
         <div>
           <h2 className="text-lg font-semibold">Server Unavailable</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Waiting for the FsPulse server...
+            Waiting for the fsPulse server...
           </p>
         </div>
       </div>

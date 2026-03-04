@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# FsPulse Build Script
+# fsPulse Build Script
 # --------------------
-# Builds both the frontend and backend for FsPulse.
+# Builds both the frontend and backend for fsPulse.
 # This script handles the full build process including:
 # - Installing frontend dependencies
 # - Building the React frontend
@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-echo "🏗️  FsPulse Build Script"
+echo "🏗️  fsPulse Build Script"
 echo "======================="
 echo
 
@@ -64,6 +64,6 @@ echo "✅ Build complete!"
 echo
 echo "The binary is located at: ./target/release/fspulse"
 echo
-echo "To run FsPulse:"
+echo "To run fsPulse:"
 echo "  ./target/release/fspulse serve"
 echo

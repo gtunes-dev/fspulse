@@ -52,7 +52,7 @@ export function ShutdownDialog({ open, onOpenChange }: ShutdownDialogProps) {
         </DialogHeader>
 
         <DialogDescription className="pt-2">
-          Shut down the FsPulse server? Running tasks will be stopped and resumed when the server is restarted.
+          Shut down the fsPulse server? Running tasks will be stopped and resumed when the server is restarted.
         </DialogDescription>
 
         {error && (

@@ -1,5 +1,5 @@
 /**
- * Date formatting utilities for FsPulse frontend
+ * Date formatting utilities for fsPulse frontend
  * All functions accept Unix timestamps in SECONDS (as returned by backend with @timestamp)
  * All formatting is done in the user's local timezone
  */

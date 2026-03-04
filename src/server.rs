@@ -73,7 +73,7 @@ impl WebServer {
             (app, None)
         };
 
-        println!("FsPulse server starting on http://{}", addr);
+        println!("fsPulse server starting on http://{}", addr);
 
         #[cfg(debug_assertions)]
         println!("   Running in DEVELOPMENT mode - serving assets from frontend/dist/");
@@ -396,7 +396,7 @@ fn start_app_services(shutdown_tx: broadcast::Sender<()>) -> Result<(), FsPulseE
 async fn health_check() -> Result<(StatusCode, Html<String>), StatusCode> {
     Ok((
         StatusCode::OK,
-        Html("<h1>FsPulse Server</h1><p>✅ Server is running</p>".to_string()),
+        Html("<h1>fsPulse Server</h1><p>✅ Server is running</p>".to_string()),
     ))
 }
 

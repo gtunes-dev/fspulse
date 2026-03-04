@@ -8,7 +8,7 @@ use crate::error::FsPulseError;
 #[command(
     name = "fspulse",
     version,
-    about = "FsPulse: Filesystem scanning and monitoring service"
+    about = "fsPulse: Filesystem scanning and monitoring service"
 )]
 pub struct Cli {
     #[command(subcommand)]

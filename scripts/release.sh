@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# FsPulse Release Script
+# fsPulse Release Script
 # -----------------------
 # This script updates the version in Cargo.toml, commits it,
 # tags the commit, and pushes both the tag and the main branch.

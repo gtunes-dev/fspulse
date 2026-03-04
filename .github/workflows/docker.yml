@@ -100,5 +100,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.IMAGE_NAME }}
-          short-description: "FsPulse - Filesystem state capture and analysis tool"
+          short-description: "fsPulse - Filesystem state capture and analysis tool"
           readme-filepath: ./README.md

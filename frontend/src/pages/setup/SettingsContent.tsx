@@ -482,8 +482,8 @@ export function SettingsContent() {
                       settingKey="analysis_threads"
                     />
                     <SettingRow
-                      name="FsPulse Log Level"
-                      description="Logging verbosity for FsPulse"
+                      name="fsPulse Log Level"
+                      description="Logging verbosity for fsPulse"
                       setting={settings.logging_fspulse}
                       defaultValue="info"
                       settingKey="logging_fspulse"
@@ -549,8 +549,8 @@ export function SettingsContent() {
                     max: 24,
                   },
                   'logging_fspulse': {
-                    title: 'FsPulse Log Level',
-                    description: 'Logging verbosity for FsPulse',
+                    title: 'fsPulse Log Level',
+                    description: 'Logging verbosity for fsPulse',
                     setting: settings.logging_fspulse,
                     defaultValue: 'info',
                     inputType: 'select',
@@ -855,7 +855,7 @@ export function SettingsContent() {
 
               <div className="pt-3 border-t border-border">
                 <p className="text-xs text-muted-foreground">
-                  FsPulse is a fast, cross-platform filesystem scanner and change tracker.
+                  fsPulse is a fast, cross-platform filesystem scanner and change tracker.
                 </p>
                 <div className="flex flex-wrap gap-4 mt-2">
                   <a

@@ -60,7 +60,7 @@ pub async fn get_settings() -> Result<Json<SettingsResponse>, (StatusCode, Strin
         editable: threads_value.env_value.is_none(),
     };
 
-    // Logging FsPulse
+    // Logging fsPulse
     let fspulse_value = config::Config::get_logging_fspulse_value();
     let fspulse_setting = ConfigSetting {
         env_value: fspulse_value.env_value.clone(),

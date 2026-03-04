@@ -423,7 +423,7 @@ fn create_default_config_file(config_path: &PathBuf) -> Result<(), FsPulseError>
     }
 
     // Write commented template file
-    let template = r#"# FsPulse Configuration
+    let template = r#"# fsPulse Configuration
 #
 # Precedence: Environment Variables > config.toml > Built-in Defaults
 #
@@ -756,7 +756,7 @@ impl Config {
         Self::with_config_write(|config| config.analysis_threads.delete_file_value(&config_path))
     }
 
-    // Logging FsPulse
+    // Logging fsPulse
 
     pub fn get_logging_fspulse() -> String {
         Self::with_config_read(|config| config.logging_fspulse.get().clone())

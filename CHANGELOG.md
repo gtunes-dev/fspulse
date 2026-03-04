@@ -53,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.4.0] - 2026-02-28
 
-This is a major release that fundamentally rearchitects how FsPulse stores and presents filesystem data, redesigns the Browse experience, and introduces a generic task execution system.
+This is a major release that fundamentally rearchitects how fsPulse stores and presents filesystem data, redesigns the Browse experience, and introduces a generic task execution system.
 
 **Upgrade note:** The database migration from v0.3.x involves restructuring all historical scan data into the new temporal model (schema v14→v23). For databases with significant scan history, this migration may take several minutes. A maintenance page with real-time progress streaming is shown automatically during the upgrade — the application will reload itself once migration completes.
 
@@ -127,7 +127,7 @@ This release also includes all features from the v0.3 series: access error track
 ### Changed
 - **Database connection handling**: Refactored to use R2D2 connection pool for improved concurrency and resource management
 - **Batch updates during scan phase of scans**: Now transacting in batches rather than for each item
-- **Tracing during scans**: When the FsPulse log level is set to tracing, we now trace timing events for the scan phase of scans
+- **Tracing during scans**: When the fsPulse log level is set to tracing, we now trace timing events for the scan phase of scans
 - **Log events have time signatures**: All log events now include time signatures
 
 ### Fixed
@@ -268,7 +268,7 @@ This release includes all features from v0.2.8:
 - **Root Filtering**: Filter scan history by specific root or view all roots
 - **Database Schema v11**: Scan timing fields (`started_at`, `ended_at`, `was_restarted`, `schedule_id`)
 - **Directory Contents Visualization**: ItemDetailSheet shows file and folder counts
-- **Breaking Change**: `scan_time` renamed to `started_at` in FsPulse Query Language
+- **Breaking Change**: `scan_time` renamed to `started_at` in fsPulse Query Language
 
 ## [v0.2.8] - 2025-11-12
 
@@ -290,7 +290,7 @@ This release includes all features from v0.2.8:
 - CI migrated from deprecated macOS 13 to macOS 15 Intel and latest ARM builds
 
 ### Breaking Changes
-- **FsPulse Query Language**: `scan_time` renamed to `started_at` in scans table. Update existing queries accordingly.
+- **fsPulse Query Language**: `scan_time` renamed to `started_at` in scans table. Update existing queries accordingly.
 
 ## [v0.2.7] - 2025-11-11
 
@@ -497,11 +497,11 @@ This release includes all features from v0.2.8:
 ### Added
 
 **🚀 Web UI and Server Mode**
-- New `serve` command launches FsPulse as a web server with full-featured UI
+- New `serve` command launches fsPulse as a web server with full-featured UI
 - Real-time scan monitoring with WebSocket updates
 - Interactive data exploration with dynamic filtering and column management
 - Alert management interface with context-aware filtering
-- Query builder with support for all FsPulse query syntax
+- Query builder with support for all fsPulse query syntax
 - Configurable via environment variables or `[server]` section in config:
   - `FSPULSE_SERVER_HOST` / `[server].host` (default: 127.0.0.1)
   - `FSPULSE_SERVER_PORT` / `[server].port` (default: 8080)
@@ -606,7 +606,7 @@ This release includes all features from v0.2.8:
 ### Added
 
 - New feature: Explore. This is a complete terminal-UI experience for exploring
-  FsPulse data. View Items, Changes, Scans, Roots. Create and modify query filters.
+  fsPulse data. View Items, Changes, Scans, Roots. Create and modify query filters.
   Show and hide columns. Implemented with Ratatui. More coming soon!
 
 ## [v0.0.10] - 2025-04-26
