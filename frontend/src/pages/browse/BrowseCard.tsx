@@ -68,6 +68,14 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
   const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
   const cache = useBrowseCache(selectedRoot?.root_id ?? 0, resolvedScanId ?? 0)
 
+  // Sync with URL param changes (e.g., deep-linking from Dashboard)
+  useEffect(() => {
+    if (defaultRootId && defaultRootId !== selectedRootId) {
+      setSelectedRootId(defaultRootId)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultRootId])
+
   // Auto-select first root if no default provided
   useEffect(() => {
     if (!selectedRootId && roots.length > 0) {

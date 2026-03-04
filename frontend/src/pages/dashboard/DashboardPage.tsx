@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { CirclePause } from 'lucide-react'
 import { TaskCard } from './TaskCard'
 import { RecentActivityCard } from './RecentActivityCard'
+import { RootHealthSummary } from './RootHealthSummary'
 import { UpcomingTasksTable } from './UpcomingTasksTable'
 import { EmptyStateNoRoots } from './EmptyStateNoRoots'
 import { EmptyStateNoTasks } from './EmptyStateNoTasks'
@@ -177,6 +178,9 @@ export function DashboardPage() {
 
       {/* Task Card - Always visible, handles both active and idle states */}
       <TaskCard />
+
+      {/* Root Health - Per-root status at a glance */}
+      <RootHealthSummary />
 
       {/* Upcoming Tasks */}
       <UpcomingTasksTable />

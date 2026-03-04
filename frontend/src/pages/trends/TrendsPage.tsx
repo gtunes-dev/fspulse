@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import { Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -58,8 +59,13 @@ interface ScanData {
 type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
 export function TrendsPage() {
+  const [searchParams] = useSearchParams()
+
+  // Support deep-linking via URL params (e.g., from Dashboard root health card)
+  const initialRootId = searchParams.get('root_id') || ''
+
   const [roots, setRoots] = useState<Root[]>([])
-  const [selectedRootId, setSelectedRootId] = useState<string>('')
+  const [selectedRootId, setSelectedRootId] = useState<string>(initialRootId)
   const [timeWindow, setTimeWindow] = useState<TimeWindowPreset>('3m') // Default to 3 months
   const [fromDate, setFromDate] = useState<Date | undefined>()
   const [toDate, setToDate] = useState<Date | undefined>()
@@ -131,9 +137,11 @@ export function TrendsPage() {
 
         setRoots(rootsData)
 
-        // Auto-select first root and set default date range
+        // Auto-select first root (unless deep-linked via URL) and set default date range
         if (rootsData.length > 0 && !hasAutoSelected) {
-          setSelectedRootId(rootsData[0].root_id.toString())
+          if (!selectedRootId) {
+            setSelectedRootId(rootsData[0].root_id.toString())
+          }
           const today = startOfDay(new Date())
           setFromDate(subMonths(today, 3))
           setToDate(today)
@@ -144,6 +152,7 @@ export function TrendsPage() {
       }
     }
     loadRoots()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasAutoSelected])
 
   // Load the very first scan ID for this root

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Info, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -82,11 +83,17 @@ const ACTION_LABELS: Record<AlertStatusValue, string> = {
 }
 
 export function AlertsPage() {
-  const [selectedRootId, setSelectedRootId] = useState<string>('all')
+  const [searchParams] = useSearchParams()
+
+  // Support deep-linking via URL params (e.g., from Dashboard root health card)
+  const initialRootId = searchParams.get('root_id') || 'all'
+  const initialStatus = searchParams.get('alert_status') || 'O'
+
+  const [selectedRootId, setSelectedRootId] = useState<string>(initialRootId)
   const [roots, setRoots] = useState<Root[]>([])
   const [loading, setLoading] = useState(true)
   const [columns, setColumns] = useState<ColumnState[]>([])
-  const [statusFilter, setStatusFilter] = useState<string>('O') // Default to "Open"
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus)
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [pathSearch, setPathSearch] = useState('')
   const [debouncedPathSearch, setDebouncedPathSearch] = useState('')
