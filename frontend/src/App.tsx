@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { TaskProvider, useTaskContext } from './contexts/TaskContext'
 import { ScrollContext } from './contexts/ScrollContext'
 import { Header } from './components/layout/Header'
@@ -12,14 +12,41 @@ import { AlertsPage } from './pages/alerts/AlertsPage'
 import { InsightsPage } from './pages/insights/InsightsPage'
 import { BrowsePage } from './pages/browse/BrowsePage'
 import { SettingsPage } from './pages/settings/SettingsPage'
+import { KeepAlivePage } from './components/layout/KeepAlivePage'
 import { BackendUnavailablePage } from './components/layout/BackendUnavailablePage'
 
 function AppContent() {
   const { backendConnected } = useTaskContext()
+  const location = useLocation()
   const [mainElement, setMainElement] = useState<HTMLElement | null>(null)
   const mainRef = useCallback((node: HTMLElement | null) => {
     setMainElement(node)
   }, [])
+
+  // Scroll position save/restore across page navigations
+  const scrollPositionsRef = useRef<Map<string, number>>(new Map())
+  const previousPathnameRef = useRef(location.pathname)
+
+  useEffect(() => {
+    const prevPath = previousPathnameRef.current
+    const newPath = location.pathname
+
+    if (prevPath === newPath) return
+
+    // Save scroll position for the page we're leaving
+    if (mainElement) {
+      scrollPositionsRef.current.set(prevPath, mainElement.scrollTop)
+    }
+
+    previousPathnameRef.current = newPath
+
+    // Restore scroll position for the page we're entering
+    requestAnimationFrame(() => {
+      if (mainElement) {
+        mainElement.scrollTop = scrollPositionsRef.current.get(newPath) ?? 0
+      }
+    })
+  }, [location.pathname, mainElement])
 
   if (!backendConnected) {
     return <BackendUnavailablePage />
@@ -39,9 +66,12 @@ function AppContent() {
             <Route path="/explore/*" element={<ExplorePage />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/insights/*" element={<InsightsPage />} />
-            <Route path="/browse" element={<BrowsePage />} />
+            <Route path="/browse" element={null} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
+          <KeepAlivePage isActive={location.pathname === '/browse'}>
+            {(active) => <BrowsePage isActive={active} />}
+          </KeepAlivePage>
           </ScrollContext.Provider>
         </main>
       </div>

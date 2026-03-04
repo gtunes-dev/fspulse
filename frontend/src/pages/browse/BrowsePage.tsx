@@ -11,7 +11,11 @@ interface Root {
   root_path: string
 }
 
-export function BrowsePage() {
+interface BrowsePageProps {
+  isActive?: boolean
+}
+
+export function BrowsePage({ isActive = true }: BrowsePageProps) {
   const [searchParams] = useSearchParams()
   const [roots, setRoots] = useState<Root[]>([])
   const [loading, setLoading] = useState(true)
@@ -104,10 +108,12 @@ export function BrowsePage() {
           roots={roots}
           defaultRootId={defaultRootId}
           defaultScanId={defaultScanIdNum}
+          isActive={isActive}
         />
         <div className={showCompare ? 'flex-1 min-w-0 flex' : 'hidden'}>
           <BrowseCard
             roots={roots}
+            isActive={isActive && showCompare}
           />
         </div>
       </div>

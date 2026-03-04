@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { format } from 'date-fns'
 import { Check, ChevronDown, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Calendar, CalendarDayButton } from '@/components/ui/calendar'
+import { Calendar } from '@/components/ui/calendar'
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { formatScanDate, formatTime } from '@/lib/dateUtils'
-import type { DayButton } from 'react-day-picker'
 
 interface CompactScanBarProps {
   rootId: number
@@ -41,6 +40,7 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
 
   // Calendar scan date highlighting
   const [scanDates, setScanDates] = useState<Set<string>>(new Set())
+  const [scanDatesLoaded, setScanDatesLoaded] = useState(false)
   const [displayMonth, setDisplayMonth] = useState<Date>(new Date())
 
   // Scans for selected date
@@ -59,21 +59,37 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
   const dateScansIdRef = useRef(0)
 
   // ── Fetch scan dates for calendar highlighting ─────────────────────
+  // Fetches current, previous, and next months in parallel so outside
+  // dates (from adjacent months visible in the calendar) are covered.
   const fetchScanDates = useCallback(
     async (month: Date) => {
       const currentId = ++scanDatesIdRef.current
       try {
-        const params = new URLSearchParams({
-          root_id: rootId.toString(),
-          year: month.getFullYear().toString(),
-          month: (month.getMonth() + 1).toString(),
-        })
-        const response = await fetch(`/api/scans/scan_dates?${params}`)
+        const months = [
+          new Date(month.getFullYear(), month.getMonth() - 1, 1),
+          month,
+          new Date(month.getFullYear(), month.getMonth() + 1, 1),
+        ]
+
+        const results = await Promise.all(
+          months.map(async (m) => {
+            const params = new URLSearchParams({
+              root_id: rootId.toString(),
+              year: m.getFullYear().toString(),
+              month: (m.getMonth() + 1).toString(),
+            })
+            const response = await fetch(`/api/scans/scan_dates?${params}`)
+            if (response.ok) {
+              const data = (await response.json()) as { dates: string[] }
+              return data.dates
+            }
+            return []
+          })
+        )
+
         if (currentId !== scanDatesIdRef.current) return
-        if (response.ok) {
-          const data = (await response.json()) as { dates: string[] }
-          setScanDates(new Set(data.dates))
-        }
+        setScanDates(new Set(results.flat()))
+        setScanDatesLoaded(true)
       } catch {
         if (currentId !== scanDatesIdRef.current) return
       }
@@ -236,6 +252,7 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
   // ── Initialize on mount / rootId change ────────────────────────────
   useEffect(() => {
     setScanDates(new Set())
+    setScanDatesLoaded(false)
     setDateScans([])
     setSelectedDate(undefined)
     setIsFallback(false)
@@ -270,21 +287,10 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
     setDisplayMonth(month)
   }
 
-  // ── Calendar day button: bold + blue for dates with scans ──────────
-  const ScanDayButton = useCallback(
-    (props: React.ComponentProps<typeof DayButton>) => {
-      const dateStr = format(props.day.date, 'yyyy-MM-dd')
-      const hasScan = scanDates.has(dateStr)
-
-      return (
-        <CalendarDayButton
-          {...props}
-          className={hasScan ? 'font-bold text-primary' : undefined}
-        />
-      )
-    },
-    [scanDates]
-  )
+  // Disable + line-through dates without scans (only after scan dates have loaded)
+  const noScanMatcher = scanDatesLoaded
+    ? (date: Date) => !scanDates.has(format(date, 'yyyy-MM-dd'))
+    : undefined
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
@@ -327,17 +333,22 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
               <div className="border-r border-border shrink-0">
                 <Calendar
                   mode="single"
+                  captionLayout="dropdown"
                   selected={selectedDate}
                   onSelect={handleDateSelect}
                   month={displayMonth}
                   onMonthChange={handleMonthChange}
+                  disabled={noScanMatcher}
+                  modifiers={{
+                    noScan: noScanMatcher ?? [],
+                  }}
+                  modifiersClassNames={{
+                    noScan: '[&>button]:line-through opacity-100',
+                  }}
                   className="p-2 [--cell-size:1.625rem]"
                   classNames={{
                     month: 'flex w-full flex-col gap-2',
                     week: 'mt-1 flex w-full',
-                  }}
-                  components={{
-                    DayButton: ScanDayButton,
                   }}
                 />
               </div>

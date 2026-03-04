@@ -34,8 +34,12 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
     // Track what we've loaded to prevent duplicate fetches
     const loadedKeyRef = useRef<string | null>(null)
 
+    // Ref for selectedItemId so we can read it in the load effect without adding it to deps
+    const selectedItemIdRef = useRef(selectedItemId)
+    selectedItemIdRef.current = selectedItemId
+
     // Virtual tree hook using the shared cache
-    const { flatItems, initializeTree, toggleNode, isLoading: isNodeLoading, revealPath: treeRevealPath } = useVirtualTree({
+    const { flatItems, initializeTree, initializeTreeWithExpansions, getExpandedPaths, toggleNode, isLoading: isNodeLoading, revealPath: treeRevealPath } = useVirtualTree({
       loadChildrenFn: cache.loadChildren,
     })
 
@@ -95,6 +99,9 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
         return
       }
 
+      // Snapshot expanded paths from the current tree before rebuilding
+      const expandedPaths = getExpandedPaths()
+
       // Mark as loading IMMEDIATELY to prevent Strict Mode duplicates
       loadedKeyRef.current = loadKey
 
@@ -133,8 +140,17 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
 
           const sortedNodes = sortTreeItems(nodes)
 
-          // Initialize virtual tree with root nodes
-          initializeTree(sortedNodes)
+          // Rebuild tree — restore expansions if we had any, otherwise plain init
+          if (expandedPaths.size > 0) {
+            await initializeTreeWithExpansions(sortedNodes, expandedPaths)
+          } else {
+            initializeTree(sortedNodes)
+          }
+
+          // Scroll to selected item if it exists in the rebuilt tree
+          if (selectedItemIdRef.current != null) {
+            setPendingScrollTarget(selectedItemIdRef.current)
+          }
         } catch (err) {
           // Reset on error to allow retry
           loadedKeyRef.current = null
@@ -146,7 +162,7 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
       }
 
       loadRootLevelItems()
-    }, [isActive, rootPath, scanId, cache, initializeTree])
+    }, [isActive, rootPath, scanId, cache, initializeTree, initializeTreeWithExpansions, getExpandedPaths])
 
     return (
       <div

@@ -33,9 +33,10 @@ interface BrowseCardProps {
   roots: Root[]
   defaultRootId?: string
   defaultScanId?: number
+  isActive?: boolean
 }
 
-export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardProps) {
+export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: pageActive = true }: BrowseCardProps) {
   const [selectedRootId, setSelectedRootId] = useState<string>(defaultRootId ?? '')
   const [resolvedScanId, setResolvedScanId] = useState<number | null>(null)
   const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
@@ -196,7 +197,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
           hiddenKinds={hiddenKinds}
           hiddenHashStates={hiddenHashStates}
           hiddenValStates={hiddenValStates}
-          isActive={viewMode === 'tree'}
+          isActive={pageActive && viewMode === 'tree'}
           selectedItemId={selectedItems.tree?.itemId}
           onItemSelect={handleTreeSelect}
         />
@@ -213,7 +214,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
           hiddenKinds={hiddenKinds}
           hiddenHashStates={hiddenHashStates}
           hiddenValStates={hiddenValStates}
-          isActive={viewMode === 'folder'}
+          isActive={pageActive && viewMode === 'folder'}
           selectedItemId={selectedItems.folder?.itemId}
           onItemSelect={handleFolderSelect}
         />
@@ -229,7 +230,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId }: BrowseCardPr
           hiddenKinds={hiddenKinds}
           hiddenHashStates={hiddenHashStates}
           hiddenValStates={hiddenValStates}
-          isActive={viewMode === 'search' && hasSearchQuery}
+          isActive={pageActive && viewMode === 'search' && hasSearchQuery}
           selectedItemId={selectedItems.search?.itemId}
           onItemSelect={handleSearchSelect}
         />

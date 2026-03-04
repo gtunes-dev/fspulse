@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Item detail folder counts**: Directory item detail views show change type counts (added/deleted/modified/unchanged) and integrity counts (suspect hash/invalid item) from the version data
 - **Item detail version diffs for counts**: Version history diffs for folders show folder count and integrity count transitions, including on initial (Added) versions
 - **Editable alert status**: Alert status can be changed directly from the item detail view via a dropdown instead of navigating to the Alerts page
+- **Browse page keep-alive**: Browse page state (tree expansions, folder path, selections, filters, view mode, scan selection) is preserved when navigating to other pages and back. Uses a reusable `KeepAlivePage` component that can be applied to other pages
+- **Scroll position persistence**: Scroll positions are saved and restored when switching between pages, so returning to any page resumes where you left off
+- **Calendar disabled dates**: Dates without scans are visually struck through and non-clickable in the scan date picker, preventing accidental selection of empty dates
+- **Calendar month/year dropdowns**: The scan date picker calendar now shows month and year dropdowns for faster navigation to distant dates
+- **Tree expansion preservation**: Switching scans in the Browse tree view preserves expanded folder state — previously expanded directories are re-expanded in the new scan (with graceful fallback for paths that no longer exist)
 
 ### Fixed
 - Fix incorrect validation state display in item detail panels where val_state integers were mapped to wrong labels (e.g., Invalid files showing as "No Validator")
@@ -26,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Rename `val` column to `val_state` across the schema, query language, and frontend for symmetry with `hash_state`
 - Rename Scans page title from "Scan History" to "Scans" for consistency with sidebar navigation
+
+### Removed
+- Remove unused `ScanPicker` component (replaced by `CompactScanBar`)
 
 ## [v0.4.1] - 2026-02-28
 
