@@ -4,13 +4,12 @@ import { TaskProvider, useTaskContext } from './contexts/TaskContext'
 import { ScrollContext } from './contexts/ScrollContext'
 import { Header } from './components/layout/Header'
 import { Sidebar } from './components/layout/Sidebar'
-import { TasksPage } from './pages/dashboard/TasksPage'
-import { MonitorPage } from './pages/setup/MonitorPage'
+import { DashboardPage } from './pages/dashboard/DashboardPage'
+import { SetupPage } from './pages/setup/SetupPage'
 import { ExplorePage } from './pages/explore/ExplorePage'
 import { AlertsPage } from './pages/alerts/AlertsPage'
-import { InsightsPage } from './pages/trends/InsightsPage'
+import { TrendsPage } from './pages/trends/TrendsPage'
 import { BrowsePage } from './pages/browse/BrowsePage'
-import { SettingsPage } from './pages/settings/SettingsPage'
 import { HistoryPage } from './pages/history/HistoryPage'
 import { KeepAlivePage } from './components/layout/KeepAlivePage'
 import { BackendUnavailablePage } from './components/layout/BackendUnavailablePage'
@@ -60,14 +59,13 @@ function AppContent() {
         <main ref={mainRef} className="flex-1 overflow-auto bg-background p-6">
           <ScrollContext.Provider value={mainElement}>
           <Routes>
-            <Route path="/" element={<TasksPage />} />
-            <Route path="/setup" element={<MonitorPage />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/setup" element={<SetupPage />} />
             <Route path="/explore/*" element={<ExplorePage />} />
             <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/trends/*" element={<InsightsPage />} />
+            <Route path="/trends/*" element={<TrendsPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/browse" element={null} />
-            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
           <KeepAlivePage isActive={location.pathname === '/browse'}>
             {(active) => <BrowsePage isActive={active} />}

@@ -40,7 +40,7 @@ interface SettingsResponse {
   database_dir: ConfigSetting<string>
 }
 
-export function SettingsPage() {
+export function SettingsContent() {
   const { isExclusive, lastTaskCompletedAt } = useTaskContext()
 
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
@@ -437,8 +437,6 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Settings</h1>
-
       <Card>
         <CardHeader>
           <CardTitle>Configuration</CardTitle>

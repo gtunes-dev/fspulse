@@ -200,7 +200,7 @@ export interface ScheduleWithRoot extends Schedule {
   next_scan_time?: number  // Unix timestamp
 }
 
-// Insights Page Types
+// Trends Page Types
 
 export type AlertStatusValue = 'O' | 'F' | 'D' // Open, Flagged, Dismissed
 export type AlertTypeValue = 'H' | 'I' | 'A' // Suspect Hash, Invalid Item, Access Denied

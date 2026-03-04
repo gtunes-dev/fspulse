@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { RootsView } from './RootsView'
 import { ScansView } from './ScansView'
 import { ItemsView } from './ItemsView'
@@ -38,62 +37,39 @@ export function ExplorePage() {
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <h1 className="text-2xl font-semibold mb-8">Data Explorer</h1>
+    <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-semibold">Data Explorer</h1>
 
-      <Card className="flex-1 flex flex-col min-h-0">
-        <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col">
-          <CardHeader className="pb-0">
-            <TabsList className="h-auto p-0 bg-transparent gap-0">
-              <TabsTrigger value="roots" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Roots
-              </TabsTrigger>
-              <TabsTrigger value="scans" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Scans
-              </TabsTrigger>
-              <TabsTrigger value="items" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Items
-              </TabsTrigger>
-              <TabsTrigger value="versions" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Versions
-              </TabsTrigger>
-              <TabsTrigger value="alerts" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Alerts
-              </TabsTrigger>
-              <TabsTrigger value="query" className="text-2xl font-semibold px-6 py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Query
-              </TabsTrigger>
-            </TabsList>
-          </CardHeader>
+      <Tabs value={currentTab} onValueChange={handleTabChange}>
+        <TabsList>
+          <TabsTrigger value="roots">Roots</TabsTrigger>
+          <TabsTrigger value="scans">Scans</TabsTrigger>
+          <TabsTrigger value="items">Items</TabsTrigger>
+          <TabsTrigger value="versions">Versions</TabsTrigger>
+          <TabsTrigger value="alerts">Alerts</TabsTrigger>
+          <TabsTrigger value="query">Query</TabsTrigger>
+        </TabsList>
 
-          <CardContent className="flex-1 flex flex-col px-6 pb-6 pt-4">
-            {/* Keep all tabs mounted for instant switching - use CSS hiding */}
-            <div className={`flex-1 flex flex-col ${currentTab === 'roots' ? '' : 'hidden'}`}>
-              <RootsView />
-            </div>
-
-            <div className={`flex-1 flex flex-col ${currentTab === 'scans' ? '' : 'hidden'}`}>
-              <ScansView />
-            </div>
-
-            <div className={`flex-1 flex flex-col ${currentTab === 'items' ? '' : 'hidden'}`}>
-              <ItemsView />
-            </div>
-
-            <div className={`flex-1 flex flex-col ${currentTab === 'versions' ? '' : 'hidden'}`}>
-              <VersionsView />
-            </div>
-
-            <div className={`flex-1 flex flex-col ${currentTab === 'alerts' ? '' : 'hidden'}`}>
-              <AlertsView />
-            </div>
-
-            <div className={`flex-1 flex flex-col ${currentTab === 'query' ? '' : 'hidden'}`}>
-              <QueryView />
-            </div>
-          </CardContent>
-        </Tabs>
-      </Card>
+        {/* Keep all tabs mounted for instant switching - use CSS hiding */}
+        <div className={`mt-2 ${currentTab === 'roots' ? '' : 'hidden'}`}>
+          <RootsView />
+        </div>
+        <div className={`mt-2 ${currentTab === 'scans' ? '' : 'hidden'}`}>
+          <ScansView />
+        </div>
+        <div className={`mt-2 ${currentTab === 'items' ? '' : 'hidden'}`}>
+          <ItemsView />
+        </div>
+        <div className={`mt-2 ${currentTab === 'versions' ? '' : 'hidden'}`}>
+          <VersionsView />
+        </div>
+        <div className={`mt-2 ${currentTab === 'alerts' ? '' : 'hidden'}`}>
+          <AlertsView />
+        </div>
+        <div className={`mt-2 ${currentTab === 'query' ? '' : 'hidden'}`}>
+          <QueryView />
+        </div>
+      </Tabs>
     </div>
   )
 }

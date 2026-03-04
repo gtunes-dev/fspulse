@@ -57,7 +57,7 @@ interface ScanData {
 
 type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
-export function InsightsPage() {
+export function TrendsPage() {
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>('')
   const [timeWindow, setTimeWindow] = useState<TimeWindowPreset>('3m') // Default to 3 months

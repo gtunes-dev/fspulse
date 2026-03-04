@@ -13,7 +13,7 @@ import { useTaskContext } from '@/contexts/TaskContext'
 import { countQuery } from '@/lib/api'
 
 /**
- * Tasks Page - Main landing page showing task status and history
+ * Dashboard Page - Main landing page showing task status and history
  *
  * DEVELOPMENT/TESTING URL PARAMETERS:
  * ------------------------------------
@@ -28,7 +28,7 @@ import { countQuery } from '@/lib/api'
  *
  * Without any parameter, the page uses actual database counts to determine state.
  */
-export function TasksPage() {
+export function DashboardPage() {
   const [searchParams] = useSearchParams()
   const { isPaused, pauseUntil } = useTaskContext()
   const [loading, setLoading] = useState(true)
