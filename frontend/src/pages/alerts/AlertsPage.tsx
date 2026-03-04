@@ -83,13 +83,31 @@ const ACTION_LABELS: Record<AlertStatusValue, string> = {
 }
 
 export function AlertsPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Support deep-linking via URL params (e.g., from Dashboard root health card)
   const initialRootId = searchParams.get('root_id') || 'all'
   const initialStatus = searchParams.get('alert_status') || 'O'
 
   const [selectedRootId, setSelectedRootId] = useState<string>(initialRootId)
+
+  // Update URL when root changes so sidebar can carry it to other pages
+  const handleRootChange = useCallback((rootId: string) => {
+    setSelectedRootId(rootId)
+    if (rootId && rootId !== 'all') {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('root_id', rootId)
+        return next
+      }, { replace: true })
+    } else {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('root_id')
+        return next
+      }, { replace: true })
+    }
+  }, [setSearchParams])
   const [roots, setRoots] = useState<Root[]>([])
   const [loading, setLoading] = useState(true)
   const [columns, setColumns] = useState<ColumnState[]>([])
@@ -508,7 +526,7 @@ export function AlertsPage() {
         <RootCard
           roots={roots}
           selectedRootId={selectedRootId}
-          onRootChange={setSelectedRootId}
+          onRootChange={handleRootChange}
           allowAll={true}
           actionBar={
             <>

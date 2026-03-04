@@ -59,13 +59,31 @@ interface ScanData {
 type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
 export function TrendsPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Support deep-linking via URL params (e.g., from Dashboard root health card)
   const initialRootId = searchParams.get('root_id') || ''
 
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>(initialRootId)
+
+  // Update URL when root changes so sidebar can carry it to other pages
+  const handleRootChange = useCallback((rootId: string) => {
+    setSelectedRootId(rootId)
+    if (rootId) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('root_id', rootId)
+        return next
+      }, { replace: true })
+    } else {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('root_id')
+        return next
+      }, { replace: true })
+    }
+  }, [setSearchParams])
   const [timeWindow, setTimeWindow] = useState<TimeWindowPreset>('3m') // Default to 3 months
   const [fromDate, setFromDate] = useState<Date | undefined>()
   const [toDate, setToDate] = useState<Date | undefined>()
@@ -309,7 +327,7 @@ export function TrendsPage() {
       <RootCard
         roots={roots}
         selectedRootId={selectedRootId}
-        onRootChange={setSelectedRootId}
+        onRootChange={handleRootChange}
         actionBar={
           <>
             <Select value={timeWindow} onValueChange={handleTimeWindowChange}>

@@ -109,6 +109,7 @@ export function BrowsePage({ isActive = true }: BrowsePageProps) {
           defaultRootId={defaultRootId}
           defaultScanId={defaultScanIdNum}
           isActive={isActive}
+          isPrimary
         />
         <div className={showCompare ? 'flex-1 min-w-0 flex' : 'hidden'}>
           <BrowseCard

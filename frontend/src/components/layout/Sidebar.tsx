@@ -1,9 +1,26 @@
 import { LayoutDashboard, FolderTree, TriangleAlert, TrendingUp, Clock, Database, Wrench } from 'lucide-react'
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
+
+// Pages where root_id context is meaningful
+const ROOT_SCOPED_PATHS = ['/browse', '/alerts', '/trends']
 
 export function Sidebar() {
   const [isExpanded, setIsExpanded] = useState(false)
+  const location = useLocation()
+
+  // Read root_id from current URL to carry between root-scoped pages
+  const currentRootId = new URLSearchParams(location.search).get('root_id')
+
+  // Build destination URL, carrying root_id for root-scoped pages
+  const buildTo = (basePath: string): string => {
+    if (!currentRootId) return basePath
+    // Only carry root_id if the destination is a root-scoped page
+    const isRootScoped = ROOT_SCOPED_PATHS.some(p => basePath.startsWith(p))
+    if (!isRootScoped) return basePath
+    const separator = basePath.includes('?') ? '&' : '?'
+    return `${basePath}${separator}root_id=${currentRootId}`
+  }
 
   // Primary navigation: user goals — "why I opened the app"
   const primaryNavItems = [
@@ -26,7 +43,7 @@ export function Sidebar() {
       return (
         <NavLink
           key={item.label}
-          to={item.to}
+          to={buildTo(item.to)}
           end={item.end}
           className={({ isActive }) =>
             `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${

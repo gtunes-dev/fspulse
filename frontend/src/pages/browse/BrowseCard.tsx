@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { FolderTree, FolderOpen, Search, ArrowLeftRight, AlertTriangle, CircleX, Check, ChevronDown, SlidersHorizontal } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -34,10 +35,24 @@ interface BrowseCardProps {
   defaultRootId?: string
   defaultScanId?: number
   isActive?: boolean
+  isPrimary?: boolean
 }
 
-export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: pageActive = true }: BrowseCardProps) {
-  const [selectedRootId, setSelectedRootId] = useState<string>(defaultRootId ?? '')
+export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: pageActive = true, isPrimary = false }: BrowseCardProps) {
+  const [, setSearchParams] = useSearchParams()
+  const [selectedRootId, setSelectedRootIdRaw] = useState<string>(defaultRootId ?? '')
+
+  // Wrap setter to also update URL for the primary card (enables sidebar root context)
+  const setSelectedRootId = useCallback((rootId: string) => {
+    setSelectedRootIdRaw(rootId)
+    if (isPrimary && rootId) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('root_id', rootId)
+        return next
+      }, { replace: true })
+    }
+  }, [isPrimary, setSearchParams])
   const [resolvedScanId, setResolvedScanId] = useState<number | null>(null)
   const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
@@ -81,7 +96,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
     if (!selectedRootId && roots.length > 0) {
       setSelectedRootId(roots[0].root_id.toString())
     }
-  }, [roots, selectedRootId])
+  }, [roots, selectedRootId, setSelectedRootId])
 
   // Reset resolved scan, all selections, and folder path when root changes
   useEffect(() => {
