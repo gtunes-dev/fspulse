@@ -1,12 +1,12 @@
 # Command-Line Interface
 
-FsPulse is a **web-first application**. The CLI exists solely to launch the web server—all functionality including scanning, querying, browsing, and configuration is accessed through the [Interface](web_ui.md).
+fsPulse is a **web-first application**. The CLI exists solely to launch the web server—all functionality including scanning, querying, browsing, and configuration is accessed through the [Interface](web_ui.md).
 
 ---
 
-## Starting FsPulse
+## Starting fsPulse
 
-To start the FsPulse server:
+To start the fsPulse server:
 
 ```sh
 fspulse
@@ -31,7 +31,7 @@ Once running, open your browser to access the full web interface for:
 
 ## Configuration
 
-FsPulse behavior is configured through **environment variables** or a **config file**, not command-line flags.
+fsPulse behavior is configured through **environment variables** or a **config file**, not command-line flags.
 
 ### Environment Variables
 
@@ -56,7 +56,7 @@ fspulse
 
 ### Configuration File
 
-FsPulse also reads from `config.toml` in the data directory. See [Configuration](configuration.md) for complete documentation including:
+fsPulse also reads from `config.toml` in the data directory. See [Configuration](configuration.md) for complete documentation including:
 - All available settings
 - Environment variable reference
 - Platform-specific data directory locations
@@ -79,5 +79,5 @@ fspulse --version
 
 - **[Configuration](configuration.md)** — Complete configuration reference
 - **[Interface](web_ui.md)** — Guide to all UI features
-- **[Docker Deployment](docker.md)** — Running FsPulse in Docker
+- **[Docker Deployment](docker.md)** — Running fsPulse in Docker
 

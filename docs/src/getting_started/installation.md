@@ -1,6 +1,6 @@
 # Installation
 
-FsPulse can be installed in several ways depending on your preferences and environment.
+fsPulse can be installed in several ways depending on your preferences and environment.
 
 ## Docker Hub (Recommended)
 
@@ -38,4 +38,4 @@ macOS builds include both Intel (x86_64) and Apple Silicon (ARM64) binaries.
 ## Next Steps
 
 - **Want to build from source?** See [Building from Source](building.md)
-- **Ready to start using FsPulse?** Proceed to [First Steps](first_steps.md)
+- **Ready to start using fsPulse?** Proceed to [First Steps](first_steps.md)

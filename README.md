@@ -49,12 +49,13 @@ Whether you're managing storage capacity, tracking project evolution, or ensurin
 
 ## 🚀 Key Capabilities
 
+- **Health-at-a-Glance Dashboard** — See the status of all monitored directories immediately: open alerts, last scan times, and overall health
 - **Continuous Monitoring** — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically
 - **Temporal Versioning** — Every item's state is tracked over time; browse your filesystem as it appeared at any past scan
 - **Size & Growth Tracking** — Monitor directory sizes and visualize storage trends over time with dual-format units
 - **Change Detection** — Track all file additions, modifications, and deletions through version history
 - **Integrity Verification** — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types
-- **Historical Analysis** — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts
+- **Historical Trends** — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts
 - **Alert System** — Suspect hash changes and validation failures flagged immediately with status management
 - **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing across five data domains
 - **Web-First Design** — Elegant web UI for all operations including scanning, browsing, querying, and configuration
@@ -69,7 +70,7 @@ Quick start instructions are below, but full documentation is available in book 
 
 Key sections:
 - [Getting Started](https://gtunes-dev.github.io/fspulse/getting_started.html) — Installation, Docker deployment, and first steps
-- [Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Tasks, Scans, Monitor, Browse, Alerts, Insights, Explore, and Settings pages
+- [Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Dashboard, Browse, Alerts, Trends, History, Data Explorer, and Setup
 - [Scanning Concepts](https://gtunes-dev.github.io/fspulse/scanning.html) — How scans work, hashing, and validation
 - [Query Syntax](https://gtunes-dev.github.io/fspulse/query.html) — Powerful filtering and data exploration
 - [Configuration](https://gtunes-dev.github.io/fspulse/configuration.html) — Customizing fsPulse behavior
@@ -110,13 +111,14 @@ fspulse serve
 Open **http://127.0.0.1:8080** in your browser to access the web interface.
 
 All functionality is available through the web UI:
+- Health dashboard with root status and alert counts at a glance
 - Configure and manage scan roots and schedules
 - Monitor task progress in real-time
 - Browse your filesystem with tree, folder, and search views
+- Filter by integrity status: hash state, validation state, and change type
 - View point-in-time snapshots and compare across scans
 - Query and explore your data across five domains
 - Manage alerts and validation issues
-- Configure settings and manage the database
 
 ### Configuration
 
@@ -135,20 +137,21 @@ See the [Configuration Guide](https://gtunes-dev.github.io/fspulse/configuration
 
 ### 🖥️ Interface Highlights
 
-The interface provides powerful visual tools for monitoring and exploring your data:
+The interface is organized into two navigation groups — primary pages for everyday use, and utility pages for configuration and advanced analysis:
 
-- **Tasks** — Central dashboard showing active tasks, upcoming scheduled scans, and task history with real-time progress
-- **Monitor** — Configure automatic scans with flexible scheduling options and manage scan roots
-- **Browse** — Navigate your filesystem with tree, folder, and search views, inline detail panels, and side-by-side comparison across scans or roots
-- **Insights** — Interactive charts tracking file sizes, counts, change activity, and validation issues over time with customizable date ranges
-- **Alert Management** — Filter, flag, and dismiss integrity issues with context-aware views and status tracking
-- **Settings** — View and edit configuration with value precedence visualization, database management, and version info
+**Primary:**
+- **Dashboard** — Health overview showing root status, open alerts, active tasks, and recent activity at a glance
+- **Browse** — Navigate your filesystem with tree, folder, and search views, integrity filters, inline detail panels, and side-by-side comparison across scans or roots
+- **Alerts** — Filter, flag, and dismiss integrity issues with context-aware views, batch operations, and status tracking
+- **Trends** — Interactive charts tracking file sizes, counts, change activity, and alert patterns over time
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-monitor-schedules.png" alt="fsPulse Monitor Page - Scheduled Scans" width="90%" style="max-width: 900px;">
-  <br>
-  <em>Monitor page showing scheduled scans and queue management</em>
-</p>
+**Utility:**
+- **History** — Complete scan and task activity log with filtering
+- **Data Explorer** — Visual query builder and free-form query interface across five data domains
+- **Setup** — Manage scan roots and schedules, edit configuration, view database stats and system info
+
+<!-- Screenshots: These screenshots need to be updated to reflect the new UI -->
+<!-- TODO: Replace these with current screenshots showing the new navigation and pages -->
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-tree.png" alt="fsPulse Browse Page - Filesystem Tree" width="90%" style="max-width: 900px;">
@@ -160,12 +163,6 @@ The interface provides powerful visual tools for monitoring and exploring your d
   <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="fsPulse Browse Page - Item Detail Panel" width="90%" style="max-width: 900px;">
   <br>
   <em>Item detail panel showing metadata, validation status, and version history</em>
-</p>
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-insights-trends.png" alt="fsPulse Insights - Trend Analysis" width="90%" style="max-width: 900px;">
-  <br>
-  <em>Insights page with interactive charts for historical trend analysis</em>
 </p>
 
 ---

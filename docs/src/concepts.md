@@ -1,11 +1,11 @@
 # Concepts
 
-FsPulse tracks the state of your filesystem over time using a **temporal versioning** model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.
+fsPulse tracks the state of your filesystem over time using a **temporal versioning** model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.
 
 ---
 ## Root
 
-A **root** is the starting point for a scan. It represents a specific path on the filesystem that you tell FsPulse to track.
+A **root** is the starting point for a scan. It represents a specific path on the filesystem that you tell fsPulse to track.
 
 - Paths are stored as absolute paths.
 - Each root has a unique ID.
@@ -43,7 +43,7 @@ An item's mutable state — metadata, hash, validation — is stored in **item v
 
 ## Item Version
 
-An **item version** captures the full known state of an item at a point in time. FsPulse uses temporal versioning: instead of maintaining one mutable row per item, the system stores one row per **distinct state**. A new version is created only when an item's observable state changes.
+An **item version** captures the full known state of an item at a point in time. fsPulse uses temporal versioning: instead of maintaining one mutable row per item, the system stores one row per **distinct state**. A new version is created only when an item's observable state changes.
 
 Each version contains:
 - **Temporal range** — `first_scan_id` (when this state was first observed) and `last_scan_id` (last scan where it was confirmed)
@@ -71,7 +71,7 @@ Change types are derived by comparing adjacent versions of an item:
 An **alert** flags a potential integrity issue detected during scanning. There are three alert types:
 - **Suspect Hash** — file content hash changed but modification time did not, suggesting bit rot or tampering
 - **Invalid Item** — format validation detected corruption in a supported file type
-- **Access Denied** — FsPulse could not access the item's metadata or contents
+- **Access Denied** — fsPulse could not access the item's metadata or contents
 
 Alerts have statuses (Open, Flagged, Dismissed) for triage workflows.
 
@@ -90,7 +90,7 @@ Schedules can be enabled or disabled independently.
 
 ## Task
 
-A **task** is a unit of work in the execution queue. Tasks are created from manual scan requests or triggered by schedules. The Tasks page shows active, upcoming, and completed tasks.
+A **task** is a unit of work in the execution queue. Tasks are created from manual scan requests or triggered by schedules. The Dashboard shows active and upcoming tasks; the History page shows completed tasks.
 
 Tasks can be paused globally, and individual tasks can be stopped while in progress.
 
@@ -109,4 +109,4 @@ Root
 
 ---
 
-These concepts form the foundation of FsPulse's scanning, browsing, and query capabilities.
+These concepts form the foundation of fsPulse's scanning, browsing, and query capabilities.

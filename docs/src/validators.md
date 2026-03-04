@@ -1,8 +1,8 @@
 # Validators
 
-FsPulse can optionally validate file contents during the **analysis** phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.
+fsPulse can optionally validate file contents during the **analysis** phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.
 
-Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.
+Validation allows fsPulse to go beyond basic metadata inspection and attempt to decode the file's contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.
 
 ---
 
@@ -15,7 +15,7 @@ Each **file** in the database has an associated **validation status** (folders d
 | `U`         | **Unknown** — item has never been included in a validation scan |
 | `V`         | **Valid** — most recent validation scan found no issues        |
 | `I`         | **Invalid** — validation failed; see `validation_error` field  |
-| `N`         | **No Validator** — FsPulse does not currently support this file type |
+| `N`         | **No Validator** — fsPulse does not currently support this file type |
 
 > The `validation_error` field contains the error message returned by the validator **only if** the item was marked invalid. This field is empty for valid items or items with no validator.
 
@@ -25,7 +25,7 @@ Note: Some validation "errors" surfaced by the underlying libraries may not indi
 
 ## Supported Validators
 
-FsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.
+fsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.
 
 | File Types                                                | Crate     | Link                                                 |
 |-----------------------------------------------------------|-----------|------------------------------------------------------|
@@ -33,7 +33,7 @@ FsPulse relies on external Rust crates for performing format-specific validation
 | Images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.tiff`, `.bmp`) | `image`   | [image on GitHub](https://github.com/image-rs/image) |
 | PDF documents (`.pdf`)                                    | `lopdf`   | [lopdf on GitHub](https://github.com/J-F-Liu/lopdf)  |
 
-Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.
+Validation support may expand in future versions of fsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.
 
 ---
 

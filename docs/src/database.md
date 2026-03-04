@@ -1,6 +1,6 @@
 # Database
 
-FsPulse uses an embedded [SQLite](https://sqlite.org) database to store all scan-related data. The database uses a **temporal versioning** model where item state is tracked through version rows rather than mutable updates.
+fsPulse uses an embedded [SQLite](https://sqlite.org) database to store all scan-related data. The database uses a **temporal versioning** model where item state is tracked through version rows rather than mutable updates.
 
 ---
 
@@ -14,7 +14,7 @@ fspulse.db
 
 ### Data Directory
 
-FsPulse uses a **data directory** to store application data including configuration, logs, and (by default) the database. The data directory location is determined by:
+fsPulse uses a **data directory** to store application data including configuration, logs, and (by default) the database. The data directory location is determined by:
 
 1. **`FSPULSE_DATA_DIR` environment variable** (if set) - overrides the default location
 2. **Platform-specific default** - uses the [`directories`](https://docs.rs/directories) crate's project local directory:
@@ -64,7 +64,7 @@ fspulse serve
 dir = "/path/to/custom/directory"
 ```
 
-In both cases, FsPulse will store the database as `fspulse.db` inside the specified directory. **The filename cannot be changed** — only the directory is configurable.
+In both cases, fsPulse will store the database as `fspulse.db` inside the specified directory. **The filename cannot be changed** — only the directory is configurable.
 
 **Database Location Precedence:**
 
@@ -80,7 +80,7 @@ See the [Configuration - Database Settings](configuration.md#database-settings) 
 
 ## Schema Overview
 
-The database schema reflects FsPulse's temporal versioning model:
+The database schema reflects fsPulse's temporal versioning model:
 
 | Table | Purpose |
 |-------|---------|
@@ -104,26 +104,26 @@ An item that remains unchanged across many scans has a single version row. A new
 
 ### Schema Versioning
 
-The schema is versioned (currently version 24) and automatically migrated on startup. FsPulse handles all upgrades transparently — no manual migration steps are needed.
+The schema is versioned (currently version 24) and automatically migrated on startup. fsPulse handles all upgrades transparently — no manual migration steps are needed.
 
 ---
 
 ## Database Compaction
 
-Over time, deletions and updates can leave unused space in the database file. The Settings page provides a **Compact Database** action that reclaims this space by running SQLite's VACUUM command.
+Over time, deletions and updates can leave unused space in the database file. The Setup page provides a **Compact Database** action that reclaims this space by running SQLite's VACUUM command.
 
 ---
 
 ## Exploring the Database
 
-Because FsPulse uses SQLite, you can inspect the database using any compatible tool, such as:
+Because fsPulse uses SQLite, you can inspect the database using any compatible tool, such as:
 
 - [DB Browser for SQLite](https://sqlitebrowser.org)
 - The `sqlite3` command-line tool
 - SQLite integrations in many IDEs and database browsers
 
-> ⚠️ **Caution:** Making manual changes to the database may affect FsPulse's behavior or stability. Read-only access is recommended.
+> ⚠️ **Caution:** Making manual changes to the database may affect fsPulse's behavior or stability. Read-only access is recommended.
 
 ---
 
-FsPulse manages all internal data access automatically. Most users will not need to interact with the database directly.
+fsPulse manages all internal data access automatically. Most users will not need to interact with the database directly.

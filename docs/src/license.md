@@ -1,6 +1,6 @@
 # License
 
-FsPulse is released under the [MIT License](https://opensource.org/licenses/MIT).
+fsPulse is released under the [MIT License](https://opensource.org/licenses/MIT).
 
 You are free to use, modify, and distribute the software under the terms of this license.
 

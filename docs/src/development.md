@@ -1,10 +1,10 @@
 # Development
 
-FsPulse is under active development, with regular improvements being made to both its functionality and documentation.
+fsPulse is under active development, with regular improvements being made to both its functionality and documentation.
 
 ## Contribution Policy
 
-At this time, FsPulse is **not open for public contribution**. This may change in the future as the project matures and its architecture stabilizes.
+At this time, fsPulse is **not open for public contribution**. This may change in the future as the project matures and its architecture stabilizes.
 
 If you're interested in the project, you're encouraged to:
 

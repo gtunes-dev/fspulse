@@ -1,6 +1,6 @@
 # Getting Started
 
-FsPulse can be installed in one of four ways:
+fsPulse can be installed in one of four ways:
 
 1. **Run with Docker (Recommended)**
 2. **Install via [crates.io](https://crates.io/crates/fspulse)**
@@ -13,7 +13,7 @@ Choose the method that works best for your platform and preferences.
 
 ## 1. Run with Docker (Recommended)
 
-The easiest way to run FsPulse is with Docker:
+The easiest way to run fsPulse is with Docker:
 
 ```sh
 docker pull gtunesdev/fspulse:latest
@@ -40,13 +40,13 @@ See the [Docker Deployment](docker.md) chapter for complete documentation includ
 
 ## 2. Install via Crates.io
 
-The easiest way to get FsPulse is via [crates.io](https://crates.io/crates/fspulse):
+The easiest way to get fsPulse is via [crates.io](https://crates.io/crates/fspulse):
 
 ```sh
 cargo install fspulse
 ```
 
-This will download, compile, and install the latest version of FsPulse into Cargo’s `bin` directory, typically `~/.cargo/bin`. That directory is usually already in your `PATH`. If it's not, you may need to add it manually.
+This will download, compile, and install the latest version of fsPulse into Cargo's `bin` directory, typically `~/.cargo/bin`. That directory is usually already in your `PATH`. If it's not, you may need to add it manually.
 
 Then run:
 
@@ -103,9 +103,9 @@ fspulse --help
 
 ---
 
-## Running FsPulse
+## Running fsPulse
 
-After installation, start the FsPulse server:
+After installation, start the fsPulse server:
 
 ```sh
 fspulse
@@ -119,17 +119,18 @@ fspulse serve
 
 Then open your browser to **http://localhost:8080** to access the web interface.
 
-FsPulse is a **web-first application**. All functionality is available through the web UI:
-- Task monitoring and scan management with real-time progress
+fsPulse is a **web-first application**. All functionality is available through the web UI:
+- Health dashboard with root status and alert counts
 - Root and schedule management
 - Interactive browsing with tree, folder, and search views
 - Point-in-time filesystem snapshots and comparison
+- Integrity filtering by hash state and validation state
 - Powerful query interface across five data domains
 - Alert management and configuration
 
 ### Configuration
 
-FsPulse is configured through environment variables or a config file, not command-line flags:
+fsPulse is configured through environment variables or a config file, not command-line flags:
 
 ```sh
 # Example: Change port and enable debug logging
@@ -139,4 +140,3 @@ fspulse
 ```
 
 See [Configuration](configuration.md) for all available settings and the [Command-Line Interface](cli.md) page for more details.
-

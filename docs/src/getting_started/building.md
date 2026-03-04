@@ -1,10 +1,10 @@
 # Building from Source
 
-This guide covers building FsPulse from source code, which is useful for development, customization, or running on platforms without pre-built binaries.
+This guide covers building fsPulse from source code, which is useful for development, customization, or running on platforms without pre-built binaries.
 
 ## Prerequisites
 
-Before building FsPulse, ensure you have the following installed:
+Before building fsPulse, ensure you have the following installed:
 
 ### Required Tools
 
@@ -31,7 +31,7 @@ Before building FsPulse, ensure you have the following installed:
 
 ## Quick Build (Recommended)
 
-The easiest way to build FsPulse is using the provided build script:
+The easiest way to build fsPulse is using the provided build script:
 
 ```sh
 git clone https://github.com/gtunes-dev/fspulse.git
@@ -137,7 +137,7 @@ cd ..
 
 ## Running Your Build
 
-After building, run FsPulse:
+After building, run fsPulse:
 
 ```sh
 ./target/release/fspulse --help
@@ -148,6 +148,6 @@ Access the web UI at: **http://localhost:8080**
 
 ## Next Steps
 
-- [First Steps](first_steps.md) - Configure and start using FsPulse
-- [Configuration](../configuration.md) - Customize FsPulse behavior
-- [Development](../development.md) - Contributing to FsPulse
+- [First Steps](first_steps.md) - Configure and start using fsPulse
+- [Configuration](../configuration.md) - Customize fsPulse behavior
+- [Development](../development.md) - Contributing to fsPulse

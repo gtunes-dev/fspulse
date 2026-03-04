@@ -4,11 +4,11 @@ The Alerts page provides a centralized view for managing integrity issues detect
 
 ## Alert Types
 
-FsPulse generates three types of alerts:
+fsPulse generates three types of alerts:
 
 ### Access Denied
 
-Triggered when FsPulse is unable to access an item or folder. These alerts can occur during either the scan phase or the analysis phase:
+Triggered when fsPulse is unable to access an item or folder. These alerts can occur during either the scan phase or the analysis phase:
 
 **During Scan Phase:**
 - Unable to retrieve item metadata (type, size, or modification date)
@@ -18,7 +18,7 @@ Triggered when FsPulse is unable to access an item or folder. These alerts can o
 - Unable to read a file for hashing or validation
 
 **Notes:**
-- If FsPulse cannot determine an item's type from metadata, the item is recorded as an instance of the "Unknown" type
+- If fsPulse cannot determine an item's type from metadata, the item is recorded as an instance of the "Unknown" type
 - Items with failed metadata retrieval, whether "Unknown" or otherwise, are not examined during the analysis phase
 
 ### Suspect Hash Changes
@@ -61,6 +61,8 @@ Filter alerts by:
 - Time range
 - Path search
 
+> **Tip**: If you select a root on the [Browse](browse.md) or [Trends](trends.md) page before navigating to Alerts, the same root will be pre-selected automatically via the shared root context.
+
 ### Status Actions
 
 - **Flag**: Mark alert for follow-up
@@ -83,12 +85,12 @@ Click an alert to view:
 
 ## Integration with Browse
 
-Alerts are also displayed in the [Browse](browse.md) page's item detail panel, providing context when investigating specific files.
+Alerts are also displayed in the [Browse](browse.md) page's item detail panel, providing context when investigating specific files. You can change alert status directly from the Browse detail panel without navigating to the Alerts page.
 
 ## Workflow Recommendations
 
-1. **Review Open Alerts**: Check new alerts regularly
+1. **Review Open Alerts**: Check the [Dashboard](dashboard.md) for alert counts, then navigate here
 2. **Investigate**: Use Browse to examine affected items
 3. **Triage**: Flag important issues, dismiss false positives
 4. **Restore**: Use backups to restore corrupted files if needed
-5. **Track**: Monitor alert trends in [Insights](insights.md)
+5. **Track**: Monitor alert trends on the [Trends](trends.md) page

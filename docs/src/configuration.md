@@ -1,20 +1,20 @@
 # Configuration
 
-FsPulse supports persistent, user-defined configuration through a file named `config.toml`. This file allows you to control logging behavior, analysis settings, server configuration, and more.
+fsPulse supports persistent, user-defined configuration through a file named `config.toml`. This file allows you to control logging behavior, analysis settings, server configuration, and more.
 
-> **Web UI**: Most configuration settings can also be viewed and edited through the [Settings](web_ui/settings.md) page in the web interface, which shows the active value and its source (default, config file, or environment variable).
+> **Web UI**: Most configuration settings can also be viewed and edited through the [Setup](web_ui/setup.md) page in the web interface, which shows the active value and its source (default, config file, or environment variable).
 
-> **📦 Docker Users**: If you're running FsPulse in Docker, see the [Docker Deployment](docker.md) chapter for Docker-specific configuration including environment variable overrides and volume management.
+> **📦 Docker Users**: If you're running fsPulse in Docker, see the [Docker Deployment](docker.md) chapter for Docker-specific configuration including environment variable overrides and volume management.
 
 ---
 
 ## Finding `config.toml`
 
-The `config.toml` file is stored in FsPulse's **data directory**. The location depends on how you're running FsPulse:
+The `config.toml` file is stored in fsPulse's **data directory**. The location depends on how you're running fsPulse:
 
 ### Docker Deployments
 
-When running in Docker, the data directory is **`/data`**, so the config file is located at **`/data/config.toml`** inside the container. FsPulse automatically creates this file with default settings on first run.
+When running in Docker, the data directory is **`/data`**, so the config file is located at **`/data/config.toml`** inside the container. fsPulse automatically creates this file with default settings on first run.
 
 To access it from your host machine:
 ```bash
@@ -29,7 +29,7 @@ See the [Docker Deployment](docker.md#configuration) chapter for details on edit
 
 ### Native Installations
 
-FsPulse uses the [directories](https://docs.rs/directories) crate to determine the platform-specific data directory location:
+fsPulse uses the [directories](https://docs.rs/directories) crate to determine the platform-specific data directory location:
 
 | Platform | Data Directory Location | Example Path                                      |
 |----------|-------------------------|---------------------------------------------------|
@@ -39,7 +39,7 @@ FsPulse uses the [directories](https://docs.rs/directories) crate to determine t
 
 The config file is located at `<data_dir>/config.toml`.
 
-On first run, FsPulse automatically creates the data directory and writes a default `config.toml` if one doesn't exist.
+On first run, fsPulse automatically creates the data directory and writes a default `config.toml` if one doesn't exist.
 
 > **Tip**: You can delete `config.toml` at any time to regenerate it with defaults. Newly introduced settings will not automatically be added to an existing file.
 >
@@ -68,22 +68,22 @@ threads = 8
 
 ## Logging
 
-FsPulse uses the Rust [`log`](https://docs.rs/log) crate, and so does the PDF validation crate `lopdf`. You can configure logging levels independently for each subsystem in the `[logging]` section.
+fsPulse uses the Rust [`log`](https://docs.rs/log) crate, and so does the PDF validation crate `lopdf`. You can configure logging levels independently for each subsystem in the `[logging]` section.
 
 ### Supported log levels:
 
 - `error` – only critical errors
 - `warn` – warnings and errors
-- `info` – general status messages (default for FsPulse)
+- `info` – general status messages (default for fsPulse)
 - `debug` – verbose output for debugging
 - `trace` – extremely detailed logs
 
 ### Log File Behavior
 
 - Logs are written to `<data_dir>/logs/`
-- Each run of FsPulse creates a new log file, named using the current date and time
+- Each run of fsPulse creates a new log file, named using the current date and time
 - Individual log files are capped at **50 MB**; if a single run exceeds this, it continues in a new file
-- FsPulse retains up to **20** log files; older files are automatically deleted
+- fsPulse retains up to **20** log files; older files are automatically deleted
 
 ---
 
@@ -106,7 +106,7 @@ The `[analysis]` section controls how many threads are used during the **analysi
 
 - `threads`: number of worker threads (default: `8`)
 
-You can adjust this based on your system's CPU count or performance needs. FsPulse uses SHA-256 for file hashing to detect content changes and verify integrity.
+You can adjust this based on your system's CPU count or performance needs. fsPulse uses SHA-256 for file hashing to detect content changes and verify integrity.
 
 ---
 
@@ -159,7 +159,7 @@ Configure log output verbosity:
 
 | Variable | Default | Valid Values | Description |
 |----------|---------|--------------|-------------|
-| `FSPULSE_LOGGING_FSPULSE` | `info` | `error`, `warn`, `info`, `debug`, `trace` | FsPulse application log level |
+| `FSPULSE_LOGGING_FSPULSE` | `info` | `error`, `warn`, `info`, `debug`, `trace` | fsPulse application log level |
 | `FSPULSE_LOGGING_LOPDF` | `error` | `error`, `warn`, `info`, `debug`, `trace` | PDF library (lopdf) log level |
 
 **Examples:**
@@ -191,7 +191,7 @@ docker run -e FSPULSE_ANALYSIS_THREADS=16 ...
 
 #### Data Directory and Database Settings
 
-Control where FsPulse stores its data:
+Control where fsPulse stores its data:
 
 | Variable | Default | Valid Values | Description |
 |----------|---------|--------------|-------------|
@@ -229,8 +229,8 @@ These variables are specific to Docker deployments:
 
 | Variable | Default | Valid Values | Description |
 |----------|---------|--------------|-------------|
-| `PUID` | `1000` | UID number | User ID to run FsPulse as (for NAS permission matching) |
-| `PGID` | `1000` | GID number | Group ID to run FsPulse as (for NAS permission matching) |
+| `PUID` | `1000` | UID number | User ID to run fsPulse as (for NAS permission matching) |
+| `PGID` | `1000` | GID number | Group ID to run fsPulse as (for NAS permission matching) |
 | `TZ` | `UTC` | Timezone string | Timezone for log timestamps and UI (e.g., `America/New_York`) |
 
 See [Docker Deployment - NAS Deployments](docker.md#nas-deployments-truenas-unraid) for details on PUID/PGID usage.
@@ -244,7 +244,7 @@ export FSPULSE_SERVER_PORT=9090
 export FSPULSE_LOGGING_FSPULSE=debug
 export FSPULSE_ANALYSIS_THREADS=16
 
-# Run FsPulse (uses env vars)
+# Run fsPulse (uses env vars)
 fspulse serve
 ```
 
@@ -275,7 +275,7 @@ services:
 
 ### Verifying Environment Variables
 
-To see what environment variables FsPulse is using:
+To see what environment variables fsPulse is using:
 
 **Native:**
 ```bash
@@ -291,16 +291,16 @@ docker exec fspulse env | grep FSPULSE_
 
 ## Docker Configuration
 
-When running FsPulse in Docker, configuration is managed slightly differently. The config file lives at `/data/config.toml` inside the container, and you have several options for customizing settings.
+When running fsPulse in Docker, configuration is managed slightly differently. The config file lives at `/data/config.toml` inside the container, and you have several options for customizing settings.
 
-For step-by-step instructions on configuring FsPulse in Docker, including editing config files and using environment variables, see the [Docker Deployment - Configuration](docker.md#configuration) section.
+For step-by-step instructions on configuring fsPulse in Docker, including editing config files and using environment variables, see the [Docker Deployment - Configuration](docker.md#configuration) section.
 
 ---
 
 ## New Settings and Restoring Defaults
 
-FsPulse may expand its configuration options over time. When new settings are introduced, they won't automatically appear in your existing `config.toml`. To take advantage of new options, either:
+fsPulse may expand its configuration options over time. When new settings are introduced, they won't automatically appear in your existing `config.toml`. To take advantage of new options, either:
 
 - Manually add new settings to your config file
-- Delete the file to allow FsPulse to regenerate it with all current defaults
+- Delete the file to allow fsPulse to regenerate it with all current defaults
 

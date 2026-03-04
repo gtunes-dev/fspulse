@@ -1,6 +1,6 @@
 # Query Syntax
 
-FsPulse provides a flexible, SQL-like query language for exploring scan results. This language supports filtering, custom column selection, ordering, and limiting the number of results.
+fsPulse provides a flexible, SQL-like query language for exploring scan results. This language supports filtering, custom column selection, ordering, and limiting the number of results.
 
 ---
 
@@ -280,4 +280,4 @@ scans show scan_id, file_count, total_size, add_count, modify_count, delete_coun
 
 ---
 
-See also: [Explore Page](web_ui/explore.md) · [Validators](validators.md) · [Configuration](configuration.md)
+See also: [Data Explorer](web_ui/data_explorer.md) · [Validators](validators.md) · [Configuration](configuration.md)

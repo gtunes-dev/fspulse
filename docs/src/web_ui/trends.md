@@ -1,10 +1,9 @@
-# Insights
+# Trends
 
-The Insights page provides interactive visualizations showing how your data evolves over time across multiple scans.
+The Trends page provides interactive visualizations showing how your data evolves over time across multiple scans.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-insights-trends.png" alt="Insights Trend Charts" style="width: 90%; max-width: 900px;">
-</p>
+<!-- Screenshot: Trends page showing file size and change activity charts -->
+<!-- ![Trends Charts](screenshot-placeholder-trends.png) -->
 
 ## Available Charts
 
@@ -41,6 +40,8 @@ Track integrity issues over time:
 ### Root Selection
 
 Select which scan root to analyze from the dropdown. Each root maintains independent trend data.
+
+> **Tip**: If you select a root on the [Browse](browse.md) or [Alerts](alerts.md) page before navigating to Trends, the same root will be pre-selected automatically via the shared root context.
 
 ### Date Range Filtering
 

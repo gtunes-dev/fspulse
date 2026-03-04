@@ -1,13 +1,16 @@
-# Explore
+# Data Explorer
 
-The Explore page provides both visual query building and free-form query capabilities for analyzing your FsPulse data.
+The Data Explorer provides both visual query building and free-form query capabilities for analyzing your fsPulse data. It is located in the utility section of the sidebar, designed for power users who need detailed data access beyond what the primary pages offer.
 
 ## Overview
 
-Explore offers two ways to query your data:
+Data Explorer offers two ways to query your data:
 
 - **Structured tabs** (Roots, Scans, Items, Versions, Alerts) — Visual query builder with column selection, sorting, and filtering
-- **Query tab** — Free-form query entry using FsPulse's query language
+- **Query tab** — Free-form query entry using fsPulse's query language
+
+<!-- Screenshot: Data Explorer showing the structured Items tab with column selector and results -->
+<!-- ![Data Explorer - Structured Query](screenshot-placeholder-data-explorer-structured.png) -->
 
 ## Structured Query Tabs
 
@@ -49,7 +52,10 @@ Click the reset button in the column header to restore all columns to their defa
 
 ## Query Tab
 
-The **Query** tab provides a free-form interface for writing queries using FsPulse's SQL-inspired query language.
+The **Query** tab provides a free-form interface for writing queries using fsPulse's SQL-inspired query language.
+
+<!-- Screenshot: Data Explorer Query tab with a query entered and results displayed -->
+<!-- ![Data Explorer - Query Tab](screenshot-placeholder-data-explorer-query.png) -->
 
 ### Features
 

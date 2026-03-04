@@ -1,10 +1,10 @@
 # Acknowledgements
 
-FsPulse relies on several open source Rust crates. We gratefully acknowledge the work of these maintainers, particularly for enabling file format validation.
+fsPulse relies on several open source Rust crates. We gratefully acknowledge the work of these maintainers, particularly for enabling file format validation.
 
 ## File Format Validation
 
-The following libraries enable FsPulse's ability to detect corrupted files:
+The following libraries enable fsPulse's ability to detect corrupted files:
 
 - [`claxon`](https://github.com/ruuda/claxon) — FLAC audio decoding and validation
 - [`image`](https://github.com/image-rs/image) — Image format decoding for JPG, PNG, GIF, TIFF, BMP
@@ -14,7 +14,7 @@ See [Validators](validators.md) for the complete list of supported file types.
 
 ## Additional Dependencies
 
-FsPulse wouldn't be possible without the incredible open source ecosystem it's built upon:
+fsPulse wouldn't be possible without the incredible open source ecosystem it's built upon:
 
 **Web Interface:**
 - [shadcn/ui](https://ui.shadcn.com) — Beautiful, accessible component library
@@ -38,4 +38,4 @@ The complete list of dependencies is available in the project's [`Cargo.toml`](h
 
 ---
 
-Thank you to all the open source maintainers whose work makes FsPulse possible.
+Thank you to all the open source maintainers whose work makes fsPulse possible.

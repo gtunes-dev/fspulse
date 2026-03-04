@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronRight, CirclePause, Play, Lightbulb } from 'lucide-react'
 import { useTaskContext } from '@/contexts/TaskContext'
 import { Card, CardContent } from '@/components/ui/card'
@@ -87,7 +88,7 @@ export function TaskCard() {
                   No task in progress
                 </p>
                 <InfoBar variant="info" icon={Lightbulb}>
-                  Configure recurring scans on the <a href="/setup" className="underline hover:text-primary">Setup</a> page
+                  Configure recurring scans on the <Link to="/setup?tab=schedules" className="underline hover:text-primary">Schedules</Link> tab in Setup
                 </InfoBar>
               </div>
             ) : (

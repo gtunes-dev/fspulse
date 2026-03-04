@@ -80,7 +80,7 @@ export function BrowsePage({ isActive = true }: BrowsePageProps) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">
-          No roots configured. Add a root on the Monitor page to get started.
+          No roots configured. Add a root on the Setup page to get started.
         </div>
       </div>
     )

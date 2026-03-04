@@ -1,12 +1,12 @@
 # Docker Deployment
 
-The easiest way to run FsPulse is with Docker. The container runs FsPulse as a background service with the web UI accessible on port 8080. You can manage roots, initiate scans, query data, and view results—all from your browser.
+The easiest way to run fsPulse is with Docker. The container runs fsPulse as a background service with the web UI accessible on port 8080. You can manage roots, initiate scans, query data, and view results—all from your browser.
 
 ---
 
 ## Quick Start
 
-Get FsPulse running in three simple steps:
+Get fsPulse running in three simple steps:
 
 ```bash
 # 1. Pull the image
@@ -25,13 +25,13 @@ open http://localhost:8080
 
 That's it! The web UI is now running.
 
-This basic setup stores all FsPulse data (database, config, logs) in a Docker volume and uses default settings. **If you need to customize settings** (like running as a specific user for NAS deployments, or changing the port), see the [Configuration](#configuration) and [NAS Deployments](#nas-deployments-truenas-unraid) sections below.
+This basic setup stores all fsPulse data (database, config, logs) in a Docker volume and uses default settings. **If you need to customize settings** (like running as a specific user for NAS deployments, or changing the port), see the [Configuration](#configuration) and [NAS Deployments](#nas-deployments-truenas-unraid) sections below.
 
 ---
 
 ## Scanning Your Files
 
-To scan directories on your host machine, you need to mount them into the container. FsPulse can then scan these mounted paths.
+To scan directories on your host machine, you need to mount them into the container. fsPulse can then scan these mounted paths.
 
 ### Mounting Directories
 
@@ -47,14 +47,14 @@ docker run -d \
   gtunesdev/fspulse:latest
 ```
 
-The `:ro` (read-only) flag is recommended for safety—FsPulse only reads files during scans and never modifies them.
+The `:ro` (read-only) flag is recommended for safety—fsPulse only reads files during scans and never modifies them.
 
 ### Creating Roots in the Web UI
 
 After mounting directories:
 
 1. Open http://localhost:8080 in your browser
-2. Navigate to **Manage Roots** in the sidebar
+2. Navigate to **Setup** in the sidebar
 3. Click **Add Root**
 4. Enter the **container path**: `/roots/documents` (not the host path `~/Documents`)
 5. Click **Create Root**
@@ -110,7 +110,7 @@ docker-compose up -d
 
 ## Configuration
 
-FsPulse creates a default `config.toml` on first run with sensible defaults. Most users won't need to change anything, but when you do, there are three ways to customize settings.
+fsPulse creates a default `config.toml` on first run with sensible defaults. Most users won't need to change anything, but when you do, there are three ways to customize settings.
 
 ### Option 1: Use Environment Variables (Easiest)
 
@@ -178,11 +178,11 @@ Most users should start with Option 1 (environment variables) or Option 2 (edit 
 
 ## NAS Deployments (TrueNAS, Unraid)
 
-NAS systems often have specific user IDs for file ownership. By default, FsPulse runs as user 1000, but you may need it to match your file ownership.
+NAS systems often have specific user IDs for file ownership. By default, fsPulse runs as user 1000, but you may need it to match your file ownership.
 
 ### Setting User and Group IDs
 
-Use `PUID` and `PGID` environment variables to run FsPulse as a specific user:
+Use `PUID` and `PGID` environment variables to run fsPulse as a specific user:
 
 **TrueNAS Example** (apps user = UID 34):
 ```bash
@@ -211,7 +211,7 @@ docker run -d \
 
 ### Why PUID/PGID Matters
 
-Even though you mount directories as read-only (`:ro`), Linux permissions still apply. If your files are owned by UID 34 and aren't world-readable, FsPulse (running as UID 1000 by default) won't be able to scan them. Setting `PUID=34` makes FsPulse run as the same user that owns the files.
+Even though you mount directories as read-only (`:ro`), Linux permissions still apply. If your files are owned by UID 34 and aren't world-readable, fsPulse (running as UID 1000 by default) won't be able to scan them. Setting `PUID=34` makes fsPulse run as the same user that owns the files.
 
 **When to use PUID/PGID:**
 - Files have restrictive permissions (not world-readable)
@@ -353,7 +353,7 @@ docker run -d --name fspulse -v fspulse-data:/data ...
 
 **Cause**: Multiple containers accessing the same database
 
-**Solution**: Only run one FsPulse container per database. Don't mount the same `/data` volume to multiple containers.
+**Solution**: Only run one fsPulse container per database. Don't mount the same `/data` volume to multiple containers.
 
 ---
 
@@ -408,7 +408,7 @@ tar xzf fspulse-backup.tar.gz -C /mnt/pool/fspulse/data
 
 ## Image Tags and Updates
 
-FsPulse provides multiple tags for different update strategies:
+fsPulse provides multiple tags for different update strategies:
 
 | Tag | Description | When to Use |
 |-----|-------------|-------------|
@@ -433,7 +433,7 @@ Your data persists in the volume across updates.
 
 ## Platform Support
 
-FsPulse images support multiple architectures—Docker automatically pulls the correct one for your platform:
+fsPulse images support multiple architectures—Docker automatically pulls the correct one for your platform:
 
 - **linux/amd64** - Intel/AMD processors (most common)
 - **linux/arm64** - ARM processors (Apple Silicon, Raspberry Pi 4, ARM servers)
@@ -452,4 +452,4 @@ FsPulse images support multiple architectures—Docker automatically pulls the c
 
 - **Issues**: [GitHub Issues](https://github.com/gtunes-dev/fspulse/issues)
 - **Docker Hub**: [gtunesdev/fspulse](https://hub.docker.com/r/gtunesdev/fspulse)
-- **Documentation**: [FsPulse Book](https://gtunes-dev.github.io/fspulse/)
+- **Documentation**: [fsPulse Book](https://gtunes-dev.github.io/fspulse/)
