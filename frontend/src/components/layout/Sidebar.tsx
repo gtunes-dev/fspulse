@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -12,11 +12,23 @@ import {
   Sun,
   Power,
   Loader2,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import { useTaskContext } from '@/contexts/TaskContext'
+import {
+  Sidebar as SidebarRoot,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
+  useSidebar,
+} from '@/components/ui/sidebar'
 import { ShutdownDialog } from './ShutdownDialog'
 
 // Pages where root_id context is meaningful
@@ -29,21 +41,16 @@ function shortenPath(path: string, maxLength = 30): string {
   return '.../' + parts.slice(-2).join('/')
 }
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    return localStorage.getItem('fspulse.sidebar.collapsed') === 'true'
-  })
+export function AppSidebar() {
   const [showShutdownDialog, setShowShutdownDialog] = useState(false)
 
   const location = useLocation()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const { activeTask } = useTaskContext()
+  const { state } = useSidebar()
 
-  // Persist collapse state
-  useEffect(() => {
-    localStorage.setItem('fspulse.sidebar.collapsed', collapsed ? 'true' : 'false')
-  }, [collapsed])
+  const collapsed = state === 'collapsed'
 
   // Read root_id from current URL to carry between root-scoped pages
   const currentRootId = new URLSearchParams(location.search).get('root_id')
@@ -67,7 +74,7 @@ export function Sidebar() {
   const hasPercentage = activeTask?.progress_bar?.percentage !== null && activeTask?.progress_bar?.percentage !== undefined
   const percentage = hasPercentage ? Math.round(activeTask!.progress_bar!.percentage!) : 0
 
-  // Primary navigation: user goals
+  // Navigation items
   const primaryNavItems = [
     { icon: LayoutDashboard, label: 'Dashboard', to: '/', end: true },
     { icon: FolderTree, label: 'Browse', to: '/browse', end: true },
@@ -75,194 +82,169 @@ export function Sidebar() {
     { icon: TrendingUp, label: 'Trends', to: '/trends/scan-trends', end: false },
   ]
 
-  // Utility navigation: operational/investigative
   const utilityNavItems = [
     { icon: Clock, label: 'History', to: '/history', end: true },
     { icon: Database, label: 'Data Explorer', to: '/explore/roots', end: false },
     { icon: Wrench, label: 'Setup', to: '/setup', end: false },
   ]
 
-  const renderNavItems = (items: typeof primaryNavItems) =>
-    items.map((item) => {
-      const Icon = item.icon
-      return (
-        <NavLink
-          key={item.label}
-          to={buildTo(item.to)}
-          end={item.end}
-          className={({ isActive }) =>
-            `flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
-              isActive
-                ? 'bg-accent text-accent-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            }`
-          }
-        >
-          <Icon className="h-5 w-5 flex-shrink-0" />
-          <span
-            className="whitespace-nowrap overflow-hidden transition-all duration-200"
-            style={{
-              opacity: collapsed ? 0 : 1,
-              width: collapsed ? 0 : 'auto',
-            }}
-          >
-            {item.label}
-          </span>
-        </NavLink>
-      )
-    })
+  const isNavActive = (item: typeof primaryNavItems[0]): boolean => {
+    const path = location.pathname
+    return item.end ? path === item.to : path.startsWith(item.to)
+  }
+
+  const renderNavItems = (items: typeof primaryNavItems) => (
+    <SidebarMenu>
+      {items.map((item) => {
+        const Icon = item.icon
+        return (
+          <SidebarMenuItem key={item.label}>
+            <SidebarMenuButton
+              asChild
+              tooltip={item.label}
+              isActive={isNavActive(item)}
+            >
+              <NavLink to={buildTo(item.to)}>
+                <Icon />
+                <span>{item.label}</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )
+      })}
+    </SidebarMenu>
+  )
 
   return (
-    <aside
-      className="flex flex-col h-full bg-muted border-r border-border transition-all duration-200 ease-in-out"
-      style={{ width: collapsed ? '64px' : '220px' }}
-    >
+    <SidebarRoot collapsible="icon">
       {/* Brand area */}
-      <div className="flex items-center gap-3 px-3 py-3 border-b border-border flex-shrink-0">
-        <img
-          src="/favicon.svg"
-          alt="FsPulse"
-          className="h-6 w-6 flex-shrink-0"
-        />
-        <span
-          className="text-lg font-semibold whitespace-nowrap overflow-hidden transition-all duration-200"
-          style={{
-            opacity: collapsed ? 0 : 1,
-            width: collapsed ? 0 : 'auto',
-          }}
-        >
-          FsPulse
-        </span>
-      </div>
+      <SidebarHeader className="border-b border-sidebar-border">
+        <div className="flex items-center gap-3 px-1 py-1">
+          <img
+            src="/favicon.svg"
+            alt="FsPulse"
+            className="h-6 w-6 flex-shrink-0"
+          />
+          {!collapsed && (
+            <span className="text-lg font-semibold whitespace-nowrap">
+              FsPulse
+            </span>
+          )}
+        </div>
+      </SidebarHeader>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 p-2 flex-shrink-0">
-        {renderNavItems(primaryNavItems)}
-        <div className="my-2 border-t border-border" />
-        {renderNavItems(utilityNavItems)}
-      </nav>
+      <SidebarContent>
+        <SidebarGroup>
+          {renderNavItems(primaryNavItems)}
+        </SidebarGroup>
+        <SidebarSeparator />
+        <SidebarGroup>
+          {renderNavItems(utilityNavItems)}
+        </SidebarGroup>
+      </SidebarContent>
 
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Task progress */}
-      {isRunning && activeTask && (
-        collapsed ? (
-          <div className="flex justify-center py-2 flex-shrink-0">
-            <button
+      {/* Footer: task progress + controls */}
+      <SidebarFooter>
+        {/* Task progress */}
+        {isRunning && activeTask && (
+          collapsed ? (
+            <div className="flex justify-center">
+              <button
+                onClick={() => navigate('/')}
+                className="rounded-md p-2 hover:bg-sidebar-accent transition-colors"
+                title={headerText}
+              >
+                <Loader2
+                  className={`h-5 w-5 animate-spin ${isError ? 'text-red-500' : 'text-primary'}`}
+                />
+              </button>
+            </div>
+          ) : (
+            <div
+              className="px-3 py-2 rounded-md border border-sidebar-border bg-sidebar cursor-pointer hover:bg-sidebar-accent/50 transition-colors"
               onClick={() => navigate('/')}
-              className="rounded-md p-2 hover:bg-accent transition-colors"
-              title={headerText}
             >
-              <Loader2
-                className={`h-5 w-5 animate-spin ${isError ? 'text-red-500' : 'text-primary'}`}
-              />
-            </button>
-          </div>
-        ) : (
-          <div
-            className="mx-2 mb-2 px-3 py-2 rounded-md border border-border bg-card cursor-pointer hover:bg-accent/50 transition-colors flex-shrink-0"
-            onClick={() => navigate('/')}
-          >
-            <div className="text-xs font-medium truncate">
-              {headerText}
+              <div className="text-xs font-medium truncate">
+                {headerText}
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-sidebar-foreground/60 mt-0.5">
+                {isError ? (
+                  <span className="text-red-600 dark:text-red-400 truncate">
+                    Error: {activeTask.error_message}
+                  </span>
+                ) : (
+                  <>
+                    {phaseText && <span className="truncate">{phaseText}</span>}
+                    {hasPercentage && (
+                      <>
+                        {phaseText && <span>&middot;</span>}
+                        <div className="flex-1 h-[3px] bg-sidebar-accent rounded-sm overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all duration-300 rounded-sm"
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                        <span className="font-medium text-sidebar-foreground min-w-[28px] text-right">
+                          {percentage}%
+                        </span>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
-              {isError ? (
-                <span className="text-red-600 dark:text-red-400 truncate">
-                  Error: {activeTask.error_message}
-                </span>
-              ) : (
-                <>
-                  {phaseText && <span className="truncate">{phaseText}</span>}
-                  {hasPercentage && (
-                    <>
-                      {phaseText && <span>&middot;</span>}
-                      <div className="flex-1 h-[3px] bg-muted rounded-sm overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all duration-300 rounded-sm"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                      <span className="font-medium text-foreground min-w-[28px] text-right">
-                        {percentage}%
-                      </span>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )
-      )}
+          )
+        )}
 
-      {/* Controls */}
-      {collapsed ? (
-        <div className="flex flex-col items-center gap-1 py-2 border-t border-border flex-shrink-0">
-          <button
-            onClick={toggleTheme}
-            className="rounded-md p-2 hover:bg-accent transition-colors"
-            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-          >
-            {theme === 'light' ? (
-              <Moon className="h-5 w-5" />
-            ) : (
-              <Sun className="h-5 w-5" />
-            )}
-          </button>
-          <button
-            onClick={() => setShowShutdownDialog(true)}
-            className="rounded-md p-2 hover:bg-accent transition-colors text-muted-foreground hover:text-destructive"
-            title="Shut down server"
-          >
-            <Power className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => setCollapsed(false)}
-            className="rounded-md p-2 hover:bg-accent transition-colors"
-            title="Expand sidebar"
-            aria-label="Expand sidebar"
-          >
-            <PanelLeftOpen className="h-5 w-5" />
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between px-3 py-2 border-t border-border flex-shrink-0">
-          <div className="flex items-center gap-1">
+        {/* Controls */}
+        {collapsed ? (
+          <div className="flex flex-col items-center gap-1">
             <button
               onClick={toggleTheme}
-              className="rounded-md p-2 hover:bg-accent transition-colors"
+              className="rounded-md p-2 hover:bg-sidebar-accent transition-colors"
               title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
             >
-              {theme === 'light' ? (
-                <Moon className="h-5 w-5" />
-              ) : (
-                <Sun className="h-5 w-5" />
-              )}
+              {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </button>
             <button
               onClick={() => setShowShutdownDialog(true)}
-              className="rounded-md p-2 hover:bg-accent transition-colors text-muted-foreground hover:text-destructive"
+              className="rounded-md p-2 hover:bg-sidebar-accent transition-colors text-sidebar-foreground/60 hover:text-destructive"
               title="Shut down server"
             >
-              <Power className="h-5 w-5" />
+              <Power className="h-4 w-4" />
             </button>
+            <SidebarTrigger className="h-8 w-8" />
           </div>
-          <button
-            onClick={() => setCollapsed(true)}
-            className="rounded-md p-2 hover:bg-accent transition-colors"
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
-          >
-            <PanelLeftClose className="h-5 w-5" />
-          </button>
-        </div>
-      )}
+        ) : (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={toggleTheme}
+                className="rounded-md p-2 hover:bg-sidebar-accent transition-colors"
+                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              >
+                {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={() => setShowShutdownDialog(true)}
+                className="rounded-md p-2 hover:bg-sidebar-accent transition-colors text-sidebar-foreground/60 hover:text-destructive"
+                title="Shut down server"
+              >
+                <Power className="h-4 w-4" />
+              </button>
+            </div>
+            <SidebarTrigger />
+          </div>
+        )}
+      </SidebarFooter>
+
+      <SidebarRail />
 
       <ShutdownDialog
         open={showShutdownDialog}
         onOpenChange={setShowShutdownDialog}
       />
-    </aside>
+    </SidebarRoot>
   )
 }

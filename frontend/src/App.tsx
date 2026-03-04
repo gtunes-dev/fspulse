@@ -2,7 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { TaskProvider, useTaskContext } from './contexts/TaskContext'
 import { ScrollContext } from './contexts/ScrollContext'
-import { Sidebar } from './components/layout/Sidebar'
+import { AppSidebar } from './components/layout/Sidebar'
+import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { DashboardPage } from './pages/dashboard/DashboardPage'
 import { SetupPage } from './pages/setup/SetupPage'
 import { ExplorePage } from './pages/explore/ExplorePage'
@@ -51,9 +52,9 @@ function AppContent() {
   }
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar />
-      <main ref={mainRef} className="flex-1 overflow-auto bg-background p-6">
+    <SidebarProvider defaultOpen={true}>
+      <AppSidebar />
+      <SidebarInset ref={mainRef} className="overflow-auto p-6">
         <ScrollContext.Provider value={mainElement}>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
@@ -68,8 +69,8 @@ function AppContent() {
           {(active) => <BrowsePage isActive={active} />}
         </KeepAlivePage>
         </ScrollContext.Provider>
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
