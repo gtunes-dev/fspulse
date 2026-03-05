@@ -34,7 +34,7 @@ import {
 import { ShutdownDialog } from './ShutdownDialog'
 
 // Pages where root_id context is meaningful
-const ROOT_SCOPED_PATHS = ['/browse', '/alerts', '/trends', '/schedules']
+const ROOT_SCOPED_PATHS = ['/browse', '/alerts', '/trends', '/schedules', '/history']
 
 function shortenPath(path: string, maxLength = 30): string {
   if (!path || path.length <= maxLength) return path

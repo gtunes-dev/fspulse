@@ -1302,27 +1302,31 @@ impl TaskEntry {
 
     /// Get task history count for pagination
     /// Returns count of tasks in terminal states (Completed, Stopped, Error)
-    /// Optionally filtered by task_type
+    /// Optionally filtered by task_type and/or root_id
     pub fn get_task_history_count(
         task_type: Option<TaskType>,
+        root_id: Option<i64>,
     ) -> Result<i64, FsPulseError> {
         let conn = Database::get_connection()?;
 
         let completed = TaskStatus::Completed.as_i64();
         let stopped = TaskStatus::Stopped.as_i64();
         let error = TaskStatus::Error.as_i64();
-        let terminal_statuses = format!("{}, {}, {}", completed, stopped, error);
 
-        let (query, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match task_type {
-            Some(tt) => (
-                format!("SELECT COUNT(*) FROM tasks WHERE status IN ({}) AND task_type = ?", terminal_statuses),
-                vec![Box::new(tt.as_i64())],
-            ),
-            None => (
-                format!("SELECT COUNT(*) FROM tasks WHERE status IN ({})", terminal_statuses),
-                vec![],
-            ),
-        };
+        let mut query = format!(
+            "SELECT COUNT(*) FROM tasks WHERE status IN ({}, {}, {})",
+            completed, stopped, error
+        );
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![];
+
+        if let Some(tt) = task_type {
+            query.push_str(" AND task_type = ?");
+            params.push(Box::new(tt.as_i64()));
+        }
+        if let Some(rid) = root_id {
+            query.push_str(" AND root_id = ?");
+            params.push(Box::new(rid));
+        }
 
         let count: i64 = conn
             .query_row(&query, rusqlite::params_from_iter(params.iter()), |row| row.get(0))
@@ -1332,10 +1336,11 @@ impl TaskEntry {
     }
 
     /// Get task history for display in UI
-    /// Returns completed/stopped/error tasks with root_path and schedule_name
-    /// Optionally filtered by task_type, paginated
+    /// Returns completed/stopped/error tasks with root_path, schedule_name, and scan-specific fields
+    /// Optionally filtered by task_type and/or root_id, paginated
     pub fn get_task_history(
         task_type: Option<TaskType>,
+        root_id: Option<i64>,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<TaskHistoryRow>, FsPulseError> {
@@ -1345,10 +1350,16 @@ impl TaskEntry {
         let stopped = TaskStatus::Stopped.as_i64();
         let error = TaskStatus::Error.as_i64();
 
-        let type_filter = match task_type {
-            Some(tt) => format!("AND t.task_type = {}", tt.as_i64()),
-            None => String::new(),
-        };
+        let mut filters = String::new();
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![];
+
+        if let Some(tt) = task_type {
+            filters.push_str(&format!(" AND t.task_type = {}", tt.as_i64()));
+        }
+        if let Some(rid) = root_id {
+            filters.push_str(" AND t.root_id = ?");
+            params.push(Box::new(rid));
+        }
 
         let query = format!(
             "SELECT
@@ -1361,20 +1372,30 @@ impl TaskEntry {
                 t.status,
                 t.started_at,
                 t.completed_at,
-                t.task_state
+                sc.scan_id,
+                sc.add_count,
+                sc.modify_count,
+                sc.delete_count,
+                sc.was_restarted
              FROM tasks t
              LEFT JOIN roots r ON t.root_id = r.root_id
              LEFT JOIN scan_schedules s ON t.schedule_id = s.schedule_id
-             WHERE t.status IN ({}, {}, {}) {}
+             LEFT JOIN scans sc ON t.task_type = 0
+                 AND sc.scan_id = CAST(json_extract(t.task_state, '$.scan_id') AS INTEGER)
+             WHERE t.status IN ({}, {}, {}){}
              ORDER BY t.completed_at DESC, t.task_id DESC
              LIMIT ? OFFSET ?",
-            completed, stopped, error, type_filter
+            completed, stopped, error, filters
         );
+
+        // Add limit and offset to params
+        params.push(Box::new(limit));
+        params.push(Box::new(offset));
 
         let mut stmt = conn.prepare(&query).map_err(FsPulseError::DatabaseError)?;
 
         let tasks = stmt
-            .query_map(rusqlite::params![limit, offset], |row| {
+            .query_map(rusqlite::params_from_iter(params.iter()), |row| {
                 let source: i32 = row.get(5)?;
                 let status: i64 = row.get(6)?;
                 Ok(TaskHistoryRow {
@@ -1393,7 +1414,11 @@ impl TaskEntry {
                     status: TaskStatus::from_i64(status),
                     started_at: row.get(7)?,
                     completed_at: row.get(8)?,
-                    task_state: row.get(9)?,
+                    scan_id: row.get(9)?,
+                    add_count: row.get(10)?,
+                    modify_count: row.get(11)?,
+                    delete_count: row.get(12)?,
+                    was_restarted: row.get(13)?,
                 })
             })
             .map_err(FsPulseError::DatabaseError)?
@@ -1501,8 +1526,13 @@ pub struct TaskHistoryRow {
     pub status: TaskStatus,
     pub started_at: Option<i64>,
     pub completed_at: Option<i64>,
-    /// Opaque task state JSON blob — interpretation is task-type-specific
-    pub task_state: Option<String>,
+    /// Scan ID (from scans table JOIN for scan tasks; None for other task types)
+    pub scan_id: Option<i64>,
+    /// Scan-specific fields (from scans table JOIN; None for non-scan tasks)
+    pub add_count: Option<i64>,
+    pub modify_count: Option<i64>,
+    pub delete_count: Option<i64>,
+    pub was_restarted: Option<bool>,
 }
 
 /// Schedule with root path and next scan time

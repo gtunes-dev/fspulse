@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::db::Database;
 use crate::schedules::{SourceType, TaskEntry};
 use crate::scans::{HashMode, ValidateMode};
-use crate::task::{ScanTaskState, TaskStatus, TaskType};
+use crate::task::{TaskStatus, TaskType};
 use crate::task_manager::TaskManager;
 
 use super::state::AppState;
@@ -89,6 +89,7 @@ pub async fn schedule_compact_database() -> Result<StatusCode, (StatusCode, Stri
 #[derive(Debug, Deserialize)]
 pub struct TaskHistoryCountParams {
     pub task_type: Option<i64>,
+    pub root_id: Option<i64>,
 }
 
 /// Response structure for task history count
@@ -101,12 +102,12 @@ pub struct TaskHistoryCountResponse {
 #[derive(Debug, Deserialize)]
 pub struct TaskHistoryFetchParams {
     pub task_type: Option<i64>,
+    pub root_id: Option<i64>,
     pub limit: i64,
     pub offset: i64,
 }
 
-/// A task history row enriched with task-type-specific fields for the API response.
-/// Decouples the API shape from the internal `TaskHistoryRow` (which carries an opaque task_state blob).
+/// A task history row with scan-specific fields for the API response.
 #[derive(Debug, Serialize)]
 pub struct TaskHistoryResponseRow {
     pub task_id: i64,
@@ -118,8 +119,11 @@ pub struct TaskHistoryResponseRow {
     pub status: TaskStatus,
     pub started_at: Option<i64>,
     pub completed_at: Option<i64>,
-    /// Extracted from task_state for scan tasks; None for other task types
     pub scan_id: Option<i64>,
+    pub add_count: Option<i64>,
+    pub modify_count: Option<i64>,
+    pub delete_count: Option<i64>,
+    pub was_restarted: Option<bool>,
 }
 
 /// Response structure for task history fetch
@@ -128,15 +132,15 @@ pub struct TaskHistoryFetchResponse {
     pub tasks: Vec<TaskHistoryResponseRow>,
 }
 
-/// GET /api/tasks/history/count?task_type=0
+/// GET /api/tasks/history/count?task_type=0&root_id=1
 /// Returns count of task history entries (completed, stopped, or error states)
-/// Optionally filtered by task_type
+/// Optionally filtered by task_type and/or root_id
 pub async fn get_task_history_count(
     Query(params): Query<TaskHistoryCountParams>,
 ) -> Result<Json<TaskHistoryCountResponse>, StatusCode> {
     let task_type = params.task_type.map(TaskType::from_i64);
 
-    let count = TaskEntry::get_task_history_count(task_type).map_err(|e| {
+    let count = TaskEntry::get_task_history_count(task_type, params.root_id).map_err(|e| {
         error!("Failed to get task history count: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -144,44 +148,37 @@ pub async fn get_task_history_count(
     Ok(Json(TaskHistoryCountResponse { count }))
 }
 
-/// GET /api/tasks/history/fetch?task_type=0&limit=25&offset=0
-/// Returns paginated task history with root and schedule information
-/// Optionally filtered by task_type
+/// GET /api/tasks/history/fetch?task_type=0&root_id=1&limit=25&offset=0
+/// Returns paginated task history with root, schedule, and scan-specific information
+/// Optionally filtered by task_type and/or root_id
 pub async fn get_task_history_fetch(
     Query(params): Query<TaskHistoryFetchParams>,
 ) -> Result<Json<TaskHistoryFetchResponse>, StatusCode> {
     let task_type = params.task_type.map(TaskType::from_i64);
 
-    let rows = TaskEntry::get_task_history(task_type, params.limit, params.offset)
+    let rows = TaskEntry::get_task_history(task_type, params.root_id, params.limit, params.offset)
         .map_err(|e| {
             error!("Failed to get task history: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    // Enrich rows with task-type-specific fields extracted from the opaque task_state
     let tasks = rows
         .into_iter()
-        .map(|row| {
-            let scan_id = if row.task_type == TaskType::Scan {
-                ScanTaskState::from_task_state(row.task_state.as_deref())
-                    .ok()
-                    .and_then(|s| s.scan_id)
-            } else {
-                None
-            };
-
-            TaskHistoryResponseRow {
-                task_id: row.task_id,
-                task_type: row.task_type,
-                root_id: row.root_id,
-                root_path: row.root_path,
-                schedule_name: row.schedule_name,
-                source: row.source,
-                status: row.status,
-                started_at: row.started_at,
-                completed_at: row.completed_at,
-                scan_id,
-            }
+        .map(|row| TaskHistoryResponseRow {
+            task_id: row.task_id,
+            task_type: row.task_type,
+            root_id: row.root_id,
+            root_path: row.root_path,
+            schedule_name: row.schedule_name,
+            source: row.source,
+            status: row.status,
+            started_at: row.started_at,
+            completed_at: row.completed_at,
+            scan_id: row.scan_id,
+            add_count: row.add_count,
+            modify_count: row.modify_count,
+            delete_count: row.delete_count,
+            was_restarted: row.was_restarted,
         })
         .collect();
 

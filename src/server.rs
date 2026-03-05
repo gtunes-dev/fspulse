@@ -237,15 +237,6 @@ impl WebServer {
             .route("/api/tasks/scan", post(api::tasks::schedule_scan))
             .route("/api/tasks/compact-database", post(api::tasks::schedule_compact_database))
             .route("/api/tasks/{task_id}/stop", post(api::scans::stop_task))
-            // Scan endpoints
-            .route(
-                "/api/scans/scan_history/count",
-                get(api::scans::get_scan_history_count),
-            )
-            .route(
-                "/api/scans/scan_history/fetch",
-                get(api::scans::get_scan_history_fetch),
-            )
             // Pause endpoints
             .route("/api/pause", post(api::scans::set_pause))
             .route("/api/pause", delete(api::scans::clear_pause))

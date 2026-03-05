@@ -14,7 +14,7 @@ interface TaskTypeFilterProps {
 
 /**
  * Shared component for filtering by task type
- * Used in TaskHistoryTable
+ * Used in HistoryPage
  */
 export function TaskTypeFilter({
   selectedType,
