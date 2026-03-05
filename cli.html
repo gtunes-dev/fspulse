@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Command-Line Interface - FsPulse</title>
+        <title>Command-Line Interface - fsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cf6a1674.js";
+            window.path_to_searchindex_js = "searchindex-f2954cd2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ae9385db.js"></script>
+        <script src="toc-d3000b55.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -137,7 +137,7 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">FsPulse</h1>
+                    <h1 class="menu-title">fsPulse</h1>
 
                     <div class="right-buttons">
                         <a href="print.html" title="Print this book" aria-label="Print this book">
@@ -175,10 +175,10 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="command-line-interface"><a class="header" href="#command-line-interface">Command-Line Interface</a></h1>
-<p>FsPulse is a <strong>web-first application</strong>. The CLI exists solely to launch the web server—all functionality including scanning, querying, browsing, and configuration is accessed through the <a href="web_ui.html">Interface</a>.</p>
+<p>fsPulse is a <strong>web-first application</strong>. The CLI exists solely to launch the web server—all functionality including scanning, querying, browsing, and configuration is accessed through the <a href="web_ui.html">Interface</a>.</p>
 <hr>
-<h2 id="starting-fspulse"><a class="header" href="#starting-fspulse">Starting FsPulse</a></h2>
-<p>To start the FsPulse server:</p>
+<h2 id="starting-fspulse"><a class="header" href="#starting-fspulse">Starting fsPulse</a></h2>
+<p>To start the fsPulse server:</p>
 <pre><code class="language-sh">fspulse
 </code></pre>
 <p>Or explicitly:</p>
@@ -195,7 +195,7 @@
 </ul>
 <hr>
 <h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
-<p>FsPulse behavior is configured through <strong>environment variables</strong> or a <strong>config file</strong>, not command-line flags.</p>
+<p>fsPulse behavior is configured through <strong>environment variables</strong> or a <strong>config file</strong>, not command-line flags.</p>
 <h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
 <p>Set these before running <code>fspulse</code>:</p>
 <pre><code class="language-sh"># Server settings
@@ -214,7 +214,7 @@ export FSPULSE_DATA_DIR=/custom/path  # Data directory override
 fspulse
 </code></pre>
 <h3 id="configuration-file"><a class="header" href="#configuration-file">Configuration File</a></h3>
-<p>FsPulse also reads from <code>config.toml</code> in the data directory. See <a href="configuration.html">Configuration</a> for complete documentation including:</p>
+<p>fsPulse also reads from <code>config.toml</code> in the data directory. See <a href="configuration.html">Configuration</a> for complete documentation including:</p>
 <ul>
 <li>All available settings</li>
 <li>Environment variable reference</li>
@@ -232,14 +232,14 @@ fspulse --version
 <ul>
 <li><strong><a href="configuration.html">Configuration</a></strong> — Complete configuration reference</li>
 <li><strong><a href="web_ui.html">Interface</a></strong> — Guide to all UI features</li>
-<li><strong><a href="docker.html">Docker Deployment</a></strong> — Running FsPulse in Docker</li>
+<li><strong><a href="docker.html">Docker Deployment</a></strong> — Running fsPulse in Docker</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="web_ui/settings.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="web_ui/setup.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -253,7 +253,7 @@ fspulse --version
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="web_ui/settings.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="web_ui/setup.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

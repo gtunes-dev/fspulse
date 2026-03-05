@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Concepts - FsPulse</title>
+        <title>Concepts - fsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cf6a1674.js";
+            window.path_to_searchindex_js = "searchindex-f2954cd2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ae9385db.js"></script>
+        <script src="toc-d3000b55.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -137,7 +137,7 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">FsPulse</h1>
+                    <h1 class="menu-title">fsPulse</h1>
 
                     <div class="right-buttons">
                         <a href="print.html" title="Print this book" aria-label="Print this book">
@@ -175,10 +175,10 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="concepts"><a class="header" href="#concepts">Concepts</a></h1>
-<p>FsPulse tracks the state of your filesystem over time using a <strong>temporal versioning</strong> model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.</p>
+<p>fsPulse tracks the state of your filesystem over time using a <strong>temporal versioning</strong> model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.</p>
 <hr>
 <h2 id="root"><a class="header" href="#root">Root</a></h2>
-<p>A <strong>root</strong> is the starting point for a scan. It represents a specific path on the filesystem that you tell FsPulse to track.</p>
+<p>A <strong>root</strong> is the starting point for a scan. It represents a specific path on the filesystem that you tell fsPulse to track.</p>
 <ul>
 <li>Paths are stored as absolute paths.</li>
 <li>Each root has a unique ID.</li>
@@ -209,7 +209,7 @@
 <p>An item’s mutable state — metadata, hash, validation — is stored in <strong>item versions</strong>, not in the item row itself.</p>
 <hr>
 <h2 id="item-version"><a class="header" href="#item-version">Item Version</a></h2>
-<p>An <strong>item version</strong> captures the full known state of an item at a point in time. FsPulse uses temporal versioning: instead of maintaining one mutable row per item, the system stores one row per <strong>distinct state</strong>. A new version is created only when an item’s observable state changes.</p>
+<p>An <strong>item version</strong> captures the full known state of an item at a point in time. fsPulse uses temporal versioning: instead of maintaining one mutable row per item, the system stores one row per <strong>distinct state</strong>. A new version is created only when an item’s observable state changes.</p>
 <p>Each version contains:</p>
 <ul>
 <li><strong>Temporal range</strong> — <code>first_scan_id</code> (when this state was first observed) and <code>last_scan_id</code> (last scan where it was confirmed)</li>
@@ -235,7 +235,7 @@
 <ul>
 <li><strong>Suspect Hash</strong> — file content hash changed but modification time did not, suggesting bit rot or tampering</li>
 <li><strong>Invalid Item</strong> — format validation detected corruption in a supported file type</li>
-<li><strong>Access Denied</strong> — FsPulse could not access the item’s metadata or contents</li>
+<li><strong>Access Denied</strong> — fsPulse could not access the item’s metadata or contents</li>
 </ul>
 <p>Alerts have statuses (Open, Flagged, Dismissed) for triage workflows.</p>
 <hr>
@@ -249,7 +249,7 @@
 <p>Schedules can be enabled or disabled independently.</p>
 <hr>
 <h2 id="task"><a class="header" href="#task">Task</a></h2>
-<p>A <strong>task</strong> is a unit of work in the execution queue. Tasks are created from manual scan requests or triggered by schedules. The Tasks page shows active, upcoming, and completed tasks.</p>
+<p>A <strong>task</strong> is a unit of work in the execution queue. Tasks are created from manual scan requests or triggered by schedules. The Home page shows active and upcoming tasks; the History page shows completed tasks.</p>
 <p>Tasks can be paused globally, and individual tasks can be stopped while in progress.</p>
 <hr>
 <h2 id="entity-relationships"><a class="header" href="#entity-relationships">Entity Relationships</a></h2>
@@ -261,7 +261,7 @@
       └── Item Version (state at a point in time)
 </code></pre>
 <hr>
-<p>These concepts form the foundation of FsPulse’s scanning, browsing, and query capabilities.</p>
+<p>These concepts form the foundation of fsPulse’s scanning, browsing, and query capabilities.</p>
 
                     </main>
 

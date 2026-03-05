@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Database Schema - FsPulse</title>
+        <title>Database Schema - fsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cf6a1674.js";
+            window.path_to_searchindex_js = "searchindex-f2954cd2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ae9385db.js"></script>
+        <script src="toc-d3000b55.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -137,7 +137,7 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">FsPulse</h1>
+                    <h1 class="menu-title">fsPulse</h1>
 
                     <div class="right-buttons">
                         <a href="print.html" title="Print this book" aria-label="Print this book">
@@ -175,14 +175,14 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="database"><a class="header" href="#database">Database</a></h1>
-<p>FsPulse uses an embedded <a href="https://sqlite.org">SQLite</a> database to store all scan-related data. The database uses a <strong>temporal versioning</strong> model where item state is tracked through version rows rather than mutable updates.</p>
+<p>fsPulse uses an embedded <a href="https://sqlite.org">SQLite</a> database to store all scan-related data. The database uses a <strong>temporal versioning</strong> model where item state is tracked through version rows rather than mutable updates.</p>
 <hr>
 <h2 id="database-name-and-location"><a class="header" href="#database-name-and-location">Database Name and Location</a></h2>
 <p>The database file is always named:</p>
 <pre><code class="language-text">fspulse.db
 </code></pre>
 <h3 id="data-directory"><a class="header" href="#data-directory">Data Directory</a></h3>
-<p>FsPulse uses a <strong>data directory</strong> to store application data including configuration, logs, and (by default) the database. The data directory location is determined by:</p>
+<p>fsPulse uses a <strong>data directory</strong> to store application data including configuration, logs, and (by default) the database. The data directory location is determined by:</p>
 <ol>
 <li><strong><code>FSPULSE_DATA_DIR</code> environment variable</strong> (if set) - overrides the default location</li>
 <li><strong>Platform-specific default</strong> - uses the <a href="https://docs.rs/directories"><code>directories</code></a> crate’s project local directory:</li>
@@ -225,7 +225,7 @@ fspulse serve
 <pre><code class="language-toml">[database]
 dir = "/path/to/custom/directory"
 </code></pre>
-<p>In both cases, FsPulse will store the database as <code>fspulse.db</code> inside the specified directory. <strong>The filename cannot be changed</strong> — only the directory is configurable.</p>
+<p>In both cases, fsPulse will store the database as <code>fspulse.db</code> inside the specified directory. <strong>The filename cannot be changed</strong> — only the directory is configurable.</p>
 <p><strong>Database Location Precedence:</strong></p>
 <ol>
 <li><code>FSPULSE_DATABASE_DIR</code> environment variable (highest priority)</li>
@@ -236,7 +236,7 @@ dir = "/path/to/custom/directory"
 <p>See the <a href="configuration.html#database-settings">Configuration - Database Settings</a> section for more details.</p>
 <hr>
 <h2 id="schema-overview"><a class="header" href="#schema-overview">Schema Overview</a></h2>
-<p>The database schema reflects FsPulse’s temporal versioning model:</p>
+<p>The database schema reflects fsPulse’s temporal versioning model:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -262,23 +262,23 @@ dir = "/path/to/custom/directory"
 </ul>
 <p>An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, hash, validation, or deletion status).</p>
 <h3 id="schema-versioning"><a class="header" href="#schema-versioning">Schema Versioning</a></h3>
-<p>The schema is versioned (currently version 24) and automatically migrated on startup. FsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
+<p>The schema is versioned (currently version 24) and automatically migrated on startup. fsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
 <hr>
 <h2 id="database-compaction"><a class="header" href="#database-compaction">Database Compaction</a></h2>
 <p>Over time, deletions and updates can leave unused space in the database file. The Settings page provides a <strong>Compact Database</strong> action that reclaims this space by running SQLite’s VACUUM command.</p>
 <hr>
 <h2 id="exploring-the-database"><a class="header" href="#exploring-the-database">Exploring the Database</a></h2>
-<p>Because FsPulse uses SQLite, you can inspect the database using any compatible tool, such as:</p>
+<p>Because fsPulse uses SQLite, you can inspect the database using any compatible tool, such as:</p>
 <ul>
 <li><a href="https://sqlitebrowser.org">DB Browser for SQLite</a></li>
 <li>The <code>sqlite3</code> command-line tool</li>
 <li>SQLite integrations in many IDEs and database browsers</li>
 </ul>
 <blockquote>
-<p>⚠️ <strong>Caution:</strong> Making manual changes to the database may affect FsPulse’s behavior or stability. Read-only access is recommended.</p>
+<p>⚠️ <strong>Caution:</strong> Making manual changes to the database may affect fsPulse’s behavior or stability. Read-only access is recommended.</p>
 </blockquote>
 <hr>
-<p>FsPulse manages all internal data access automatically. Most users will not need to interact with the database directly.</p>
+<p>fsPulse manages all internal data access automatically. Most users will not need to interact with the database directly.</p>
 
                     </main>
 

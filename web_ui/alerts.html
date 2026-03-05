@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Alerts - FsPulse</title>
+        <title>Alerts - fsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cf6a1674.js";
+            window.path_to_searchindex_js = "../searchindex-f2954cd2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-ae9385db.js"></script>
+        <script src="../toc-d3000b55.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -137,7 +137,7 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">FsPulse</h1>
+                    <h1 class="menu-title">fsPulse</h1>
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
@@ -177,9 +177,9 @@
                         <h1 id="alerts"><a class="header" href="#alerts">Alerts</a></h1>
 <p>The Alerts page provides a centralized view for managing integrity issues detected during scans.</p>
 <h2 id="alert-types"><a class="header" href="#alert-types">Alert Types</a></h2>
-<p>FsPulse generates three types of alerts:</p>
+<p>fsPulse generates three types of alerts:</p>
 <h3 id="access-denied"><a class="header" href="#access-denied">Access Denied</a></h3>
-<p>Triggered when FsPulse is unable to access an item or folder. These alerts can occur during either the scan phase or the analysis phase:</p>
+<p>Triggered when fsPulse is unable to access an item or folder. These alerts can occur during either the scan phase or the analysis phase:</p>
 <p><strong>During Scan Phase:</strong></p>
 <ul>
 <li>Unable to retrieve item metadata (type, size, or modification date)</li>
@@ -191,7 +191,7 @@
 </ul>
 <p><strong>Notes:</strong></p>
 <ul>
-<li>If FsPulse cannot determine an item’s type from metadata, the item is recorded as an instance of the “Unknown” type</li>
+<li>If fsPulse cannot determine an item’s type from metadata, the item is recorded as an instance of the “Unknown” type</li>
 <li>Items with failed metadata retrieval, whether “Unknown” or otherwise, are not examined during the analysis phase</li>
 </ul>
 <h3 id="suspect-hash-changes"><a class="header" href="#suspect-hash-changes">Suspect Hash Changes</a></h3>
@@ -232,6 +232,9 @@
 <li>Time range</li>
 <li>Path search</li>
 </ul>
+<blockquote>
+<p><strong>Tip</strong>: If you select a root on the <a href="browse.html">Browse</a> or <a href="trends.html">Trends</a> page before navigating to Alerts, the same root will be pre-selected automatically via the shared root context.</p>
+</blockquote>
 <h3 id="status-actions"><a class="header" href="#status-actions">Status Actions</a></h3>
 <ul>
 <li><strong>Flag</strong>: Mark alert for follow-up</li>
@@ -251,14 +254,14 @@
 <li>Link to item in Browse view</li>
 </ul>
 <h2 id="integration-with-browse"><a class="header" href="#integration-with-browse">Integration with Browse</a></h2>
-<p>Alerts are also displayed in the <a href="browse.html">Browse</a> page’s item detail panel, providing context when investigating specific files.</p>
+<p>Alerts are also displayed in the <a href="browse.html">Browse</a> page’s item detail panel, providing context when investigating specific files. You can change alert status directly from the Browse detail panel without navigating to the Alerts page.</p>
 <h2 id="workflow-recommendations"><a class="header" href="#workflow-recommendations">Workflow Recommendations</a></h2>
 <ol>
-<li><strong>Review Open Alerts</strong>: Check new alerts regularly</li>
+<li><strong>Review Open Alerts</strong>: Check the <a href="home.html">Home</a> page for alert counts, then navigate here</li>
 <li><strong>Investigate</strong>: Use Browse to examine affected items</li>
 <li><strong>Triage</strong>: Flag important issues, dismiss false positives</li>
 <li><strong>Restore</strong>: Use backups to restore corrupted files if needed</li>
-<li><strong>Track</strong>: Monitor alert trends in <a href="insights.html">Insights</a></li>
+<li><strong>Track</strong>: Monitor alert trends on the <a href="trends.html">Trends</a> page</li>
 </ol>
 
                     </main>
@@ -269,7 +272,7 @@
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../web_ui/insights.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../web_ui/trends.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -283,7 +286,7 @@
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../web_ui/insights.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../web_ui/trends.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Validators - FsPulse</title>
+        <title>Validators - fsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cf6a1674.js";
+            window.path_to_searchindex_js = "searchindex-f2954cd2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-ae9385db.js"></script>
+        <script src="toc-d3000b55.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -137,7 +137,7 @@
                         </button>
                     </div>
 
-                    <h1 class="menu-title">FsPulse</h1>
+                    <h1 class="menu-title">fsPulse</h1>
 
                     <div class="right-buttons">
                         <a href="print.html" title="Print this book" aria-label="Print this book">
@@ -175,8 +175,8 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="validators"><a class="header" href="#validators">Validators</a></h1>
-<p>FsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
-<p>Validation allows FsPulse to go beyond basic metadata inspection and attempt to decode the file’s contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
+<p>fsPulse can optionally validate file contents during the <strong>analysis</strong> phase of a scan. To enable validation, configure it in the web UI when setting up or initiating a scan.</p>
+<p>Validation allows fsPulse to go beyond basic metadata inspection and attempt to decode the file’s contents using format-specific logic. This helps detect corruption or formatting issues in supported file types.</p>
 <hr>
 <h2 id="validation-status-codes"><a class="header" href="#validation-status-codes">Validation Status Codes</a></h2>
 <p>Each <strong>file</strong> in the database has an associated <strong>validation status</strong> (folders do not have a validation state):</p>
@@ -189,7 +189,7 @@
 <tr><td><code>U</code></td><td><strong>Unknown</strong> — item has never been included in a validation scan</td></tr>
 <tr><td><code>V</code></td><td><strong>Valid</strong> — most recent validation scan found no issues</td></tr>
 <tr><td><code>I</code></td><td><strong>Invalid</strong> — validation failed; see <code>validation_error</code> field</td></tr>
-<tr><td><code>N</code></td><td><strong>No Validator</strong> — FsPulse does not currently support this file type</td></tr>
+<tr><td><code>N</code></td><td><strong>No Validator</strong> — fsPulse does not currently support this file type</td></tr>
 </tbody>
 </table>
 </div>
@@ -199,7 +199,7 @@
 <p>Note: Some validation “errors” surfaced by the underlying libraries may not indicate corruption, but rather unsupported edge cases or metadata formatting. Always review the error messages before assuming a file is damaged.</p>
 <hr>
 <h2 id="supported-validators"><a class="header" href="#supported-validators">Supported Validators</a></h2>
-<p>FsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.</p>
+<p>fsPulse relies on external Rust crates for performing format-specific validation. We gratefully acknowledge the work of the developers behind these crates for making them available to the Rust community.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -212,7 +212,7 @@
 </tbody>
 </table>
 </div>
-<p>Validation support may expand in future versions of FsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.</p>
+<p>Validation support may expand in future versions of fsPulse to cover additional file types such as ZIP archives, audio metadata, or XML/JSON files.</p>
 <hr>
 <p>$1 See the <a href="query.html">Query Syntax</a> page for full details on query clauses and supported filters.</p>
 
