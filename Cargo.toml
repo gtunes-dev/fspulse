@@ -31,7 +31,7 @@ figment = { version = "0.10", features = ["toml", "env", "test"] }
 flexi_logger = "0.31"
 hex = "0.4"
 icu_collator = "2.1"
-image = "0.25"
+image = "=0.25.8" # Pinned: 0.25.9 generates spurious image error alerts
 log = "0.4"
 logging_timer = "1.1"
 lopdf = "0.39"

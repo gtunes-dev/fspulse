@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Header bar eliminated**: Shutdown, theme toggle, and task progress integrated into sidebar footer
 - **Documentation overhauled**: All docs updated to reflect new page names and navigation structure
 
+### Fixed
+- **Image validation**: Pinned `image` crate to 0.25.8; version 0.25.9 generates spurious image error alerts
+
 ### Removed
 - **Header component**: Replaced by sidebar footer controls
 - **Scans page**: Merged into History
