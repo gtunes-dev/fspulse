@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Migration no longer auto-pauses**: Removed the v15→v16 migration step that unconditionally set `pause_until = -1`, which left users in a paused state after upgrading from older schema versions
+- **Pause info on action dialogs**: Scan Now and Run Schedule dialogs now show an informational message when fsPulse is paused, explaining that the task will be queued. Button text changes to "Queue Scan" while paused
+- **Pause info on compact button**: Settings page Compact Database section shows the same informational message when paused
+- **Schedule table not refreshing after create**: Fixed SchedulesPage not passing `onSuccess` to CreateScheduleDialog, so the table now reloads after adding a new schedule
+
+### Changed
+- Rename `LICENSE-APACHE` to `LICENSE-APACHE-2.0` for GitHub license detection compliance
+
 ## [v0.4.2] - 2026-03-04
 
 ### Added

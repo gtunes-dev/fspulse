@@ -120,14 +120,9 @@ pub fn migrate_15_to_16(conn: &Connection) -> Result<(), FsPulseError> {
     Ok(())
 }
 
-/// Post-SQL: Update schema version and pause scheduled tasks.
+/// Post-SQL: Update schema version.
 pub const UPGRADE_15_TO_16_POST_SQL: &str = r#"
 UPDATE meta SET value = '16' WHERE key = 'schema_version';
-
--- Pause scheduled tasks indefinitely after migration.
--- The scanner does not yet write to the new temporal tables,
--- so prevent it from running until dual-write is implemented.
-INSERT OR REPLACE INTO meta (key, value) VALUES ('pause_until', '-1');
 "#;
 
 // ============================================================================

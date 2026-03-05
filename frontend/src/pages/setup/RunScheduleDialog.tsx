@@ -22,7 +22,7 @@ export function RunScheduleDialog({
   onOpenChange,
   schedule,
 }: RunScheduleDialogProps) {
-  const { notifyTaskScheduled } = useTaskContext()
+  const { notifyTaskScheduled, isPaused } = useTaskContext()
   const [error, setError] = useState('')
   const [running, setRunning] = useState(false)
 
@@ -93,6 +93,14 @@ export function RunScheduleDialog({
               </div>
             </div>
 
+            {isPaused && (
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
+                <p className="text-sm text-blue-600 dark:text-blue-400">
+                  fsPulse is paused. This scan will be queued and will run when fsPulse is resumed.
+                </p>
+              </div>
+            )}
+
             {error && (
               <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md p-3">
                 {error}
@@ -113,7 +121,7 @@ export function RunScheduleDialog({
             onClick={handleRun}
             disabled={running}
           >
-            {running ? 'Starting...' : 'Run Scan'}
+            {running ? 'Starting...' : isPaused ? 'Queue Scan' : 'Run Scan'}
           </Button>
         </DialogFooter>
       </DialogContent>

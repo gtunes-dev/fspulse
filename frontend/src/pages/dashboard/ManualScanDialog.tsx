@@ -26,7 +26,7 @@ interface ManualScanDialogProps {
 }
 
 export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: ManualScanDialogProps) {
-  const { notifyTaskScheduled } = useTaskContext()
+  const { notifyTaskScheduled, isPaused } = useTaskContext()
 
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>('')
@@ -178,6 +178,15 @@ export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: Manu
               onValidateModeChange={setValidateMode}
             />
 
+            {/* Pause Warning */}
+            {isPaused && (
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
+                <p className="text-sm text-blue-600 dark:text-blue-400">
+                  fsPulse is paused. This scan will be queued and will run when fsPulse is resumed.
+                </p>
+              </div>
+            )}
+
             {/* Error Display */}
             {error && (
               <div className="rounded-md bg-red-50 p-3">
@@ -205,7 +214,7 @@ export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: Manu
                 Starting...
               </>
             ) : (
-              'Start Scan'
+              isPaused ? 'Queue Scan' : 'Start Scan'
             )}
           </Button>
         </DialogFooter>

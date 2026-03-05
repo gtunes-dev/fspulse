@@ -41,7 +41,7 @@ interface SettingsResponse {
 }
 
 export function SettingsContent() {
-  const { isExclusive, lastTaskCompletedAt } = useTaskContext()
+  const { isExclusive, isPaused, lastTaskCompletedAt } = useTaskContext()
 
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -793,6 +793,14 @@ export function SettingsContent() {
                     </span>
                   )}
                 </div>
+
+                {isPaused && (
+                  <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3">
+                    <p className="text-sm text-blue-600 dark:text-blue-400">
+                      fsPulse is paused. This will be queued and will run when fsPulse is resumed.
+                    </p>
+                  </div>
+                )}
 
                 {compactionMessage && (
                   <p

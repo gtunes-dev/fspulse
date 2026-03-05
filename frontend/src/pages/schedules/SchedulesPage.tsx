@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTaskContext } from '@/contexts/TaskContext'
 import { RootCard } from '@/components/shared/RootCard'
 import { Button } from '@/components/ui/button'
-import { SchedulesTable } from '../setup/SchedulesTable'
+import { SchedulesTable, type SchedulesTableRef } from '../setup/SchedulesTable'
 import { CreateScheduleDialog } from '../setup/CreateScheduleDialog'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
@@ -15,6 +15,7 @@ interface Root {
 
 export function SchedulesPage() {
   const { isRunning } = useTaskContext()
+  const schedulesTableRef = useRef<SchedulesTableRef>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [roots, setRoots] = useState<Root[]>([])
@@ -89,6 +90,7 @@ export function SchedulesPage() {
         }
       >
         <SchedulesTable
+          ref={schedulesTableRef}
           isScanning={isRunning}
           selectedRootId={selectedRootId}
         />
@@ -98,6 +100,7 @@ export function SchedulesPage() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         preselectedRootId={preselectedRootId}
+        onSuccess={() => schedulesTableRef.current?.reload()}
       />
     </div>
   )
