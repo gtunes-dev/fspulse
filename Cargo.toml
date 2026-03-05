@@ -1,6 +1,6 @@
 [package]
 name = "fspulse"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 authors = ["The fsPulse Developers"]
 description = "fsPulse is a fast, cross-platform filesystem scanner and change tracker."
