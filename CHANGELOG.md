@@ -8,32 +8,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Hash state tracking**: New `hash_state` column on file item versions tracks hash integrity over time (Unknown → Valid → Suspect). Suspect state is sticky until a legitimate file modification is detected
-- **Validation and hash state counts**: Scans and folder versions now record counts of descendant files in each validation state (Unknown, Valid, Invalid, No Validator) and hash state (Unknown, Valid, Suspect)
-- **Browse page filter panel**: Collapsible "Filters" panel on the Browse page with three filter dimensions — Change Type (colored dot toggles for added/modified/deleted/unchanged), Hash State (checkboxes for unknown/valid/suspect), and Validation State (checkboxes for unknown/valid/invalid/no validator). Filters apply across tree, folder, and search views with AND logic across dimensions
-- **Integrity icons**: Files with suspect hashes show an amber warning triangle and files with invalid validation show a rose circle-X icon next to their name in tree, folder, and search views
-- **Change and integrity tooltips**: Colored change dots and integrity icons show descriptive tooltips on hover; directory change dots show descendant counts (e.g., "3 added, 12 modified, 1 deleted, 45 unchanged")
-- **Scan History deep links**: Added a "Scan" column to the Scan History table on the Scans page with clickable links (e.g., "Scan #42") that navigate directly to the Browse page with the correct root and scan pre-selected
-- **Scan History date formatting**: The "Started" column in the Scan History table now shows a readable date+time with day of week (e.g., "Fri, Feb 28, 2:30 PM") instead of relative time
-- **Item detail hash state**: File item detail views show hash state and validation state in an "Integrity" section with truncated expandable hash values
-- **Item detail folder counts**: Directory item detail views show change type counts (added/deleted/modified/unchanged) and integrity counts (suspect hash/invalid item) from the version data
-- **Item detail version diffs for counts**: Version history diffs for folders show folder count and integrity count transitions, including on initial (Added) versions
-- **Editable alert status**: Alert status can be changed directly from the item detail view via a dropdown instead of navigating to the Alerts page
-- **Browse page keep-alive**: Browse page state (tree expansions, folder path, selections, filters, view mode, scan selection) is preserved when navigating to other pages and back. Uses a reusable `KeepAlivePage` component that can be applied to other pages
-- **Scroll position persistence**: Scroll positions are saved and restored when switching between pages, so returning to any page resumes where you left off
-- **Calendar disabled dates**: Dates without scans are visually struck through and non-clickable in the scan date picker, preventing accidental selection of empty dates
-- **Calendar month/year dropdowns**: The scan date picker calendar now shows month and year dropdowns for faster navigation to distant dates
-- **Tree expansion preservation**: Switching scans in the Browse tree view preserves expanded folder state — previously expanded directories are re-expanded in the new scan (with graceful fallback for paths that no longer exist)
-
-### Fixed
-- Fix incorrect validation state display in item detail panels where val_state integers were mapped to wrong labels (e.g., Invalid files showing as "No Validator")
+- **Collapsible sidebar**: Adopted shadcn Sidebar with icon-only collapsed mode, keyboard shortcut (Cmd/Ctrl+B), rail toggle, and auto-collapse on narrow screens
+- **Root health summary**: Home page shows per-root status cards with alert counts, last scan info, and deep links to Browse, Alerts, and Trends
+- **Shared root context**: Selecting a root on Browse, Alerts, Trends, Schedules, or History carries the selection across pages via URL parameter
+- **History page**: Unified task history with root filtering, task type filter, scan-specific columns (changes, schedule, duration), and RootCard pattern
+- **Run Schedule dialog**: Proper confirmation dialog for running a schedule's scan, replacing browser confirm()
+- **Scroll position persistence**: Scroll positions saved and restored when switching between pages
 
 ### Changed
-- Rename `val` column to `val_state` across the schema, query language, and frontend for symmetry with `hash_state`
-- Rename Scans page title from "Scan History" to "Scans" for consistency with sidebar navigation
+- **Rebrand to fsPulse**: Renamed from FsPulse with new folder-pulse favicon
+- **Navigation restructure**: Two-tier sidebar (Primary: Home, Browse, Alerts, Trends; Utility: History, Roots, Schedules, Data Explorer, Settings) replacing flat nav with header bar
+- **Dashboard renamed to Home**: Removed page title for cleaner layout
+- **Setup split into three pages**: Roots, Schedules, and Settings are now separate sidebar items instead of tabs within a single Setup page
+- **History unified**: Merged separate Scan History and Task History tables into single table with scan-specific columns showing em-dashes for non-scan tasks
+- **Scans page removed**: Functionality merged into History page and Home page
+- **Header bar eliminated**: Shutdown, theme toggle, and task progress integrated into sidebar footer
+- **Documentation overhauled**: All docs updated to reflect new page names and navigation structure
 
 ### Removed
+- **Header component**: Replaced by sidebar footer controls
+- **Scans page**: Merged into History
+- **RootFilter component**: Replaced by RootCard pattern
+- **ScanHistoryTable/TaskHistoryTable**: Replaced by unified HistoryPage
+- **Roadmap doc page**: Removed
+
+- **Hash state tracking**: New `hash_state` column on file item versions tracks hash integrity over time (Unknown → Valid → Suspect). Suspect state is sticky until a legitimate file modification is detected
+- **Validation and hash state counts**: Scans and folder versions now record counts of descendant files in each validation state (Unknown, Valid, Invalid, No Validator) and hash state (Unknown, Valid, Suspect)
+- **Browse page filter panel**: Collapsible "Filters" panel with three filter dimensions — Change Type, Hash State, and Validation State with AND logic across dimensions
+- **Integrity icons**: Files with suspect hashes or invalid validation show warning icons in tree, folder, and search views
+- **Change and integrity tooltips**: Colored change dots and integrity icons show descriptive tooltips on hover
+- **Item detail hash state**: File detail views show hash and validation state in an "Integrity" section
+- **Item detail folder counts**: Directory detail views show change type and integrity counts
+- **Item detail version diffs for counts**: Version history diffs for folders show count transitions
+- **Editable alert status**: Alert status changeable directly from item detail view via dropdown
+- **Browse page keep-alive**: Browse page state preserved when navigating away and back
+- **Calendar disabled dates**: Dates without scans are struck through and non-clickable
+- **Calendar month/year dropdowns**: Faster navigation to distant dates in scan date picker
+- **Tree expansion preservation**: Switching scans preserves expanded folder state
+
+### Changed
+- **Rebrand to fsPulse**: Renamed from FsPulse with new folder-pulse favicon
+- **Navigation restructure**: Two-tier sidebar (Primary: Home, Browse, Alerts, Trends; Utility: History, Roots, Schedules, Data Explorer, Settings) replacing flat nav with header bar
+- **Dashboard renamed to Home**: Removed page title for cleaner layout
+- **Setup split into three pages**: Roots, Schedules, and Settings are now separate sidebar items
+- **History unified**: Merged Scan History and Task History into single table with scan-specific columns
+- **Scans page removed**: Functionality merged into History and Home pages
+- **Header bar eliminated**: Shutdown, theme toggle, and task progress integrated into sidebar footer
+- **Documentation overhauled**: All docs updated to reflect new page names and navigation structure
+- Rename `val` column to `val_state` across the schema, query language, and frontend for symmetry with `hash_state`
+
+### Removed
+- **Header component**: Replaced by sidebar footer controls
+- **Scans page**: Merged into History
+- **RootFilter component**: Replaced by RootCard pattern
+- **ScanHistoryTable/TaskHistoryTable**: Replaced by unified HistoryPage
+- **Roadmap doc page**: Removed
 - Remove unused `ScanPicker` component (replaced by `CompactScanBar`)
+
+### Fixed
+- Fix incorrect validation state display in item detail panels where val_state integers were mapped to wrong labels
 
 ## [v0.4.1] - 2026-02-28
 
