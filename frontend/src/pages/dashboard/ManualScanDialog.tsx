@@ -22,9 +22,10 @@ interface Root {
 interface ManualScanDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  preselectedRootId?: number
 }
 
-export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) {
+export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: ManualScanDialogProps) {
   const { notifyTaskScheduled } = useTaskContext()
 
   const [roots, setRoots] = useState<Root[]>([])
@@ -40,14 +41,14 @@ export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) 
   useEffect(() => {
     if (open) {
       // Reset form to defaults
-      setSelectedRootId('')
+      setSelectedRootId(preselectedRootId ? preselectedRootId.toString() : '')
       setHashMode('New or Changed')
       setValidateMode('New or Changed')
       setError(null)
 
       loadRoots()
     }
-  }, [open])
+  }, [open, preselectedRootId])
 
   async function loadRoots() {
     try {
@@ -155,12 +156,18 @@ export function ManualScanDialog({ open, onOpenChange }: ManualScanDialogProps) 
             {/* Root Selection */}
             <div className="space-y-4">
               <label className="text-sm font-semibold">Root Directory</label>
-              <RootPicker
-                roots={roots}
-                value={selectedRootId}
-                onChange={setSelectedRootId}
-                placeholder="Select a root to scan"
-              />
+              {preselectedRootId ? (
+                <div className="rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono text-muted-foreground">
+                  {roots.find(r => r.root_id === preselectedRootId)?.root_path ?? `Root #${preselectedRootId}`}
+                </div>
+              ) : (
+                <RootPicker
+                  roots={roots}
+                  value={selectedRootId}
+                  onChange={setSelectedRootId}
+                  placeholder="Select a root to scan"
+                />
+              )}
             </div>
 
             {/* Scan Options */}

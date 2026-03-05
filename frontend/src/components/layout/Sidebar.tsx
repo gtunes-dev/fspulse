@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard,
+  Home,
   FolderTree,
   TriangleAlert,
   TrendingUp,
   Clock,
+  HardDrive,
+  Calendar,
   Database,
   Wrench,
   Moon,
@@ -32,7 +34,7 @@ import {
 import { ShutdownDialog } from './ShutdownDialog'
 
 // Pages where root_id context is meaningful
-const ROOT_SCOPED_PATHS = ['/browse', '/alerts', '/trends']
+const ROOT_SCOPED_PATHS = ['/browse', '/alerts', '/trends', '/schedules']
 
 function shortenPath(path: string, maxLength = 30): string {
   if (!path || path.length <= maxLength) return path
@@ -76,7 +78,7 @@ export function AppSidebar() {
 
   // Navigation items
   const primaryNavItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', to: '/', end: true },
+    { icon: Home, label: 'Home', to: '/', end: true },
     { icon: FolderTree, label: 'Browse', to: '/browse', end: true },
     { icon: TriangleAlert, label: 'Alerts', to: '/alerts', end: true },
     { icon: TrendingUp, label: 'Trends', to: '/trends/scan-trends', end: false },
@@ -84,8 +86,10 @@ export function AppSidebar() {
 
   const utilityNavItems = [
     { icon: Clock, label: 'History', to: '/history', end: true },
+    { icon: HardDrive, label: 'Roots', to: '/roots', end: true },
+    { icon: Calendar, label: 'Schedules', to: '/schedules', end: true },
     { icon: Database, label: 'Data Explorer', to: '/explore/roots', end: false },
-    { icon: Wrench, label: 'Setup', to: '/setup', end: false },
+    { icon: Wrench, label: 'Settings', to: '/settings', end: true },
   ]
 
   const isNavActive = (item: typeof primaryNavItems[0]): boolean => {

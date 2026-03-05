@@ -5,7 +5,9 @@ import { ScrollContext } from './contexts/ScrollContext'
 import { AppSidebar } from './components/layout/Sidebar'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { DashboardPage } from './pages/dashboard/DashboardPage'
-import { SetupPage } from './pages/setup/SetupPage'
+import { RootsPage } from './pages/roots/RootsPage'
+import { SchedulesPage } from './pages/schedules/SchedulesPage'
+import { SettingsPage } from './pages/settings/SettingsPage'
 import { ExplorePage } from './pages/explore/ExplorePage'
 import { AlertsPage } from './pages/alerts/AlertsPage'
 import { TrendsPage } from './pages/trends/TrendsPage'
@@ -58,7 +60,9 @@ function AppContent() {
         <ScrollContext.Provider value={mainElement}>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/roots" element={<RootsPage />} />
+          <Route path="/schedules" element={<SchedulesPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/explore/*" element={<ExplorePage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/trends/*" element={<TrendsPage />} />

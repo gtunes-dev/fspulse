@@ -37,4 +37,4 @@ Filter the activity log by:
 - **Trend awareness**: Notice patterns in change counts or alert frequency across scans
 - **Audit trail**: Review what the system has been doing over any time period
 
-> **Tip**: The [Dashboard](dashboard.md) shows a compact summary of recent activity. Use the History page when you need the full, filterable log.
+> **Tip**: The [Home](home.md) page shows a compact summary of recent activity. Use the History page when you need the full, filterable log.

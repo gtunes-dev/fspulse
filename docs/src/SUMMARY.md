@@ -8,7 +8,7 @@
   - [First Steps](getting_started/first_steps.md)
 - [Scanning Concepts](scanning.md)
 - [Interface](web_ui.md)
-  - [Dashboard](web_ui/dashboard.md)
+  - [Home](web_ui/home.md)
   - [Browse](web_ui/browse.md)
   - [Alerts](web_ui/alerts.md)
   - [Trends](web_ui/trends.md)

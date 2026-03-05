@@ -15,8 +15,8 @@ export function EmptyStateNoRoots() {
             <p className="text-base text-muted-foreground mb-6 max-w-md">
               Get started by adding a root directory to monitor.
             </p>
-            <Button size="lg" onClick={() => navigate('/setup')}>
-              Go to Setup
+            <Button size="lg" onClick={() => navigate('/roots')}>
+              Go to Roots
             </Button>
             <div className="mt-8 text-sm text-muted-foreground space-y-1">
               <p>fsPulse never modifies your files</p>
@@ -38,11 +38,11 @@ export function EmptyStateNoRoots() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <button
-                    onClick={() => navigate('/setup?tab=roots')}
+                    onClick={() => navigate('/roots')}
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Add a directory in <strong>Setup &gt; Roots</strong>. fsPulse calls the directories it monitors "Roots"
+                      Add a directory on the <strong>Roots</strong> page. fsPulse calls the directories it monitors "Roots"
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>
@@ -54,11 +54,11 @@ export function EmptyStateNoRoots() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <button
-                    onClick={() => navigate('/setup?tab=schedules')}
+                    onClick={() => navigate('/schedules')}
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Create a recurring scan schedule in <strong>Setup &gt; Schedules</strong>, or use <strong>Scan Now</strong> on any root for an immediate scan
+                      Create a recurring scan schedule on the <strong>Schedules</strong> page, or use <strong>Scan Now</strong> on any root for an immediate scan
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>

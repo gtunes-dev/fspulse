@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from 'react'
-import { Trash2, Power, Pencil } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Trash2, Power, Pencil, Play } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -13,14 +12,16 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DeleteScheduleDialog } from './DeleteScheduleDialog'
 import { EditScheduleDialog } from './EditScheduleDialog'
+import { RunScheduleDialog } from './RunScheduleDialog'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
-import { RootFilter } from '@/components/shared/RootFilter'
 import { formatDateRelative } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import type { ScheduleWithRoot } from '@/lib/types'
 
 interface SchedulesTableProps {
   isScanning: boolean
+  /** When set, only show schedules for this root. 'all' shows all. */
+  selectedRootId: string
 }
 
 export interface SchedulesTableRef {
@@ -30,30 +31,19 @@ export interface SchedulesTableRef {
 const ITEMS_PER_PAGE = 25
 
 export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>(
-  function SchedulesTable({ isScanning }, ref) {
+  function SchedulesTable({ isScanning, selectedRootId }, ref) {
     const { lastTaskCompletedAt, lastTaskScheduledAt } = useTaskContext()
     const [schedules, setSchedules] = useState<ScheduleWithRoot[]>([])
     const [loading, setLoading] = useState(true)
     const [currentPage, setCurrentPage] = useState(1)
-    const [selectedRootId, setSelectedRootId] = useState<string>('all')
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [editDialogOpen, setEditDialogOpen] = useState(false)
+    const [runDialogOpen, setRunDialogOpen] = useState(false)
     const [selectedSchedule, setSelectedSchedule] = useState<ScheduleWithRoot | null>(null)
     const [selectedRoot, setSelectedRoot] = useState<{ id: number; path: string } | null>(null)
     const [rootSheetOpen, setRootSheetOpen] = useState(false)
     const [reloadTrigger, setReloadTrigger] = useState(0)
     const isInitialLoad = useRef(true)
-
-    // Extract unique roots for the filter dropdown
-    const uniqueRoots = useMemo(() => {
-      const rootMap = new Map<number, string>()
-      schedules.forEach(schedule => {
-        if (!rootMap.has(schedule.root_id)) {
-          rootMap.set(schedule.root_id, schedule.root_path)
-        }
-      })
-      return Array.from(rootMap.entries()).map(([id, path]) => ({ id, path }))
-    }, [schedules])
 
     // Filter schedules by selected root
     const filteredSchedules = useMemo(() => {
@@ -66,7 +56,6 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
     useEffect(() => {
       async function loadSchedules() {
         try {
-          // Only show loading on initial mount, keep old data during refetch
           if (isInitialLoad.current) {
             setLoading(true)
             isInitialLoad.current = false
@@ -87,7 +76,6 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
       loadSchedules()
     }, [lastTaskCompletedAt, lastTaskScheduledAt, reloadTrigger])
 
-    // Expose reload method via ref for manual refresh
     useImperativeHandle(ref, () => ({
       reload: () => {
         setReloadTrigger(prev => prev + 1)
@@ -99,7 +87,7 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
       setCurrentPage(1)
     }, [selectedRootId])
 
-    // Pagination (using filtered schedules)
+    // Pagination
     const totalCount = filteredSchedules.length
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
     const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalCount)
@@ -139,7 +127,6 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
 
         if (!response.ok) throw new Error('Failed to toggle schedule')
 
-        // Reload schedules
         setReloadTrigger(prev => prev + 1)
       } catch (error) {
         console.error('Error toggling schedule:', error)
@@ -147,192 +134,195 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
       }
     }
 
+    // Run Now handler
+    const handleRunNow = (schedule: ScheduleWithRoot) => {
+      setSelectedSchedule(schedule)
+      setRunDialogOpen(true)
+    }
+
     if (loading) {
       return (
-        <Card>
-          <CardContent className="py-8">
-            <div className="text-center text-muted-foreground">Loading schedules...</div>
-          </CardContent>
-        </Card>
+        <div className="text-center py-8 text-muted-foreground">Loading schedules...</div>
       )
     }
 
     return (
       <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Schedules</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Root Filter */}
-          <RootFilter
-            roots={uniqueRoots}
-            selectedRootId={selectedRootId}
-            onRootChange={setSelectedRootId}
-          />
+        {paginatedSchedules.length === 0 ? (
+          <div className="border border-border rounded-lg">
+            <p className="text-sm text-muted-foreground text-center py-12">
+              {selectedRootId === 'all'
+                ? 'No schedules found. Click "Add Schedule" to get started.'
+                : 'No schedules found for this root.'}
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Bordered Table Container */}
+            <div className="border border-border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader className="bg-muted">
+                  <TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead className="uppercase text-xs tracking-wide">Name</TableHead>
+                    <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
+                    <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
+                    <TableHead className="uppercase text-xs tracking-wide">Next Scan</TableHead>
+                    <TableHead className="uppercase text-xs tracking-wide text-center">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedSchedules.map((schedule) => (
+                    <TableRow key={schedule.schedule_id}>
+                      {/* Toggle Enabled Column */}
+                      <TableCell className="w-10 pr-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={isScanning}
+                          onClick={() => handleToggleEnabled(schedule)}
+                          className={`h-8 w-8 p-0 ${
+                            schedule.enabled
+                              ? 'text-green-600 hover:text-green-700 hover:bg-green-100'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                          }`}
+                          title={schedule.enabled ? 'Disable schedule' : 'Enable schedule'}
+                        >
+                          <Power className="h-5 w-5" />
+                        </Button>
+                      </TableCell>
 
-          {paginatedSchedules.length === 0 ? (
-            <div className="border border-border rounded-lg">
-              <p className="text-sm text-muted-foreground text-center py-12">
-                {selectedRootId === 'all'
-                  ? 'No schedules found. Click "Add Schedule" to get started.'
-                  : 'No schedules found for this root.'}
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Bordered Table Container */}
-              <div className="border border-border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader className="bg-muted">
-                    <TableRow>
-                      <TableHead className="w-10"></TableHead>
-                      <TableHead className="w-10"></TableHead>
-                      <TableHead className="w-10"></TableHead>
-                      <TableHead className="uppercase text-xs tracking-wide">Name</TableHead>
-                      <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
-                      <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
-                      <TableHead className="uppercase text-xs tracking-wide">Next Scan</TableHead>
-                      <TableHead className="uppercase text-xs tracking-wide text-center">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedSchedules.map((schedule) => (
-                      <TableRow key={schedule.schedule_id}>
-                        {/* Toggle Enabled Column */}
-                        <TableCell className="w-10 pr-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={isScanning}
-                            onClick={() => handleToggleEnabled(schedule)}
-                            className={`h-8 w-8 p-0 ${
-                              schedule.enabled
-                                ? 'text-green-600 hover:text-green-700 hover:bg-green-100'
-                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                            }`}
-                            title={schedule.enabled ? 'Disable schedule' : 'Enable schedule'}
-                          >
-                            <Power className="h-5 w-5" />
-                          </Button>
-                        </TableCell>
+                      {/* Delete Icon Column */}
+                      <TableCell className="w-10 pr-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={isScanning}
+                          onClick={() => {
+                            setSelectedSchedule(schedule)
+                            setDeleteDialogOpen(true)
+                          }}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          title="Delete schedule"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </Button>
+                      </TableCell>
 
-                        {/* Delete Icon Column */}
-                        <TableCell className="w-10 pr-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={isScanning}
-                            onClick={() => {
-                              setSelectedSchedule(schedule)
-                              setDeleteDialogOpen(true)
-                            }}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            title="Delete schedule"
-                          >
-                            <Trash2 className="h-5 w-5" />
-                          </Button>
-                        </TableCell>
+                      {/* Edit Icon Column */}
+                      <TableCell className="w-10 pr-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={isScanning}
+                          onClick={() => {
+                            setSelectedSchedule(schedule)
+                            setEditDialogOpen(true)
+                          }}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                          title="Edit schedule"
+                        >
+                          <Pencil className="h-5 w-5" />
+                        </Button>
+                      </TableCell>
 
-                        {/* Edit Icon Column */}
-                        <TableCell className="w-10 pr-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={isScanning}
-                            onClick={() => {
-                              setSelectedSchedule(schedule)
-                              setEditDialogOpen(true)
-                            }}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                            title="Edit schedule"
-                          >
-                            <Pencil className="h-5 w-5" />
-                          </Button>
-                        </TableCell>
+                      {/* Run Now Column */}
+                      <TableCell className="w-10 pr-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={isScanning}
+                          onClick={() => handleRunNow(schedule)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-green-600 hover:bg-green-100"
+                          title="Run scan now with this schedule's settings"
+                        >
+                          <Play className="h-5 w-5" />
+                        </Button>
+                      </TableCell>
 
-                        {/* Name Column */}
-                        <TableCell>
-                          <span className="font-medium">
-                            {schedule.schedule_name}
-                          </span>
-                        </TableCell>
+                      {/* Name Column */}
+                      <TableCell>
+                        <span className="font-medium">
+                          {schedule.schedule_name}
+                        </span>
+                      </TableCell>
 
-                        {/* Root Path Column */}
-                        <TableCell>
-                          <button
-                            onClick={() => {
-                              setSelectedRoot({ id: schedule.root_id, path: schedule.root_path })
-                              setRootSheetOpen(true)
-                            }}
-                            className="text-sm text-muted-foreground hover:underline hover:text-primary text-left"
-                          >
-                            {schedule.root_path}
-                          </button>
-                        </TableCell>
+                      {/* Root Path Column */}
+                      <TableCell>
+                        <button
+                          onClick={() => {
+                            setSelectedRoot({ id: schedule.root_id, path: schedule.root_path })
+                            setRootSheetOpen(true)
+                          }}
+                          className="text-sm text-muted-foreground hover:underline hover:text-primary text-left"
+                        >
+                          {schedule.root_path}
+                        </button>
+                      </TableCell>
 
-                        {/* Schedule Description Column */}
-                        <TableCell>
+                      {/* Schedule Description Column */}
+                      <TableCell>
+                        <span className="text-sm">
+                          {formatScheduleDescription(schedule)}
+                        </span>
+                      </TableCell>
+
+                      {/* Next Scan Column */}
+                      <TableCell>
+                        {schedule.next_scan_time ? (
                           <span className="text-sm">
-                            {formatScheduleDescription(schedule)}
+                            {formatDateRelative(schedule.next_scan_time)}
                           </span>
-                        </TableCell>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Not scheduled</span>
+                        )}
+                      </TableCell>
 
-                        {/* Next Scan Column */}
-                        <TableCell>
-                          {schedule.next_scan_time ? (
-                            <span className="text-sm">
-                              {formatDateRelative(schedule.next_scan_time)}
-                            </span>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Not scheduled</span>
-                          )}
-                        </TableCell>
+                      {/* Status Column */}
+                      <TableCell className="text-center">
+                        {schedule.enabled ? (
+                          <Badge variant="success">Enabled</Badge>
+                        ) : (
+                          <Badge variant="secondary">Disabled</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
-                        {/* Status Column */}
-                        <TableCell className="text-center">
-                          {schedule.enabled ? (
-                            <Badge variant="success">Enabled</Badge>
-                          ) : (
-                            <Badge variant="secondary">Disabled</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Pagination */}
-              {totalCount > ITEMS_PER_PAGE && (
-                <div className="flex items-center justify-between pt-4">
-                  <div className="text-sm text-muted-foreground">
-                    Showing {(startIndex + 1).toLocaleString()} - {endIndex.toLocaleString()} of {totalCount.toLocaleString()} schedules
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => endIndex < totalCount && setCurrentPage(p => p + 1)}
-                      disabled={endIndex >= totalCount}
-                    >
-                      Next
-                    </Button>
-                  </div>
+            {/* Pagination */}
+            {totalCount > ITEMS_PER_PAGE && (
+              <div className="flex items-center justify-between pt-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {(startIndex + 1).toLocaleString()} - {endIndex.toLocaleString()} of {totalCount.toLocaleString()} schedules
                 </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => endIndex < totalCount && setCurrentPage(p => p + 1)}
+                    disabled={endIndex >= totalCount}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
       {/* Delete Schedule Dialog */}
       <DeleteScheduleDialog
@@ -357,6 +347,13 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
         }}
       />
 
+      {/* Run Schedule Dialog */}
+      <RunScheduleDialog
+        open={runDialogOpen}
+        onOpenChange={setRunDialogOpen}
+        schedule={selectedSchedule}
+      />
+
       {/* Root Detail Sheet */}
       {selectedRoot && (
         <RootDetailSheet
@@ -370,4 +367,3 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
     )
   }
 )
-

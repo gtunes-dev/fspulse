@@ -27,12 +27,12 @@ fsPulse gives you **continuous awareness** of both the visible and invisible:
 
 Whether you're managing storage capacity, tracking project evolution, or ensuring data integrity, fsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.
 
-<!-- Screenshot: Dashboard page showing root health summary with alert counts and last scan times -->
-<!-- ![fsPulse Dashboard](screenshot-placeholder-dashboard.png) -->
+<!-- Screenshot: Home page showing root health summary with alert counts and last scan times -->
+<!-- ![fsPulse Home](screenshot-placeholder-home.png) -->
 
 ## Key Capabilities
 
-- **Health-at-a-Glance Dashboard** — See the status of all monitored directories immediately: open alerts, last scan times, and overall health
+- **Health-at-a-Glance Overview** — See the status of all monitored directories immediately: open alerts, last scan times, and overall health
 - **Continuous Monitoring** — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically
 - **Temporal Versioning** — Every item's state is tracked over time; browse your filesystem as it appeared at any past scan
 - **Size & Growth Tracking** — Monitor directory sizes and visualize storage trends over time with dual-format units

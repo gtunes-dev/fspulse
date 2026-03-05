@@ -14,7 +14,7 @@ import { useTaskContext } from '@/contexts/TaskContext'
 import { countQuery } from '@/lib/api'
 
 /**
- * Dashboard Page - Main landing page showing task status and history
+ * Home Page - Main landing page showing task status and health overview
  *
  * DEVELOPMENT/TESTING URL PARAMETERS:
  * ------------------------------------
@@ -100,7 +100,7 @@ export function DashboardPage() {
   if (loading && !stateOverride) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+  
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground text-center py-8">
@@ -116,7 +116,7 @@ export function DashboardPage() {
   if (stateOverride === 'no-roots') {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+  
         <EmptyStateNoRoots />
       </div>
     )
@@ -125,7 +125,7 @@ export function DashboardPage() {
   if (stateOverride === 'no-tasks') {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+  
         <TaskCard />
         <EmptyStateNoTasks rootCount={rootCount || 2} />
       </div>
@@ -137,7 +137,7 @@ export function DashboardPage() {
   if (rootCount === 0 && taskCount === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+  
         <EmptyStateNoRoots />
       </div>
     )
@@ -148,7 +148,7 @@ export function DashboardPage() {
   if (taskCount === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+  
         <TaskCard />
         <EmptyStateNoTasks rootCount={rootCount} />
       </div>
@@ -158,7 +158,7 @@ export function DashboardPage() {
   // Normal operational state
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+
 
       {/* Global Pause Banner - Only when paused */}
       {isPaused && (

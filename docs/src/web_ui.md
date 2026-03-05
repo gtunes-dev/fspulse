@@ -18,7 +18,7 @@ The left sidebar organizes pages into two groups:
 
 **Primary** — the pages you'll use most often:
 
-- **[Dashboard](web_ui/dashboard.md)** — Health overview showing root status, active tasks, and recent activity
+- **[Home](web_ui/home.md)** — Health overview showing root status, active tasks, and recent activity
 - **[Browse](web_ui/browse.md)** — Navigate filesystem hierarchy with tree, folder, and search views
 - **[Alerts](web_ui/alerts.md)** — Manage integrity issues and validation failures
 - **[Trends](web_ui/trends.md)** — Visualize historical data with interactive charts
@@ -26,8 +26,10 @@ The left sidebar organizes pages into two groups:
 **Utility** — operational and investigative pages:
 
 - **[History](web_ui/history.md)** — Scan and task activity log
+- **Roots** — Add, remove, and scan monitored directories
+- **Schedules** — Create and manage automated scan schedules
 - **[Data Explorer](web_ui/data_explorer.md)** — Query interface for advanced data analysis
-- **[Setup](web_ui/setup.md)** — Configure scan roots, schedules, application settings, and view system info
+- **[Settings](web_ui/setup.md)** — Edit configuration, view database stats and system info
 
 ## Sidebar
 
@@ -41,7 +43,7 @@ When collapsed, hovering over an icon shows a tooltip with the page name.
 
 ## Shared Root Context
 
-When you select a root on Browse, Alerts, or Trends, that selection is carried across pages via a URL parameter (`?root_id=N`). Selecting a root on Browse and then navigating to Alerts automatically pre-selects the same root, so you don't need to re-select it on every page.
+When you select a root on Browse, Alerts, Trends, or Schedules, that selection is carried across pages via a URL parameter (`?root_id=N`). Selecting a root on Browse and then navigating to Alerts automatically pre-selects the same root, so you don't need to re-select it on every page.
 
 ## Live Updates
 

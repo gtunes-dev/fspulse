@@ -49,7 +49,7 @@ Whether you're managing storage capacity, tracking project evolution, or ensurin
 
 ## 🚀 Key Capabilities
 
-- **Health-at-a-Glance Dashboard** — See the status of all monitored directories immediately: open alerts, last scan times, and overall health
+- **Health-at-a-Glance Overview** — See the status of all monitored directories immediately: open alerts, last scan times, and overall health
 - **Continuous Monitoring** — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically
 - **Temporal Versioning** — Every item's state is tracked over time; browse your filesystem as it appeared at any past scan
 - **Size & Growth Tracking** — Monitor directory sizes and visualize storage trends over time with dual-format units
@@ -70,7 +70,7 @@ Quick start instructions are below, but full documentation is available in book 
 
 Key sections:
 - [Getting Started](https://gtunes-dev.github.io/fspulse/getting_started.html) — Installation, Docker deployment, and first steps
-- [Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Dashboard, Browse, Alerts, Trends, History, Data Explorer, and Setup
+- [Interface](https://gtunes-dev.github.io/fspulse/web_ui.html) — Complete guide to Home, Browse, Alerts, Trends, History, Roots, Schedules, Data Explorer, and Settings
 - [Scanning Concepts](https://gtunes-dev.github.io/fspulse/scanning.html) — How scans work, hashing, and validation
 - [Query Syntax](https://gtunes-dev.github.io/fspulse/query.html) — Powerful filtering and data exploration
 - [Configuration](https://gtunes-dev.github.io/fspulse/configuration.html) — Customizing fsPulse behavior
@@ -111,7 +111,7 @@ fspulse serve
 Open **http://127.0.0.1:8080** in your browser to access the web interface.
 
 All functionality is available through the web UI:
-- Health dashboard with root status and alert counts at a glance
+- Health overview with root status and alert counts at a glance
 - Configure and manage scan roots and schedules
 - Monitor task progress in real-time
 - Browse your filesystem with tree, folder, and search views
@@ -140,15 +140,17 @@ See the [Configuration Guide](https://gtunes-dev.github.io/fspulse/configuration
 The interface is organized into two navigation groups — primary pages for everyday use, and utility pages for configuration and advanced analysis:
 
 **Primary:**
-- **Dashboard** — Health overview showing root status, open alerts, active tasks, and recent activity at a glance
+- **Home** — Health overview showing root status, open alerts, active tasks, and recent activity at a glance
 - **Browse** — Navigate your filesystem with tree, folder, and search views, integrity filters, inline detail panels, and side-by-side comparison across scans or roots
 - **Alerts** — Filter, flag, and dismiss integrity issues with context-aware views, batch operations, and status tracking
 - **Trends** — Interactive charts tracking file sizes, counts, change activity, and alert patterns over time
 
 **Utility:**
 - **History** — Complete scan and task activity log with filtering
+- **Roots** — Add, remove, and scan monitored directories
+- **Schedules** — Create and manage automated scan schedules
 - **Data Explorer** — Visual query builder and free-form query interface across five data domains
-- **Setup** — Manage scan roots and schedules, edit configuration, view database stats and system info
+- **Settings** — Edit configuration, view database stats and system info
 
 <!-- Screenshots: These screenshots need to be updated to reflect the new UI -->
 <!-- TODO: Replace these with current screenshots showing the new navigation and pages -->

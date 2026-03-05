@@ -17,10 +17,10 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <h3 className="text-xl font-semibold mb-3">Ready to get started?</h3>
             <p className="text-base text-muted-foreground mb-6 max-w-md">
-              You've configured {rootCount === 1 ? 'a root' : 'roots'}! Use the Manual Scan button above to start scanning, or visit Setup to add more roots and configure schedules.
+              You've configured {rootCount === 1 ? 'a root' : 'roots'}! Use the Scan Now button above to start scanning, or visit Schedules to configure recurring scans.
             </p>
-            <Button size="lg" onClick={() => navigate('/setup')}>
-              Go to Setup
+            <Button size="lg" onClick={() => navigate('/schedules')}>
+              Go to Schedules
             </Button>
           </div>
         </CardContent>
@@ -37,11 +37,11 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
                 </span>
                 <div className="flex-1 min-w-0">
                   <button
-                    onClick={() => navigate('/setup?tab=roots')}
+                    onClick={() => navigate('/roots')}
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Add a directory in <strong>Setup &gt; Roots</strong>. fsPulse calls the directories it monitors "Roots"
+                      Add a directory on the <strong>Roots</strong> page. fsPulse calls the directories it monitors "Roots"
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>
@@ -53,11 +53,11 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
                 </span>
                 <div className="flex-1 min-w-0">
                   <button
-                    onClick={() => navigate('/setup?tab=schedules')}
+                    onClick={() => navigate('/schedules')}
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Create a recurring scan schedule in <strong>Setup &gt; Schedules</strong>, or use <strong>Scan Now</strong> on any root for an immediate scan
+                      Create a recurring scan schedule on the <strong>Schedules</strong> page, or use <strong>Scan Now</strong> on any root for an immediate scan
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>

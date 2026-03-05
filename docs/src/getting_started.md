@@ -120,7 +120,7 @@ fspulse serve
 Then open your browser to **http://localhost:8080** to access the web interface.
 
 fsPulse is a **web-first application**. All functionality is available through the web UI:
-- Health dashboard with root status and alert counts
+- Health overview with root status and alert counts
 - Root and schedule management
 - Interactive browsing with tree, folder, and search views
 - Point-in-time filesystem snapshots and comparison

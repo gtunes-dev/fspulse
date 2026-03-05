@@ -89,7 +89,7 @@ Alerts are also displayed in the [Browse](browse.md) page's item detail panel, p
 
 ## Workflow Recommendations
 
-1. **Review Open Alerts**: Check the [Dashboard](dashboard.md) for alert counts, then navigate here
+1. **Review Open Alerts**: Check the [Home](home.md) page for alert counts, then navigate here
 2. **Investigate**: Use Browse to examine affected items
 3. **Triage**: Flag important issues, dismiss false positives
 4. **Restore**: Use backups to restore corrupted files if needed

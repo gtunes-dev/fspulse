@@ -57,7 +57,7 @@ export function TaskCard() {
           <div className="flex items-center gap-3 mb-4">
             <Button size="lg" onClick={() => setShowManualScanDialog(true)} disabled={isExclusive}>
               <Play className="h-4 w-4 mr-2" />
-              Manual Scan
+              Scan Now
             </Button>
             <Button
               size="lg"
@@ -88,7 +88,7 @@ export function TaskCard() {
                   No task in progress
                 </p>
                 <InfoBar variant="info" icon={Lightbulb}>
-                  Configure recurring scans on the <Link to="/setup?tab=schedules" className="underline hover:text-primary">Schedules</Link> tab in Setup
+                  Configure recurring scans on the <Link to="/schedules" className="underline hover:text-primary">Schedules</Link> page
                 </InfoBar>
               </div>
             ) : (

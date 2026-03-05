@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, type ReactElement } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Trash2, Calendar, Play } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -12,7 +13,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DeleteRootDialog } from './DeleteRootDialog'
-import { CreateScheduleDialog } from './CreateScheduleDialog'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { ScanDetailSheet } from '@/components/shared/ScanDetailSheet'
 import { formatDateRelative } from '@/lib/dateUtils'
@@ -21,13 +21,13 @@ import type { RootWithScan } from '@/lib/types'
 
 interface RootsTableProps {
   onAddRoot: () => void
-  onScheduleCreated?: () => void
+  onScanNow?: (rootId?: number) => void
   externalReloadTrigger?: number
 }
 
 const ITEMS_PER_PAGE = 25
 
-export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger }: RootsTableProps) {
+export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: RootsTableProps) {
   const { activeRootId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,8 +38,6 @@ export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger
   const [rootSheetOpen, setRootSheetOpen] = useState(false)
   const [selectedScanId, setSelectedScanId] = useState<number | null>(null)
   const [scanSheetOpen, setScanSheetOpen] = useState(false)
-  const [createScheduleDialogOpen, setCreateScheduleDialogOpen] = useState(false)
-  const [preselectedRootId, setPreselectedRootId] = useState<number | undefined>(undefined)
   const [internalReloadTrigger, setInternalReloadTrigger] = useState(0)
   const isInitialLoad = useRef(true)
 
@@ -305,30 +303,36 @@ export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger
                         {lastScanContent}
                       </TableCell>
 
-                      {/* Schedules Column - Info only */}
+                      {/* Schedules Column - links to Schedules page */}
                       <TableCell>
-                        <span className="text-sm">
+                        <Link
+                          to={`/schedules?root_id=${root.root_id}`}
+                          className="flex items-center gap-1.5 text-sm hover:text-primary transition-colors"
+                          title="View schedules"
+                        >
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
                           {scheduleCount === 0 ? (
                             <span className="text-muted-foreground">None</span>
                           ) : (
-                            `${scheduleCount} ${scheduleCount === 1 ? 'schedule' : 'schedules'}`
+                            <span>{scheduleCount} {scheduleCount === 1 ? 'schedule' : 'schedules'}</span>
                           )}
-                        </span>
+                        </Link>
                       </TableCell>
 
-                      {/* Add Schedule Action Column */}
+                      {/* Scan Now Column */}
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => {
-                            setPreselectedRootId(root.root_id)
-                            setCreateScheduleDialogOpen(true)
-                          }}
-                          className="text-xs"
-                        >
-                          Add Schedule
-                        </Button>
+                        {onScanNow && (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            disabled={hasActiveScan}
+                            onClick={() => onScanNow(root.root_id)}
+                            className="text-xs"
+                          >
+                            <Play className="h-3.5 w-3.5 mr-1.5" />
+                            Scan Now
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   )
@@ -377,18 +381,6 @@ export function RootsTable({ onAddRoot, onScheduleCreated, externalReloadTrigger
       onDeleteSuccess={() => {
         setInternalReloadTrigger(prev => prev + 1)
         setSelectedRoot(null)
-      }}
-    />
-
-    {/* Create Schedule Dialog */}
-    <CreateScheduleDialog
-      open={createScheduleDialogOpen}
-      onOpenChange={setCreateScheduleDialogOpen}
-      preselectedRootId={preselectedRootId}
-      onSuccess={() => {
-        setInternalReloadTrigger(prev => prev + 1)
-        setPreselectedRootId(undefined)
-        onScheduleCreated?.()
       }}
     />
 

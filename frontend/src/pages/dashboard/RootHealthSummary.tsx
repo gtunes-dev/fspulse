@@ -17,6 +17,7 @@ import {
   Clock,
   Loader2,
   FolderTree,
+  Calendar,
   TrendingUp,
 } from 'lucide-react'
 import { formatDateRelative } from '@/lib/dateUtils'
@@ -149,6 +150,13 @@ export function RootHealthSummary() {
                           title="View trends"
                         >
                           <TrendingUp className="h-4 w-4" />
+                        </Link>
+                        <Link
+                          to={`/schedules?root_id=${root.root_id}`}
+                          className="text-muted-foreground hover:text-primary p-0.5 rounded"
+                          title="View schedules"
+                        >
+                          <Calendar className="h-4 w-4" />
                         </Link>
                       </div>
                     </div>

@@ -54,7 +54,7 @@ fsPulse supports flexible scheduling options for automated monitoring.
 - **Edit**: Modify timing or scan options
 - **Delete**: Remove the schedule
 
-Scans and other tasks are queued and executed sequentially to prevent resource conflicts. You can view upcoming and running tasks on the [Dashboard](dashboard.md).
+Scans and other tasks are queued and executed sequentially to prevent resource conflicts. You can view upcoming and running tasks on the [Home](home.md) page.
 
 ---
 
