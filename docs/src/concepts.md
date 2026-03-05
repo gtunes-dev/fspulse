@@ -90,7 +90,7 @@ Schedules can be enabled or disabled independently.
 
 ## Task
 
-A **task** is a unit of work in the execution queue. Tasks are created from manual scan requests or triggered by schedules. The Dashboard shows active and upcoming tasks; the History page shows completed tasks.
+A **task** is a unit of work in the execution queue. Tasks are created from manual scan requests or triggered by schedules. The Home page shows active and upcoming tasks; the History page shows completed tasks.
 
 Tasks can be paused globally, and individual tasks can be stopped while in progress.
 

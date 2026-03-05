@@ -1,13 +1,13 @@
-# Setup
+# Roots, Schedules & Settings
 
-The Setup page is the single destination for all fsPulse configuration: managing scan roots, creating schedules, editing application settings, and viewing system information. It is organized into four tabs.
+fsPulse provides three dedicated pages for configuration: **Roots** for managing monitored directories, **Schedules** for automated scan timing, and **Settings** for application configuration and system information.
 
 ---
 
 ## Roots
 
-<!-- Screenshot: Setup page Roots tab showing the roots table with Add Root and Scan Now buttons -->
-<!-- ![Setup - Roots](screenshot-placeholder-setup-roots.png) -->
+<!-- Screenshot: Roots page showing the roots table with Add Root and Scan Now buttons -->
+<!-- ![Roots](screenshot-placeholder-roots.png) -->
 
 ### Adding a Root
 
@@ -28,8 +28,8 @@ The Setup page is the single destination for all fsPulse configuration: managing
 
 fsPulse supports flexible scheduling options for automated monitoring.
 
-<!-- Screenshot: Setup page Schedules tab showing schedule list with enable/disable toggles -->
-<!-- ![Setup - Schedules](screenshot-placeholder-setup-schedules.png) -->
+<!-- Screenshot: Schedules page showing schedule list with enable/disable toggles -->
+<!-- ![Schedules](screenshot-placeholder-schedules.png) -->
 
 ### Schedule Types
 

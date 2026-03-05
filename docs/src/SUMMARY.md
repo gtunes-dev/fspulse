@@ -14,7 +14,7 @@
   - [Trends](web_ui/trends.md)
   - [History](web_ui/history.md)
   - [Data Explorer](web_ui/data_explorer.md)
-  - [Setup](web_ui/setup.md)
+  - [Roots, Schedules & Settings](web_ui/setup.md)
 - [Command-Line Interface](cli.md)
 - [Query Syntax](query.md)
 - [Configuration](configuration.md)

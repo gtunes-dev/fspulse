@@ -9,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useTaskContext } from '@/contexts/TaskContext'
+import { shortenPath } from '@/lib/pathUtils'
 import { Clock, Calendar, CirclePause } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 
@@ -90,15 +91,6 @@ export function UpcomingTasksTable() {
     if (minutes < 60) return `in ${minutes} min`
     if (hours < 24) return `in ${hours} ${hours === 1 ? 'hour' : 'hours'}`
     return `in ${days} ${days === 1 ? 'day' : 'days'}`
-  }
-
-  const shortenPath = (path: string, maxLength: number = 30): string => {
-    if (path.length <= maxLength) return path
-    const parts = path.split('/')
-    if (parts.length <= 2) return path
-
-    // Show first and last parts
-    return `${parts[0]}/.../${parts[parts.length - 1]}`
   }
 
   if (loading) {

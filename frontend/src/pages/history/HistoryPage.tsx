@@ -16,6 +16,7 @@ import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { RootCard } from '@/components/shared/RootCard'
 import { TaskTypeFilter } from '@/components/shared/TaskTypeFilter'
 import { fetchQuery } from '@/lib/api'
+import { shortenPath } from '@/lib/pathUtils'
 import type { ColumnSpec } from '@/lib/types'
 
 interface HistoryRow {
@@ -71,9 +72,10 @@ export function HistoryPage() {
   const isInitialLoad = useRef(true)
   const lastFilterKeyRef = useRef<string>('')
 
-  // URL sync for root_id
+  // URL sync for root_id, reset page on filter change
   const handleRootChange = useCallback((rootId: string) => {
     setSelectedRootId(rootId)
+    setCurrentPage(1)
     if (rootId && rootId !== 'all') {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
@@ -88,6 +90,11 @@ export function HistoryPage() {
       }, { replace: true })
     }
   }, [setSearchParams])
+
+  const handleTypeChange = useCallback((type: string) => {
+    setSelectedType(type)
+    setCurrentPage(1)
+  }, [])
 
   // Load roots on mount
   useEffect(() => {
@@ -131,7 +138,7 @@ export function HistoryPage() {
 
         const rootId = selectedRootId === 'all' ? undefined : selectedRootId
         const taskType = selectedType === 'all' ? undefined : selectedType
-        const filterKey = `${rootId || 'all'}-${taskType || 'all'}`
+        const filterKey = `${rootId || 'all'}-${taskType || 'all'}-${lastTaskCompletedAt}`
         const needsCount = filterKey !== lastFilterKeyRef.current
 
         if (needsCount) {
@@ -169,11 +176,6 @@ export function HistoryPage() {
 
     loadHistory()
   }, [lastTaskCompletedAt, selectedRootId, selectedType, currentPage])
-
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [selectedRootId, selectedType])
 
   // Helpers
   const formatChanges = (add: number | null, modify: number | null, del: number | null): string => {
@@ -217,13 +219,6 @@ export function HistoryPage() {
     }
   }
 
-  const shortenPath = (path: string, maxLength: number = 30): string => {
-    if (path.length <= maxLength) return path
-    const parts = path.split('/')
-    if (parts.length <= 2) return path
-    return `${parts[0]}/.../${parts[parts.length - 1]}`
-  }
-
   const isScan = (task: HistoryRow) => task.task_type === 'scan'
 
   // Pagination
@@ -242,7 +237,7 @@ export function HistoryPage() {
         actionBar={
           <TaskTypeFilter
             selectedType={selectedType}
-            onTypeChange={setSelectedType}
+            onTypeChange={handleTypeChange}
           />
         }
       >

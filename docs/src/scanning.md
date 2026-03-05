@@ -10,11 +10,11 @@ fsPulse scans are at the core of how it tracks changes to the filesystem over ti
 
 1. Start the server: `fspulse serve`
 2. Open http://localhost:8080 in your browser (or the custom port you've configured)
-3. Navigate to the **Setup** page to configure roots and schedules
+3. Navigate to the **Roots** page to add directories to monitor
 4. Start a manual scan or let a schedule trigger one
-5. Monitor real-time progress on the **Dashboard**
+5. Monitor real-time progress on the **Home** page
 
-The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules (daily, weekly, monthly, or custom intervals) or initiate individual scans as needed. See [Setup](web_ui/setup.md) for details.
+The web UI supports both scheduled automatic scans and manual on-demand scans. You can create recurring schedules on the **Schedules** page (daily, weekly, monthly, or custom intervals) or initiate individual scans from the **Roots** page as needed.
 
 Once a scan on a root has begun, it must complete or be explicitly stopped before another scan on the same root can be started. Scans on different roots can run independently.
 

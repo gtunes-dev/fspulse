@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { formatDateRelative } from '@/lib/dateUtils'
 import { countQuery } from '@/lib/api'
+import { shortenPath } from '@/lib/pathUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import type { RootWithScan } from '@/lib/types'
 
@@ -41,13 +42,6 @@ const scanStateIcon = (state: string) => {
     default:
       return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
   }
-}
-
-const shortenPath = (path: string, maxLength: number = 40): string => {
-  if (path.length <= maxLength) return path
-  const parts = path.split('/')
-  if (parts.length <= 2) return path
-  return `${parts[0]}/.../${parts[parts.length - 1]}`
 }
 
 export function RootHealthSummary() {
@@ -134,7 +128,7 @@ export function RootHealthSummary() {
                   <TableCell className="max-w-[300px]" title={root.root_path}>
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium">
-                        {shortenPath(root.root_path)}
+                        {shortenPath(root.root_path, 40)}
                       </span>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <Link

@@ -197,7 +197,6 @@ pub async fn get_last_scan_stats() -> Result<Json<Value>, StatusCode> {
     }
 }
 
-
 /// Query parameters for scan dates within a month
 #[derive(Debug, Deserialize)]
 pub struct ScanDatesParams {

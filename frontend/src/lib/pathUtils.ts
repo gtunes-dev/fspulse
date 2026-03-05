@@ -1,5 +1,16 @@
 // Path utility functions for file tree navigation
 
+/**
+ * Shorten a filesystem path for display by collapsing middle segments.
+ * Example: "/Users/alice/Documents/projects/myapp" → "/Users/.../myapp"
+ */
+export function shortenPath(path: string, maxLength: number = 30): string {
+  if (path.length <= maxLength) return path
+  const parts = path.split('/')
+  if (parts.length <= 2) return path
+  return `${parts[0]}/.../${parts[parts.length - 1]}`
+}
+
 export type ChangeKind = 'added' | 'modified' | 'deleted' | 'unchanged'
 export type HashState = 'unknown' | 'valid' | 'suspect'
 export type ValState = 'unknown' | 'valid' | 'invalid' | 'no_validator'

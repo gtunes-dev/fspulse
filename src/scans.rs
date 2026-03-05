@@ -958,7 +958,6 @@ pub fn get_scans_for_date(
     Ok(result)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

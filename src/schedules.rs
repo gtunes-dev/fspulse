@@ -1354,7 +1354,8 @@ impl TaskEntry {
         let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![];
 
         if let Some(tt) = task_type {
-            filters.push_str(&format!(" AND t.task_type = {}", tt.as_i64()));
+            filters.push_str(" AND t.task_type = ?");
+            params.push(Box::new(tt.as_i64()));
         }
         if let Some(rid) = root_id {
             filters.push_str(" AND t.root_id = ?");

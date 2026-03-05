@@ -54,7 +54,7 @@ The `:ro` (read-only) flag is recommended for safety—fsPulse only reads files 
 After mounting directories:
 
 1. Open http://localhost:8080 in your browser
-2. Navigate to **Setup** in the sidebar
+2. Navigate to **Roots** in the sidebar
 3. Click **Add Root**
 4. Enter the **container path**: `/roots/documents` (not the host path `~/Documents`)
 5. Click **Create Root**

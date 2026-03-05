@@ -26,10 +26,10 @@ The left sidebar organizes pages into two groups:
 **Utility** — operational and investigative pages:
 
 - **[History](web_ui/history.md)** — Scan and task activity log
-- **Roots** — Add, remove, and scan monitored directories
-- **Schedules** — Create and manage automated scan schedules
+- **[Roots](web_ui/setup.md#roots)** — Add, remove, and scan monitored directories
+- **[Schedules](web_ui/setup.md#schedules)** — Create and manage automated scan schedules
 - **[Data Explorer](web_ui/data_explorer.md)** — Query interface for advanced data analysis
-- **[Settings](web_ui/setup.md)** — Edit configuration, view database stats and system info
+- **[Settings](web_ui/setup.md#configuration)** — Edit configuration, view database stats and system info
 
 ## Sidebar
 
@@ -43,7 +43,7 @@ When collapsed, hovering over an icon shows a tooltip with the page name.
 
 ## Shared Root Context
 
-When you select a root on Browse, Alerts, Trends, or Schedules, that selection is carried across pages via a URL parameter (`?root_id=N`). Selecting a root on Browse and then navigating to Alerts automatically pre-selects the same root, so you don't need to re-select it on every page.
+When you select a root on Browse, Alerts, Trends, Schedules, or History, that selection is carried across pages via a URL parameter (`?root_id=N`). Selecting a root on Browse and then navigating to Alerts automatically pre-selects the same root, so you don't need to re-select it on every page.
 
 ## Live Updates
 

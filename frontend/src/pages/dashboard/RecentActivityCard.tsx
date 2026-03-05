@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/table'
 import { formatTimeAgo } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
+import { shortenPath } from '@/lib/pathUtils'
 import { CheckCircle, XCircle, AlertTriangle, ArrowRight } from 'lucide-react'
 
 interface TaskHistoryRow {
@@ -73,13 +74,6 @@ export function RecentActivityCard() {
       default:
         return null
     }
-  }
-
-  const shortenPath = (path: string, maxLength: number = 30): string => {
-    if (path.length <= maxLength) return path
-    const parts = path.split('/')
-    if (parts.length <= 2) return path
-    return `${parts[0]}/.../${parts[parts.length - 1]}`
   }
 
   if (loading && tasks.length === 0) {

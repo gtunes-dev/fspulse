@@ -2,7 +2,7 @@
 
 fsPulse supports persistent, user-defined configuration through a file named `config.toml`. This file allows you to control logging behavior, analysis settings, server configuration, and more.
 
-> **Web UI**: Most configuration settings can also be viewed and edited through the [Setup](web_ui/setup.md) page in the web interface, which shows the active value and its source (default, config file, or environment variable).
+> **Web UI**: Most configuration settings can also be viewed and edited through the [Settings](web_ui/setup.md#configuration) page in the web interface, which shows the active value and its source (default, config file, or environment variable).
 
 > **📦 Docker Users**: If you're running fsPulse in Docker, see the [Docker Deployment](docker.md) chapter for Docker-specific configuration including environment variable overrides and volume management.
 

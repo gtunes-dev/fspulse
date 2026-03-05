@@ -110,7 +110,7 @@ The schema is versioned (currently version 24) and automatically migrated on sta
 
 ## Database Compaction
 
-Over time, deletions and updates can leave unused space in the database file. The Setup page provides a **Compact Database** action that reclaims this space by running SQLite's VACUUM command.
+Over time, deletions and updates can leave unused space in the database file. The Settings page provides a **Compact Database** action that reclaims this space by running SQLite's VACUUM command.
 
 ---
 
