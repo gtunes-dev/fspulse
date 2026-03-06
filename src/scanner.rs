@@ -748,8 +748,8 @@ impl Scanner {
     /// and state snapshot counts.
     ///
     /// Returns the cumulative `(adds, mods, dels, state_counts)` for all descendants.
-    /// Appends a `FolderCountWrite` entry for each folder that has non-zero change counts
-    /// or non-zero state counts.
+    /// Appends a `FolderCountWrite` entry for each folder whose counts actually differ
+    /// from its previous version's counts.
     fn walk_folder_counts(
         conn: &Connection,
         root_id: i64,
@@ -790,11 +790,17 @@ impl Scanner {
         let direct_sc = Scanner::query_direct_file_state_counts(conn, root_id, parent_path, scan_id)?;
         state_counts.add(&direct_sc);
 
-        // 5. Record write if any descendant changes or state counts are non-zero
-        if adds > 0 || mods > 0 || dels > 0 || !state_counts.is_zero() {
+        // 5. Write a new folder version if any descendant was added, modified,
+        //    or deleted this scan. Analysis-phase state changes (hash/val) are
+        //    already reflected here because update_item_analysis creates a new
+        //    file version for every state change, which query_direct_change_counts
+        //    counts as a "modify".
+        //
+        //    The state_counts snapshot (val/hash state distribution) is computed
+        //    above and recorded as data on the folder version, but is not used
+        //    as a trigger — adds/mods/dels are the sole trigger.
+        if adds > 0 || mods > 0 || dels > 0 {
             if let Some(folder_item_id) = Scanner::lookup_folder_item_id(conn, root_id, parent_path)? {
-                // Derive unchanged from previous version's alive count:
-                // everyone alive before was either modified, deleted, or unchanged.
                 let prev_alive = Scanner::query_prev_alive(conn, folder_item_id, scan_id)?;
                 let unchanged = prev_alive - mods - dels;
 

@@ -25,12 +25,6 @@ impl StateCounts {
         self.hash_valid += other.hash_valid;
         self.hash_suspect += other.hash_suspect;
     }
-
-    pub fn is_zero(&self) -> bool {
-        self.val_unknown == 0 && self.val_valid == 0 && self.val_invalid == 0
-            && self.val_no_validator == 0 && self.hash_unknown == 0
-            && self.hash_valid == 0 && self.hash_suspect == 0
-    }
 }
 
 /// A single temporal version of an item.
@@ -262,7 +256,11 @@ impl ItemVersion {
     ///
     /// Used by item modification. The caller provides the new observable state;
     /// unchanged fields are carried forward from `prev`.
-    /// Counts are per-scan and never carried forward — folders get `(0,0,0,0)`, files get `None`.
+    ///
+    /// For folders, descendant counts default to "no changes, everyone unchanged":
+    /// `(0, 0, 0, prev_alive)`. Phase 4 overwrites these via Case A if descendants
+    /// actually changed. If no descendants changed, these defaults are correct —
+    /// all previously-alive descendants are still unchanged.
     pub fn insert_with_carry_forward(
         conn: &Connection,
         item_id: i64,
@@ -274,7 +272,25 @@ impl ItemVersion {
         prev: &ItemVersion,
         is_folder: bool,
     ) -> Result<(), FsPulseError> {
-        let counts = if is_folder { Some((0, 0, 0, 0)) } else { None };
+        let counts = if is_folder {
+            // Initialize counts to "no descendant changes, everyone unchanged."
+            // In the typical case (folder metadata changed because files were
+            // added/removed), Phase 4 will detect adds/mods/dels > 0 and
+            // overwrite these via Case A with the real counts.
+            //
+            // However, if the folder's own metadata changed without any
+            // descendant changes (e.g., external `touch` on the directory),
+            // Phase 4's guard (adds > 0 || mods > 0 || dels > 0) is false
+            // and these defaults remain. Carrying forward prev_alive as
+            // the unchanged count ensures query_prev_alive returns the
+            // correct total for subsequent scans.
+            let prev_alive = prev.add_count().unwrap_or(0)
+                + prev.modify_count().unwrap_or(0)
+                + prev.unchanged_count().unwrap_or(0);
+            Some((0, 0, 0, prev_alive))
+        } else {
+            None
+        };
         Self::insert_full(
             conn, item_id, scan_id, false, is_deleted, access, mod_date, size,
             prev.file_hash(), prev.val_state(), prev.val_error(),

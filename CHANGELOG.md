@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Redundant folder versions**: Fixed folder count rollup creating a new folder version on every scan for any folder containing files, even when nothing changed. The trigger is now `adds > 0 || mods > 0 || dels > 0` instead of `!state_counts.is_zero()`. Analysis-phase state changes (hash/validation) are already captured as modifies via `update_item_analysis`, so the simpler guard is correct and complete
+- **Folder version dedup migration (v24→v25)**: Data-only migration removes redundant folder versions created by the bug. Merges consecutive identical versions and consecutive no-change versions (adds=0, mods=0, dels=0 with matching metadata) by extending the keeper's `last_scan_id`. Also recomputes scan-level add/modify/delete counts which were inflated by the redundant versions
+- **Folder unchanged count on metadata-only changes**: `insert_with_carry_forward` now initializes folder counts to `(0, 0, 0, prev_alive)` instead of `(0, 0, 0, 0)`, so that if a folder's own metadata changes without any descendant changes, `query_prev_alive` returns the correct total for subsequent scans
+- **Clippy `result_large_err` warnings**: Added `#[allow(clippy::result_large_err)]` to config test module to fix new warnings from Rust toolchain update
 - **Migration no longer auto-pauses**: Removed the v15→v16 migration step that unconditionally set `pause_until = -1`, which left users in a paused state after upgrading from older schema versions
 - **Pause info on action dialogs**: Scan Now and Run Schedule dialogs now show an informational message when fsPulse is paused, explaining that the task will be queued. Button text changes to "Queue Scan" while paused
 - **Pause info on compact button**: Settings page Compact Database section shows the same informational message when paused
