@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import { Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -60,12 +60,22 @@ type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
 export function TrendsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   // Support deep-linking via URL params (e.g., from Dashboard root health card)
   const initialRootId = searchParams.get('root_id') || ''
 
   const [roots, setRoots] = useState<Root[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string>(initialRootId)
+
+  // Sync with URL param changes (e.g., root carried via sidebar navigation)
+  const urlRootId = searchParams.get('root_id') || ''
+  useEffect(() => {
+    if (urlRootId && urlRootId !== selectedRootId) {
+      setSelectedRootId(urlRootId)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlRootId])
 
   // Update URL when root changes so sidebar can carry it to other pages
   const handleRootChange = useCallback((rootId: string) => {
@@ -95,6 +105,38 @@ export function TrendsPage() {
   const [firstValidatingScanId, setFirstValidatingScanId] = useState<number | null>(null)
   const [excludeFirstScan, setExcludeFirstScan] = useState(false)
   const [excludeFirstValidatingScan, setExcludeFirstValidatingScan] = useState(false)
+  const [hiddenChangeSeries, setHiddenChangeSeries] = useState<Set<string>>(new Set())
+
+  const changesChartRef = useRef<HTMLDivElement>(null)
+  const alertsChartRef = useRef<HTMLDivElement>(null)
+
+  // Set pointer cursor only when hovering a data column (bar highlight active)
+  const setCursorForChart = (ref: React.RefObject<HTMLDivElement | null>, pointer: boolean) => {
+    const svg = ref.current?.querySelector('svg')
+    if (svg) svg.style.cursor = pointer ? 'pointer' : ''
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleBarChartMouseMove = (ref: React.RefObject<HTMLDivElement | null>) => (state: any) => {
+    setCursorForChart(ref, state?.activeTooltipIndex != null)
+  }
+  const handleBarChartMouseLeave = (ref: React.RefObject<HTMLDivElement | null>) => () => {
+    setCursorForChart(ref, false)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleChartClick = (...args: any[]) => {
+    for (const arg of args) {
+      // Chart-level onClick: { activePayload: [{ payload: { scan_id } }] }
+      const fromActivePayload = arg?.activePayload?.[0]?.payload?.scan_id
+      // activeDot onClick: (event, payload) where scan_id is in payload.payload
+      // Bar onClick: (data) where scan_id is in data.payload or data directly
+      const scanId = fromActivePayload ?? arg?.payload?.scan_id ?? arg?.scan_id
+      if (scanId) {
+        navigate(`/browse?root_id=${selectedRootId}&scan_id=${scanId}`)
+        return
+      }
+    }
+  }
 
   // Calculate date range based on time window preset
   const getDateRangeForPreset = (preset: TimeWindowPreset): { from: Date; to: Date } => {
@@ -437,6 +479,7 @@ export function TrendsPage() {
                     data={scanData.map((d) => ({
                       date: format(new Date(d.started_at * 1000), 'MMM dd'),
                       total_size: d.total_size,
+                      scan_id: d.scan_id,
                     }))}
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -479,6 +522,7 @@ export function TrendsPage() {
                       stroke="var(--color-total_size)"
                       strokeWidth={2}
                       dot={false}
+                      activeDot={{ r: 5, cursor: 'pointer', onClick: handleChartClick }}
                       name="Total Size"
                     />
                   </LineChart>
@@ -510,6 +554,7 @@ export function TrendsPage() {
                       date: format(new Date(d.started_at * 1000), 'MMM dd'),
                       file_count: d.file_count,
                       folder_count: d.folder_count,
+                      scan_id: d.scan_id,
                     }))}
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -531,6 +576,7 @@ export function TrendsPage() {
                       stroke="var(--color-file_count)"
                       fill="var(--color-file_count)"
                       fillOpacity={0.6}
+                      activeDot={{ r: 5, cursor: 'pointer', onClick: handleChartClick }}
                       name="Files"
                     />
                     {/* Folders stacked on top */}
@@ -541,6 +587,7 @@ export function TrendsPage() {
                       stroke="var(--color-folder_count)"
                       fill="var(--color-folder_count)"
                       fillOpacity={0.6}
+                      activeDot={{ r: 5, cursor: 'pointer', onClick: handleChartClick }}
                       name="Folders"
                     />
                   </AreaChart>
@@ -566,19 +613,20 @@ export function TrendsPage() {
                   )}
                 </CardHeader>
                 <CardContent>
+                  <div ref={changesChartRef}>
                   <ChartContainer
                     config={{
                       add_count: {
                         label: 'Added',
-                        color: 'hsl(142 71% 45%)', // Vibrant green
+                        color: 'hsl(142 71% 45%)',
                       },
                       modify_count: {
                         label: 'Modified',
-                        color: 'hsl(45 93% 47%)', // Vibrant amber
+                        color: 'hsl(217 91% 60%)',
                       },
                       delete_count: {
                         label: 'Deleted',
-                        color: 'hsl(0 84% 60%)', // Vibrant red
+                        color: 'hsl(0 84% 60%)',
                       },
                     }}
                     className="aspect-auto h-[300px]"
@@ -589,7 +637,11 @@ export function TrendsPage() {
                         add_count: d.add_count,
                         modify_count: d.modify_count,
                         delete_count: d.delete_count,
+                        scan_id: d.scan_id,
                       }))}
+                      onClick={handleChartClick}
+                      onMouseMove={handleBarChartMouseMove(changesChartRef)}
+                      onMouseLeave={handleBarChartMouseLeave(changesChartRef)}
                     >
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis
@@ -601,13 +653,57 @@ export function TrendsPage() {
                         tick={{ fill: 'hsl(var(--muted-foreground))' }}
                       />
                       <ChartTooltip content={<ChartTooltipContent />} />
-                      <Legend />
-                      {/* Stacked bars - all on same vertical bar */}
-                      <Bar dataKey="add_count" stackId="a" fill="var(--color-add_count)" name="Added" />
-                      <Bar dataKey="modify_count" stackId="a" fill="var(--color-modify_count)" name="Modified" />
-                      <Bar dataKey="delete_count" stackId="a" fill="var(--color-delete_count)" name="Deleted" />
+                      <Legend content={() => (
+                        <div className="flex items-center justify-center gap-1 pt-1">
+                          {([
+                            { key: 'add_count', label: 'Added', color: 'bg-green-500', ring: 'ring-green-500/40' },
+                            { key: 'modify_count', label: 'Modified', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
+                            { key: 'delete_count', label: 'Deleted', color: 'bg-red-500', ring: 'ring-red-500/40' },
+                          ]).map(({ key, label, color, ring }) => {
+                            const visible = !hiddenChangeSeries.has(key)
+                            return (
+                              <button
+                                key={key}
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors text-left',
+                                  visible
+                                    ? 'text-foreground hover:bg-accent'
+                                    : 'text-muted-foreground/40 hover:bg-accent/50'
+                                )}
+                                onClick={(e) => { e.stopPropagation(); setHiddenChangeSeries(prev => {
+                                  const next = new Set(prev)
+                                  if (next.has(key)) next.delete(key)
+                                  else next.add(key)
+                                  return next
+                                })}}
+                              >
+                                <span
+                                  className={cn(
+                                    'inline-block w-3 h-3 rounded-full transition-all flex-shrink-0',
+                                    visible
+                                      ? `${color} ring-2 ${ring}`
+                                      : 'bg-transparent ring-1 ring-muted-foreground/25'
+                                  )}
+                                />
+                                {label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )} />
+                      {/* Stacked bars - conditionally rendered based on legend toggles */}
+                      {!hiddenChangeSeries.has('add_count') && (
+                        <Bar dataKey="add_count" stackId="a" fill="var(--color-add_count)" name="Added" />
+                      )}
+                      {!hiddenChangeSeries.has('modify_count') && (
+                        <Bar dataKey="modify_count" stackId="a" fill="var(--color-modify_count)" name="Modified" />
+                      )}
+                      {!hiddenChangeSeries.has('delete_count') && (
+                        <Bar dataKey="delete_count" stackId="a" fill="var(--color-delete_count)" name="Deleted" />
+                      )}
                     </BarChart>
                   </ChartContainer>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -627,6 +723,7 @@ export function TrendsPage() {
                   )}
                 </CardHeader>
                 <CardContent>
+                  <div ref={alertsChartRef}>
                   <ChartContainer
                     config={{
                       alert_count: {
@@ -640,7 +737,11 @@ export function TrendsPage() {
                       data={alertsData.map((d) => ({
                         date: format(new Date(d.started_at * 1000), 'MMM dd'),
                         alert_count: d.alert_count,
+                        scan_id: d.scan_id,
                       }))}
+                      onClick={handleChartClick}
+                      onMouseMove={handleBarChartMouseMove(alertsChartRef)}
+                      onMouseLeave={handleBarChartMouseLeave(alertsChartRef)}
                     >
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis
@@ -660,6 +761,7 @@ export function TrendsPage() {
                       />
                     </BarChart>
                   </ChartContainer>
+                  </div>
                 </CardContent>
               </Card>
             </div>

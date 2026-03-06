@@ -65,12 +65,15 @@ function AppContent() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/explore/*" element={<ExplorePage />} />
           <Route path="/alerts" element={<AlertsPage />} />
-          <Route path="/trends/*" element={<TrendsPage />} />
+          <Route path="/trends/*" element={null} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/browse" element={null} />
         </Routes>
         <KeepAlivePage isActive={location.pathname === '/browse'}>
           {(active) => <BrowsePage isActive={active} />}
+        </KeepAlivePage>
+        <KeepAlivePage isActive={location.pathname.startsWith('/trends')}>
+          {() => <TrendsPage />}
         </KeepAlivePage>
         </ScrollContext.Provider>
       </SidebarInset>

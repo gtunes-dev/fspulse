@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Clickable Trends charts**: All four charts on the Trends page (Total Size, Items, Changes, New Alerts) now navigate to the Browse page for the clicked scan. Bar charts show pointer cursor only when hovering a data column
+- **Changes chart legend toggles**: The Changes chart legend now uses colored dot + name representation matching the Browse page filters, with clickable toggles to show/hide individual change types (Added, Modified, Deleted)
+- **Trends page state persistence**: The Trends page now stays mounted when navigating away (matching Browse page behavior), preserving scroll position, selected root, time window, and chart state
+
+### Changed
+- **Changes chart Modified color**: Updated from amber to blue to match the Browse page's change type color scheme
+
 ## [v0.4.3] - 2026-03-05
 
 ### Fixed
