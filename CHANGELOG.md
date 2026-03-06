@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.5] - 2026-03-06
+
 ### Added
 - **Unchanged series on Changes chart**: The Changes chart now includes an "Unchanged" series, computed as `(file_count + folder_count) - add_count - modify_count`. Defaults to hidden in the legend; users can toggle it on
 - **Hide empty scans**: Changes and New Alerts charts now have a "Hide empty" checkbox (on by default) that removes scans with no visible activity. For Changes, this respects legend toggles — a scan is only hidden if all currently visible series are zero
