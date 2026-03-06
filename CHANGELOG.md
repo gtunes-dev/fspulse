@@ -7,18 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.3] - 2026-03-05
+
 ### Fixed
-- **Redundant folder versions**: Fixed folder count rollup creating a new folder version on every scan for any folder containing files, even when nothing changed. The trigger is now `adds > 0 || mods > 0 || dels > 0` instead of `!state_counts.is_zero()`. Analysis-phase state changes (hash/validation) are already captured as modifies via `update_item_analysis`, so the simpler guard is correct and complete
-- **Folder version dedup migration (v24→v25)**: Data-only migration removes redundant folder versions created by the bug. Merges consecutive identical versions and consecutive no-change versions (adds=0, mods=0, dels=0 with matching metadata) by extending the keeper's `last_scan_id`. Also recomputes scan-level add/modify/delete counts which were inflated by the redundant versions
-- **Folder unchanged count on metadata-only changes**: `insert_with_carry_forward` now initializes folder counts to `(0, 0, 0, prev_alive)` instead of `(0, 0, 0, 0)`, so that if a folder's own metadata changes without any descendant changes, `query_prev_alive` returns the correct total for subsequent scans
-- **Clippy `result_large_err` warnings**: Added `#[allow(clippy::result_large_err)]` to config test module to fix new warnings from Rust toolchain update
-- **Migration no longer auto-pauses**: Removed the v15→v16 migration step that unconditionally set `pause_until = -1`, which left users in a paused state after upgrading from older schema versions
-- **Pause info on action dialogs**: Scan Now and Run Schedule dialogs now show an informational message when fsPulse is paused, explaining that the task will be queued. Button text changes to "Queue Scan" while paused
-- **Pause info on compact button**: Settings page Compact Database section shows the same informational message when paused
-- **Schedule table not refreshing after create**: Fixed SchedulesPage not passing `onSuccess` to CreateScheduleDialog, so the table now reloads after adding a new schedule
+- **Redundant folder versions**: Folder count rollup was creating a new version on every scan for any folder containing files, even when nothing changed. The guard is now `adds > 0 || mods > 0 || dels > 0` — analysis-phase state changes are already captured as modifies, so this simpler condition is correct and complete
+- **Dedup migration (v24→v25)**: Data-only migration removes redundant folder versions created by the above bug, merging consecutive no-change versions and recomputing inflated scan-level change counts
+- **Folder unchanged count on metadata-only changes**: Folder counts now initialize to `(0, 0, 0, prev_alive)` instead of `(0, 0, 0, 0)`, so folders whose own metadata changes without descendant changes preserve the correct alive count for subsequent scans
+- **Migration auto-pause removed**: The v15→v16 migration no longer unconditionally sets `pause_until = -1`, which left users paused after upgrading from older schemas
+- **Pause info on action dialogs**: Scan Now, Run Schedule, and Compact Database dialogs show an informational message when paused, with button text changing to "Queue Scan"
+- **Schedule table not refreshing**: Table now reloads after creating a new schedule
+- **Clippy `result_large_err` warnings**: Suppressed new warnings from Rust toolchain update in config test module
 
 ### Changed
-- Rename `LICENSE-APACHE` to `LICENSE-APACHE-2.0` for GitHub license detection compliance
+- Rename `LICENSE-APACHE` to `LICENSE-APACHE-2.0` for GitHub license detection
 
 ## [v0.4.2] - 2026-03-04
 
