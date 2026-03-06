@@ -105,7 +105,9 @@ export function TrendsPage() {
   const [firstValidatingScanId, setFirstValidatingScanId] = useState<number | null>(null)
   const [excludeFirstScan, setExcludeFirstScan] = useState(false)
   const [excludeFirstValidatingScan, setExcludeFirstValidatingScan] = useState(false)
-  const [hiddenChangeSeries, setHiddenChangeSeries] = useState<Set<string>>(new Set())
+  const [hideEmptyChangeScans, setHideEmptyChangeScans] = useState(true)
+  const [hideEmptyAlertScans, setHideEmptyAlertScans] = useState(true)
+  const [hiddenChangeSeries, setHiddenChangeSeries] = useState<Set<string>>(new Set(['unchanged_count']))
 
   const changesChartRef = useRef<HTMLDivElement>(null)
   const alertsChartRef = useRef<HTMLDivElement>(null)
@@ -354,14 +356,26 @@ export function TrendsPage() {
   const firstValidatingScanInView = firstValidatingScanId !== null && scanData.some(d => d.scan_id === firstValidatingScanId)
 
   // Filter data for change count chart
-  const changeCountData = excludeFirstScan && firstScanId !== null
-    ? scanData.filter(d => d.scan_id !== firstScanId)
-    : scanData
+  const changeCountData = scanData.filter(d => {
+    if (excludeFirstScan && firstScanId !== null && d.scan_id === firstScanId) return false
+    if (hideEmptyChangeScans) {
+      const visibleKeys = ['add_count', 'modify_count', 'delete_count', 'unchanged_count'] as const
+      const hasVisibleData = visibleKeys.some(key =>
+        !hiddenChangeSeries.has(key) && (key === 'unchanged_count'
+          ? (d.file_count + d.folder_count) - d.add_count - d.modify_count > 0
+          : d[key] > 0)
+      )
+      if (!hasVisibleData) return false
+    }
+    return true
+  })
 
   // Filter data for alerts chart
-  const alertsData = excludeFirstValidatingScan && firstValidatingScanId !== null
-    ? scanData.filter(d => d.scan_id !== firstValidatingScanId)
-    : scanData
+  const alertsData = scanData.filter(d => {
+    if (excludeFirstValidatingScan && firstValidatingScanId !== null && d.scan_id === firstValidatingScanId) return false
+    if (hideEmptyAlertScans && d.alert_count === 0) return false
+    return true
+  })
 
   return (
     <div className="flex flex-col h-full">
@@ -600,17 +614,28 @@ export function TrendsPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle>Changes</CardTitle>
-                  {firstScanInView && (
+                  <div className="flex items-center gap-4">
+                    {firstScanInView && (
+                      <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={excludeFirstScan}
+                          onChange={(e) => setExcludeFirstScan(e.target.checked)}
+                          className="cursor-pointer"
+                        />
+                        <span className="text-muted-foreground">Hide first scan</span>
+                      </label>
+                    )}
                     <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={excludeFirstScan}
-                        onChange={(e) => setExcludeFirstScan(e.target.checked)}
+                        checked={hideEmptyChangeScans}
+                        onChange={(e) => setHideEmptyChangeScans(e.target.checked)}
                         className="cursor-pointer"
                       />
-                      <span className="text-muted-foreground">Exclude initial baseline scan</span>
+                      <span className="text-muted-foreground">Hide empty</span>
                     </label>
-                  )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div ref={changesChartRef}>
@@ -628,6 +653,10 @@ export function TrendsPage() {
                         label: 'Deleted',
                         color: 'hsl(0 84% 60%)',
                       },
+                      unchanged_count: {
+                        label: 'Unchanged',
+                        color: 'hsl(220 9% 60%)',
+                      },
                     }}
                     className="aspect-auto h-[300px]"
                   >
@@ -637,6 +666,7 @@ export function TrendsPage() {
                         add_count: d.add_count,
                         modify_count: d.modify_count,
                         delete_count: d.delete_count,
+                        unchanged_count: (d.file_count + d.folder_count) - d.add_count - d.modify_count,
                         scan_id: d.scan_id,
                       }))}
                       onClick={handleChartClick}
@@ -659,6 +689,7 @@ export function TrendsPage() {
                             { key: 'add_count', label: 'Added', color: 'bg-green-500', ring: 'ring-green-500/40' },
                             { key: 'modify_count', label: 'Modified', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
                             { key: 'delete_count', label: 'Deleted', color: 'bg-red-500', ring: 'ring-red-500/40' },
+                            { key: 'unchanged_count', label: 'Unchanged', color: 'bg-gray-400', ring: 'ring-gray-400/40' },
                           ]).map(({ key, label, color, ring }) => {
                             const visible = !hiddenChangeSeries.has(key)
                             return (
@@ -701,6 +732,9 @@ export function TrendsPage() {
                       {!hiddenChangeSeries.has('delete_count') && (
                         <Bar dataKey="delete_count" stackId="a" fill="var(--color-delete_count)" name="Deleted" />
                       )}
+                      {!hiddenChangeSeries.has('unchanged_count') && (
+                        <Bar dataKey="unchanged_count" stackId="a" fill="var(--color-unchanged_count)" name="Unchanged" />
+                      )}
                     </BarChart>
                   </ChartContainer>
                   </div>
@@ -710,17 +744,28 @@ export function TrendsPage() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle>New Alerts</CardTitle>
-                  {firstValidatingScanInView && (
+                  <div className="flex items-center gap-4">
+                    {firstValidatingScanInView && (
+                      <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={excludeFirstValidatingScan}
+                          onChange={(e) => setExcludeFirstValidatingScan(e.target.checked)}
+                          className="cursor-pointer"
+                        />
+                        <span className="text-muted-foreground">Hide first scan</span>
+                      </label>
+                    )}
                     <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={excludeFirstValidatingScan}
-                        onChange={(e) => setExcludeFirstValidatingScan(e.target.checked)}
+                        checked={hideEmptyAlertScans}
+                        onChange={(e) => setHideEmptyAlertScans(e.target.checked)}
                         className="cursor-pointer"
                       />
-                      <span className="text-muted-foreground">Exclude initial baseline scan</span>
+                      <span className="text-muted-foreground">Hide empty</span>
                     </label>
-                  )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div ref={alertsChartRef}>
