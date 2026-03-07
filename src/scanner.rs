@@ -47,7 +47,7 @@ use std::{cmp, fs};
 pub struct Scanner {}
 
 /// Batch size for database write operations during scanning
-const SCAN_BATCH_SIZE: usize = 100;
+const SCAN_BATCH_SIZE: usize = 2000;
 
 /// A pending folder count write, collected during the recursive walk and
 /// applied in batched transactions afterward.

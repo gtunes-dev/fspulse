@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **SQLite scan performance**: Increased transaction batch size from 100 to 2000 items, set `synchronous = NORMAL` (safe with WAL for resumable workloads), and increased per-connection page cache to ~32 MB to keep index pages hot during large scans
+
 ### Fixed
 - **Browse page overflow**: Tree view content no longer draws over the Item Details panel when the window is narrow. File/folder names truncate with ellipsis instead of wrapping
 - **Browse page filter overflow**: Filter labels (Change Type, Hash State, Validation State) no longer wrap or overflow the card boundary at narrow widths

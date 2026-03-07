@@ -69,6 +69,15 @@ impl Database {
             // Enable WAL mode for better concurrency (readers don't block writers)
             conn.pragma_update(None, "journal_mode", "WAL")?;
 
+            // NORMAL is safe with WAL — committed data survives app crashes;
+            // only a power-loss/OS-crash could lose the last few commits,
+            // which is fine since scans are resumable.
+            conn.pragma_update(None, "synchronous", "NORMAL")?;
+
+            // Increase page cache to ~32 MB (8000 × 4 KB pages) so index and
+            // table pages stay hot during large scans.
+            conn.pragma_update(None, "cache_size", -32000)?;
+
             // Set busy timeout for lock contention handling
             conn.busy_timeout(Duration::from_secs(DB_BUSY_TIMEOUT_SECS))?;
 
