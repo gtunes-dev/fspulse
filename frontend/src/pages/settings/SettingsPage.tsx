@@ -1,4 +1,4 @@
-import { SettingsContent } from '../setup/SettingsContent'
+import { SettingsContent } from './SettingsContent'
 
 export function SettingsPage() {
   return (

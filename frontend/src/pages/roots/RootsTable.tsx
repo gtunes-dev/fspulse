@@ -28,7 +28,7 @@ interface RootsTableProps {
 const ITEMS_PER_PAGE = 25
 
 export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: RootsTableProps) {
-  const { activeRootId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
+  const { activeRootId, currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt, isPaused } = useTaskContext()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -64,7 +64,7 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
     }
 
     loadRoots()
-  }, [activeRootId, lastTaskCompletedAt, lastTaskScheduledAt, internalReloadTrigger, externalReloadTrigger])
+  }, [activeRootId, currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt, internalReloadTrigger, externalReloadTrigger])
 
   // Pagination
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE

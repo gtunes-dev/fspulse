@@ -58,12 +58,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (message.type === 'no_active_task') {
-      setActiveTask(prev => {
-        if (prev === null) return null
+      // Signal task completion if we were tracking an active task
+      if (lastProcessedState.current.task_id !== null) {
         setLastTaskCompletedAt(Date.now())
         lastProcessedState.current = { task_id: null, status: null }
-        return null
-      })
+      }
+      setActiveTask(null)
       setPauseState(null)
       return
     }
@@ -80,31 +80,36 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       lastProcessedState.current = { task_id: task.task_id, status: task.status }
     }
 
-    setActiveTask(prev => {
-      if (prev !== null && prev.task_id !== task.task_id) {
-        setLastTaskCompletedAt(Date.now())
-      }
+    // Signal task completion when task changes or reaches terminal state
+    // (moved out of setActiveTask updater — updaters must be pure)
+    const prevTaskId = lastProcessedState.current.task_id
+    if (!isTerminal) {
+      lastProcessedState.current = { task_id: task.task_id, status: task.status }
+    }
 
-      if (isTerminal) {
-        setLastTaskCompletedAt(Date.now())
-      }
+    if (prevTaskId !== null && prevTaskId !== task.task_id) {
+      setLastTaskCompletedAt(Date.now())
+    }
 
-      return {
-        task_id: task.task_id,
-        task_type: task.task_type,
-        active_root_id: task.active_root_id,
-        is_exclusive: task.is_exclusive,
-        is_stoppable: task.is_stoppable,
-        is_pausable: task.is_pausable,
-        action: task.action,
-        target: task.target,
-        status: task.status,
-        error_message: task.error_message,
-        breadcrumbs: task.breadcrumbs ?? [],
-        phase: task.phase,
-        progress_bar: task.progress_bar,
-        thread_states: task.thread_states ?? [],
-      }
+    if (isTerminal) {
+      setLastTaskCompletedAt(Date.now())
+    }
+
+    setActiveTask({
+      task_id: task.task_id,
+      task_type: task.task_type,
+      active_root_id: task.active_root_id,
+      is_exclusive: task.is_exclusive,
+      is_stoppable: task.is_stoppable,
+      is_pausable: task.is_pausable,
+      action: task.action,
+      target: task.target,
+      status: task.status,
+      error_message: task.error_message,
+      breadcrumbs: task.breadcrumbs ?? [],
+      phase: task.phase,
+      progress_bar: task.progress_bar,
+      thread_states: task.thread_states ?? [],
     })
   }, [])
 

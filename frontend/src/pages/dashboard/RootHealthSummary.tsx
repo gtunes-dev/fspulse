@@ -45,7 +45,7 @@ const scanStateIcon = (state: string) => {
 }
 
 export function RootHealthSummary() {
-  const { lastTaskCompletedAt } = useTaskContext()
+  const { lastTaskCompletedAt, currentTaskId } = useTaskContext()
   const [roots, setRoots] = useState<RootHealth[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -96,7 +96,7 @@ export function RootHealthSummary() {
     }
 
     loadHealthData()
-  }, [lastTaskCompletedAt])
+  }, [lastTaskCompletedAt, currentTaskId])
 
   if (loading && roots.length === 0) {
     return null

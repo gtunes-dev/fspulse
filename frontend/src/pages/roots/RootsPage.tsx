@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { RootsTable } from '../setup/RootsTable'
-import { AddRootDialog } from '../setup/AddRootDialog'
+import { RootsTable } from './RootsTable'
+import { AddRootDialog } from './AddRootDialog'
 import { ManualScanDialog } from '../dashboard/ManualScanDialog'
 
 export function RootsPage() {
