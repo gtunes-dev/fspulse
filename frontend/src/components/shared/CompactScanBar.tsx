@@ -264,6 +264,14 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootId])
 
+  // ── Jump to a specific scan when initialScanId changes (e.g., deep-link from Trends)
+  useEffect(() => {
+    if (initialScanId && initialScanId !== resolvedScanId) {
+      jumpToScan(initialScanId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialScanId])
+
   // ── Fetch scan dates when calendar month changes ───────────────────
   useEffect(() => {
     fetchScanDates(displayMonth)
@@ -328,7 +336,7 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
         {/* Collapsible picker: calendar + scan list side by side */}
         <CollapsibleContent>
           <div className="border-t border-border">
-            <div className="flex">
+            <div className="flex overflow-hidden">
               {/* Calendar */}
               <div className="border-r border-border shrink-0">
                 <Calendar
@@ -356,7 +364,7 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
               {/* Scan list */}
               <div className="flex-1 min-w-0 flex flex-col">
                 <div className="px-3 py-2 border-b border-border">
-                  <p className="text-xs font-medium text-muted-foreground">
+                  <p className="text-xs font-medium text-muted-foreground truncate">
                     {selectedDate ? `Scans on ${format(selectedDate, 'MMM d, yyyy')}` : 'Select a date'}
                   </p>
                 </div>
@@ -376,7 +384,7 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
                         <button
                           key={scan.scan_id}
                           className={cn(
-                            'w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
+                            'w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors overflow-hidden',
                             'hover:bg-accent',
                             scan.scan_id === resolvedScanId
                               ? 'bg-accent font-medium'
@@ -390,7 +398,7 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
                             )}
                           </span>
                           <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <span className="text-xs font-medium">#{scan.scan_id}</span>
                               <span className="text-xs text-muted-foreground">
                                 {formatTime(scan.started_at)}

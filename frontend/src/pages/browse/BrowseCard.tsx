@@ -321,9 +321,9 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
         )}
 
         {/* View mode tabs + layout control */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 overflow-hidden">
           <Tabs value={viewMode} onValueChange={handleViewModeChange}>
-            <TabsList>
+            <TabsList className="shrink-0">
               <TabsTrigger value="tree" className="gap-1.5">
                 <FolderTree className="h-3.5 w-3.5" />
                 Tree
@@ -366,7 +366,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
 
             {/* Expandable content — three vertical columns */}
             <CollapsibleContent>
-              <div className="flex gap-5 px-4 pb-3">
+              <div className="flex gap-5 px-4 pb-3 overflow-hidden">
                 {/* Change column */}
                 <div>
                   <div className="text-xs font-medium text-muted-foreground border-b border-border pb-1 mb-1.5">Change Type</div>
@@ -382,7 +382,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
                         <button
                           key={kind}
                           className={cn(
-                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left',
+                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left whitespace-nowrap',
                             visible
                               ? 'text-foreground hover:bg-accent'
                               : 'text-muted-foreground/40 hover:bg-accent/50'
@@ -425,7 +425,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
                         <button
                           key={state}
                           className={cn(
-                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left',
+                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left whitespace-nowrap',
                             visible
                               ? 'text-foreground hover:bg-accent'
                               : 'text-muted-foreground/40 hover:bg-accent/50'
@@ -470,7 +470,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
                         <button
                           key={state}
                           className={cn(
-                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left',
+                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left whitespace-nowrap',
                             visible
                               ? 'text-foreground hover:bg-accent'
                               : 'text-muted-foreground/40 hover:bg-accent/50'
@@ -512,7 +512,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
         )}
 
         {/* Content area: content view + detail panel side by side */}
-        <div className="flex-1 flex border border-border rounded-lg">
+        <div className="flex-1 flex border border-border rounded-lg overflow-hidden">
           {!detailOnRight && detailPanel}
           {contentView}
           {detailOnRight && detailPanel}

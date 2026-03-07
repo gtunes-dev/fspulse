@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Browse page overflow**: Tree view content no longer draws over the Item Details panel when the window is narrow. File/folder names truncate with ellipsis instead of wrapping
+- **Browse page filter overflow**: Filter labels (Change Type, Hash State, Validation State) no longer wrap or overflow the card boundary at narrow widths
+- **Browse page tab bar overflow**: Tree/Folder/Search tabs no longer overflow at narrow widths
+- **Scan picker overflow**: Calendar scan list header and scan entries no longer wrap or overflow at narrow widths
+- **Trends empty chart state**: Changes and New Alerts charts now show "No scans to display" instead of rendering empty axes with a floating legend when all data is filtered out
+- **Trends date picker format**: Custom range date buttons now show year (e.g., "6 Mar 2026") instead of just month/day
+- **Trends date picker initial month**: Calendar popover now opens to the month of the currently selected date instead of always defaulting to today
+- **Trends date picker auto-dismiss**: Selecting a date now automatically closes the calendar popover
+- **Trends API error handling**: API errors during scan data fetch now show empty results instead of an error message; invalid date ranges (start after end) are handled gracefully
+- **Trends empty state message**: Shows root path and date range (e.g., "No scans for '/path' between 6 Dec 2025 and 6 Mar 2026") instead of generic message
+- **Trends chart click navigation**: Clicking a data point now correctly navigates to the clicked scan on the Browse page instead of always showing today's scan
+
 ## [v0.4.5] - 2026-03-06
 
 ### Added

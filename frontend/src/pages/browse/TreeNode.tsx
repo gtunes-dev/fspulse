@@ -94,7 +94,7 @@ export function TreeNode({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 p-2 hover:bg-accent rounded',
+        'flex items-center gap-2 p-2 hover:bg-accent rounded overflow-hidden',
         isSelected && 'bg-accent',
       )}
       style={{ paddingLeft: `${paddingLeft}px` }}
@@ -116,9 +116,9 @@ export function TreeNode({
         unchangedCount={item.unchanged_count}
       />
       <span
-        className="cursor-pointer"
+        className="cursor-pointer truncate"
         onClick={handleItemClick}
-        title={showPathTooltip ? item.item_path : undefined}
+        title={showPathTooltip ? item.item_path : item.item_name}
       >
         {item.item_name}
       </span>

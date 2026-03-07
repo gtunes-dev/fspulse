@@ -107,6 +107,8 @@ export function TrendsPage() {
   const [excludeFirstValidatingScan, setExcludeFirstValidatingScan] = useState(false)
   const [hideEmptyChangeScans, setHideEmptyChangeScans] = useState(true)
   const [hideEmptyAlertScans, setHideEmptyAlertScans] = useState(true)
+  const [fromPickerOpen, setFromPickerOpen] = useState(false)
+  const [toPickerOpen, setToPickerOpen] = useState(false)
   const [hiddenChangeSeries, setHiddenChangeSeries] = useState<Set<string>>(new Set(['unchanged_count']))
 
   const changesChartRef = useRef<HTMLDivElement>(null)
@@ -281,6 +283,12 @@ export function TrendsPage() {
       return
     }
 
+    // Guard: if both dates are set but from > to, just show empty
+    if (fromDate && toDate && fromDate > toDate) {
+      setScanData([])
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -295,7 +303,7 @@ export function TrendsPage() {
       if (fromDate || toDate) {
         const fromStr = fromDate ? format(fromDate, 'yyyy-MM-dd') : '1970-01-01'
         const toStr = toDate ? format(toDate, 'yyyy-MM-dd') : '2099-12-31'
-        filters.push({ column: 'started_at', value: `${fromStr}..${toStr}` })  // No () !
+        filters.push({ column: 'started_at', value: `${fromStr}..${toStr}` })
       }
 
       // Query for scan data with all the fields we need
@@ -333,8 +341,9 @@ export function TrendsPage() {
 
       setScanData(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load scan data')
       console.error('Error loading scan data:', err)
+      // Treat API errors as empty results rather than showing an error message
+      setScanData([])
     } finally {
       setLoading(false)
     }
@@ -403,24 +412,25 @@ export function TrendsPage() {
             {/* Custom Date Pickers - Inline when selected */}
             {timeWindow === 'custom' && (
               <>
-                <Popover>
+                <Popover open={fromPickerOpen} onOpenChange={setFromPickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       className={cn(
-                        'w-[140px] justify-start text-left font-normal',
+                        'w-[160px] justify-start text-left font-normal',
                         !fromDate && 'text-muted-foreground'
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {fromDate ? format(fromDate, 'MMM dd') : 'From'}
+                      {fromDate ? format(fromDate, 'd MMM yyyy') : 'From'}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="end">
                     <Calendar
                       mode="single"
                       selected={fromDate}
-                      onSelect={setFromDate}
+                      onSelect={(date) => { setFromDate(date); setFromPickerOpen(false) }}
+                      defaultMonth={fromDate}
                       captionLayout="dropdown"
                     />
                   </PopoverContent>
@@ -428,24 +438,25 @@ export function TrendsPage() {
 
                 <span className="text-muted-foreground">to</span>
 
-                <Popover>
+                <Popover open={toPickerOpen} onOpenChange={setToPickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       className={cn(
-                        'w-[140px] justify-start text-left font-normal',
+                        'w-[160px] justify-start text-left font-normal',
                         !toDate && 'text-muted-foreground'
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {toDate ? format(toDate, 'MMM dd') : 'To'}
+                      {toDate ? format(toDate, 'd MMM yyyy') : 'To'}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="end">
                     <Calendar
                       mode="single"
                       selected={toDate}
-                      onSelect={setToDate}
+                      onSelect={(date) => { setToDate(date); setToPickerOpen(false) }}
+                      defaultMonth={toDate}
                       captionLayout="dropdown"
                     />
                   </PopoverContent>
@@ -470,7 +481,7 @@ export function TrendsPage() {
           </div>
         ) : scanData.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-muted-foreground">
-            No scan data available for this root
+            No scans for &lsquo;{roots.find(r => r.root_id.toString() === selectedRootId)?.root_path ?? 'Unknown'}&rsquo;{fromDate && toDate ? ` between ${format(fromDate, 'd MMM yyyy')} and ${format(toDate, 'd MMM yyyy')}` : ''}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6">
@@ -638,6 +649,11 @@ export function TrendsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {changeCountData.length === 0 ? (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                      No scans to display
+                    </div>
+                  ) : (
                   <div ref={changesChartRef}>
                   <ChartContainer
                     config={{
@@ -738,6 +754,7 @@ export function TrendsPage() {
                     </BarChart>
                   </ChartContainer>
                   </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -768,6 +785,11 @@ export function TrendsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {alertsData.length === 0 ? (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                      No scans to display
+                    </div>
+                  ) : (
                   <div ref={alertsChartRef}>
                   <ChartContainer
                     config={{
@@ -807,6 +829,7 @@ export function TrendsPage() {
                     </BarChart>
                   </ChartContainer>
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
