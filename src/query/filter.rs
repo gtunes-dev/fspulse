@@ -377,6 +377,106 @@ impl StringFilter {
 }
 
 #[derive(Debug)]
+pub struct HashFilter {
+    hash_col_db: &'static str,
+    match_null: bool,
+    match_not_null: bool,
+    hash_values: Vec<String>,
+}
+
+impl Filter for HashFilter {
+    fn to_predicate_parts(&self) -> Result<(String, Vec<Box<dyn ToSql>>), FsPulseError> {
+        let mut pred_str = String::new();
+        let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
+        let mut first: bool = true;
+
+        let mut pred_count = self.hash_values.iter().len();
+        if self.match_null {
+            pred_count += 1
+        };
+        if self.match_not_null {
+            pred_count += 1
+        };
+
+        if pred_count > 1 {
+            pred_str.push('(');
+        }
+        if self.match_null {
+            first = false;
+            pred_str.push_str(&format!("({} IS NULL)", &self.hash_col_db));
+        }
+
+        if self.match_not_null {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+            pred_str.push_str(&format!("({} IS NOT NULL)", &self.hash_col_db));
+        }
+
+        for hash_val in &self.hash_values {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+
+            pred_str.push_str(&format!("(HEX({}) LIKE ?)", &self.hash_col_db));
+            let like_param = format!("%{}%", hash_val.to_uppercase());
+            pred_vec.push(Box::new(like_param));
+        }
+
+        if pred_count > 1 {
+            pred_str.push(')');
+        }
+
+        Ok((pred_str, pred_vec))
+    }
+}
+
+impl HashFilter {
+    fn new(hash_col_db: &'static str) -> Self {
+        HashFilter {
+            hash_col_db,
+            match_null: false,
+            match_not_null: false,
+            hash_values: Vec::new(),
+        }
+    }
+
+    pub fn add_hash_filter_to_query(
+        hash_filter_pair: Pair<Rule>,
+        query: &mut dyn Query,
+    ) -> Result<(), FsPulseError> {
+        let mut iter = hash_filter_pair.into_inner();
+        let hash_col_pair = iter.next().unwrap();
+        let hash_col = hash_col_pair.as_str().to_owned();
+
+        let mut hash_filter = match query.col_set().col_name_to_db(&hash_col) {
+            Some(hash_col_db) => Self::new(hash_col_db),
+            None => {
+                return Err(FsPulseError::CustomParsingError(format!(
+                    "Column not found: '{hash_col}'"
+                )))
+            }
+        };
+
+        for hash_val_pair in iter {
+            match hash_val_pair.as_rule() {
+                Rule::null => hash_filter.match_null = true,
+                Rule::not_null => hash_filter.match_not_null = true,
+                _ => {
+                    let query_val_str = hash_val_pair.as_str();
+                    hash_filter.hash_values.push(query_val_str.to_owned());
+                }
+            }
+        }
+        query.add_filter(Box::new(hash_filter));
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
 /// Filter for boolean columns
 pub struct BoolFilter {
     bool_col_db: &'static str,
@@ -1033,6 +1133,46 @@ mod tests {
     #[test]
     fn test_string_filter_not_null() {
         let result = QueryParser::parse(Rule::string_filter_EOI, "not null");
+        assert!(
+            result.is_ok(),
+            "Failed to parse 'not null': {:?}",
+            result.err()
+        );
+    }
+
+    // ==================================================================================
+    // Hash Filter Tests
+    // ==================================================================================
+
+    #[test]
+    fn test_hash_filter_single() {
+        let result = QueryParser::parse(Rule::hash_filter_EOI, "'a1b2c3'");
+        assert!(
+            result.is_ok(),
+            "Failed to parse single hash: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_hash_filter_multiple() {
+        let result = QueryParser::parse(Rule::hash_filter_EOI, "'a1b2c3', 'deadbeef'");
+        assert!(
+            result.is_ok(),
+            "Failed to parse multiple hashes: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_hash_filter_null() {
+        let result = QueryParser::parse(Rule::hash_filter_EOI, "null");
+        assert!(result.is_ok(), "Failed to parse 'null': {:?}", result.err());
+    }
+
+    #[test]
+    fn test_hash_filter_not_null() {
+        let result = QueryParser::parse(Rule::hash_filter_EOI, "not null");
         assert!(
             result.is_ok(),
             "Failed to parse 'not null': {:?}",

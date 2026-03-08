@@ -36,6 +36,7 @@ pub enum ColType {
     Date,
     Bool,
     String,
+    Hash,
     Path,
     ValState,
     ItemType,
@@ -74,6 +75,11 @@ impl ColType {
                 Rule::string_filter_EOI,
                 "String",
                 "Single-quoted substring(s) e.g. 'disk', 'error'\nComma-separate values (null and not null also ok)",
+            ),
+            ColType::Hash => ColTypeInfo::new(
+                Rule::hash_filter_EOI,
+                "Hash",
+                "Single-quoted hex substring(s) e.g. 'a1b2c3'\nComma-separate values (null and not null also ok)",
             ),
             ColType::Path => ColTypeInfo::new(
                 Rule::path_filter_EOI,
@@ -204,7 +210,7 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_state" => ColSpec::new("iv.val_state", "Val State", false, ColType::ValState, ColAlign::Center),
     "val_error" => ColSpec::new("iv.val_error", "Val Error", false, ColType::String, ColAlign::Left),
     "last_hash_scan" => ColSpec::new("iv.last_hash_scan", "Last Hash Scan", false, ColType::Id, ColAlign::Right),
-    "file_hash" => ColSpec::new("iv.file_hash", "File Hash", false, ColType::String, ColAlign::Left),
+    "file_hash" => ColSpec::new("iv.file_hash", "File Hash", false, ColType::Hash, ColAlign::Left),
     "hash_state" => ColSpec::new("iv.hash_state", "Hash State", false, ColType::HashState, ColAlign::Center),
 };
 
@@ -225,7 +231,7 @@ pub const VERSIONS_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_state" => ColSpec::new("iv.val_state", "Val State", false, ColType::ValState, ColAlign::Center),
     "val_error" => ColSpec::new("iv.val_error", "Val Error", false, ColType::String, ColAlign::Left),
     "last_hash_scan" => ColSpec::new("iv.last_hash_scan", "Last Hash Scan", false, ColType::Id, ColAlign::Right),
-    "file_hash" => ColSpec::new("iv.file_hash", "File Hash", false, ColType::String, ColAlign::Left),
+    "file_hash" => ColSpec::new("iv.file_hash", "File Hash", false, ColType::Hash, ColAlign::Left),
     "hash_state" => ColSpec::new("iv.hash_state", "Hash State", false, ColType::HashState, ColAlign::Center),
     "add_count" => ColSpec::new("iv.add_count", "Adds", false, ColType::Int, ColAlign::Right),
     "modify_count" => ColSpec::new("iv.modify_count", "Modifies", false, ColType::Int, ColAlign::Right),
@@ -251,8 +257,8 @@ pub const ALERTS_QUERY_COLS: ColMap = phf_ordered_map! {
     "created_at" => ColSpec::new("created_at", "Created", true, ColType::Date, ColAlign::Center),
     "updated_at" => ColSpec::new("updated_at", "Updated", false, ColType::Date, ColAlign::Center),
     "prev_hash_scan" => ColSpec::new("prev_hash_scan", "Prev Hash Scan", false, ColType::Id, ColAlign::Right),
-    "hash_old" => ColSpec::new("hash_old", "Hash Old", false, ColType::String, ColAlign::Left),
-    "hash_new" => ColSpec::new("hash_new", "Hash New", false, ColType::String, ColAlign::Left),
+    "hash_old" => ColSpec::new("hash_old", "Hash Old", false, ColType::Hash, ColAlign::Left),
+    "hash_new" => ColSpec::new("hash_new", "Hash New", false, ColType::Hash, ColAlign::Left),
     "val_error" => ColSpec::new("alerts.val_error", "Val Error", true, ColType::String, ColAlign::Left),
 };
 

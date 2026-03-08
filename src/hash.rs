@@ -87,6 +87,26 @@ impl crate::query::QueryEnum for HashState {
 pub struct Hash;
 
 impl Hash {
+    /// Decode a hex-encoded hash string to raw bytes for BLOB storage.
+    pub fn hex_to_blob(hex: &str) -> Vec<u8> {
+        hex::decode(hex).expect("invalid hex string in hash")
+    }
+
+    /// Decode an optional hex-encoded hash string to raw bytes for BLOB storage.
+    pub fn opt_hex_to_blob(hex: Option<&str>) -> Option<Vec<u8>> {
+        hex.map(Self::hex_to_blob)
+    }
+
+    /// Encode raw BLOB bytes to a hex string for display.
+    pub fn blob_to_hex(blob: Vec<u8>) -> String {
+        hex::encode(blob)
+    }
+
+    /// Encode optional raw BLOB bytes to a hex string for display.
+    pub fn opt_blob_to_hex(blob: Option<Vec<u8>>) -> Option<String> {
+        blob.map(Self::blob_to_hex)
+    }
+
     pub fn compute_sha2_256_hash(
         path: &Path,
         interrupt_token: &Arc<AtomicBool>,

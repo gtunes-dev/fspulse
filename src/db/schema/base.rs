@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '26');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '27');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -63,7 +63,6 @@ CREATE TABLE IF NOT EXISTS items (
     UNIQUE (root_id, item_path, item_type)
 );
 
-CREATE INDEX IF NOT EXISTS idx_items_path ON items (item_path COLLATE natural_path);
 CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
 CREATE INDEX IF NOT EXISTS idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
 
@@ -91,7 +90,7 @@ CREATE TABLE IF NOT EXISTS item_versions (
 
     -- Hash fields (NULL for folders)
     last_hash_scan  INTEGER,
-    file_hash       TEXT,
+    file_hash       BLOB,
     hash_state      INTEGER,
 
     -- Folder-specific descendant change counts (NULL for files).
@@ -148,8 +147,8 @@ CREATE TABLE IF NOT EXISTS alerts (
 
   -- suspect hash
   prev_hash_scan INTEGER DEFAULT NULL,
-  hash_old TEXT DEFAULT NULL,
-  hash_new TEXT DEFAULT NULL,
+  hash_old BLOB DEFAULT NULL,
+  hash_new BLOB DEFAULT NULL,
 
   -- invalid file
   val_error TEXT DEFAULT NULL

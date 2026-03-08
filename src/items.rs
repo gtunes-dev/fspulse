@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::MAIN_SEPARATOR_STR;
 
 use crate::{
-    db::Database, error::FsPulseError, utils::Utils,
+    db::Database, error::FsPulseError, hash::Hash, utils::Utils,
 };
 
 // Re-export types that were moved to item_identity.rs.
@@ -318,7 +318,7 @@ impl VersionHistoryEntry {
             val_state: row.get(10)?,
             val_error: row.get(11)?,
             last_hash_scan: row.get(12)?,
-            file_hash: row.get(13)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(13)?),
             hash_state: row.get(14)?,
             add_count: row.get(15)?,
             modify_count: row.get(16)?,

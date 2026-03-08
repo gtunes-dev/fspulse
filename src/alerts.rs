@@ -3,6 +3,7 @@ use rusqlite::{named_params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::error::FsPulseError;
+use crate::hash::Hash;
 
 #[repr(i64)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -222,6 +223,8 @@ impl Alerts {
             )
         "#;
 
+        let hash_old_blob = Hash::opt_hex_to_blob(hash_old);
+        let hash_new_blob = Hash::hex_to_blob(hash_new);
         conn.execute(
             sql,
             named_params! {
@@ -230,8 +233,8 @@ impl Alerts {
                 ":scan_id":         scan_id,
                 ":item_id":         item_id,
                 ":prev_hash_scan":  prev_hash_scan,
-                ":hash_old":        hash_old,
-                ":hash_new":        hash_new,
+                ":hash_old":        hash_old_blob,
+                ":hash_new":        hash_new_blob,
             },
         )?;
         Ok(())

@@ -15,6 +15,7 @@ use crate::{
     alerts::{AlertStatus, AlertType},
     db::Database,
     error::FsPulseError,
+    hash::Hash,
     items::{Access, ItemType},
     scans::ScanState,
     validate::validator::ValidationState,
@@ -22,7 +23,7 @@ use crate::{
 
 use super::{
     columns::ColAlign,
-    filter::{DateFilter, Filter, IdFilter, PathFilter, StringFilter},
+    filter::{DateFilter, Filter, HashFilter, IdFilter, PathFilter, StringFilter},
     order::Order,
     QueryParser, Rule,
 };
@@ -791,7 +792,7 @@ impl ItemsQueryRow {
             val_state: row.get(13)?,
             val_error: row.get(14)?,
             last_hash_scan: row.get(15)?,
-            file_hash: row.get(16)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(16)?),
             hash_state: row.get(17)?,
         })
     }
@@ -848,7 +849,7 @@ impl VersionsQueryRow {
             val_state: row.get(13)?,
             val_error: row.get(14)?,
             last_hash_scan: row.get(15)?,
-            file_hash: row.get(16)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(16)?),
             hash_state: row.get(17)?,
             add_count: row.get(18)?,
             modify_count: row.get(19)?,
@@ -957,8 +958,8 @@ impl AlertsQueryRow {
             created_at: row.get(7)?,
             updated_at: row.get(8)?,
             prev_hash_scan: row.get(9)?,
-            hash_old: row.get(10)?,
-            hash_new: row.get(11)?,
+            hash_old: Hash::opt_blob_to_hex(row.get(10)?),
+            hash_new: Hash::opt_blob_to_hex(row.get(11)?),
             val_error: row.get(12)?,
         })
     }
@@ -1101,6 +1102,9 @@ impl QueryProcessor {
                 }
                 Rule::string_filter => {
                     StringFilter::add_string_filter_to_query(token, query)?;
+                }
+                Rule::hash_filter => {
+                    HashFilter::add_hash_filter_to_query(token, query)?;
                 }
                 Rule::int_filter => {
                     IntFilter::add_int_filter_to_query(token, query)?;

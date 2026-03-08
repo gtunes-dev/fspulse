@@ -1,6 +1,6 @@
 use rusqlite::{self, params, Connection, OptionalExtension};
 
-use crate::{error::FsPulseError, hash::HashState, item_identity::Access, scans::AnalysisSpec, undo_log::UndoLog, validate::validator::ValidationState};
+use crate::{error::FsPulseError, hash::{Hash, HashState}, item_identity::Access, scans::AnalysisSpec, undo_log::UndoLog, validate::validator::ValidationState};
 
 /// Folder-level state snapshot counts — how many alive descendant files
 /// are in each validation/hash state at a given scan.
@@ -231,6 +231,7 @@ impl ItemVersion {
                          Some(sc.hash_suspect)),
             None => (None, None, None, None, None, None, None),
         };
+        let hash_blob = Hash::opt_hex_to_blob(file_hash);
         conn.execute(
             "INSERT INTO item_versions (
                 item_id, first_scan_id, last_scan_id,
@@ -244,7 +245,7 @@ impl ItemVersion {
             params![
                 item_id, scan_id, scan_id, is_added, is_deleted, access.as_i64(),
                 mod_date, size, last_val_scan, val.map(|v| v.as_i64()), val_error,
-                last_hash_scan, file_hash, hash_state.map(|h| h.as_i64()),
+                last_hash_scan, hash_blob, hash_state.map(|h| h.as_i64()),
                 add_count, modify_count, delete_count, unchanged_count,
                 vu, vv, vi, vn, hu, hv, hs,
             ],
@@ -348,13 +349,14 @@ impl ItemVersion {
         last_val_scan: Option<i64>,
         hash_state: HashState,
     ) -> Result<(), FsPulseError> {
+        let hash_blob = Hash::opt_hex_to_blob(file_hash);
         conn.execute(
             "UPDATE item_versions SET
                 access = ?, file_hash = ?, val_state = ?, val_error = ?,
                 last_hash_scan = ?, last_val_scan = ?, hash_state = ?
              WHERE version_id = ?",
             params![
-                access.as_i64(), file_hash, val.as_i64(), val_error,
+                access.as_i64(), hash_blob, val.as_i64(), val_error,
                 last_hash_scan, last_val_scan, hash_state.as_i64(), version_id,
             ],
         )?;
@@ -396,7 +398,7 @@ impl ItemVersion {
             val_state: row.get::<_, Option<i64>>(9)?.map(ValidationState::from_i64),
             val_error: row.get(10)?,
             last_hash_scan: row.get(11)?,
-            file_hash: row.get(12)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(12)?),
             hash_state: row.get::<_, Option<i64>>(13)?.map(HashState::from_i64),
             add_count: row.get(14)?,
             modify_count: row.get(15)?,
@@ -488,7 +490,7 @@ impl AnalysisItem {
             item_path: row.get(1)?,
             access: row.get(2)?,
             last_hash_scan: row.get(3)?,
-            file_hash: row.get(4)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(4)?),
             last_val_scan: row.get(5)?,
             val_state: row.get(6)?,
             val_error: row.get(7)?,

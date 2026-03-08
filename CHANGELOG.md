@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Hash storage optimization**: SHA-256 hashes (`file_hash`, `hash_old`, `hash_new`) are now stored as 32-byte BLOBs instead of 64-character hex TEXT strings, halving per-hash storage cost. Hex conversion happens at the Rust read/write boundary; all business logic and the frontend remain unchanged. The query language gains a new `Hash` column type so hash filters use `HEX()` to search BLOB data (schema v26→v27)
+- **Drop redundant index**: Removed standalone `idx_items_path` index. All queries that filter/sort on `item_path` also filter on `root_id`, so the composite `idx_items_root_path` index covers every use case. Saves ~40 MB per 1M items (schema v26→v27)
 - **SQLite scan performance**: Increased transaction batch size from 100 to 2000 items, set `synchronous = NORMAL` (safe with WAL for resumable workloads), and increased per-connection page cache to ~32 MB to keep index pages hot during large scans
 - **Frontend source reorganization**: Moved components from legacy `pages/setup/` directory into their respective page directories (`pages/roots/`, `pages/schedules/`, `pages/settings/`) to match the app's navigation structure
 - **scan_undo_log primary key**: Replaced `undo_id` auto-increment column with `version_id` as the primary key (schema v25→v26). Since there is at most one undo entry per version, `version_id` is the natural key — lookups are now O(1) rowid seeks instead of B-tree index traversals

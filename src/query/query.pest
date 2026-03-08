@@ -10,18 +10,18 @@ query_type = { "roots" | "scans" | "items" | "versions" | "alerts" }
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter       = _{ id_filter | date_filter | bool_filter | string_filter | path_filter | val_state_filter | hash_state_filter | item_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | access_filter | int_filter }
+filter       = _{ id_filter | date_filter | bool_filter | string_filter | hash_filter | path_filter | val_state_filter | hash_state_filter | item_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | access_filter | int_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | path_show | val_state_show | hash_state_show | item_type_show | alert_type_show | alert_status_show | scan_state_show | access_show | int_show }
+show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | hash_show | path_show | val_state_show | hash_state_show | item_type_show | alert_type_show | alert_status_show | scan_state_show | access_show | int_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { id_col | date_col | bool_col | string_col | path_col | val_state_col | hash_state_col | item_type_col | alert_type_col | alert_status_col | scan_state_col | access_col | int_col }
+order_column =  { id_col | date_col | bool_col | string_col | hash_col | path_col | val_state_col | hash_state_col | item_type_col | alert_type_col | alert_status_col | scan_state_col | access_col | int_col }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause
@@ -39,6 +39,7 @@ id_filter_EOI           = { WS* ~ id_filter_values ~ WS* ~ EOI }
 date_filter_EOI         = { WS* ~ date_filter_values ~ WS* ~ EOI }
 bool_filter_EOI         = { bool_filter_values ~ WS* ~ EOI }
 string_filter_EOI       = { string_filter_values ~ WS* ~ EOI }
+hash_filter_EOI         = { hash_filter_values ~ WS* ~ EOI }
 path_filter_EOI         = { WS* ~ path_filter_values ~ WS* ~ EOI }
 val_state_filter_EOI    = { WS* ~ val_state_filter_values ~ WS* ~ EOI }
 hash_state_filter_EOI   = { WS* ~ hash_state_filter_values ~ WS* ~ EOI }
@@ -89,7 +90,7 @@ bool               = _{ null | not_null | bool_true | bool_false }
 bool_true          =  { "TRUE" | "true" | "True" | ^"T" }
 bool_false         =  { "FALSE" | "false" | "False" | ^"F" }
 
-string_col = { "error" | "file_hash" | "val_error" | "hash_old" | "hash_new" }
+string_col = { "error" | "val_error" }
 
 string_show = { string_col }
 
@@ -98,6 +99,17 @@ string_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ string_filter_value
 string_filter_values = _{ WS* ~ string_spec ~ (WS* ~ COMMA ~ WS* ~ string_spec)* }
 string_spec          = _{ null | not_null | ("'" ~ string ~ "'") }
 string               =  { (("\\'" | (!"'" ~ ANY)))* }
+
+// Hash Columns (stored as BLOB, queried via HEX conversion)
+hash_col = { "file_hash" | "hash_old" | "hash_new" }
+
+hash_show = { hash_col }
+
+hash_filter        =  { hash_col ~ hash_filter_body }
+hash_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ hash_filter_values ~ WS* ~ RPAREN }
+hash_filter_values = _{ WS* ~ hash_spec ~ (WS* ~ COMMA ~ WS* ~ hash_spec)* }
+hash_spec          = _{ null | not_null | ("'" ~ hash_string ~ "'") }
+hash_string        =  { (("\\'" | (!"'" ~ ANY)))* }
 
 // Path Columns
 path_col = { "item_path" | "item_name" | "root_path" }
