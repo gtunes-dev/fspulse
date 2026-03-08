@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.6] - 2026-03-06
+
 ### Changed
 - **Hash storage optimization**: SHA-256 hashes (`file_hash`, `hash_old`, `hash_new`) are now stored as 32-byte BLOBs instead of 64-character hex TEXT strings, halving per-hash storage cost. Hex conversion happens at the Rust read/write boundary; all business logic and the frontend remain unchanged. The query language gains a new `Hash` column type so hash filters use `HEX()` to search BLOB data (schema v26→v27)
 - **Drop redundant index**: Removed standalone `idx_items_path` index. All queries that filter/sort on `item_path` also filter on `root_id`, so the composite `idx_items_root_path` index covers every use case. Saves ~40 MB per 1M items (schema v26→v27)
