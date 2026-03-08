@@ -37,6 +37,7 @@ import {
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { fetchQuery } from '@/lib/api'
+import { useTaskContext } from '@/contexts/TaskContext'
 import type { ColumnSpec } from '@/lib/types'
 
 interface Root {
@@ -61,6 +62,7 @@ type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 export function TrendsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { lastTaskCompletedAt } = useTaskContext()
 
   // Support deep-linking via URL params (e.g., from Dashboard root health card)
   const initialRootId = searchParams.get('root_id') || ''
@@ -347,7 +349,7 @@ export function TrendsPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedRootId, fromDate, toDate])
+  }, [selectedRootId, fromDate, toDate, lastTaskCompletedAt])
 
   // Load data when filters change
   useEffect(() => {

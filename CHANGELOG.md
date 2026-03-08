@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **scan_undo_log primary key**: Replaced `undo_id` auto-increment column with `version_id` as the primary key (schema v25→v26). Since there is at most one undo entry per version, `version_id` is the natural key — lookups are now O(1) rowid seeks instead of B-tree index traversals
 
 ### Fixed
+- **Trends page not updating on scan completion**: Trends charts now automatically refresh when a scan completes, using the same `lastTaskCompletedAt` mechanism as other pages
 - **Root Health and Roots tables not updating on task stop**: `setLastTaskCompletedAt` was called inside React state updater functions (a side effect in what should be a pure function), which could cause React to silently drop the update. Moved all `setLastTaskCompletedAt` calls out of updaters so task completion reliably triggers data re-fetch
 - **Root Health and Roots tables not updating on task start**: These tables only re-fetched on task completion, so starting a scan wouldn't update the displayed scan state until the page was refreshed. Added `currentTaskId` as a useEffect dependency so they also re-fetch when a task starts or clears
 - **Scan rollback FK ordering**: Fixed `FOREIGN KEY constraint failed` error when stopping a scan. The undo log rollback was deleting items before their child versions; reordered to delete `item_versions` first, then orphaned `items`, satisfying the FK constraint
