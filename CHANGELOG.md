@@ -10,10 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **SQLite scan performance**: Increased transaction batch size from 100 to 2000 items, set `synchronous = NORMAL` (safe with WAL for resumable workloads), and increased per-connection page cache to ~32 MB to keep index pages hot during large scans
 - **Frontend source reorganization**: Moved components from legacy `pages/setup/` directory into their respective page directories (`pages/roots/`, `pages/schedules/`, `pages/settings/`) to match the app's navigation structure
+- **scan_undo_log primary key**: Replaced `undo_id` auto-increment column with `version_id` as the primary key (schema v25→v26). Since there is at most one undo entry per version, `version_id` is the natural key — lookups are now O(1) rowid seeks instead of B-tree index traversals
 
 ### Fixed
 - **Root Health and Roots tables not updating on task stop**: `setLastTaskCompletedAt` was called inside React state updater functions (a side effect in what should be a pure function), which could cause React to silently drop the update. Moved all `setLastTaskCompletedAt` calls out of updaters so task completion reliably triggers data re-fetch
 - **Root Health and Roots tables not updating on task start**: These tables only re-fetched on task completion, so starting a scan wouldn't update the displayed scan state until the page was refreshed. Added `currentTaskId` as a useEffect dependency so they also re-fetch when a task starts or clears
+- **Scan rollback FK ordering**: Fixed `FOREIGN KEY constraint failed` error when stopping a scan. The undo log rollback was deleting items before their child versions; reordered to delete `item_versions` first, then orphaned `items`, satisfying the FK constraint
+- **Undo log cleared on scan resume**: The undo log was unconditionally cleared at scan start, destroying entries needed to roll back a resumed scan. Now only clears on fresh scans; resumed scans preserve existing undo entries
 - **Browse page overflow**: Tree view content no longer draws over the Item Details panel when the window is narrow. File/folder names truncate with ellipsis instead of wrapping
 - **Browse page filter overflow**: Filter labels (Change Type, Hash State, Validation State) no longer wrap or overflow the card boundary at narrow widths
 - **Browse page tab bar overflow**: Tree/Folder/Search tabs no longer overflow at narrow widths

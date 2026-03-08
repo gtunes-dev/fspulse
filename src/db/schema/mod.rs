@@ -14,6 +14,7 @@ mod v21_to_v22;
 mod v22_to_v23;
 mod v23_to_v24;
 mod v24_to_v25;
+mod v25_to_v26;
 mod v2_to_v3;
 mod v3_to_v4;
 mod v4_to_v5;
@@ -47,6 +48,7 @@ use v21_to_v22::{migrate_21_to_22, UPGRADE_21_TO_22_POST_SQL, UPGRADE_21_TO_22_P
 use v22_to_v23::run_backfill_unchanged_count;
 use v23_to_v24::run_migration_v23_to_v24;
 use v24_to_v25::run_migration_v24_to_v25;
+use v25_to_v26::UPGRADE_25_TO_26_SQL;
 use v2_to_v3::UPGRADE_2_TO_3_SQL;
 use v3_to_v4::UPGRADE_3_TO_4_SQL;
 use v4_to_v5::UPGRADE_4_TO_5_SQL;
@@ -152,3 +154,4 @@ pub const MIGRATION_21_TO_22: Migration = Migration::Transacted {
 pub const MIGRATION_22_TO_23: Migration = Migration::standalone(run_backfill_unchanged_count);
 pub const MIGRATION_23_TO_24: Migration = Migration::standalone(run_migration_v23_to_v24);
 pub const MIGRATION_24_TO_25: Migration = Migration::standalone(run_migration_v24_to_v25);
+pub const MIGRATION_25_TO_26: Migration = Migration::sql_only(UPGRADE_25_TO_26_SQL);

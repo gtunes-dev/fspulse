@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '24');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '26');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -131,8 +131,7 @@ CREATE INDEX IF NOT EXISTS idx_versions_first_scan ON item_versions (first_scan_
 -- Scan undo log (transient, for rollback support)
 -- ========================================
 CREATE TABLE IF NOT EXISTS scan_undo_log (
-    undo_id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    version_id          INTEGER NOT NULL,
+    version_id          INTEGER PRIMARY KEY,
     old_last_scan_id    INTEGER NOT NULL,
     old_last_hash_scan  INTEGER,
     old_last_val_scan   INTEGER

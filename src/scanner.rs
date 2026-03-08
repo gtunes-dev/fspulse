@@ -175,10 +175,12 @@ impl Scanner {
         // it exits cleanly with the scan, and database, in a resumable state
         // independent of the reason the interrupt was triggered
 
-        // Guard: the undo log should be empty at scan start. If not, a previous scan
-        // crashed without cleaning up. Warn and clear to prevent stale entries from
-        // corrupting this scan's rollback.
-        {
+        // Guard: on a fresh scan, the undo log should be empty. If not, a previous
+        // scan crashed without cleaning up. Warn and clear to prevent stale entries
+        // from corrupting this scan's rollback.
+        // On resume (was_restarted), the undo log contains entries from the previous
+        // run that are needed for rollback — do NOT clear them.
+        if !scan.was_restarted() {
             let conn = Database::get_connection()?;
             UndoLog::warn_and_clear_if_not_empty(&conn)?;
         }

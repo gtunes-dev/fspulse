@@ -108,7 +108,6 @@ pub struct Scan {
     started_at: i64,
     #[allow(dead_code)]
     ended_at: Option<i64>,
-    #[allow(dead_code)]
     was_restarted: bool,
     state: ScanState,
     analysis_spec: AnalysisSpec,
@@ -367,6 +366,10 @@ impl Scan {
 
     pub fn root_id(&self) -> i64 {
         self.root_id
+    }
+
+    pub fn was_restarted(&self) -> bool {
+        self.was_restarted
     }
 
     pub fn state(&self) -> ScanState {
