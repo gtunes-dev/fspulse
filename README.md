@@ -1,16 +1,29 @@
-<img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="fsPulse logo" width="100%" style="max-width: 600px;">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/brand/icon-256.png" alt="fsPulse" width="128">
+</p>
 
-# fsPulse
+<h1 align="center" style="font-weight: 600; font-size: 2em; margin-top: 0.2em;">fsPulse</h1>
 
-> **⚠️ Early Development Notice**
-> fsPulse is under active development and is not yet feature-complete. Core functionality is stable, but expect continued evolution and occasional breaking changes. Feedback and issue reports are welcome as we work toward a 1.0 release.
+<p align="center">
+  <strong>Filesystem monitoring and integrity verification</strong>
+</p>
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/gtunesdev/fspulse)](https://hub.docker.com/r/gtunesdev/fspulse)
-[![GitHub release](https://img.shields.io/github/v/release/gtunes-dev/fspulse)](https://github.com/gtunes-dev/fspulse/releases)
+<p align="center">
+  <a href="https://gtunes-dev.github.io/fspulse/">Documentation</a> •
+  <a href="https://gtunes-dev.github.io/fspulse/getting_started.html">Getting Started</a> •
+  <a href="https://hub.docker.com/r/gtunesdev/fspulse">Docker Hub</a> •
+  <a href="https://github.com/gtunes-dev/fspulse/releases">Releases</a>
+</p>
+
+<p align="center">
+  <a href="https://hub.docker.com/r/gtunesdev/fspulse"><img src="https://img.shields.io/docker/pulls/gtunesdev/fspulse" alt="Docker Pulls"></a>
+  <a href="https://github.com/gtunes-dev/fspulse/releases"><img src="https://img.shields.io/github/v/release/gtunes-dev/fspulse" alt="GitHub release"></a>
+</p>
 
 ---
 
-> **📖 fsPulse has comprehensive documentation.** [Jump straight to the docs →](https://gtunes-dev.github.io/fspulse/)
+> **⚠️ Early Development Notice**
+> fsPulse is under active development and is not yet feature-complete. Core functionality is stable, but expect continued evolution and occasional breaking changes. Feedback and issue reports are welcome as we work toward a 1.0 release.
 
 ---
 
@@ -40,7 +53,7 @@ fsPulse gives you **continuous awareness** of both the visible and invisible:
 Whether you're managing storage capacity, tracking project evolution, or ensuring data integrity, fsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-scan-progress.png" alt="fsPulse Web UI - Real-time Scan Monitoring" width="90%" style="max-width: 900px;">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/screenshots/web-scan-progress.png" alt="fsPulse Web UI - Real-time Scan Monitoring" width="90%" style="max-width: 900px;">
   <br>
   <em>Web UI showing real-time scan progress with live statistics</em>
 </p>
@@ -156,13 +169,13 @@ The interface is organized into two navigation groups — primary pages for ever
 <!-- TODO: Replace these with current screenshots showing the new navigation and pages -->
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-tree.png" alt="fsPulse Browse Page - Filesystem Tree" width="90%" style="max-width: 900px;">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/screenshots/web-browse-tree.png" alt="fsPulse Browse Page - Filesystem Tree" width="90%" style="max-width: 900px;">
   <br>
   <em>Browse page showing filesystem hierarchy navigation</em>
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/web-browse-detail.png" alt="fsPulse Browse Page - Item Detail Panel" width="90%" style="max-width: 900px;">
+  <img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/screenshots/web-browse-detail.png" alt="fsPulse Browse Page - Item Detail Panel" width="90%" style="max-width: 900px;">
   <br>
   <em>Item detail panel showing metadata, validation status, and version history</em>
 </p>

@@ -123,10 +123,11 @@ export function AppSidebar() {
     <SidebarRoot collapsible="icon">
       {/* Brand area */}
       <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-3 px-1 py-1">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 flex-shrink-0" aria-hidden="true">
-            <path d="M20 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4l2 3h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2Z" />
-            <polyline points="5 14 8 14 10 10 13 17 15 12 17 14 19 14" />
+        <div className="flex items-center gap-3 px-1 py-1 text-[#14B8A6] dark:text-[#2DD4BF]">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" className="h-6 w-6 flex-shrink-0" aria-hidden="true">
+            <circle cx="12" cy="12" r="10.5" fill="currentColor" opacity="0.10" />
+            <circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <polyline points="3,13 7.5,13 9.5,9 12,17 14.5,6 16.5,13 20.5,13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           {!collapsed && (
             <span className="text-lg font-semibold whitespace-nowrap">

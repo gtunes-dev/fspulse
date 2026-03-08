@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- fsPulse Logo — Monochrome white. For colored/busy backgrounds, overlays, stickers. -->
+  <circle cx="256" cy="256" r="224" fill="#ffffff" opacity="0.10" stroke="none"/>
+  <circle cx="256" cy="256" r="224" fill="none" stroke="#ffffff" stroke-width="16"/>
+  <polyline
+    points="56,276 160,276 200,276 224,196 256,356 288,136 312,276 352,276 456,276"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="16"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

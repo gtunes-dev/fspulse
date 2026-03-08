@@ -1,6 +1,10 @@
-# Introduction
+<p align="center">
+  <img src="images/icon-256.png" alt="fsPulse" width="128">
+  <br>
+  <strong style="font-size: 1.5em; color: #14B8A6; font-family: sans-serif;">fsPulse</strong>
+</p>
 
-<img src="https://raw.githubusercontent.com/gtunes-dev/fspulse/main/assets/splash.png" alt="fsPulse logo" style="width: 100%; max-width: 600px;">
+# Introduction
 
 > **Read-Only Guarantee.**
 > fsPulse **never modifies your files**. It requires only read access to the directories you configure for scanning. Write access is required only for fsPulse's own database, configuration files, and logs — never for your data.

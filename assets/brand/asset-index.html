@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>fsPulse Asset Kit — Final Review</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f0f0; color: #333; }
+  .header { text-align: center; padding: 40px 24px 10px; }
+  .header h1 { font-size: 24px; font-weight: 300; color: #555; }
+  .header p { font-size: 13px; color: #999; margin-top: 4px; }
+  .section { max-width: 1060px; margin: 20px auto; padding: 0 24px; }
+  .section h2 { font-size: 14px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .card { background: white; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+  .row { display: flex; }
+  .panel { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; min-height: 200px; }
+  .panel.light { background: #ffffff; }
+  .panel.dark { background: #0d1117; }
+  .panel.teal-bg { background: #14B8A6; }
+  .panel img { display: block; }
+  .label { font-size: 10px; color: #999; margin-top: 6px; text-align: center; }
+  .panel.dark .label { color: #666; }
+  .panel.teal-bg .label { color: rgba(255,255,255,0.7); }
+
+  .icon-row { display: flex; gap: 24px; padding: 24px 32px; align-items: end; justify-content: center; flex-wrap: wrap; }
+  .icon-item { text-align: center; }
+  .icon-item img { display: block; border: 1px solid #eee; border-radius: 4px; }
+  .icon-item span { display: block; font-size: 10px; color: #999; margin-top: 4px; }
+
+  .file-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .file-table th { text-align: left; padding: 10px 16px; border-bottom: 2px solid #eee; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .file-table td { padding: 8px 16px; border-bottom: 1px solid #f5f5f5; }
+  .mono { font-family: 'SF Mono', Monaco, monospace; font-size: 11px; color: #14B8A6; }
+  .desc { color: #666; }
+  .group-header td { background: #fafafa; font-weight: 600; color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>fsPulse — Complete Asset Kit</h1>
+  <p>29 files &middot; 3 color variants &middot; all icon-only, no text</p>
+</div>
+
+<!-- SVG Masters -->
+<div class="section">
+  <h2>SVG Masters — 3 Color Variants</h2>
+  <div class="card">
+    <div class="row">
+      <div class="panel light" style="flex-direction: column;">
+        <img src="assets/logo.svg" width="140" height="140">
+        <div class="label">logo.svg<br>Standard (#14B8A6)</div>
+      </div>
+      <div class="panel dark" style="flex-direction: column;">
+        <img src="assets/logo-dark.svg" width="140" height="140">
+        <div class="label">logo-dark.svg<br>Dark-optimized (#2DD4BF)</div>
+      </div>
+      <div class="panel teal-bg" style="flex-direction: column;">
+        <img src="assets/logo-white.svg" width="140" height="140">
+        <div class="label">logo-white.svg<br>Monochrome white</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Favicon -->
+<div class="section">
+  <h2>Favicon (dark/light adaptive SVG + legacy ICO)</h2>
+  <div class="card">
+    <div class="row">
+      <div class="panel light" style="gap: 28px; min-height: 120px;">
+        <div style="text-align:center"><img src="assets/favicon.svg" style="width:16px;height:16px"><div class="label">16px</div></div>
+        <div style="text-align:center"><img src="assets/favicon.svg" style="width:24px;height:24px"><div class="label">24px</div></div>
+        <div style="text-align:center"><img src="assets/favicon.svg" style="width:32px;height:32px"><div class="label">32px</div></div>
+      </div>
+      <div class="panel dark" style="gap: 28px; min-height: 120px;">
+        <div style="text-align:center"><img src="assets/favicon.svg" style="width:16px;height:16px"><div class="label">16px</div></div>
+        <div style="text-align:center"><img src="assets/favicon.svg" style="width:24px;height:24px"><div class="label">24px</div></div>
+        <div style="text-align:center"><img src="assets/favicon.svg" style="width:32px;height:32px"><div class="label">32px</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Standard PNGs -->
+<div class="section">
+  <h2>Standard PNG Set (light backgrounds)</h2>
+  <div class="card">
+    <div class="icon-row">
+      <div class="icon-item"><img src="assets/icon-16.png" width="16" height="16"><span>16</span></div>
+      <div class="icon-item"><img src="assets/icon-32.png" width="32" height="32"><span>32</span></div>
+      <div class="icon-item"><img src="assets/icon-48.png" width="48" height="48"><span>48</span></div>
+      <div class="icon-item"><img src="assets/icon-64.png" width="64" height="64"><span>64</span></div>
+      <div class="icon-item"><img src="assets/icon-128.png" width="100" height="100"><span>128</span></div>
+      <div class="icon-item"><img src="assets/icon-256.png" width="100" height="100"><span>256</span></div>
+      <div class="icon-item"><img src="assets/icon-512.png" width="100" height="100"><span>512</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Dark PNGs -->
+<div class="section">
+  <h2>Dark-Optimized PNG Set (dark backgrounds)</h2>
+  <div class="card" style="background: #0d1117;">
+    <div class="icon-row">
+      <div class="icon-item"><img src="assets/icon-16-dark.png" width="16" height="16" style="border-color:#222"><span style="color:#666">16</span></div>
+      <div class="icon-item"><img src="assets/icon-32-dark.png" width="32" height="32" style="border-color:#222"><span style="color:#666">32</span></div>
+      <div class="icon-item"><img src="assets/icon-48-dark.png" width="48" height="48" style="border-color:#222"><span style="color:#666">48</span></div>
+      <div class="icon-item"><img src="assets/icon-64-dark.png" width="64" height="64" style="border-color:#222"><span style="color:#666">64</span></div>
+      <div class="icon-item"><img src="assets/icon-128-dark.png" width="100" height="100" style="border-color:#222"><span style="color:#666">128</span></div>
+      <div class="icon-item"><img src="assets/icon-256-dark.png" width="100" height="100" style="border-color:#222"><span style="color:#666">256</span></div>
+      <div class="icon-item"><img src="assets/icon-512-dark.png" width="100" height="100" style="border-color:#222"><span style="color:#666">512</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- White PNGs -->
+<div class="section">
+  <h2>Monochrome White PNGs</h2>
+  <div class="card" style="background: #14B8A6;">
+    <div class="icon-row">
+      <div class="icon-item"><img src="assets/icon-128-white.png" width="100" height="100" style="border:none"><span style="color:rgba(255,255,255,0.7)">128</span></div>
+      <div class="icon-item"><img src="assets/icon-256-white.png" width="100" height="100" style="border:none"><span style="color:rgba(255,255,255,0.7)">256</span></div>
+      <div class="icon-item"><img src="assets/icon-512-white.png" width="100" height="100" style="border:none"><span style="color:rgba(255,255,255,0.7)">512</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Maskable -->
+<div class="section">
+  <h2>Maskable PWA Icons (safe zone for Android adaptive crop)</h2>
+  <div class="card">
+    <div class="row">
+      <div class="panel light" style="gap: 40px; flex-direction: row;">
+        <div style="text-align: center;">
+          <div style="position:relative; width:128px; height:128px;">
+            <img src="assets/icon-192-maskable.png" width="128" height="128" style="border: 1px solid #eee; border-radius: 4px;">
+            <div style="position:absolute;top:12.8px;left:12.8px;right:12.8px;bottom:12.8px;border:1px dashed #f97316;border-radius:50%;pointer-events:none;"></div>
+          </div>
+          <div class="label">192 maskable<br><span style="color:#f97316">orange = Android crop</span></div>
+        </div>
+        <div style="text-align: center;">
+          <div style="position:relative; width:128px; height:128px;">
+            <img src="assets/icon-512-maskable.png" width="128" height="128" style="border: 1px solid #eee; border-radius: 4px;">
+            <div style="position:absolute;top:12.8px;left:12.8px;right:12.8px;bottom:12.8px;border:1px dashed #f97316;border-radius:50%;pointer-events:none;"></div>
+          </div>
+          <div class="label">512 maskable<br><span style="color:#f97316">orange = Android crop</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Complete File Index -->
+<div class="section">
+  <h2>Complete File Index (29 files)</h2>
+  <div class="card">
+    <table class="file-table">
+      <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr class="group-header"><td colspan="2">SVG Masters</td></tr>
+        <tr><td class="mono">logo.svg</td><td class="desc">Canonical master. Standard teal (#14B8A6). Scalable to any size.</td></tr>
+        <tr><td class="mono">logo-dark.svg</td><td class="desc">Dark-background variant. Lighter teal (#2DD4BF) for better contrast.</td></tr>
+        <tr><td class="mono">logo-white.svg</td><td class="desc">Monochrome white. Overlays, stickers, colored backgrounds.</td></tr>
+        <tr><td class="mono">favicon.svg</td><td class="desc">In-app favicon. Dark/light adaptive via CSS. Optimized strokes for 16–32px.</td></tr>
+
+        <tr class="group-header"><td colspan="2">Legacy Favicon</td></tr>
+        <tr><td class="mono">favicon.ico</td><td class="desc">Legacy browsers. Bundles 16, 32, 48px.</td></tr>
+
+        <tr class="group-header"><td colspan="2">Standard PNGs (light backgrounds)</td></tr>
+        <tr><td class="mono">icon-16.png</td><td class="desc">Browser tab favicon fallback.</td></tr>
+        <tr><td class="mono">icon-32.png</td><td class="desc">Retina browser tab, Windows taskbar.</td></tr>
+        <tr><td class="mono">icon-48.png</td><td class="desc">Windows desktop icon, small dashboard tiles.</td></tr>
+        <tr><td class="mono">icon-64.png</td><td class="desc">Medium dashboard tiles.</td></tr>
+        <tr><td class="mono">icon-128.png</td><td class="desc">Large dashboard tiles (Homepage, Homarr, Heimdall).</td></tr>
+        <tr><td class="mono">icon-180.png</td><td class="desc">Apple Touch Icon (alternate path).</td></tr>
+        <tr><td class="mono">icon-192.png</td><td class="desc">Android/Chrome PWA icon.</td></tr>
+        <tr><td class="mono">icon-256.png</td><td class="desc">General purpose, Windows large icon.</td></tr>
+        <tr><td class="mono">icon-512.png</td><td class="desc">PWA splash, Docker Hub, high-res display.</td></tr>
+        <tr><td class="mono">apple-touch-icon.png</td><td class="desc">iOS home screen bookmark. 180×180.</td></tr>
+
+        <tr class="group-header"><td colspan="2">Dark-Optimized PNGs (#2DD4BF)</td></tr>
+        <tr><td class="mono">icon-16-dark.png</td><td class="desc">Dark theme browser tab.</td></tr>
+        <tr><td class="mono">icon-32-dark.png</td><td class="desc">Dark theme retina tab.</td></tr>
+        <tr><td class="mono">icon-48-dark.png</td><td class="desc">Dark dashboard small tile.</td></tr>
+        <tr><td class="mono">icon-64-dark.png</td><td class="desc">Dark dashboard medium tile.</td></tr>
+        <tr><td class="mono">icon-128-dark.png</td><td class="desc">Dark dashboard large tile.</td></tr>
+        <tr><td class="mono">icon-180-dark.png</td><td class="desc">Dark Apple Touch Icon.</td></tr>
+        <tr><td class="mono">icon-192-dark.png</td><td class="desc">Dark Android/Chrome PWA.</td></tr>
+        <tr><td class="mono">icon-256-dark.png</td><td class="desc">Dark general purpose.</td></tr>
+        <tr><td class="mono">icon-512-dark.png</td><td class="desc">Dark high-res display.</td></tr>
+
+        <tr class="group-header"><td colspan="2">Monochrome White PNGs</td></tr>
+        <tr><td class="mono">icon-128-white.png</td><td class="desc">White overlay, medium.</td></tr>
+        <tr><td class="mono">icon-256-white.png</td><td class="desc">White overlay, large.</td></tr>
+        <tr><td class="mono">icon-512-white.png</td><td class="desc">White overlay, high-res.</td></tr>
+
+        <tr class="group-header"><td colspan="2">Maskable PWA Icons</td></tr>
+        <tr><td class="mono">icon-192-maskable.png</td><td class="desc">Android adaptive icon. Logo inset to 80% safe zone.</td></tr>
+        <tr><td class="mono">icon-512-maskable.png</td><td class="desc">Android adaptive icon (large). Logo inset to 80% safe zone.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>
