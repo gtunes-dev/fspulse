@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '27');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '28');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -54,11 +54,12 @@ CREATE TABLE IF NOT EXISTS scans (
 -- ========================================
 -- Lightweight stable identity for each item across all its versions.
 CREATE TABLE IF NOT EXISTS items (
-    item_id     INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_id     INTEGER NOT NULL,
-    item_path   TEXT NOT NULL,
-    item_name   TEXT NOT NULL,
-    item_type   INTEGER NOT NULL,
+    item_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    root_id        INTEGER NOT NULL,
+    item_path      TEXT NOT NULL,
+    item_name      TEXT NOT NULL,
+    item_type      INTEGER NOT NULL,
+    has_validator   INTEGER NOT NULL DEFAULT 0,   -- 1 if a structural validator exists for this file type
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     UNIQUE (root_id, item_path, item_type)
 );
@@ -83,16 +84,6 @@ CREATE TABLE IF NOT EXISTS item_versions (
     mod_date        INTEGER,
     size            INTEGER,
 
-    -- Validation fields (NULL for folders)
-    last_val_scan   INTEGER,
-    val_state       INTEGER,
-    val_error       TEXT,
-
-    -- Hash fields (NULL for folders)
-    last_hash_scan  INTEGER,
-    file_hash       BLOB,
-    hash_state      INTEGER,
-
     -- Folder-specific descendant change counts (NULL for files).
     -- Each count reflects the scan that created this version:
     --   add_count       — descendants that were added (new or restored)
@@ -107,17 +98,6 @@ CREATE TABLE IF NOT EXISTS item_versions (
     delete_count    INTEGER,
     unchanged_count INTEGER,
 
-    -- Folder-specific descendant state snapshot counts (NULL for files).
-    -- Count of alive descendant files in each validation/hash state
-    -- at the scan that created this version.
-    val_unknown_count        INTEGER,
-    val_valid_count          INTEGER,
-    val_invalid_count        INTEGER,
-    val_no_validator_count   INTEGER,
-    hash_unknown_count       INTEGER,
-    hash_valid_count         INTEGER,
-    hash_suspect_count    INTEGER,
-
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
@@ -127,14 +107,52 @@ CREATE INDEX IF NOT EXISTS idx_versions_item_scan ON item_versions (item_id, fir
 CREATE INDEX IF NOT EXISTS idx_versions_first_scan ON item_versions (first_scan_id);
 
 -- ========================================
+-- Hash versions table (integrity observations)
+-- ========================================
+-- One row per distinct hash observation for a file. Decoupled from item_versions.
+-- Absence of a row means the item has never been hashed.
+CREATE TABLE IF NOT EXISTS hash_versions (
+    item_id         INTEGER NOT NULL,
+    first_scan_id   INTEGER NOT NULL,
+    last_scan_id    INTEGER NOT NULL,
+    file_hash       BLOB NOT NULL,
+    hash_state      INTEGER NOT NULL,   -- 1=Valid, 2=Suspect
+    PRIMARY KEY (item_id, first_scan_id),
+    FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
+    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+) WITHOUT ROWID;
+
+-- ========================================
+-- Validation versions table (integrity observations)
+-- ========================================
+-- One row per distinct validation result for a file. Decoupled from item_versions.
+-- Absence of a row means the item has never been validated.
+CREATE TABLE IF NOT EXISTS val_versions (
+    item_id         INTEGER NOT NULL,
+    first_scan_id   INTEGER NOT NULL,
+    last_scan_id    INTEGER NOT NULL,
+    val_state       INTEGER NOT NULL,   -- 1=Valid, 2=Invalid
+    val_error       TEXT,
+    PRIMARY KEY (item_id, first_scan_id),
+    FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
+    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+) WITHOUT ROWID;
+
+-- ========================================
 -- Scan undo log (transient, for rollback support)
 -- ========================================
+-- log_type: 0=item_version, 1=hash_version, 2=val_version
+-- For type 0: ref_id1=version_id, ref_id2=0
+-- For types 1,2: ref_id1=item_id, ref_id2=first_scan_id
 CREATE TABLE IF NOT EXISTS scan_undo_log (
-    version_id          INTEGER PRIMARY KEY,
+    log_type            INTEGER NOT NULL,
+    ref_id1             INTEGER NOT NULL,
+    ref_id2             INTEGER NOT NULL DEFAULT 0,
     old_last_scan_id    INTEGER NOT NULL,
-    old_last_hash_scan  INTEGER,
-    old_last_val_scan   INTEGER
-);
+    PRIMARY KEY (log_type, ref_id1, ref_id2)
+) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS alerts (
   alert_id INTEGER PRIMARY KEY AUTOINCREMENT,

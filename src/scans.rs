@@ -564,19 +564,36 @@ impl Scan {
                             )
                             .unwrap_or((0, 0, 0));
 
-                        // Compute val/hash state counts for alive files at this scan
+                        // Compute val/hash state counts for alive files at this scan.
+                        //
+                        // Hash state lives in hash_versions joined via LEFT JOIN.
+                        // A file never hashed has no row → hv.hash_state IS NULL → "unknown".
+                        //
+                        // Validation state uses both items.has_validator and val_versions:
+                        //   - "No Validator": i.has_validator = 0 (no structural validator for this file type)
+                        //   - "Unknown":      i.has_validator = 1 AND vv.val_state IS NULL (validatable but not yet validated)
+                        //   - "Valid":         vv.val_state = 1
+                        //   - "Invalid":       vv.val_state = 2
                         let (vu, vv, vi, vn, hu, hv, hs): (i64, i64, i64, i64, i64, i64, i64) = c
                             .query_row(
                                 "SELECT
-                                    COALESCE(SUM(CASE WHEN COALESCE(iv.val_state, 0) = 0 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.val_state = 1 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.val_state = 2 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.val_state = 3 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN COALESCE(iv.hash_state, 0) = 0 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.hash_state = 1 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.hash_state = 2 THEN 1 ELSE 0 END), 0)
+                                    COALESCE(SUM(CASE WHEN i.has_validator = 1 AND vv.val_state IS NULL THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN vv.val_state = 1 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN vv.val_state = 2 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN i.has_validator = 0 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN hv.hash_state IS NULL THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN hv.hash_state = 1 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN hv.hash_state = 2 THEN 1 ELSE 0 END), 0)
                                  FROM items i
                                  JOIN item_versions iv ON iv.item_id = i.item_id
+                                 LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+                                     AND hv.first_scan_id = (
+                                         SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+                                     )
+                                 LEFT JOIN val_versions vv ON vv.item_id = i.item_id
+                                     AND vv.first_scan_id = (
+                                         SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+                                     )
                                  WHERE i.root_id = ? AND i.item_type = 0
                                    AND iv.last_scan_id = ? AND iv.is_deleted = 0",
                                 params![self.root_id, self.scan_id],
@@ -801,21 +818,21 @@ impl ScanStats {
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
         ).unwrap_or((0, 0, 0, 0, 0, 0));
 
-        // Get hashing statistics from temporal model
+        // Get hashing statistics: count items whose current hash was confirmed this scan
         let items_hashed: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM item_versions
-                 WHERE last_hash_scan = ? AND file_hash IS NOT NULL",
+                "SELECT COUNT(*) FROM hash_versions
+                 WHERE last_scan_id = ?",
                 params![scan_id],
                 |row| row.get(0),
             )
             .unwrap_or(0);
 
-        // Get validation statistics from temporal model
+        // Get validation statistics: count items whose current val was confirmed this scan
         let items_validated: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM item_versions
-                 WHERE last_val_scan = ?",
+                "SELECT COUNT(*) FROM val_versions
+                 WHERE last_scan_id = ?",
                 params![scan_id],
                 |row| row.get(0),
             )

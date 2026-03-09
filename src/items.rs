@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::MAIN_SEPARATOR_STR;
 
 use crate::{
-    db::Database, error::FsPulseError, hash::Hash, utils::Utils,
+    db::Database, error::FsPulseError, utils::Utils,
 };
 
 // Re-export types that were moved to item_identity.rs.
@@ -97,6 +97,7 @@ pub struct TemporalTreeItem {
     pub item_path: String,
     pub item_name: String,
     pub item_type: ItemType,
+    pub has_validator: bool,
     pub first_scan_id: i64,
     pub is_added: bool,
     pub is_deleted: bool,
@@ -106,17 +107,9 @@ pub struct TemporalTreeItem {
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
     pub unchanged_count: Option<i64>,
-    // Integrity state for files (NULL for dirs/symlinks/other)
+    // Integrity state from hash_versions/val_versions (NULL if never hashed/validated)
     pub val_state: Option<i64>,
     pub hash_state: Option<i64>,
-    // Integrity descendant counts for directories (NULL for files)
-    pub val_unknown_count: Option<i64>,
-    pub val_valid_count: Option<i64>,
-    pub val_invalid_count: Option<i64>,
-    pub val_no_validator_count: Option<i64>,
-    pub hash_unknown_count: Option<i64>,
-    pub hash_valid_count: Option<i64>,
-    pub hash_suspect_count: Option<i64>,
 }
 
 /// Get immediate children at a point in time using items + item_versions.
@@ -144,14 +137,20 @@ pub fn get_temporal_immediate_children(
     );
 
     let sql = format!(
-        "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
+        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
                 iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
-                iv.val_state, iv.hash_state,
-                iv.val_unknown_count, iv.val_valid_count, iv.val_invalid_count, iv.val_no_validator_count,
-                iv.hash_unknown_count, iv.hash_valid_count, iv.hash_suspect_count
+                vv.val_state, hv.hash_state
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
+         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+             AND hv.first_scan_id = (
+                 SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+             )
+         LEFT JOIN val_versions vv ON vv.item_id = i.item_id
+             AND vv.first_scan_id = (
+                 SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+             )
          WHERE i.root_id = ?1
            AND iv.first_scan_id = (
                SELECT MAX(first_scan_id)
@@ -178,24 +177,18 @@ pub fn get_temporal_immediate_children(
                 item_path: row.get(1)?,
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
-                first_scan_id: row.get(4)?,
-                is_added: row.get(5)?,
-                is_deleted: row.get(6)?,
-                mod_date: row.get(7)?,
-                size: row.get(8)?,
-                add_count: row.get(9)?,
-                modify_count: row.get(10)?,
-                delete_count: row.get(11)?,
-                unchanged_count: row.get(12)?,
-                val_state: row.get(13)?,
-                hash_state: row.get(14)?,
-                val_unknown_count: row.get(15)?,
-                val_valid_count: row.get(16)?,
-                val_invalid_count: row.get(17)?,
-                val_no_validator_count: row.get(18)?,
-                hash_unknown_count: row.get(19)?,
-                hash_valid_count: row.get(20)?,
-                hash_suspect_count: row.get(21)?,
+                has_validator: row.get::<_, i64>(4)? != 0,
+                first_scan_id: row.get(5)?,
+                is_added: row.get(6)?,
+                is_deleted: row.get(7)?,
+                mod_date: row.get(8)?,
+                size: row.get(9)?,
+                add_count: row.get(10)?,
+                modify_count: row.get(11)?,
+                delete_count: row.get(12)?,
+                unchanged_count: row.get(13)?,
+                val_state: row.get(14)?,
+                hash_state: row.get(15)?,
             })
         },
     )?;
@@ -216,14 +209,20 @@ pub fn search_temporal_items(
     let conn = Database::get_connection()?;
 
     let sql =
-        "SELECT i.item_id, i.item_path, i.item_name, i.item_type,
+        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
                 iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
-                iv.val_state, iv.hash_state,
-                iv.val_unknown_count, iv.val_valid_count, iv.val_invalid_count, iv.val_no_validator_count,
-                iv.hash_unknown_count, iv.hash_valid_count, iv.hash_suspect_count
+                vv.val_state, hv.hash_state
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
+         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+             AND hv.first_scan_id = (
+                 SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+             )
+         LEFT JOIN val_versions vv ON vv.item_id = i.item_id
+             AND vv.first_scan_id = (
+                 SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+             )
          WHERE i.root_id = ?1
            AND iv.first_scan_id = (
                SELECT MAX(first_scan_id)
@@ -246,24 +245,18 @@ pub fn search_temporal_items(
                 item_path: row.get(1)?,
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
-                first_scan_id: row.get(4)?,
-                is_added: row.get(5)?,
-                is_deleted: row.get(6)?,
-                mod_date: row.get(7)?,
-                size: row.get(8)?,
-                add_count: row.get(9)?,
-                modify_count: row.get(10)?,
-                delete_count: row.get(11)?,
-                unchanged_count: row.get(12)?,
-                val_state: row.get(13)?,
-                hash_state: row.get(14)?,
-                val_unknown_count: row.get(15)?,
-                val_valid_count: row.get(16)?,
-                val_invalid_count: row.get(17)?,
-                val_no_validator_count: row.get(18)?,
-                hash_unknown_count: row.get(19)?,
-                hash_valid_count: row.get(20)?,
-                hash_suspect_count: row.get(21)?,
+                has_validator: row.get::<_, i64>(4)? != 0,
+                first_scan_id: row.get(5)?,
+                is_added: row.get(6)?,
+                is_deleted: row.get(7)?,
+                mod_date: row.get(8)?,
+                size: row.get(9)?,
+                add_count: row.get(10)?,
+                modify_count: row.get(11)?,
+                delete_count: row.get(12)?,
+                unchanged_count: row.get(13)?,
+                val_state: row.get(14)?,
+                hash_state: row.get(15)?,
             })
         },
     )?;
@@ -287,19 +280,11 @@ pub struct VersionHistoryEntry {
     pub access: i64,
     pub mod_date: Option<i64>,
     pub size: Option<i64>,
-    pub last_val_scan: Option<i64>,
-    pub val_state: Option<i64>,
-    pub val_error: Option<String>,
-    pub last_hash_scan: Option<i64>,
-    pub file_hash: Option<String>,
-    pub hash_state: Option<i64>,
     // Folder counts (NULL for files)
     pub add_count: Option<i64>,
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
     pub unchanged_count: Option<i64>,
-    pub hash_suspect_count: Option<i64>,
-    pub val_invalid_count: Option<i64>,
 }
 
 impl VersionHistoryEntry {
@@ -314,18 +299,10 @@ impl VersionHistoryEntry {
             access: row.get(6)?,
             mod_date: row.get(7)?,
             size: row.get(8)?,
-            last_val_scan: row.get(9)?,
-            val_state: row.get(10)?,
-            val_error: row.get(11)?,
-            last_hash_scan: row.get(12)?,
-            file_hash: Hash::opt_blob_to_hex(row.get(13)?),
-            hash_state: row.get(14)?,
-            add_count: row.get(15)?,
-            modify_count: row.get(16)?,
-            delete_count: row.get(17)?,
-            unchanged_count: row.get(18)?,
-            hash_suspect_count: row.get(19)?,
-            val_invalid_count: row.get(20)?,
+            add_count: row.get(9)?,
+            modify_count: row.get(10)?,
+            delete_count: row.get(11)?,
+            unchanged_count: row.get(12)?,
         })
     }
 }
@@ -353,8 +330,8 @@ const VERSION_HISTORY_COLUMNS: &str =
     "v.version_id, v.first_scan_id, v.last_scan_id, \
      s1.started_at, s2.started_at, \
      v.is_deleted, v.access, \
-     v.mod_date, v.size, v.last_val_scan, v.val_state, v.val_error, v.last_hash_scan, v.file_hash, v.hash_state, \
-     v.add_count, v.modify_count, v.delete_count, v.unchanged_count, v.hash_suspect_count, v.val_invalid_count";
+     v.mod_date, v.size, \
+     v.add_count, v.modify_count, v.delete_count, v.unchanged_count";
 
 /// Get version history for an item, starting from a specific scan going backwards.
 /// Returns up to `limit` versions ordered by first_scan_id DESC.

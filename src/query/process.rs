@@ -468,13 +468,11 @@ impl ItemsQuery {
                 "access" => Format::format_access(item.access, col.format)?,
                 "mod_date" => Format::format_opt_date(item.mod_date, col.format)?,
                 "size" => Format::format_opt_i64(item.size),
-                "last_val_scan" => Format::format_opt_i64(item.last_val_scan),
                 "val_state" => match item.val_state {
                     Some(v) => Format::format_val_state(ValidationState::from_i64(v), col.format)?,
                     None => String::new(),
                 },
                 "val_error" => Format::format_opt_string(&item.val_error),
-                "last_hash_scan" => Format::format_opt_i64(item.last_hash_scan),
                 "file_hash" => Format::format_opt_string(&item.file_hash),
                 "hash_state" => Format::format_hash_state(item.hash_state, col.format)?,
                 _ => {
@@ -624,26 +622,17 @@ impl VersionsQuery {
                 "access" => Format::format_access(version.access, col.format)?,
                 "mod_date" => Format::format_opt_date(version.mod_date, col.format)?,
                 "size" => Format::format_opt_i64(version.size),
-                "last_val_scan" => Format::format_opt_i64(version.last_val_scan),
+                "add_count" => Format::format_opt_i64(version.add_count),
+                "modify_count" => Format::format_opt_i64(version.modify_count),
+                "delete_count" => Format::format_opt_i64(version.delete_count),
+                "unchanged_count" => Format::format_opt_i64(version.unchanged_count),
                 "val_state" => match version.val_state {
                     Some(v) => Format::format_val_state(ValidationState::from_i64(v), col.format)?,
                     None => String::new(),
                 },
                 "val_error" => Format::format_opt_string(&version.val_error),
-                "last_hash_scan" => Format::format_opt_i64(version.last_hash_scan),
                 "file_hash" => Format::format_opt_string(&version.file_hash),
                 "hash_state" => Format::format_hash_state(version.hash_state, col.format)?,
-                "add_count" => Format::format_opt_i64(version.add_count),
-                "modify_count" => Format::format_opt_i64(version.modify_count),
-                "delete_count" => Format::format_opt_i64(version.delete_count),
-                "unchanged_count" => Format::format_opt_i64(version.unchanged_count),
-                "val_unknown_count" => Format::format_opt_i64(version.val_unknown_count),
-                "val_valid_count" => Format::format_opt_i64(version.val_valid_count),
-                "val_invalid_count" => Format::format_opt_i64(version.val_invalid_count),
-                "val_no_validator_count" => Format::format_opt_i64(version.val_no_validator_count),
-                "hash_unknown_count" => Format::format_opt_i64(version.hash_unknown_count),
-                "hash_valid_count" => Format::format_opt_i64(version.hash_valid_count),
-                "hash_suspect_count" => Format::format_opt_i64(version.hash_suspect_count),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -700,6 +689,14 @@ impl QueryImpl {
             AND iv.first_scan_id = (
                 SELECT MAX(first_scan_id) FROM item_versions WHERE item_id = i.item_id
             )
+        LEFT JOIN val_versions vv ON vv.item_id = i.item_id
+            AND vv.first_scan_id = (
+                SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+            )
+        LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+            AND hv.first_scan_id = (
+                SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+            )
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -708,6 +705,14 @@ impl QueryImpl {
     const VERSIONS_SQL_QUERY: &str = "SELECT {select_list}
         FROM item_versions iv
         JOIN items i ON i.item_id = iv.item_id
+        LEFT JOIN val_versions vv ON vv.item_id = iv.item_id
+            AND vv.first_scan_id = (
+                SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = iv.item_id
+            )
+        LEFT JOIN hash_versions hv ON hv.item_id = iv.item_id
+            AND hv.first_scan_id = (
+                SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = iv.item_id
+            )
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -765,10 +770,8 @@ struct ItemsQueryRow {
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
-    last_val_scan: Option<i64>,
     val_state: Option<i64>,
     val_error: Option<String>,
-    last_hash_scan: Option<i64>,
     file_hash: Option<String>,
     hash_state: Option<i64>,
 }
@@ -788,12 +791,10 @@ impl ItemsQueryRow {
             access: Access::from_i64(row.get(9)?),
             mod_date: row.get(10)?,
             size: row.get(11)?,
-            last_val_scan: row.get(12)?,
-            val_state: row.get(13)?,
-            val_error: row.get(14)?,
-            last_hash_scan: row.get(15)?,
-            file_hash: Hash::opt_blob_to_hex(row.get(16)?),
-            hash_state: row.get(17)?,
+            val_state: row.get(12)?,
+            val_error: row.get(13)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(14)?),
+            hash_state: row.get(15)?,
         })
     }
 }
@@ -811,23 +812,14 @@ struct VersionsQueryRow {
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
-    last_val_scan: Option<i64>,
-    val_state: Option<i64>,
-    val_error: Option<String>,
-    last_hash_scan: Option<i64>,
-    file_hash: Option<String>,
-    hash_state: Option<i64>,
     add_count: Option<i64>,
     modify_count: Option<i64>,
     delete_count: Option<i64>,
     unchanged_count: Option<i64>,
-    val_unknown_count: Option<i64>,
-    val_valid_count: Option<i64>,
-    val_invalid_count: Option<i64>,
-    val_no_validator_count: Option<i64>,
-    hash_unknown_count: Option<i64>,
-    hash_valid_count: Option<i64>,
-    hash_suspect_count: Option<i64>,
+    val_state: Option<i64>,
+    val_error: Option<String>,
+    file_hash: Option<String>,
+    hash_state: Option<i64>,
 }
 
 impl VersionsQueryRow {
@@ -845,23 +837,14 @@ impl VersionsQueryRow {
             access: Access::from_i64(row.get(9)?),
             mod_date: row.get(10)?,
             size: row.get(11)?,
-            last_val_scan: row.get(12)?,
-            val_state: row.get(13)?,
-            val_error: row.get(14)?,
-            last_hash_scan: row.get(15)?,
-            file_hash: Hash::opt_blob_to_hex(row.get(16)?),
-            hash_state: row.get(17)?,
-            add_count: row.get(18)?,
-            modify_count: row.get(19)?,
-            delete_count: row.get(20)?,
-            unchanged_count: row.get(21)?,
-            val_unknown_count: row.get(22)?,
-            val_valid_count: row.get(23)?,
-            val_invalid_count: row.get(24)?,
-            val_no_validator_count: row.get(25)?,
-            hash_unknown_count: row.get(26)?,
-            hash_valid_count: row.get(27)?,
-            hash_suspect_count: row.get(28)?,
+            add_count: row.get(12)?,
+            modify_count: row.get(13)?,
+            delete_count: row.get(14)?,
+            unchanged_count: row.get(15)?,
+            val_state: row.get(16)?,
+            val_error: row.get(17)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(18)?),
+            hash_state: row.get(19)?,
         })
     }
 }

@@ -16,6 +16,7 @@ mod v23_to_v24;
 mod v24_to_v25;
 mod v25_to_v26;
 mod v26_to_v27;
+mod v27_to_v28;
 mod v2_to_v3;
 mod v3_to_v4;
 mod v4_to_v5;
@@ -51,6 +52,7 @@ use v23_to_v24::run_migration_v23_to_v24;
 use v24_to_v25::run_migration_v24_to_v25;
 use v25_to_v26::UPGRADE_25_TO_26_SQL;
 use v26_to_v27::UPGRADE_26_TO_27_PRE_SQL;
+use v27_to_v28::{rollback_in_progress_scans, UPGRADE_27_TO_28_POST_SQL};
 use v2_to_v3::UPGRADE_2_TO_3_SQL;
 use v3_to_v4::UPGRADE_3_TO_4_SQL;
 use v4_to_v5::UPGRADE_4_TO_5_SQL;
@@ -158,3 +160,8 @@ pub const MIGRATION_23_TO_24: Migration = Migration::standalone(run_migration_v2
 pub const MIGRATION_24_TO_25: Migration = Migration::standalone(run_migration_v24_to_v25);
 pub const MIGRATION_25_TO_26: Migration = Migration::sql_only(UPGRADE_25_TO_26_SQL);
 pub const MIGRATION_26_TO_27: Migration = Migration::sql_only(UPGRADE_26_TO_27_PRE_SQL);
+pub const MIGRATION_27_TO_28: Migration = Migration::Transacted {
+    pre_sql: None,
+    code_fn: Some(rollback_in_progress_scans),
+    post_sql: Some(UPGRADE_27_TO_28_POST_SQL),
+};

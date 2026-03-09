@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Separated hash and validation from item versions**: Hash and validation state now live in dedicated `hash_versions` and `val_versions` tables with composite PK `(item_id, first_scan_id)` and WITHOUT ROWID, instead of columns on `item_versions`. Analysis phase runs from a new `src/integrity/` module. Temporal queries use LEFT JOIN with MAX(first_scan_id) subqueries (schema v27→v28)
+- **Added `has_validator` flag to items table**: Boolean column on `items` indicates whether a structural validator exists for the file's extension, eliminating NoValidator rows from `val_versions`. Query filter maps N (NoValidator) and U (Unknown) to item-level predicates instead of val_version lookups (schema v27→v28)
+- **Lightweight validator existence check**: `has_validator_for_path` uses a `matches!` check instead of allocating a boxed validator object, used during scanning for new items
+
 ## [v0.4.6] - 2026-03-06
 
 ### Changed
