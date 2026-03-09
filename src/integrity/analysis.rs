@@ -1,6 +1,6 @@
 use crossbeam_channel::bounded;
 use log::{error, info};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use threadpool::ThreadPool;
 
 use std::path::PathBuf;
@@ -42,6 +42,9 @@ pub fn run_analysis_phase(
         return Ok(());
     }
 
+    // Compute prev_scan_id once for Case B access versioning (same query as Phase 4)
+    let prev_scan_id = query_prev_completed_scan(&conn, scan.root_id(), scan.scan_id())?;
+
     // Parse initial task state for restart resilience (HWM loaded from TaskRow)
     let initial_state = ScanTaskState::from_task_state(initial_task_state.as_deref())?;
     let initial_hwm = initial_state.high_water_mark;
@@ -82,6 +85,7 @@ pub fn run_analysis_phase(
                 analyze_item(
                     &scan_copy,
                     analysis_item,
+                    prev_scan_id,
                     thread_index,
                     &task_progress_clone,
                     &interrupt_token_clone,
@@ -150,6 +154,7 @@ pub fn run_analysis_phase(
 fn analyze_item(
     scan: &Scan,
     mut analysis_item: AnalysisItem,
+    prev_scan_id: Option<i64>,
     thread_index: usize,
     task_progress: &Arc<TaskProgress>,
     interrupt_token: &Arc<AtomicBool>,
@@ -272,6 +277,7 @@ fn analyze_item(
         if let Err(error) = persist_analysis(
             scan,
             &analysis_item,
+            prev_scan_id,
             new_hash,
             new_val,
             new_val_error,
@@ -302,6 +308,7 @@ fn analyze_item(
 fn persist_analysis(
     scan: &Scan,
     analysis_item: &AnalysisItem,
+    prev_scan_id: Option<i64>,
     new_hash: Option<String>,
     new_val: ValidationState,
     new_val_error: Option<String>,
@@ -359,13 +366,40 @@ fn persist_analysis(
             )?;
         }
 
-        // Access state change on item_versions
+        // Access state change on item_versions — uses Case A/B pattern
+        // like Phase 4 folder counts. Access changes create proper version
+        // boundaries so they are correctly scoped in time and rolled back.
         if access_changed {
-            let current_version = crate::item_version::ItemVersion::get_current(c, analysis_item.item_id())?;
-            if let Some(cv) = current_version {
+            if analysis_item.version_first_scan_id() == scan.scan_id() {
+                // Case A: Version was created this scan — UPDATE in place.
+                // No undo needed; the entire version is deleted on rollback.
                 c.execute(
                     "UPDATE item_versions SET access = ? WHERE version_id = ?",
-                    rusqlite::params![new_access_value.as_i64(), cv.version_id()],
+                    rusqlite::params![new_access_value.as_i64(), analysis_item.version_id()],
+                )?;
+            } else {
+                // Case B: Pre-existing version. Close it by restoring last_scan_id
+                // to prev_scan_id, then INSERT a new version with the changed access.
+                // On rollback, the new version is deleted (first_scan_id = scan_id)
+                // and the old version's last_scan_id is restored by the undo log
+                // entry from Phase 1's touch_last_scan.
+                if let Some(prev) = prev_scan_id {
+                    c.execute(
+                        "UPDATE item_versions SET last_scan_id = ? WHERE version_id = ?",
+                        rusqlite::params![prev, analysis_item.version_id()],
+                    )?;
+                }
+
+                crate::item_version::ItemVersion::insert_full(
+                    c,
+                    analysis_item.item_id(),
+                    scan.scan_id(),
+                    false,          // is_added
+                    false,          // is_deleted (analysis only runs on non-deleted items)
+                    new_access_value,
+                    analysis_item.mod_date(),
+                    analysis_item.size(),
+                    None,           // counts (files only, no folder counts)
                 )?;
             }
         }
@@ -402,6 +436,8 @@ fn persist_analysis(
 pub struct AnalysisItem {
     item_id: i64,
     item_path: String,
+    version_id: i64,
+    version_first_scan_id: i64,
     access: i64,
     mod_date: Option<i64>,
     size: Option<i64>,
@@ -426,6 +462,14 @@ impl AnalysisItem {
 
     pub fn item_path(&self) -> &str {
         &self.item_path
+    }
+
+    pub fn version_id(&self) -> i64 {
+        self.version_id
+    }
+
+    pub fn version_first_scan_id(&self) -> i64 {
+        self.version_first_scan_id
     }
 
     pub fn access(&self) -> Access {
@@ -489,18 +533,20 @@ impl AnalysisItem {
         Ok(AnalysisItem {
             item_id: row.get(0)?,
             item_path: row.get(1)?,
-            access: row.get(2)?,
-            mod_date: row.get(3)?,
-            size: row.get(4)?,
-            has_validator: row.get::<_, i64>(5)? != 0,
-            hash_first_scan_id: row.get(6)?,
-            hash_last_scan_id: row.get(7)?,
-            file_hash: Hash::opt_blob_to_hex(row.get(8)?),
-            val_first_scan_id: row.get(9)?,
-            val_state: row.get(10)?,
-            val_error: row.get(11)?,
-            needs_hash: row.get(12)?,
-            needs_val: row.get(13)?,
+            version_id: row.get(2)?,
+            version_first_scan_id: row.get(3)?,
+            access: row.get(4)?,
+            mod_date: row.get(5)?,
+            size: row.get(6)?,
+            has_validator: row.get::<_, i64>(7)? != 0,
+            hash_first_scan_id: row.get(8)?,
+            hash_last_scan_id: row.get(9)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(10)?),
+            val_first_scan_id: row.get(11)?,
+            val_state: row.get(12)?,
+            val_error: row.get(13)?,
+            needs_hash: row.get(14)?,
+            needs_val: row.get(15)?,
         })
     }
 
@@ -605,6 +651,8 @@ impl AnalysisItem {
             "SELECT
                 i.item_id,
                 i.item_path,
+                cv.version_id,
+                cv.first_scan_id,
                 cv.access,
                 cv.mod_date,
                 cv.size,
@@ -709,6 +757,27 @@ pub enum ValAnalysisError {
     ValidationError(String),
 }
 
+/// Find the most recent completed scan before the current one for this root.
+///
+/// Used by Case B access versioning to restore `last_scan_id` on the pre-existing
+/// version. Same query as `Scanner::query_prev_completed_scan`.
+fn query_prev_completed_scan(
+    conn: &Connection,
+    root_id: i64,
+    scan_id: i64,
+) -> Result<Option<i64>, FsPulseError> {
+    let prev: Option<i64> = conn
+        .query_row(
+            "SELECT MAX(scan_id) FROM scans
+             WHERE root_id = ? AND scan_id < ? AND state = 4",
+            params![root_id, scan_id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(prev)
+}
+
 fn check_interrupted(interrupt_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
     if interrupt_token.load(Ordering::Acquire) {
         Err(FsPulseError::TaskInterrupted)
@@ -734,6 +803,8 @@ mod tests {
         let analysis_item = AnalysisItem {
             item_id: 123,
             item_path: "/test/path".to_string(),
+            version_id: 999,
+            version_first_scan_id: 50,
             access: Access::Ok.as_i64(),
             mod_date: Some(1000),
             size: Some(2000),
