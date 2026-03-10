@@ -42,7 +42,6 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Legend,
 } from 'recharts'
 import { Separator } from '@/components/ui/separator'
 import { fetchQuery, countQuery, updateAlertStatus } from '@/lib/api'
@@ -252,6 +251,37 @@ function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
     v.size !== prev.size ||
     v.access !== prev.access ||
     hasFolderCountChanges(v, prev)
+  )
+}
+
+// ---- Layout helpers ----
+
+// Section wrapper: Card in sheet mode, div with divider in panel mode
+// IMPORTANT: Defined outside ItemDetail so React sees a stable component reference.
+// Defining this inside the component causes unmount/remount on every render,
+// which breaks Recharts charts that depend on stable DOM measurements.
+function Section({ mode, title, trailing, children }: { mode: ItemDetailMode; title: string; trailing?: ReactNode; children: ReactNode }) {
+  if (mode === 'sheet') {
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>{title}</CardTitle>
+            {trailing}
+          </div>
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
+    )
+  }
+  return (
+    <div className="px-3 py-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-semibold">{title}</p>
+        {trailing}
+      </div>
+      {children}
+    </div>
   )
 }
 
@@ -508,34 +538,6 @@ export function ItemDetail({
     }
     loadIntegrity()
   }, [shouldLoad, itemId, itemType, scanId])
-
-  // ---- Mode-aware layout helpers ----
-
-  // Section wrapper: Card in sheet mode, div with divider in panel mode
-  const Section = ({ title, trailing, children }: { title: string; trailing?: ReactNode; children: ReactNode }) => {
-    if (isSheet) {
-      return (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>{title}</CardTitle>
-              {trailing}
-            </div>
-          </CardHeader>
-          <CardContent>{children}</CardContent>
-        </Card>
-      )
-    }
-    return (
-      <div className="px-3 py-3">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-semibold">{title}</p>
-          {trailing}
-        </div>
-        {children}
-      </div>
-    )
-  }
 
   // Spacing constants
   const sp = {
@@ -870,11 +872,7 @@ export function ItemDetail({
       </div>
     )
 
-    const chartContent = loadingSizeHistory ? (
-      <div className={`flex items-center justify-center ${isPanel ? 'h-32' : 'h-64'} text-sm text-muted-foreground`}>Loading...</div>
-    ) : sizeHistory.length === 0 ? (
-      <div className={`flex items-center justify-center ${isPanel ? 'h-32' : 'h-64'} text-sm text-muted-foreground`}>No size history</div>
-    ) : (
+    const chart = (
       <ChartContainer
         config={{ size: { label: 'Size', color: 'hsl(271 81% 56%)' } }}
         className={`aspect-auto ${sp.chartHeight}`}
@@ -890,17 +888,22 @@ export function ItemDetail({
               while (s >= 1024 && i < units.length - 1) { s /= 1024; i++ }
               return `${s.toFixed(isPanel ? 0 : 1)} ${units[i]}`
             }}
-            width={isPanel ? 50 : undefined}
+            width={isPanel ? 50 : 60}
           />
           <ChartTooltip content={<ChartTooltipContent />} formatter={(v) => formatFileSize(v as number)} />
-          {isSheet && <Legend />}
           <Line type="step" dataKey="size" stroke="var(--color-size)" strokeWidth={2} dot={false} name="Size" />
         </LineChart>
       </ChartContainer>
     )
 
+    const chartContent = loadingSizeHistory ? (
+      <div className={`flex items-center justify-center ${isPanel ? 'h-32' : 'h-64'} text-sm text-muted-foreground`}>Loading...</div>
+    ) : sizeHistory.length === 0 ? (
+      <div className={`flex items-center justify-center ${isPanel ? 'h-32' : 'h-64'} text-sm text-muted-foreground`}>No size history</div>
+    ) : chart
+
     return (
-      <Section title="Size History" trailing={timeWindowSelector}>
+      <Section mode={mode} title="Size History" trailing={timeWindowSelector}>
         {chartContent}
       </Section>
     )
@@ -917,7 +920,7 @@ export function ItemDetail({
     ) : undefined
 
     return (
-      <Section title="Version History" trailing={trailing}>
+      <Section mode={mode} title="Version History" trailing={trailing}>
         {changes.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">No version history</p>
         ) : (
@@ -1093,7 +1096,7 @@ export function ItemDetail({
     ) : undefined
 
     return (
-      <Section title="Alerts" trailing={trailing}>
+      <Section mode={mode} title="Alerts" trailing={trailing}>
         {totalAlerts === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">No alerts</p>
         ) : (

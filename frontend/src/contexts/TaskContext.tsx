@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type {
   BroadcastMessage,
   TaskData,
@@ -6,8 +6,9 @@ import type {
   TaskStatus,
 } from '@/lib/types'
 
+// ── Stable context (changes at task boundaries, not every progress tick) ──
+
 interface TaskContextType {
-  activeTask: TaskData | null
   currentTaskId: number | null
   activeRootId: number | null
   isRunning: boolean
@@ -25,6 +26,16 @@ interface TaskContextType {
 
 const TaskContext = createContext<TaskContextType | null>(null)
 
+// ── Progress context (updates every ~250ms during active tasks) ──
+
+interface TaskProgressContextType {
+  activeTask: TaskData | null
+}
+
+const TaskProgressContext = createContext<TaskProgressContextType>({ activeTask: null })
+
+// ── Provider ──
+
 const TERMINAL_STATUSES: TaskStatus[] = ['completed', 'stopped', 'error']
 
 // API endpoints
@@ -32,28 +43,44 @@ const WS_PROGRESS_ENDPOINT = '/ws/tasks/progress'
 const API_STOP_ENDPOINT = (taskId: number) => `/api/tasks/${taskId}/stop`
 
 export function TaskProvider({ children }: { children: React.ReactNode }) {
+  // Progress state (changes every broadcast)
   const [activeTask, setActiveTask] = useState<TaskData | null>(null)
+
+  // Stable state (changes only at task/pause boundaries)
+  const [currentTaskId, setCurrentTaskId] = useState<number | null>(null)
+  const [activeRootId, setActiveRootId] = useState<number | null>(null)
+  const [isRunning, setIsRunning] = useState(false)
+  const [isExclusive, setIsExclusive] = useState(false)
   const [pauseState, setPauseState] = useState<PauseState | null>(null)
   const [lastTaskCompletedAt, setLastTaskCompletedAt] = useState<number | null>(null)
   const [lastTaskScheduledAt, setLastTaskScheduledAt] = useState<number | null>(null)
   const [backendConnected, setBackendConnected] = useState(false)
 
+  const isPaused = pauseState?.paused ?? false
+  const pauseUntil = pauseState?.pauseUntil ?? null
+
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const lastProcessedState = useRef<{ task_id: number | null; status: TaskStatus | null }>({ task_id: null, status: null })
 
-  // Derived state
-  const currentTaskId = activeTask?.task_id ?? null
-  const activeRootId = activeTask?.active_root_id ?? null
-  const isRunning = activeTask !== null
-  const isExclusive = activeTask?.is_exclusive ?? false
-  const isPaused = pauseState?.paused ?? false
-  const pauseUntil = pauseState?.pauseUntil ?? null
+  // Update stable fields only when they actually change
+  const updateStableFields = useCallback((task: TaskData | null) => {
+    const newTaskId = task?.task_id ?? null
+    const newRootId = task?.active_root_id ?? null
+    const newIsRunning = task !== null
+    const newIsExclusive = task?.is_exclusive ?? false
+
+    setCurrentTaskId(prev => prev === newTaskId ? prev : newTaskId)
+    setActiveRootId(prev => prev === newRootId ? prev : newRootId)
+    setIsRunning(prev => prev === newIsRunning ? prev : newIsRunning)
+    setIsExclusive(prev => prev === newIsExclusive ? prev : newIsExclusive)
+  }, [])
 
   const handleBroadcastMessage = useCallback((message: BroadcastMessage) => {
     if (message.type === 'paused') {
       setPauseState({ paused: true, pauseUntil: message.pause_until })
       setActiveTask(null)
+      updateStableFields(null)
       return
     }
 
@@ -64,6 +91,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         lastProcessedState.current = { task_id: null, status: null }
       }
       setActiveTask(null)
+      updateStableFields(null)
       setPauseState(null)
       return
     }
@@ -95,7 +123,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       setLastTaskCompletedAt(Date.now())
     }
 
-    setActiveTask({
+    const taskData: TaskData = {
       task_id: task.task_id,
       task_type: task.task_type,
       active_root_id: task.active_root_id,
@@ -110,8 +138,15 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       phase: task.phase,
       progress_bar: task.progress_bar,
       thread_states: task.thread_states ?? [],
-    })
-  }, [])
+    }
+
+    setActiveTask(taskData)
+    // For terminal statuses, immediately clear stable fields so that the
+    // idle message (which arrives shortly after) won't trigger a second
+    // stableValue change.  This batches all stableValue updates into one
+    // render and prevents consumers from flashing/redrawing twice.
+    updateStableFields(isTerminal ? null : taskData)
+  }, [updateStableFields])
 
   const connectWebSocket = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
@@ -196,8 +231,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     }
   }, [connectWebSocket])
 
-  const value: TaskContextType = {
-    activeTask,
+  const stableValue = useMemo<TaskContextType>(() => ({
     currentTaskId,
     activeRootId,
     isRunning,
@@ -211,11 +245,21 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     pauseTasks,
     unpauseTasks,
     notifyTaskScheduled,
-  }
+  }), [
+    currentTaskId, activeRootId, isRunning, isExclusive,
+    isPaused, pauseUntil, lastTaskCompletedAt, lastTaskScheduledAt,
+    backendConnected, stopTask, pauseTasks, unpauseTasks, notifyTaskScheduled,
+  ])
+
+  const progressValue = useMemo<TaskProgressContextType>(() => ({
+    activeTask,
+  }), [activeTask])
 
   return (
-    <TaskContext.Provider value={value}>
-      {children}
+    <TaskContext.Provider value={stableValue}>
+      <TaskProgressContext.Provider value={progressValue}>
+        {children}
+      </TaskProgressContext.Provider>
     </TaskContext.Provider>
   )
 }
@@ -226,4 +270,8 @@ export function useTaskContext() {
     throw new Error('useTaskContext must be used within TaskProvider')
   }
   return context
+}
+
+export function useTaskProgress() {
+  return useContext(TaskProgressContext)
 }

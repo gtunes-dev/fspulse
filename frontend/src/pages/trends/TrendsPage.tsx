@@ -291,8 +291,15 @@ export function TrendsPage() {
       return
     }
 
+    const isRefresh = scanData.length > 0
+
     try {
-      setLoading(true)
+      // Only show the loading indicator for the initial load.
+      // During refreshes (after task completion), keep existing charts
+      // visible to avoid a flash of "Loading..." unmounting them.
+      if (!isRefresh) {
+        setLoading(true)
+      }
       setError(null)
 
       // Build filters: root_id and only completed scans
