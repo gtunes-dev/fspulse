@@ -127,6 +127,7 @@ impl ItemVersion {
     /// Insert a new version with all fields specified explicitly.
     ///
     /// `counts` should be `Some((a, m, d, u))` for folders, `None` for files.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_full(
         conn: &Connection,
         item_id: i64,
@@ -164,6 +165,7 @@ impl ItemVersion {
     /// For folders, descendant counts default to "no changes, everyone unchanged":
     /// `(0, 0, 0, prev_alive)`. The scan analysis phase overwrites these if descendants
     /// actually changed.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_with_carry_forward(
         conn: &Connection,
         item_id: i64,

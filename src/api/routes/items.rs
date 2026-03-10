@@ -60,7 +60,7 @@ pub async fn get_integrity_state(
         Ok(state) => Ok(Json(IntegrityStateResponse {
             has_validator: state.has_validator,
             hash_state: state.hash_state,
-            file_hash: state.file_hash.map(|h| hex::encode(h)),
+            file_hash: state.file_hash.map(hex::encode),
             val_state: state.val_state,
             val_error: state.val_error,
         })),

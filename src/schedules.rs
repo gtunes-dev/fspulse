@@ -1469,36 +1469,6 @@ pub fn root_has_active_scan_immediate(
     Ok(has_active_scan)
 }
 
-/// Delete all schedules and Pending task entries for a specific root.
-///
-/// Only deletes Pending tasks (status = 0). Running tasks are left alone
-/// (they'll finish independently). Historical completed/stopped/error tasks
-/// are preserved.
-///
-/// IMPORTANT: The `_immediate` suffix indicates this function MUST be called
-/// within an immediate transaction. The caller is responsible for managing
-/// the transaction.
-pub fn delete_schedules_for_root_immediate(
-    conn: &rusqlite::Connection,
-    root_id: i64,
-) -> Result<(), FsPulseError> {
-    // Delete only Pending task entries
-    conn.execute(
-        "DELETE FROM tasks WHERE root_id = ? AND status = 0",
-        [root_id],
-    )
-    .map_err(FsPulseError::DatabaseError)?;
-
-    // Soft delete schedules by setting deleted_at timestamp
-    conn.execute(
-        "UPDATE scan_schedules SET deleted_at = strftime('%s', 'now', 'utc')
-         WHERE root_id = ? AND deleted_at IS NULL",
-        [root_id],
-    )
-    .map_err(FsPulseError::DatabaseError)?;
-
-    Ok(())
-}
 
 /// Information about an upcoming task for UI display
 #[derive(Debug, Clone, Serialize, Deserialize)]

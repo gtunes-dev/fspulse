@@ -305,6 +305,7 @@ fn analyze_item(
 ///
 /// Writes to `hash_versions` and `val_versions` tables. Also handles
 /// access state changes on `item_versions` and alert creation.
+#[allow(clippy::too_many_arguments)]
 fn persist_analysis(
     scan: &Scan,
     analysis_item: &AnalysisItem,

@@ -10,6 +10,7 @@ use crate::{error::FsPulseError, item_version::ItemVersion};
 /// - ValVersion (2): ref_id1 = item_id, ref_id2 = first_scan_id
 #[repr(i64)]
 #[derive(Debug, Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
 pub enum UndoLogType {
     ItemVersion = 0,
     HashVersion = 1,

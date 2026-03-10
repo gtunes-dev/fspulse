@@ -3,7 +3,7 @@ use std::{env, fs};
 
 use crate::db::Database;
 use crate::error::FsPulseError;
-use crate::schedules::{delete_schedules_for_root_immediate, root_has_active_scan_immediate};
+use crate::schedules::root_has_active_scan_immediate;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
@@ -72,16 +72,21 @@ impl Root {
                 ));
             }
 
-            // Delete schedules and queue entries for this root
-            delete_schedules_for_root_immediate(c, root_id)?;
+            // Delete all tasks and schedules for this root
+            c.execute("DELETE FROM tasks WHERE root_id = ?", [root_id])?;
+            c.execute("DELETE FROM scan_schedules WHERE root_id = ?", [root_id])?;
 
             // Delete in order based on foreign key constraints:
             // 1. alerts (references scan_id and item_id)
-            // 2. scan_undo_log (references version_id from item_versions)
-            // 3. item_versions (references item_id from items, scan_id from scans)
-            // 4. items (references root_id)
-            // 5. scans (references root_id)
-            // 6. root itself
+            // 2. hash_versions (references item_id from items)
+            // 3. val_versions (references item_id from items)
+            // 4. item_versions (references item_id from items, scan_id from scans)
+            // 5. items (references root_id)
+            // 6. scans (references root_id)
+            // 7. root itself
+            //
+            // Note: scan_undo_log is always empty between scans, and we've
+            // already verified no active scan is in progress above.
 
             // Delete alerts for all scans of this root
             c.execute(
@@ -89,12 +94,18 @@ impl Root {
                 [root_id],
             )?;
 
-            // Delete undo log entries for versions belonging to this root's items
+            // Delete hash versions for this root
             c.execute(
-                "DELETE FROM scan_undo_log WHERE version_id IN (
-                    SELECT v.version_id FROM item_versions v
-                    JOIN items i ON i.item_id = v.item_id
-                    WHERE i.root_id = ?
+                "DELETE FROM hash_versions WHERE item_id IN (
+                    SELECT item_id FROM items WHERE root_id = ?
+                )",
+                [root_id],
+            )?;
+
+            // Delete val versions for this root
+            c.execute(
+                "DELETE FROM val_versions WHERE item_id IN (
+                    SELECT item_id FROM items WHERE root_id = ?
                 )",
                 [root_id],
             )?;

@@ -7,12 +7,16 @@
 // Steps:
 //   1. (code_fn) Roll back any in-progress scans using the OLD undo log schema,
 //      since the undo log structure and item_versions columns are about to change.
-//   2. (post_sql) Create hash_versions and val_versions tables (WITHOUT ROWID).
-//   3. (post_sql) Migrate current hash/val data from item_versions into new tables.
-//   4. (post_sql) Rebuild item_versions without hash/val and folder state count columns
-//      (13 columns removed).
-//   5. (post_sql) Rebuild scan_undo_log with new schema (log_type discriminator).
-//   6. (post_sql) Bump schema version to 28.
+//   2. (post_sql) Stage hash/val data from item_versions into temp tables
+//      (must happen before item_versions is rebuilt).
+//   3. (post_sql) Rebuild items table with has_validator column.
+//   4. (post_sql) Create hash_versions and val_versions tables AFTER items rebuild
+//      (so FKs reference the final items table — SQLite rewrites FK references
+//      when a table is renamed, which would otherwise leave them pointing at items_old).
+//   5. (post_sql) Populate hash/val tables from staging and drop staging tables.
+//   6. (post_sql) Rebuild item_versions without hash/val columns (13 columns removed).
+//   7. (post_sql) Rebuild scan_undo_log with new schema (log_type discriminator).
+//   8. (post_sql) Bump schema version to 28.
 //
 // The code_fn runs before post_sql to ensure in-progress scans are rolled back
 // while the old schema is still intact.
@@ -101,47 +105,16 @@ pub fn rollback_in_progress_scans(conn: &Connection) -> Result<(), FsPulseError>
 
 pub const UPGRADE_27_TO_28_POST_SQL: &str = r#"
 -- ============================================================
--- Create hash_versions table
+-- Migrate hash/val data into temporary staging tables.
+-- Must happen before item_versions is rebuilt (needs old hash/val columns).
 -- ============================================================
-CREATE TABLE hash_versions (
-    item_id         INTEGER NOT NULL,
-    first_scan_id   INTEGER NOT NULL,
-    last_scan_id    INTEGER NOT NULL,
-    file_hash       BLOB NOT NULL,
-    hash_state      INTEGER NOT NULL,
-    PRIMARY KEY (item_id, first_scan_id),
-    FOREIGN KEY (item_id) REFERENCES items(item_id),
-    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
-) WITHOUT ROWID;
-
--- ============================================================
--- Create val_versions table
--- ============================================================
-CREATE TABLE val_versions (
-    item_id         INTEGER NOT NULL,
-    first_scan_id   INTEGER NOT NULL,
-    last_scan_id    INTEGER NOT NULL,
-    val_state       INTEGER NOT NULL,
-    val_error       TEXT,
-    PRIMARY KEY (item_id, first_scan_id),
-    FOREIGN KEY (item_id) REFERENCES items(item_id),
-    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
-) WITHOUT ROWID;
-
--- ============================================================
--- Migrate current hash data from item_versions into hash_versions.
--- Only the most recent version per item is migrated. Historical
--- hash changes are already captured in the alerts table.
--- ============================================================
-INSERT INTO hash_versions (item_id, first_scan_id, last_scan_id, file_hash, hash_state)
+CREATE TEMP TABLE hash_staging AS
 SELECT
     iv.item_id,
-    iv.last_hash_scan,
+    iv.last_hash_scan AS first_scan_id,
     iv.last_scan_id,
     iv.file_hash,
-    COALESCE(iv.hash_state, 1)
+    COALESCE(iv.hash_state, 1) AS hash_state
 FROM item_versions iv
 WHERE iv.file_hash IS NOT NULL
   AND iv.last_hash_scan IS NOT NULL
@@ -151,21 +124,17 @@ WHERE iv.file_hash IS NOT NULL
       WHERE iv2.item_id = iv.item_id
   );
 
--- ============================================================
--- Migrate current validation data from item_versions into val_versions.
--- Skip Unknown (val_state=0) since absence of a row means unknown
--- in the new model.
--- ============================================================
-INSERT INTO val_versions (item_id, first_scan_id, last_scan_id, val_state, val_error)
+CREATE TEMP TABLE val_staging AS
 SELECT
     iv.item_id,
-    iv.last_val_scan,
+    iv.last_val_scan AS first_scan_id,
     iv.last_scan_id,
     iv.val_state,
     iv.val_error
 FROM item_versions iv
 WHERE iv.val_state IS NOT NULL
   AND iv.val_state != 0
+  AND iv.val_state != 3
   AND iv.last_val_scan IS NOT NULL
   AND iv.last_scan_id = (
       SELECT MAX(iv2.last_scan_id)
@@ -174,7 +143,10 @@ WHERE iv.val_state IS NOT NULL
   );
 
 -- ============================================================
--- Add has_validator column to items table and populate it
+-- Add has_validator column to items table and populate it.
+-- Must happen before hash/val table creation so FKs point to
+-- the final items table (SQLite rewrites FK references when
+-- a table is renamed, which would leave them pointing at items_old).
 -- ============================================================
 ALTER TABLE items RENAME TO items_old;
 
@@ -213,9 +185,45 @@ CREATE INDEX idx_items_root_path ON items (root_id, item_path COLLATE natural_pa
 CREATE INDEX idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
 
 -- ============================================================
--- Remove NoValidator rows from val_versions (now tracked via items.has_validator)
+-- Create hash_versions and val_versions tables.
+-- Created AFTER the items rebuild so FKs correctly reference
+-- the final items table.
 -- ============================================================
-DELETE FROM val_versions WHERE val_state = 3;
+CREATE TABLE hash_versions (
+    item_id         INTEGER NOT NULL,
+    first_scan_id   INTEGER NOT NULL,
+    last_scan_id    INTEGER NOT NULL,
+    file_hash       BLOB NOT NULL,
+    hash_state      INTEGER NOT NULL,
+    PRIMARY KEY (item_id, first_scan_id),
+    FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
+    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+) WITHOUT ROWID;
+
+CREATE TABLE val_versions (
+    item_id         INTEGER NOT NULL,
+    first_scan_id   INTEGER NOT NULL,
+    last_scan_id    INTEGER NOT NULL,
+    val_state       INTEGER NOT NULL,
+    val_error       TEXT,
+    PRIMARY KEY (item_id, first_scan_id),
+    FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
+    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+) WITHOUT ROWID;
+
+-- Populate from staging
+INSERT INTO hash_versions (item_id, first_scan_id, last_scan_id, file_hash, hash_state)
+SELECT item_id, first_scan_id, last_scan_id, file_hash, hash_state
+FROM hash_staging;
+
+INSERT INTO val_versions (item_id, first_scan_id, last_scan_id, val_state, val_error)
+SELECT item_id, first_scan_id, last_scan_id, val_state, val_error
+FROM val_staging;
+
+DROP TABLE hash_staging;
+DROP TABLE val_staging;
 
 -- ============================================================
 -- Rebuild item_versions without hash/val and folder state count columns
