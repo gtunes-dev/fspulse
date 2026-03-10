@@ -219,6 +219,7 @@ fn analyze_item(
         && !file_not_found
         && !is_interrupted(interrupt_token)
     {
+        task_progress.set_thread_state(thread_index, "Validating", "info-alternate", Some(&display_path));
         match val_analysis::run_validation(&path, interrupt_token) {
             Ok((state, err)) => {
                 read_attempted = true;
@@ -299,6 +300,8 @@ fn analyze_item(
     if let Err(e) = tracker.complete_item(item_id) {
         error!("Failed to complete item {}: {}", item_id, e);
     }
+
+    info!("Done analyzing: {path:?}");
 }
 
 /// Persist hash and validation results to the database.
