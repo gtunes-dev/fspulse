@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { RootPicker } from '@/components/shared/RootPicker'
 import { CompactScanBar } from '@/components/shared/CompactScanBar'
 import { SearchFilter } from '@/components/shared/SearchFilter'
-import { ItemDetailPanel } from '@/components/shared/ItemDetailPanel'
+import { ItemDetail } from '@/components/shared/ItemDetail'
 import { useBrowseCache } from '@/hooks/useBrowseCache'
 import { getParentPath, type ChangeKind } from '@/lib/pathUtils'
 import { FileTreeView } from './FileTreeView'
@@ -279,7 +279,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
       detailOnRight ? 'border-l border-border' : 'border-r border-border'
     )}>
       <div className="sticky top-0">
-        <ItemDetailPanel
+        <ItemDetail
+          mode="panel"
           itemId={activeSelection.itemId}
           itemPath={activeSelection.itemPath}
           itemType={activeSelection.itemType}

@@ -282,7 +282,7 @@ fn serialize_optional_hash<S: Serializer>(
     }
 }
 
-/// A single version entry for the ItemDetailSheet version history
+/// A single version entry for the ItemDetail version history
 #[derive(Clone, Debug, Serialize)]
 pub struct VersionHistoryEntry {
     pub version_id: i64,
@@ -335,11 +335,8 @@ impl VersionHistoryEntry {
 #[derive(Debug, Serialize)]
 pub struct VersionHistoryResponse {
     pub versions: Vec<VersionHistoryEntry>,
-    pub anchor_index: Option<usize>,
     pub has_more: bool,
     pub total_count: i64,
-    pub first_seen_scan_id: i64,
-    pub first_seen_scan_date: i64,
     pub anchor_scan_date: i64,
 }
 
@@ -391,27 +388,11 @@ pub fn get_version_history_init(
     if total_count == 0 {
         return Ok(VersionHistoryResponse {
             versions: Vec::new(),
-            anchor_index: None,
             has_more: false,
             total_count: 0,
-            first_seen_scan_id: 0,
-            first_seen_scan_date: 0,
             anchor_scan_date: 0,
         });
     }
-
-    // Get first-seen scan id and date
-    let (first_seen_scan_id, first_seen_scan_date): (i64, i64) = conn
-        .query_row(
-            "SELECT iv.first_scan_id, s.started_at \
-             FROM item_versions iv \
-             JOIN scans s ON s.scan_id = iv.first_scan_id \
-             WHERE iv.item_id = ? \
-             ORDER BY iv.first_scan_id ASC \
-             LIMIT 1",
-            params![item_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?;
 
     // Get the anchor scan date
     let anchor_scan_date: i64 = conn.query_row(
@@ -445,11 +426,8 @@ pub fn get_version_history_init(
 
     Ok(VersionHistoryResponse {
         versions,
-        anchor_index: Some(0),
         has_more,
         total_count,
-        first_seen_scan_id,
-        first_seen_scan_date,
         anchor_scan_date,
     })
 }
