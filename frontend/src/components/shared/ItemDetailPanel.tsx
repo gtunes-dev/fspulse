@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
   File, Folder, FileX, FolderX, Calendar as CalendarIcon,
-  HardDrive, Hash, ShieldAlert, ShieldCheck, ShieldQuestion,
-  AlertTriangle, CircleX, ChevronDown, Eye, X,
+  HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -58,18 +57,14 @@ interface VersionEntry {
   access: number
   mod_date: number | null
   size: number | null
-  last_val_scan: number | null
-  val_state: number | null
-  val_error: string | null
-  last_hash_scan: number | null
-  file_hash: string | null
-  hash_state: number | null
   add_count: number | null
   modify_count: number | null
   delete_count: number | null
   unchanged_count: number | null
-  hash_suspect_count: number | null
-  val_invalid_count: number | null
+  hash_state: number | null
+  file_hash: string | null
+  val_state: number | null
+  val_error: string | null
 }
 
 interface VersionHistoryInitResponse {
@@ -105,6 +100,14 @@ interface SizeHistoryPoint {
 interface ChildrenCounts {
   file_count: number
   directory_count: number
+}
+
+interface IntegrityState {
+  has_validator: boolean
+  hash_state: number | null
+  file_hash: string | null
+  val_state: number | null
+  val_error: string | null
 }
 
 type ChangeKind = 'initial' | 'modified' | 'deleted' | 'restored'
@@ -153,44 +156,6 @@ function accessLabel(access: number): string {
   }
 }
 
-function valShort(val: number | null): string {
-  switch (val) {
-    case 0: return 'U'
-    case 1: return 'V'
-    case 2: return 'I'
-    case 3: return 'N'
-    default: return 'U'
-  }
-}
-
-function hashShort(hash: number | null): string {
-  switch (hash) {
-    case 0: return 'U'
-    case 1: return 'V'
-    case 2: return 'S'
-    default: return 'U'
-  }
-}
-
-function hashStateName(hash: number | null): string {
-  switch (hash) {
-    case 0: return 'Unknown'
-    case 1: return 'Valid'
-    case 2: return 'Suspect'
-    default: return 'Unknown'
-  }
-}
-
-function valStateName(val: number | null): string {
-  switch (val) {
-    case 0: return 'Unknown'
-    case 1: return 'Valid'
-    case 2: return 'Invalid'
-    case 3: return 'No Validator'
-    default: return 'Unknown'
-  }
-}
-
 function alertTypeLabel(type: string): string {
   switch (type) {
     case 'H': return 'Suspect Hash'
@@ -232,9 +197,7 @@ function hasNonZeroFolderCounts(v: VersionEntry): boolean {
     (v.add_count ?? 0) > 0 ||
     (v.modify_count ?? 0) > 0 ||
     (v.delete_count ?? 0) > 0 ||
-    (v.unchanged_count ?? 0) > 0 ||
-    (v.hash_suspect_count ?? 0) > 0 ||
-    (v.val_invalid_count ?? 0) > 0
+    (v.unchanged_count ?? 0) > 0
   )
 }
 
@@ -243,9 +206,7 @@ function hasFolderCountChanges(v: VersionEntry, prev: VersionEntry): boolean {
     v.add_count !== prev.add_count ||
     v.modify_count !== prev.modify_count ||
     v.delete_count !== prev.delete_count ||
-    v.unchanged_count !== prev.unchanged_count ||
-    v.hash_suspect_count !== prev.hash_suspect_count ||
-    v.val_invalid_count !== prev.val_invalid_count
+    v.unchanged_count !== prev.unchanged_count
   )
 }
 
@@ -253,11 +214,7 @@ function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
   return (
     v.mod_date !== prev.mod_date ||
     v.size !== prev.size ||
-    v.file_hash !== prev.file_hash ||
     v.access !== prev.access ||
-    v.val_state !== prev.val_state ||
-    v.val_error !== prev.val_error ||
-    v.hash_state !== prev.hash_state ||
     hasFolderCountChanges(v, prev)
   )
 }
@@ -278,12 +235,8 @@ export function ItemDetailPanel({
   const [loadingMoreVersions, setLoadingMoreVersions] = useState(false)
   const [hasMoreVersions, setHasMoreVersions] = useState(false)
   const [totalVersionCount, setTotalVersionCount] = useState(0)
-  const [firstSeenScanId, setFirstSeenScanId] = useState(0)
   const [anchorScanDate, setAnchorScanDate] = useState(0)
   const [openVersions, setOpenVersions] = useState<Record<number, boolean>>({})
-
-  // Hash expand state
-  const [hashExpanded, setHashExpanded] = useState(false)
 
   // Alerts state
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -301,6 +254,11 @@ export function ItemDetailPanel({
   const [childrenCounts, setChildrenCounts] = useState<ChildrenCounts | null>(null)
   const [loadingChildrenCounts, setLoadingChildrenCounts] = useState(false)
 
+  // Integrity state (files only)
+  const [integrityState, setIntegrityState] = useState<IntegrityState | null>(null)
+  const [hashExpanded, setHashExpanded] = useState(false)
+  const [pathExpanded, setPathExpanded] = useState(false)
+
   const itemName = itemPath.split('/').filter(Boolean).pop() || itemPath
   const anchorVersion = versions.length > 0 ? versions[0] : null
   const changes = buildChanges(versions)
@@ -308,6 +266,7 @@ export function ItemDetailPanel({
   // Reset state when switching items
   useEffect(() => {
     setOpenVersions({})
+    setPathExpanded(false)
   }, [itemId])
 
   // ---- Data loading ----
@@ -324,7 +283,6 @@ export function ItemDetailPanel({
           setVersions(data.versions)
           setHasMoreVersions(data.has_more)
           setTotalVersionCount(data.total_count)
-          setFirstSeenScanId(data.first_seen_scan_id)
           setAnchorScanDate(data.anchor_scan_date)
         }
 
@@ -474,26 +432,29 @@ export function ItemDetailPanel({
     loadChildrenCounts()
   }, [itemId, itemType, isTombstone, scanId])
 
+  // ---- Integrity state (files only) ----
+
+  useEffect(() => {
+    if (itemType !== 'F') {
+      setIntegrityState(null)
+      return
+    }
+    async function loadIntegrity() {
+      try {
+        const response = await fetch(`/api/items/${itemId}/integrity-state?scan_id=${scanId}`)
+        if (response.ok) {
+          setIntegrityState(await response.json())
+        } else {
+          setIntegrityState(null)
+        }
+      } catch {
+        setIntegrityState(null)
+      }
+    }
+    loadIntegrity()
+  }, [itemId, itemType, scanId])
+
   // ---- Badge renderers ----
-
-  const getValidationBadge = (val: number | null) => {
-    const short = valShort(val)
-    switch (short) {
-      case 'V': return <Badge variant="success" className="gap-1 text-xs"><ShieldCheck className="h-2.5 w-2.5" />Valid</Badge>
-      case 'I': return <Badge variant="destructive" className="gap-1 text-xs"><ShieldAlert className="h-2.5 w-2.5" />Invalid</Badge>
-      case 'N': return <Badge variant="secondary" className="text-xs">No Validator</Badge>
-      default: return <Badge variant="secondary" className="gap-1 text-xs"><ShieldQuestion className="h-2.5 w-2.5" />Unknown</Badge>
-    }
-  }
-
-  const getHashStateBadge = (hash: number | null) => {
-    const short = hashShort(hash)
-    switch (short) {
-      case 'V': return <Badge variant="success" className="gap-1 text-xs"><ShieldCheck className="h-2.5 w-2.5" />Valid</Badge>
-      case 'S': return <Badge className={cn("bg-amber-500 hover:bg-amber-600 gap-1 text-xs")}><AlertTriangle className="h-2.5 w-2.5" />Suspect</Badge>
-      default: return <Badge variant="secondary" className="gap-1 text-xs"><ShieldQuestion className="h-2.5 w-2.5" />Unknown</Badge>
-    }
-  }
 
   const getChangeIndicator = (kind: ChangeKind) => {
     const dotColor =
@@ -510,7 +471,6 @@ export function ItemDetailPanel({
       <span className="inline-flex items-center gap-1.5 text-xs flex-shrink-0">
         <span className={`inline-block w-[7px] h-[7px] rounded-full ${dotColor}`} />
         <span>{label}</span>
-        <span className="text-muted-foreground/50">&middot;</span>
       </span>
     )
   }
@@ -553,17 +513,25 @@ export function ItemDetailPanel({
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground truncate mt-0.5 pl-7">{itemPath}</p>
+        <button
+          className="text-xs text-muted-foreground mt-0.5 pl-7 flex items-center gap-1 text-left w-full hover:text-foreground transition-colors"
+          onClick={() => setPathExpanded(!pathExpanded)}
+        >
+          <span className={pathExpanded ? 'break-all' : 'truncate'}>{itemPath}</span>
+          <ChevronDown className={cn("h-3 w-3 flex-shrink-0 transition-transform", !pathExpanded && "-rotate-90")} />
+        </button>
         {isTombstone && (
           <div className="mt-1 pl-7">
             <Badge variant="destructive" className="text-xs">Deleted</Badge>
           </div>
         )}
-        <div className="text-xs text-muted-foreground mt-1 pl-7">
-          {firstSeenScanId > 0 && <>First seen #{firstSeenScanId}</>}
-          {firstSeenScanId > 0 && totalVersionCount > 0 && <span className="mx-1">&middot;</span>}
-          {totalVersionCount > 0 && <>{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</>}
-        </div>
+        {anchorVersion && (
+          <p className="text-xs text-muted-foreground mt-1 pl-7">
+            Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
+            <span className="mx-1.5">&middot;</span>
+            Version <span className="font-mono font-semibold text-foreground">#{anchorVersion.version_id}</span>
+          </p>
+        )}
       </div>
 
       {loadingVersions ? (
@@ -575,11 +543,10 @@ export function ItemDetailPanel({
           {/* Current State */}
           {anchorVersion && (
             <div className="px-3 py-3">
-              <div className="flex items-center justify-between mb-2">
+              <div className="mb-2">
                 <p className="text-sm font-semibold">
                   {scanRef(scanId, anchorScanDate)}
                 </p>
-                <span className="text-xs text-muted-foreground">v{anchorVersion.version_id}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm pl-2">
                 <div>
@@ -598,23 +565,23 @@ export function ItemDetailPanel({
                 )}
               </div>
 
-              {itemType === 'F' && (
+              {itemType === 'F' && integrityState && (
                 <div className="mt-2 pt-2 border-t">
                   <p className="text-sm font-semibold mb-2">Integrity</p>
                   <div className="text-sm pl-2 space-y-2">
                     <div>
                       <div className="flex items-center gap-1">
                         <span className="text-muted-foreground">Hash State :</span>
-                        <span>{hashStateName(anchorVersion.hash_state)}</span>
-                        {anchorVersion.hash_state === 2 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                        <span>{integrityState.hash_state === 2 ? 'Suspect' : integrityState.hash_state === 1 ? 'Valid' : 'Unknown'}</span>
+                        {integrityState.hash_state === 2 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
                       </div>
-                      {anchorVersion.file_hash && (
+                      {integrityState.file_hash && (
                         <div
                           className="flex items-center gap-1 mt-0.5 cursor-pointer"
                           onClick={() => setHashExpanded(!hashExpanded)}
                         >
                           <p className="font-mono text-xs break-all">
-                            {hashExpanded ? anchorVersion.file_hash : anchorVersion.file_hash.slice(0, 8) + '…'}
+                            {hashExpanded ? integrityState.file_hash : integrityState.file_hash.slice(0, 8) + '\u2026'}
                           </p>
                           <ChevronDown className={cn("h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform", !hashExpanded && "-rotate-90")} />
                         </div>
@@ -623,11 +590,17 @@ export function ItemDetailPanel({
                     <div>
                       <div className="flex items-center gap-1">
                         <span className="text-muted-foreground">Validation State :</span>
-                        <span>{valStateName(anchorVersion.val_state)}</span>
-                        {anchorVersion.val_state === 2 && <CircleX className="h-3.5 w-3.5 text-rose-500" />}
+                        <span>
+                          {integrityState.val_state === 2 ? 'Invalid'
+                            : integrityState.val_state === 1 ? 'Valid'
+                            : integrityState.val_state === 3 ? 'No Validator'
+                            : !integrityState.has_validator ? 'No Validator'
+                            : 'Unknown'}
+                        </span>
+                        {integrityState.val_state === 2 && <CircleX className="h-3.5 w-3.5 text-rose-500" />}
                       </div>
-                      {anchorVersion.val_error && anchorVersion.val_error.trim() !== '' && (
-                        <p className="text-xs mt-0.5">{anchorVersion.val_error}</p>
+                      {integrityState.val_error && integrityState.val_error.trim() !== '' && (
+                        <p className="text-xs mt-0.5">{integrityState.val_error}</p>
                       )}
                     </div>
                   </div>
@@ -672,19 +645,6 @@ export function ItemDetailPanel({
                               <span className="inline-block w-[7px] h-[7px] rounded-full bg-zinc-400" />
                               <span className="text-muted-foreground">Unchanged :</span>
                               <span className="font-medium">{(anchorVersion.unchanged_count ?? 0).toLocaleString()}</span>
-                            </span>
-                          </div>
-                          <div className="border-t my-2" />
-                          <div className="grid grid-cols-2 gap-x-4">
-                            <span className="flex items-center gap-1">
-                              <AlertTriangle className={cn("h-3 w-3", (anchorVersion.hash_suspect_count ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground/40")} />
-                              <span className="text-muted-foreground">Suspect Hash :</span>
-                              <span className="font-medium">{(anchorVersion.hash_suspect_count ?? 0).toLocaleString()}</span>
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <CircleX className={cn("h-3 w-3", (anchorVersion.val_invalid_count ?? 0) > 0 ? "text-rose-500" : "text-muted-foreground/40")} />
-                              <span className="text-muted-foreground">Invalid Item :</span>
-                              <span className="font-medium">{(anchorVersion.val_invalid_count ?? 0).toLocaleString()}</span>
                             </span>
                           </div>
                         </div>
@@ -764,12 +724,12 @@ export function ItemDetailPanel({
                     const isAnchor = changes[0].version.version_id === v.version_id
                     const isOpen = openVersions[v.version_id] || false
                     const setIsOpen = (open: boolean) => setOpenVersions(prev => ({ ...prev, [v.version_id]: open }))
-                    const isExpandable =
-                      (change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)) ||
-                      (change.kind === 'initial' && hasNonZeroFolderCounts(v))
+                    const hasIntegrity = v.hash_state != null || v.val_state != null
+                    const hasMetadataChanges = change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)
+                    const hasInitialFolderCounts = change.kind === 'initial' && hasNonZeroFolderCounts(v)
+                    const isExpandable = hasMetadataChanges || hasInitialFolderCounts || hasIntegrity
                     const prevForCounts = change.prev ?? {
                       add_count: 0, modify_count: 0, delete_count: 0, unchanged_count: 0,
-                      hash_suspect_count: 0, val_invalid_count: 0,
                     }
 
                     return (
@@ -783,6 +743,8 @@ export function ItemDetailPanel({
                                 </Button>
                               </CollapsibleTrigger>
                               {getChangeIndicator(change.kind)}
+                              {v.hash_state === 2 && <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                              {v.val_state === 2 && <CircleX className="h-3 w-3 text-rose-500 flex-shrink-0" />}
                               <p className="text-xs text-muted-foreground truncate flex-1">
                                 {scanRangeLabel(v)}
                               </p>
@@ -802,29 +764,43 @@ export function ItemDetailPanel({
                                     <p className="text-muted-foreground">{formatFileSize(change.prev.size)} &rarr; {formatFileSize(v.size)}</p>
                                   </div>
                                 )}
-                                {change.prev && v.file_hash !== change.prev.file_hash && (
-                                  <div className="bg-muted/50 p-1.5 rounded">
-                                    <p className="font-medium flex items-center gap-1"><Hash className="h-2.5 w-2.5" />Hash</p>
-                                    <p className="font-mono break-all text-muted-foreground">{change.prev.file_hash || 'N/A'}</p>
-                                    <p className="font-mono break-all">{v.file_hash || 'N/A'}</p>
-                                  </div>
-                                )}
                                 {change.prev && v.access !== change.prev.access && (
                                   <div className="bg-muted/50 p-1.5 rounded">
                                     <p className="font-medium">Access</p>
                                     <p className="text-muted-foreground">{accessLabel(change.prev.access)} &rarr; {accessLabel(v.access)}</p>
                                   </div>
                                 )}
-                                {change.prev && v.val_state !== change.prev.val_state && (
+                                {v.file_hash != null ? (
                                   <div className="bg-muted/50 p-1.5 rounded">
-                                    <p className="font-medium">Validation</p>
-                                    <div className="flex items-center gap-1 mt-0.5">{getValidationBadge(change.prev.val_state)} <span>&rarr;</span> {getValidationBadge(v.val_state)}</div>
+                                    <p className="font-medium flex items-center gap-1">
+                                      Hash
+                                      {v.hash_state === 2 && <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />}
+                                    </p>
+                                    <p className="font-mono break-all text-muted-foreground">{v.file_hash}</p>
+                                  </div>
+                                ) : v.hash_state != null && (
+                                  <div className="bg-muted/50 p-1.5 rounded">
+                                    <p className="font-medium">Hash</p>
+                                    <p className="text-muted-foreground">Not available</p>
                                   </div>
                                 )}
-                                {change.prev && v.hash_state !== change.prev.hash_state && (
+                                {v.val_state != null ? (
                                   <div className="bg-muted/50 p-1.5 rounded">
-                                    <p className="font-medium">Hash State</p>
-                                    <div className="flex items-center gap-1 mt-0.5">{getHashStateBadge(change.prev.hash_state)} <span>&rarr;</span> {getHashStateBadge(v.hash_state)}</div>
+                                    <p className="font-medium flex items-center gap-1">
+                                      Validation
+                                      {v.val_state === 2 && <CircleX className="h-2.5 w-2.5 text-rose-500" />}
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      {v.val_state === 2 ? 'Invalid' : v.val_state === 1 ? 'Valid' : v.val_state === 3 ? 'No Validator' : 'Unknown'}
+                                    </p>
+                                    {v.val_error && v.val_error.trim() !== '' && (
+                                      <p className="font-mono break-all text-muted-foreground mt-0.5">{v.val_error}</p>
+                                    )}
+                                  </div>
+                                ) : v.hash_state != null && (
+                                  <div className="bg-muted/50 p-1.5 rounded">
+                                    <p className="font-medium">Validation</p>
+                                    <p className="text-muted-foreground">Not available</p>
                                   </div>
                                 )}
                                 {((v.add_count ?? 0) !== (prevForCounts.add_count ?? 0) || (v.delete_count ?? 0) !== (prevForCounts.delete_count ?? 0) || (v.modify_count ?? 0) !== (prevForCounts.modify_count ?? 0) || (v.unchanged_count ?? 0) !== (prevForCounts.unchanged_count ?? 0)) && (
@@ -870,31 +846,6 @@ export function ItemDetailPanel({
                                     </div>
                                   </div>
                                 )}
-                                {((v.hash_suspect_count ?? 0) !== (prevForCounts.hash_suspect_count ?? 0) || (v.val_invalid_count ?? 0) !== (prevForCounts.val_invalid_count ?? 0)) && (
-                                  <div className="bg-muted/50 p-1.5 rounded">
-                                    <p className="font-medium">Integrity</p>
-                                    <div className="mt-1 space-y-0.5">
-                                      {(v.hash_suspect_count ?? 0) !== (prevForCounts.hash_suspect_count ?? 0) && (
-                                        <div className="flex items-center gap-1">
-                                          <AlertTriangle className="h-3 w-3 text-amber-500" />
-                                          <span className="text-muted-foreground">Suspect Hash :</span>
-                                          <span className="text-muted-foreground">{(prevForCounts.hash_suspect_count ?? 0).toLocaleString()}</span>
-                                          <span>&rarr;</span>
-                                          <span className="font-medium">{(v.hash_suspect_count ?? 0).toLocaleString()}</span>
-                                        </div>
-                                      )}
-                                      {(v.val_invalid_count ?? 0) !== (prevForCounts.val_invalid_count ?? 0) && (
-                                        <div className="flex items-center gap-1">
-                                          <CircleX className="h-3 w-3 text-rose-500" />
-                                          <span className="text-muted-foreground">Invalid Item :</span>
-                                          <span className="text-muted-foreground">{(prevForCounts.val_invalid_count ?? 0).toLocaleString()}</span>
-                                          <span>&rarr;</span>
-                                          <span className="font-medium">{(v.val_invalid_count ?? 0).toLocaleString()}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
                               </div>
                             </CollapsibleContent>
                           </Collapsible>
@@ -902,6 +853,8 @@ export function ItemDetailPanel({
                           <div className="flex items-center gap-1.5">
                             <div className="h-4 w-4 flex-shrink-0" />
                             {getChangeIndicator(change.kind)}
+                            {v.hash_state === 2 && <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />}
+                            {v.val_state === 2 && <CircleX className="h-3 w-3 text-rose-500 flex-shrink-0" />}
                             <p className="text-xs text-muted-foreground truncate flex-1">
                               {scanRangeLabel(v)}
                             </p>

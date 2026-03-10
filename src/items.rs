@@ -1,5 +1,5 @@
 use rusqlite::{self, params, OptionalExtension};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use std::path::MAIN_SEPARATOR_STR;
 
 use crate::{
@@ -145,11 +145,13 @@ pub fn get_temporal_immediate_children(
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
              AND hv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+                 SELECT MAX(first_scan_id) FROM hash_versions
+                 WHERE item_id = i.item_id AND first_scan_id <= ?2
              )
          LEFT JOIN val_versions vv ON vv.item_id = i.item_id
              AND vv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+                 SELECT MAX(first_scan_id) FROM val_versions
+                 WHERE item_id = i.item_id AND first_scan_id <= ?2
              )
          WHERE i.root_id = ?1
            AND iv.first_scan_id = (
@@ -217,11 +219,13 @@ pub fn search_temporal_items(
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
              AND hv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+                 SELECT MAX(first_scan_id) FROM hash_versions
+                 WHERE item_id = i.item_id AND first_scan_id <= ?2
              )
          LEFT JOIN val_versions vv ON vv.item_id = i.item_id
              AND vv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+                 SELECT MAX(first_scan_id) FROM val_versions
+                 WHERE item_id = i.item_id AND first_scan_id <= ?2
              )
          WHERE i.root_id = ?1
            AND iv.first_scan_id = (
@@ -268,6 +272,16 @@ pub fn search_temporal_items(
 
 // ---- Version history types and functions ----
 
+fn serialize_optional_hash<S: Serializer>(
+    hash: &Option<Vec<u8>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match hash {
+        Some(bytes) => serializer.serialize_some(&hex::encode(bytes)),
+        None => serializer.serialize_none(),
+    }
+}
+
 /// A single version entry for the ItemDetailSheet version history
 #[derive(Clone, Debug, Serialize)]
 pub struct VersionHistoryEntry {
@@ -285,6 +299,12 @@ pub struct VersionHistoryEntry {
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
     pub unchanged_count: Option<i64>,
+    // Integrity fields (NULL for non-files or when no record exists)
+    pub hash_state: Option<i64>,
+    #[serde(serialize_with = "serialize_optional_hash")]
+    pub file_hash: Option<Vec<u8>>,
+    pub val_state: Option<i64>,
+    pub val_error: Option<String>,
 }
 
 impl VersionHistoryEntry {
@@ -303,6 +323,10 @@ impl VersionHistoryEntry {
             modify_count: row.get(10)?,
             delete_count: row.get(11)?,
             unchanged_count: row.get(12)?,
+            hash_state: row.get(13)?,
+            file_hash: row.get(14)?,
+            val_state: row.get(15)?,
+            val_error: row.get(16)?,
         })
     }
 }
@@ -331,7 +355,22 @@ const VERSION_HISTORY_COLUMNS: &str =
      s1.started_at, s2.started_at, \
      v.is_deleted, v.access, \
      v.mod_date, v.size, \
-     v.add_count, v.modify_count, v.delete_count, v.unchanged_count";
+     v.add_count, v.modify_count, v.delete_count, v.unchanged_count, \
+     hv.hash_state, hv.file_hash, vv.val_state, vv.val_error";
+
+const VERSION_HISTORY_JOINS: &str =
+    "JOIN scans s1 ON s1.scan_id = v.first_scan_id \
+     JOIN scans s2 ON s2.scan_id = v.last_scan_id \
+     LEFT JOIN hash_versions hv ON hv.item_id = v.item_id \
+       AND hv.first_scan_id = ( \
+           SELECT MAX(hv2.first_scan_id) FROM hash_versions hv2 \
+           WHERE hv2.item_id = v.item_id AND hv2.first_scan_id <= v.last_scan_id \
+       ) \
+     LEFT JOIN val_versions vv ON vv.item_id = v.item_id \
+       AND vv.first_scan_id = ( \
+           SELECT MAX(vv2.first_scan_id) FROM val_versions vv2 \
+           WHERE vv2.item_id = v.item_id AND vv2.first_scan_id <= v.last_scan_id \
+       )";
 
 /// Get version history for an item, starting from a specific scan going backwards.
 /// Returns up to `limit` versions ordered by first_scan_id DESC.
@@ -385,12 +424,11 @@ pub fn get_version_history_init(
     let sql = format!(
         "SELECT {} \
          FROM item_versions v \
-         JOIN scans s1 ON s1.scan_id = v.first_scan_id \
-         JOIN scans s2 ON s2.scan_id = v.last_scan_id \
+         {} \
          WHERE v.item_id = ? AND v.first_scan_id <= ? \
          ORDER BY v.first_scan_id DESC \
          LIMIT ?",
-        VERSION_HISTORY_COLUMNS
+        VERSION_HISTORY_COLUMNS, VERSION_HISTORY_JOINS
     );
 
     let mut stmt = conn.prepare(&sql)?;
@@ -428,12 +466,11 @@ pub fn get_version_history_page(
     let sql = format!(
         "SELECT {} \
          FROM item_versions v \
-         JOIN scans s1 ON s1.scan_id = v.first_scan_id \
-         JOIN scans s2 ON s2.scan_id = v.last_scan_id \
+         {} \
          WHERE v.item_id = ? AND v.first_scan_id < ? \
          ORDER BY v.first_scan_id DESC \
          LIMIT ?",
-        VERSION_HISTORY_COLUMNS
+        VERSION_HISTORY_COLUMNS, VERSION_HISTORY_JOINS
     );
 
     let mut stmt = conn.prepare(&sql)?;
@@ -523,6 +560,69 @@ pub fn get_children_counts(
     Ok(ChildrenCounts {
         file_count,
         directory_count,
+    })
+}
+
+/// Response for integrity state of an item at a specific scan point
+#[derive(Clone, Debug, Serialize)]
+pub struct IntegrityState {
+    pub has_validator: bool,
+    pub hash_state: Option<i64>,
+    pub file_hash: Option<Vec<u8>>,
+    pub val_state: Option<i64>,
+    pub val_error: Option<String>,
+}
+
+/// Get the integrity state (hash + validation) for an item at a specific scan point.
+/// Queries hash_versions and val_versions for the current record at the given scan,
+/// plus has_validator from the items table.
+pub fn get_integrity_state(
+    item_id: i64,
+    scan_id: i64,
+) -> Result<IntegrityState, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    let has_validator: bool = conn
+        .query_row(
+            "SELECT has_validator FROM items WHERE item_id = ?",
+            params![item_id],
+            |row| row.get::<_, i64>(0).map(|v| v != 0),
+        )
+        .optional()?
+        .unwrap_or(false);
+
+    let hash_row: Option<(i64, Option<Vec<u8>>)> = conn
+        .query_row(
+            "SELECT hash_state, file_hash FROM hash_versions \
+             WHERE item_id = ?1 \
+               AND first_scan_id = ( \
+                   SELECT MAX(first_scan_id) FROM hash_versions \
+                   WHERE item_id = ?1 AND first_scan_id <= ?2 \
+               )",
+            params![item_id, scan_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+
+    let val_row: Option<(i64, Option<String>)> = conn
+        .query_row(
+            "SELECT val_state, val_error FROM val_versions \
+             WHERE item_id = ?1 \
+               AND first_scan_id = ( \
+                   SELECT MAX(first_scan_id) FROM val_versions \
+                   WHERE item_id = ?1 AND first_scan_id <= ?2 \
+               )",
+            params![item_id, scan_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+
+    Ok(IntegrityState {
+        has_validator,
+        hash_state: hash_row.as_ref().map(|(s, _)| *s),
+        file_hash: hash_row.and_then(|(_, h)| h),
+        val_state: val_row.as_ref().map(|(s, _)| *s),
+        val_error: val_row.and_then(|(_, e)| e),
     })
 }
 

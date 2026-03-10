@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
-import type { FlatTreeItem, ChangeKind, HashState, ValState } from '@/lib/pathUtils'
+import type { FlatTreeItem, ChangeKind } from '@/lib/pathUtils'
 import { hashStateFromInt, valStateFromInt, isItemVisible } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 
@@ -11,8 +11,6 @@ interface SearchResultsListProps {
   scanId: number
   searchQuery: string
   hiddenKinds: Set<ChangeKind>
-  hiddenHashStates: Set<HashState>
-  hiddenValStates: Set<ValState>
   isActive?: boolean
   selectedItemId?: number | null
   onItemSelect?: (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }) => void
@@ -24,8 +22,6 @@ export function SearchResultsList({
   scanId,
   searchQuery,
   hiddenKinds,
-  hiddenHashStates,
-  hiddenValStates,
   isActive = true,
   selectedItemId,
   onItemSelect,
@@ -83,13 +79,6 @@ export function SearchResultsList({
           unchanged_count: number | null
           val_state: number | null
           hash_state: number | null
-          val_unknown_count: number | null
-          val_valid_count: number | null
-          val_invalid_count: number | null
-          val_no_validator_count: number | null
-          hash_unknown_count: number | null
-          hash_valid_count: number | null
-          hash_suspect_count: number | null
         }>
 
         const flatItems: FlatTreeItem[] = items.map((item) => {
@@ -117,13 +106,6 @@ export function SearchResultsList({
               : item.unchanged_count,
             hash_state: hashStateFromInt(item.hash_state),
             val_state: valStateFromInt(item.val_state),
-            val_unknown_count: item.val_unknown_count,
-            val_valid_count: item.val_valid_count,
-            val_invalid_count: item.val_invalid_count,
-            val_no_validator_count: item.val_no_validator_count,
-            hash_unknown_count: item.hash_unknown_count,
-            hash_valid_count: item.hash_valid_count,
-            hash_suspect_count: item.hash_suspect_count,
             depth: 0,
             isExpanded: false,
             childrenLoaded: false,
@@ -148,7 +130,7 @@ export function SearchResultsList({
   }, [isActive, rootId, scanId, searchQuery])
 
   // Filter items client-side based on change kind, hash state, and val state toggles
-  const visibleResults = results.filter((item) => isItemVisible(item, hiddenKinds, hiddenHashStates, hiddenValStates))
+  const visibleResults = results.filter((item) => isItemVisible(item, hiddenKinds))
 
   const scrollMargin = useScrollMargin(parentRef)
 

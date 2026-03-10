@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
   File, Folder, FileX, FolderX, Calendar as CalendarIcon,
-  HardDrive, Hash, ShieldAlert, ShieldCheck, ShieldQuestion,
-  AlertTriangle, CircleX, ChevronDown, Eye,
+  HardDrive, AlertTriangle, CircleX, ChevronDown, Eye,
+  Hash, ShieldAlert, ShieldCheck, ShieldQuestion,
 } from 'lucide-react'
 import {
   Sheet,
@@ -75,18 +75,22 @@ interface VersionEntry {
   access: number
   mod_date: number | null
   size: number | null
-  last_val_scan: number | null
-  val_state: number | null
-  val_error: string | null
-  last_hash_scan: number | null
-  file_hash: string | null
-  hash_state: number | null
   add_count: number | null
   modify_count: number | null
   delete_count: number | null
   unchanged_count: number | null
-  hash_suspect_count: number | null
-  val_invalid_count: number | null
+  hash_state: number | null
+  file_hash: string | null
+  val_state: number | null
+  val_error: string | null
+}
+
+interface IntegrityState {
+  has_validator: boolean
+  hash_state: number | null
+  file_hash: string | null
+  val_state: number | null
+  val_error: string | null
 }
 
 interface VersionHistoryInitResponse {
@@ -161,15 +165,6 @@ function parseAlertRow(row: string[]): Alert {
   }
 }
 
-function accessLabel(access: number): string {
-  switch (access) {
-    case 0: return 'No Error'
-    case 1: return 'Meta Error'
-    case 2: return 'Read Error'
-    default: return `Unknown (${access})`
-  }
-}
-
 function valShort(val: number | null): string {
   switch (val) {
     case 0: return 'U'
@@ -205,6 +200,15 @@ function valStateName(val: number | null): string {
     case 2: return 'Invalid'
     case 3: return 'No Validator'
     default: return 'Unknown'
+  }
+}
+
+function accessLabel(access: number): string {
+  switch (access) {
+    case 0: return 'No Error'
+    case 1: return 'Meta Error'
+    case 2: return 'Read Error'
+    default: return `Unknown (${access})`
   }
 }
 
@@ -256,9 +260,7 @@ function hasNonZeroFolderCounts(v: VersionEntry): boolean {
     (v.add_count ?? 0) > 0 ||
     (v.modify_count ?? 0) > 0 ||
     (v.delete_count ?? 0) > 0 ||
-    (v.unchanged_count ?? 0) > 0 ||
-    (v.hash_suspect_count ?? 0) > 0 ||
-    (v.val_invalid_count ?? 0) > 0
+    (v.unchanged_count ?? 0) > 0
   )
 }
 
@@ -267,9 +269,7 @@ function hasFolderCountChanges(v: VersionEntry, prev: VersionEntry): boolean {
     v.add_count !== prev.add_count ||
     v.modify_count !== prev.modify_count ||
     v.delete_count !== prev.delete_count ||
-    v.unchanged_count !== prev.unchanged_count ||
-    v.hash_suspect_count !== prev.hash_suspect_count ||
-    v.val_invalid_count !== prev.val_invalid_count
+    v.unchanged_count !== prev.unchanged_count
   )
 }
 
@@ -278,11 +278,11 @@ function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
   return (
     v.mod_date !== prev.mod_date ||
     v.size !== prev.size ||
-    v.file_hash !== prev.file_hash ||
     v.access !== prev.access ||
+    v.file_hash !== prev.file_hash ||
+    v.hash_state !== prev.hash_state ||
     v.val_state !== prev.val_state ||
     v.val_error !== prev.val_error ||
-    v.hash_state !== prev.hash_state ||
     hasFolderCountChanges(v, prev)
   )
 }
@@ -309,7 +309,8 @@ export function ItemDetailSheet({
   const [anchorScanDate, setAnchorScanDate] = useState(0)
   const [openVersions, setOpenVersions] = useState<Record<number, boolean>>({})
 
-  // Hash expand state
+  // Integrity state (files only)
+  const [integrityState, setIntegrityState] = useState<IntegrityState | null>(null)
   const [hashExpanded, setHashExpanded] = useState(false)
 
   // Alerts state
@@ -535,6 +536,28 @@ export function ItemDetailSheet({
     loadChildrenCounts()
   }, [open, itemId, itemType, isTombstone, scanId])
 
+  // ---- Integrity state (files only) ----
+
+  useEffect(() => {
+    if (!open || itemType !== 'F') {
+      setIntegrityState(null)
+      return
+    }
+    async function loadIntegrity() {
+      try {
+        const response = await fetch(`/api/items/${itemId}/integrity-state?scan_id=${scanId}`)
+        if (response.ok) {
+          setIntegrityState(await response.json())
+        } else {
+          setIntegrityState(null)
+        }
+      } catch {
+        setIntegrityState(null)
+      }
+    }
+    loadIntegrity()
+  }, [open, itemId, itemType, scanId])
+
   // ---- Badge renderers ----
 
   const getValidationBadge = (val: number | null) => {
@@ -576,8 +599,6 @@ export function ItemDetailSheet({
         return <Badge variant="success">Restored</Badge>
     }
   }
-
-
 
   // ---- Scan reference helpers ----
 
@@ -694,23 +715,23 @@ export function ItemDetailSheet({
                     )}
                   </div>
 
-                  {itemType === 'F' && (
+                  {itemType === 'F' && integrityState && (
                     <div className="mt-4 pt-4 border-t">
                       <p className="text-base font-semibold mb-2">Integrity</p>
                       <div className="text-sm pl-2 space-y-3">
                         <div>
                           <div className="flex items-center gap-1">
                             <span className="text-muted-foreground">Hash State :</span>
-                            <span>{hashStateName(anchorVersion.hash_state)}</span>
-                            {anchorVersion.hash_state === 2 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                            <span>{integrityState.hash_state === 2 ? 'Suspect' : integrityState.hash_state === 1 ? 'Valid' : 'Unknown'}</span>
+                            {integrityState.hash_state === 2 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
                           </div>
-                          {anchorVersion.file_hash && (
+                          {integrityState.file_hash && (
                             <div
                               className="flex items-center gap-1 mt-1 cursor-pointer"
                               onClick={() => setHashExpanded(!hashExpanded)}
                             >
                               <p className="text-xs font-mono break-all">
-                                {hashExpanded ? anchorVersion.file_hash : anchorVersion.file_hash.slice(0, 8) + '…'}
+                                {hashExpanded ? integrityState.file_hash : integrityState.file_hash.slice(0, 8) + '\u2026'}
                               </p>
                               <ChevronDown className={cn("h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform", !hashExpanded && "-rotate-90")} />
                             </div>
@@ -719,11 +740,17 @@ export function ItemDetailSheet({
                         <div>
                           <div className="flex items-center gap-1">
                             <span className="text-muted-foreground">Validation State :</span>
-                            <span>{valStateName(anchorVersion.val_state)}</span>
-                            {anchorVersion.val_state === 2 && <CircleX className="h-3.5 w-3.5 text-rose-500" />}
+                            <span>
+                              {integrityState.val_state === 2 ? 'Invalid'
+                                : integrityState.val_state === 1 ? 'Valid'
+                                : integrityState.val_state === 3 ? 'No Validator'
+                                : !integrityState.has_validator ? 'No Validator'
+                                : 'Unknown'}
+                            </span>
+                            {integrityState.val_state === 2 && <CircleX className="h-3.5 w-3.5 text-rose-500" />}
                           </div>
-                          {anchorVersion.val_error && anchorVersion.val_error.trim() !== '' && (
-                            <p className="text-xs font-mono mt-1">{anchorVersion.val_error}</p>
+                          {integrityState.val_error && integrityState.val_error.trim() !== '' && (
+                            <p className="text-xs font-mono mt-1">{integrityState.val_error}</p>
                           )}
                         </div>
                       </div>
@@ -775,19 +802,6 @@ export function ItemDetailSheet({
                                   <span className="inline-block w-2 h-2 rounded-full bg-zinc-400" />
                                   <span className="text-muted-foreground">Unchanged :</span>
                                   <span className="font-medium">{(anchorVersion.unchanged_count ?? 0).toLocaleString()}</span>
-                                </span>
-                              </div>
-                              <div className="border-t my-2" />
-                              <div className="grid grid-cols-2 gap-x-6">
-                                <span className="flex items-center gap-1">
-                                  <AlertTriangle className={cn("h-3.5 w-3.5", (anchorVersion.hash_suspect_count ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground/40")} />
-                                  <span className="text-muted-foreground">Suspect Hash :</span>
-                                  <span className="font-medium">{(anchorVersion.hash_suspect_count ?? 0).toLocaleString()}</span>
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <CircleX className={cn("h-3.5 w-3.5", (anchorVersion.val_invalid_count ?? 0) > 0 ? "text-rose-500" : "text-muted-foreground/40")} />
-                                  <span className="text-muted-foreground">Invalid Item :</span>
-                                  <span className="font-medium">{(anchorVersion.val_invalid_count ?? 0).toLocaleString()}</span>
                                 </span>
                               </div>
                             </div>
@@ -964,12 +978,12 @@ export function ItemDetailSheet({
                           }
 
                           // Determine if this entry is expandable
+                          const hasIntegrity = v.hash_state != null || v.val_state != null
                           const isExpandable =
                             (change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)) ||
-                            (change.kind === 'initial' && hasNonZeroFolderCounts(v))
+                            (change.kind === 'initial' && (hasNonZeroFolderCounts(v) || hasIntegrity))
                           const prevForCounts = change.prev ?? {
                             add_count: 0, modify_count: 0, delete_count: 0, unchanged_count: 0,
-                            hash_suspect_count: 0, val_invalid_count: 0,
                           }
 
                           return (
@@ -1033,29 +1047,6 @@ export function ItemDetailSheet({
                                           </div>
                                         )}
 
-                                        {change.prev && v.file_hash !== change.prev.file_hash && (
-                                          <div className="bg-muted/50 p-2 rounded">
-                                            <p className="font-medium mb-1 flex items-center gap-1">
-                                              <Hash className="h-3 w-3" />
-                                              File Hash
-                                            </p>
-                                            <div className="space-y-1">
-                                              <div className="flex items-start gap-2">
-                                                <span className="text-muted-foreground flex-shrink-0">Old:</span>
-                                                <span className="font-mono break-all text-muted-foreground">
-                                                  {change.prev.file_hash || 'N/A'}
-                                                </span>
-                                              </div>
-                                              <div className="flex items-start gap-2">
-                                                <span className="text-muted-foreground flex-shrink-0">New:</span>
-                                                <span className="font-mono break-all font-medium">
-                                                  {v.file_hash || 'N/A'}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        )}
-
                                         {change.prev && v.access !== change.prev.access && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1">Access</p>
@@ -1067,30 +1058,81 @@ export function ItemDetailSheet({
                                           </div>
                                         )}
 
-                                        {change.prev && v.val_state !== change.prev.val_state && (
-                                          <div className="bg-muted/50 p-2 rounded">
-                                            <p className="font-medium mb-1 flex items-center gap-1">
-                                              <ShieldCheck className="h-3 w-3" />
-                                              Validation Status
-                                            </p>
-                                            <div className="flex items-center gap-2">
-                                              {getValidationBadge(change.prev.val_state)}
-                                              <span className="text-muted-foreground">&rarr;</span>
-                                              {getValidationBadge(v.val_state)}
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {change.prev && v.hash_state !== change.prev.hash_state && (
+                                        {(change.prev ? v.hash_state !== change.prev.hash_state : v.hash_state != null) && (
                                           <div className="bg-muted/50 p-2 rounded">
                                             <p className="font-medium mb-1 flex items-center gap-1">
                                               <Hash className="h-3 w-3" />
                                               Hash State
                                             </p>
                                             <div className="flex items-center gap-2">
-                                              {getHashStateBadge(change.prev.hash_state)}
-                                              <span className="text-muted-foreground">&rarr;</span>
+                                              {change.prev && (
+                                                <>
+                                                  {getHashStateBadge(change.prev.hash_state)}
+                                                  <span className="text-muted-foreground">&rarr;</span>
+                                                </>
+                                              )}
                                               {getHashStateBadge(v.hash_state)}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {(change.prev ? v.file_hash !== change.prev.file_hash : v.file_hash != null) && (
+                                          <div className="bg-muted/50 p-2 rounded">
+                                            <p className="font-medium mb-1 flex items-center gap-1">
+                                              <Hash className="h-3 w-3" />
+                                              File Hash
+                                            </p>
+                                            {change.prev ? (
+                                              <div className="space-y-1">
+                                                <div className="flex items-start gap-2">
+                                                  <span className="text-muted-foreground flex-shrink-0">Old:</span>
+                                                  <span className="font-mono break-all text-muted-foreground">
+                                                    {change.prev.file_hash || 'N/A'}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-start gap-2">
+                                                  <span className="text-muted-foreground flex-shrink-0">New:</span>
+                                                  <span className="font-mono break-all font-medium">
+                                                    {v.file_hash || 'N/A'}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <p className="font-mono break-all">{v.file_hash}</p>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {(change.prev ? v.val_state !== change.prev.val_state : v.val_state != null) && (
+                                          <div className="bg-muted/50 p-2 rounded">
+                                            <p className="font-medium mb-1 flex items-center gap-1">
+                                              <ShieldCheck className="h-3 w-3" />
+                                              Validation Status
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                              {change.prev && (
+                                                <>
+                                                  {getValidationBadge(change.prev.val_state)}
+                                                  <span className="text-muted-foreground">&rarr;</span>
+                                                </>
+                                              )}
+                                              {getValidationBadge(v.val_state)}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {(change.prev ? v.val_error !== change.prev.val_error : v.val_error != null) && (
+                                          <div className="bg-muted/50 p-2 rounded">
+                                            <p className="font-medium mb-1 text-destructive">Validation Error</p>
+                                            <div className="space-y-1">
+                                              {change.prev?.val_error && (
+                                                <p className="font-mono text-muted-foreground break-all">
+                                                  Old: {change.prev.val_error}
+                                                </p>
+                                              )}
+                                              <p className="font-mono font-medium break-all">
+                                                {v.val_error ? (change.prev ? `New: ${v.val_error}` : v.val_error) : 'Cleared'}
+                                              </p>
                                             </div>
                                           </div>
                                         )}
@@ -1135,47 +1177,6 @@ export function ItemDetailSheet({
                                                   <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
                                                 </div>
                                               )}
-                                            </div>
-                                          </div>
-                                        )}
-                                        {((v.hash_suspect_count ?? 0) !== (prevForCounts.hash_suspect_count ?? 0) || (v.val_invalid_count ?? 0) !== (prevForCounts.val_invalid_count ?? 0)) && (
-                                          <div className="bg-muted/50 p-2 rounded">
-                                            <p className="font-medium mb-1">Integrity</p>
-                                            <div className="mt-1 space-y-0.5">
-                                              {(v.hash_suspect_count ?? 0) !== (prevForCounts.hash_suspect_count ?? 0) && (
-                                                <div className="flex items-center gap-1">
-                                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                                                  <span className="text-muted-foreground">Suspect Hash :</span>
-                                                  <span className="text-muted-foreground">{(prevForCounts.hash_suspect_count ?? 0).toLocaleString()}</span>
-                                                  <span>&rarr;</span>
-                                                  <span className="font-medium">{(v.hash_suspect_count ?? 0).toLocaleString()}</span>
-                                                </div>
-                                              )}
-                                              {(v.val_invalid_count ?? 0) !== (prevForCounts.val_invalid_count ?? 0) && (
-                                                <div className="flex items-center gap-1">
-                                                  <CircleX className="h-3.5 w-3.5 text-rose-500" />
-                                                  <span className="text-muted-foreground">Invalid Item :</span>
-                                                  <span className="text-muted-foreground">{(prevForCounts.val_invalid_count ?? 0).toLocaleString()}</span>
-                                                  <span>&rarr;</span>
-                                                  <span className="font-medium">{(v.val_invalid_count ?? 0).toLocaleString()}</span>
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {change.prev && v.val_error !== change.prev.val_error && (
-                                          <div className="bg-muted/50 p-2 rounded">
-                                            <p className="font-medium mb-1 text-destructive">Validation Error</p>
-                                            <div className="space-y-1">
-                                              {change.prev.val_error && (
-                                                <p className="font-mono text-muted-foreground break-all">
-                                                  Old: {change.prev.val_error}
-                                                </p>
-                                              )}
-                                              <p className="font-mono font-medium break-all">
-                                                {v.val_error ? `New: ${v.val_error}` : 'Cleared'}
-                                              </p>
                                             </div>
                                           </div>
                                         )}

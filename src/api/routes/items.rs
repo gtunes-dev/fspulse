@@ -34,6 +34,46 @@ pub struct ChildrenCountsParams {
     pub scan_id: i64,
 }
 
+/// Query parameters for integrity state
+#[derive(Debug, Deserialize)]
+pub struct IntegrityStateParams {
+    pub scan_id: i64,
+}
+
+/// Response structure for integrity state
+#[derive(Debug, Serialize)]
+pub struct IntegrityStateResponse {
+    pub has_validator: bool,
+    pub hash_state: Option<i64>,
+    pub file_hash: Option<String>,
+    pub val_state: Option<i64>,
+    pub val_error: Option<String>,
+}
+
+/// GET /api/items/:item_id/integrity-state?scan_id=42
+/// Returns the current hash and validation state for an item at a specific scan point
+pub async fn get_integrity_state(
+    Path(item_id): Path<i64>,
+    Query(params): Query<IntegrityStateParams>,
+) -> Result<Json<IntegrityStateResponse>, (StatusCode, String)> {
+    match items::get_integrity_state(item_id, params.scan_id) {
+        Ok(state) => Ok(Json(IntegrityStateResponse {
+            has_validator: state.has_validator,
+            hash_state: state.hash_state,
+            file_hash: state.file_hash.map(|h| hex::encode(h)),
+            val_state: state.val_state,
+            val_error: state.val_error,
+        })),
+        Err(e) => {
+            error!("Failed to get integrity state for item {}: {}", item_id, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get integrity state: {}", e),
+            ))
+        }
+    }
+}
+
 /// GET /api/items/:item_id/size-history?from_date=YYYY-MM-DD&to_scan_id=42
 /// Returns size history for an item from a date up to a specific scan
 pub async fn get_item_size_history(

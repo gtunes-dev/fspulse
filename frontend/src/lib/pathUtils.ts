@@ -37,77 +37,33 @@ export function valStateFromInt(val: number | null): ValState | null {
 }
 
 /**
- * Determines if an item should be visible given the set of hidden filters.
+ * Determines if an item should be visible given the set of hidden change kinds.
  *
- * Filtering is AND across all three dimensions:
- * - Change kind (added/modified/deleted/unchanged)
- * - Hash state (unknown/valid/suspect) — files only
- * - Validation state (unknown/valid/invalid/no_validator) — files only
- *
- * For files: visible if all three dimension checks pass.
- * For folders: visible based on own change_kind + descendant counts for each dimension.
- * When a hidden set is empty, that dimension is a no-op (all items pass).
+ * For non-directories: visible if their change_kind is not hidden.
+ * For directories: visible if their own change_kind is not hidden, or if they
+ * have descendants with a visible change kind.
  */
 export function isItemVisible(
   item: {
     item_type: string
     change_kind: ChangeKind
-    hash_state?: HashState | null
-    val_state?: ValState | null
     add_count?: number | null
     modify_count?: number | null
     delete_count?: number | null
     unchanged_count?: number | null
-    val_unknown_count?: number | null
-    val_valid_count?: number | null
-    val_invalid_count?: number | null
-    val_no_validator_count?: number | null
-    hash_unknown_count?: number | null
-    hash_valid_count?: number | null
-    hash_suspect_count?: number | null
   },
   hiddenKinds: Set<ChangeKind>,
-  hiddenHashStates: Set<HashState> = new Set(),
-  hiddenValStates: Set<ValState> = new Set(),
 ): boolean {
   if (item.item_type !== 'D') {
-    // Non-directory: all three dimensions must pass
-    if (hiddenKinds.has(item.change_kind)) return false
-    if (hiddenHashStates.size > 0 && item.hash_state != null && hiddenHashStates.has(item.hash_state)) return false
-    if (hiddenValStates.size > 0 && item.val_state != null && hiddenValStates.has(item.val_state)) return false
-    return true
+    return !hiddenKinds.has(item.change_kind)
   }
 
-  // Directory: check each dimension using own state + descendant counts
-
-  // Change dimension
-  const changeDimOk = !hiddenKinds.has(item.change_kind) ||
+  // Directory: visible if own kind is visible OR has descendants with a visible kind
+  return !hiddenKinds.has(item.change_kind) ||
     (!hiddenKinds.has('added') && (item.add_count ?? 0) > 0) ||
     (!hiddenKinds.has('modified') && (item.modify_count ?? 0) > 0) ||
     (!hiddenKinds.has('deleted') && (item.delete_count ?? 0) > 0) ||
     (!hiddenKinds.has('unchanged') && (item.unchanged_count ?? 0) > 0)
-  if (!changeDimOk) return false
-
-  // Hash dimension (no-op when nothing is hidden)
-  if (hiddenHashStates.size > 0) {
-    const hashDimOk =
-      (!hiddenHashStates.has('unknown') && (item.hash_unknown_count ?? 0) > 0) ||
-      (!hiddenHashStates.has('valid') && (item.hash_valid_count ?? 0) > 0) ||
-      (!hiddenHashStates.has('suspect') && (item.hash_suspect_count ?? 0) > 0)
-    if (!hashDimOk) return false
-  }
-
-  // Validation dimension (no-op when nothing is hidden)
-  if (hiddenValStates.size > 0) {
-    const valDimOk =
-      (!hiddenValStates.has('unknown') && (item.val_unknown_count ?? 0) > 0) ||
-      (!hiddenValStates.has('valid') && (item.val_valid_count ?? 0) > 0) ||
-      (!hiddenValStates.has('invalid') && (item.val_invalid_count ?? 0) > 0) ||
-      (!hiddenValStates.has('no_validator') && (item.val_no_validator_count ?? 0) > 0)
-    if (!valDimOk) return false
-  }
-
-  return true
 }
 
 export interface ItemData {
@@ -126,14 +82,6 @@ export interface ItemData {
   // Integrity state for files (null for dirs/symlinks/other)
   hash_state?: HashState | null
   val_state?: ValState | null
-  // Integrity descendant counts for directories (null for files)
-  val_unknown_count?: number | null
-  val_valid_count?: number | null
-  val_invalid_count?: number | null
-  val_no_validator_count?: number | null
-  hash_unknown_count?: number | null
-  hash_valid_count?: number | null
-  hash_suspect_count?: number | null
 }
 
 /**
@@ -155,13 +103,6 @@ export interface FlatTreeItem {
   unchanged_count?: number | null
   hash_state?: HashState | null
   val_state?: ValState | null
-  val_unknown_count?: number | null
-  val_valid_count?: number | null
-  val_invalid_count?: number | null
-  val_no_validator_count?: number | null
-  hash_unknown_count?: number | null
-  hash_valid_count?: number | null
-  hash_suspect_count?: number | null
   depth: number
   isExpanded: boolean
   childrenLoaded: boolean
