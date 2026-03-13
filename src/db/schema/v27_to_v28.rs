@@ -814,11 +814,11 @@ fn p3_direct_population_counts(
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
              AND hv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+                 SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id AND first_scan_id <= ?2
              )
          LEFT JOIN val_versions vv ON vv.item_id = i.item_id
              AND vv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+                 SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id AND first_scan_id <= ?2
              )
          WHERE i.root_id = ?1
            AND iv.last_scan_id >= ?2
@@ -836,7 +836,7 @@ fn p3_direct_population_counts(
 
     let mut stmt = conn.prepare(&sql)?;
     let result = stmt.query_row(
-        params![scan_id, root_id, &path_prefix, &path_upper, parent_path],
+        params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
         |row| Ok((
             row.get(0)?, row.get(1)?,
             row.get(2)?, row.get(3)?, row.get(4)?,
