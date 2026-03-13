@@ -106,6 +106,27 @@ struct FolderCountWrite {
     unchanged: i64,
 }
 
+/// Accumulated scan-level counts, built up during the recursive folder walk.
+/// These are the counts that get stamped on the scan row.
+#[derive(Default)]
+struct ScanCounts {
+    // Change counts (from the recursive walk)
+    adds: i64,
+    mods: i64,
+    dels: i64,
+    // Population counts
+    file_count: i64,
+    folder_count: i64,
+    // Integrity counts (files only)
+    hash_unknown: i64,
+    hash_valid: i64,
+    hash_suspect: i64,
+    val_unknown: i64,
+    val_valid: i64,
+    val_invalid: i64,
+    val_no_validator: i64,
+}
+
 struct FolderVersionAtScan {
     version_id: i64,
     item_id: i64,
@@ -697,7 +718,7 @@ fn p3_immediate_dir_children(
         .map_err(FsPulseError::DatabaseError)
 }
 
-/// Count direct non-folder children of parent_path that changed in this scan,
+/// Count direct children (files and folders) of parent_path that changed in this scan,
 /// classified as add/modify/delete.
 fn p3_direct_change_counts(
     conn: &Connection,
@@ -749,6 +770,83 @@ fn p3_direct_change_counts(
     Ok(result)
 }
 
+/// Count alive direct children of parent_path at scan_id for population and
+/// integrity accumulation. Returns counts that feed into ScanCounts.
+///
+/// Population: alive files and alive folders (counted separately).
+/// Integrity: alive files joined to their latest hash/val versions.
+fn p3_direct_population_counts(
+    conn: &Connection,
+    root_id: i64,
+    parent_path: &str,
+    scan_id: i64,
+) -> Result<(i64, i64, i64, i64, i64, i64, i64, i64, i64), FsPulseError> {
+    let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
+        parent_path.to_string()
+    } else {
+        format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
+    };
+
+    let path_upper = format!(
+        "{}{}",
+        &path_prefix[..path_prefix.len() - MAIN_SEPARATOR_STR.len()],
+        char::from(std::path::MAIN_SEPARATOR as u8 + 1)
+    );
+
+    // Query alive direct children (immediate, not recursive).
+    // For files: count population and integrity states.
+    // For folders: count population only (integrity doesn't apply).
+    let sql = format!(
+        "SELECT
+            -- Population
+            COALESCE(SUM(CASE WHEN i.item_type = 0 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN i.item_type = 1 THEN 1 ELSE 0 END), 0),
+            -- Hash integrity (files only)
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND hv.hash_state IS NULL THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND hv.hash_state = 1 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND hv.hash_state = 2 THEN 1 ELSE 0 END), 0),
+            -- Val integrity (files only)
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND i.has_validator = 1 AND vv.val_state IS NULL THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND vv.val_state = 1 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND vv.val_state = 2 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND i.has_validator = 0 THEN 1 ELSE 0 END), 0)
+         FROM items i
+         JOIN item_versions iv ON iv.item_id = i.item_id
+         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+             AND hv.first_scan_id = (
+                 SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+             )
+         LEFT JOIN val_versions vv ON vv.item_id = i.item_id
+             AND vv.first_scan_id = (
+                 SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+             )
+         WHERE i.root_id = ?1
+           AND iv.last_scan_id >= ?2
+           AND iv.is_deleted = 0
+           AND iv.first_scan_id = (
+               SELECT MAX(first_scan_id) FROM item_versions
+               WHERE item_id = i.item_id AND first_scan_id <= ?2
+           )
+           AND i.item_path >= ?3
+           AND i.item_path < ?4
+           AND i.item_path != ?5
+           AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'",
+        MAIN_SEPARATOR_STR
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let result = stmt.query_row(
+        params![scan_id, root_id, &path_prefix, &path_upper, parent_path],
+        |row| Ok((
+            row.get(0)?, row.get(1)?,
+            row.get(2)?, row.get(3)?, row.get(4)?,
+            row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?,
+        )),
+    )?;
+
+    Ok(result)
+}
+
 /// Look up the item_id for a folder by its path.
 fn p3_lookup_folder_item_id(
     conn: &Connection,
@@ -794,10 +892,12 @@ fn p3_prev_alive(
     Ok(alive.unwrap_or(0))
 }
 
-/// Recursive depth-first walk of the folder tree, computing descendant change counts.
+/// Recursive depth-first walk of the folder tree, computing descendant change counts
+/// and accumulating scan-level population/integrity counts.
 ///
 /// Returns cumulative (adds, mods, dels) for all descendants under parent_path.
 /// Appends a FolderCountWrite entry for each folder with non-zero change counts.
+/// Accumulates population and integrity counts into scan_counts.
 ///
 /// unchanged is derived per-folder at write time:
 ///   unchanged = prev_alive - mods - dels
@@ -807,6 +907,7 @@ fn p3_walk_folder_counts(
     scan_id: i64,
     parent_path: &str,
     writes: &mut Vec<FolderCountWrite>,
+    scan_counts: &mut ScanCounts,
 ) -> Result<(i64, i64, i64), FsPulseError> {
     let mut adds = 0i64;
     let mut mods = 0i64;
@@ -817,19 +918,32 @@ fn p3_walk_folder_counts(
 
     // 2. Recurse into each folder child
     for (_child_id, child_path) in &dir_children {
-        let (sa, sm, sd) = p3_walk_folder_counts(conn, root_id, scan_id, child_path, writes)?;
+        let (sa, sm, sd) = p3_walk_folder_counts(conn, root_id, scan_id, child_path, writes, scan_counts)?;
         adds += sa;
         mods += sm;
         dels += sd;
     }
 
-    // 3. Count direct non-folder children that changed in this scan
+    // 3. Count direct children (files and folders) that changed in this scan
     let (da, dm, dd) = p3_direct_change_counts(conn, root_id, parent_path, scan_id)?;
     adds += da;
     mods += dm;
     dels += dd;
 
-    // 4. Record write if any descendant changed
+    // 4. Accumulate population and integrity counts for direct children at this level
+    let (files, folders, hu, hv, hs, vu, vv, vi, vn) =
+        p3_direct_population_counts(conn, root_id, parent_path, scan_id)?;
+    scan_counts.file_count += files;
+    scan_counts.folder_count += folders;
+    scan_counts.hash_unknown += hu;
+    scan_counts.hash_valid += hv;
+    scan_counts.hash_suspect += hs;
+    scan_counts.val_unknown += vu;
+    scan_counts.val_valid += vv;
+    scan_counts.val_invalid += vi;
+    scan_counts.val_no_validator += vn;
+
+    // 5. Record write if any descendant changed
     if adds > 0 || mods > 0 || dels > 0 {
         if let Some(folder_item_id) = p3_lookup_folder_item_id(conn, root_id, parent_path)? {
             let prev_alive = p3_prev_alive(conn, folder_item_id, scan_id)?;
@@ -883,7 +997,7 @@ fn p3_update_folder_counts(
         .optional()?;
 
     match spanning {
-        Some((span_vid, _is_added, _is_deleted, access, mod_date, size)) => {
+        Some((span_vid, _is_added, is_deleted, access, mod_date, size)) => {
             // Get the spanning version's last_scan_id before we truncate it
             let span_last: i64 = conn.query_row(
                 "SELECT last_scan_id FROM item_versions WHERE version_id = ?",
@@ -897,15 +1011,17 @@ fn p3_update_folder_counts(
                 params![scan_id - 1, span_vid],
             )?;
 
-            // Insert new version at scan_id with same metadata but computed counts
+            // Insert new version at scan_id with same metadata but computed counts.
+            // is_added is always 0 (this is a continuation); is_deleted is carried
+            // forward from the spanning version per spec.
             conn.execute(
                 "INSERT INTO item_versions (item_id, first_scan_id, last_scan_id,
                     is_added, is_deleted, access, mod_date, size,
                     add_count, modify_count, delete_count, unchanged_count)
-                 VALUES (?1, ?2, ?3, 0, 0, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                 VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     w.folder_item_id, scan_id, span_last,
-                    access, mod_date, size,
+                    is_deleted, access, mod_date, size,
                     w.adds, w.mods, w.dels, w.unchanged
                 ],
             )?;
@@ -1290,9 +1406,15 @@ fn phase3_recompute_folder_counts(conn: &Connection) -> Result<(), FsPulseError>
     let mut total_removed: i64 = 0;
 
     for (completed, (scan_id, root_id, root_path)) in scans.iter().enumerate() {
-        // Walk tree and collect writes for folders with non-zero structural changes
+        // Walk tree, collecting folder count writes and accumulating scan-level
+        // counts (changes, population, integrity) in a single recursive pass.
         let mut writes = Vec::new();
-        p3_walk_folder_counts(conn, *root_id, *scan_id, root_path, &mut writes)?;
+        let mut sc = ScanCounts::default();
+        let (scan_adds, scan_mods, scan_dels) =
+            p3_walk_folder_counts(conn, *root_id, *scan_id, root_path, &mut writes, &mut sc)?;
+        sc.adds = scan_adds;
+        sc.mods = scan_mods;
+        sc.dels = scan_dels;
 
         // Build set of folder item_ids that have real changes
         let changed_ids: HashSet<i64> = writes.iter().map(|w| w.folder_item_id).collect();
@@ -1317,6 +1439,25 @@ fn phase3_recompute_folder_counts(conn: &Connection) -> Result<(), FsPulseError>
                     }
                 }
             }
+
+            // Stamp all scan-level counts from the accumulated walk results
+            c.execute(
+                "UPDATE scans SET
+                    add_count = ?, modify_count = ?, delete_count = ?,
+                    file_count = ?, folder_count = ?,
+                    val_unknown_count = ?, val_valid_count = ?,
+                    val_invalid_count = ?, val_no_validator_count = ?,
+                    hash_unknown_count = ?, hash_valid_count = ?, hash_suspect_count = ?
+                 WHERE scan_id = ?",
+                params![
+                    sc.adds, sc.mods, sc.dels,
+                    sc.file_count, sc.folder_count,
+                    sc.val_unknown, sc.val_valid,
+                    sc.val_invalid, sc.val_no_validator,
+                    sc.hash_unknown, sc.hash_valid, sc.hash_suspect,
+                    scan_id,
+                ],
+            )?;
 
             Database::set_meta_value_locked(c, COUNT_HWM_KEY, &scan_id.to_string())
         })?;
