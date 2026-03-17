@@ -9,7 +9,7 @@ use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::scanner::Scanner;
 use crate::schedules::TaskEntry;
-use crate::scans::{AnalysisSpec, HashMode, Scan, ValidateMode};
+use crate::scans::{AnalysisSpec, HashMode, Scan};
 
 use super::progress::TaskProgress;
 use super::task_type::TaskType;
@@ -32,18 +32,18 @@ use super::traits::Task;
 /// 1. Add the field with `#[serde(default)]` or `#[serde(default = "default_fn")]`
 /// 2. Existing rows in the database will deserialize correctly with the default value
 /// 3. No migration needed for backwards compatibility
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ScanSettings {
     pub hash_mode: HashMode,
-    pub validate_mode: ValidateMode,
+    pub is_val: bool,
 }
 
 impl ScanSettings {
     /// Create new scan settings
-    pub fn new(hash_mode: HashMode, validate_mode: ValidateMode) -> Self {
+    pub fn new(hash_mode: HashMode, is_val: bool) -> Self {
         Self {
             hash_mode,
-            validate_mode,
+            is_val,
         }
     }
 
@@ -53,10 +53,55 @@ impl ScanSettings {
             .map_err(|e| FsPulseError::Error(format!("Failed to serialize ScanSettings: {}", e)))
     }
 
-    /// Deserialize from JSON string retrieved from database
+    /// Deserialize from JSON string retrieved from database.
+    ///
+    /// Handles both current format (`is_val: bool`) and legacy format
+    /// (`validate_mode: "None"/"New"`) for backwards compatibility with
+    /// task_settings JSON written before the ValidateMode removal.
     pub fn from_json(json: &str) -> Result<Self, FsPulseError> {
-        serde_json::from_str(json)
-            .map_err(|e| FsPulseError::Error(format!("Failed to deserialize ScanSettings: {}", e)))
+        // Try current format first
+        if let Ok(settings) = serde_json::from_str::<Self>(json) {
+            return Ok(settings);
+        }
+        // Fall back to legacy format
+        #[derive(Deserialize)]
+        struct LegacyScanSettings {
+            hash_mode: HashMode,
+            validate_mode: String,
+        }
+        let legacy: LegacyScanSettings = serde_json::from_str(json)
+            .map_err(|e| FsPulseError::Error(format!("Failed to deserialize ScanSettings: {}", e)))?;
+        Ok(Self {
+            hash_mode: legacy.hash_mode,
+            is_val: legacy.validate_mode != "None",
+        })
+    }
+}
+
+// Custom Deserialize to handle both current and legacy JSON formats
+impl<'de> Deserialize<'de> for ScanSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Deserialize into a generic Value first, then dispatch
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let obj = value.as_object().ok_or_else(|| serde::de::Error::custom("expected object"))?;
+
+        let hash_mode: HashMode = serde_json::from_value(
+            obj.get("hash_mode").cloned().ok_or_else(|| serde::de::Error::missing_field("hash_mode"))?
+        ).map_err(serde::de::Error::custom)?;
+
+        let is_val = if let Some(v) = obj.get("is_val") {
+            v.as_bool().ok_or_else(|| serde::de::Error::custom("is_val must be boolean"))?
+        } else if let Some(v) = obj.get("validate_mode") {
+            let mode = v.as_str().ok_or_else(|| serde::de::Error::custom("validate_mode must be string"))?;
+            mode != "None"
+        } else {
+            return Err(serde::de::Error::missing_field("is_val"));
+        };
+
+        Ok(ScanSettings { hash_mode, is_val })
     }
 }
 
@@ -102,15 +147,15 @@ impl ScanTaskState {
 
 /// Internal state protected by the AnalysisTracker mutex
 struct AnalysisTrackerInner {
-    /// Sorted vector of item IDs currently being processed
+    /// Sorted vector of version IDs currently being processed
     in_flight: Vec<i64>,
     /// Scan-specific task state (persisted to DB as JSON)
     state: ScanTaskState,
 }
 
-/// Tracks in-flight analysis items and manages the high water mark (HWM) for
-/// restart resilience. The HWM represents the highest item_id such that all
-/// items with id <= HWM have been fully processed.
+/// Tracks in-flight analysis versions and manages the high water mark (HWM) for
+/// restart resilience. The HWM represents the highest version_id such that all
+/// versions with id <= HWM have been fully processed.
 ///
 /// The HWM is persisted in the `task_state` JSON column via `ScanTaskState`.
 ///
@@ -141,37 +186,37 @@ impl AnalysisTracker {
         self.inner.lock().unwrap().state.high_water_mark
     }
 
-    /// Add a batch of item IDs to track. Called by main thread after fetching.
+    /// Add a batch of version IDs to track. Called by main thread after fetching.
     pub fn add_batch(&self, ids: impl Iterator<Item = i64>) {
         let mut inner = self.inner.lock().unwrap();
         inner.in_flight.extend(ids);
         inner.in_flight.sort_unstable();
     }
 
-    /// Mark an item as complete and update HWM if appropriate.
+    /// Mark a version as complete and update HWM if appropriate.
     /// Called by worker threads after finishing processing.
     ///
     /// The HWM update logic:
-    /// - If this is not the smallest ID, just remove it (items before it are still in-flight)
+    /// - If this is not the smallest ID, just remove it (versions before it are still in-flight)
     /// - If this is the smallest ID:
     ///   - If it's the only ID, set HWM to this ID (all work complete up to here)
     ///   - Otherwise, set HWM to (next_smallest - 1), indicating all IDs before
-    ///     the next in-flight item are complete
+    ///     the next in-flight version are complete
     pub fn complete_item(&self, id: i64) -> Result<(), FsPulseError> {
         let mut inner = self.inner.lock().unwrap();
 
         if let Some(pos) = inner.in_flight.iter().position(|&x| x == id) {
             let new_hwm = if pos == 0 {
-                // This is the smallest item
+                // This is the smallest version
                 if inner.in_flight.len() == 1 {
-                    // Only item - all work up to this ID is complete
+                    // Only version - all work up to this ID is complete
                     Some(id)
                 } else {
-                    // More items remain - HWM is one less than the next in-flight item
+                    // More versions remain - HWM is one less than the next in-flight version
                     Some(inner.in_flight[1] - 1)
                 }
             } else {
-                // Not the smallest - can't advance HWM yet
+                // Not the smallest version - can't advance HWM yet
                 None
             };
 
@@ -185,7 +230,7 @@ impl AnalysisTracker {
             }
         } else {
             log::warn!(
-                "AnalysisTracker: Item {} not found in in-flight vector for task_id {}",
+                "AnalysisTracker: Version {} not found in in-flight vector for task_id {}",
                 id,
                 self.task_id
             );
@@ -194,13 +239,13 @@ impl AnalysisTracker {
         Ok(())
     }
 
-    /// Warn if there are still items in the in-flight vector.
-    /// Should be called after analysis completes successfully to verify all items were processed.
+    /// Warn if there are still versions in the in-flight vector.
+    /// Should be called after analysis completes successfully to verify all versions were processed.
     pub fn warn_if_not_empty(&self) {
         let inner = self.inner.lock().unwrap();
         if !inner.in_flight.is_empty() {
             log::warn!(
-                "AnalysisTracker: {} items still in-flight after analysis completed for task_id {}. Item IDs: {:?}",
+                "AnalysisTracker: {} versions still in-flight after analysis completed for task_id {}. Version IDs: {:?}",
                 inner.in_flight.len(),
                 self.task_id,
                 &inner.in_flight[..inner.in_flight.len().min(10)] // Show at most first 10 IDs
@@ -275,7 +320,7 @@ impl ScanTask {
         } else {
             // New scan: create scan record and persist scan_id to task_state
             let analysis_spec =
-                AnalysisSpec::from_modes(self.settings.hash_mode, self.settings.validate_mode);
+                AnalysisSpec::new(self.settings.hash_mode, self.settings.is_val);
 
             Database::immediate_transaction(&conn, |c| {
                 let scan = Scan::create(c, &root, self.schedule_id, &analysis_spec)?;
@@ -377,7 +422,7 @@ mod tests {
 
     #[test]
     fn test_scan_settings_round_trip() {
-        let settings = ScanSettings::new(HashMode::New, ValidateMode::All);
+        let settings = ScanSettings::new(HashMode::New, true);
         let json = settings.to_json().unwrap();
         let restored = ScanSettings::from_json(&json).unwrap();
         assert_eq!(settings, restored);
@@ -385,17 +430,31 @@ mod tests {
 
     #[test]
     fn test_scan_settings_json_format() {
-        let settings = ScanSettings::new(HashMode::All, ValidateMode::None);
+        let settings = ScanSettings::new(HashMode::All, false);
         let json = settings.to_json().unwrap();
         assert!(json.contains("hash_mode"));
-        assert!(json.contains("validate_mode"));
+        assert!(json.contains("is_val"));
     }
 
     #[test]
     fn test_scan_settings_deserialize_with_extra_fields() {
-        let json = r#"{"hash_mode":"All","validate_mode":"None","unknown_field":123}"#;
+        let json = r#"{"hash_mode":"All","is_val":false,"unknown_field":123}"#;
         let settings = ScanSettings::from_json(json).unwrap();
         assert_eq!(settings.hash_mode, HashMode::All);
-        assert_eq!(settings.validate_mode, ValidateMode::None);
+        assert!(!settings.is_val);
+    }
+
+    #[test]
+    fn test_scan_settings_legacy_format() {
+        // Legacy JSON from before ValidateMode removal
+        let json = r#"{"hash_mode":"New","validate_mode":"New"}"#;
+        let settings = ScanSettings::from_json(json).unwrap();
+        assert_eq!(settings.hash_mode, HashMode::New);
+        assert!(settings.is_val);
+
+        let json_none = r#"{"hash_mode":"All","validate_mode":"None"}"#;
+        let settings_none = ScanSettings::from_json(json_none).unwrap();
+        assert_eq!(settings_none.hash_mode, HashMode::All);
+        assert!(!settings_none.is_val);
     }
 }

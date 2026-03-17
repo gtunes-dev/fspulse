@@ -78,12 +78,11 @@ impl Root {
 
             // Delete in order based on foreign key constraints:
             // 1. alerts (references scan_id and item_id)
-            // 2. hash_versions (references item_id from items)
-            // 3. val_versions (references item_id from items)
-            // 4. item_versions (references item_id from items, scan_id from scans)
-            // 5. items (references root_id)
-            // 6. scans (references root_id)
-            // 7. root itself
+            // 2. hash_versions (references item_version_id from item_versions)
+            // 3. item_versions (references item_id from items, scan_id from scans)
+            // 4. items (references root_id)
+            // 5. scans (references root_id)
+            // 6. root itself
             //
             // Note: scan_undo_log is always empty between scans, and we've
             // already verified no active scan is in progress above.
@@ -97,14 +96,6 @@ impl Root {
             // Delete hash versions for this root
             c.execute(
                 "DELETE FROM hash_versions WHERE item_id IN (
-                    SELECT item_id FROM items WHERE root_id = ?
-                )",
-                [root_id],
-            )?;
-
-            // Delete val versions for this root
-            c.execute(
-                "DELETE FROM val_versions WHERE item_id IN (
                     SELECT item_id FROM items WHERE root_id = ?
                 )",
                 [root_id],

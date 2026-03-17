@@ -1,3 +1,51 @@
+// ============================================================================
+// Query Pattern Guidelines
+// ============================================================================
+//
+// Performance-critical queries must follow these patterns to use indexes
+// effectively and avoid full table scans on large tables (item_versions
+// and hash_versions can have millions of rows).
+//
+// Pattern 1: "Alive versions for a root at a scan"
+//   Used by: analysis batch fetch, analysis counts, scan completion counts.
+//   Drive from item_versions using idx_versions_root_lastscan:
+//     FROM item_versions cv
+//     JOIN items i ON i.item_id = cv.item_id
+//     WHERE cv.root_id = ? AND cv.last_scan_id = ?
+//
+// Pattern 2: "Versions created in a scan"
+//   Used by: change counts (add/modify/delete) at scan completion.
+//   Drive from item_versions using idx_versions_first_scan:
+//     FROM item_versions iv WHERE iv.first_scan_id = ?
+//   Add iv.root_id = ? for defense-in-depth.
+//
+// Pattern 3: "Latest hash for a version"
+//   Used by: analysis queries, scan completion hash state counts.
+//   Use hash_versions PK prefix (item_id, item_version_id):
+//     LEFT JOIN hash_versions hv ON hv.item_id = cv.item_id
+//       AND hv.item_version_id = cv.version_id
+//       AND hv.first_scan_id = (
+//         SELECT MAX(first_scan_id) FROM hash_versions
+//         WHERE item_id = cv.item_id AND item_version_id = cv.version_id)
+//
+// Pattern 4: "Version history for an item"
+//   Used by: item detail views, get_current().
+//   Drive from item_versions using idx_versions_item_scan:
+//     FROM item_versions WHERE item_id = ? ORDER BY first_scan_id DESC
+//   No root_id filter needed — item_id is globally unique.
+//
+// Pattern 5: "Scans for a root"
+//   Used by: trends, browse, scan picker.
+//   Drive from scans using idx_scans_root:
+//     FROM scans WHERE root_id = ?
+//
+// Anti-pattern: Scanning all items then probing item_versions per item.
+//   BAD:  FROM items i JOIN item_versions cv ON cv.item_id = i.item_id
+//           AND cv.last_scan_id = ?
+//   GOOD: FROM item_versions cv JOIN items i ON i.item_id = cv.item_id
+//           WHERE cv.root_id = ? AND cv.last_scan_id = ?
+// ============================================================================
+
 pub const CREATE_SCHEMA_SQL: &str = r#"
 BEGIN TRANSACTION;
 
@@ -29,7 +77,6 @@ CREATE TABLE IF NOT EXISTS scans (
     is_hash BOOLEAN NOT NULL,          -- Hash new or changed files
     hash_all BOOLEAN NOT NULL,         -- Hash all items including unchanged and previously hashed
     is_val BOOLEAN NOT NULL,           -- Validate the contents of files
-    val_all BOOLEAN NOT NULL,          -- Validate all items including unchanged and previously validated
     file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
     folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
     total_size INTEGER DEFAULT NULL,   -- Total size of all items (files and directories) seen in the scan
@@ -48,6 +95,8 @@ CREATE TABLE IF NOT EXISTS scans (
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_scans_root ON scans (root_id);
 
 -- ========================================
 -- Item identity table
@@ -74,6 +123,7 @@ CREATE INDEX IF NOT EXISTS idx_items_root_name ON items (root_id, item_name COLL
 CREATE TABLE IF NOT EXISTS item_versions (
     version_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id         INTEGER NOT NULL,
+    root_id         INTEGER NOT NULL,
     first_scan_id   INTEGER NOT NULL,
     last_scan_id    INTEGER NOT NULL,
 
@@ -98,54 +148,52 @@ CREATE TABLE IF NOT EXISTS item_versions (
     delete_count    INTEGER,
     unchanged_count INTEGER,
 
+    -- Validation state (files only, NULL for folders and unvalidated files).
+    -- Tightly coupled to this version: validated once when version is created.
+    val_scan_id     INTEGER,            -- scan in which this version was validated
+    val_state       INTEGER,            -- 1=Valid, 2=Invalid
+    val_error       TEXT,               -- error details when val_state=Invalid
+
     FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_versions_item_scan ON item_versions (item_id, first_scan_id DESC);
 CREATE INDEX IF NOT EXISTS idx_versions_first_scan ON item_versions (first_scan_id);
+CREATE INDEX IF NOT EXISTS idx_versions_root_lastscan ON item_versions (root_id, last_scan_id);
 
 -- ========================================
--- Hash versions table (integrity observations)
+-- Hash versions table (integrity observation log)
 -- ========================================
--- One row per distinct hash observation for a file. Decoupled from item_versions.
--- Absence of a row means the item has never been hashed.
+-- Zero or more hash observations per item_version. Forms a log of hash checks.
+-- Absence of any row for a version means it has never been hashed.
+-- Multiple rows for the same version track hash changes over time (e.g., bit rot).
 CREATE TABLE IF NOT EXISTS hash_versions (
-    item_id         INTEGER NOT NULL,
-    first_scan_id   INTEGER NOT NULL,
-    last_scan_id    INTEGER NOT NULL,
-    file_hash       BLOB NOT NULL,
-    hash_state      INTEGER NOT NULL,   -- 1=Valid, 2=Suspect
-    PRIMARY KEY (item_id, first_scan_id),
+    item_id          INTEGER NOT NULL,     -- leading key for item-level queries
+    item_version_id  INTEGER NOT NULL,     -- which item_version this hash observes
+    first_scan_id    INTEGER NOT NULL,
+    last_scan_id     INTEGER NOT NULL,
+    file_hash        BLOB NOT NULL,
+    hash_state       INTEGER NOT NULL,     -- 1=Valid, 2=Suspect
+    PRIMARY KEY (item_id, item_version_id, first_scan_id),
     FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (item_version_id) REFERENCES item_versions(version_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
 ) WITHOUT ROWID;
 
--- ========================================
--- Validation versions table (integrity observations)
--- ========================================
--- One row per distinct validation result for a file. Decoupled from item_versions.
--- Absence of a row means the item has never been validated.
-CREATE TABLE IF NOT EXISTS val_versions (
-    item_id         INTEGER NOT NULL,
-    first_scan_id   INTEGER NOT NULL,
-    last_scan_id    INTEGER NOT NULL,
-    val_state       INTEGER NOT NULL,   -- 1=Valid, 2=Invalid
-    val_error       TEXT,
-    PRIMARY KEY (item_id, first_scan_id),
-    FOREIGN KEY (item_id) REFERENCES items(item_id),
-    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
-) WITHOUT ROWID;
+-- FK-support index: allows efficient FK constraint checks when deleting
+-- item_versions rows (avoids full scan of hash_versions).
+CREATE INDEX IF NOT EXISTS idx_hash_versions_item_version ON hash_versions (item_version_id);
 
 -- ========================================
 -- Scan undo log (transient, for rollback support)
 -- ========================================
--- log_type: 0=item_version, 1=hash_version, 2=val_version
+-- log_type: 0=item_version, 1=hash_version
 -- For type 0: ref_id1=version_id, ref_id2=0
--- For types 1,2: ref_id1=item_id, ref_id2=first_scan_id
+-- For type 1: ref_id1=item_version_id, ref_id2=first_scan_id
 CREATE TABLE IF NOT EXISTS scan_undo_log (
     log_type            INTEGER NOT NULL,
     ref_id1             INTEGER NOT NULL,
@@ -188,7 +236,7 @@ CREATE TABLE IF NOT EXISTS scan_schedules (
     interval_value INTEGER,                                             -- For interval schedules
     interval_unit INTEGER CHECK(interval_unit IN (0, 1, 2, 3)),       -- 0=minutes, 1=hours, 2=days, 3=weeks
     hash_mode INTEGER NOT NULL CHECK(hash_mode IN (0, 1, 2)),
-    validate_mode INTEGER NOT NULL CHECK(validate_mode IN (0, 1, 2)),
+    is_val BOOLEAN NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     deleted_at INTEGER DEFAULT NULL,                                    -- Soft delete timestamp (NULL for active schedules)

@@ -171,7 +171,7 @@ export interface RootWithScan {
 export interface ScheduleScanRequest {
   root_id: number
   hash_mode: 'All' | 'New' | 'None'
-  validate_mode: 'All' | 'New' | 'None'
+  is_val: boolean
 }
 
 // Schedule types
@@ -190,7 +190,7 @@ export interface Schedule {
   interval_value?: number
   interval_unit?: IntervalUnit
   hash_mode: 'All' | 'New' | 'None'
-  validate_mode: 'All' | 'New' | 'None'
+  is_val: boolean
   created_at: number  // Unix timestamp
   updated_at: number  // Unix timestamp
 }

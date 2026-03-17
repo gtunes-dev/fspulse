@@ -28,16 +28,18 @@ impl HashState {
     }
 }
 
-/// A single hash observation for a file. Maps to the `hash_versions` table.
+/// A single hash observation for a file version. Maps to the `hash_versions` table.
 ///
-/// Each row represents a period where a particular hash was observed.
-/// `first_scan_id` is when this hash was first computed; `last_scan_id` is
-/// extended each time the hash is re-confirmed unchanged.
+/// Each row represents a period where a particular hash was observed for an
+/// item_version. `first_scan_id` is when this hash was first computed;
+/// `last_scan_id` is extended each time the hash is re-confirmed unchanged.
 ///
-/// Absence of a row for an item means it has never been hashed.
+/// A version can have zero or more hash observations (a log of hash checks).
+/// Multiple rows for the same version track hash changes over time (e.g., bit rot).
 #[allow(dead_code)]
 pub struct HashVersion {
     item_id: i64,
+    item_version_id: i64,
     first_scan_id: i64,
     last_scan_id: i64,
     file_hash: String,
@@ -48,6 +50,10 @@ pub struct HashVersion {
 impl HashVersion {
     pub fn item_id(&self) -> i64 {
         self.item_id
+    }
+
+    pub fn item_version_id(&self) -> i64 {
+        self.item_version_id
     }
 
     pub fn first_scan_id(&self) -> i64 {
@@ -66,18 +72,19 @@ impl HashVersion {
         self.hash_state
     }
 
-    /// Get the most recent hash_version for an item (if any).
-    pub fn get_current(
+    /// Get the most recent hash_version for an item_version (if any).
+    pub fn get_current_for_version(
         conn: &Connection,
         item_id: i64,
+        item_version_id: i64,
     ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
-            "SELECT item_id, first_scan_id, last_scan_id, file_hash, hash_state
+            "SELECT item_id, item_version_id, first_scan_id, last_scan_id, file_hash, hash_state
              FROM hash_versions
-             WHERE item_id = ?
+             WHERE item_id = ? AND item_version_id = ?
              ORDER BY first_scan_id DESC
              LIMIT 1",
-            params![item_id],
+            params![item_id, item_version_id],
             Self::from_row,
         )
         .optional()
@@ -88,15 +95,16 @@ impl HashVersion {
     pub fn insert(
         conn: &Connection,
         item_id: i64,
+        item_version_id: i64,
         scan_id: i64,
         file_hash: &str,
         hash_state: HashState,
     ) -> Result<(), FsPulseError> {
         let hash_blob = Hash::hex_to_blob(file_hash);
         conn.execute(
-            "INSERT INTO hash_versions (item_id, first_scan_id, last_scan_id, file_hash, hash_state)
-             VALUES (?, ?, ?, ?, ?)",
-            params![item_id, scan_id, scan_id, hash_blob, hash_state.as_i64()],
+            "INSERT INTO hash_versions (item_id, item_version_id, first_scan_id, last_scan_id, file_hash, hash_state)
+             VALUES (?, ?, ?, ?, ?, ?)",
+            params![item_id, item_version_id, scan_id, scan_id, hash_blob, hash_state.as_i64()],
         )?;
         Ok(())
     }
@@ -105,13 +113,14 @@ impl HashVersion {
     pub fn extend_last_scan(
         conn: &Connection,
         item_id: i64,
+        item_version_id: i64,
         first_scan_id: i64,
         new_last_scan_id: i64,
     ) -> Result<(), FsPulseError> {
         conn.execute(
             "UPDATE hash_versions SET last_scan_id = ?
-             WHERE item_id = ? AND first_scan_id = ?",
-            params![new_last_scan_id, item_id, first_scan_id],
+             WHERE item_id = ? AND item_version_id = ? AND first_scan_id = ?",
+            params![new_last_scan_id, item_id, item_version_id, first_scan_id],
         )?;
         Ok(())
     }
@@ -119,10 +128,11 @@ impl HashVersion {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(HashVersion {
             item_id: row.get(0)?,
-            first_scan_id: row.get(1)?,
-            last_scan_id: row.get(2)?,
-            file_hash: Hash::blob_to_hex(row.get(3)?),
-            hash_state: HashState::from_i64(row.get(4)?),
+            item_version_id: row.get(1)?,
+            first_scan_id: row.get(2)?,
+            last_scan_id: row.get(3)?,
+            file_hash: Hash::blob_to_hex(row.get(4)?),
+            hash_state: HashState::from_i64(row.get(5)?),
         })
     }
 }

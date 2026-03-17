@@ -107,7 +107,7 @@ pub struct TemporalTreeItem {
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
     pub unchanged_count: Option<i64>,
-    // Integrity state from hash_versions/val_versions (NULL if never hashed/validated)
+    // Integrity state (NULL if never hashed/validated)
     pub val_state: Option<i64>,
     pub hash_state: Option<i64>,
 }
@@ -140,18 +140,14 @@ pub fn get_temporal_immediate_children(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
                 iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
-                vv.val_state, hv.hash_state
+                iv.val_state, hv.hash_state
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+             AND hv.item_version_id = iv.version_id
              AND hv.first_scan_id = (
                  SELECT MAX(first_scan_id) FROM hash_versions
-                 WHERE item_id = i.item_id AND first_scan_id <= ?2
-             )
-         LEFT JOIN val_versions vv ON vv.item_id = i.item_id
-             AND vv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM val_versions
-                 WHERE item_id = i.item_id AND first_scan_id <= ?2
+                 WHERE item_id = i.item_id AND item_version_id = iv.version_id
              )
          WHERE i.root_id = ?1
            AND iv.first_scan_id = (
@@ -214,18 +210,14 @@ pub fn search_temporal_items(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
                 iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
-                vv.val_state, hv.hash_state
+                iv.val_state, hv.hash_state
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+             AND hv.item_version_id = iv.version_id
              AND hv.first_scan_id = (
                  SELECT MAX(first_scan_id) FROM hash_versions
-                 WHERE item_id = i.item_id AND first_scan_id <= ?2
-             )
-         LEFT JOIN val_versions vv ON vv.item_id = i.item_id
-             AND vv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM val_versions
-                 WHERE item_id = i.item_id AND first_scan_id <= ?2
+                 WHERE item_id = i.item_id AND item_version_id = iv.version_id
              )
          WHERE i.root_id = ?1
            AND iv.first_scan_id = (
@@ -353,20 +345,16 @@ const VERSION_HISTORY_COLUMNS: &str =
      v.is_deleted, v.access, \
      v.mod_date, v.size, \
      v.add_count, v.modify_count, v.delete_count, v.unchanged_count, \
-     hv.hash_state, hv.file_hash, vv.val_state, vv.val_error";
+     hv.hash_state, hv.file_hash, v.val_state, v.val_error";
 
 const VERSION_HISTORY_JOINS: &str =
     "JOIN scans s1 ON s1.scan_id = v.first_scan_id \
      JOIN scans s2 ON s2.scan_id = v.last_scan_id \
      LEFT JOIN hash_versions hv ON hv.item_id = v.item_id \
+       AND hv.item_version_id = v.version_id \
        AND hv.first_scan_id = ( \
            SELECT MAX(hv2.first_scan_id) FROM hash_versions hv2 \
-           WHERE hv2.item_id = v.item_id AND hv2.first_scan_id <= v.last_scan_id \
-       ) \
-     LEFT JOIN val_versions vv ON vv.item_id = v.item_id \
-       AND vv.first_scan_id = ( \
-           SELECT MAX(vv2.first_scan_id) FROM val_versions vv2 \
-           WHERE vv2.item_id = v.item_id AND vv2.first_scan_id <= v.last_scan_id \
+           WHERE hv2.item_id = v.item_id AND hv2.item_version_id = v.version_id \
        )";
 
 /// Get version history for an item, starting from a specific scan going backwards.
@@ -552,7 +540,7 @@ pub struct IntegrityState {
 }
 
 /// Get the integrity state (hash + validation) for an item at a specific scan point.
-/// Queries hash_versions and val_versions for the current record at the given scan,
+/// Queries hash_versions (keyed on item_version_id) and val columns on item_versions,
 /// plus has_validator from the items table.
 pub fn get_integrity_state(
     item_id: i64,
@@ -569,28 +557,40 @@ pub fn get_integrity_state(
         .optional()?
         .unwrap_or(false);
 
-    let hash_row: Option<(i64, Option<Vec<u8>>)> = conn
+    // Get the version active at this scan point
+    let version_row: Option<(i64, Option<i64>, Option<String>)> = conn
         .query_row(
-            "SELECT hash_state, file_hash FROM hash_versions \
+            "SELECT version_id, val_state, val_error FROM item_versions \
              WHERE item_id = ?1 \
                AND first_scan_id = ( \
-                   SELECT MAX(first_scan_id) FROM hash_versions \
+                   SELECT MAX(first_scan_id) FROM item_versions \
                    WHERE item_id = ?1 AND first_scan_id <= ?2 \
                )",
             params![item_id, scan_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?;
 
-    let val_row: Option<(i64, Option<String>)> = conn
+    let (version_id, val_state, val_error) = match version_row {
+        Some((vid, vs, ve)) => (vid, vs, ve),
+        None => return Ok(IntegrityState {
+            has_validator,
+            hash_state: None,
+            file_hash: None,
+            val_state: None,
+            val_error: None,
+        }),
+    };
+
+    let hash_row: Option<(i64, Option<Vec<u8>>)> = conn
         .query_row(
-            "SELECT val_state, val_error FROM val_versions \
-             WHERE item_id = ?1 \
+            "SELECT hash_state, file_hash FROM hash_versions \
+             WHERE item_id = ?1 AND item_version_id = ?2 \
                AND first_scan_id = ( \
-                   SELECT MAX(first_scan_id) FROM val_versions \
-                   WHERE item_id = ?1 AND first_scan_id <= ?2 \
+                   SELECT MAX(first_scan_id) FROM hash_versions \
+                   WHERE item_id = ?1 AND item_version_id = ?2 \
                )",
-            params![item_id, scan_id],
+            params![item_id, version_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
@@ -599,8 +599,8 @@ pub fn get_integrity_state(
         has_validator,
         hash_state: hash_row.as_ref().map(|(s, _)| *s),
         file_hash: hash_row.and_then(|(_, h)| h),
-        val_state: val_row.as_ref().map(|(s, _)| *s),
-        val_error: val_row.and_then(|(_, e)| e),
+        val_state,
+        val_error,
     })
 }
 

@@ -479,12 +479,12 @@ impl Scanner {
             // version has first_scan_id = current_scan so it's simply deleted on rollback.
             c.execute(
                 "INSERT INTO item_versions (
-                    item_id, first_scan_id, last_scan_id,
+                    item_id, root_id, first_scan_id, last_scan_id,
                     is_added, is_deleted, access, mod_date, size,
                     add_count, modify_count, delete_count, unchanged_count
                  )
                  SELECT
-                    iv.item_id, ?, ?,
+                    iv.item_id, i.root_id, ?, ?,
                     0, 1, iv.access, iv.mod_date, iv.size,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
@@ -579,7 +579,7 @@ impl Scanner {
 
         info!("Scan analysis: {} folders have descendant changes", writes.len());
 
-        Scanner::apply_folder_count_writes(&conn, scan_id, &writes, prev_scan_id, interrupt_token)?;
+        Scanner::apply_folder_count_writes(&conn, root_id, scan_id, &writes, prev_scan_id, interrupt_token)?;
         Ok(())
     }
 
@@ -817,6 +817,7 @@ impl Scanner {
     /// Each batch is committed independently; interrupts are checked between batches.
     fn apply_folder_count_writes(
         conn: &Connection,
+        root_id: i64,
         scan_id: i64,
         writes: &[FolderCountWrite],
         prev_scan_id: Option<i64>,
@@ -828,7 +829,7 @@ impl Scanner {
             Scanner::check_interrupted(interrupt_token)?;
             Database::immediate_transaction(conn, |c| {
                 for w in batch {
-                    Scanner::write_single_folder_count(c, scan_id, prev_scan_id, w)?;
+                    Scanner::write_single_folder_count(c, root_id, scan_id, prev_scan_id, w)?;
                 }
                 Ok(())
             })?;
@@ -844,6 +845,7 @@ impl Scanner {
     ///   metadata with the computed counts.
     fn write_single_folder_count(
         conn: &Connection,
+        root_id: i64,
         scan_id: i64,
         prev_scan_id: Option<i64>,
         w: &FolderCountWrite,
@@ -884,6 +886,7 @@ impl Scanner {
                 ItemVersion::insert_full(
                     conn,
                     w.folder_item_id,
+                    root_id,
                     scan_id,
                     false,
                     version.is_deleted(),
@@ -1063,7 +1066,7 @@ impl Scanner {
             // and temporal queries resolve via MAX(first_scan_id), not last_scan_id)
             let counts = if item_type == ItemType::Directory { Some((0, 0, 0, 0)) } else { None };
             ItemVersion::insert_initial(
-                c, existing_item.item_id, ctx.scan.scan_id(), new_access, mod_date, size, counts,
+                c, existing_item.item_id, ctx.scan.root_id(), ctx.scan.scan_id(), new_access, mod_date, size, counts,
             )?;
 
             // For rehydration, we alert whenever new_access is not Ok, regardless of what
@@ -1092,7 +1095,7 @@ impl Scanner {
             // (old version is not modified — its last_scan_id already reflects when it was
             // last confirmed, and temporal queries resolve via MAX(first_scan_id))
             ItemVersion::insert_with_carry_forward(
-                c, existing_item.item_id, ctx.scan.scan_id(),
+                c, existing_item.item_id, ctx.scan.root_id(), ctx.scan.scan_id(),
                 false, new_access, mod_date, size, &existing_item.version,
                 item_type == ItemType::Directory,
             )?;
@@ -1143,7 +1146,7 @@ impl Scanner {
         ctx.execute_batch_write(|c| {
             let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type, has_validator)?;
             let counts = if item_type == ItemType::Directory { Some((0, 0, 0, 0)) } else { None };
-            ItemVersion::insert_initial(c, item_id, ctx.scan.scan_id(), new_access, mod_date, size, counts)?;
+            ItemVersion::insert_initial(c, item_id, ctx.scan.root_id(), ctx.scan.scan_id(), new_access, mod_date, size, counts)?;
 
             if new_access != Access::Ok {
                 Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), item_id)?;

@@ -202,11 +202,6 @@ impl WebServer {
             .route("/api/server/shutdown", post(api::server::shutdown))
             // App info
             .route("/api/app-info", get(api::app::get_app_info))
-            // Home/Dashboard API
-            .route(
-                "/api/home/last-scan-stats",
-                get(api::scans::get_last_scan_stats),
-            )
             // Query endpoints
             .route(
                 "/api/query/fetch_override",

@@ -539,7 +539,6 @@ impl ScansQuery {
                 "is_hash" => Format::format_bool(scan.is_hash, col.format)?,
                 "hash_all" => Format::format_bool(scan.hash_all, col.format)?,
                 "is_val" => Format::format_bool(scan.is_val, col.format)?,
-                "val_all" => Format::format_bool(scan.val_all, col.format)?,
                 "file_count" => Format::format_opt_i64(scan.file_count),
                 "folder_count" => Format::format_opt_i64(scan.folder_count),
                 "total_size" => Format::format_opt_i64(scan.total_size),
@@ -689,13 +688,11 @@ impl QueryImpl {
             AND iv.first_scan_id = (
                 SELECT MAX(first_scan_id) FROM item_versions WHERE item_id = i.item_id
             )
-        LEFT JOIN val_versions vv ON vv.item_id = i.item_id
-            AND vv.first_scan_id = (
-                SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
-            )
         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+            AND hv.item_version_id = iv.version_id
             AND hv.first_scan_id = (
-                SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
+                SELECT MAX(first_scan_id) FROM hash_versions
+                WHERE item_id = i.item_id AND item_version_id = iv.version_id
             )
         {where_clause}
         {order_clause}
@@ -705,13 +702,11 @@ impl QueryImpl {
     const VERSIONS_SQL_QUERY: &str = "SELECT {select_list}
         FROM item_versions iv
         JOIN items i ON i.item_id = iv.item_id
-        LEFT JOIN val_versions vv ON vv.item_id = iv.item_id
-            AND vv.first_scan_id = (
-                SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = iv.item_id
-            )
-        LEFT JOIN hash_versions hv ON hv.item_id = iv.item_id
+        LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+            AND hv.item_version_id = iv.version_id
             AND hv.first_scan_id = (
-                SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = iv.item_id
+                SELECT MAX(first_scan_id) FROM hash_versions
+                WHERE item_id = i.item_id AND item_version_id = iv.version_id
             )
         {where_clause}
         {order_clause}
@@ -860,7 +855,6 @@ pub struct ScansQueryRow {
     is_hash: bool,
     hash_all: bool,
     is_val: bool,
-    val_all: bool,
     file_count: Option<i64>,
     folder_count: Option<i64>,
     total_size: Option<i64>,
@@ -892,22 +886,21 @@ impl ScansQueryRow {
             is_hash: row.get(7)?,
             hash_all: row.get(8)?,
             is_val: row.get(9)?,
-            val_all: row.get(10)?,
-            file_count: row.get(11)?,
-            folder_count: row.get(12)?,
-            total_size: row.get(13)?,
-            alert_count: row.get(14)?,
-            add_count: row.get(15)?,
-            modify_count: row.get(16)?,
-            delete_count: row.get(17)?,
-            val_unknown_count: row.get(18)?,
-            val_valid_count: row.get(19)?,
-            val_invalid_count: row.get(20)?,
-            val_no_validator_count: row.get(21)?,
-            hash_unknown_count: row.get(22)?,
-            hash_valid_count: row.get(23)?,
-            hash_suspect_count: row.get(24)?,
-            error: row.get(25)?,
+            file_count: row.get(10)?,
+            folder_count: row.get(11)?,
+            total_size: row.get(12)?,
+            alert_count: row.get(13)?,
+            add_count: row.get(14)?,
+            modify_count: row.get(15)?,
+            delete_count: row.get(16)?,
+            val_unknown_count: row.get(17)?,
+            val_valid_count: row.get(18)?,
+            val_invalid_count: row.get(19)?,
+            val_no_validator_count: row.get(20)?,
+            hash_unknown_count: row.get(21)?,
+            hash_valid_count: row.get(22)?,
+            hash_suspect_count: row.get(23)?,
+            error: row.get(24)?,
         })
     }
 }

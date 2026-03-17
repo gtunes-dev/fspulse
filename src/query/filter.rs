@@ -629,8 +629,8 @@ impl Filter for EnumFilter {
 
         // For val_state, special-case NoValidator (3) and Unknown (0):
         //   NoValidator → i.has_validator = 0
-        //   Unknown     → (i.has_validator = 1 AND vv.val_state IS NULL)
-        let is_val_state = self.enum_col_db == "vv.val_state";
+        //   Unknown     → (i.has_validator = 1 AND iv.val_state IS NULL)
+        let is_val_state = self.enum_col_db == "iv.val_state";
 
         // Separate out special val_state values from normal ones
         let mut normal_vals = Vec::new();
@@ -685,7 +685,7 @@ impl Filter for EnumFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            pred_str.push_str("(i.has_validator = 1 AND vv.val_state IS NULL)");
+            pred_str.push_str("(i.has_validator = 1 AND iv.val_state IS NULL)");
         }
 
         for enum_val in &normal_vals {

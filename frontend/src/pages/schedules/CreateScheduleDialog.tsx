@@ -45,7 +45,7 @@ export function CreateScheduleDialog({
   const [intervalValue, setIntervalValue] = useState<number>(2)
   const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('Hours')
   const [hashMode, setHashMode] = useState<string>('New or Changed')
-  const [validateMode, setValidateMode] = useState<string>('New or Changed')
+  const [isVal, setIsVal] = useState<boolean>(true)
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -63,7 +63,7 @@ export function CreateScheduleDialog({
       setIntervalValue(2)
       setIntervalUnit('Hours')
       setHashMode('New or Changed')
-      setValidateMode('New or Changed')
+      setIsVal(true)
       setError(null)
 
       // Set preselected root if provided
@@ -142,8 +142,8 @@ export function CreateScheduleDialog({
       setSubmitting(true)
       setError(null)
 
-      // Map UI values to API values
-      const mapMode = (mode: string): string => {
+      // Map UI hash mode to API value
+      const mapHashMode = (mode: string): string => {
         if (mode === 'New or Changed') return 'New'
         return mode // 'All' and 'None' map directly
       }
@@ -153,8 +153,8 @@ export function CreateScheduleDialog({
         root_id: parseInt(selectedRootId),
         schedule_name: scheduleName.trim(),
         schedule_type: scheduleType,
-        hash_mode: mapMode(hashMode),
-        validate_mode: mapMode(validateMode),
+        hash_mode: mapHashMode(hashMode),
+        is_val: isVal,
       }
 
       // Add schedule-type-specific fields
@@ -348,9 +348,9 @@ export function CreateScheduleDialog({
             {/* Scan Options */}
             <ScanOptionsFields
               hashMode={hashMode}
-              validateMode={validateMode}
+              isVal={isVal}
               onHashModeChange={setHashMode}
-              onValidateModeChange={setValidateMode}
+              onIsValChange={setIsVal}
             />
 
             {/* Error Display */}

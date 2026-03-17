@@ -119,7 +119,8 @@ impl Hash {
         let mut f = File::open(path)?;
 
         let mut hasher = Sha256::new();
-        let mut buffer = [0; 131_072]; // Read in 128KB chunks
+        let mut buffer = vec![0u8; 4 * 1024 * 1024]; // 4MB on the heap
+
 
         let mut loop_counter = 0;
 

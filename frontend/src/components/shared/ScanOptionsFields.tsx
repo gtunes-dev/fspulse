@@ -5,16 +5,16 @@
 
 interface ScanOptionsFieldsProps {
   hashMode: string
-  validateMode: string
+  isVal: boolean
   onHashModeChange: (mode: string) => void
-  onValidateModeChange: (mode: string) => void
+  onIsValChange: (isVal: boolean) => void
 }
 
 export function ScanOptionsFields({
   hashMode,
-  validateMode,
+  isVal,
   onHashModeChange,
-  onValidateModeChange,
+  onIsValChange,
 }: ScanOptionsFieldsProps) {
   return (
     <div className="space-y-6">
@@ -60,46 +60,17 @@ export function ScanOptionsFields({
         </div>
       </div>
 
-      {/* Validate Mode */}
+      {/* Validate Files */}
       <div className="space-y-4">
-        <label className="text-sm font-semibold">Validate Files</label>
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="validate-mode"
-              value="All"
-              checked={validateMode === 'All'}
-              onChange={(e) => onValidateModeChange(e.target.value)}
-              className="w-4 h-4"
-            />
-            <span className="text-sm">All</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="validate-mode"
-              value="New or Changed"
-              checked={validateMode === 'New or Changed'}
-              onChange={(e) => onValidateModeChange(e.target.value)}
-              className="w-4 h-4"
-            />
-            <span className="text-sm">New or Changed</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="validate-mode"
-              value="None"
-              checked={validateMode === 'None'}
-              onChange={(e) => onValidateModeChange(e.target.value)}
-              className="w-4 h-4"
-            />
-            <span className="text-sm">None</span>
-          </label>
-        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isVal}
+            onChange={(e) => onIsValChange(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span className="text-sm font-semibold">Validate Files</span>
+        </label>
       </div>
     </div>
   )

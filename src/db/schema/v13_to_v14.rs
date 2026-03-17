@@ -1,6 +1,4 @@
 use crate::error::FsPulseError;
-use crate::scans::{HashMode, ValidateMode};
-use crate::task::{ScanSettings, TaskType};
 use rusqlite::Connection;
 
 /// Pre-SQL: Create the new task_queue table with the new schema.
@@ -100,6 +98,25 @@ pub fn migrate_13_to_14(conn: &Connection) -> Result<(), FsPulseError> {
         )
         .map_err(FsPulseError::DatabaseError)?;
 
+    // Local helpers to produce v14-era JSON without depending on external types
+    // that may evolve in later schema versions.
+    fn hash_mode_str(mode: i32) -> Result<&'static str, FsPulseError> {
+        match mode {
+            0 => Ok("None"),
+            1 => Ok("New"),
+            2 => Ok("All"),
+            _ => Err(FsPulseError::Error(format!("Invalid hash_mode value: {}", mode))),
+        }
+    }
+    fn validate_mode_str(mode: i32) -> Result<&'static str, FsPulseError> {
+        match mode {
+            0 => Ok("None"),
+            1 => Ok("New"),
+            2 => Ok("All"),
+            _ => Err(FsPulseError::Error(format!("Invalid validate_mode value: {}", mode))),
+        }
+    }
+
     for (
         queue_id,
         root_id,
@@ -113,23 +130,18 @@ pub fn migrate_13_to_14(conn: &Connection) -> Result<(), FsPulseError> {
         analysis_hwm,
     ) in rows
     {
-        // All existing entries are Scan tasks
-        let task_type = TaskType::Scan.as_i64();
+        // All existing entries are Scan tasks (task_type 0)
+        let task_type: i64 = 0;
 
         // is_active = true if scan_id IS NOT NULL (in-progress scan)
         let is_active = scan_id.is_some();
 
-        // Convert integer modes to enums and create typed settings
-        let hash_mode_enum = HashMode::from_i32(hash_mode).ok_or_else(|| {
-            FsPulseError::Error(format!("Invalid hash_mode value: {}", hash_mode))
-        })?;
-        let validate_mode_enum = ValidateMode::from_i32(validate_mode).ok_or_else(|| {
-            FsPulseError::Error(format!("Invalid validate_mode value: {}", validate_mode))
-        })?;
-
-        // Generate JSON task_settings using typed struct for consistent format
-        let settings = ScanSettings::new(hash_mode_enum, validate_mode_enum);
-        let task_settings = settings.to_json()?;
+        // Build v14-era JSON: {"hash_mode":"New","validate_mode":"None"}
+        let task_settings = format!(
+            r#"{{"hash_mode":"{}","validate_mode":"{}"}}"#,
+            hash_mode_str(hash_mode)?,
+            validate_mode_str(validate_mode)?,
+        );
 
         insert_stmt
             .execute(rusqlite::params![

@@ -77,7 +77,7 @@ date_range         =  { date ~ WS* ~ DOTDOT ~ date }
 date               =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
-bool_col = { "is_deleted" | "is_hash" | "hash_all" | "is_val" | "val_all" | "was_restarted" }
+bool_col = { "is_deleted" | "is_hash" | "hash_all" | "is_val" | "was_restarted" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }

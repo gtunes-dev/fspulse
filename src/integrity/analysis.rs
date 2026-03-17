@@ -50,7 +50,7 @@ pub fn run_analysis_phase(
     let initial_hwm = initial_state.high_water_mark;
 
     let (analyze_total, analyze_done) =
-        AnalysisItem::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
+        AnalysisItem::get_analysis_counts(&conn, scan.root_id(), scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
 
     // Set up counter-based progress tracking
     task_progress.set_progress_total(analyze_total, analyze_done, Some("files"));
@@ -96,7 +96,7 @@ pub fn run_analysis_phase(
         });
     }
 
-    let mut last_item_id = initial_hwm;
+    let mut last_version_id = initial_hwm;
 
     loop {
         if interrupt_token.load(Ordering::Acquire) {
@@ -105,9 +105,10 @@ pub fn run_analysis_phase(
 
         let analysis_items = AnalysisItem::fetch_next_batch(
             &conn,
+            scan.root_id(),
             scan.scan_id(),
             scan.analysis_spec(),
-            last_item_id,
+            last_version_id,
             100,
         )?;
 
@@ -115,11 +116,11 @@ pub fn run_analysis_phase(
             break;
         }
 
-        // Add batch item IDs to tracker before distributing work
-        tracker.add_batch(analysis_items.iter().map(|item| item.item_id()));
+        // Add batch version IDs to tracker before distributing work
+        tracker.add_batch(analysis_items.iter().map(|item| item.version_id()));
 
         for analysis_item in analysis_items {
-            last_item_id = analysis_item.item_id();
+            last_version_id = analysis_item.version_id();
 
             sender
                 .send(analysis_item)
@@ -160,7 +161,6 @@ fn analyze_item(
     interrupt_token: &Arc<AtomicBool>,
     tracker: &Arc<AnalysisTracker>,
 ) {
-    let item_id = analysis_item.item_id();
     let path = PathBuf::from(analysis_item.item_path());
 
     info!("Beginning analysis of: {path:?}");
@@ -274,8 +274,8 @@ fn analyze_item(
         None
     };
 
-    if !is_interrupted(interrupt_token) {
-        if let Err(error) = persist_analysis(
+    let persisted = if !is_interrupted(interrupt_token) {
+        match persist_analysis(
             scan,
             &analysis_item,
             prev_scan_id,
@@ -285,20 +285,31 @@ fn analyze_item(
             new_access,
             interrupt_token,
         ) {
-            let e_str = error.to_string();
-            error!(
-                "Error updating item analysis '{}': {}",
-                &display_path, e_str
-            );
+            Ok(()) => true,
+            Err(error) => {
+                let e_str = error.to_string();
+                error!(
+                    "Error updating item analysis '{}': {}",
+                    &display_path, e_str
+                );
+                false
+            }
         }
-    }
+    } else {
+        false
+    };
 
     task_progress.increment_progress();
     task_progress.set_thread_idle(thread_index);
 
-    // Mark item as completed in the tracker (updates HWM)
-    if let Err(e) = tracker.complete_item(item_id) {
-        error!("Failed to complete item {}: {}", item_id, e);
+    // Only advance the HWM if the item was successfully persisted.
+    // If interrupted or failed, the item must be re-processed on resume,
+    // so the HWM must not advance past it.
+    if persisted {
+        let version_id = analysis_item.version_id();
+        if let Err(e) = tracker.complete_item(version_id) {
+            error!("Failed to complete version {}: {}", version_id, e);
+        }
     }
 
     info!("Done analyzing: {path:?}");
@@ -306,8 +317,8 @@ fn analyze_item(
 
 /// Persist hash and validation results to the database.
 ///
-/// Writes to `hash_versions` and `val_versions` tables. Also handles
-/// access state changes on `item_versions` and alert creation.
+/// Writes to `hash_versions` table and val columns on `item_versions`.
+/// Also handles access state changes on `item_versions` and alert creation.
 #[allow(clippy::too_many_arguments)]
 fn persist_analysis(
     scan: &Scan,
@@ -322,8 +333,6 @@ fn persist_analysis(
     // Determine what needs to be written
     let hash_changed = analysis_item.needs_hash()
         && analysis_item.file_hash() != new_hash.as_deref();
-
-    let val_state_changed = val_analysis::is_val_changed(analysis_item, new_val, new_val_error.as_deref());
 
     let mut access_changed = false;
     let mut new_access_value = analysis_item.access();
@@ -366,7 +375,7 @@ fn persist_analysis(
         // Val persistence
         if analysis_item.needs_val() {
             val_analysis::persist_val(
-                c, scan, analysis_item, new_val, new_val_error.as_deref(), val_state_changed,
+                c, scan, analysis_item, new_val, new_val_error.as_deref(),
             )?;
         }
 
@@ -397,6 +406,7 @@ fn persist_analysis(
                 crate::item_version::ItemVersion::insert_full(
                     c,
                     analysis_item.item_id(),
+                    scan.root_id(),
                     scan.scan_id(),
                     false,          // is_added
                     false,          // is_deleted (analysis only runs on non-deleted items)
@@ -409,7 +419,7 @@ fn persist_analysis(
         }
 
         // Alerts
-        if analysis_item.needs_val() && val_state_changed && new_val == ValidationState::Invalid {
+        if analysis_item.needs_val() && new_val == ValidationState::Invalid {
             crate::alerts::Alerts::add_invalid_item_alert(
                 c,
                 scan.scan_id(),
@@ -434,8 +444,8 @@ fn persist_analysis(
 /// An item ready for the analysis phase, with its current state and flags
 /// indicating which analysis operations are needed.
 ///
-/// Hash/val state is sourced from `hash_versions` and `val_versions` tables
-/// via LEFT JOINs, not from `item_versions`.
+/// Hash state is sourced from `hash_versions` via LEFT JOIN.
+/// Val state is sourced from `item_versions` columns (val_state, val_error).
 #[derive(Clone, Debug)]
 pub struct AnalysisItem {
     item_id: i64,
@@ -446,13 +456,14 @@ pub struct AnalysisItem {
     mod_date: Option<i64>,
     size: Option<i64>,
     has_validator: bool,
-    // From hash_versions (NULL if never hashed)
+    // From hash_versions (NULL if never hashed for this version)
     hash_first_scan_id: Option<i64>,
     hash_last_scan_id: Option<i64>,
     file_hash: Option<String>,
-    // From val_versions (NULL if never validated)
-    val_first_scan_id: Option<i64>,
+    // From item_versions (NULL if not yet validated)
+    #[allow(dead_code)]
     val_state: Option<i64>,
+    #[allow(dead_code)]
     val_error: Option<String>,
     // Computed flags
     needs_hash: bool,
@@ -505,14 +516,12 @@ impl AnalysisItem {
         self.file_hash.as_deref()
     }
 
-    pub fn val_first_scan_id(&self) -> Option<i64> {
-        self.val_first_scan_id
-    }
-
+    #[allow(dead_code)]
     pub fn val_state(&self) -> Option<ValidationState> {
         self.val_state.map(ValidationState::from_i64)
     }
 
+    #[allow(dead_code)]
     pub fn val_error(&self) -> Option<&str> {
         self.val_error.as_deref()
     }
@@ -546,80 +555,63 @@ impl AnalysisItem {
             hash_first_scan_id: row.get(8)?,
             hash_last_scan_id: row.get(9)?,
             file_hash: Hash::opt_blob_to_hex(row.get(10)?),
-            val_first_scan_id: row.get(11)?,
-            val_state: row.get(12)?,
-            val_error: row.get(13)?,
-            needs_hash: row.get(14)?,
-            needs_val: row.get(15)?,
+            val_state: row.get(11)?,
+            val_error: row.get(12)?,
+            needs_hash: row.get(13)?,
+            needs_val: row.get(14)?,
         })
     }
 
     pub fn get_analysis_counts(
         conn: &Connection,
+        root_id: i64,
         scan_id: i64,
         analysis_spec: &AnalysisSpec,
-        last_item_id: i64,
+        last_version_id: i64,
     ) -> Result<(u64, u64), FsPulseError> {
-        // Sources hash/val state from hash_versions/val_versions via LEFT JOIN.
-        // "Never hashed" = no row in hash_versions (hv columns are NULL).
-        // "Never validated" = no row in val_versions (vv columns are NULL).
+        // Driven by idx_versions_root_lastscan (root_id, last_scan_id, rowid) to find
+        // alive versions for this root at this scan. The version_id filter uses the
+        // implicit rowid in the index for an efficient seek (no full-scan).
         let sql = r#"
             WITH candidates AS (
                 SELECT
                     hv.last_scan_id AS hash_last_scan,
-                    vv.last_scan_id AS val_last_scan,
+                    cv.val_scan_id,
                     CASE
-                        WHEN $1 = 0 THEN 0
-                        WHEN $2 = 1 AND (hv.file_hash IS NULL OR hv.last_scan_id < $3) THEN 1
+                        WHEN ?1 = 0 THEN 0
+                        WHEN ?2 = 1 AND (hv.file_hash IS NULL OR hv.last_scan_id < ?3) THEN 1
                         WHEN hv.file_hash IS NULL THEN 1
-                        WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
-                        WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
-                        WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
                         ELSE 0
                     END AS needs_hash,
                     CASE
-                        WHEN $4 = 0 THEN 0
+                        WHEN ?4 = 0 THEN 0
                         WHEN i.has_validator = 0 THEN 0
-                        WHEN $5 = 1 AND (vv.val_state IS NULL OR vv.last_scan_id < $3) THEN 1
-                        WHEN vv.val_state IS NULL THEN 1
-                        WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
-                        WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
-                        WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                        WHEN cv.val_state IS NULL THEN 1
                         ELSE 0
                     END AS needs_val
-                FROM items i
-                JOIN item_versions cv
-                    ON cv.item_id = i.item_id
-                    AND cv.last_scan_id = $3
-                LEFT JOIN item_versions pv
-                    ON pv.item_id = i.item_id
-                    AND pv.first_scan_id = (
-                        SELECT MAX(first_scan_id)
-                        FROM item_versions
-                        WHERE item_id = i.item_id
-                          AND first_scan_id < cv.first_scan_id
-                    )
+                FROM item_versions cv
+                JOIN items i
+                    ON i.item_id = cv.item_id
                 LEFT JOIN hash_versions hv
-                    ON hv.item_id = i.item_id
+                    ON hv.item_id = cv.item_id
+                    AND hv.item_version_id = cv.version_id
                     AND hv.first_scan_id = (
-                        SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
-                    )
-                LEFT JOIN val_versions vv
-                    ON vv.item_id = i.item_id
-                    AND vv.first_scan_id = (
-                        SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+                        SELECT MAX(first_scan_id) FROM hash_versions
+                        WHERE item_id = cv.item_id AND item_version_id = cv.version_id
                     )
                 WHERE
-                    i.item_type = 0
+                    cv.root_id = ?6
+                    AND cv.last_scan_id = ?3
+                    AND i.item_type = 0
                     AND cv.is_deleted = 0
                     AND cv.access <> 1
-                    AND i.item_id > $6
+                    AND cv.version_id > ?5
             )
             SELECT
                 COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
                 COALESCE(SUM(CASE
-                    WHEN (needs_hash = 1 AND hash_last_scan = $3)
-                    OR (needs_val = 1 AND val_last_scan = $3)
+                    WHEN (needs_hash = 1 AND hash_last_scan = ?3)
+                    OR (needs_val = 1 AND val_scan_id = ?3)
                     THEN 1 ELSE 0 END), 0) AS total_done
             FROM candidates"#;
 
@@ -629,8 +621,8 @@ impl AnalysisItem {
             analysis_spec.hash_all() as i64,
             scan_id,
             analysis_spec.is_val() as i64,
-            analysis_spec.val_all() as i64,
-            last_item_id
+            last_version_id,
+            root_id,
         ])?;
 
         if let Some(row) = rows.next()? {
@@ -644,16 +636,19 @@ impl AnalysisItem {
 
     pub fn fetch_next_batch(
         conn: &Connection,
+        root_id: i64,
         scan_id: i64,
         analysis_spec: &AnalysisSpec,
-        last_item_id: i64,
+        last_version_id: i64,
         limit: usize,
     ) -> Result<Vec<AnalysisItem>, FsPulseError> {
-        // Sources hash/val state from hash_versions/val_versions via LEFT JOIN.
-        // needs_val is gated on i.has_validator = 1 — files without a validator are skipped.
+        // Driven by idx_versions_root_lastscan (root_id, last_scan_id, rowid) to find
+        // alive versions for this root at this scan. The version_id filter and ORDER BY
+        // use the implicit rowid in the index for an efficient seek and ordered scan
+        // (no TEMP B-TREE needed).
         let query = format!(
             "SELECT
-                i.item_id,
+                cv.item_id,
                 i.item_path,
                 cv.version_id,
                 cv.first_scan_id,
@@ -664,72 +659,46 @@ impl AnalysisItem {
                 hv.first_scan_id,
                 hv.last_scan_id,
                 hv.file_hash,
-                vv.first_scan_id,
-                vv.val_state,
-                vv.val_error,
+                cv.val_state,
+                cv.val_error,
                 CASE
-                    WHEN $1 = 0 THEN 0
-                    WHEN $2 = 1 AND (hv.file_hash IS NULL OR hv.last_scan_id < $3) THEN 1
+                    WHEN ?1 = 0 THEN 0
+                    WHEN ?2 = 1 AND (hv.file_hash IS NULL OR hv.last_scan_id < ?3) THEN 1
                     WHEN hv.file_hash IS NULL THEN 1
-                    WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
-                    WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
-                    WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
                     ELSE 0
                 END AS needs_hash,
                 CASE
-                    WHEN $4 = 0 THEN 0
+                    WHEN ?4 = 0 THEN 0
                     WHEN i.has_validator = 0 THEN 0
-                    WHEN $5 = 1 AND (vv.val_state IS NULL OR vv.last_scan_id < $3) THEN 1
-                    WHEN vv.val_state IS NULL THEN 1
-                    WHEN cv.first_scan_id = $3 AND pv.version_id IS NULL THEN 1
-                    WHEN cv.first_scan_id = $3 AND pv.is_deleted = 1 THEN 1
-                    WHEN cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) THEN 1
+                    WHEN cv.val_state IS NULL THEN 1
                     ELSE 0
                 END AS needs_val
-            FROM items i
-            JOIN item_versions cv
-                ON cv.item_id = i.item_id
-                AND cv.last_scan_id = $3
-            LEFT JOIN item_versions pv
-                ON pv.item_id = i.item_id
-                AND pv.first_scan_id = (
-                    SELECT MAX(first_scan_id)
-                    FROM item_versions
-                    WHERE item_id = i.item_id
-                      AND first_scan_id < cv.first_scan_id
-                )
+            FROM item_versions cv
+            JOIN items i
+                ON i.item_id = cv.item_id
             LEFT JOIN hash_versions hv
-                ON hv.item_id = i.item_id
+                ON hv.item_id = cv.item_id
+                AND hv.item_version_id = cv.version_id
                 AND hv.first_scan_id = (
-                    SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id
-                )
-            LEFT JOIN val_versions vv
-                ON vv.item_id = i.item_id
-                AND vv.first_scan_id = (
-                    SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id
+                    SELECT MAX(first_scan_id) FROM hash_versions
+                    WHERE item_id = cv.item_id AND item_version_id = cv.version_id
                 )
             WHERE
-                i.item_type = 0
+                cv.root_id = ?6
+                AND cv.last_scan_id = ?3
+                AND i.item_type = 0
                 AND cv.is_deleted = 0
                 AND cv.access <> 1
-                AND i.item_id > $6
+                AND cv.version_id > ?5
                 AND (
-                    ($1 = 1 AND (
-                        ($2 = 1 AND (hv.file_hash IS NULL OR hv.last_scan_id < $3)) OR
-                        hv.file_hash IS NULL OR
-                        (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (hv.last_scan_id IS NULL OR hv.last_scan_id < $3)) OR
-                        (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (hv.last_scan_id IS NULL OR hv.last_scan_id < $3)) OR
-                        (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (hv.last_scan_id IS NULL OR hv.last_scan_id < $3))
-                    )) OR
-                    ($4 = 1 AND i.has_validator = 1 AND (
-                        ($5 = 1 AND (vv.val_state IS NULL OR vv.last_scan_id < $3)) OR
-                        vv.val_state IS NULL OR
-                        (cv.first_scan_id = $3 AND pv.version_id IS NULL AND (vv.last_scan_id IS NULL OR vv.last_scan_id < $3)) OR
-                        (cv.first_scan_id = $3 AND pv.is_deleted = 1 AND (vv.last_scan_id IS NULL OR vv.last_scan_id < $3)) OR
-                        (cv.first_scan_id = $3 AND (cv.mod_date IS NOT pv.mod_date OR cv.size IS NOT pv.size) AND (vv.last_scan_id IS NULL OR vv.last_scan_id < $3))
+                    (?1 = 1 AND (
+                        hv.file_hash IS NULL
+                        OR (?2 = 1 AND hv.last_scan_id < ?3)
                     ))
+                    OR
+                    (?4 = 1 AND i.has_validator = 1 AND cv.val_state IS NULL)
                 )
-            ORDER BY i.item_id ASC
+            ORDER BY cv.version_id ASC
             LIMIT {limit}"
         );
 
@@ -741,8 +710,8 @@ impl AnalysisItem {
                 analysis_spec.hash_all() as i64,
                 scan_id,
                 analysis_spec.is_val() as i64,
-                analysis_spec.val_all() as i64,
-                last_item_id,
+                last_version_id,
+                root_id,
             ],
             AnalysisItem::from_row,
         )?;
@@ -816,7 +785,6 @@ mod tests {
             hash_first_scan_id: Some(456),
             hash_last_scan_id: Some(460),
             file_hash: Some("abc123".to_string()),
-            val_first_scan_id: Some(789),
             val_state: Some(ValidationState::Valid.as_i64()),
             val_error: Some("test error".to_string()),
             needs_hash: true,
@@ -829,7 +797,6 @@ mod tests {
         assert!(analysis_item.has_validator());
         assert_eq!(analysis_item.hash_first_scan_id(), Some(456));
         assert_eq!(analysis_item.file_hash(), Some("abc123"));
-        assert_eq!(analysis_item.val_first_scan_id(), Some(789));
         assert_eq!(analysis_item.val_error(), Some("test error"));
         assert!(analysis_item.needs_hash());
         assert!(!analysis_item.needs_val());

@@ -49,7 +49,6 @@ Each domain has a set of available columns. Columns marked as **default** are sh
 | `is_hash`       | Boolean         | Yes     | Hash new or changed files                      |
 | `hash_all`      | Boolean         | No      | Hash all items including unchanged             |
 | `is_val`        | Boolean         | Yes     | Validate new or changed files                  |
-| `val_all`       | Boolean         | No      | Validate all items including unchanged         |
 | `file_count`    | Integer         | Yes     | Count of files found in the scan               |
 | `folder_count`  | Integer         | Yes     | Count of directories found in the scan         |
 | `total_size`    | Integer         | Yes     | Total size in bytes of all files               |

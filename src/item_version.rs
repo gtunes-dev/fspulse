@@ -8,7 +8,8 @@ use crate::{error::FsPulseError, item_identity::Access};
 /// A new row is created only when observable state changes. Identity (path, type, root)
 /// comes from JOINing to the `items` table.
 ///
-/// Hash and validation state are stored separately in `hash_versions` and `val_versions`.
+/// Hash state is stored in `hash_versions` (keyed on item_version_id).
+/// Validation state is stored directly on this table (val_scan_id, val_state, val_error).
 #[allow(dead_code)]
 pub struct ItemVersion {
     version_id: i64,
@@ -99,9 +100,11 @@ impl ItemVersion {
     ///
     /// `counts` should be `Some((0, 0, 0, 0))` for folders (add, modify, delete, unchanged),
     /// `None` for files.
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_initial(
         conn: &Connection,
         item_id: i64,
+        root_id: i64,
         scan_id: i64,
         access: Access,
         mod_date: Option<i64>,
@@ -114,11 +117,11 @@ impl ItemVersion {
         };
         conn.execute(
             "INSERT INTO item_versions (
-                item_id, first_scan_id, last_scan_id,
+                item_id, root_id, first_scan_id, last_scan_id,
                 is_added, is_deleted, access, mod_date, size,
                 add_count, modify_count, delete_count, unchanged_count
-             ) VALUES (?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?)",
-            params![item_id, scan_id, scan_id, access.as_i64(), mod_date, size,
+             ) VALUES (?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?)",
+            params![item_id, root_id, scan_id, scan_id, access.as_i64(), mod_date, size,
                     add_count, modify_count, delete_count, unchanged_count],
         )?;
         Ok(())
@@ -131,6 +134,7 @@ impl ItemVersion {
     pub fn insert_full(
         conn: &Connection,
         item_id: i64,
+        root_id: i64,
         scan_id: i64,
         is_added: bool,
         is_deleted: bool,
@@ -145,12 +149,12 @@ impl ItemVersion {
         };
         conn.execute(
             "INSERT INTO item_versions (
-                item_id, first_scan_id, last_scan_id,
+                item_id, root_id, first_scan_id, last_scan_id,
                 is_added, is_deleted, access, mod_date, size,
                 add_count, modify_count, delete_count, unchanged_count
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
-                item_id, scan_id, scan_id, is_added, is_deleted, access.as_i64(),
+                item_id, root_id, scan_id, scan_id, is_added, is_deleted, access.as_i64(),
                 mod_date, size,
                 add_count, modify_count, delete_count, unchanged_count,
             ],
@@ -169,6 +173,7 @@ impl ItemVersion {
     pub fn insert_with_carry_forward(
         conn: &Connection,
         item_id: i64,
+        root_id: i64,
         scan_id: i64,
         is_deleted: bool,
         access: Access,
@@ -186,7 +191,7 @@ impl ItemVersion {
             None
         };
         Self::insert_full(
-            conn, item_id, scan_id, false, is_deleted, access, mod_date, size,
+            conn, item_id, root_id, scan_id, false, is_deleted, access, mod_date, size,
             counts,
         )
     }

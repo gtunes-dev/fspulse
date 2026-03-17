@@ -36,7 +36,7 @@ export function EditScheduleDialog({
   const [intervalValue, setIntervalValue] = useState<number>(2)
   const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('Hours')
   const [hashMode, setHashMode] = useState<string>('All')
-  const [validateMode, setValidateMode] = useState<string>('New or Changed')
+  const [isVal, setIsVal] = useState<boolean>(true)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,14 +61,14 @@ export function EditScheduleDialog({
       setIntervalValue(schedule.interval_value || 2)
       setIntervalUnit(schedule.interval_unit || 'Hours')
 
-      // Map backend modes to UI modes
-      const mapModeToUI = (mode: string): string => {
+      // Map backend hash mode to UI mode
+      const mapHashModeToUI = (mode: string): string => {
         if (mode === 'New') return 'New or Changed'
         return mode // 'All' and 'None' map directly
       }
 
-      setHashMode(mapModeToUI(schedule.hash_mode))
-      setValidateMode(mapModeToUI(schedule.validate_mode))
+      setHashMode(mapHashModeToUI(schedule.hash_mode))
+      setIsVal(schedule.is_val)
       setError(null)
     }
   }, [open, schedule])
@@ -107,8 +107,8 @@ export function EditScheduleDialog({
       setSubmitting(true)
       setError(null)
 
-      // Map UI values to API values
-      const mapMode = (mode: string): string => {
+      // Map UI hash mode to API value
+      const mapHashMode = (mode: string): string => {
         if (mode === 'New or Changed') return 'New'
         return mode // 'All' and 'None' map directly
       }
@@ -117,8 +117,8 @@ export function EditScheduleDialog({
       const requestBody: Record<string, unknown> = {
         schedule_name: scheduleName.trim(),
         schedule_type: scheduleType,
-        hash_mode: mapMode(hashMode),
-        validate_mode: mapMode(validateMode),
+        hash_mode: mapHashMode(hashMode),
+        is_val: isVal,
       }
 
       // Add schedule-type-specific fields
@@ -288,9 +288,9 @@ export function EditScheduleDialog({
           {/* Scan Options */}
           <ScanOptionsFields
             hashMode={hashMode}
-            validateMode={validateMode}
+            isVal={isVal}
             onHashModeChange={setHashMode}
-            onValidateModeChange={setValidateMode}
+            onIsValChange={setIsVal}
           />
 
           {/* Error Display */}

@@ -1,9 +1,10 @@
 // ============================================================================
 // Schema Upgrade: Version 27 → 28 — Project Integrity
 //
-// Separates hash and validation state from item_versions into dedicated
-// hash_versions and val_versions tables. Also removes phantom item_versions
-// created by the old analysis phase.
+// Separates hash state into a dedicated hash_versions table keyed on
+// item_version_id. Moves validation state onto item_versions as columns.
+// Removes phantom item_versions created by the old analysis phase.
+// Removes val_all from scans. Renames validate_mode to is_val in scan_schedules.
 //
 // This is a Standalone migration. FK enforcement is disabled for the duration.
 //
@@ -23,15 +24,18 @@
 // recomputes all folder counts and removes folder versions that become
 // unnecessary (zero structural changes + metadata matches predecessor).
 //
-// ── Hash/val history ─────────────────────────────────────────────────────────
+// ── Hash history ──────────────────────────────────────────────────────────────
 // Versions are grouped into (real_version, phantom_cluster) pairs. Each group
 // that contains hash data produces one hash_versions row:
+//   item_version_id = the real version's version_id
 //   first_scan_id = MIN(last_hash_scan) in the cluster (when hash was first got)
 //   last_scan_id  = MAX(last_scan_id)   in the cluster (when it was last seen)
-//   file_hash / hash_state from the last phantom with hash data (most recent state)
-// This correctly handles files that were modified and re-hashed multiple times,
-// producing one hash_versions row per structural version that was hashed.
-// Same logic applies to val_versions.
+//   file_hash from the version with MIN(last_hash_scan) (baseline hash)
+//   hash_state from the version with MAX(last_hash_scan) (most recent state)
+//
+// ── Validation ────────────────────────────────────────────────────────────────
+// Val data is written directly onto the item_version row as val_scan_id,
+// val_state, and val_error. No separate val_versions table.
 //
 // ── Idempotency / crash recovery ─────────────────────────────────────────────
 // Phase 2 uses "lift and shift": each batch atomically INSERTs into the new
@@ -45,10 +49,10 @@
 //
 // Phases:
 //   1. DDL (one transaction): roll back in-progress scans, rebuild items,
-//      create hash_versions/val_versions, rename item_versions → item_versions_old,
-//      create new item_versions, rebuild scan_undo_log.
+//      rebuild scans (drop val_all), create hash_versions, rename
+//      item_versions → item_versions_old, create new item_versions (with val
+//      columns), rebuild scan_undo_log, fix scan_schedules.
 //   2. Data (batched transactions): lift-and-shift per batch of BATCH_SIZE items.
-//      Creates item_versions indexes at end.
 //   3. Count recomputation (per-scan transactions): recomputes add/modify/delete/
 //      unchanged for all folder versions across all completed scans. Removes
 //      folder versions that become unnecessary after recomputation. HWM-based.
@@ -222,34 +226,65 @@ DROP TABLE items_old;
 CREATE INDEX idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
 CREATE INDEX idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
 
-CREATE TABLE hash_versions (
-    item_id       INTEGER NOT NULL,
-    first_scan_id INTEGER NOT NULL,
-    last_scan_id  INTEGER NOT NULL,
-    file_hash     BLOB    NOT NULL,
-    hash_state    INTEGER NOT NULL,
-    PRIMARY KEY (item_id, first_scan_id),
-    FOREIGN KEY (item_id)       REFERENCES items(item_id),
-    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_scan_id)  REFERENCES scans(scan_id)
-) WITHOUT ROWID;
+-- Rebuild scans table without val_all column
+ALTER TABLE scans RENAME TO scans_old;
 
-CREATE TABLE val_versions (
-    item_id       INTEGER NOT NULL,
-    first_scan_id INTEGER NOT NULL,
-    last_scan_id  INTEGER NOT NULL,
-    val_state     INTEGER NOT NULL,
-    val_error     TEXT,
-    PRIMARY KEY (item_id, first_scan_id),
-    FOREIGN KEY (item_id)       REFERENCES items(item_id),
-    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_scan_id)  REFERENCES scans(scan_id)
-) WITHOUT ROWID;
+CREATE TABLE scans (
+    scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    root_id INTEGER NOT NULL,
+    schedule_id INTEGER DEFAULT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER DEFAULT NULL,
+    was_restarted BOOLEAN NOT NULL DEFAULT 0,
+    state INTEGER NOT NULL,
+    is_hash BOOLEAN NOT NULL,
+    hash_all BOOLEAN NOT NULL,
+    is_val BOOLEAN NOT NULL,
+    file_count INTEGER DEFAULT NULL,
+    folder_count INTEGER DEFAULT NULL,
+    total_size INTEGER DEFAULT NULL,
+    alert_count INTEGER DEFAULT NULL,
+    add_count INTEGER DEFAULT NULL,
+    modify_count INTEGER DEFAULT NULL,
+    delete_count INTEGER DEFAULT NULL,
+    val_unknown_count INTEGER DEFAULT NULL,
+    val_valid_count INTEGER DEFAULT NULL,
+    val_invalid_count INTEGER DEFAULT NULL,
+    val_no_validator_count INTEGER DEFAULT NULL,
+    hash_unknown_count INTEGER DEFAULT NULL,
+    hash_valid_count INTEGER DEFAULT NULL,
+    hash_suspect_count INTEGER DEFAULT NULL,
+    error TEXT DEFAULT NULL,
+    FOREIGN KEY (root_id) REFERENCES roots(root_id),
+    FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id)
+);
+
+INSERT INTO scans (
+    scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state,
+    is_hash, hash_all, is_val,
+    file_count, folder_count, total_size, alert_count,
+    add_count, modify_count, delete_count,
+    val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
+    hash_unknown_count, hash_valid_count, hash_suspect_count,
+    error
+)
+SELECT
+    scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state,
+    is_hash, hash_all, is_val,
+    file_count, folder_count, total_size, alert_count,
+    add_count, modify_count, delete_count,
+    val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
+    hash_unknown_count, hash_valid_count, hash_suspect_count,
+    error
+FROM scans_old;
+
+DROP TABLE scans_old;
+
+CREATE INDEX IF NOT EXISTS idx_scans_root ON scans (root_id);
 
 ALTER TABLE item_versions RENAME TO item_versions_old;
 
--- The rename moved idx_versions_item_scan and idx_versions_first_scan
--- to item_versions_old. Drop them so we can recreate on both tables.
+-- The rename moved indexes to item_versions_old. Drop them so we can recreate.
 DROP INDEX IF EXISTS idx_versions_item_scan;
 DROP INDEX IF EXISTS idx_versions_first_scan;
 
@@ -257,9 +292,11 @@ DROP INDEX IF EXISTS idx_versions_first_scan;
 CREATE INDEX idx_versions_old_item_scan  ON item_versions_old (item_id, first_scan_id DESC);
 CREATE INDEX idx_versions_old_first_scan ON item_versions_old (first_scan_id);
 
+-- New item_versions with root_id + val columns
 CREATE TABLE item_versions (
     version_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id         INTEGER NOT NULL,
+    root_id         INTEGER NOT NULL,
     first_scan_id   INTEGER NOT NULL,
     last_scan_id    INTEGER NOT NULL,
     is_added        BOOLEAN NOT NULL DEFAULT 0,
@@ -271,14 +308,37 @@ CREATE TABLE item_versions (
     modify_count    INTEGER,
     delete_count    INTEGER,
     unchanged_count INTEGER,
+    val_scan_id     INTEGER,
+    val_state       INTEGER,
+    val_error       TEXT,
     FOREIGN KEY (item_id)       REFERENCES items(item_id),
+    FOREIGN KEY (root_id)       REFERENCES roots(root_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id)  REFERENCES scans(scan_id)
 );
 
 -- Indexes on the new table (needed for Phase 2 writes/Phase 3 reads)
-CREATE INDEX idx_versions_item_scan  ON item_versions (item_id, first_scan_id DESC);
-CREATE INDEX idx_versions_first_scan ON item_versions (first_scan_id);
+CREATE INDEX idx_versions_item_scan      ON item_versions (item_id, first_scan_id DESC);
+CREATE INDEX idx_versions_first_scan     ON item_versions (first_scan_id);
+CREATE INDEX idx_versions_root_lastscan  ON item_versions (root_id, last_scan_id);
+
+-- Hash versions table — created AFTER new item_versions so FK binds to the
+-- new table, not item_versions_old (SQLite FKs follow table renames).
+CREATE TABLE hash_versions (
+    item_id          INTEGER NOT NULL,
+    item_version_id  INTEGER NOT NULL,
+    first_scan_id    INTEGER NOT NULL,
+    last_scan_id     INTEGER NOT NULL,
+    file_hash        BLOB NOT NULL,
+    hash_state       INTEGER NOT NULL,
+    PRIMARY KEY (item_id, item_version_id, first_scan_id),
+    FOREIGN KEY (item_id) REFERENCES items(item_id),
+    FOREIGN KEY (item_version_id) REFERENCES item_versions(version_id),
+    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
+    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+) WITHOUT ROWID;
+
+CREATE INDEX idx_hash_versions_item_version ON hash_versions (item_version_id);
 
 DROP TABLE scan_undo_log;
 
@@ -289,6 +349,10 @@ CREATE TABLE scan_undo_log (
     old_last_scan_id INTEGER NOT NULL,
     PRIMARY KEY (log_type, ref_id1, ref_id2)
 ) WITHOUT ROWID;
+
+-- Convert validate_mode=2 (All) to 1 (New), then rename column to is_val (boolean)
+UPDATE scan_schedules SET validate_mode = 1 WHERE validate_mode = 2;
+ALTER TABLE scan_schedules RENAME COLUMN validate_mode TO is_val;
 "#;
 
 fn phase1_ddl_setup(conn: &Connection) -> Result<(), FsPulseError> {
@@ -362,17 +426,16 @@ fn build_groups(versions: &[OldVersion]) -> Vec<Group> {
 
 /// Extract the hash_versions row for one group, if the group has hash data.
 ///
-/// first_scan_id = MIN(last_hash_scan) across real + phantoms with hash
-///   — the scan when this hash was first acquired for this structural version.
-/// last_scan_id  = group.effective_last_scan
-///   — the last scan where this structural version (and its hash) was seen.
-/// file_hash / hash_state from the version with MAX(last_hash_scan)
-///   — the most recent state (in case hash_state changed, e.g. confirmed vs suspect).
+/// Returns (item_version_id, first_scan_id, last_scan_id, file_hash, hash_state).
+/// item_version_id = the real version's version_id.
+/// first_scan_id = MIN(last_hash_scan) across real + phantoms with hash (baseline).
+/// last_scan_id  = group.effective_last_scan.
+/// file_hash from the version with MIN(last_hash_scan) (baseline hash).
+/// hash_state from the version with MAX(last_hash_scan) (most recent observation).
 fn extract_hash(
     versions: &[OldVersion],
     group: &Group,
-) -> Option<(i64, i64, Vec<u8>, i64)> {
-    // Candidates: real version plus all phantoms, filtered to those with hash data.
+) -> Option<(i64, i64, i64, Vec<u8>, i64)> {
     let candidates: Vec<&OldVersion> = std::iter::once(group.real_idx)
         .chain(group.phantom_indices.iter().copied())
         .map(|idx| &versions[idx])
@@ -386,22 +449,27 @@ fn extract_hash(
     let first = candidates.iter().min_by_key(|v| v.last_hash_scan.unwrap())?;
     let last  = candidates.iter().max_by_key(|v| v.last_hash_scan.unwrap())?;
 
+    let real_version_id = versions[group.real_idx].version_id;
+
     Some((
+        real_version_id,                     // item_version_id
         first.last_hash_scan.unwrap(),       // first_scan_id
         group.effective_last_scan,           // last_scan_id
-        first.file_hash.clone().unwrap(),    // hash value (same for all in chain)
+        first.file_hash.clone().unwrap(),    // hash value (baseline)
         last.hash_state.unwrap_or(1),        // most recent hash_state
     ))
 }
 
-/// Extract the val_versions row for one group, if the group has meaningful val data.
+/// Extract val data for one group, to be written onto the item_version row.
 ///
+/// Returns (val_scan_id, val_state, val_error).
+/// val_scan_id = MAX(last_val_scan) across real + phantoms with meaningful val.
+/// val_state/val_error from the version with MAX(last_val_scan).
 /// val_state 0 (not applicable) and 3 (pending) are skipped.
-/// Same first/last logic as extract_hash.
 fn extract_val(
     versions: &[OldVersion],
     group: &Group,
-) -> Option<(i64, i64, i64, Option<String>)> {
+) -> Option<(i64, i64, Option<String>)> {
     let is_meaningful = |v: &&OldVersion| {
         matches!(v.val_state, Some(s) if s != 0 && s != 3) && v.last_val_scan.is_some()
     };
@@ -416,25 +484,23 @@ fn extract_val(
         return None;
     }
 
-    let first = candidates.iter().min_by_key(|v| v.last_val_scan.unwrap())?;
-    let last  = candidates.iter().max_by_key(|v| v.last_val_scan.unwrap())?;
+    let last = candidates.iter().max_by_key(|v| v.last_val_scan.unwrap())?;
 
     Some((
-        first.last_val_scan.unwrap(),  // first_scan_id
-        group.effective_last_scan,     // last_scan_id
-        last.val_state.unwrap(),       // most recent val_state
-        last.val_error.clone(),        // most recent val_error
+        last.last_val_scan.unwrap(),  // val_scan_id
+        last.val_state.unwrap(),      // val_state
+        last.val_error.clone(),       // val_error
     ))
 }
 
-/// Migrate one item: insert versions + hash/val rows, then delete from old table.
+/// Migrate one item: insert versions + hash rows, then delete from old table.
 ///
 /// For files: detect and remove phantom versions (hash/val-only changes), extract
-/// hash/val data into dedicated tables.
+/// hash data into hash_versions, write val data onto item_version rows.
 /// For folders: copy all versions as-is. Counts will be corrected in Phase 3.
 ///
 /// Returns (total_versions_in_old, phantom_count).
-fn migrate_one_item(conn: &Connection, item_id: i64, is_folder: bool) -> Result<(i64, i64), FsPulseError> {
+fn migrate_one_item(conn: &Connection, item_id: i64, root_id: i64, is_folder: bool) -> Result<(i64, i64), FsPulseError> {
     let mut stmt = conn.prepare_cached("
         SELECT version_id, first_scan_id, last_scan_id,
                is_added, is_deleted, access, mod_date, size,
@@ -486,14 +552,14 @@ fn migrate_one_item(conn: &Connection, item_id: i64, is_folder: bool) -> Result<
         // incorrectly flagged as phantoms.
         let mut iv = conn.prepare_cached("
             INSERT INTO item_versions (
-                version_id, item_id, first_scan_id, last_scan_id,
+                version_id, item_id, root_id, first_scan_id, last_scan_id,
                 is_added, is_deleted, access, mod_date, size,
                 add_count, modify_count, delete_count, unchanged_count
-            ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+            ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
         ")?;
         for v in &versions {
             iv.execute(rusqlite::params![
-                v.version_id, item_id, v.first_scan_id, v.last_scan_id,
+                v.version_id, item_id, root_id, v.first_scan_id, v.last_scan_id,
                 v.is_added, v.is_deleted, v.access, v.mod_date, v.size,
                 v.add_count, v.modify_count, v.delete_count, v.unchanged_count,
             ])?;
@@ -507,17 +573,24 @@ fn migrate_one_item(conn: &Connection, item_id: i64, is_folder: bool) -> Result<
         {
             let mut iv = conn.prepare_cached("
                 INSERT INTO item_versions (
-                    version_id, item_id, first_scan_id, last_scan_id,
+                    version_id, item_id, root_id, first_scan_id, last_scan_id,
                     is_added, is_deleted, access, mod_date, size,
-                    add_count, modify_count, delete_count, unchanged_count
-                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+                    add_count, modify_count, delete_count, unchanged_count,
+                    val_scan_id, val_state, val_error
+                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
             ")?;
             for group in &groups {
                 let r = &versions[group.real_idx];
+                let val = extract_val(&versions, group);
+                let (val_scan_id, val_state, val_error) = match val {
+                    Some((scan_id, state, error)) => (Some(scan_id), Some(state), error),
+                    None => (None, None, None),
+                };
                 iv.execute(rusqlite::params![
-                    r.version_id, item_id, r.first_scan_id, group.effective_last_scan,
+                    r.version_id, item_id, root_id, r.first_scan_id, group.effective_last_scan,
                     r.is_added, r.is_deleted, r.access, r.mod_date, r.size,
                     r.add_count, r.modify_count, r.delete_count, r.unchanged_count,
+                    val_scan_id, val_state, val_error,
                 ])?;
             }
         }
@@ -525,25 +598,12 @@ fn migrate_one_item(conn: &Connection, item_id: i64, is_folder: bool) -> Result<
         {
             let mut hv = conn.prepare_cached("
                 INSERT OR IGNORE INTO hash_versions
-                    (item_id, first_scan_id, last_scan_id, file_hash, hash_state)
-                VALUES (?1,?2,?3,?4,?5)
+                    (item_id, item_version_id, first_scan_id, last_scan_id, file_hash, hash_state)
+                VALUES (?1,?2,?3,?4,?5,?6)
             ")?;
             for group in &groups {
-                if let Some((first, last, hash, state)) = extract_hash(&versions, group) {
-                    hv.execute(rusqlite::params![item_id, first, last, hash, state])?;
-                }
-            }
-        }
-
-        {
-            let mut vv = conn.prepare_cached("
-                INSERT OR IGNORE INTO val_versions
-                    (item_id, first_scan_id, last_scan_id, val_state, val_error)
-                VALUES (?1,?2,?3,?4,?5)
-            ")?;
-            for group in &groups {
-                if let Some((first, last, state, error)) = extract_val(&versions, group) {
-                    vv.execute(rusqlite::params![item_id, first, last, state, error])?;
+                if let Some((version_id, first, last, hash, state)) = extract_hash(&versions, group) {
+                    hv.execute(rusqlite::params![item_id, version_id, first, last, hash, state])?;
                 }
             }
         }
@@ -586,13 +646,13 @@ fn phase2_migrate_data(conn: &Connection) -> Result<(), FsPulseError> {
             // Select next batch of distinct item_ids still present in item_versions_old,
             // along with item_type so we can branch on file vs folder.
             let mut id_stmt = conn.prepare_cached(
-                "SELECT DISTINCT ivo.item_id, i.item_type
+                "SELECT DISTINCT ivo.item_id, i.item_type, i.root_id
                  FROM item_versions_old ivo
                  JOIN items i ON i.item_id = ivo.item_id
                  ORDER BY ivo.item_id LIMIT ?",
             )?;
-            let batch: Vec<(i64, i64)> = id_stmt
-                .query_map([BATCH_SIZE], |r| Ok((r.get(0)?, r.get(1)?)))?
+            let batch: Vec<(i64, i64, i64)> = id_stmt
+                .query_map([BATCH_SIZE], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
                 .collect::<Result<Vec<_>, _>>()?;
 
             if batch.is_empty() {
@@ -603,8 +663,8 @@ fn phase2_migrate_data(conn: &Connection) -> Result<(), FsPulseError> {
             // A crash here rolls back the entire batch; those items stay in
             // item_versions_old and are retried on restart.
             conn.execute_batch("BEGIN IMMEDIATE;")?;
-            for &(item_id, item_type) in &batch {
-                let (ver_count, phantom_count) = migrate_one_item(conn, item_id, item_type == 1)?;
+            for &(item_id, item_type, root_id) in &batch {
+                let (ver_count, phantom_count) = migrate_one_item(conn, item_id, root_id, item_type == 1)?;
                 versions_done += ver_count;
                 phantoms_removed += phantom_count;
             }
@@ -770,11 +830,12 @@ fn p3_direct_change_counts(
     Ok(result)
 }
 
+#[allow(clippy::type_complexity)]
 /// Count alive direct children of parent_path at scan_id for population and
 /// integrity accumulation. Returns counts that feed into ScanCounts.
 ///
 /// Population: alive files and alive folders (counted separately).
-/// Integrity: alive files joined to their latest hash/val versions.
+/// Integrity: alive files — val from item_versions columns, hash from hash_versions.
 fn p3_direct_population_counts(
     conn: &Connection,
     root_id: i64,
@@ -795,6 +856,8 @@ fn p3_direct_population_counts(
 
     // Query alive direct children (immediate, not recursive).
     // For files: count population and integrity states.
+    //   - Val comes from item_versions columns directly (no join needed).
+    //   - Hash comes from hash_versions joined via item_version_id.
     // For folders: count population only (integrity doesn't apply).
     let sql = format!(
         "SELECT
@@ -805,20 +868,18 @@ fn p3_direct_population_counts(
             COALESCE(SUM(CASE WHEN i.item_type = 0 AND hv.hash_state IS NULL THEN 1 ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN i.item_type = 0 AND hv.hash_state = 1 THEN 1 ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN i.item_type = 0 AND hv.hash_state = 2 THEN 1 ELSE 0 END), 0),
-            -- Val integrity (files only)
-            COALESCE(SUM(CASE WHEN i.item_type = 0 AND i.has_validator = 1 AND vv.val_state IS NULL THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN i.item_type = 0 AND vv.val_state = 1 THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN i.item_type = 0 AND vv.val_state = 2 THEN 1 ELSE 0 END), 0),
+            -- Val integrity (files only, from item_versions columns)
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND i.has_validator = 1 AND iv.val_state IS NULL THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND iv.val_state = 1 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN i.item_type = 0 AND iv.val_state = 2 THEN 1 ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN i.item_type = 0 AND i.has_validator = 0 THEN 1 ELSE 0 END), 0)
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+             AND hv.item_version_id = iv.version_id
              AND hv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM hash_versions WHERE item_id = i.item_id AND first_scan_id <= ?2
-             )
-         LEFT JOIN val_versions vv ON vv.item_id = i.item_id
-             AND vv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM val_versions WHERE item_id = i.item_id AND first_scan_id <= ?2
+                 SELECT MAX(first_scan_id) FROM hash_versions
+                 WHERE item_id = i.item_id AND item_version_id = iv.version_id AND first_scan_id <= ?2
              )
          WHERE i.root_id = ?1
            AND iv.last_scan_id >= ?2
@@ -970,6 +1031,7 @@ fn p3_walk_folder_counts(
 ///         new version at scan_id with the same metadata and the computed counts.
 fn p3_update_folder_counts(
     conn: &Connection,
+    root_id: i64,
     scan_id: i64,
     w: &FolderCountWrite,
 ) -> Result<(), FsPulseError> {
@@ -985,6 +1047,7 @@ fn p3_update_folder_counts(
     }
 
     // Case B: find the spanning version (first_scan_id < scan_id AND last_scan_id >= scan_id)
+    #[allow(clippy::type_complexity)]
     let spanning: Option<(i64, i64, i64, i64, Option<i64>, Option<i64>)> = conn
         .query_row(
             "SELECT version_id, is_added, is_deleted, access, mod_date, size
@@ -1015,12 +1078,12 @@ fn p3_update_folder_counts(
             // is_added is always 0 (this is a continuation); is_deleted is carried
             // forward from the spanning version per spec.
             conn.execute(
-                "INSERT INTO item_versions (item_id, first_scan_id, last_scan_id,
+                "INSERT INTO item_versions (item_id, root_id, first_scan_id, last_scan_id,
                     is_added, is_deleted, access, mod_date, size,
                     add_count, modify_count, delete_count, unchanged_count)
-                 VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
-                    w.folder_item_id, scan_id, span_last,
+                    w.folder_item_id, root_id, scan_id, span_last,
                     is_deleted, access, mod_date, size,
                     w.adds, w.mods, w.dels, w.unchanged
                 ],
@@ -1233,6 +1296,7 @@ fn p3_merge_adjacent_duplicates(conn: &Connection) -> Result<i64, FsPulseError> 
              ORDER BY first_scan_id"
         )?;
 
+        #[allow(clippy::type_complexity)]
         let versions: Vec<(i64, i64, i64, i64, i64, i64, Option<i64>, Option<i64>, i64, i64, i64, i64)> = vstmt
             .query_map([folder_id], |row| {
                 Ok((
@@ -1305,6 +1369,7 @@ fn p3_merge_adjacent_duplicates(conn: &Connection) -> Result<i64, FsPulseError> 
                      ORDER BY first_scan_id"
                 )?;
 
+                #[allow(clippy::type_complexity)]
                 let versions: Vec<(i64, i64, i64, i64, i64, i64, Option<i64>, Option<i64>, i64, i64, i64, i64)> = vstmt
                     .query_map([folder_id], |row| {
                         Ok((
@@ -1428,15 +1493,14 @@ fn phase3_recompute_folder_counts(conn: &Connection) -> Result<(), FsPulseError>
         Database::immediate_transaction(conn, |c| {
             // Update counts on folders with real structural changes
             for w in &writes {
-                p3_update_folder_counts(c, *scan_id, w)?;
+                p3_update_folder_counts(c, *root_id, *scan_id, w)?;
             }
 
             // Clean up folder versions with zero changes after recomputation
             for fv in &all_folder_versions {
-                if !changed_ids.contains(&fv.item_id) {
-                    if p3_cleanup_zero_change_folder(c, fv, *scan_id)? {
-                        scan_removed += 1;
-                    }
+                if !changed_ids.contains(&fv.item_id)
+                    && p3_cleanup_zero_change_folder(c, fv, *scan_id)? {
+                    scan_removed += 1;
                 }
             }
 
