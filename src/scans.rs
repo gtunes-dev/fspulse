@@ -4,6 +4,7 @@ use crate::roots::Root;
 use crate::undo_log::UndoLog;
 
 use chrono::{Local, NaiveDate, TimeZone, Utc};
+use log::info;
 use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::Serialize;
 
@@ -493,11 +494,11 @@ impl Scan {
                             .query_row(
                                 "SELECT
                                     COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 0
-                                        AND (pv.version_id IS NULL OR pv.is_deleted = 1)), 0),
+                                        AND (pv.item_id IS NULL OR pv.is_deleted = 1)), 0),
                                     COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 0
-                                        AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
+                                        AND pv.item_id IS NOT NULL AND pv.is_deleted = 0), 0),
                                     COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 1
-                                        AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0)
+                                        AND pv.item_id IS NOT NULL AND pv.is_deleted = 0), 0)
                                  FROM item_versions iv
                                  LEFT JOIN item_versions pv ON pv.item_id = iv.item_id
                                      AND pv.first_scan_id = (
@@ -533,10 +534,10 @@ impl Scan {
                                  FROM item_versions iv
                                  JOIN items i ON i.item_id = iv.item_id
                                  LEFT JOIN hash_versions hv ON hv.item_id = iv.item_id
-                                     AND hv.item_version_id = iv.version_id
+                                     AND hv.item_version = iv.item_version
                                      AND hv.first_scan_id = (
                                          SELECT MAX(first_scan_id) FROM hash_versions
-                                         WHERE item_id = iv.item_id AND item_version_id = iv.version_id
+                                         WHERE item_id = iv.item_id AND item_version = iv.item_version
                                      )
                                  WHERE iv.root_id = ? AND i.item_type = 0
                                    AND iv.last_scan_id = ? AND iv.is_deleted = 0",
@@ -652,6 +653,9 @@ impl Scan {
         scan: &Scan,
         error_message: Option<&str>,
     ) -> Result<(), FsPulseError> {
+        let action = if error_message.is_some() { "error" } else { "stop" };
+        info!("Stopping scan {} (reason: {})...", scan.scan_id(), action);
+
         Database::immediate_transaction(conn, |c| {
             // Roll back item_versions, orphaned identities, and undo log
             UndoLog::rollback(c, scan.scan_id())?;

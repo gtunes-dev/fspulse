@@ -189,21 +189,21 @@ impl ExistingItem {
         item_type: ItemType,
     ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
-            "SELECT iv.version_id, iv.first_scan_id, iv.last_scan_id,
+            "SELECT iv.item_id, iv.item_version, iv.first_scan_id, iv.last_scan_id,
                     iv.is_added, iv.is_deleted, iv.access,
                     iv.mod_date, iv.size,
                     iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
                     i.item_id
              FROM items i
              JOIN item_versions iv ON iv.item_id = i.item_id
-               AND iv.first_scan_id = (
-                   SELECT MAX(first_scan_id) FROM item_versions WHERE item_id = i.item_id
+               AND iv.item_version = (
+                   SELECT MAX(item_version) FROM item_versions WHERE item_id = i.item_id
                )
              WHERE i.root_id = ? AND i.item_path = ? AND i.item_type = ?",
             params![root_id, path, item_type.as_i64()],
             |row| {
                 let version = ItemVersion::from_row(row)?;
-                let item_id: i64 = row.get(12)?;
+                let item_id: i64 = row.get(13)?;
                 Ok(ExistingItem { item_id, version })
             },
         )

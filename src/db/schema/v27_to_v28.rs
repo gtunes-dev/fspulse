@@ -1576,14 +1576,124 @@ fn phase3_recompute_folder_counts(conn: &Connection) -> Result<(), FsPulseError>
 
 // ── Phase 4 ──────────────────────────────────────────────────────────────────
 
-fn phase4_cleanup(conn: &Connection) -> Result<(), FsPulseError> {
-    migration_info("  Phase 4/4: Finalizing...");
+fn phase4_rebuild_final_schema(conn: &Connection) -> Result<(), FsPulseError> {
+    migration_info("  Phase 4/4: Rebuilding tables with composite primary keys...");
     let t = Instant::now();
     Database::immediate_transaction(conn, |c| {
+        // Drop the Phase 2 source table (no longer needed)
+        c.execute_batch("DROP TABLE IF EXISTS item_versions_old;")?;
+
+        // Step 1: Build mapping from old version_id to per-item sequential item_version
+        migration_info("    Creating version mapping...");
         c.execute_batch("
-            DROP TABLE item_versions_old;
+            CREATE TEMP TABLE vid_map AS
+            SELECT version_id, item_id,
+                   CAST(ROW_NUMBER() OVER (PARTITION BY item_id ORDER BY first_scan_id) AS INTEGER) AS item_version
+            FROM item_versions;
         ")?;
+
+        // Step 2: Rebuild item_versions with composite PK (item_id, item_version)
+        migration_info("    Rebuilding item_versions...");
+        c.execute_batch("
+            ALTER TABLE item_versions RENAME TO item_versions_mid;
+
+            CREATE TABLE item_versions (
+                item_id         INTEGER NOT NULL,
+                item_version    INTEGER NOT NULL,
+                root_id         INTEGER NOT NULL,
+                first_scan_id   INTEGER NOT NULL,
+                last_scan_id    INTEGER NOT NULL,
+                is_added        BOOLEAN NOT NULL DEFAULT 0,
+                is_deleted      BOOLEAN NOT NULL DEFAULT 0,
+                access          INTEGER NOT NULL DEFAULT 0,
+                mod_date        INTEGER,
+                size            INTEGER,
+                add_count       INTEGER,
+                modify_count    INTEGER,
+                delete_count    INTEGER,
+                unchanged_count INTEGER,
+                val_scan_id     INTEGER,
+                val_state       INTEGER,
+                val_error       TEXT,
+                PRIMARY KEY (item_id, item_version),
+                FOREIGN KEY (item_id) REFERENCES items(item_id),
+                FOREIGN KEY (root_id) REFERENCES roots(root_id),
+                FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
+                FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+            ) WITHOUT ROWID;
+
+            INSERT INTO item_versions (
+                item_id, item_version, root_id, first_scan_id, last_scan_id,
+                is_added, is_deleted, access, mod_date, size,
+                add_count, modify_count, delete_count, unchanged_count,
+                val_scan_id, val_state, val_error
+            )
+            SELECT
+                m.item_id, m.item_version, iv.root_id, iv.first_scan_id, iv.last_scan_id,
+                iv.is_added, iv.is_deleted, iv.access, iv.mod_date, iv.size,
+                iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
+                iv.val_scan_id, iv.val_state, iv.val_error
+            FROM item_versions_mid iv
+            JOIN vid_map m ON m.version_id = iv.version_id;
+
+            DROP TABLE item_versions_mid;
+        ")?;
+
+        // Step 3: Rebuild hash_versions (rename item_version_id -> item_version, map values)
+        migration_info("    Rebuilding hash_versions...");
+        c.execute_batch("
+            ALTER TABLE hash_versions RENAME TO hash_versions_old;
+
+            CREATE TABLE hash_versions (
+                item_id          INTEGER NOT NULL,
+                item_version     INTEGER NOT NULL,
+                first_scan_id    INTEGER NOT NULL,
+                last_scan_id     INTEGER NOT NULL,
+                file_hash        BLOB NOT NULL,
+                hash_state       INTEGER NOT NULL,
+                PRIMARY KEY (item_id, item_version, first_scan_id),
+                FOREIGN KEY (item_id, item_version) REFERENCES item_versions(item_id, item_version),
+                FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
+                FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+            ) WITHOUT ROWID;
+
+            INSERT INTO hash_versions (
+                item_id, item_version, first_scan_id, last_scan_id, file_hash, hash_state
+            )
+            SELECT
+                hv.item_id, m.item_version, hv.first_scan_id, hv.last_scan_id,
+                hv.file_hash, hv.hash_state
+            FROM hash_versions_old hv
+            JOIN vid_map m ON m.version_id = hv.item_version_id;
+
+            DROP TABLE hash_versions_old;
+        ")?;
+
+        // Step 4: Rebuild scan_undo_log with ref_id3 column
+        c.execute_batch("
+            DROP TABLE scan_undo_log;
+
+            CREATE TABLE scan_undo_log (
+                log_type            INTEGER NOT NULL,
+                ref_id1             INTEGER NOT NULL,
+                ref_id2             INTEGER NOT NULL,
+                ref_id3             INTEGER NOT NULL DEFAULT 0,
+                old_last_scan_id    INTEGER NOT NULL,
+                PRIMARY KEY (log_type, ref_id1, ref_id2, ref_id3)
+            ) WITHOUT ROWID;
+        ")?;
+
+        // Step 5: Create indexes on final tables
+        c.execute_batch("
+            CREATE INDEX idx_versions_first_scan ON item_versions (first_scan_id);
+            CREATE INDEX idx_versions_root_lastscan ON item_versions (root_id, last_scan_id);
+        ")?;
+
+        // Step 6: Clean up
+        c.execute_batch("DROP TABLE vid_map;")?;
         Database::delete_meta_locked(c, COUNT_HWM_KEY)?;
+        // Delete any stale HWM keys from the running app
+        Database::delete_meta_locked(c, "high_water_mark")?;
         Database::set_meta_value_locked(c, "schema_version", "28")
     })?;
     migration_info(&format!("  Phase 4/4 complete ({:.1}s)", t.elapsed().as_secs_f64()));
@@ -1620,7 +1730,7 @@ fn run_migration(conn: &Connection) -> Result<(), FsPulseError> {
 
     conn.execute_batch("DROP INDEX IF EXISTS idx_tmp_versions_scan_item;")?;
 
-    phase4_cleanup(conn)?;
+    phase4_rebuild_final_schema(conn)?;
 
     migration_info(&format!(
         "  Migration v27→v28 complete in {:.1}s",

@@ -96,7 +96,7 @@ pub fn run_analysis_phase(
         });
     }
 
-    let mut last_version_id = initial_hwm;
+    let mut last_item_id = initial_hwm;
 
     loop {
         if interrupt_token.load(Ordering::Acquire) {
@@ -108,7 +108,7 @@ pub fn run_analysis_phase(
             scan.root_id(),
             scan.scan_id(),
             scan.analysis_spec(),
-            last_version_id,
+            last_item_id,
             100,
         )?;
 
@@ -116,11 +116,11 @@ pub fn run_analysis_phase(
             break;
         }
 
-        // Add batch version IDs to tracker before distributing work
-        tracker.add_batch(analysis_items.iter().map(|item| item.version_id()));
+        // Add batch item IDs to tracker before distributing work
+        tracker.add_batch(analysis_items.iter().map(|item| item.item_id()));
 
         for analysis_item in analysis_items {
-            last_version_id = analysis_item.version_id();
+            last_item_id = analysis_item.item_id();
 
             sender
                 .send(analysis_item)
@@ -306,9 +306,9 @@ fn analyze_item(
     // If interrupted or failed, the item must be re-processed on resume,
     // so the HWM must not advance past it.
     if persisted {
-        let version_id = analysis_item.version_id();
-        if let Err(e) = tracker.complete_item(version_id) {
-            error!("Failed to complete version {}: {}", version_id, e);
+        let item_id = analysis_item.item_id();
+        if let Err(e) = tracker.complete_item(item_id) {
+            error!("Failed to complete item {}: {}", item_id, e);
         }
     }
 
@@ -387,8 +387,8 @@ fn persist_analysis(
                 // Case A: Version was created this scan — UPDATE in place.
                 // No undo needed; the entire version is deleted on rollback.
                 c.execute(
-                    "UPDATE item_versions SET access = ? WHERE version_id = ?",
-                    rusqlite::params![new_access_value.as_i64(), analysis_item.version_id()],
+                    "UPDATE item_versions SET access = ? WHERE item_id = ? AND item_version = ?",
+                    rusqlite::params![new_access_value.as_i64(), analysis_item.item_id(), analysis_item.item_version()],
                 )?;
             } else {
                 // Case B: Pre-existing version. Close it by restoring last_scan_id
@@ -398,8 +398,8 @@ fn persist_analysis(
                 // entry from Phase 1's touch_last_scan.
                 if let Some(prev) = prev_scan_id {
                     c.execute(
-                        "UPDATE item_versions SET last_scan_id = ? WHERE version_id = ?",
-                        rusqlite::params![prev, analysis_item.version_id()],
+                        "UPDATE item_versions SET last_scan_id = ? WHERE item_id = ? AND item_version = ?",
+                        rusqlite::params![prev, analysis_item.item_id(), analysis_item.item_version()],
                     )?;
                 }
 
@@ -450,7 +450,7 @@ fn persist_analysis(
 pub struct AnalysisItem {
     item_id: i64,
     item_path: String,
-    version_id: i64,
+    item_version: i64,
     version_first_scan_id: i64,
     access: i64,
     mod_date: Option<i64>,
@@ -479,8 +479,8 @@ impl AnalysisItem {
         &self.item_path
     }
 
-    pub fn version_id(&self) -> i64 {
-        self.version_id
+    pub fn item_version(&self) -> i64 {
+        self.item_version
     }
 
     pub fn version_first_scan_id(&self) -> i64 {
@@ -546,7 +546,7 @@ impl AnalysisItem {
         Ok(AnalysisItem {
             item_id: row.get(0)?,
             item_path: row.get(1)?,
-            version_id: row.get(2)?,
+            item_version: row.get(2)?,
             version_first_scan_id: row.get(3)?,
             access: row.get(4)?,
             mod_date: row.get(5)?,
@@ -567,11 +567,11 @@ impl AnalysisItem {
         root_id: i64,
         scan_id: i64,
         analysis_spec: &AnalysisSpec,
-        last_version_id: i64,
+        last_item_id: i64,
     ) -> Result<(u64, u64), FsPulseError> {
-        // Driven by idx_versions_root_lastscan (root_id, last_scan_id, rowid) to find
-        // alive versions for this root at this scan. The version_id filter uses the
-        // implicit rowid in the index for an efficient seek (no full-scan).
+        // Driven by idx_versions_root_lastscan (root_id, last_scan_id) to find
+        // alive versions for this root at this scan. The item_id filter provides
+        // cursor-based pagination.
         let sql = r#"
             WITH candidates AS (
                 SELECT
@@ -594,10 +594,10 @@ impl AnalysisItem {
                     ON i.item_id = cv.item_id
                 LEFT JOIN hash_versions hv
                     ON hv.item_id = cv.item_id
-                    AND hv.item_version_id = cv.version_id
+                    AND hv.item_version = cv.item_version
                     AND hv.first_scan_id = (
                         SELECT MAX(first_scan_id) FROM hash_versions
-                        WHERE item_id = cv.item_id AND item_version_id = cv.version_id
+                        WHERE item_id = cv.item_id AND item_version = cv.item_version
                     )
                 WHERE
                     cv.root_id = ?6
@@ -605,7 +605,7 @@ impl AnalysisItem {
                     AND i.item_type = 0
                     AND cv.is_deleted = 0
                     AND cv.access <> 1
-                    AND cv.version_id > ?5
+                    AND cv.item_id > ?5
             )
             SELECT
                 COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0) AS total_needed,
@@ -621,7 +621,7 @@ impl AnalysisItem {
             analysis_spec.hash_all() as i64,
             scan_id,
             analysis_spec.is_val() as i64,
-            last_version_id,
+            last_item_id,
             root_id,
         ])?;
 
@@ -639,18 +639,17 @@ impl AnalysisItem {
         root_id: i64,
         scan_id: i64,
         analysis_spec: &AnalysisSpec,
-        last_version_id: i64,
+        last_item_id: i64,
         limit: usize,
     ) -> Result<Vec<AnalysisItem>, FsPulseError> {
-        // Driven by idx_versions_root_lastscan (root_id, last_scan_id, rowid) to find
-        // alive versions for this root at this scan. The version_id filter and ORDER BY
-        // use the implicit rowid in the index for an efficient seek and ordered scan
-        // (no TEMP B-TREE needed).
+        // Driven by idx_versions_root_lastscan (root_id, last_scan_id) to find
+        // alive versions for this root at this scan. The item_id filter and ORDER BY
+        // provide cursor-based pagination (each item has at most one alive version).
         let query = format!(
             "SELECT
                 cv.item_id,
                 i.item_path,
-                cv.version_id,
+                cv.item_version,
                 cv.first_scan_id,
                 cv.access,
                 cv.mod_date,
@@ -678,10 +677,10 @@ impl AnalysisItem {
                 ON i.item_id = cv.item_id
             LEFT JOIN hash_versions hv
                 ON hv.item_id = cv.item_id
-                AND hv.item_version_id = cv.version_id
+                AND hv.item_version = cv.item_version
                 AND hv.first_scan_id = (
                     SELECT MAX(first_scan_id) FROM hash_versions
-                    WHERE item_id = cv.item_id AND item_version_id = cv.version_id
+                    WHERE item_id = cv.item_id AND item_version = cv.item_version
                 )
             WHERE
                 cv.root_id = ?6
@@ -689,7 +688,7 @@ impl AnalysisItem {
                 AND i.item_type = 0
                 AND cv.is_deleted = 0
                 AND cv.access <> 1
-                AND cv.version_id > ?5
+                AND cv.item_id > ?5
                 AND (
                     (?1 = 1 AND (
                         hv.file_hash IS NULL
@@ -698,7 +697,7 @@ impl AnalysisItem {
                     OR
                     (?4 = 1 AND i.has_validator = 1 AND cv.val_state IS NULL)
                 )
-            ORDER BY cv.version_id ASC
+            ORDER BY cv.item_id ASC
             LIMIT {limit}"
         );
 
@@ -710,7 +709,7 @@ impl AnalysisItem {
                 analysis_spec.hash_all() as i64,
                 scan_id,
                 analysis_spec.is_val() as i64,
-                last_version_id,
+                last_item_id,
                 root_id,
             ],
             AnalysisItem::from_row,
@@ -776,7 +775,7 @@ mod tests {
         let analysis_item = AnalysisItem {
             item_id: 123,
             item_path: "/test/path".to_string(),
-            version_id: 999,
+            item_version: 3,
             version_first_scan_id: 50,
             access: Access::Ok.as_i64(),
             mod_date: Some(1000),

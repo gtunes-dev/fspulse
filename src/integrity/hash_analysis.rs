@@ -69,21 +69,21 @@ pub fn persist_hash(
         HashVersion::insert(
             conn,
             analysis_item.item_id(),
-            analysis_item.version_id(),
+            analysis_item.item_version(),
             scan.scan_id(),
             new_hash.unwrap(),
             hash_state,
         )?;
     } else if let Some(first_scan_id) = analysis_item.hash_first_scan_id() {
         // Hash unchanged — extend the existing hash_version's last_scan_id
-        let current_hv = HashVersion::get_current_for_version(conn, analysis_item.item_id(), analysis_item.version_id())?;
+        let current_hv = HashVersion::get_current_for_version(conn, analysis_item.item_id(), analysis_item.item_version())?;
         if let Some(hv) = current_hv {
             UndoLog::log_hash_version_extend(
-                conn, analysis_item.version_id(), first_scan_id, hv.last_scan_id(),
+                conn, analysis_item.item_id(), analysis_item.item_version(), first_scan_id, hv.last_scan_id(),
             )?;
         }
         HashVersion::extend_last_scan(
-            conn, analysis_item.item_id(), analysis_item.version_id(), first_scan_id, scan.scan_id(),
+            conn, analysis_item.item_id(), analysis_item.item_version(), first_scan_id, scan.scan_id(),
         )?;
     }
 

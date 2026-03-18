@@ -479,12 +479,14 @@ impl Scanner {
             // version has first_scan_id = current_scan so it's simply deleted on rollback.
             c.execute(
                 "INSERT INTO item_versions (
-                    item_id, root_id, first_scan_id, last_scan_id,
+                    item_id, item_version, root_id, first_scan_id, last_scan_id,
                     is_added, is_deleted, access, mod_date, size,
                     add_count, modify_count, delete_count, unchanged_count
                  )
                  SELECT
-                    iv.item_id, i.root_id, ?, ?,
+                    iv.item_id,
+                    COALESCE((SELECT MAX(iv3.item_version) FROM item_versions iv3 WHERE iv3.item_id = iv.item_id), 0) + 1,
+                    i.root_id, ?, ?,
                     0, 1, iv.access, iv.mod_date, iv.size,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
@@ -737,11 +739,11 @@ impl Scanner {
         let sql = format!(
             "SELECT
                 COALESCE(SUM(CASE WHEN cv.is_deleted = 0
-                    AND (pv.version_id IS NULL OR pv.is_deleted = 1) THEN 1 ELSE 0 END), 0),
+                    AND (pv.item_id IS NULL OR pv.is_deleted = 1) THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN cv.is_deleted = 0
-                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0),
+                    AND pv.item_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN cv.is_deleted = 1
-                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0)
+                    AND pv.item_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0)
              FROM items i
              JOIN item_versions cv ON cv.item_id = i.item_id AND cv.first_scan_id = ?1
              LEFT JOIN item_versions pv ON pv.item_id = i.item_id
@@ -851,22 +853,23 @@ impl Scanner {
         w: &FolderCountWrite,
     ) -> Result<(), FsPulseError> {
         // Check if folder already has a version for this scan
-        let existing_version_id: Option<i64> = conn
+        let existing: bool = conn
             .query_row(
-                "SELECT version_id FROM item_versions
+                "SELECT 1 FROM item_versions
                  WHERE item_id = ? AND first_scan_id = ?",
                 params![w.folder_item_id, scan_id],
-                |row| row.get(0),
+                |_row| Ok(true),
             )
-            .optional()?;
+            .optional()?
+            .unwrap_or(false);
 
-        if let Some(version_id) = existing_version_id {
+        if existing {
             // Case A: UPDATE the existing version's counts
             conn.execute(
                 "UPDATE item_versions SET
                     add_count = ?, modify_count = ?, delete_count = ?, unchanged_count = ?
-                 WHERE version_id = ?",
-                params![w.adds, w.mods, w.dels, w.unchanged, version_id],
+                 WHERE item_id = ? AND first_scan_id = ?",
+                params![w.adds, w.mods, w.dels, w.unchanged, w.folder_item_id, scan_id],
             )?;
         } else {
             // Case B: Folder metadata unchanged but descendants changed.
@@ -877,8 +880,8 @@ impl Scanner {
                 // Restore last_scan_id to previous completed scan (avoids undo log dependency)
                 if let Some(prev) = prev_scan_id {
                     conn.execute(
-                        "UPDATE item_versions SET last_scan_id = ? WHERE version_id = ?",
-                        params![prev, version.version_id()],
+                        "UPDATE item_versions SET last_scan_id = ? WHERE item_id = ? AND item_version = ?",
+                        params![prev, version.item_id(), version.item_version()],
                     )?;
                 }
 
@@ -1115,7 +1118,7 @@ impl Scanner {
     ) -> Result<(), FsPulseError> {
         ctx.execute_batch_write(|c| {
             UndoLog::log_update(c, &existing_item.version)?;
-            ItemVersion::touch_last_scan(c, existing_item.version.version_id(), ctx.scan.scan_id())?;
+            ItemVersion::touch_last_scan(c, existing_item.version.item_id(), existing_item.version.item_version(), ctx.scan.scan_id())?;
 
             Ok(())
         })

@@ -144,10 +144,10 @@ pub fn get_temporal_immediate_children(
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-             AND hv.item_version_id = iv.version_id
+             AND hv.item_version = iv.item_version
              AND hv.first_scan_id = (
                  SELECT MAX(first_scan_id) FROM hash_versions
-                 WHERE item_id = i.item_id AND item_version_id = iv.version_id
+                 WHERE item_id = i.item_id AND item_version = iv.item_version
              )
          WHERE i.root_id = ?1
            AND iv.first_scan_id = (
@@ -214,10 +214,10 @@ pub fn search_temporal_items(
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-             AND hv.item_version_id = iv.version_id
+             AND hv.item_version = iv.item_version
              AND hv.first_scan_id = (
                  SELECT MAX(first_scan_id) FROM hash_versions
-                 WHERE item_id = i.item_id AND item_version_id = iv.version_id
+                 WHERE item_id = i.item_id AND item_version = iv.item_version
              )
          WHERE i.root_id = ?1
            AND iv.first_scan_id = (
@@ -277,7 +277,7 @@ fn serialize_optional_hash<S: Serializer>(
 /// A single version entry for the ItemDetail version history
 #[derive(Clone, Debug, Serialize)]
 pub struct VersionHistoryEntry {
-    pub version_id: i64,
+    pub item_version: i64,
     pub first_scan_id: i64,
     pub last_scan_id: i64,
     pub first_scan_date: i64,
@@ -302,7 +302,7 @@ pub struct VersionHistoryEntry {
 impl VersionHistoryEntry {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(VersionHistoryEntry {
-            version_id: row.get(0)?,
+            item_version: row.get(0)?,
             first_scan_id: row.get(1)?,
             last_scan_id: row.get(2)?,
             first_scan_date: row.get(3)?,
@@ -340,7 +340,7 @@ pub struct VersionHistoryPageResponse {
 }
 
 const VERSION_HISTORY_COLUMNS: &str =
-    "v.version_id, v.first_scan_id, v.last_scan_id, \
+    "v.item_version, v.first_scan_id, v.last_scan_id, \
      s1.started_at, s2.started_at, \
      v.is_deleted, v.access, \
      v.mod_date, v.size, \
@@ -351,10 +351,10 @@ const VERSION_HISTORY_JOINS: &str =
     "JOIN scans s1 ON s1.scan_id = v.first_scan_id \
      JOIN scans s2 ON s2.scan_id = v.last_scan_id \
      LEFT JOIN hash_versions hv ON hv.item_id = v.item_id \
-       AND hv.item_version_id = v.version_id \
+       AND hv.item_version = v.item_version \
        AND hv.first_scan_id = ( \
            SELECT MAX(hv2.first_scan_id) FROM hash_versions hv2 \
-           WHERE hv2.item_id = v.item_id AND hv2.item_version_id = v.version_id \
+           WHERE hv2.item_id = v.item_id AND hv2.item_version = v.item_version \
        )";
 
 /// Get version history for an item, starting from a specific scan going backwards.
@@ -395,7 +395,7 @@ pub fn get_version_history_init(
          FROM item_versions v \
          {} \
          WHERE v.item_id = ? AND v.first_scan_id <= ? \
-         ORDER BY v.first_scan_id DESC \
+         ORDER BY v.item_version DESC \
          LIMIT ?",
         VERSION_HISTORY_COLUMNS, VERSION_HISTORY_JOINS
     );
@@ -434,7 +434,7 @@ pub fn get_version_history_page(
          FROM item_versions v \
          {} \
          WHERE v.item_id = ? AND v.first_scan_id < ? \
-         ORDER BY v.first_scan_id DESC \
+         ORDER BY v.item_version DESC \
          LIMIT ?",
         VERSION_HISTORY_COLUMNS, VERSION_HISTORY_JOINS
     );
@@ -540,7 +540,7 @@ pub struct IntegrityState {
 }
 
 /// Get the integrity state (hash + validation) for an item at a specific scan point.
-/// Queries hash_versions (keyed on item_version_id) and val columns on item_versions,
+/// Queries hash_versions (keyed on item_id, item_version) and val columns on item_versions,
 /// plus has_validator from the items table.
 pub fn get_integrity_state(
     item_id: i64,
@@ -560,7 +560,7 @@ pub fn get_integrity_state(
     // Get the version active at this scan point
     let version_row: Option<(i64, Option<i64>, Option<String>)> = conn
         .query_row(
-            "SELECT version_id, val_state, val_error FROM item_versions \
+            "SELECT item_version, val_state, val_error FROM item_versions \
              WHERE item_id = ?1 \
                AND first_scan_id = ( \
                    SELECT MAX(first_scan_id) FROM item_versions \
@@ -571,8 +571,8 @@ pub fn get_integrity_state(
         )
         .optional()?;
 
-    let (version_id, val_state, val_error) = match version_row {
-        Some((vid, vs, ve)) => (vid, vs, ve),
+    let (item_version, val_state, val_error) = match version_row {
+        Some((iv, vs, ve)) => (iv, vs, ve),
         None => return Ok(IntegrityState {
             has_validator,
             hash_state: None,
@@ -585,12 +585,12 @@ pub fn get_integrity_state(
     let hash_row: Option<(i64, Option<Vec<u8>>)> = conn
         .query_row(
             "SELECT hash_state, file_hash FROM hash_versions \
-             WHERE item_id = ?1 AND item_version_id = ?2 \
+             WHERE item_id = ?1 AND item_version = ?2 \
                AND first_scan_id = ( \
                    SELECT MAX(first_scan_id) FROM hash_versions \
-                   WHERE item_id = ?1 AND item_version_id = ?2 \
+                   WHERE item_id = ?1 AND item_version = ?2 \
                )",
-            params![item_id, version_id],
+            params![item_id, item_version],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;

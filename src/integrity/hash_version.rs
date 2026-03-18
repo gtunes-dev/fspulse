@@ -39,7 +39,7 @@ impl HashState {
 #[allow(dead_code)]
 pub struct HashVersion {
     item_id: i64,
-    item_version_id: i64,
+    item_version: i64,
     first_scan_id: i64,
     last_scan_id: i64,
     file_hash: String,
@@ -52,8 +52,8 @@ impl HashVersion {
         self.item_id
     }
 
-    pub fn item_version_id(&self) -> i64 {
-        self.item_version_id
+    pub fn item_version(&self) -> i64 {
+        self.item_version
     }
 
     pub fn first_scan_id(&self) -> i64 {
@@ -76,15 +76,15 @@ impl HashVersion {
     pub fn get_current_for_version(
         conn: &Connection,
         item_id: i64,
-        item_version_id: i64,
+        item_version: i64,
     ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
-            "SELECT item_id, item_version_id, first_scan_id, last_scan_id, file_hash, hash_state
+            "SELECT item_id, item_version, first_scan_id, last_scan_id, file_hash, hash_state
              FROM hash_versions
-             WHERE item_id = ? AND item_version_id = ?
+             WHERE item_id = ? AND item_version = ?
              ORDER BY first_scan_id DESC
              LIMIT 1",
-            params![item_id, item_version_id],
+            params![item_id, item_version],
             Self::from_row,
         )
         .optional()
@@ -95,16 +95,16 @@ impl HashVersion {
     pub fn insert(
         conn: &Connection,
         item_id: i64,
-        item_version_id: i64,
+        item_version: i64,
         scan_id: i64,
         file_hash: &str,
         hash_state: HashState,
     ) -> Result<(), FsPulseError> {
         let hash_blob = Hash::hex_to_blob(file_hash);
         conn.execute(
-            "INSERT INTO hash_versions (item_id, item_version_id, first_scan_id, last_scan_id, file_hash, hash_state)
+            "INSERT INTO hash_versions (item_id, item_version, first_scan_id, last_scan_id, file_hash, hash_state)
              VALUES (?, ?, ?, ?, ?, ?)",
-            params![item_id, item_version_id, scan_id, scan_id, hash_blob, hash_state.as_i64()],
+            params![item_id, item_version, scan_id, scan_id, hash_blob, hash_state.as_i64()],
         )?;
         Ok(())
     }
@@ -113,14 +113,14 @@ impl HashVersion {
     pub fn extend_last_scan(
         conn: &Connection,
         item_id: i64,
-        item_version_id: i64,
+        item_version: i64,
         first_scan_id: i64,
         new_last_scan_id: i64,
     ) -> Result<(), FsPulseError> {
         conn.execute(
             "UPDATE hash_versions SET last_scan_id = ?
-             WHERE item_id = ? AND item_version_id = ? AND first_scan_id = ?",
-            params![new_last_scan_id, item_id, item_version_id, first_scan_id],
+             WHERE item_id = ? AND item_version = ? AND first_scan_id = ?",
+            params![new_last_scan_id, item_id, item_version, first_scan_id],
         )?;
         Ok(())
     }
@@ -128,7 +128,7 @@ impl HashVersion {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(HashVersion {
             item_id: row.get(0)?,
-            item_version_id: row.get(1)?,
+            item_version: row.get(1)?,
             first_scan_id: row.get(2)?,
             last_scan_id: row.get(3)?,
             file_hash: Hash::blob_to_hex(row.get(4)?),

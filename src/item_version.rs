@@ -8,11 +8,15 @@ use crate::{error::FsPulseError, item_identity::Access};
 /// A new row is created only when observable state changes. Identity (path, type, root)
 /// comes from JOINing to the `items` table.
 ///
-/// Hash state is stored in `hash_versions` (keyed on item_version_id).
+/// The primary key is (item_id, item_version), where item_version is a per-item
+/// sequence number (1, 2, 3, …, n) assigned chronologically.
+///
+/// Hash state is stored in `hash_versions` (keyed on item_id, item_version).
 /// Validation state is stored directly on this table (val_scan_id, val_state, val_error).
 #[allow(dead_code)]
 pub struct ItemVersion {
-    version_id: i64,
+    item_id: i64,
+    item_version: i64,
     first_scan_id: i64,
     last_scan_id: i64,
     is_added: bool,
@@ -28,8 +32,12 @@ pub struct ItemVersion {
 
 #[allow(dead_code)]
 impl ItemVersion {
-    pub fn version_id(&self) -> i64 {
-        self.version_id
+    pub fn item_id(&self) -> i64 {
+        self.item_id
+    }
+
+    pub fn item_version(&self) -> i64 {
+        self.item_version
     }
 
     pub fn first_scan_id(&self) -> i64 {
@@ -82,12 +90,12 @@ impl ItemVersion {
         item_id: i64,
     ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
-            "SELECT version_id, first_scan_id, last_scan_id, is_added, is_deleted, access,
+            "SELECT item_id, item_version, first_scan_id, last_scan_id, is_added, is_deleted, access,
                     mod_date, size,
                     add_count, modify_count, delete_count, unchanged_count
              FROM item_versions
              WHERE item_id = ?
-             ORDER BY first_scan_id DESC
+             ORDER BY item_version DESC
              LIMIT 1",
             params![item_id],
             Self::from_row,
@@ -117,11 +125,12 @@ impl ItemVersion {
         };
         conn.execute(
             "INSERT INTO item_versions (
-                item_id, root_id, first_scan_id, last_scan_id,
+                item_id, item_version, root_id, first_scan_id, last_scan_id,
                 is_added, is_deleted, access, mod_date, size,
                 add_count, modify_count, delete_count, unchanged_count
-             ) VALUES (?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?)",
-            params![item_id, root_id, scan_id, scan_id, access.as_i64(), mod_date, size,
+             ) VALUES (?1, COALESCE((SELECT MAX(item_version) FROM item_versions WHERE item_id = ?1), 0) + 1,
+                        ?2, ?3, ?3, 1, 0, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![item_id, root_id, scan_id, access.as_i64(), mod_date, size,
                     add_count, modify_count, delete_count, unchanged_count],
         )?;
         Ok(())
@@ -149,12 +158,13 @@ impl ItemVersion {
         };
         conn.execute(
             "INSERT INTO item_versions (
-                item_id, root_id, first_scan_id, last_scan_id,
+                item_id, item_version, root_id, first_scan_id, last_scan_id,
                 is_added, is_deleted, access, mod_date, size,
                 add_count, modify_count, delete_count, unchanged_count
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             ) VALUES (?1, COALESCE((SELECT MAX(item_version) FROM item_versions WHERE item_id = ?1), 0) + 1,
+                        ?2, ?3, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
-                item_id, root_id, scan_id, scan_id, is_added, is_deleted, access.as_i64(),
+                item_id, root_id, scan_id, is_added, is_deleted, access.as_i64(),
                 mod_date, size,
                 add_count, modify_count, delete_count, unchanged_count,
             ],
@@ -199,31 +209,32 @@ impl ItemVersion {
     /// Update `last_scan_id` in place for an unchanged item confirmed alive.
     pub fn touch_last_scan(
         conn: &Connection,
-        version_id: i64,
+        item_id: i64,
+        item_version: i64,
         scan_id: i64,
     ) -> Result<(), FsPulseError> {
         conn.execute(
-            "UPDATE item_versions SET last_scan_id = ? WHERE version_id = ?",
-            params![scan_id, version_id],
+            "UPDATE item_versions SET last_scan_id = ? WHERE item_id = ? AND item_version = ?",
+            params![scan_id, item_id, item_version],
         )?;
         Ok(())
     }
 
     pub(crate) fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(ItemVersion {
-            version_id: row.get(0)?,
-            first_scan_id: row.get(1)?,
-            last_scan_id: row.get(2)?,
-            is_added: row.get(3)?,
-            is_deleted: row.get(4)?,
-            access: Access::from_i64(row.get(5)?),
-            mod_date: row.get(6)?,
-            size: row.get(7)?,
-            add_count: row.get(8)?,
-            modify_count: row.get(9)?,
-            delete_count: row.get(10)?,
-            unchanged_count: row.get(11)?,
+            item_id: row.get(0)?,
+            item_version: row.get(1)?,
+            first_scan_id: row.get(2)?,
+            last_scan_id: row.get(3)?,
+            is_added: row.get(4)?,
+            is_deleted: row.get(5)?,
+            access: Access::from_i64(row.get(6)?),
+            mod_date: row.get(7)?,
+            size: row.get(8)?,
+            add_count: row.get(9)?,
+            modify_count: row.get(10)?,
+            delete_count: row.get(11)?,
+            unchanged_count: row.get(12)?,
         })
     }
 }
-

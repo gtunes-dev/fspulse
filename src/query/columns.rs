@@ -198,7 +198,7 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
     "item_path" => ColSpec::new("i.item_path", "Item Path", true, ColType::Path, ColAlign::Left),
     "item_name" => ColSpec::new("i.item_name", "Item Name", false, ColType::Path, ColAlign::Left),
     "item_type" => ColSpec::new("i.item_type", "Type", true, ColType::ItemType, ColAlign::Center),
-    "version_id" => ColSpec::new("iv.version_id", "Version Id", false, ColType::Id, ColAlign::Right),
+    "item_version" => ColSpec::new("iv.item_version", "Version", false, ColType::Id, ColAlign::Right),
     "first_scan_id" => ColSpec::new("iv.first_scan_id", "First Scan", false, ColType::Id, ColAlign::Right),
     "last_scan_id" => ColSpec::new("iv.last_scan_id", "Last Scan", true, ColType::Id, ColAlign::Right),
     "is_deleted" => ColSpec::new("iv.is_deleted", "Deleted", true, ColType::Bool, ColAlign::Center),
@@ -212,7 +212,7 @@ pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
 };
 
 pub const VERSIONS_QUERY_COLS: ColMap = phf_ordered_map! {
-    "version_id" => ColSpec::new("iv.version_id", "Version Id", true, ColType::Id, ColAlign::Right),
+    "item_version" => ColSpec::new("iv.item_version", "Version", true, ColType::Id, ColAlign::Right),
     "item_id" => ColSpec::new("iv.item_id", "Item Id", true, ColType::Id, ColAlign::Right),
     "root_id" => ColSpec::new("i.root_id", "Root Id", true, ColType::Id, ColAlign::Right),
     "item_path" => ColSpec::new("i.item_path", "Item Path", false, ColType::Path, ColAlign::Left),

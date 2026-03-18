@@ -67,8 +67,8 @@ pub fn persist_val(
     // Write val state directly onto the item_version row
     conn.execute(
         "UPDATE item_versions SET val_scan_id = ?, val_state = ?, val_error = ?
-         WHERE version_id = ?",
-        params![scan.scan_id(), new_val_state.as_i64(), new_val_error, analysis_item.version_id()],
+         WHERE item_id = ? AND item_version = ?",
+        params![scan.scan_id(), new_val_state.as_i64(), new_val_error, analysis_item.item_id(), analysis_item.item_version()],
     )?;
 
     Ok(())

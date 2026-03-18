@@ -69,7 +69,7 @@ interface ItemDetailProps {
 }
 
 interface VersionEntry {
-  version_id: number
+  item_version: number
   first_scan_id: number
   last_scan_id: number
   first_scan_date: number
@@ -620,7 +620,7 @@ export function ItemDetail({
                 <p className="text-xs text-muted-foreground mt-1">
                   Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
                   <span className="mx-1.5">&middot;</span>
-                  Version <span className="font-mono font-semibold text-foreground">#{anchorVersion.version_id}</span>
+                  Version <span className="font-mono font-semibold text-foreground">{anchorVersion.item_version}{totalVersionCount > 0 ? ` of ${totalVersionCount}` : ''}</span>
                 </p>
               )}
             </div>
@@ -662,7 +662,7 @@ export function ItemDetail({
           <p className="text-xs text-muted-foreground mt-1 pl-7">
             Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
             <span className="mx-1.5">&middot;</span>
-            Version <span className="font-mono font-semibold text-foreground">#{anchorVersion.version_id}</span>
+            Version <span className="font-mono font-semibold text-foreground">{anchorVersion.item_version}{totalVersionCount > 0 ? ` of ${totalVersionCount}` : ''}</span>
           </p>
         )}
       </div>
@@ -928,9 +928,9 @@ export function ItemDetail({
             <div className={isSheet ? 'border border-border rounded-lg' : 'divide-y divide-border'}>
               {changes.map((change, idx) => {
                 const v = change.version
-                const isAnchor = changes[0].version.version_id === v.version_id
-                const isOpen = openVersions[v.version_id] || false
-                const setIsOpen = (val: boolean) => setOpenVersions(prev => ({ ...prev, [v.version_id]: val }))
+                const isAnchor = changes[0].version.item_version === v.item_version
+                const isOpen = openVersions[v.item_version] || false
+                const setIsOpen = (val: boolean) => setOpenVersions(prev => ({ ...prev, [v.item_version]: val }))
                 const hasIntegrity = v.hash_state != null || v.val_state != null
                 const hasMetadataChanges = change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)
                 const hasInitialFolderCounts = change.kind === 'initial' && hasNonZeroFolderCounts(v)
@@ -952,7 +952,7 @@ export function ItemDetail({
                 )
 
                 return (
-                  <div key={v.version_id}>
+                  <div key={v.item_version}>
                     <div className={cn(sp.padX, isAnchor && "bg-accent/30")}>
                       {isExpandable ? (
                         <Collapsible open={isOpen} onOpenChange={setIsOpen}>

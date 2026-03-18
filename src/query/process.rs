@@ -461,7 +461,7 @@ impl ItemsQuery {
                 "item_path" => Format::format_path(&item.item_path, col.format)?,
                 "item_name" => Format::format_path(&item.item_name, col.format)?,
                 "item_type" => Format::format_item_type(item.item_type, col.format)?,
-                "version_id" => Format::format_i64(item.version_id),
+                "item_version" => Format::format_i64(item.item_version),
                 "first_scan_id" => Format::format_i64(item.first_scan_id),
                 "last_scan_id" => Format::format_i64(item.last_scan_id),
                 "is_deleted" => Format::format_bool(item.is_deleted, col.format)?,
@@ -609,7 +609,7 @@ impl VersionsQuery {
 
         for col in &self.show().display_cols {
             let col_string = match col.display_col {
-                "version_id" => Format::format_i64(version.version_id),
+                "item_version" => Format::format_i64(version.item_version),
                 "item_id" => Format::format_i64(version.item_id),
                 "root_id" => Format::format_i64(version.root_id),
                 "item_path" => Format::format_path(&version.item_path, col.format)?,
@@ -689,10 +689,10 @@ impl QueryImpl {
                 SELECT MAX(first_scan_id) FROM item_versions WHERE item_id = i.item_id
             )
         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-            AND hv.item_version_id = iv.version_id
+            AND hv.item_version = iv.item_version
             AND hv.first_scan_id = (
                 SELECT MAX(first_scan_id) FROM hash_versions
-                WHERE item_id = i.item_id AND item_version_id = iv.version_id
+                WHERE item_id = i.item_id AND item_version = iv.item_version
             )
         {where_clause}
         {order_clause}
@@ -703,10 +703,10 @@ impl QueryImpl {
         FROM item_versions iv
         JOIN items i ON i.item_id = iv.item_id
         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-            AND hv.item_version_id = iv.version_id
+            AND hv.item_version = iv.item_version
             AND hv.first_scan_id = (
                 SELECT MAX(first_scan_id) FROM hash_versions
-                WHERE item_id = i.item_id AND item_version_id = iv.version_id
+                WHERE item_id = i.item_id AND item_version = iv.item_version
             )
         {where_clause}
         {order_clause}
@@ -758,7 +758,7 @@ struct ItemsQueryRow {
     item_path: String,
     item_name: String,
     item_type: ItemType,
-    version_id: i64,
+    item_version: i64,
     first_scan_id: i64,
     last_scan_id: i64,
     is_deleted: bool,
@@ -779,7 +779,7 @@ impl ItemsQueryRow {
             item_path: row.get(2)?,
             item_name: row.get(3)?,
             item_type: ItemType::from_i64(row.get(4)?),
-            version_id: row.get(5)?,
+            item_version: row.get(5)?,
             first_scan_id: row.get(6)?,
             last_scan_id: row.get(7)?,
             is_deleted: row.get(8)?,
@@ -795,7 +795,7 @@ impl ItemsQueryRow {
 }
 
 struct VersionsQueryRow {
-    version_id: i64,
+    item_version: i64,
     item_id: i64,
     root_id: i64,
     item_path: String,
@@ -820,7 +820,7 @@ struct VersionsQueryRow {
 impl VersionsQueryRow {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(VersionsQueryRow {
-            version_id: row.get(0)?,
+            item_version: row.get(0)?,
             item_id: row.get(1)?,
             root_id: row.get(2)?,
             item_path: row.get(3)?,

@@ -21,17 +21,17 @@
 //
 // Pattern 3: "Latest hash for a version"
 //   Used by: analysis queries, scan completion hash state counts.
-//   Use hash_versions PK prefix (item_id, item_version_id):
+//   Use hash_versions PK prefix (item_id, item_version):
 //     LEFT JOIN hash_versions hv ON hv.item_id = cv.item_id
-//       AND hv.item_version_id = cv.version_id
+//       AND hv.item_version = cv.item_version
 //       AND hv.first_scan_id = (
 //         SELECT MAX(first_scan_id) FROM hash_versions
-//         WHERE item_id = cv.item_id AND item_version_id = cv.version_id)
+//         WHERE item_id = cv.item_id AND item_version = cv.item_version)
 //
 // Pattern 4: "Version history for an item"
 //   Used by: item detail views, get_current().
-//   Drive from item_versions using idx_versions_item_scan:
-//     FROM item_versions WHERE item_id = ? ORDER BY first_scan_id DESC
+//   Drive from item_versions using PK (item_id, item_version):
+//     FROM item_versions WHERE item_id = ? ORDER BY item_version DESC
 //   No root_id filter needed — item_id is globally unique.
 //
 // Pattern 5: "Scans for a root"
@@ -120,9 +120,10 @@ CREATE INDEX IF NOT EXISTS idx_items_root_name ON items (root_id, item_name COLL
 -- Temporal item versions table
 -- ========================================
 -- One row per distinct state of an item. Identity (path, type, root) lives in items.
+-- item_version is a per-item sequence number (1, 2, 3, …, n) assigned chronologically.
 CREATE TABLE IF NOT EXISTS item_versions (
-    version_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id         INTEGER NOT NULL,
+    item_version    INTEGER NOT NULL,
     root_id         INTEGER NOT NULL,
     first_scan_id   INTEGER NOT NULL,
     last_scan_id    INTEGER NOT NULL,
@@ -154,13 +155,13 @@ CREATE TABLE IF NOT EXISTS item_versions (
     val_state       INTEGER,            -- 1=Valid, 2=Invalid
     val_error       TEXT,               -- error details when val_state=Invalid
 
+    PRIMARY KEY (item_id, item_version),
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
-);
+) WITHOUT ROWID;
 
-CREATE INDEX IF NOT EXISTS idx_versions_item_scan ON item_versions (item_id, first_scan_id DESC);
 CREATE INDEX IF NOT EXISTS idx_versions_first_scan ON item_versions (first_scan_id);
 CREATE INDEX IF NOT EXISTS idx_versions_root_lastscan ON item_versions (root_id, last_scan_id);
 
@@ -172,34 +173,30 @@ CREATE INDEX IF NOT EXISTS idx_versions_root_lastscan ON item_versions (root_id,
 -- Multiple rows for the same version track hash changes over time (e.g., bit rot).
 CREATE TABLE IF NOT EXISTS hash_versions (
     item_id          INTEGER NOT NULL,     -- leading key for item-level queries
-    item_version_id  INTEGER NOT NULL,     -- which item_version this hash observes
+    item_version     INTEGER NOT NULL,     -- which item_version this hash observes
     first_scan_id    INTEGER NOT NULL,
     last_scan_id     INTEGER NOT NULL,
     file_hash        BLOB NOT NULL,
     hash_state       INTEGER NOT NULL,     -- 1=Baseline, 2=Suspect
-    PRIMARY KEY (item_id, item_version_id, first_scan_id),
-    FOREIGN KEY (item_id) REFERENCES items(item_id),
-    FOREIGN KEY (item_version_id) REFERENCES item_versions(version_id),
+    PRIMARY KEY (item_id, item_version, first_scan_id),
+    FOREIGN KEY (item_id, item_version) REFERENCES item_versions(item_id, item_version),
     FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
 ) WITHOUT ROWID;
-
--- FK-support index: allows efficient FK constraint checks when deleting
--- item_versions rows (avoids full scan of hash_versions).
-CREATE INDEX IF NOT EXISTS idx_hash_versions_item_version ON hash_versions (item_version_id);
 
 -- ========================================
 -- Scan undo log (transient, for rollback support)
 -- ========================================
 -- log_type: 0=item_version, 1=hash_version
--- For type 0: ref_id1=version_id, ref_id2=0
--- For type 1: ref_id1=item_version_id, ref_id2=first_scan_id
+-- For type 0: ref_id1=item_id, ref_id2=item_version, ref_id3=0
+-- For type 1: ref_id1=item_id, ref_id2=item_version, ref_id3=first_scan_id
 CREATE TABLE IF NOT EXISTS scan_undo_log (
     log_type            INTEGER NOT NULL,
     ref_id1             INTEGER NOT NULL,
-    ref_id2             INTEGER NOT NULL DEFAULT 0,
+    ref_id2             INTEGER NOT NULL,
+    ref_id3             INTEGER NOT NULL DEFAULT 0,
     old_last_scan_id    INTEGER NOT NULL,
-    PRIMARY KEY (log_type, ref_id1, ref_id2)
+    PRIMARY KEY (log_type, ref_id1, ref_id2, ref_id3)
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS alerts (

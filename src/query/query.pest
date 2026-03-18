@@ -51,7 +51,7 @@ access_filter_EOI       = { WS* ~ access_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "version_id" | "first_scan_id" | "last_scan_id" | "last_hash_scan" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
+id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "item_version" | "first_scan_id" | "last_scan_id" | "last_hash_scan" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
 
 id_show = { id_col }
 
