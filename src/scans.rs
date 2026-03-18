@@ -4,18 +4,19 @@ use crate::roots::Root;
 use crate::undo_log::UndoLog;
 
 use chrono::{Local, NaiveDate, TimeZone, Utc};
+use log::info;
 use rusqlite::{params, Connection, OptionalExtension, Result};
 use serde::Serialize;
 
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_valid_count, hash_suspect_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_baseline_count, hash_suspect_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, val_all, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_valid_count, hash_suspect_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_baseline_count, hash_suspect_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -43,40 +44,17 @@ impl HashMode {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-#[repr(i32)]
-pub enum ValidateMode {
-    None = 0,
-    New = 1,
-    All = 2,
-}
-
-impl ValidateMode {
-    pub fn from_i32(value: i32) -> Option<Self> {
-        match value {
-            0 => Some(Self::None),
-            1 => Some(Self::New),
-            2 => Some(Self::All),
-            _ => None,
-        }
-    }
-
-    pub fn as_i32(self) -> i32 {
-        self as i32
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
 pub struct AnalysisSpec {
     hash_mode: HashMode,
-    val_mode: ValidateMode,
+    is_val: bool,
 }
 
 impl AnalysisSpec {
-    pub fn from_modes(hash_mode: HashMode, val_mode: ValidateMode) -> Self {
+    pub fn new(hash_mode: HashMode, is_val: bool) -> Self {
         AnalysisSpec {
             hash_mode,
-            val_mode,
+            is_val,
         }
     }
 
@@ -89,11 +67,7 @@ impl AnalysisSpec {
     }
 
     pub fn is_val(&self) -> bool {
-        self.val_mode != ValidateMode::None
-    }
-
-    pub fn val_all(&self) -> bool {
-        self.val_mode == ValidateMode::All
+        self.is_val
     }
 }
 
@@ -123,7 +97,7 @@ pub struct Scan {
     val_invalid_count: Option<i64>,
     val_no_validator_count: Option<i64>,
     hash_unknown_count: Option<i64>,
-    hash_valid_count: Option<i64>,
+    hash_baseline_count: Option<i64>,
     hash_suspect_count: Option<i64>,
     error: Option<String>,
 }
@@ -250,7 +224,7 @@ impl Scan {
             val_invalid_count: None,
             val_no_validator_count: None,
             hash_unknown_count: None,
-            hash_valid_count: None,
+            hash_baseline_count: None,
             hash_suspect_count: None,
             error: None,
         }
@@ -263,8 +237,8 @@ impl Scan {
         analysis_spec: &AnalysisSpec,
     ) -> Result<Self, FsPulseError> {
         let (scan_id, started_at): (i64, i64) = conn.query_row(
-            "INSERT INTO scans (root_id, schedule_id, state, is_hash, hash_all, is_val, val_all, started_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc'))
+            "INSERT INTO scans (root_id, schedule_id, state, is_hash, hash_all, is_val, started_at)
+             VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now', 'utc'))
              RETURNING scan_id, started_at",
             params![
                 root.root_id(),
@@ -273,7 +247,6 @@ impl Scan {
                 analysis_spec.is_hash() as i64,
                 analysis_spec.hash_all() as i64,
                 analysis_spec.is_val() as i64,
-                analysis_spec.val_all() as i64,
             ],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
@@ -317,14 +290,7 @@ impl Scan {
                     _ => HashMode::New,
                 };
 
-                let is_val = row.get(9)?;
-                let val_all = row.get(10)?;
-
-                let val_mode = match (is_val, val_all) {
-                    (false, _) => ValidateMode::None,
-                    (_, true) => ValidateMode::All,
-                    _ => ValidateMode::New,
-                };
+                let is_val: bool = row.get(9)?;
 
                 Ok(Scan {
                     scan_id: row.get(0)?,
@@ -336,23 +302,23 @@ impl Scan {
                     state: ScanState::from_i64(row.get(6)?),
                     analysis_spec: AnalysisSpec {
                         hash_mode,
-                        val_mode,
+                        is_val,
                     },
-                    file_count: row.get(11)?,
-                    folder_count: row.get(12)?,
-                    total_size: row.get(13)?,
-                    alert_count: row.get(14)?,
-                    add_count: row.get(15)?,
-                    modify_count: row.get(16)?,
-                    delete_count: row.get(17)?,
-                    val_unknown_count: row.get(18)?,
-                    val_valid_count: row.get(19)?,
-                    val_invalid_count: row.get(20)?,
-                    val_no_validator_count: row.get(21)?,
-                    hash_unknown_count: row.get(22)?,
-                    hash_valid_count: row.get(23)?,
-                    hash_suspect_count: row.get(24)?,
-                    error: row.get(25)?,
+                    file_count: row.get(10)?,
+                    folder_count: row.get(11)?,
+                    total_size: row.get(12)?,
+                    alert_count: row.get(13)?,
+                    add_count: row.get(14)?,
+                    modify_count: row.get(15)?,
+                    delete_count: row.get(16)?,
+                    val_unknown_count: row.get(17)?,
+                    val_valid_count: row.get(18)?,
+                    val_invalid_count: row.get(19)?,
+                    val_no_validator_count: row.get(20)?,
+                    hash_unknown_count: row.get(21)?,
+                    hash_baseline_count: row.get(22)?,
+                    hash_suspect_count: row.get(23)?,
+                    error: row.get(24)?,
                 })
             })
             .optional()?;
@@ -396,25 +362,6 @@ impl Scan {
         self.folder_count
     }
 
-    pub fn total_size(&self) -> Option<i64> {
-        self.total_size
-    }
-
-    pub fn alert_count(&self) -> Option<i64> {
-        self.alert_count
-    }
-
-    pub fn add_count(&self) -> Option<i64> {
-        self.add_count
-    }
-
-    pub fn modify_count(&self) -> Option<i64> {
-        self.modify_count
-    }
-
-    pub fn delete_count(&self) -> Option<i64> {
-        self.delete_count
-    }
 
     /// Resolve a date to the most recent completed scan for a root at or before that date.
     /// If `date_str` is None, returns the most recent completed scan for the root.
@@ -547,37 +494,52 @@ impl Scan {
                             .query_row(
                                 "SELECT
                                     COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 0
-                                        AND (pv.version_id IS NULL OR pv.is_deleted = 1)), 0),
+                                        AND (pv.item_id IS NULL OR pv.is_deleted = 1)), 0),
                                     COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 0
-                                        AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
+                                        AND pv.item_id IS NOT NULL AND pv.is_deleted = 0), 0),
                                     COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 1
-                                        AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0)
+                                        AND pv.item_id IS NOT NULL AND pv.is_deleted = 0), 0)
                                  FROM item_versions iv
                                  LEFT JOIN item_versions pv ON pv.item_id = iv.item_id
                                      AND pv.first_scan_id = (
                                          SELECT MAX(first_scan_id) FROM item_versions
                                          WHERE item_id = iv.item_id AND first_scan_id < iv.first_scan_id
                                      )
-                                 WHERE iv.first_scan_id = ?",
-                                [self.scan_id],
+                                 WHERE iv.root_id = ? AND iv.first_scan_id = ?",
+                                params![self.root_id, self.scan_id],
                                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                             )
                             .unwrap_or((0, 0, 0));
 
-                        // Compute val/hash state counts for alive files at this scan
+                        // Compute val/hash state counts for alive files at this scan.
+                        //
+                        // Hash state from hash_versions keyed on item_version_id.
+                        // A version never hashed has no row → hv.hash_state IS NULL → "unknown".
+                        //
+                        // Validation state from item_versions columns and items.has_validator:
+                        //   - "No Validator": i.has_validator = 0
+                        //   - "Unknown":      i.has_validator = 1 AND iv.val_state IS NULL
+                        //   - "Valid":         iv.val_state = 1
+                        //   - "Invalid":       iv.val_state = 2
                         let (vu, vv, vi, vn, hu, hv, hs): (i64, i64, i64, i64, i64, i64, i64) = c
                             .query_row(
                                 "SELECT
-                                    COALESCE(SUM(CASE WHEN COALESCE(iv.val_state, 0) = 0 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN i.has_validator = 1 AND iv.val_state IS NULL THEN 1 ELSE 0 END), 0),
                                     COALESCE(SUM(CASE WHEN iv.val_state = 1 THEN 1 ELSE 0 END), 0),
                                     COALESCE(SUM(CASE WHEN iv.val_state = 2 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.val_state = 3 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN COALESCE(iv.hash_state, 0) = 0 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.hash_state = 1 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.hash_state = 2 THEN 1 ELSE 0 END), 0)
-                                 FROM items i
-                                 JOIN item_versions iv ON iv.item_id = i.item_id
-                                 WHERE i.root_id = ? AND i.item_type = 0
+                                    COALESCE(SUM(CASE WHEN i.has_validator = 0 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN hv.hash_state IS NULL THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN hv.hash_state = 1 THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN hv.hash_state = 2 THEN 1 ELSE 0 END), 0)
+                                 FROM item_versions iv
+                                 JOIN items i ON i.item_id = iv.item_id
+                                 LEFT JOIN hash_versions hv ON hv.item_id = iv.item_id
+                                     AND hv.item_version = iv.item_version
+                                     AND hv.first_scan_id = (
+                                         SELECT MAX(first_scan_id) FROM hash_versions
+                                         WHERE item_id = iv.item_id AND item_version = iv.item_version
+                                     )
+                                 WHERE iv.root_id = ? AND i.item_type = 0
                                    AND iv.last_scan_id = ? AND iv.is_deleted = 0",
                                 params![self.root_id, self.scan_id],
                                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?,
@@ -599,7 +561,7 @@ impl Scan {
                                 val_invalid_count = ?,
                                 val_no_validator_count = ?,
                                 hash_unknown_count = ?,
-                                hash_valid_count = ?,
+                                hash_baseline_count = ?,
                                 hash_suspect_count = ?,
                                 state = ?,
                                 ended_at = strftime('%s', 'now', 'utc')
@@ -640,7 +602,7 @@ impl Scan {
                 self.val_invalid_count = Some(vi);
                 self.val_no_validator_count = Some(vn);
                 self.hash_unknown_count = Some(hu);
-                self.hash_valid_count = Some(hv);
+                self.hash_baseline_count = Some(hv);
                 self.hash_suspect_count = Some(hs);
 
                 Ok(())
@@ -691,6 +653,9 @@ impl Scan {
         scan: &Scan,
         error_message: Option<&str>,
     ) -> Result<(), FsPulseError> {
+        let action = if error_message.is_some() { "error" } else { "stop" };
+        info!("Stopping scan {} (reason: {})...", scan.scan_id(), action);
+
         Database::immediate_transaction(conn, |c| {
             // Roll back item_versions, orphaned identities, and undo log
             UndoLog::rollback(c, scan.scan_id())?;
@@ -714,149 +679,6 @@ impl Scan {
         })?;
 
         Ok(())
-    }
-}
-
-/// Statistics for a completed or in-progress scan
-#[derive(Debug, Clone)]
-pub struct ScanStats {
-    pub scan_id: i64,
-    pub root_id: i64,
-    pub root_path: String,
-    pub state: ScanState,
-    pub started_at: i64,
-
-    // Total counts from scans table
-    pub total_files: i64,
-    pub total_folders: i64,
-    pub total_size: i64,
-
-    // Total change counts from scans table
-    pub total_adds: i64,
-    pub total_modifies: i64,
-    pub total_deletes: i64,
-
-    // Change breakdown by type (files)
-    pub files_added: i64,
-    pub files_modified: i64,
-    pub files_deleted: i64,
-
-    // Change breakdown by type (folders)
-    pub folders_added: i64,
-    pub folders_modified: i64,
-    pub folders_deleted: i64,
-
-    // Analysis statistics
-    pub items_hashed: i64,
-    pub items_validated: i64,
-    pub alerts_generated: i64,
-
-    // Scan configuration
-    pub hash_enabled: bool,
-    pub validation_enabled: bool,
-
-    // Error information
-    pub error: Option<String>,
-}
-
-impl ScanStats {
-    /// Get statistics for a specific scan ID
-    pub fn get_for_scan(conn: &Connection, scan_id: i64) -> Result<Option<Self>, FsPulseError> {
-        // Use existing function to get scan
-        let scan = match Scan::get_by_id_or_latest(conn, Some(scan_id), None)? {
-            Some(s) => s,
-            None => return Ok(None),
-        };
-
-        // Use existing function to get root path
-        let root = crate::roots::Root::get_by_id(conn, scan.root_id())?
-            .ok_or_else(|| FsPulseError::Error(format!("Root {} not found", scan.root_id())))?;
-
-        // Get change statistics broken down by file vs folder from temporal model.
-        // Versions with first_scan_id = scan_id are new versions created in this scan.
-        // By comparing with the previous version we classify as add/modify/delete.
-        let changes: (i64, i64, i64, i64, i64, i64) = conn.query_row(
-            "SELECT
-                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 0 AND iv.is_deleted = 0
-                    AND (pv.version_id IS NULL OR pv.is_deleted = 1)), 0),
-                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 0 AND iv.is_deleted = 0
-                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
-                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 0 AND iv.is_deleted = 1
-                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
-                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 1 AND iv.is_deleted = 0
-                    AND (pv.version_id IS NULL OR pv.is_deleted = 1)), 0),
-                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 1 AND iv.is_deleted = 0
-                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0),
-                COALESCE(COUNT(*) FILTER (WHERE i.item_type = 1 AND iv.is_deleted = 1
-                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0), 0)
-             FROM item_versions iv
-             JOIN items i ON i.item_id = iv.item_id
-             LEFT JOIN item_versions pv ON pv.item_id = iv.item_id
-                 AND pv.first_scan_id = (
-                     SELECT MAX(first_scan_id) FROM item_versions
-                     WHERE item_id = iv.item_id AND first_scan_id < iv.first_scan_id
-                 )
-             WHERE iv.first_scan_id = ?",
-            params![scan_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
-        ).unwrap_or((0, 0, 0, 0, 0, 0));
-
-        // Get hashing statistics from temporal model
-        let items_hashed: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM item_versions
-                 WHERE last_hash_scan = ? AND file_hash IS NOT NULL",
-                params![scan_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
-        // Get validation statistics from temporal model
-        let items_validated: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM item_versions
-                 WHERE last_val_scan = ?",
-                params![scan_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
-        Ok(Some(ScanStats {
-            scan_id: scan.scan_id(),
-            root_id: scan.root_id(),
-            root_path: root.root_path().to_string(),
-            state: scan.state(),
-            started_at: scan.started_at(),
-            total_files: scan.file_count().unwrap_or(0),
-            total_folders: scan.folder_count().unwrap_or(0),
-            total_size: scan.total_size().unwrap_or(0),
-            total_adds: scan.add_count().unwrap_or(0),
-            total_modifies: scan.modify_count().unwrap_or(0),
-            total_deletes: scan.delete_count().unwrap_or(0),
-            files_added: changes.0,
-            files_modified: changes.1,
-            files_deleted: changes.2,
-            folders_added: changes.3,
-            folders_modified: changes.4,
-            folders_deleted: changes.5,
-            items_hashed,
-            items_validated,
-            alerts_generated: scan.alert_count().unwrap_or(0),
-            hash_enabled: scan.analysis_spec().is_hash(),
-            validation_enabled: scan.analysis_spec().is_val(),
-            error: scan.error().map(|s| s.to_string()),
-        }))
-    }
-
-    /// Get statistics for the most recent scan across all roots
-    pub fn get_latest(conn: &Connection) -> Result<Option<Self>, FsPulseError> {
-        // Use existing function with None to get latest scan
-        let scan = match Scan::get_by_id_or_latest(conn, None, None)? {
-            Some(s) => s,
-            None => return Ok(None),
-        };
-
-        Self::get_for_scan(conn, scan.scan_id())
     }
 }
 
@@ -1031,15 +853,13 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_mode_enum() {
-        // Test that ValidateMode enum has expected variants
-        let _none = ValidateMode::None;
-        let _new = ValidateMode::New;
-        let _all = ValidateMode::All;
+    fn test_analysis_spec_is_val() {
+        let spec_val = AnalysisSpec::new(HashMode::None, true);
+        assert!(spec_val.is_val());
+        assert!(!spec_val.is_hash());
 
-        // Test PartialEq
-        assert_eq!(ValidateMode::None, ValidateMode::None);
-        assert_ne!(ValidateMode::None, ValidateMode::New);
-        assert_ne!(ValidateMode::New, ValidateMode::All);
+        let spec_no_val = AnalysisSpec::new(HashMode::New, false);
+        assert!(!spec_no_val.is_val());
+        assert!(spec_no_val.is_hash());
     }
 }

@@ -5,6 +5,7 @@ mod config;
 mod db;
 mod error;
 mod hash;
+mod integrity;
 mod item_identity;
 mod item_version;
 mod items;

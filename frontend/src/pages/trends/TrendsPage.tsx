@@ -115,6 +115,7 @@ export function TrendsPage() {
 
   const changesChartRef = useRef<HTMLDivElement>(null)
   const alertsChartRef = useRef<HTMLDivElement>(null)
+  const hasDataRef = useRef(false)
 
   // Set pointer cursor only when hovering a data column (bar highlight active)
   const setCursorForChart = (ref: React.RefObject<HTMLDivElement | null>, pointer: boolean) => {
@@ -281,18 +282,27 @@ export function TrendsPage() {
   // Load scan data when root or date range changes
   const loadScanData = useCallback(async () => {
     if (!selectedRootId) {
+      hasDataRef.current = false
       setScanData([])
       return
     }
 
     // Guard: if both dates are set but from > to, just show empty
     if (fromDate && toDate && fromDate > toDate) {
+      hasDataRef.current = false
       setScanData([])
       return
     }
 
+    const isRefresh = hasDataRef.current
+
     try {
-      setLoading(true)
+      // Only show the loading indicator for the initial load.
+      // During refreshes (after task completion), keep existing charts
+      // visible to avoid a flash of "Loading..." unmounting them.
+      if (!isRefresh) {
+        setLoading(true)
+      }
       setError(null)
 
       // Build filters: root_id and only completed scans
@@ -341,14 +351,17 @@ export function TrendsPage() {
         delete_count: parseInt(row[8]) || 0,
       }))
 
+      hasDataRef.current = data.length > 0
       setScanData(data)
     } catch (err) {
       console.error('Error loading scan data:', err)
       // Treat API errors as empty results rather than showing an error message
+      hasDataRef.current = false
       setScanData([])
     } finally {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRootId, fromDate, toDate, lastTaskCompletedAt])
 
   // Load data when filters change

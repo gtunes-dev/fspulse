@@ -16,7 +16,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskProgress } from '@/contexts/TaskContext'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -49,7 +49,7 @@ export function AppSidebar() {
   const location = useLocation()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
-  const { activeTask } = useTaskContext()
+  const { activeTask } = useTaskProgress()
   const { state } = useSidebar()
 
   const collapsed = state === 'collapsed'

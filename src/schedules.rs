@@ -1,6 +1,6 @@
 use crate::db::Database;
 use crate::error::FsPulseError;
-use crate::scans::{HashMode, ValidateMode};
+use crate::scans::HashMode;
 use crate::task::{CompactDatabaseSettings, CompactDatabaseTask, ScanSettings, ScanTask, Task, TaskStatus, TaskType};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -100,7 +100,7 @@ pub struct CreateScheduleParams {
     pub interval_value: Option<i64>,
     pub interval_unit: Option<IntervalUnit>,
     pub hash_mode: HashMode,
-    pub validate_mode: ValidateMode,
+    pub is_val: bool,
 }
 
 /// A scan schedule configuration
@@ -128,7 +128,7 @@ pub struct Schedule {
 
     // Scan options
     pub hash_mode: HashMode,
-    pub validate_mode: ValidateMode,
+    pub is_val: bool,
 
     // Metadata
     pub created_at: i64, // Unix timestamp (UTC)
@@ -543,7 +543,7 @@ impl Schedule {
             interval_value: params.interval_value,
             interval_unit: params.interval_unit,
             hash_mode: params.hash_mode,
-            validate_mode: params.validate_mode,
+            is_val: params.is_val,
             created_at: now,
             updated_at: now,
         };
@@ -567,7 +567,7 @@ impl Schedule {
                 root_id, enabled, schedule_name, schedule_type,
                 time_of_day, days_of_week, day_of_month,
                 interval_value, interval_unit,
-                hash_mode, validate_mode,
+                hash_mode, is_val,
                 created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING schedule_id",
@@ -582,7 +582,7 @@ impl Schedule {
                     schedule.interval_value,
                     schedule.interval_unit.map(|u| u.as_i32()),
                     schedule.hash_mode.as_i32(),
-                    schedule.validate_mode.as_i32(),
+                    schedule.is_val,
                     schedule.created_at,
                     schedule.updated_at,
                 ],
@@ -591,7 +591,7 @@ impl Schedule {
             .map_err(FsPulseError::DatabaseError)?;
 
         // Build task_settings using typed struct
-        let task_settings = ScanSettings::new(schedule.hash_mode, schedule.validate_mode).to_json()?;
+        let task_settings = ScanSettings::new(schedule.hash_mode, schedule.is_val).to_json()?;
 
         // Insert task entry (schedule is enabled by default)
         conn.execute(
@@ -627,7 +627,7 @@ impl Schedule {
                 schedule_id, root_id, enabled, schedule_name, schedule_type,
                 time_of_day, days_of_week, day_of_month,
                 interval_value, interval_unit,
-                hash_mode, validate_mode,
+                hash_mode, is_val,
                 created_at, updated_at
             FROM scan_schedules
             WHERE schedule_id = ?",
@@ -668,13 +668,7 @@ impl Schedule {
                             rusqlite::types::Type::Integer,
                         )
                     })?,
-                    validate_mode: ValidateMode::from_i32(row.get(11)?).ok_or_else(|| {
-                        rusqlite::Error::InvalidColumnType(
-                            11,
-                            "validate_mode".to_string(),
-                            rusqlite::types::Type::Integer,
-                        )
-                    })?,
+                    is_val: row.get(11)?,
                     created_at: row.get(12)?,
                     updated_at: row.get(13)?,
                 })
@@ -711,7 +705,7 @@ impl Schedule {
                 interval_value = ?,
                 interval_unit = ?,
                 hash_mode = ?,
-                validate_mode = ?,
+                is_val = ?,
                 updated_at = ?
             WHERE schedule_id = ? AND deleted_at IS NULL",
                 rusqlite::params![
@@ -723,7 +717,7 @@ impl Schedule {
                     self.interval_value,
                     self.interval_unit.map(|u| u.as_i32()),
                     self.hash_mode.as_i32(),
-                    self.validate_mode.as_i32(),
+                    self.is_val,
                     now,
                     self.schedule_id,
                 ],
@@ -809,7 +803,7 @@ impl Schedule {
                     })?;
 
                     let task_settings =
-                        ScanSettings::new(schedule.hash_mode, schedule.validate_mode).to_json()?;
+                        ScanSettings::new(schedule.hash_mode, schedule.is_val).to_json()?;
 
                     c.execute(
                         "INSERT INTO tasks (
@@ -919,7 +913,7 @@ impl TaskEntry {
         conn: &rusqlite::Connection,
         root_id: i64,
         hash_mode: HashMode,
-        validate_mode: ValidateMode,
+        is_val: bool,
     ) -> Result<(), FsPulseError> {
         let now = chrono::Utc::now().timestamp();
 
@@ -936,7 +930,7 @@ impl TaskEntry {
         }
 
         // Build task_settings using typed struct
-        let task_settings = ScanSettings::new(hash_mode, validate_mode).to_json()?;
+        let task_settings = ScanSettings::new(hash_mode, is_val).to_json()?;
 
         // Create task entry with Pending status
         conn.execute(
@@ -1469,36 +1463,6 @@ pub fn root_has_active_scan_immediate(
     Ok(has_active_scan)
 }
 
-/// Delete all schedules and Pending task entries for a specific root.
-///
-/// Only deletes Pending tasks (status = 0). Running tasks are left alone
-/// (they'll finish independently). Historical completed/stopped/error tasks
-/// are preserved.
-///
-/// IMPORTANT: The `_immediate` suffix indicates this function MUST be called
-/// within an immediate transaction. The caller is responsible for managing
-/// the transaction.
-pub fn delete_schedules_for_root_immediate(
-    conn: &rusqlite::Connection,
-    root_id: i64,
-) -> Result<(), FsPulseError> {
-    // Delete only Pending task entries
-    conn.execute(
-        "DELETE FROM tasks WHERE root_id = ? AND status = 0",
-        [root_id],
-    )
-    .map_err(FsPulseError::DatabaseError)?;
-
-    // Soft delete schedules by setting deleted_at timestamp
-    conn.execute(
-        "UPDATE scan_schedules SET deleted_at = strftime('%s', 'now', 'utc')
-         WHERE root_id = ? AND deleted_at IS NULL",
-        [root_id],
-    )
-    .map_err(FsPulseError::DatabaseError)?;
-
-    Ok(())
-}
 
 /// Information about an upcoming task for UI display
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1555,7 +1519,7 @@ pub fn list_schedules() -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
             s.schedule_id, s.root_id, s.enabled, s.schedule_name, s.schedule_type,
             s.time_of_day, s.days_of_week, s.day_of_month,
             s.interval_value, s.interval_unit,
-            s.hash_mode, s.validate_mode,
+            s.hash_mode, s.is_val,
             s.created_at, s.updated_at,
             r.root_path,
             q.run_at
@@ -1603,13 +1567,7 @@ pub fn list_schedules() -> Result<Vec<ScheduleWithRoot>, FsPulseError> {
                         rusqlite::types::Type::Integer,
                     )
                 })?,
-                validate_mode: ValidateMode::from_i32(row.get(11)?).ok_or_else(|| {
-                    rusqlite::Error::InvalidColumnType(
-                        11,
-                        "validate_mode".to_string(),
-                        rusqlite::types::Type::Integer,
-                    )
-                })?,
+                is_val: row.get(11)?,
                 created_at: row.get(12)?,
                 updated_at: row.get(13)?,
             },
@@ -1666,7 +1624,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::New,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1688,7 +1646,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::New,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1710,7 +1668,7 @@ mod tests {
             interval_value: Some(5),
             interval_unit: Some(IntervalUnit::Minutes),
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1732,7 +1690,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::New,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1754,7 +1712,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::All,
-            validate_mode: ValidateMode::All,
+            is_val: true,
             created_at: 0,
             updated_at: 0,
         };
@@ -1776,7 +1734,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::New,
-            validate_mode: ValidateMode::New,
+            is_val: true,
             created_at: 0,
             updated_at: 0,
         };
@@ -1798,7 +1756,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::New,
-            validate_mode: ValidateMode::New,
+            is_val: true,
             created_at: 0,
             updated_at: 0,
         };
@@ -1827,7 +1785,7 @@ mod tests {
             interval_value: Some(5),
             interval_unit: Some(IntervalUnit::Minutes),
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1851,7 +1809,7 @@ mod tests {
             interval_value: Some(2),
             interval_unit: Some(IntervalUnit::Hours),
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1875,7 +1833,7 @@ mod tests {
             interval_value: Some(1),
             interval_unit: Some(IntervalUnit::Days),
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1901,7 +1859,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1934,7 +1892,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -1967,7 +1925,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2000,7 +1958,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2033,7 +1991,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2066,7 +2024,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2099,7 +2057,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2132,7 +2090,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2165,7 +2123,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2198,7 +2156,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2237,7 +2195,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -2276,7 +2234,7 @@ mod tests {
             interval_value: None,
             interval_unit: None,
             hash_mode: HashMode::None,
-            validate_mode: ValidateMode::None,
+            is_val: false,
             created_at: 0,
             updated_at: 0,
         };

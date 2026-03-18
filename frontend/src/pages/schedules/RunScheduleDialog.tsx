@@ -39,7 +39,7 @@ export function RunScheduleDialog({
         body: JSON.stringify({
           root_id: schedule.root_id,
           hash_mode: schedule.hash_mode,
-          validate_mode: schedule.validate_mode,
+          is_val: schedule.is_val,
         }),
       })
 
@@ -88,7 +88,7 @@ export function RunScheduleDialog({
               <div>
                 <div className="text-sm font-medium mb-0.5">Options</div>
                 <div className="text-sm text-muted-foreground">
-                  Hash: {schedule.hash_mode} &middot; Validate: {schedule.validate_mode}
+                  Hash: {schedule.hash_mode} &middot; Validate: {schedule.is_val ? 'Yes' : 'No'}
                 </div>
               </div>
             </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, CirclePause, Play, Lightbulb } from 'lucide-react'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext, useTaskProgress } from '@/contexts/TaskContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,8 @@ import { ManualScanDialog } from './ManualScanDialog'
 import { PauseDialog } from './PauseDialog'
 
 export function TaskCard() {
-  const { activeTask, currentTaskId, isExclusive, isPaused, stopTask } = useTaskContext()
+  const { currentTaskId, isExclusive, isPaused, stopTask } = useTaskContext()
+  const { activeTask } = useTaskProgress()
   const [detailsExpanded, setDetailsExpanded] = useState(() => {
     return localStorage.getItem('fspulse.task.details.expanded') === 'true'
   })

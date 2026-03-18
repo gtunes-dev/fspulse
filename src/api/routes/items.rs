@@ -34,6 +34,46 @@ pub struct ChildrenCountsParams {
     pub scan_id: i64,
 }
 
+/// Query parameters for integrity state
+#[derive(Debug, Deserialize)]
+pub struct IntegrityStateParams {
+    pub scan_id: i64,
+}
+
+/// Response structure for integrity state
+#[derive(Debug, Serialize)]
+pub struct IntegrityStateResponse {
+    pub has_validator: bool,
+    pub hash_state: Option<i64>,
+    pub file_hash: Option<String>,
+    pub val_state: Option<i64>,
+    pub val_error: Option<String>,
+}
+
+/// GET /api/items/:item_id/integrity-state?scan_id=42
+/// Returns the current hash and validation state for an item at a specific scan point
+pub async fn get_integrity_state(
+    Path(item_id): Path<i64>,
+    Query(params): Query<IntegrityStateParams>,
+) -> Result<Json<IntegrityStateResponse>, (StatusCode, String)> {
+    match items::get_integrity_state(item_id, params.scan_id) {
+        Ok(state) => Ok(Json(IntegrityStateResponse {
+            has_validator: state.has_validator,
+            hash_state: state.hash_state,
+            file_hash: state.file_hash.map(hex::encode),
+            val_state: state.val_state,
+            val_error: state.val_error,
+        })),
+        Err(e) => {
+            error!("Failed to get integrity state for item {}: {}", item_id, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get integrity state: {}", e),
+            ))
+        }
+    }
+}
+
 /// GET /api/items/:item_id/size-history?from_date=YYYY-MM-DD&to_scan_id=42
 /// Returns size history for an item from a date up to a specific scan
 pub async fn get_item_size_history(
@@ -100,13 +140,6 @@ pub struct ItemResponse {
     pub unchanged_count: Option<i64>,
     pub val_state: Option<i64>,
     pub hash_state: Option<i64>,
-    pub val_unknown_count: Option<i64>,
-    pub val_valid_count: Option<i64>,
-    pub val_invalid_count: Option<i64>,
-    pub val_no_validator_count: Option<i64>,
-    pub hash_unknown_count: Option<i64>,
-    pub hash_valid_count: Option<i64>,
-    pub hash_suspect_count: Option<i64>,
 }
 
 /// GET /api/items/immediate-children?root_id=X&parent_path=/path&scan_id=Y
@@ -136,13 +169,6 @@ pub async fn get_immediate_children(
                     unchanged_count: item.unchanged_count,
                     val_state: item.val_state,
                     hash_state: item.hash_state,
-                    val_unknown_count: item.val_unknown_count,
-                    val_valid_count: item.val_valid_count,
-                    val_invalid_count: item.val_invalid_count,
-                    val_no_validator_count: item.val_no_validator_count,
-                    hash_unknown_count: item.hash_unknown_count,
-                    hash_valid_count: item.hash_valid_count,
-                    hash_suspect_count: item.hash_suspect_count,
                 })
                 .collect();
             Ok(Json(response))
@@ -194,13 +220,6 @@ pub async fn search_items(
                     unchanged_count: item.unchanged_count,
                     val_state: item.val_state,
                     hash_state: item.hash_state,
-                    val_unknown_count: item.val_unknown_count,
-                    val_valid_count: item.val_valid_count,
-                    val_invalid_count: item.val_invalid_count,
-                    val_no_validator_count: item.val_no_validator_count,
-                    hash_unknown_count: item.hash_unknown_count,
-                    hash_valid_count: item.hash_valid_count,
-                    hash_suspect_count: item.hash_suspect_count,
                 })
                 .collect();
             Ok(Json(response))

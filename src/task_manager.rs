@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::task::{BroadcastMessage, TaskProgress, TaskStatus};
-use crate::scans::{HashMode, ValidateMode};
+use crate::scans::HashMode;
 use crate::schedules::{TaskEntry, Schedule};
 use log::{error, info, Level};
 use logging_timer::timer;
@@ -97,14 +97,14 @@ impl TaskManager {
         conn: &Connection,
         root_id: i64,
         hash_mode: HashMode,
-        validate_mode: ValidateMode,
+        is_val: bool,
     ) -> Result<(), FsPulseError> {
         let mut manager = Self::instance().lock().unwrap();
 
         manager.check_activity_allowed_locked()?;
 
         Database::immediate_transaction(conn, |conn| {
-            TaskEntry::create_manual(conn, root_id, hash_mode, validate_mode)
+            TaskEntry::create_manual(conn, root_id, hash_mode, is_val)
         })?;
 
         manager.try_start_next_task_locked(conn)?;

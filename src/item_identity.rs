@@ -154,13 +154,14 @@ impl ItemIdentity {
         root_id: i64,
         path: &str,
         item_type: ItemType,
+        has_validator: bool,
     ) -> Result<i64, FsPulseError> {
         let item_name = Utils::display_path_name(path);
 
         conn.execute(
-            "INSERT INTO items (root_id, item_path, item_name, item_type)
-             VALUES (?, ?, ?, ?)",
-            params![root_id, path, item_name, item_type.as_i64()],
+            "INSERT INTO items (root_id, item_path, item_name, item_type, has_validator)
+             VALUES (?, ?, ?, ?, ?)",
+            params![root_id, path, item_name, item_type.as_i64(), has_validator as i64],
         )?;
 
         let item_id: i64 = conn.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
@@ -188,25 +189,21 @@ impl ExistingItem {
         item_type: ItemType,
     ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
-            "SELECT iv.version_id, iv.first_scan_id, iv.last_scan_id,
+            "SELECT iv.item_id, iv.item_version, iv.first_scan_id, iv.last_scan_id,
                     iv.is_added, iv.is_deleted, iv.access,
                     iv.mod_date, iv.size,
-                    iv.last_val_scan, iv.val_state, iv.val_error,
-                    iv.last_hash_scan, iv.file_hash, iv.hash_state,
                     iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
-                    iv.val_unknown_count, iv.val_valid_count, iv.val_invalid_count, iv.val_no_validator_count,
-                    iv.hash_unknown_count, iv.hash_valid_count, iv.hash_suspect_count,
                     i.item_id
              FROM items i
              JOIN item_versions iv ON iv.item_id = i.item_id
-               AND iv.first_scan_id = (
-                   SELECT MAX(first_scan_id) FROM item_versions WHERE item_id = i.item_id
+               AND iv.item_version = (
+                   SELECT MAX(item_version) FROM item_versions WHERE item_id = i.item_id
                )
              WHERE i.root_id = ? AND i.item_path = ? AND i.item_type = ?",
             params![root_id, path, item_type.as_i64()],
             |row| {
                 let version = ItemVersion::from_row(row)?;
-                let item_id: i64 = row.get(25)?;
+                let item_id: i64 = row.get(13)?;
                 Ok(ExistingItem { item_id, version })
             },
         )

@@ -55,7 +55,7 @@ A collapsible filter panel lets you narrow the view by integrity status across t
 
 **Change Kind**: Filter by Added, Modified, Deleted, or Unchanged items.
 
-**Hash State**: Filter by Valid, Unknown, or Suspect hash states. Folders are shown if they contain descendants matching the selected states.
+**Hash State**: Filter by Baseline, Unknown, or Suspect hash states. Folders are shown if they contain descendants matching the selected states.
 
 **Validation State**: Filter by Valid, Invalid, Unknown, or No Validator states. Works the same as hash state filtering with descendant logic for folders.
 
@@ -86,7 +86,7 @@ Clicking any item opens an inline detail panel within the card. The panel can be
 - First seen scan and total version count
 
 ### File Integrity (Files Only)
-- **Hash state**: Displayed as Valid, Suspect, or Unknown with a colored icon. Click to expand/collapse the full SHA-256 hash value.
+- **Hash state**: Displayed as Baseline, Suspect, or Unknown with a colored icon. Click to expand/collapse the full SHA-256 hash value.
 - **Validation state**: Displayed as Valid, Invalid, Unknown, or No Validator. If invalid, the validation error message is shown.
 
 ### Directory Children Counts (Directories Only)

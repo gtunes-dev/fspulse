@@ -22,7 +22,7 @@ use crate::error::FsPulseError;
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum HashState {
     Unknown = 0,
-    Valid = 1,
+    Baseline = 1,
     Suspect = 2,
 }
 
@@ -34,7 +34,7 @@ impl HashState {
     pub fn from_i64(value: i64) -> Self {
         match value {
             0 => HashState::Unknown,
-            1 => HashState::Valid,
+            1 => HashState::Baseline,
             2 => HashState::Suspect,
             _ => {
                 warn!("Invalid HashState value in database: {}, defaulting to Unknown", value);
@@ -46,7 +46,7 @@ impl HashState {
     pub fn short_name(&self) -> &'static str {
         match self {
             HashState::Unknown => "U",
-            HashState::Valid => "V",
+            HashState::Baseline => "B",
             HashState::Suspect => "S",
         }
     }
@@ -54,7 +54,7 @@ impl HashState {
     pub fn full_name(&self) -> &'static str {
         match self {
             HashState::Unknown => "Unknown",
-            HashState::Valid => "Valid",
+            HashState::Baseline => "Baseline",
             HashState::Suspect => "Suspect",
         }
     }
@@ -62,10 +62,10 @@ impl HashState {
     pub fn from_string(s: &str) -> Option<Self> {
         match s.to_ascii_uppercase().as_str() {
             "UNKNOWN" => Some(HashState::Unknown),
-            "VALID" => Some(HashState::Valid),
+            "BASELINE" => Some(HashState::Baseline),
             "SUSPECT" => Some(HashState::Suspect),
             "U" => Some(HashState::Unknown),
-            "V" => Some(HashState::Valid),
+            "B" => Some(HashState::Baseline),
             "S" => Some(HashState::Suspect),
             _ => None,
         }
@@ -119,7 +119,8 @@ impl Hash {
         let mut f = File::open(path)?;
 
         let mut hasher = Sha256::new();
-        let mut buffer = [0; 131_072]; // Read in 128KB chunks
+        let mut buffer = vec![0u8; 4 * 1024 * 1024]; // 4MB on the heap
+
 
         let mut loop_counter = 0;
 

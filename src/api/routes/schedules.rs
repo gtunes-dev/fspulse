@@ -1,6 +1,6 @@
 use crate::db::Database;
 use crate::task_manager::TaskManager;
-use crate::scans::{HashMode, ValidateMode};
+use crate::scans::HashMode;
 use crate::schedules::{
     CreateScheduleParams, IntervalUnit, Schedule, ScheduleType, ScheduleWithRoot,
 };
@@ -20,7 +20,7 @@ pub struct CreateScheduleRequest {
     pub interval_value: Option<i64>,
     pub interval_unit: Option<IntervalUnit>,
     pub hash_mode: HashMode,
-    pub validate_mode: ValidateMode,
+    pub is_val: bool,
 }
 
 /// Request body for updating a schedule
@@ -34,7 +34,7 @@ pub struct UpdateScheduleRequest {
     pub interval_value: Option<i64>,
     pub interval_unit: Option<IntervalUnit>,
     pub hash_mode: HashMode,
-    pub validate_mode: ValidateMode,
+    pub is_val: bool,
 }
 
 /// Request body for toggling schedule enabled status
@@ -65,7 +65,7 @@ pub async fn create_schedule(
             interval_value: request.interval_value,
             interval_unit: request.interval_unit,
             hash_mode: request.hash_mode,
-            validate_mode: request.validate_mode,
+            is_val: request.is_val,
         },
     )
     .map_err(|e| {
@@ -112,7 +112,7 @@ pub async fn update_schedule(
         interval_value: request.interval_value,
         interval_unit: request.interval_unit,
         hash_mode: request.hash_mode,
-        validate_mode: request.validate_mode,
+        is_val: request.is_val,
         created_at: existing.created_at, // Preserve
         updated_at: now,
     };

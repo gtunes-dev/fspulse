@@ -51,7 +51,7 @@ access_filter_EOI       = { WS* ~ access_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "version_id" | "first_scan_id" | "last_scan_id" | "last_hash_scan" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
+id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "item_version" | "first_scan_id" | "last_scan_id" | "last_hash_scan" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
 
 id_show = { id_col }
 
@@ -77,7 +77,7 @@ date_range         =  { date ~ WS* ~ DOTDOT ~ date }
 date               =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
-bool_col = { "is_deleted" | "is_hash" | "hash_all" | "is_val" | "val_all" | "was_restarted" }
+bool_col = { "is_deleted" | "is_hash" | "hash_all" | "is_val" | "was_restarted" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }
@@ -361,7 +361,7 @@ access               =  {
 }
 
 // Integer columns
-int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_valid_count" | "hash_suspect_count" }
+int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_baseline_count" | "hash_suspect_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

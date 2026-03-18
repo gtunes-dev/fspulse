@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Database;
 use crate::schedules::{SourceType, TaskEntry};
-use crate::scans::{HashMode, ValidateMode};
+use crate::scans::HashMode;
 use crate::task::{TaskStatus, TaskType};
 use crate::task_manager::TaskManager;
 
@@ -17,8 +17,8 @@ use super::state::AppState;
 #[derive(Debug, Deserialize)]
 pub struct ScheduleScanRequest {
     pub root_id: i64,
-    pub hash_mode: String,     // "None", "New", "All"
-    pub validate_mode: String, // "None", "New", "All"
+    pub hash_mode: String, // "None", "New", "All"
+    pub is_val: bool,
 }
 
 /// POST /api/tasks/scan
@@ -41,17 +41,7 @@ pub async fn schedule_scan(
         }
     };
 
-    let validate_mode = match req.validate_mode.as_str() {
-        "None" => ValidateMode::None,
-        "New" => ValidateMode::New,
-        "All" => ValidateMode::All,
-        _ => {
-            error!("Invalid validate_mode: {}", req.validate_mode);
-            return Err(StatusCode::BAD_REQUEST);
-        }
-    };
-
-    TaskManager::schedule_manual_scan(&conn, req.root_id, hash_mode, validate_mode).map_err(
+    TaskManager::schedule_manual_scan(&conn, req.root_id, hash_mode, req.is_val).map_err(
         |e| {
             error!("Failed to schedule manual scan: {}", e);
             if e.to_string().contains("Root not found") {

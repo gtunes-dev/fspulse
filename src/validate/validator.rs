@@ -96,6 +96,22 @@ impl crate::query::QueryEnum for ValidationState {
     }
 }
 
+/// Check whether an extension has a structural validator, without allocating one.
+pub fn has_validator_extension<S: AsRef<OsStr>>(ext: S) -> bool {
+    let Some(ext) = ext.as_ref().to_str() else { return false };
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "flac" | "jpg" | "jpeg" | "png" | "gif" | "tiff" | "bmp" | "pdf"
+    )
+}
+
+/// Check whether a path's extension has a structural validator, without allocating one.
+pub fn has_validator_for_path<P: AsRef<Path>>(path: P) -> bool {
+    path.as_ref()
+        .extension()
+        .is_some_and(has_validator_extension)
+}
+
 pub fn from_extension<S>(ext: S) -> Option<Box<dyn Validator>>
 where
     S: AsRef<OsStr>,

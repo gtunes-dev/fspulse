@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FolderTree, FolderOpen, Search, ArrowLeftRight, AlertTriangle, CircleX, Check, ChevronDown, SlidersHorizontal } from 'lucide-react'
+import { FolderTree, FolderOpen, Search, ArrowLeftRight, ChevronDown, SlidersHorizontal } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -8,9 +8,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { RootPicker } from '@/components/shared/RootPicker'
 import { CompactScanBar } from '@/components/shared/CompactScanBar'
 import { SearchFilter } from '@/components/shared/SearchFilter'
-import { ItemDetailPanel } from '@/components/shared/ItemDetailPanel'
+import { ItemDetail } from '@/components/shared/ItemDetail'
 import { useBrowseCache } from '@/hooks/useBrowseCache'
-import { getParentPath, type ChangeKind, type HashState, type ValState } from '@/lib/pathUtils'
+import { getParentPath, type ChangeKind } from '@/lib/pathUtils'
 import { FileTreeView } from './FileTreeView'
 import type { FileTreeViewHandle } from './FileTreeView'
 import { FolderView } from './FolderView'
@@ -57,8 +57,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
   const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hiddenKinds, setHiddenKinds] = useState<Set<ChangeKind>>(new Set())
-  const [hiddenHashStates, setHiddenHashStates] = useState<Set<HashState>>(new Set())
-  const [hiddenValStates, setHiddenValStates] = useState<Set<ValState>>(new Set())
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [searchFilter, setSearchFilter] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -218,8 +216,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
           scanId={resolvedScanId}
           cache={cache}
           hiddenKinds={hiddenKinds}
-          hiddenHashStates={hiddenHashStates}
-          hiddenValStates={hiddenValStates}
           isActive={pageActive && viewMode === 'tree'}
           selectedItemId={selectedItems.tree?.itemId}
           onItemSelect={handleTreeSelect}
@@ -235,8 +231,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
           currentPath={folderCurrentPath}
           onNavigate={setFolderCurrentPath}
           hiddenKinds={hiddenKinds}
-          hiddenHashStates={hiddenHashStates}
-          hiddenValStates={hiddenValStates}
           isActive={pageActive && viewMode === 'folder'}
           selectedItemId={selectedItems.folder?.itemId}
           onItemSelect={handleFolderSelect}
@@ -251,8 +245,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
           scanId={resolvedScanId}
           searchQuery={debouncedSearch}
           hiddenKinds={hiddenKinds}
-          hiddenHashStates={hiddenHashStates}
-          hiddenValStates={hiddenValStates}
           isActive={pageActive && viewMode === 'search' && hasSearchQuery}
           selectedItemId={selectedItems.search?.itemId}
           onItemSelect={handleSearchSelect}
@@ -287,7 +279,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
       detailOnRight ? 'border-l border-border' : 'border-r border-border'
     )}>
       <div className="sticky top-0">
-        <ItemDetailPanel
+        <ItemDetail
+          mode="panel"
           itemId={activeSelection.itemId}
           itemPath={activeSelection.itemPath}
           itemType={activeSelection.itemType}
@@ -364,7 +357,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
               </CollapsibleTrigger>
             </div>
 
-            {/* Expandable content — three vertical columns */}
+            {/* Expandable content — change type filter */}
             <CollapsibleContent>
               <div className="flex gap-5 px-4 pb-3 overflow-hidden">
                 {/* Change column */}
@@ -403,95 +396,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
                             )}
                           />
                           {label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="w-px bg-border" />
-
-                {/* Hash column */}
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground border-b border-border pb-1 mb-1.5">Hash State</div>
-                  <div className="flex flex-col gap-0.5">
-                    {([
-                      { state: 'suspect' as HashState, label: 'Suspect', icon: AlertTriangle },
-                      { state: 'unknown' as HashState, label: 'Unknown', icon: null },
-                      { state: 'valid' as HashState, label: 'Valid', icon: null },
-                    ] as const).map(({ state, label, icon: Icon }) => {
-                      const visible = !hiddenHashStates.has(state)
-                      return (
-                        <button
-                          key={state}
-                          className={cn(
-                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left whitespace-nowrap',
-                            visible
-                              ? 'text-foreground hover:bg-accent'
-                              : 'text-muted-foreground/40 hover:bg-accent/50'
-                          )}
-                          onClick={() => setHiddenHashStates(prev => {
-                            const next = new Set(prev)
-                            if (next.has(state)) next.delete(state)
-                            else next.add(state)
-                            return next
-                          })}
-                        >
-                          <span className={cn(
-                            'inline-flex items-center justify-center w-4 h-4 rounded border transition-all flex-shrink-0',
-                            visible
-                              ? 'border-foreground/50 bg-foreground/10'
-                              : 'border-muted-foreground/25 bg-transparent'
-                          )}>
-                            {visible && <Check className="h-3 w-3" />}
-                          </span>
-                          {label}
-                          {Icon && <Icon className={cn('h-3.5 w-3.5', visible ? 'text-amber-500' : 'text-muted-foreground/30')} />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="w-px bg-border" />
-
-                {/* Validation column */}
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground border-b border-border pb-1 mb-1.5">Validation State</div>
-                  <div className="flex flex-col gap-0.5">
-                    {([
-                      { state: 'invalid' as ValState, label: 'Invalid', icon: CircleX },
-                      { state: 'unknown' as ValState, label: 'Unknown', icon: null },
-                      { state: 'valid' as ValState, label: 'Valid', icon: null },
-                      { state: 'no_validator' as ValState, label: 'No Validator', icon: null },
-                    ] as const).map(({ state, label, icon: Icon }) => {
-                      const visible = !hiddenValStates.has(state)
-                      return (
-                        <button
-                          key={state}
-                          className={cn(
-                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left whitespace-nowrap',
-                            visible
-                              ? 'text-foreground hover:bg-accent'
-                              : 'text-muted-foreground/40 hover:bg-accent/50'
-                          )}
-                          onClick={() => setHiddenValStates(prev => {
-                            const next = new Set(prev)
-                            if (next.has(state)) next.delete(state)
-                            else next.add(state)
-                            return next
-                          })}
-                        >
-                          <span className={cn(
-                            'inline-flex items-center justify-center w-4 h-4 rounded border transition-all flex-shrink-0',
-                            visible
-                              ? 'border-foreground/50 bg-foreground/10'
-                              : 'border-muted-foreground/25 bg-transparent'
-                          )}>
-                            {visible && <Check className="h-3 w-3" />}
-                          </span>
-                          {label}
-                          {Icon && <Icon className={cn('h-3.5 w-3.5', visible ? 'text-rose-500' : 'text-muted-foreground/30')} />}
                         </button>
                       )
                     })}

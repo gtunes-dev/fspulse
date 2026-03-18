@@ -18,22 +18,19 @@
 // 5. Stopped
 
 use crate::alerts::Alerts;
-use crate::hash::{Hash, HashState};
 use crate::item_identity::{Access, ExistingItem, ItemIdentity, ItemType};
-use crate::item_version::{AnalysisItem, ItemVersion, StateCounts};
+use crate::item_version::ItemVersion;
 use crate::roots::Root;
 use crate::scans::ScanState;
-use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
+use crate::task::TaskProgress;
 use crate::undo_log::UndoLog;
-use crate::validate::validator::{from_path, ValidationState};
 use crate::utils::Utils;
+use crate::validate::validator;
 use crate::{db::Database, error::FsPulseError, scans::Scan};
 
-use crossbeam_channel::bounded;
-use log::{error, info, trace, warn, Level};
+use log::{error, info, trace, Level};
 use logging_timer::timer;
 use rusqlite::{params, Connection, OptionalExtension};
-use threadpool::ThreadPool;
 
 use std::fs::Metadata;
 use std::io::ErrorKind;
@@ -42,7 +39,7 @@ use std::path::MAIN_SEPARATOR_STR;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{cmp, fs};
+use std::fs;
 
 pub struct Scanner {}
 
@@ -57,7 +54,6 @@ struct FolderCountWrite {
     mods: i64,
     dels: i64,
     unchanged: i64,
-    state_counts: StateCounts,
 }
 
 /// Context passed through recursive directory scanning to avoid large parameter lists
@@ -217,7 +213,7 @@ impl Scanner {
                 ScanState::AnalyzingFiles => {
                     task_progress.set_phase("Phase 3 of 4: Analyzing Files");
                     if scan.state() == ScanState::AnalyzingFiles {
-                        Scanner::do_state_analyzing_files(scan, task_id, initial_task_state.take(), task_progress.clone(), &interrupt_token)?;
+                        crate::integrity::analysis::run_analysis_phase(scan, task_id, initial_task_state.take(), task_progress.clone(), &interrupt_token)?;
                     }
                     loop_state = ScanState::AnalyzingScan;
                 }
@@ -483,17 +479,15 @@ impl Scanner {
             // version has first_scan_id = current_scan so it's simply deleted on rollback.
             c.execute(
                 "INSERT INTO item_versions (
-                    item_id, first_scan_id, last_scan_id,
+                    item_id, item_version, root_id, first_scan_id, last_scan_id,
                     is_added, is_deleted, access, mod_date, size,
-                    last_val_scan, val_state, val_error,
-                    last_hash_scan, file_hash, hash_state,
                     add_count, modify_count, delete_count, unchanged_count
                  )
                  SELECT
-                    iv.item_id, ?, ?,
+                    iv.item_id,
+                    COALESCE((SELECT MAX(iv3.item_version) FROM item_versions iv3 WHERE iv3.item_id = iv.item_id), 0) + 1,
+                    i.root_id, ?, ?,
                     0, 1, iv.access, iv.mod_date, iv.size,
-                    iv.last_val_scan, iv.val_state, iv.val_error,
-                    iv.last_hash_scan, iv.file_hash, iv.hash_state,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
                     CASE WHEN i.item_type = 1 THEN 0 ELSE NULL END,
@@ -518,141 +512,6 @@ impl Scanner {
 
         task_progress.add_breadcrumb("Tombstoned deleted items");
 
-        Ok(())
-    }
-
-    fn do_state_analyzing_files(
-        scan: &mut Scan,
-        task_id: i64,
-        initial_task_state: Option<String>,
-        task_progress: Arc<TaskProgress>,
-        interrupt_token: &Arc<AtomicBool>,
-    ) -> Result<(), FsPulseError> {
-        // Get a single connection for this entire phase
-        let conn = Database::get_connection()?;
-
-        let is_hash = scan.analysis_spec().is_hash();
-        let is_val = scan.analysis_spec().is_val();
-
-        // If the scan doesn't hash or validate, skip to scan analyzing
-        if !is_hash && !is_val {
-            Scanner::check_interrupted(interrupt_token)?;
-            scan.set_state_analyzing_scan(&conn)?;
-            return Ok(());
-        }
-
-        // Parse initial task state for restart resilience (HWM loaded from TaskRow)
-        let initial_state = ScanTaskState::from_task_state(initial_task_state.as_deref())?;
-        let initial_hwm = initial_state.high_water_mark;
-
-        let (analyze_total, analyze_done) =
-            AnalysisItem::get_analysis_counts(&conn, scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
-
-        // Set up counter-based progress tracking
-        task_progress.set_progress_total(analyze_total, analyze_done, Some("files"));
-
-        // Create the analysis tracker for HWM management (shared with worker threads)
-        let tracker = Arc::new(AnalysisTracker::new(task_id, initial_state));
-
-        // Create a bounded channel to limit the number of queued tasks (e.g., max 100 tasks)
-        let (sender, receiver) = bounded::<AnalysisItem>(100);
-
-        // Initialize the thread pool
-        let items_remaining = analyze_total.saturating_sub(analyze_done); // avoids underflow
-        let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
-
-        let thread_count = crate::config::Config::get_analysis_threads();
-
-        let num_threads = cmp::min(items_remaining_usize, thread_count);
-        let pool = ThreadPool::new(num_threads.max(1)); // ensure at least one thread
-
-        // Set up thread states
-        task_progress.set_thread_count(num_threads);
-
-        for thread_index in 0..num_threads {
-            // Clone shared resources for each worker thread.
-            let receiver = receiver.clone();
-            let scan_copy = scan.clone();
-            let task_progress_clone = Arc::clone(&task_progress);
-            let interrupt_token_clone = Arc::clone(interrupt_token);
-            let tracker_clone = Arc::clone(&tracker);
-
-            // Worker thread: continuously receive and process tasks.
-            // Each thread gets its own connection from the pool!
-            pool.execute(move || {
-                while let Ok(analysis_item) = receiver.recv() {
-                    Scanner::process_item_async(
-                        &scan_copy,
-                        analysis_item,
-                        thread_index,
-                        &task_progress_clone,
-                        &interrupt_token_clone,
-                        &tracker_clone,
-                    );
-                }
-                task_progress_clone.set_thread_idle(thread_index);
-            });
-        }
-
-        let mut last_item_id = initial_hwm;
-
-        loop {
-            if interrupt_token.load(Ordering::Acquire) {
-                break;
-            }
-
-            let analysis_items = AnalysisItem::fetch_next_batch(
-                &conn,
-                scan.scan_id(),
-                scan.analysis_spec(),
-                last_item_id,
-                100,
-            )?;
-
-            if analysis_items.is_empty() {
-                break;
-            }
-
-            // Add batch item IDs to tracker before distributing work
-            tracker.add_batch(analysis_items.iter().map(|item| item.item_id()));
-
-            for analysis_item in analysis_items {
-                // Items will be ordered by id. We keep track of the last seen id and provide
-                // it in calls to fetch_next_analysis_batch to avoid picking up unprocessed
-                // items that we've already picked up. This avoids a race condition
-                // in which we'd pick up unprocessed items that are currently being processed
-                last_item_id = analysis_item.item_id();
-
-                // This send will block if the channel already has 100 items.
-                sender
-                    .send(analysis_item)
-                    .expect("Failed to send task into the bounded channel");
-            }
-
-            // HWM is now updated by workers via tracker.complete_item()
-        }
-
-        // Drop the sender to signal the workers that no more items will come.
-        drop(sender);
-
-        // Wait for all tasks to complete.
-        pool.join();
-
-        // It is critical that we check for interruption before advancing to the next state
-        // (AnalyzingScan). If the interrupt was detected during this phase, some hashing or
-        // validation operations may have been skipped, so we must not allow the scan to
-        // progress further.
-        Scanner::check_interrupted(interrupt_token)?;
-
-        // If we got here without interruption, all items should have been processed.
-        // Warn if the tracker still has items (indicates a bug in the tracking logic).
-        tracker.warn_if_not_empty();
-
-        // Clear thread states and add breadcrumb
-        task_progress.clear_thread_states();
-        task_progress.add_breadcrumb(&format!("Analyzed {} files", analyze_total));
-
-        scan.set_state_analyzing_scan(&conn)?;
         Ok(())
     }
 
@@ -720,9 +579,9 @@ impl Scanner {
         let mut writes = Vec::new();
         Scanner::walk_folder_counts(&conn, root_id, scan_id, root_path, interrupt_token, &mut writes)?;
 
-        info!("Scan analysis: {} folders have descendant changes or state counts", writes.len());
+        info!("Scan analysis: {} folders have descendant changes", writes.len());
 
-        Scanner::apply_folder_count_writes(&conn, scan_id, &writes, prev_scan_id, interrupt_token)?;
+        Scanner::apply_folder_count_writes(&conn, root_id, scan_id, &writes, prev_scan_id, interrupt_token)?;
         Ok(())
     }
 
@@ -747,9 +606,8 @@ impl Scanner {
     }
 
     /// Recursive depth-first walk of the folder tree, computing descendant change counts
-    /// and state snapshot counts.
     ///
-    /// Returns the cumulative `(adds, mods, dels, state_counts)` for all descendants.
+    /// Returns the cumulative `(adds, mods, dels)` for all descendants.
     /// Appends a `FolderCountWrite` entry for each folder whose counts actually differ
     /// from its previous version's counts.
     fn walk_folder_counts(
@@ -759,13 +617,12 @@ impl Scanner {
         parent_path: &str,
         interrupt_token: &Arc<AtomicBool>,
         writes: &mut Vec<FolderCountWrite>,
-    ) -> Result<(i64, i64, i64, StateCounts), FsPulseError> {
+    ) -> Result<(i64, i64, i64), FsPulseError> {
         Scanner::check_interrupted(interrupt_token)?;
 
         let mut adds = 0i64;
         let mut mods = 0i64;
         let mut dels = 0i64;
-        let mut state_counts = StateCounts::default();
 
         // 1. Get immediate directory children alive at this scan
         //    (including dirs deleted AT this scan — needed to recurse into deleted subtrees)
@@ -773,13 +630,12 @@ impl Scanner {
 
         // 2. Recurse into each directory child
         for (_child_id, child_path) in &dir_children {
-            let (sa, sm, sd, sc) = Scanner::walk_folder_counts(
+            let (sa, sm, sd) = Scanner::walk_folder_counts(
                 conn, root_id, scan_id, child_path, interrupt_token, writes,
             )?;
             adds += sa;
             mods += sm;
             dels += sd;
-            state_counts.add(&sc);
         }
 
         // 3. Count direct children that changed in this scan
@@ -788,19 +644,8 @@ impl Scanner {
         mods += dm;
         dels += dd;
 
-        // 4. Count direct file children's val/hash_state
-        let direct_sc = Scanner::query_direct_file_state_counts(conn, root_id, parent_path, scan_id)?;
-        state_counts.add(&direct_sc);
-
-        // 5. Write a new folder version if any descendant was added, modified,
-        //    or deleted this scan. Analysis-phase state changes (hash/val) are
-        //    already reflected here because update_item_analysis creates a new
-        //    file version for every state change, which query_direct_change_counts
-        //    counts as a "modify".
-        //
-        //    The state_counts snapshot (val/hash state distribution) is computed
-        //    above and recorded as data on the folder version, but is not used
-        //    as a trigger — adds/mods/dels are the sole trigger.
+        // 4. Write a new folder version if any descendant was added, modified,
+        //    or deleted this scan.
         if adds > 0 || mods > 0 || dels > 0 {
             if let Some(folder_item_id) = Scanner::lookup_folder_item_id(conn, root_id, parent_path)? {
                 let prev_alive = Scanner::query_prev_alive(conn, folder_item_id, scan_id)?;
@@ -812,12 +657,11 @@ impl Scanner {
                     mods,
                     dels,
                     unchanged,
-                    state_counts,
                 });
             }
         }
 
-        Ok((adds, mods, dels, state_counts))
+        Ok((adds, mods, dels))
     }
 
     /// Query immediate directory children of `parent_path` that are alive at `scan_id`
@@ -895,11 +739,11 @@ impl Scanner {
         let sql = format!(
             "SELECT
                 COALESCE(SUM(CASE WHEN cv.is_deleted = 0
-                    AND (pv.version_id IS NULL OR pv.is_deleted = 1) THEN 1 ELSE 0 END), 0),
+                    AND (pv.item_id IS NULL OR pv.is_deleted = 1) THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN cv.is_deleted = 0
-                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0),
+                    AND pv.item_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN cv.is_deleted = 1
-                    AND pv.version_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0)
+                    AND pv.item_id IS NOT NULL AND pv.is_deleted = 0 THEN 1 ELSE 0 END), 0)
              FROM items i
              JOIN item_versions cv ON cv.item_id = i.item_id AND cv.first_scan_id = ?1
              LEFT JOIN item_versions pv ON pv.item_id = i.item_id
@@ -953,67 +797,6 @@ impl Scanner {
         Ok(alive.unwrap_or(0))
     }
 
-    /// Count the val/hash_state of alive direct file children for a given parent path at this scan.
-    fn query_direct_file_state_counts(
-        conn: &Connection,
-        root_id: i64,
-        parent_path: &str,
-        scan_id: i64,
-    ) -> Result<StateCounts, FsPulseError> {
-        let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
-            parent_path.to_string()
-        } else {
-            format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
-        };
-
-        let path_upper = format!(
-            "{}{}",
-            &path_prefix[..path_prefix.len() - MAIN_SEPARATOR_STR.len()],
-            char::from(std::path::MAIN_SEPARATOR as u8 + 1)
-        );
-
-        let sql = format!(
-            "SELECT
-                COALESCE(SUM(CASE WHEN COALESCE(iv.val_state, 0) = 0 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN iv.val_state = 1 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN iv.val_state = 2 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN iv.val_state = 3 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN COALESCE(iv.hash_state, 0) = 0 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN iv.hash_state = 1 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN iv.hash_state = 2 THEN 1 ELSE 0 END), 0)
-             FROM items i
-             JOIN item_versions iv ON iv.item_id = i.item_id
-             WHERE i.root_id = ?1
-               AND i.item_type = 0
-               AND iv.is_deleted = 0
-               AND iv.last_scan_id >= ?2
-               AND iv.first_scan_id <= ?2
-               AND i.item_path >= ?3
-               AND i.item_path < ?4
-               AND i.item_path != ?5
-               AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'",
-            MAIN_SEPARATOR_STR
-        );
-
-        let mut stmt = conn.prepare(&sql)?;
-        let result = stmt.query_row(
-            params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
-            |row| {
-                Ok(StateCounts {
-                    val_unknown: row.get(0)?,
-                    val_valid: row.get(1)?,
-                    val_invalid: row.get(2)?,
-                    val_no_validator: row.get(3)?,
-                    hash_unknown: row.get(4)?,
-                    hash_valid: row.get(5)?,
-                    hash_suspect: row.get(6)?,
-                })
-            },
-        )?;
-
-        Ok(result)
-    }
-
     /// Look up the item_id for a folder by its path.
     fn lookup_folder_item_id(
         conn: &Connection,
@@ -1036,6 +819,7 @@ impl Scanner {
     /// Each batch is committed independently; interrupts are checked between batches.
     fn apply_folder_count_writes(
         conn: &Connection,
+        root_id: i64,
         scan_id: i64,
         writes: &[FolderCountWrite],
         prev_scan_id: Option<i64>,
@@ -1047,7 +831,7 @@ impl Scanner {
             Scanner::check_interrupted(interrupt_token)?;
             Database::immediate_transaction(conn, |c| {
                 for w in batch {
-                    Scanner::write_single_folder_count(c, scan_id, prev_scan_id, w)?;
+                    Scanner::write_single_folder_count(c, root_id, scan_id, prev_scan_id, w)?;
                 }
                 Ok(())
             })?;
@@ -1063,34 +847,29 @@ impl Scanner {
     ///   metadata with the computed counts.
     fn write_single_folder_count(
         conn: &Connection,
+        root_id: i64,
         scan_id: i64,
         prev_scan_id: Option<i64>,
         w: &FolderCountWrite,
     ) -> Result<(), FsPulseError> {
         // Check if folder already has a version for this scan
-        let existing_version_id: Option<i64> = conn
+        let existing: bool = conn
             .query_row(
-                "SELECT version_id FROM item_versions
+                "SELECT 1 FROM item_versions
                  WHERE item_id = ? AND first_scan_id = ?",
                 params![w.folder_item_id, scan_id],
-                |row| row.get(0),
+                |_row| Ok(true),
             )
-            .optional()?;
+            .optional()?
+            .unwrap_or(false);
 
-        if let Some(version_id) = existing_version_id {
+        if existing {
             // Case A: UPDATE the existing version's counts
             conn.execute(
                 "UPDATE item_versions SET
-                    add_count = ?, modify_count = ?, delete_count = ?, unchanged_count = ?,
-                    val_unknown_count = ?, val_valid_count = ?, val_invalid_count = ?, val_no_validator_count = ?,
-                    hash_unknown_count = ?, hash_valid_count = ?, hash_suspect_count = ?
-                 WHERE version_id = ?",
-                params![w.adds, w.mods, w.dels, w.unchanged,
-                        w.state_counts.val_unknown, w.state_counts.val_valid,
-                        w.state_counts.val_invalid, w.state_counts.val_no_validator,
-                        w.state_counts.hash_unknown, w.state_counts.hash_valid,
-                        w.state_counts.hash_suspect,
-                        version_id],
+                    add_count = ?, modify_count = ?, delete_count = ?, unchanged_count = ?
+                 WHERE item_id = ? AND first_scan_id = ?",
+                params![w.adds, w.mods, w.dels, w.unchanged, w.folder_item_id, scan_id],
             )?;
         } else {
             // Case B: Folder metadata unchanged but descendants changed.
@@ -1101,8 +880,8 @@ impl Scanner {
                 // Restore last_scan_id to previous completed scan (avoids undo log dependency)
                 if let Some(prev) = prev_scan_id {
                     conn.execute(
-                        "UPDATE item_versions SET last_scan_id = ? WHERE version_id = ?",
-                        params![prev, version.version_id()],
+                        "UPDATE item_versions SET last_scan_id = ? WHERE item_id = ? AND item_version = ?",
+                        params![prev, version.item_id(), version.item_version()],
                     )?;
                 }
 
@@ -1110,207 +889,19 @@ impl Scanner {
                 ItemVersion::insert_full(
                     conn,
                     w.folder_item_id,
+                    root_id,
                     scan_id,
                     false,
                     version.is_deleted(),
                     version.access(),
                     version.mod_date(),
                     version.size(),
-                    version.file_hash(),
-                    version.val_state(),
-                    version.val_error(),
-                    version.last_hash_scan(),
-                    version.last_val_scan(),
-                    version.hash_state(),
                     Some((w.adds, w.mods, w.dels, w.unchanged)),
-                    Some(w.state_counts),
                 )?;
             }
         }
 
         Ok(())
-    }
-
-    fn process_item_async(
-        scan: &Scan,
-        mut analysis_item: AnalysisItem,
-        thread_index: usize,
-        task_progress: &Arc<TaskProgress>,
-        interrupt_token: &Arc<AtomicBool>,
-        tracker: &Arc<AnalysisTracker>,
-    ) {
-        // This function is the entry point for each worker thread to process an item.
-        // It performs hashing and/or validation as needed and updates the database.
-        // It does not return errors, but it does need to check for interruption.
-        // If an interrupt is detected, it should exit promptly without updating
-        // the database. The hashing and validation processes exit when detecting
-        // interrupt and may return an interrupt error, but we ignore that here.
-        // The calling code will always check for interrupt and do the right thing
-        // depending on why the interrupt was generated
-
-        let item_id = analysis_item.item_id();
-        let path = PathBuf::from(analysis_item.item_path());
-
-        info!("Beginning analysis of: {path:?}");
-
-        let display_path = path
-            .file_name()
-            .unwrap_or(path.as_os_str())
-            .to_string_lossy();
-
-        let mut new_hash = None;
-        let mut read_attempted = false;
-        let mut read_succeeded = false;
-        let mut read_permission_denied = false;
-        let mut file_not_found = false;
-
-        if analysis_item.needs_hash() && !Scanner::is_interrupted(interrupt_token) {
-            task_progress.set_thread_state(thread_index, "Hashing", "info", Some(&display_path));
-            read_attempted = true;
-
-            // The hash function checks for interrupt at its start and periodically
-            match Hash::compute_sha2_256_hash(&path, interrupt_token) {
-                Ok(hash_s) => {
-                    new_hash = Some(hash_s);
-                    read_succeeded = true;
-                }
-                Err(FsPulseError::IoError(ref io_err))
-                    if io_err.kind() == ErrorKind::PermissionDenied =>
-                {
-                    error!(
-                        "Cannot read file for hashing '{}': Permission denied",
-                        &display_path
-                    );
-                    read_permission_denied = true;
-                }
-                Err(FsPulseError::IoError(ref io_err))
-                    if io_err.kind() == ErrorKind::NotFound =>
-                {
-                    // File was deleted between the scan/sweep phase and analysis.
-                    // This is a normal race condition, not an error the user needs
-                    // to act on. We skip hash and validation analysis for this item
-                    // so that update_item_analysis won't examine or compare hash/val
-                    // state, and set access to MetaError to reflect that the file
-                    // could not be found.
-                    warn!(
-                        "File not found during hashing '{}': skipping analysis",
-                        &display_path
-                    );
-                    file_not_found = true;
-                }
-                Err(error) => {
-                    error!("Error hashing '{}': {}", &display_path, error);
-                    // Other errors (not permission denied) - don't affect access state
-                }
-            };
-        }
-
-        let mut new_val = ValidationState::Unknown;
-        let mut new_val_error = None;
-
-        // Skip validation if we already know we can't read the file
-        if analysis_item.needs_val()
-            && !read_permission_denied
-            && !file_not_found
-            && !Scanner::is_interrupted(interrupt_token)
-        {
-            let validator = from_path(&path);
-            match validator {
-                Some(v) => {
-                    task_progress.set_thread_state(thread_index, "Validating", "info-alternate", Some(&display_path));
-                    read_attempted = true;
-
-                    match v.validate(&path, interrupt_token) {
-                        Ok((res_validity_state, res_validation_error)) => {
-                            new_val = res_validity_state;
-                            new_val_error = res_validation_error;
-                            read_succeeded = true;
-                        }
-                        Err(FsPulseError::IoError(ref io_err))
-                            if io_err.kind() == ErrorKind::PermissionDenied =>
-                        {
-                            error!(
-                                "Cannot read file for validation '{}': Permission denied",
-                                &display_path
-                            );
-                            read_permission_denied = true;
-                        }
-                        Err(FsPulseError::IoError(ref io_err))
-                            if io_err.kind() == ErrorKind::NotFound =>
-                        {
-                            // File deleted between hashing and validation (or only
-                            // validation was requested). Same handling as hashing.
-                            warn!(
-                                "File not found during validation '{}': skipping analysis",
-                                &display_path
-                            );
-                            file_not_found = true;
-                        }
-                        Err(e) => {
-                            let e_str = e.to_string();
-                            error!("Error validating '{}': {}", &display_path, e_str);
-                            new_val = ValidationState::Invalid;
-                            new_val_error = Some(e_str);
-                        }
-                    }
-                }
-                None => new_val = ValidationState::NoValidator,
-            }
-        }
-
-        // If the file was not found during hashing or validation, disable both
-        // hash and validation analysis. The item was deleted between scan/sweep
-        // and analysis — a normal race condition. By clearing needs_hash and
-        // needs_val, update_item_analysis will skip all hash/val comparisons and
-        // only update the access state to MetaError. The item's last_hash_scan
-        // and last_val_scan markers are intentionally NOT advanced, so the item
-        // will be picked up for analysis again on the next scan when (if) the
-        // file reappears.
-        if file_not_found {
-            analysis_item.set_needs_hash(false);
-            analysis_item.set_needs_val(false);
-        }
-
-        // Determine new access state based on read results
-        let new_access = if file_not_found {
-            Some(Access::MetaError)
-        } else if read_permission_denied {
-            Some(Access::ReadError)
-        } else if read_attempted && read_succeeded {
-            Some(Access::Ok)
-        } else {
-            None // No change - preserve current access state
-        };
-
-        if !Scanner::is_interrupted(interrupt_token) {
-            if let Err(error) = Scanner::update_item_analysis(
-                scan,
-                &analysis_item,
-                new_hash,
-                new_val,
-                new_val_error,
-                new_access,
-                interrupt_token,
-            ) {
-                let e_str = error.to_string();
-                error!(
-                    "Error updating item analysis '{}': {}",
-                    &display_path, e_str
-                );
-            }
-        }
-
-        task_progress.increment_progress();
-
-        // Set thread back to idle after completing work
-        task_progress.set_thread_idle(thread_index);
-
-        // Mark item complete in tracker (updates HWM if appropriate)
-        if let Err(e) = tracker.complete_item(item_id) {
-            error!("Error updating analysis HWM for item {}: {}", item_id, e);
-        }
-
-        info!("Done analyzing: {path:?}");
     }
 
     /// Calculate the new access state based on item type, current access, and scan results.
@@ -1478,7 +1069,7 @@ impl Scanner {
             // and temporal queries resolve via MAX(first_scan_id), not last_scan_id)
             let counts = if item_type == ItemType::Directory { Some((0, 0, 0, 0)) } else { None };
             ItemVersion::insert_initial(
-                c, existing_item.item_id, ctx.scan.scan_id(), new_access, mod_date, size, counts,
+                c, existing_item.item_id, ctx.scan.root_id(), ctx.scan.scan_id(), new_access, mod_date, size, counts,
             )?;
 
             // For rehydration, we alert whenever new_access is not Ok, regardless of what
@@ -1507,7 +1098,7 @@ impl Scanner {
             // (old version is not modified — its last_scan_id already reflects when it was
             // last confirmed, and temporal queries resolve via MAX(first_scan_id))
             ItemVersion::insert_with_carry_forward(
-                c, existing_item.item_id, ctx.scan.scan_id(),
+                c, existing_item.item_id, ctx.scan.root_id(), ctx.scan.scan_id(),
                 false, new_access, mod_date, size, &existing_item.version,
                 item_type == ItemType::Directory,
             )?;
@@ -1527,7 +1118,7 @@ impl Scanner {
     ) -> Result<(), FsPulseError> {
         ctx.execute_batch_write(|c| {
             UndoLog::log_update(c, &existing_item.version)?;
-            ItemVersion::touch_last_scan(c, existing_item.version.version_id(), ctx.scan.scan_id())?;
+            ItemVersion::touch_last_scan(c, existing_item.version.item_id(), existing_item.version.item_version(), ctx.scan.scan_id())?;
 
             Ok(())
         })
@@ -1553,10 +1144,12 @@ impl Scanner {
             Access::Ok
         };
 
+        let has_validator = item_type == ItemType::File && validator::has_validator_for_path(path_str);
+
         ctx.execute_batch_write(|c| {
-            let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type)?;
+            let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type, has_validator)?;
             let counts = if item_type == ItemType::Directory { Some((0, 0, 0, 0)) } else { None };
-            ItemVersion::insert_initial(c, item_id, ctx.scan.scan_id(), new_access, mod_date, size, counts)?;
+            ItemVersion::insert_initial(c, item_id, ctx.scan.root_id(), ctx.scan.scan_id(), new_access, mod_date, size, counts)?;
 
             if new_access != Access::Ok {
                 Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), item_id)?;
@@ -1565,177 +1158,6 @@ impl Scanner {
             Ok(())
         })
     }
-
-    pub fn update_item_analysis(
-        scan: &Scan,
-        analysis_item: &AnalysisItem,
-        new_hash: Option<String>,
-        new_val: ValidationState,
-        new_val_error: Option<String>,
-        new_access: Option<Access>,
-        interrupt_token: &Arc<AtomicBool>,
-    ) -> Result<(), FsPulseError> {
-        let mut update_changes = false;
-
-        // values to use in the version update
-        let mut i_hash = analysis_item.file_hash();
-        let mut i_val = analysis_item.val_state();
-        let mut i_val_error = analysis_item.val_error();
-        let mut i_last_hash_scan = analysis_item.last_hash_scan();
-        let mut i_last_val_scan = analysis_item.last_val_scan();
-        let mut i_access = analysis_item.access();
-        let mut i_hash_state = analysis_item.hash_state_enum();
-
-        let mut alert_possible_hash = false;
-        let mut alert_invalid_item = false;
-        let mut alert_access_denied = false;
-
-        // Check if access state changed
-        if let Some(access) = new_access {
-            if access != analysis_item.access() {
-                update_changes = true;
-                i_access = access;
-
-                // Alert if item became inaccessible (Ok → error)
-                alert_access_denied =
-                    Scanner::should_alert_access_denied(analysis_item.access(), access);
-            }
-        }
-
-        if analysis_item.needs_hash() {
-            if analysis_item.file_hash() != new_hash.as_deref() {
-                update_changes = true;
-                i_hash = new_hash.as_deref();
-
-                if analysis_item.last_hash_scan().is_none() {
-                    // First hash — transition Unknown → Valid
-                    i_hash_state = HashState::Valid;
-                } else {
-                    // Hash changed with previous hash — check metadata
-                    alert_possible_hash = true;
-                    // Will be resolved to Valid or Suspect inside the transaction
-                    // after checking meta_changed_between
-                }
-            }
-            // If hash unchanged: preserve existing hash_state (already set above)
-
-            // Update the last scan id whether or not anything changed
-            i_last_hash_scan = Some(scan.scan_id());
-        }
-
-        if analysis_item.needs_val() {
-            if (analysis_item.val_state() != new_val)
-                || (analysis_item.val_error() != new_val_error.as_deref())
-            {
-                if new_val == ValidationState::Invalid {
-                    alert_invalid_item = true;
-                }
-
-                update_changes = true;
-                i_val = new_val;
-                i_val_error = new_val_error.as_deref();
-            }
-
-            // update the last validation scan id whether or not anything changed
-            i_last_val_scan = Some(scan.scan_id());
-        }
-
-        Scanner::check_interrupted(interrupt_token)?;
-
-        let conn = Database::get_connection()?;
-
-        // Use IMMEDIATE transaction for read-then-write pattern
-        Database::immediate_transaction(&conn, |c| {
-            // Resolve hash_state for hash-changed case before writing
-            if alert_possible_hash {
-                let last_hash_scan = analysis_item.last_hash_scan().unwrap();
-                let meta_changed = Alerts::meta_changed_between(
-                    c,
-                    analysis_item.item_id(),
-                    last_hash_scan,
-                    scan.scan_id(),
-                )?;
-
-                if meta_changed {
-                    // Metadata changed — legitimate modification
-                    i_hash_state = HashState::Valid;
-                } else {
-                    // Metadata unchanged — suspect
-                    i_hash_state = HashState::Suspect;
-                    Alerts::add_suspect_hash_alert(
-                        c,
-                        scan.scan_id(),
-                        analysis_item.item_id(),
-                        analysis_item.last_hash_scan(),
-                        analysis_item.file_hash(),
-                        new_hash.as_deref().unwrap(),
-                    )?;
-                }
-            }
-
-            // hash_state changed from what was on the analysis_item means we need to write
-            if i_hash_state != analysis_item.hash_state_enum() {
-                update_changes = true;
-            }
-
-            let current_version = ItemVersion::get_current(c, analysis_item.item_id())?
-                .ok_or_else(|| FsPulseError::Error(format!(
-                    "No current version for item {} during analysis",
-                    analysis_item.item_id()
-                )))?;
-
-            if current_version.first_scan_id() == scan.scan_id() {
-                // Same-scan version: UPDATE in place (no undo log — row is deleted on rollback)
-                ItemVersion::update_analysis_in_place(
-                    c, current_version.version_id(),
-                    i_access, i_hash, i_val, i_val_error,
-                    i_last_hash_scan, i_last_val_scan, i_hash_state,
-                )?;
-            } else if update_changes {
-                // Pre-existing version with state change: undo the walk-phase touch,
-                // then INSERT a new version as the sole current version for this scan.
-                ItemVersion::restore_last_scan(c, current_version.version_id())?;
-
-                ItemVersion::insert_full(
-                    c, analysis_item.item_id(), scan.scan_id(),
-                    false, false, i_access,
-                    current_version.mod_date(), current_version.size(),
-                    i_hash, Some(i_val), i_val_error,
-                    i_last_hash_scan, i_last_val_scan,
-                    Some(i_hash_state),
-                    None, None, // counts: analysis only processes files
-                )?;
-            } else if i_last_hash_scan != current_version.last_hash_scan()
-                || i_last_val_scan != current_version.last_val_scan()
-            {
-                // Pre-existing version, no state change: UPDATE bookkeeping only.
-                // No additional undo log needed — handle_item_no_change already logged
-                // the pre-scan values of last_hash_scan and last_val_scan.
-                ItemVersion::update_bookkeeping(
-                    c, current_version.version_id(),
-                    i_last_hash_scan, i_last_val_scan,
-                )?;
-            }
-
-            if alert_invalid_item {
-                Alerts::add_invalid_item_alert(
-                    c,
-                    scan.scan_id(),
-                    analysis_item.item_id(),
-                    new_val_error.as_deref().unwrap_or("Unknown error"),
-                )?;
-            }
-
-            if alert_access_denied {
-                Alerts::add_access_denied_alert(c, scan.scan_id(), analysis_item.item_id())?;
-            }
-
-            Ok(())
-        })?;
-
-        Ok(())
-    }
-
 
     /// Check if scan has been interrupted, returning error if so.
     fn check_interrupted(interrupt_token: &Arc<AtomicBool>) -> Result<(), FsPulseError> {
@@ -1746,8 +1168,4 @@ impl Scanner {
         }
     }
 
-    /// Check if scan has been interrupted
-    fn is_interrupted(interrupt_token: &Arc<AtomicBool>) -> bool {
-        interrupt_token.load(Ordering::Acquire)
-    }
 }

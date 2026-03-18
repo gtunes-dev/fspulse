@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { RootCard } from '@/components/shared/RootCard'
-import { ItemDetailSheet } from '@/components/shared/ItemDetailSheet'
+import { ItemDetail } from '@/components/shared/ItemDetail'
 import {
   Dialog,
   DialogContent,
@@ -753,12 +753,12 @@ export function AlertsPage() {
 
         {/* Item Detail Sheet */}
         {selectedItem && (
-          <ItemDetailSheet
+          <ItemDetail
+            mode="sheet"
             itemId={selectedItem.itemId}
             itemPath={selectedItem.itemPath}
             itemType="F"
             isTombstone={false}
-            rootId={selectedItem.rootId}
             scanId={selectedItem.scanId}
             open={sheetOpen}
             onOpenChange={setSheetOpen}

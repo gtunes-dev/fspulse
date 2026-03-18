@@ -1,5 +1,5 @@
 use crate::db::Database;
-use crate::scans::{Scan, ScanStats};
+use crate::scans::Scan;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -11,7 +11,6 @@ use axum::{
 };
 use log::error;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 
 use super::state::AppState;
 
@@ -152,50 +151,6 @@ pub async fn clear_pause(State(_state): State<AppState>) -> Result<StatusCode, S
     Ok(StatusCode::OK)
 }
 
-/// GET /api/home/last-scan-stats
-/// Get statistics for the most recent scan (used by Home page dashboard)
-pub async fn get_last_scan_stats() -> Result<Json<Value>, StatusCode> {
-    let conn = Database::get_connection().map_err(|e| {
-        eprintln!("Database error: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    match ScanStats::get_latest(&conn) {
-        Ok(Some(stats)) => Ok(Json(json!({
-            "state": "last_scan",
-            "scan_id": stats.scan_id,
-            "root_id": stats.root_id,
-            "root_path": stats.root_path,
-            "scan_state": format!("{:?}", stats.state),
-            "started_at": stats.started_at,
-            "total_files": stats.total_files,
-            "total_folders": stats.total_folders,
-            "total_size": stats.total_size,
-            "total_adds": stats.total_adds,
-            "total_modifies": stats.total_modifies,
-            "total_deletes": stats.total_deletes,
-            "files_added": stats.files_added,
-            "files_modified": stats.files_modified,
-            "files_deleted": stats.files_deleted,
-            "folders_added": stats.folders_added,
-            "folders_modified": stats.folders_modified,
-            "folders_deleted": stats.folders_deleted,
-            "items_hashed": stats.items_hashed,
-            "items_validated": stats.items_validated,
-            "alerts_generated": stats.alerts_generated,
-            "hash_enabled": stats.hash_enabled,
-            "validation_enabled": stats.validation_enabled,
-            "error": stats.error,
-        }))),
-        Ok(None) => Ok(Json(json!({
-            "state": "no_scans"
-        }))),
-        Err(e) => {
-            eprintln!("Error getting scan stats: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
-}
 
 /// Query parameters for scan dates within a month
 #[derive(Debug, Deserialize)]

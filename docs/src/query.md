@@ -49,7 +49,6 @@ Each domain has a set of available columns. Columns marked as **default** are sh
 | `is_hash`       | Boolean         | Yes     | Hash new or changed files                      |
 | `hash_all`      | Boolean         | No      | Hash all items including unchanged             |
 | `is_val`        | Boolean         | Yes     | Validate new or changed files                  |
-| `val_all`       | Boolean         | No      | Validate all items including unchanged         |
 | `file_count`    | Integer         | Yes     | Count of files found in the scan               |
 | `folder_count`  | Integer         | Yes     | Count of directories found in the scan         |
 | `total_size`    | Integer         | Yes     | Total size in bytes of all files               |
@@ -62,7 +61,7 @@ Each domain has a set of available columns. Columns marked as **default** are sh
 | `val_invalid_count` | Integer     | No      | Files with invalid validation state            |
 | `val_no_validator_count` | Integer | No     | Files with no available validator              |
 | `hash_unknown_count` | Integer    | No      | Files with unknown hash state                  |
-| `hash_valid_count` | Integer      | No      | Files with valid hash state                    |
+| `hash_baseline_count` | Integer   | No      | Files with baseline hash state                 |
 | `hash_suspect_count` | Integer | No      | Files with suspect hash state               |
 | `error`         | String          | No      | Error message if scan failed                   |
 
@@ -128,7 +127,7 @@ The `versions` domain queries individual item version rows — each representing
 | `val_invalid_count` | Integer       | No      | Descendant files with invalid validation (folders only) |
 | `val_no_validator_count` | Integer  | No      | Descendant files with no validator (folders only) |
 | `hash_unknown_count` | Integer      | No      | Descendant files with unknown hash state (folders only) |
-| `hash_valid_count` | Integer        | No      | Descendant files with valid hash state (folders only) |
+| `hash_baseline_count` | Integer     | No      | Descendant files with baseline hash state (folders only) |
 | `hash_suspect_count` | Integer   | No      | Descendant files with suspect hash state (folders only) |
 
 ---

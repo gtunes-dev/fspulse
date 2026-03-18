@@ -1,13 +1,28 @@
-use log::warn;
+use log::{info, warn};
 use rusqlite::{params, Connection};
 
 use crate::{error::FsPulseError, item_version::ItemVersion};
 
+/// Log type discriminator for the scan_undo_log table.
+///
+/// - ItemVersion (0): ref_id1 = item_id, ref_id2 = item_version, ref_id3 = 0
+/// - HashVersion (1): ref_id1 = item_id, ref_id2 = item_version, ref_id3 = first_scan_id
+#[repr(i64)]
+#[derive(Debug, Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
+pub enum UndoLogType {
+    ItemVersion = 0,
+    HashVersion = 1,
+}
+
 /// Transient undo log for batched scan rollback.
 ///
-/// Records the prior values of mutable fields before in-place updates to pre-existing
-/// versions (where `first_scan_id < current_scan`). Cleared on scan completion.
-/// Consumed on scan stop to restore versions to their pre-scan state.
+/// Records the prior values of mutable fields before in-place updates.
+/// Cleared on scan completion. Consumed on scan stop to restore state.
+///
+/// The schema uses a log_type discriminator to handle item_versions and
+/// hash_versions in a single table. Val state lives on item_versions and
+/// is handled as part of item_version undo.
 pub struct UndoLog;
 
 impl UndoLog {
@@ -21,34 +36,40 @@ impl UndoLog {
         version: &ItemVersion,
     ) -> Result<(), FsPulseError> {
         conn.execute(
-            "INSERT INTO scan_undo_log (version_id, old_last_scan_id, old_last_hash_scan, old_last_val_scan)
-             VALUES (?, ?, ?, ?)",
+            "INSERT INTO scan_undo_log (log_type, ref_id1, ref_id2, ref_id3, old_last_scan_id)
+             VALUES (?, ?, ?, 0, ?)",
             params![
-                version.version_id(),
+                UndoLogType::ItemVersion as i64,
+                version.item_id(),
+                version.item_version(),
                 version.last_scan_id(),
-                version.last_hash_scan(),
-                version.last_val_scan(),
             ],
         )?;
         Ok(())
     }
 
-    /// Read the pre-scan `last_scan_id` for a version from the undo log.
+    /// Record the current last_scan_id of a hash_version before extending it.
     ///
-    /// Used by the analysis phase when it needs to "properly close" a pre-existing version
-    /// before inserting a new version. The walk phase already logged the undo entry via
-    /// `handle_item_no_change`; this reads the original value back so the analysis phase
-    /// can restore it, ensuring only the new version has `last_scan_id = current_scan`.
-    pub fn get_old_last_scan_id(
+    /// Called before HashVersion::extend_last_scan to enable rollback.
+    pub fn log_hash_version_extend(
         conn: &Connection,
-        version_id: i64,
-    ) -> Result<i64, FsPulseError> {
-        let old_last_scan_id: i64 = conn.query_row(
-            "SELECT old_last_scan_id FROM scan_undo_log WHERE version_id = ?",
-            params![version_id],
-            |row| row.get(0),
+        item_id: i64,
+        item_version: i64,
+        first_scan_id: i64,
+        old_last_scan_id: i64,
+    ) -> Result<(), FsPulseError> {
+        conn.execute(
+            "INSERT INTO scan_undo_log (log_type, ref_id1, ref_id2, ref_id3, old_last_scan_id)
+             VALUES (?, ?, ?, ?, ?)",
+            params![
+                UndoLogType::HashVersion as i64,
+                item_id,
+                item_version,
+                first_scan_id,
+                old_last_scan_id,
+            ],
         )?;
-        Ok(old_last_scan_id)
+        Ok(())
     }
 
     /// Clear the entire undo log. Called on scan completion.
@@ -82,53 +103,92 @@ impl UndoLog {
         Ok(())
     }
 
-    /// Roll back the new temporal model for a stopped scan.
+    /// Roll back the temporal model for a stopped scan.
     ///
-    /// Four steps, in order:
-    /// 1. Replay undo log — restore pre-scan `last_scan_id`, `last_hash_scan`, `last_val_scan`
-    ///    on pre-existing versions that were modified in-place during the scan.
-    /// 2. Delete versions created in this scan (`first_scan_id = scan_id`) — covers
-    ///    new items, rehydrations, modifications, deletions, and analysis-phase inserts.
-    ///    Must come before item deletion to satisfy FK constraint on `item_versions.item_id`.
-    /// 3. Delete orphaned identity rows — items with no remaining versions after step 2.
-    /// 4. Clear undo log.
+    /// Steps, in order:
+    /// 1. Replay item_version undo entries — restore pre-scan `last_scan_id`.
+    /// 2. Replay hash_version undo entries — restore pre-scan `last_scan_id`.
+    /// 3. Delete hash_versions created in this scan (before item_versions to
+    ///    satisfy FK constraint without full-table scan).
+    /// 4. Delete item_versions created in this scan (val state goes with them).
+    /// 5. NULL out val columns on item_versions whose last_scan_id was reverted
+    ///    and whose val_scan_id now exceeds last_scan_id.
+    /// 6. Delete orphaned identity rows (items with no remaining versions).
+    /// 7. Clear undo log.
     ///
     /// Must be called inside a transaction.
     pub fn rollback(conn: &Connection, scan_id: i64) -> Result<(), FsPulseError> {
-        // Step 1: Replay undo log — restore pre-scan bookkeeping values
-        conn.execute(
-            "UPDATE item_versions SET
-                last_scan_id = u.old_last_scan_id,
-                last_hash_scan = u.old_last_hash_scan,
-                last_val_scan = u.old_last_val_scan
+        info!("Rolling back scan {} ...", scan_id);
+
+        // Step 1: Replay item_version undo entries
+        // ref_id1 = item_id, ref_id2 = item_version
+        let restored_versions = conn.execute(
+            "UPDATE item_versions SET last_scan_id = u.old_last_scan_id
              FROM scan_undo_log u
-             WHERE item_versions.version_id = u.version_id",
+             WHERE u.log_type = 0
+               AND item_versions.item_id = u.ref_id1
+               AND item_versions.item_version = u.ref_id2",
             [],
         )?;
 
-        // Step 2: Delete versions created in this scan.
-        // Must come before item deletion because item_versions.item_id
-        // references items(item_id) — FK enforcement blocks deletion of
-        // items that still have child versions.
-        conn.execute(
+        // Step 2: Replay hash_version undo entries
+        // ref_id1 = item_id, ref_id2 = item_version, ref_id3 = first_scan_id
+        let restored_hashes = conn.execute(
+            "UPDATE hash_versions SET last_scan_id = u.old_last_scan_id
+             FROM scan_undo_log u
+             WHERE u.log_type = 1
+               AND hash_versions.item_id = u.ref_id1
+               AND hash_versions.item_version = u.ref_id2
+               AND hash_versions.first_scan_id = u.ref_id3",
+            [],
+        )?;
+
+        // Step 3: Delete hash_versions created in this scan
+        // Must come before item_versions deletion — hash_versions has FK to
+        // item_versions, and without this order SQLite does a full table scan
+        // of hash_versions to verify FK constraints on each version delete.
+        let deleted_hashes = conn.execute(
+            "DELETE FROM hash_versions WHERE first_scan_id = ?",
+            [scan_id],
+        )?;
+
+        // Step 4: Delete item_versions created in this scan
+        let deleted_versions = conn.execute(
             "DELETE FROM item_versions WHERE first_scan_id = ?",
             [scan_id],
         )?;
 
-        // Step 3: Delete orphaned identity rows (items with no remaining versions).
-        // After step 2 removed all versions from this scan, orphaned items are
-        // simply those with no versions left at all.
-        conn.execute(
-            "DELETE FROM items
-             WHERE NOT EXISTS (
-                 SELECT 1 FROM item_versions iv
-                 WHERE iv.item_id = items.item_id
+        // Step 5: NULL out val columns on reverted versions where val_scan_id
+        // now exceeds the restored last_scan_id
+        let cleared_val = conn.execute(
+            "UPDATE item_versions
+             SET val_scan_id = NULL, val_state = NULL, val_error = NULL
+             WHERE val_scan_id IS NOT NULL AND val_scan_id > last_scan_id",
+            [],
+        )?;
+
+        // Step 6: Delete orphaned identity rows — items whose only version was
+        // created this scan and deleted in step 4. Uses LEFT JOIN for efficient
+        // index-driven orphan detection.
+        let deleted_items = conn.execute(
+            "DELETE FROM items WHERE item_id IN (
+                 SELECT i.item_id
+                 FROM items i
+                 LEFT JOIN item_versions iv ON iv.item_id = i.item_id
+                 WHERE iv.item_id IS NULL
              )",
             [],
         )?;
 
-        // Step 4: Clear undo log
+        // Step 7: Clear undo log
         conn.execute("DELETE FROM scan_undo_log", [])?;
+
+        info!(
+            "Rollback complete for scan {}: restored {} version(s), {} hash version(s); \
+             deleted {} version(s), {} hash version(s), {} item(s); cleared val on {} version(s)",
+            scan_id, restored_versions, restored_hashes,
+            deleted_versions, deleted_hashes, deleted_items, cleared_val
+        );
 
         Ok(())
     }

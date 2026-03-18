@@ -627,13 +627,31 @@ impl Filter for EnumFilter {
         let mut pred_vec: Vec<Box<dyn ToSql>> = Vec::new();
         let mut first = true;
 
-        let mut pred_count = self.enum_vals.len();
-        if self.match_null {
-            pred_count += 1
-        };
-        if self.match_not_null {
-            pred_count += 1
-        };
+        // For val_state, special-case NoValidator (3) and Unknown (0):
+        //   NoValidator → i.has_validator = 0
+        //   Unknown     → (i.has_validator = 1 AND iv.val_state IS NULL)
+        let is_val_state = self.enum_col_db == "iv.val_state";
+
+        // Separate out special val_state values from normal ones
+        let mut normal_vals = Vec::new();
+        let mut has_no_validator = false;
+        let mut has_unknown = false;
+
+        for &val in &self.enum_vals {
+            if is_val_state && val == 3 {
+                has_no_validator = true;
+            } else if is_val_state && val == 0 {
+                has_unknown = true;
+            } else {
+                normal_vals.push(val);
+            }
+        }
+
+        let mut pred_count = normal_vals.len();
+        if self.match_null { pred_count += 1; }
+        if self.match_not_null { pred_count += 1; }
+        if has_no_validator { pred_count += 1; }
+        if has_unknown { pred_count += 1; }
 
         if pred_count > 1 {
             pred_str.push('(');
@@ -653,7 +671,24 @@ impl Filter for EnumFilter {
             pred_str.push_str(&format!("({} IS NOT NULL)", &self.enum_col_db));
         }
 
-        for enum_val in &self.enum_vals {
+        // Special val_state predicates
+        if has_no_validator {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+            pred_str.push_str("(i.has_validator = 0)");
+        }
+
+        if has_unknown {
+            match first {
+                true => first = false,
+                false => pred_str.push_str(" OR "),
+            }
+            pred_str.push_str("(i.has_validator = 1 AND iv.val_state IS NULL)");
+        }
+
+        for enum_val in &normal_vals {
             match first {
                 true => first = false,
                 false => pred_str.push_str(" OR "),

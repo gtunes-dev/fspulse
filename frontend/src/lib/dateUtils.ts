@@ -90,7 +90,7 @@ export function formatTimeAgo(timestampSeconds: number): string {
 
 /**
  * Format timestamp as short date only: MM/DD/YYYY
- * Used for: ItemDetailSheet scan dates
+ * Used for: ItemDetail scan dates
  */
 export function formatDateShort(timestampSeconds: number): string {
   const date = new Date(timestampSeconds * 1000)
