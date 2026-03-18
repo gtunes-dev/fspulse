@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0837a35e.js";
+            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d3000b55.js"></script>
@@ -197,15 +197,15 @@
 <li><strong>Hash changed items</strong> (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed</li>
 <li><strong>Hash all items</strong>: Hash all files, including those that have been previously hashed</li>
 </ul>
-<p>If a hash is detected to have changed, a new item version is created. If the hash changed without a corresponding metadata change (modification date or size), the file’s <code>hash_state</code> is set to <strong>Suspect</strong> and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>). If metadata did change, the hash change is considered legitimate and <code>hash_state</code> remains <strong>Valid</strong>.</p>
+<p>If a hash is detected to have changed without a corresponding metadata change (modification date or size), the file’s <code>hash_state</code> is set to <strong>Suspect</strong> and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>). If metadata did change, the hash change is considered legitimate and <code>hash_state</code> remains <strong>Baseline</strong>.</p>
 <h3 id="hash-states"><a class="header" href="#hash-states">Hash States</a></h3>
 <p>Hash state tracks the integrity of a file’s content hash over time. Hash states are stored in the database as:</p>
 <ul>
-<li><strong>U</strong>: Unknown. No hash has been computed for this file</li>
-<li><strong>V</strong>: Valid. Hash exists, no unexplained changes detected</li>
+<li><strong>U</strong>: Unknown. No hash has been computed for this file version</li>
+<li><strong>B</strong>: Baseline. The first hash computed for a version, establishing the reference point</li>
 <li><strong>S</strong>: Suspect. Hash changed without a corresponding metadata change</li>
 </ul>
-<p>Unlike validation state (which reflects the latest analysis result), hash state is <strong>sticky</strong> — once a file is marked Suspect, it remains Suspect until the file is legitimately modified (metadata change detected during a subsequent scan with hashing enabled).</p>
+<p>The first hash computed for any item version is always Baseline — it establishes the reference against which future hashes are compared. If a subsequent hash differs without a metadata change, it is marked Suspect. When an item’s metadata changes, a new version is created and the next hash establishes a new Baseline.</p>
 <h3 id="finding-hash-changes"><a class="header" href="#finding-hash-changes">Finding Hash Changes</a></h3>
 <p>You can investigate hash changes through the web UI:</p>
 <ul>

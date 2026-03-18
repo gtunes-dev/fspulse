@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0837a35e.js";
+            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d3000b55.js"></script>
@@ -222,7 +222,6 @@
 <tr><td><code>is_hash</code></td><td>Boolean</td><td>Yes</td><td>Hash new or changed files</td></tr>
 <tr><td><code>hash_all</code></td><td>Boolean</td><td>No</td><td>Hash all items including unchanged</td></tr>
 <tr><td><code>is_val</code></td><td>Boolean</td><td>Yes</td><td>Validate new or changed files</td></tr>
-<tr><td><code>val_all</code></td><td>Boolean</td><td>No</td><td>Validate all items including unchanged</td></tr>
 <tr><td><code>file_count</code></td><td>Integer</td><td>Yes</td><td>Count of files found in the scan</td></tr>
 <tr><td><code>folder_count</code></td><td>Integer</td><td>Yes</td><td>Count of directories found in the scan</td></tr>
 <tr><td><code>total_size</code></td><td>Integer</td><td>Yes</td><td>Total size in bytes of all files</td></tr>
@@ -235,7 +234,7 @@
 <tr><td><code>val_invalid_count</code></td><td>Integer</td><td>No</td><td>Files with invalid validation state</td></tr>
 <tr><td><code>val_no_validator_count</code></td><td>Integer</td><td>No</td><td>Files with no available validator</td></tr>
 <tr><td><code>hash_unknown_count</code></td><td>Integer</td><td>No</td><td>Files with unknown hash state</td></tr>
-<tr><td><code>hash_valid_count</code></td><td>Integer</td><td>No</td><td>Files with valid hash state</td></tr>
+<tr><td><code>hash_baseline_count</code></td><td>Integer</td><td>No</td><td>Files with baseline hash state</td></tr>
 <tr><td><code>hash_suspect_count</code></td><td>Integer</td><td>No</td><td>Files with suspect hash state</td></tr>
 <tr><td><code>error</code></td><td>String</td><td>No</td><td>Error message if scan failed</td></tr>
 </tbody>
@@ -307,7 +306,7 @@
 <tr><td><code>val_invalid_count</code></td><td>Integer</td><td>No</td><td>Descendant files with invalid validation (folders only)</td></tr>
 <tr><td><code>val_no_validator_count</code></td><td>Integer</td><td>No</td><td>Descendant files with no validator (folders only)</td></tr>
 <tr><td><code>hash_unknown_count</code></td><td>Integer</td><td>No</td><td>Descendant files with unknown hash state (folders only)</td></tr>
-<tr><td><code>hash_valid_count</code></td><td>Integer</td><td>No</td><td>Descendant files with valid hash state (folders only)</td></tr>
+<tr><td><code>hash_baseline_count</code></td><td>Integer</td><td>No</td><td>Descendant files with baseline hash state (folders only)</td></tr>
 <tr><td><code>hash_suspect_count</code></td><td>Integer</td><td>No</td><td>Descendant files with suspect hash state (folders only)</td></tr>
 </tbody>
 </table>
