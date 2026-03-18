@@ -30,16 +30,16 @@ When configuring a scan in the web UI, you can enable hashing with these options
 - **Hash changed items** (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed
 - **Hash all items**: Hash all files, including those that have been previously hashed
 
-If a hash is detected to have changed, a new item version is created. If the hash changed without a corresponding metadata change (modification date or size), the file's `hash_state` is set to **Suspect** and an alert is generated (see [Alerts](web_ui/alerts.md)). If metadata did change, the hash change is considered legitimate and `hash_state` remains **Valid**.
+If a hash is detected to have changed without a corresponding metadata change (modification date or size), the file's `hash_state` is set to **Suspect** and an alert is generated (see [Alerts](web_ui/alerts.md)). If metadata did change, the hash change is considered legitimate and `hash_state` remains **Baseline**.
 
 ### Hash States
 
 Hash state tracks the integrity of a file's content hash over time. Hash states are stored in the database as:
-- **U**: Unknown. No hash has been computed for this file
-- **V**: Valid. Hash exists, no unexplained changes detected
+- **U**: Unknown. No hash has been computed for this file version
+- **B**: Baseline. The first hash computed for a version, establishing the reference point
 - **S**: Suspect. Hash changed without a corresponding metadata change
 
-Unlike validation state (which reflects the latest analysis result), hash state is **sticky** — once a file is marked Suspect, it remains Suspect until the file is legitimately modified (metadata change detected during a subsequent scan with hashing enabled).
+The first hash computed for any item version is always Baseline — it establishes the reference against which future hashes are compared. If a subsequent hash differs without a metadata change, it is marked Suspect. When an item's metadata changes, a new version is created and the next hash establishes a new Baseline.
 
 ### Finding Hash Changes
 

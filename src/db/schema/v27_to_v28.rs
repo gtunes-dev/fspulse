@@ -123,7 +123,7 @@ struct ScanCounts {
     folder_count: i64,
     // Integrity counts (files only)
     hash_unknown: i64,
-    hash_valid: i64,
+    hash_baseline: i64,
     hash_suspect: i64,
     val_unknown: i64,
     val_valid: i64,
@@ -199,7 +199,7 @@ fn rollback_in_progress_scans(conn: &Connection) -> Result<(), FsPulseError> {
 
 // ── Phase 1 ──────────────────────────────────────────────────────────────────
 
-const PHASE1_SQL: &str = r#"
+const P1_REBUILD_ITEMS: &str = r#"
 ALTER TABLE items RENAME TO items_old;
 
 CREATE TABLE items (
@@ -225,8 +225,9 @@ DROP TABLE items_old;
 
 CREATE INDEX idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
 CREATE INDEX idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
+"#;
 
--- Rebuild scans table without val_all column
+const P1_REBUILD_SCANS: &str = r#"
 ALTER TABLE scans RENAME TO scans_old;
 
 CREATE TABLE scans (
@@ -252,7 +253,7 @@ CREATE TABLE scans (
     val_invalid_count INTEGER DEFAULT NULL,
     val_no_validator_count INTEGER DEFAULT NULL,
     hash_unknown_count INTEGER DEFAULT NULL,
-    hash_valid_count INTEGER DEFAULT NULL,
+    hash_baseline_count INTEGER DEFAULT NULL,
     hash_suspect_count INTEGER DEFAULT NULL,
     error TEXT DEFAULT NULL,
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
@@ -265,7 +266,7 @@ INSERT INTO scans (
     file_count, folder_count, total_size, alert_count,
     add_count, modify_count, delete_count,
     val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
-    hash_unknown_count, hash_valid_count, hash_suspect_count,
+    hash_unknown_count, hash_baseline_count, hash_suspect_count,
     error
 )
 SELECT
@@ -281,17 +282,23 @@ FROM scans_old;
 DROP TABLE scans_old;
 
 CREATE INDEX IF NOT EXISTS idx_scans_root ON scans (root_id);
+"#;
 
+const P1_PREPARE_VERSIONS: &str = r#"
 ALTER TABLE item_versions RENAME TO item_versions_old;
 
 -- The rename moved indexes to item_versions_old. Drop them so we can recreate.
 DROP INDEX IF EXISTS idx_versions_item_scan;
 DROP INDEX IF EXISTS idx_versions_first_scan;
+"#;
 
+const P1_INDEX_OLD_VERSIONS: &str = r#"
 -- Recreate indexes on item_versions_old (needed for Phase 2 reads)
 CREATE INDEX idx_versions_old_item_scan  ON item_versions_old (item_id, first_scan_id DESC);
 CREATE INDEX idx_versions_old_first_scan ON item_versions_old (first_scan_id);
+"#;
 
+const P1_CREATE_NEW_TABLES: &str = r#"
 -- New item_versions with root_id + val columns
 CREATE TABLE item_versions (
     version_id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -356,11 +363,31 @@ ALTER TABLE scan_schedules RENAME COLUMN validate_mode TO is_val;
 "#;
 
 fn phase1_ddl_setup(conn: &Connection) -> Result<(), FsPulseError> {
-    migration_info("  Phase 1/4: Schema setup...");
+    migration_info("  Phase 1/4: Rebuilding tables...");
     let t = Instant::now();
     conn.execute_batch("BEGIN IMMEDIATE;")?;
+
     rollback_in_progress_scans(conn)?;
-    conn.execute_batch(PHASE1_SQL)?;
+
+    migration_info("    Rebuilding items table...");
+    conn.execute_batch(P1_REBUILD_ITEMS)?;
+    migration_info(&format!("    Items rebuilt ({:.1}s)", t.elapsed().as_secs_f64()));
+
+    migration_info("    Rebuilding scans table...");
+    conn.execute_batch(P1_REBUILD_SCANS)?;
+    migration_info(&format!("    Scans rebuilt ({:.1}s)", t.elapsed().as_secs_f64()));
+
+    migration_info("    Renaming item_versions to item_versions_old...");
+    conn.execute_batch(P1_PREPARE_VERSIONS)?;
+    migration_info(&format!("    Renamed ({:.1}s)", t.elapsed().as_secs_f64()));
+
+    migration_info("    Indexing item_versions_old...");
+    conn.execute_batch(P1_INDEX_OLD_VERSIONS)?;
+    migration_info(&format!("    Indexed ({:.1}s)", t.elapsed().as_secs_f64()));
+
+    migration_info("    Creating new tables (item_versions, hash_versions, scan_undo_log)...");
+    conn.execute_batch(P1_CREATE_NEW_TABLES)?;
+
     conn.execute_batch("COMMIT;")?;
     migration_info(&format!("  Phase 1/4 complete ({:.1}s)", t.elapsed().as_secs_f64()));
     Ok(())
@@ -997,7 +1024,7 @@ fn p3_walk_folder_counts(
     scan_counts.file_count += files;
     scan_counts.folder_count += folders;
     scan_counts.hash_unknown += hu;
-    scan_counts.hash_valid += hv;
+    scan_counts.hash_baseline += hv;
     scan_counts.hash_suspect += hs;
     scan_counts.val_unknown += vu;
     scan_counts.val_valid += vv;
@@ -1511,14 +1538,14 @@ fn phase3_recompute_folder_counts(conn: &Connection) -> Result<(), FsPulseError>
                     file_count = ?, folder_count = ?,
                     val_unknown_count = ?, val_valid_count = ?,
                     val_invalid_count = ?, val_no_validator_count = ?,
-                    hash_unknown_count = ?, hash_valid_count = ?, hash_suspect_count = ?
+                    hash_unknown_count = ?, hash_baseline_count = ?, hash_suspect_count = ?
                  WHERE scan_id = ?",
                 params![
                     sc.adds, sc.mods, sc.dels,
                     sc.file_count, sc.folder_count,
                     sc.val_unknown, sc.val_valid,
                     sc.val_invalid, sc.val_no_validator,
-                    sc.hash_unknown, sc.hash_valid, sc.hash_suspect,
+                    sc.hash_unknown, sc.hash_baseline, sc.hash_suspect,
                     scan_id,
                 ],
             )?;
@@ -1581,7 +1608,17 @@ fn run_migration(conn: &Connection) -> Result<(), FsPulseError> {
 
     // Phase 3 recomputes folder counts using the clean item_versions table.
     // HWM-based; idempotent if called multiple times.
+    // Create temporary index to speed up Phase 3 queries that join on
+    // (first_scan_id, item_id) — the permanent index has these columns reversed.
+    migration_info("    Creating temporary index for Phase 3...");
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_tmp_versions_scan_item
+             ON item_versions (first_scan_id, item_id);"
+    )?;
+
     phase3_recompute_folder_counts(conn)?;
+
+    conn.execute_batch("DROP INDEX IF EXISTS idx_tmp_versions_scan_item;")?;
 
     phase4_cleanup(conn)?;
 

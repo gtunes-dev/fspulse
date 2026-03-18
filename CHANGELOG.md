@@ -76,8 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v0.4.2] - 2026-03-04
 
 ### Added
-- **Hash state tracking**: New `hash_state` column on file item versions tracks hash integrity over time (Unknown → Valid → Suspect). Suspect state is sticky until a legitimate file modification is detected
-- **Validation and hash state counts**: Scans and folder versions now record counts of descendant files in each validation state (Unknown, Valid, Invalid, No Validator) and hash state (Unknown, Valid, Suspect)
+- **Hash state tracking**: New `hash_state` column on file item versions tracks hash integrity over time (Unknown → Baseline → Suspect). Suspect state is sticky until a legitimate file modification is detected
+- **Validation and hash state counts**: Scans and folder versions now record counts of descendant files in each validation state (Unknown, Valid, Invalid, No Validator) and hash state (Unknown, Baseline, Suspect)
 - **Browse page filter panel**: Collapsible "Filters" panel with three filter dimensions — Change Type, Hash State, and Validation State with AND logic across dimensions
 - **Integrity icons**: Files with suspect hashes or invalid validation show warning icons in tree, folder, and search views
 - **Change and integrity tooltips**: Colored change dots and integrity icons show descriptive tooltips on hover

@@ -187,7 +187,7 @@ pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_invalid_count" => ColSpec::new("val_invalid_count", "Val Invalid", false, ColType::Int, ColAlign::Right),
     "val_no_validator_count" => ColSpec::new("val_no_validator_count", "Val No Validator", false, ColType::Int, ColAlign::Right),
     "hash_unknown_count" => ColSpec::new("hash_unknown_count", "Hash Unknown", false, ColType::Int, ColAlign::Right),
-    "hash_valid_count" => ColSpec::new("hash_valid_count", "Hash Valid", false, ColType::Int, ColAlign::Right),
+    "hash_baseline_count" => ColSpec::new("hash_baseline_count", "Hash Baseline", false, ColType::Int, ColAlign::Right),
     "hash_suspect_count" => ColSpec::new("hash_suspect_count", "Hash Suspect", false, ColType::Int, ColAlign::Right),
     "error" => ColSpec::new("error", "Error", false, ColType::String, ColAlign::Left),
 };

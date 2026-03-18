@@ -7,7 +7,7 @@ use crate::{error::FsPulseError, hash::Hash};
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HashState {
-    Valid = 1,
+    Baseline = 1,
     Suspect = 2,
 }
 
@@ -18,11 +18,11 @@ impl HashState {
 
     pub fn from_i64(value: i64) -> Self {
         match value {
-            1 => HashState::Valid,
+            1 => HashState::Baseline,
             2 => HashState::Suspect,
             _ => {
-                log::warn!("Invalid HashState value in database: {}, defaulting to Valid", value);
-                HashState::Valid
+                log::warn!("Invalid HashState value in database: {}, defaulting to Baseline", value);
+                HashState::Baseline
             }
         }
     }

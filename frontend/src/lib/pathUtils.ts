@@ -12,14 +12,14 @@ export function shortenPath(path: string, maxLength: number = 30): string {
 }
 
 export type ChangeKind = 'added' | 'modified' | 'deleted' | 'unchanged'
-export type HashState = 'unknown' | 'valid' | 'suspect'
+export type HashState = 'unknown' | 'baseline' | 'suspect'
 export type ValState = 'unknown' | 'valid' | 'invalid' | 'no_validator'
 
 export function hashStateFromInt(val: number | null): HashState | null {
   if (val === null || val === undefined) return null
   switch (val) {
     case 0: return 'unknown'
-    case 1: return 'valid'
+    case 1: return 'baseline'
     case 2: return 'suspect'
     default: return 'unknown'
   }

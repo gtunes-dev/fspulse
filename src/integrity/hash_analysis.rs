@@ -37,11 +37,11 @@ pub fn persist_hash(
 
     if hash_changed {
         if analysis_item.hash_first_scan_id().is_none() {
-            // First hash ever for this version — Valid
-            hash_state = HashState::Valid;
+            // First hash ever for this version — Baseline
+            hash_state = HashState::Baseline;
         } else {
             // Hash changed with previous hash — check if metadata changed between
-            // the last hash confirmation and now to determine Valid vs Suspect
+            // the last hash confirmation and now to determine Baseline vs Suspect
             let hash_last_scan = analysis_item.hash_last_scan_id().unwrap();
             let meta_changed = Alerts::meta_changed_between(
                 conn,
@@ -51,7 +51,7 @@ pub fn persist_hash(
             )?;
 
             if meta_changed {
-                hash_state = HashState::Valid;
+                hash_state = HashState::Baseline;
             } else {
                 hash_state = HashState::Suspect;
                 Alerts::add_suspect_hash_alert(

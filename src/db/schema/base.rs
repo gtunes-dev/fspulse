@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS scans (
     val_invalid_count INTEGER DEFAULT NULL,       -- Count of files with invalid validation state
     val_no_validator_count INTEGER DEFAULT NULL,   -- Count of files with no available validator
     hash_unknown_count INTEGER DEFAULT NULL,       -- Count of files with unknown hash state
-    hash_valid_count INTEGER DEFAULT NULL,         -- Count of files with valid (unchanged) hash state
+    hash_baseline_count INTEGER DEFAULT NULL,       -- Count of files with baseline (unchanged) hash state
     hash_suspect_count INTEGER DEFAULT NULL,    -- Count of files with suspicious (changed) hash state
     error TEXT DEFAULT NULL,           -- Error message if scan failed
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS hash_versions (
     first_scan_id    INTEGER NOT NULL,
     last_scan_id     INTEGER NOT NULL,
     file_hash        BLOB NOT NULL,
-    hash_state       INTEGER NOT NULL,     -- 1=Valid, 2=Suspect
+    hash_state       INTEGER NOT NULL,     -- 1=Baseline, 2=Suspect
     PRIMARY KEY (item_id, item_version_id, first_scan_id),
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (item_version_id) REFERENCES item_versions(version_id),

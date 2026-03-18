@@ -203,7 +203,7 @@ function valStateLabel(val: number | null): string {
 
 function hashStateLabel(hash: number | null): string {
   switch (hash) {
-    case 1: return 'Valid'
+    case 1: return 'Baseline'
     case 2: return 'Suspect'
     default: return 'Unknown'
   }

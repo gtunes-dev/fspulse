@@ -551,7 +551,7 @@ impl ScansQuery {
                 "val_invalid_count" => Format::format_opt_i64(scan.val_invalid_count),
                 "val_no_validator_count" => Format::format_opt_i64(scan.val_no_validator_count),
                 "hash_unknown_count" => Format::format_opt_i64(scan.hash_unknown_count),
-                "hash_valid_count" => Format::format_opt_i64(scan.hash_valid_count),
+                "hash_baseline_count" => Format::format_opt_i64(scan.hash_baseline_count),
                 "hash_suspect_count" => Format::format_opt_i64(scan.hash_suspect_count),
                 "error" => Format::format_opt_string(&scan.error),
                 _ => {
@@ -867,7 +867,7 @@ pub struct ScansQueryRow {
     val_invalid_count: Option<i64>,
     val_no_validator_count: Option<i64>,
     hash_unknown_count: Option<i64>,
-    hash_valid_count: Option<i64>,
+    hash_baseline_count: Option<i64>,
     hash_suspect_count: Option<i64>,
     error: Option<String>,
 }
@@ -898,7 +898,7 @@ impl ScansQueryRow {
             val_invalid_count: row.get(19)?,
             val_no_validator_count: row.get(20)?,
             hash_unknown_count: row.get(21)?,
-            hash_valid_count: row.get(22)?,
+            hash_baseline_count: row.get(22)?,
             hash_suspect_count: row.get(23)?,
             error: row.get(24)?,
         })

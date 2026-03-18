@@ -361,7 +361,7 @@ access               =  {
 }
 
 // Integer columns
-int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_valid_count" | "hash_suspect_count" }
+int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_baseline_count" | "hash_suspect_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }
