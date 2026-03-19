@@ -5,11 +5,6 @@ import type {
   QueryRequest,
   ValidateFilterRequest,
   ValidateFilterResponse,
-  UpdateAlertStatusRequest,
-  UpdateAlertStatusResponse,
-  BulkUpdateAlertStatusRequest,
-  BulkUpdateAlertStatusByFilterRequest,
-  BulkUpdateAlertStatusResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -42,7 +37,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 /**
- * Fetch column metadata for a given domain (roots, scans, items, changes, alerts)
+ * Fetch column metadata for a given domain (roots, scans, items, versions)
  */
 export async function fetchMetadata(domain: string): Promise<MetadataResponse> {
   const response = await fetch(`${API_BASE}/query/${domain}/metadata`)
@@ -99,55 +94,6 @@ export async function validateFilter(
   return handleResponse<ValidateFilterResponse>(response)
 }
 
-/**
- * Update the status of an alert
- */
-export async function updateAlertStatus(
-  alertId: number,
-  request: UpdateAlertStatusRequest
-): Promise<UpdateAlertStatusResponse> {
-  const response = await fetch(`${API_BASE}/alerts/${alertId}/status`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  })
-  return handleResponse<UpdateAlertStatusResponse>(response)
-}
-
-/**
- * Bulk update the status of multiple alerts by their IDs
- */
-export async function bulkUpdateAlertStatus(
-  request: BulkUpdateAlertStatusRequest
-): Promise<BulkUpdateAlertStatusResponse> {
-  const response = await fetch(`${API_BASE}/alerts/bulk-status`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  })
-  return handleResponse<BulkUpdateAlertStatusResponse>(response)
-}
-
-/**
- * Bulk update the status of all alerts matching filter criteria
- */
-export async function bulkUpdateAlertStatusByFilter(
-  request: BulkUpdateAlertStatusByFilterRequest
-): Promise<BulkUpdateAlertStatusResponse> {
-  const response = await fetch(`${API_BASE}/alerts/bulk-status-by-filter`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  })
-  return handleResponse<BulkUpdateAlertStatusResponse>(response)
-}
-
 // ---- Integrity API ----
 
 export interface IntegrityItem {
@@ -158,9 +104,10 @@ export interface IntegrityItem {
   do_not_validate: boolean
   item_version: number
   val_state: number | null
-  val_acknowledged_at: number | null
+  val_reviewed_at: number | null
   hash_state: number | null
-  hash_acknowledged_at: number | null
+  hash_reviewed_at: number | null
+  first_scan_id: number
   first_detected_at: number
 }
 
@@ -196,20 +143,20 @@ export async function fetchIntegrity(
   return handleResponse<IntegrityListResponse>(response)
 }
 
-export async function acknowledgeIntegrity(
+export async function reviewIntegrity(
   itemId: number,
   itemVersion: number,
-  acknowledgeVal: boolean,
-  acknowledgeHash: boolean
+  reviewVal: boolean,
+  reviewHash: boolean
 ): Promise<{ success: boolean }> {
-  const response = await fetch(`${API_BASE}/integrity/acknowledge`, {
+  const response = await fetch(`${API_BASE}/integrity/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       item_id: itemId,
       item_version: itemVersion,
-      acknowledge_val: acknowledgeVal,
-      acknowledge_hash: acknowledgeHash,
+      review_val: reviewVal,
+      review_hash: reviewHash,
     }),
   })
   return handleResponse<{ success: boolean }>(response)
@@ -228,7 +175,7 @@ export async function setDoNotValidate(
 }
 
 /**
- * Delete a root and all associated data (scans, items, changes, alerts)
+ * Delete a root and all associated data (scans, items, versions)
  */
 export async function deleteRoot(rootId: number): Promise<void> {
   const response = await fetch(`${API_BASE}/roots/${rootId}`, {

@@ -4,7 +4,6 @@ import {
   Home,
   FolderTree,
   ShieldAlert,
-  TriangleAlert,
   TrendingUp,
   Clock,
   HardDrive,
@@ -35,7 +34,7 @@ import {
 import { ShutdownDialog } from './ShutdownDialog'
 
 // Pages where root_id context is meaningful
-const ROOT_SCOPED_PATHS = ['/browse', '/integrity', '/alerts', '/trends', '/schedules', '/history']
+const ROOT_SCOPED_PATHS = ['/browse', '/integrity', '/trends', '/schedules', '/history']
 
 function shortenPath(path: string, maxLength = 30): string {
   if (!path || path.length <= maxLength) return path
@@ -90,7 +89,6 @@ export function AppSidebar() {
     { icon: HardDrive, label: 'Roots', to: '/roots', end: true },
     { icon: Calendar, label: 'Schedules', to: '/schedules', end: true },
     { icon: Database, label: 'Data Explorer', to: '/explore/roots', end: false },
-    { icon: TriangleAlert, label: 'Alerts', to: '/alerts', end: true },
     { icon: Wrench, label: 'Settings', to: '/settings', end: true },
   ]
 

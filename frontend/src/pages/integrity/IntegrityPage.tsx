@@ -20,7 +20,7 @@ import {
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { RootCard } from '@/components/shared/RootCard'
 import { ItemDetail } from '@/components/shared/ItemDetail'
-import { fetchIntegrity, acknowledgeIntegrity, setDoNotValidate, fetchQuery } from '@/lib/api'
+import { fetchIntegrity, reviewIntegrity, setDoNotValidate, fetchQuery } from '@/lib/api'
 import type { IntegrityItem } from '@/lib/api'
 import { formatTimeAgo } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
@@ -42,19 +42,19 @@ const FILE_TYPE_OPTIONS: { label: string; value: string }[] = [
 ]
 
 function issueLabel(item: IntegrityItem): { hash: string; val: string } {
-  const hashAck = item.hash_acknowledged_at !== null
-  const valAck = item.val_acknowledged_at !== null
+  const hashReviewed = item.hash_reviewed_at !== null
+  const valReviewed = item.val_reviewed_at !== null
 
   return {
-    hash: item.hash_state === 2 ? (hashAck ? 'Suspect ✓' : 'Suspect') : '—',
-    val: item.val_state === 2 ? (valAck ? 'Invalid ✓' : 'Invalid') : '—',
+    hash: item.hash_state === 2 ? (hashReviewed ? 'Suspect ✓' : 'Suspect') : '—',
+    val: item.val_state === 2 ? (valReviewed ? 'Invalid ✓' : 'Invalid') : '—',
   }
 }
 
 function rowNeedsAction(item: IntegrityItem): boolean {
   return (
-    (item.hash_state === 2 && item.hash_acknowledged_at === null) ||
-    (item.val_state === 2 && item.val_acknowledged_at === null)
+    (item.hash_state === 2 && item.hash_reviewed_at === null) ||
+    (item.val_state === 2 && item.val_reviewed_at === null)
   )
 }
 
@@ -62,13 +62,14 @@ export function IntegrityPage() {
   const { lastTaskCompletedAt } = useTaskContext()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const initialRootId = searchParams.get('root_id') || ''
-  const [selectedRootId, setSelectedRootId] = useState<string>(initialRootId)
-  const [issueType, setIssueType] = useState<string>('all')
-  const [fileType, setFileType] = useState<string>('all')
-  const [status, setStatus] = useState<string>('unacknowledged')
-  const [pathSearch, setPathSearch] = useState<string>('')
-  const [currentPage, setCurrentPage] = useState(1)
+  // All filter state is initialised from URL params so deep links and
+  // browser back/forward work correctly.
+  const [selectedRootId, setSelectedRootId] = useState<string>(searchParams.get('root_id') || '')
+  const [issueType, setIssueType] = useState<string>(searchParams.get('issue_type') || 'all')
+  const [fileType, setFileType] = useState<string>(searchParams.get('file_type') || 'all')
+  const [status, setStatus] = useState<string>(searchParams.get('status') || 'unreviewed')
+  const [pathSearch, setPathSearch] = useState<string>(searchParams.get('q') || '')
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1') || 1)
 
   const [roots, setRoots] = useState<Root[]>([])
   const [items, setItems] = useState<IntegrityItem[]>([])
@@ -80,7 +81,7 @@ export function IntegrityPage() {
   const [detailItem, setDetailItem] = useState<IntegrityItem | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
-  // Pending acknowledge/dnv actions (item_id → true while in flight)
+  // Pending review/dnv actions (item_id → true while in flight)
   const [pendingAck, setPendingAck] = useState<Set<number>>(new Set())
 
   const isInitialLoad = useRef(true)
@@ -103,9 +104,7 @@ export function IntegrityPage() {
           root_path: row[1],
         }))
         setRoots(loaded)
-        if (!selectedRootId && loaded.length > 0) {
-          setSelectedRootId(String(loaded[0].root_id))
-        }
+        setSelectedRootId(prev => prev || (loaded.length > 0 ? String(loaded[0].root_id) : prev))
       })
       .catch(() => setError('Failed to load roots'))
   }, [])
@@ -153,26 +152,68 @@ export function IntegrityPage() {
   // Re-fetch when a task completes (a new scan may have found new issues)
   useEffect(() => {
     if (lastTaskCompletedAt) fetchItems()
-  }, [lastTaskCompletedAt])
+  }, [lastTaskCompletedAt, fetchItems])
 
-  const handleRootChange = (rootId: string) => {
+  // Sync all filter state into the URL so back/forward and deep links work.
+  const syncUrl = useCallback((updates: Record<string, string>) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      for (const [k, v] of Object.entries(updates)) {
+        if (v && v !== 'all' && v !== 'unreviewed' && v !== '1') {
+          next.set(k, v)
+        } else {
+          next.delete(k)
+        }
+      }
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+
+  const handleRootChange = useCallback((rootId: string) => {
     setSelectedRootId(rootId)
     setCurrentPage(1)
-    if (rootId) {
-      setSearchParams((prev) => { prev.set('root_id', rootId); return prev })
-    }
-  }
+    syncUrl({ root_id: rootId, page: '1' })
+  }, [syncUrl])
 
-  const handleAcknowledge = async (item: IntegrityItem) => {
-    const ackVal = item.val_state === 2 && item.val_acknowledged_at === null
-    const ackHash = item.hash_state === 2 && item.hash_acknowledged_at === null
+  const handleIssueTypeChange = useCallback((value: string) => {
+    setIssueType(value)
+    setCurrentPage(1)
+    syncUrl({ issue_type: value, page: '1' })
+  }, [syncUrl])
+
+  const handleFileTypeChange = useCallback((value: string) => {
+    setFileType(value)
+    setCurrentPage(1)
+    syncUrl({ file_type: value, page: '1' })
+  }, [syncUrl])
+
+  const handleStatusChange = useCallback((value: string) => {
+    setStatus(value)
+    setCurrentPage(1)
+    syncUrl({ status: value, page: '1' })
+  }, [syncUrl])
+
+  const handlePathSearchChange = useCallback((value: string) => {
+    setPathSearch(value)
+    setCurrentPage(1)
+    syncUrl({ q: value, page: '1' })
+  }, [syncUrl])
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page)
+    syncUrl({ page: String(page) })
+  }, [syncUrl])
+
+  const handleReview = async (item: IntegrityItem) => {
+    const reviewVal = item.val_state === 2 && item.val_reviewed_at === null
+    const reviewHash = item.hash_state === 2 && item.hash_reviewed_at === null
 
     setPendingAck((s) => new Set(s).add(item.item_id))
     try {
-      await acknowledgeIntegrity(item.item_id, item.item_version, ackVal, ackHash)
+      await reviewIntegrity(item.item_id, item.item_version, reviewVal, reviewHash)
       await fetchItems()
     } catch {
-      setError('Failed to acknowledge')
+      setError('Failed to review')
     } finally {
       setPendingAck((s) => { const n = new Set(s); n.delete(item.item_id); return n })
     }
@@ -195,7 +236,7 @@ export function IntegrityPage() {
 
   const actionBar = (
     <>
-      <Select value={issueType} onValueChange={setIssueType}>
+      <Select value={issueType} onValueChange={handleIssueTypeChange}>
         <SelectTrigger className="w-[180px]">
           <SelectValue placeholder="Issue type" />
         </SelectTrigger>
@@ -206,7 +247,7 @@ export function IntegrityPage() {
         </SelectContent>
       </Select>
 
-      <Select value={fileType} onValueChange={setFileType}>
+      <Select value={fileType} onValueChange={handleFileTypeChange}>
         <SelectTrigger className="w-[160px]">
           <SelectValue placeholder="File type" />
         </SelectTrigger>
@@ -219,20 +260,20 @@ export function IntegrityPage() {
         </SelectContent>
       </Select>
 
-      <Select value={status} onValueChange={setStatus}>
+      <Select value={status} onValueChange={handleStatusChange}>
         <SelectTrigger className="w-[180px]">
           <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="unacknowledged">Unacknowledged</SelectItem>
-          <SelectItem value="acknowledged">Acknowledged</SelectItem>
+          <SelectItem value="unreviewed">Unreviewed</SelectItem>
+          <SelectItem value="reviewed">Reviewed</SelectItem>
           <SelectItem value="all">All</SelectItem>
         </SelectContent>
       </Select>
 
       <SearchFilter
         value={pathSearch}
-        onChange={setPathSearch}
+        onChange={handlePathSearchChange}
         placeholder="Search path..."
       />
     </>
@@ -256,8 +297,8 @@ export function IntegrityPage() {
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {status === 'unacknowledged'
-              ? 'No unacknowledged integrity issues.'
+            {status === 'unreviewed'
+              ? 'No unreviewed integrity issues.'
               : 'No integrity issues found.'}
           </p>
         ) : (
@@ -292,12 +333,12 @@ export function IntegrityPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className={labels.hash === '—' ? 'text-muted-foreground' : item.hash_acknowledged_at ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400 font-medium'}>
+                        <span className={labels.hash === '—' ? 'text-muted-foreground' : item.hash_reviewed_at ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400 font-medium'}>
                           {labels.hash}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className={labels.val === '—' ? 'text-muted-foreground' : item.val_acknowledged_at ? 'text-muted-foreground' : 'text-rose-600 dark:text-rose-400 font-medium'}>
+                        <span className={labels.val === '—' ? 'text-muted-foreground' : item.val_reviewed_at ? 'text-muted-foreground' : 'text-rose-600 dark:text-rose-400 font-medium'}>
                           {labels.val}
                         </span>
                       </TableCell>
@@ -311,10 +352,10 @@ export function IntegrityPage() {
                               size="sm"
                               variant="outline"
                               disabled={inFlight}
-                              onClick={() => handleAcknowledge(item)}
+                              onClick={() => handleReview(item)}
                             >
                               <Check className="h-3.5 w-3.5 mr-1" />
-                              Acknowledge
+                              Review
                             </Button>
                           )}
                           {item.val_state === 2 && (
@@ -342,7 +383,7 @@ export function IntegrityPage() {
                 variant="outline"
                 size="sm"
                 disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
+                onClick={() => handlePageChange(currentPage - 1)}
               >
                 ← Prev
               </Button>
@@ -353,7 +394,7 @@ export function IntegrityPage() {
                 variant="outline"
                 size="sm"
                 disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
+                onClick={() => handlePageChange(currentPage + 1)}
               >
                 Next →
               </Button>
@@ -369,7 +410,7 @@ export function IntegrityPage() {
           itemPath={detailItem.item_path}
           itemType="F"
           isTombstone={false}
-          scanId={0}
+          scanId={detailItem.first_scan_id}
           open={detailOpen}
           onOpenChange={setDetailOpen}
         />

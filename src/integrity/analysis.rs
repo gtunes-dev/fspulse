@@ -418,23 +418,6 @@ fn persist_analysis(
             }
         }
 
-        // Alerts
-        if analysis_item.needs_val() && new_val == ValidationState::Invalid {
-            crate::alerts::Alerts::add_invalid_item_alert(
-                c,
-                scan.scan_id(),
-                analysis_item.item_id(),
-                new_val_error.as_deref().unwrap_or("Unknown error"),
-            )?;
-        }
-
-        if access_changed {
-            let should_alert = should_alert_access_denied(analysis_item.access(), new_access_value);
-            if should_alert {
-                crate::alerts::Alerts::add_access_denied_alert(c, scan.scan_id(), analysis_item.item_id())?;
-            }
-        }
-
         Ok(())
     })?;
 
@@ -458,7 +441,6 @@ pub struct AnalysisItem {
     has_validator: bool,
     // From hash_versions (NULL if never hashed for this version)
     hash_first_scan_id: Option<i64>,
-    hash_last_scan_id: Option<i64>,
     file_hash: Option<String>,
     // Computed flags
     needs_hash: bool,
@@ -503,10 +485,6 @@ impl AnalysisItem {
         self.hash_first_scan_id
     }
 
-    pub fn hash_last_scan_id(&self) -> Option<i64> {
-        self.hash_last_scan_id
-    }
-
     pub fn file_hash(&self) -> Option<&str> {
         self.file_hash.as_deref()
     }
@@ -538,10 +516,9 @@ impl AnalysisItem {
             size: row.get(6)?,
             has_validator: row.get::<_, i64>(7)? != 0,
             hash_first_scan_id: row.get(8)?,
-            hash_last_scan_id: row.get(9)?,
-            file_hash: Hash::opt_blob_to_hex(row.get(10)?),
-            needs_hash: row.get(11)?,
-            needs_val: row.get(12)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(9)?),
+            needs_hash: row.get(10)?,
+            needs_val: row.get(11)?,
         })
     }
 
@@ -640,7 +617,6 @@ impl AnalysisItem {
                 cv.size,
                 i.has_validator,
                 hv.first_scan_id,
-                hv.last_scan_id,
                 hv.file_hash,
                 CASE
                     WHEN ?1 = 0 THEN 0
@@ -745,9 +721,6 @@ fn is_interrupted(interrupt_token: &Arc<AtomicBool>) -> bool {
     interrupt_token.load(Ordering::Acquire)
 }
 
-fn should_alert_access_denied(old_access: Access, new_access: Access) -> bool {
-    new_access != Access::Ok && old_access == Access::Ok
-}
 
 #[cfg(test)]
 mod tests {
@@ -765,7 +738,6 @@ mod tests {
             size: Some(2000),
             has_validator: true,
             hash_first_scan_id: Some(456),
-            hash_last_scan_id: Some(460),
             file_hash: Some("abc123".to_string()),
             needs_hash: true,
             needs_val: false,

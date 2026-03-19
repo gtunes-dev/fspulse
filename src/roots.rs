@@ -59,7 +59,7 @@ impl Root {
         &self.root_path
     }
 
-    /// Delete a root and all associated data (scans, items, versions, alerts, schedules).
+    /// Delete a root and all associated data (scans, items, versions, schedules).
     /// This operation is performed within a transaction to ensure atomicity.
     /// Returns Ok(()) if successful, or an error if the root doesn't exist, has an active scan, or deletion fails.
     pub fn delete_root(root_id: i64) -> Result<(), FsPulseError> {
@@ -77,21 +77,14 @@ impl Root {
             c.execute("DELETE FROM scan_schedules WHERE root_id = ?", [root_id])?;
 
             // Delete in order based on foreign key constraints:
-            // 1. alerts (references scan_id and item_id)
-            // 2. hash_versions (references item_version_id from item_versions)
-            // 3. item_versions (references item_id from items, scan_id from scans)
-            // 4. items (references root_id)
-            // 5. scans (references root_id)
-            // 6. root itself
+            // 1. hash_versions (references item_version_id from item_versions)
+            // 2. item_versions (references item_id from items, scan_id from scans)
+            // 3. items (references root_id)
+            // 4. scans (references root_id)
+            // 5. root itself
             //
             // Note: scan_undo_log is always empty between scans, and we've
             // already verified no active scan is in progress above.
-
-            // Delete alerts for all scans of this root
-            c.execute(
-                "DELETE FROM alerts WHERE scan_id IN (SELECT scan_id FROM scans WHERE root_id = ?)",
-                [root_id],
-            )?;
 
             // Delete hash versions for this root
             c.execute(

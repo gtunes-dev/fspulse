@@ -11,12 +11,12 @@ use serde::Serialize;
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_baseline_count, hash_suspect_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, file_count, folder_count, total_size, new_hash_suspect_count, new_val_invalid_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_baseline_count, hash_suspect_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, file_count, folder_count, total_size, alert_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_baseline_count, hash_suspect_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, file_count, folder_count, total_size, new_hash_suspect_count, new_val_invalid_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_baseline_count, hash_suspect_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -88,7 +88,8 @@ pub struct Scan {
     file_count: Option<i64>,
     folder_count: Option<i64>,
     total_size: Option<i64>,
-    alert_count: Option<i64>,
+    new_hash_suspect_count: Option<i64>,
+    new_val_invalid_count: Option<i64>,
     add_count: Option<i64>,
     modify_count: Option<i64>,
     delete_count: Option<i64>,
@@ -215,7 +216,8 @@ impl Scan {
             file_count: None,
             folder_count: None,
             total_size: None,
-            alert_count: None,
+            new_hash_suspect_count: None,
+            new_val_invalid_count: None,
             add_count: None,
             modify_count: None,
             delete_count: None,
@@ -307,18 +309,19 @@ impl Scan {
                     file_count: row.get(10)?,
                     folder_count: row.get(11)?,
                     total_size: row.get(12)?,
-                    alert_count: row.get(13)?,
-                    add_count: row.get(14)?,
-                    modify_count: row.get(15)?,
-                    delete_count: row.get(16)?,
-                    val_unknown_count: row.get(17)?,
-                    val_valid_count: row.get(18)?,
-                    val_invalid_count: row.get(19)?,
-                    val_no_validator_count: row.get(20)?,
-                    hash_unknown_count: row.get(21)?,
-                    hash_baseline_count: row.get(22)?,
-                    hash_suspect_count: row.get(23)?,
-                    error: row.get(24)?,
+                    new_hash_suspect_count: row.get(13)?,
+                    new_val_invalid_count: row.get(14)?,
+                    add_count: row.get(15)?,
+                    modify_count: row.get(16)?,
+                    delete_count: row.get(17)?,
+                    val_unknown_count: row.get(18)?,
+                    val_valid_count: row.get(19)?,
+                    val_invalid_count: row.get(20)?,
+                    val_no_validator_count: row.get(21)?,
+                    hash_unknown_count: row.get(22)?,
+                    hash_baseline_count: row.get(23)?,
+                    hash_suspect_count: row.get(24)?,
+                    error: row.get(25)?,
                 })
             })
             .optional()?;
@@ -480,10 +483,21 @@ impl Scan {
                             )
                             .unwrap_or((0, 0));
 
-                        // Compute alert_count
-                        let alert_count: i64 = c
+                        // Compute new_hash_suspect_count: hash_versions with hash_state=2
+                        // first detected in this scan (new integrity evidence).
+                        let new_hash_suspect_count: i64 = c
                             .query_row(
-                                "SELECT COUNT(*) FROM alerts WHERE scan_id = ?",
+                                "SELECT COUNT(*) FROM hash_versions WHERE first_scan_id = ? AND hash_state = 2",
+                                [self.scan_id],
+                                |row| row.get(0),
+                            )
+                            .unwrap_or(0);
+
+                        // Compute new_val_invalid_count: item_versions with val_state=2
+                        // validated in this scan (new validation failures).
+                        let new_val_invalid_count: i64 = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM item_versions WHERE val_scan_id = ? AND val_state = 2",
                                 [self.scan_id],
                                 |row| row.get(0),
                             )
@@ -552,7 +566,8 @@ impl Scan {
                             "UPDATE scans SET
                                 file_count = ?,
                                 folder_count = ?,
-                                alert_count = ?,
+                                new_hash_suspect_count = ?,
+                                new_val_invalid_count = ?,
                                 add_count = ?,
                                 modify_count = ?,
                                 delete_count = ?,
@@ -567,7 +582,8 @@ impl Scan {
                                 ended_at = strftime('%s', 'now', 'utc')
                             WHERE scan_id = ?",
                             params![
-                                file_count, folder_count, alert_count,
+                                file_count, folder_count,
+                                new_hash_suspect_count, new_val_invalid_count,
                                 add_count, modify_count, delete_count,
                                 vu, vv, vi, vn, hu, hv, hs,
                                 ScanState::Completed.as_i64(),
@@ -580,12 +596,14 @@ impl Scan {
                         // scan with a stale undo log.
                         UndoLog::clear(c)?;
 
-                        Ok((file_count, folder_count, alert_count,
+                        Ok((file_count, folder_count,
+                            new_hash_suspect_count, new_val_invalid_count,
                             add_count, modify_count, delete_count,
                             vu, vv, vi, vn, hu, hv, hs))
                     })?;
 
-                let (file_count, folder_count, alert_count,
+                let (file_count, folder_count,
+                     new_hash_suspect_count, new_val_invalid_count,
                      add_count, modify_count, delete_count,
                      vu, vv, vi, vn, hu, hv, hs) = result;
 
@@ -593,7 +611,8 @@ impl Scan {
                 self.state = ScanState::Completed;
                 self.file_count = Some(file_count);
                 self.folder_count = Some(folder_count);
-                self.alert_count = Some(alert_count);
+                self.new_hash_suspect_count = Some(new_hash_suspect_count);
+                self.new_val_invalid_count = Some(new_val_invalid_count);
                 self.add_count = Some(add_count);
                 self.modify_count = Some(modify_count);
                 self.delete_count = Some(delete_count);
@@ -659,12 +678,6 @@ impl Scan {
         Database::immediate_transaction(conn, |c| {
             // Roll back item_versions, orphaned identities, and undo log
             UndoLog::rollback(c, scan.scan_id())?;
-
-            // Delete all alerts created during the scan
-            c.execute(
-                "DELETE FROM alerts WHERE scan_id = ?",
-                [scan.scan_id()],
-            )?;
 
             // Mark the scan as stopped (state=5) or error (state=6)
             // Null the total_size that may have been set at the end of the scanning phase

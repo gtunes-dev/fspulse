@@ -40,8 +40,6 @@ pub enum ColType {
     Path,
     ValState,
     ItemType,
-    AlertType,
-    AlertStatus,
     ScanState,
     Access,
     HashState,
@@ -95,16 +93,6 @@ impl ColType {
                 Rule::item_type_filter_EOI,
                 "Item Type",
                 "F (file), D (directory), S (symlink), U (unknown)\nComma-separated values",
-            ),
-            ColType::AlertType => ColTypeInfo::new(
-                Rule::alert_type_filter_EOI,
-                "Alert Type",
-                "Alert types: H (suspect hash), I (invalid item), A (access denied)\nComma-separated values",
-            ),
-            ColType::AlertStatus => ColTypeInfo::new(
-                Rule::alert_status_filter_EOI,
-                "Alert Status",
-                "Alert status types: D (dismissed), F (flagged), O (open)\nComma-separated values",
             ),
             ColType::ScanState => ColTypeInfo::new(
                 Rule::scan_state_filter_EOI,
@@ -178,7 +166,8 @@ pub const SCANS_QUERY_COLS: ColMap = phf_ordered_map! {
     "file_count" => ColSpec::new("file_count", "Files", true, ColType::Int, ColAlign::Right),
     "folder_count" => ColSpec::new("folder_count", "Folders", true, ColType::Int, ColAlign::Right),
     "total_size" => ColSpec::new("total_size", "Total Size", true, ColType::Int, ColAlign::Right),
-    "alert_count" => ColSpec::new("alert_count", "Alerts", true, ColType::Int, ColAlign::Right),
+    "new_hash_suspect_count" => ColSpec::new("new_hash_suspect_count", "New Hash Suspect", false, ColType::Int, ColAlign::Right),
+    "new_val_invalid_count" => ColSpec::new("new_val_invalid_count", "New Val Invalid", false, ColType::Int, ColAlign::Right),
     "add_count" => ColSpec::new("add_count", "Adds", true, ColType::Int, ColAlign::Right),
     "modify_count" => ColSpec::new("modify_count", "Modifies", true, ColType::Int, ColAlign::Right),
     "delete_count" => ColSpec::new("delete_count", "Deletes", true, ColType::Int, ColAlign::Right),
@@ -234,21 +223,6 @@ pub const VERSIONS_QUERY_COLS: ColMap = phf_ordered_map! {
     "hash_state" => ColSpec::new("hv.hash_state", "Hash State", false, ColType::HashState, ColAlign::Center),
 };
 
-pub const ALERTS_QUERY_COLS: ColMap = phf_ordered_map! {
-    "alert_id" => ColSpec::new("alert_id", "Alert Id", false, ColType::Id, ColAlign::Right),
-    "alert_type" => ColSpec::new("alert_type", "Type", true, ColType::AlertType, ColAlign::Center),
-    "alert_status" => ColSpec::new("alert_status", "Status", true, ColType::AlertStatus, ColAlign::Center),
-    "root_id" => ColSpec::new("scans.root_id", "Root Id", false, ColType::Id, ColAlign::Right),
-    "scan_id" => ColSpec::new("alerts.scan_id", "Scan Id", false, ColType::Id, ColAlign::Right),
-    "item_id" => ColSpec::new("alerts.item_id", "Item Id", false, ColType::Id, ColAlign::Right),
-    "item_path" => ColSpec::new("items.item_path", "Item Path", true, ColType::Path, ColAlign::Left),
-    "created_at" => ColSpec::new("created_at", "Created", true, ColType::Date, ColAlign::Center),
-    "updated_at" => ColSpec::new("updated_at", "Updated", false, ColType::Date, ColAlign::Center),
-    "prev_hash_scan" => ColSpec::new("prev_hash_scan", "Prev Hash Scan", false, ColType::Id, ColAlign::Right),
-    "hash_old" => ColSpec::new("hash_old", "Hash Old", false, ColType::Hash, ColAlign::Left),
-    "hash_new" => ColSpec::new("hash_new", "Hash New", false, ColType::Hash, ColAlign::Left),
-    "val_error" => ColSpec::new("alerts.val_error", "Val Error", true, ColType::String, ColAlign::Left),
-};
 
 #[derive(Debug, Copy, Clone)]
 pub struct ColSet {

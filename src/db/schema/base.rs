@@ -13,11 +13,12 @@
 //     JOIN items i ON i.item_id = cv.item_id
 //     WHERE cv.root_id = ? AND cv.last_scan_id = ?
 //
-// Pattern 2: "Versions created in a scan"
-//   Used by: change counts (add/modify/delete) at scan completion.
-//   Drive from item_versions using idx_versions_first_scan:
+// Pattern 2: "Versions created in a scan" / "Versions validated in a scan"
+//   Used by: change counts (add/modify/delete) and new_val_invalid_count at scan completion.
+//   Drive from item_versions using idx_versions_first_scan or idx_versions_val_scan:
 //     FROM item_versions iv WHERE iv.first_scan_id = ?
-//   Add iv.root_id = ? for defense-in-depth.
+//     FROM item_versions iv WHERE iv.val_scan_id = ? AND iv.val_state = ?
+//   scan_id already uniquely identifies a root; no root_id predicate needed.
 //
 // Pattern 3: "Latest hash for a version"
 //   Used by: analysis queries, scan completion hash state counts.
@@ -80,7 +81,8 @@ CREATE TABLE IF NOT EXISTS scans (
     file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
     folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
     total_size INTEGER DEFAULT NULL,   -- Total size of all items (files and directories) seen in the scan
-    alert_count INTEGER DEFAULT NULL,  -- Count of alerts created during the scan
+    new_hash_suspect_count INTEGER DEFAULT NULL, -- Count of hash_versions with hash_state=2 first seen in this scan
+    new_val_invalid_count INTEGER DEFAULT NULL,  -- Count of item_versions with val_state=2 validated in this scan
     add_count INTEGER DEFAULT NULL,    -- Count of items added in the scan
     modify_count INTEGER DEFAULT NULL, -- Count of items modified in the scan
     delete_count INTEGER DEFAULT NULL, -- Count of items deleted in the scan
@@ -158,15 +160,15 @@ CREATE TABLE IF NOT EXISTS item_versions (
     val_state       INTEGER,            -- 1=Valid, 2=Invalid
     val_error       TEXT,               -- error details when val_state=Invalid
 
-    -- User acknowledgment of integrity issues on this version.
-    -- val_acknowledged_at: set when user acknowledges an invalid validation result.
+    -- User review of integrity issues on this version.
+    -- val_reviewed_at: set when user marks this version's validation issue as reviewed.
     --   Never auto-cleared (validation is one-time per version).
-    -- hash_acknowledged_at: set when user acknowledges a suspect hash.
+    -- hash_reviewed_at: set when user marks this version's hash integrity issue as reviewed.
     --   Auto-cleared only when the FIRST Suspect hash_version is created for
     --   this item_version (new integrity evidence). NOT cleared on subsequent
     --   suspect hash observations (ongoing drift is not a new signal).
-    val_acknowledged_at  INTEGER DEFAULT NULL,
-    hash_acknowledged_at INTEGER DEFAULT NULL,
+    val_reviewed_at  INTEGER DEFAULT NULL,
+    hash_reviewed_at INTEGER DEFAULT NULL,
 
     PRIMARY KEY (item_id, item_version),
     FOREIGN KEY (item_id) REFERENCES items(item_id),
@@ -177,6 +179,7 @@ CREATE TABLE IF NOT EXISTS item_versions (
 
 CREATE INDEX IF NOT EXISTS idx_versions_first_scan ON item_versions (first_scan_id);
 CREATE INDEX IF NOT EXISTS idx_versions_root_lastscan ON item_versions (root_id, last_scan_id);
+CREATE INDEX IF NOT EXISTS idx_versions_val_scan ON item_versions (val_scan_id, val_state);
 
 -- ========================================
 -- Hash versions table (integrity observation log)
@@ -197,6 +200,8 @@ CREATE TABLE IF NOT EXISTS hash_versions (
     FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
 ) WITHOUT ROWID;
 
+CREATE INDEX IF NOT EXISTS idx_hash_versions_first_scan ON hash_versions (first_scan_id, hash_state);
+
 -- ========================================
 -- Scan undo log (transient, for rollback support)
 -- ========================================
@@ -211,27 +216,6 @@ CREATE TABLE IF NOT EXISTS scan_undo_log (
     old_last_scan_id    INTEGER NOT NULL,
     PRIMARY KEY (log_type, ref_id1, ref_id2, ref_id3)
 ) WITHOUT ROWID;
-
-CREATE TABLE IF NOT EXISTS alerts (
-  alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  alert_type INTEGER NOT NULL,              -- Alert type enum (0=SuspectHash, 1=InvalidItem)
-  alert_status INTEGER NOT NULL,            -- Alert status enum (0=Open, 1=Flagged, 2=Dismissed)
-  scan_id INTEGER NOT NULL,
-  item_id INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER DEFAULT NULL,
-
-  -- suspect hash
-  prev_hash_scan INTEGER DEFAULT NULL,
-  hash_old BLOB DEFAULT NULL,
-  hash_new BLOB DEFAULT NULL,
-
-  -- invalid file
-  val_error TEXT DEFAULT NULL
-);
-
--- Indexes to optimize queries
-CREATE INDEX IF NOT EXISTS idx_alerts_item ON alerts (item_id);
 
 -- Scan schedules table stores recurring scan configurations
 CREATE TABLE IF NOT EXISTS scan_schedules (

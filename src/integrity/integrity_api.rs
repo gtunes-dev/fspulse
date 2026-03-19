@@ -26,9 +26,10 @@ pub struct IntegrityItem {
     pub do_not_validate: bool,
     pub item_version: i64,
     pub val_state: Option<i64>,
-    pub val_acknowledged_at: Option<i64>,
+    pub val_reviewed_at: Option<i64>,
     pub hash_state: Option<i64>,
-    pub hash_acknowledged_at: Option<i64>,
+    pub hash_reviewed_at: Option<i64>,
+    pub first_scan_id: i64,
     pub first_detected_at: i64,
 }
 
@@ -74,15 +75,15 @@ fn build_where(q: &IntegrityQuery, scan_id: i64) -> (String, Vec<Value>) {
     // Acknowledgment status
     match q.status.as_str() {
         "acknowledged" => conds.push(
-            "((cv.val_state IS NULL OR cv.val_state != 2 OR cv.val_acknowledged_at IS NOT NULL) \
-              AND (hv.hash_state IS NULL OR hv.hash_state != 2 OR cv.hash_acknowledged_at IS NOT NULL))"
+            "((cv.val_state IS NULL OR cv.val_state != 2 OR cv.val_reviewed_at IS NOT NULL) \
+              AND (hv.hash_state IS NULL OR hv.hash_state != 2 OR cv.hash_reviewed_at IS NOT NULL))"
                 .to_string(),
         ),
         "all" => {}
         // "unacknowledged" is the default
         _ => conds.push(
-            "((cv.val_state = 2 AND cv.val_acknowledged_at IS NULL) \
-              OR (hv.hash_state = 2 AND cv.hash_acknowledged_at IS NULL))"
+            "((cv.val_state = 2 AND cv.val_reviewed_at IS NULL) \
+              OR (hv.hash_state = 2 AND cv.hash_reviewed_at IS NULL))"
                 .to_string(),
         ),
     }
@@ -149,9 +150,10 @@ pub fn query_integrity(q: &IntegrityQuery) -> Result<IntegrityQueryResult, FsPul
              i.do_not_validate,
              cv.item_version,
              cv.val_state,
-             cv.val_acknowledged_at,
-             cv.hash_acknowledged_at,
+             cv.val_reviewed_at,
+             cv.hash_reviewed_at,
              hv.hash_state,
+             cv.first_scan_id,
              s.started_at
          {BASE_FROM}
          WHERE {where_clause}
@@ -172,10 +174,11 @@ pub fn query_integrity(q: &IntegrityQuery) -> Result<IntegrityQueryResult, FsPul
                 do_not_validate: row.get::<_, i64>(4)? != 0,
                 item_version: row.get(5)?,
                 val_state: row.get(6)?,
-                val_acknowledged_at: row.get(7)?,
-                hash_acknowledged_at: row.get(8)?,
+                val_reviewed_at: row.get(7)?,
+                hash_reviewed_at: row.get(8)?,
                 hash_state: row.get(9)?,
-                first_detected_at: row.get(10)?,
+                first_scan_id: row.get(10)?,
+                first_detected_at: row.get(11)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -188,27 +191,27 @@ pub fn query_integrity(q: &IntegrityQuery) -> Result<IntegrityQueryResult, FsPul
     })
 }
 
-/// Set val_acknowledged_at and/or hash_acknowledged_at on an item_version.
-pub fn acknowledge_integrity(
+/// Set val_reviewed_at and/or hash_reviewed_at on an item_version.
+pub fn review_integrity(
     item_id: i64,
     item_version: i64,
-    acknowledge_val: bool,
-    acknowledge_hash: bool,
+    review_val: bool,
+    review_hash: bool,
 ) -> Result<(), FsPulseError> {
     let conn = Database::get_connection()?;
     let now = chrono::Utc::now().timestamp();
 
-    if acknowledge_val {
+    if review_val {
         conn.execute(
-            "UPDATE item_versions SET val_acknowledged_at = ?
+            "UPDATE item_versions SET val_reviewed_at = ?
              WHERE item_id = ? AND item_version = ?",
             params![now, item_id, item_version],
         )?;
     }
 
-    if acknowledge_hash {
+    if review_hash {
         conn.execute(
-            "UPDATE item_versions SET hash_acknowledged_at = ?
+            "UPDATE item_versions SET hash_reviewed_at = ?
              WHERE item_id = ? AND item_version = ?",
             params![now, item_id, item_version],
         )?;

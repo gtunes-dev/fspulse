@@ -44,9 +44,7 @@ import {
   CartesianGrid,
 } from 'recharts'
 import { Separator } from '@/components/ui/separator'
-import { fetchQuery, countQuery, updateAlertStatus } from '@/lib/api'
-import type { ColumnSpec, AlertStatusValue } from '@/lib/types'
-import { formatDateFull, formatDateTimeShort, formatScanDate } from '@/lib/dateUtils'
+import { formatDateFull, formatScanDate } from '@/lib/dateUtils'
 import { formatFileSize } from '@/lib/formatUtils'
 import { cn } from '@/lib/utils'
 
@@ -100,15 +98,6 @@ interface VersionHistoryPageResponse {
   has_more: boolean
 }
 
-interface Alert {
-  alert_id: number
-  scan_id: number
-  alert_type: string
-  alert_status: string
-  val_error: string | null
-  created: number
-}
-
 interface SizeHistoryPoint {
   scan_id: number
   started_at: number
@@ -141,29 +130,8 @@ type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 // ---- Constants ----
 
 const VERSIONS_PER_PAGE = 100
-const ALERTS_PER_PAGE = 20
-
-const ALERT_COLUMNS: ColumnSpec[] = [
-  { name: 'alert_id', visible: true, sort_direction: 'desc', position: 0 },
-  { name: 'scan_id', visible: true, sort_direction: 'none', position: 1 },
-  { name: 'alert_type', visible: true, sort_direction: 'none', position: 2 },
-  { name: 'alert_status', visible: true, sort_direction: 'none', position: 3 },
-  { name: 'val_error', visible: true, sort_direction: 'none', position: 4 },
-  { name: 'created_at', visible: true, sort_direction: 'none', position: 5 },
-]
 
 // ---- Helpers ----
-
-function parseAlertRow(row: string[]): Alert {
-  return {
-    alert_id: parseInt(row[0]),
-    scan_id: parseInt(row[1]),
-    alert_type: row[2],
-    alert_status: row[3],
-    val_error: row[4] && row[4] !== '-' ? row[4] : null,
-    created: parseInt(row[5]),
-  }
-}
 
 function accessLabel(access: number): string {
   switch (access) {
@@ -171,15 +139,6 @@ function accessLabel(access: number): string {
     case 1: return 'Meta Error'
     case 2: return 'Read Error'
     default: return `Unknown (${access})`
-  }
-}
-
-function alertTypeLabel(type: string): string {
-  switch (type) {
-    case 'H': return 'Suspect Hash'
-    case 'I': return 'Invalid Item'
-    case 'A': return 'Access Denied'
-    default: return type
   }
 }
 
@@ -307,12 +266,6 @@ export function ItemDetail({
   const [anchorScanDate, setAnchorScanDate] = useState(0)
   const [openVersions, setOpenVersions] = useState<Record<number, boolean>>({})
 
-  // Alerts state
-  const [alerts, setAlerts] = useState<Alert[]>([])
-  const [totalAlerts, setTotalAlerts] = useState(0)
-  const [loadingMoreAlerts, setLoadingMoreAlerts] = useState(false)
-  const [updatingAlertId, setUpdatingAlertId] = useState<number | null>(null)
-
   // Size history state
   const [sizeHistory, setSizeHistory] = useState<SizeHistoryPoint[]>([])
   const [timeWindow, setTimeWindow] = useState<TimeWindowPreset>('3m')
@@ -363,19 +316,6 @@ export function ItemDetail({
           setAnchorScanDate(data.anchor_scan_date)
         }
 
-        const alertCountResponse = await countQuery('alerts', {
-          columns: [{ name: 'alert_id', visible: true, sort_direction: 'none', position: 0 }],
-          filters: [{ column: 'item_id', value: itemId.toString() }],
-        })
-        setTotalAlerts(alertCountResponse.count)
-
-        const alertResponse = await fetchQuery('alerts', {
-          columns: ALERT_COLUMNS,
-          filters: [{ column: 'item_id', value: itemId.toString() }],
-          limit: ALERTS_PER_PAGE,
-          offset: 0,
-        })
-        setAlerts(alertResponse.rows.map(parseAlertRow))
       } catch (error) {
         console.error('Error loading item details:', error)
       } finally {
@@ -405,37 +345,6 @@ export function ItemDetail({
       setLoadingMoreVersions(false)
     }
   }
-
-  const loadMoreAlerts = async () => {
-    setLoadingMoreAlerts(true)
-    try {
-      const alertResponse = await fetchQuery('alerts', {
-        columns: ALERT_COLUMNS,
-        filters: [{ column: 'item_id', value: itemId.toString() }],
-        limit: ALERTS_PER_PAGE,
-        offset: alerts.length,
-      })
-      setAlerts(prev => [...prev, ...alertResponse.rows.map(parseAlertRow)])
-    } catch (error) {
-      console.error('Error loading more alerts:', error)
-    } finally {
-      setLoadingMoreAlerts(false)
-    }
-  }
-
-  const handleAlertStatusUpdate = useCallback(async (alertId: number, newStatus: AlertStatusValue) => {
-    setUpdatingAlertId(alertId)
-    try {
-      await updateAlertStatus(alertId, { status: newStatus })
-      setAlerts(prev => prev.map(a =>
-        a.alert_id === alertId ? { ...a, alert_status: newStatus } : a
-      ))
-    } catch (error) {
-      console.error('Error updating alert status:', error)
-    } finally {
-      setUpdatingAlertId(null)
-    }
-  }, [])
 
   // ---- Size history ----
 
@@ -1090,66 +999,6 @@ export function ItemDetail({
     )
   }
 
-  const renderAlerts = () => {
-    const trailing = totalAlerts > 0 ? (
-      <p className="text-xs text-muted-foreground">{alerts.length}/{totalAlerts}</p>
-    ) : undefined
-
-    return (
-      <Section mode={mode} title="Alerts" trailing={trailing}>
-        {totalAlerts === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">No alerts</p>
-        ) : (
-          <>
-            <div className={isSheet ? 'border border-border rounded-lg divide-y divide-border' : 'divide-y divide-border'}>
-              {alerts.map((alert) => (
-                <div key={alert.alert_id} className={`${isPanel ? 'px-2 py-2' : 'p-4'} space-y-1.5`}>
-                  <p className="text-xs">
-                    <span className="font-mono font-semibold">#{alert.alert_id}</span>
-                    {' '}<span className="text-muted-foreground">{formatDateTimeShort(alert.created)}</span>
-                  </p>
-                  <div className="text-xs space-y-1 pl-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground">Status :</span>
-                      <Select
-                        value={alert.alert_status}
-                        onValueChange={(value) => handleAlertStatusUpdate(alert.alert_id, value as AlertStatusValue)}
-                        disabled={updatingAlertId === alert.alert_id}
-                      >
-                        <SelectTrigger className={`${isPanel ? 'h-6 w-[100px]' : 'h-7 w-[110px]'} text-xs border-dashed`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="O">Open</SelectItem>
-                          <SelectItem value="F">Flagged</SelectItem>
-                          <SelectItem value="D">Dismissed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">Type :</span>
-                      <span>{alertTypeLabel(alert.alert_type)}</span>
-                      {alert.alert_type === 'H' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                      {alert.alert_type === 'I' && <CircleX className="h-3.5 w-3.5 text-rose-500" />}
-                    </div>
-                    {alert.val_error && <p className="text-muted-foreground">{alert.val_error}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {totalAlerts > alerts.length && (
-              <div className={`${isPanel ? 'mt-2' : 'mt-4'} flex justify-center`}>
-                <Button variant="outline" size={isPanel ? 'sm' : 'default'} onClick={loadMoreAlerts} disabled={loadingMoreAlerts}>
-                  {loadingMoreAlerts ? 'Loading...' : `Load ${Math.min(ALERTS_PER_PAGE, totalAlerts - alerts.length)} more`}
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </Section>
-    )
-  }
-
   // ---- Main render ----
 
   const content = (
@@ -1164,7 +1013,6 @@ export function ItemDetail({
           {renderCurrentState()}
           {renderSizeHistory()}
           {renderVersionHistory()}
-          {renderAlerts()}
         </div>
       )}
     </>

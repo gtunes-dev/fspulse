@@ -14,7 +14,7 @@ pub struct IntegrityQueryParams {
     pub issue_type: Option<String>,
     /// Comma-separated lowercase extensions, e.g. "pdf,jpg"
     pub extensions: Option<String>,
-    /// "unacknowledged" (default), "acknowledged", "all"
+    /// "unreviewed" (default), "reviewed", "all"
     pub status: Option<String>,
     /// Substring match on item_path
     pub path_search: Option<String>,
@@ -31,9 +31,10 @@ pub struct IntegrityItemResponse {
     pub do_not_validate: bool,
     pub item_version: i64,
     pub val_state: Option<i64>,
-    pub val_acknowledged_at: Option<i64>,
+    pub val_reviewed_at: Option<i64>,
     pub hash_state: Option<i64>,
-    pub hash_acknowledged_at: Option<i64>,
+    pub hash_reviewed_at: Option<i64>,
+    pub first_scan_id: i64,
     pub first_detected_at: i64,
 }
 
@@ -59,9 +60,9 @@ pub async fn get_integrity(
         .map(|s| s.trim().to_ascii_lowercase())
         .collect();
 
-    let limit = params.limit.unwrap_or(50).min(200).max(1);
+    let limit = params.limit.unwrap_or(50).clamp(1, 200);
     let offset = params.offset.unwrap_or(0).max(0);
-    let status = params.status.unwrap_or_else(|| "unacknowledged".to_string());
+    let status = params.status.unwrap_or_else(|| "unreviewed".to_string());
 
     let query = IntegrityQuery {
         root_id: params.root_id,
@@ -86,9 +87,10 @@ pub async fn get_integrity(
                     do_not_validate: item.do_not_validate,
                     item_version: item.item_version,
                     val_state: item.val_state,
-                    val_acknowledged_at: item.val_acknowledged_at,
+                    val_reviewed_at: item.val_reviewed_at,
                     hash_state: item.hash_state,
-                    hash_acknowledged_at: item.hash_acknowledged_at,
+                    hash_reviewed_at: item.hash_reviewed_at,
+                    first_scan_id: item.first_scan_id,
                     first_detected_at: item.first_detected_at,
                 })
                 .collect();
@@ -110,52 +112,52 @@ pub async fn get_integrity(
     }
 }
 
-/// Request body for POST /api/integrity/acknowledge
+/// Request body for POST /api/integrity/review
 #[derive(Debug, Deserialize)]
-pub struct AcknowledgeRequest {
+pub struct ReviewRequest {
     pub item_id: i64,
     pub item_version: i64,
-    /// Acknowledge a validation issue on this item_version
-    pub acknowledge_val: Option<bool>,
-    /// Acknowledge a hash integrity issue on this item_version
-    pub acknowledge_hash: Option<bool>,
+    /// Mark a validation issue on this item_version as reviewed
+    pub review_val: Option<bool>,
+    /// Mark a hash integrity issue on this item_version as reviewed
+    pub review_hash: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct AcknowledgeResponse {
+pub struct ReviewResponse {
     pub success: bool,
 }
 
-/// POST /api/integrity/acknowledge
-/// Sets val_acknowledged_at and/or hash_acknowledged_at on the specified item_version.
-pub async fn acknowledge(
-    Json(req): Json<AcknowledgeRequest>,
-) -> Result<Json<AcknowledgeResponse>, (StatusCode, String)> {
-    let acknowledge_val = req.acknowledge_val.unwrap_or(false);
-    let acknowledge_hash = req.acknowledge_hash.unwrap_or(false);
+/// POST /api/integrity/review
+/// Sets val_reviewed_at and/or hash_reviewed_at on the specified item_version.
+pub async fn review(
+    Json(req): Json<ReviewRequest>,
+) -> Result<Json<ReviewResponse>, (StatusCode, String)> {
+    let review_val = req.review_val.unwrap_or(false);
+    let review_hash = req.review_hash.unwrap_or(false);
 
-    if !acknowledge_val && !acknowledge_hash {
+    if !review_val && !review_hash {
         return Err((
             StatusCode::BAD_REQUEST,
-            "At least one of acknowledge_val or acknowledge_hash must be true".to_string(),
+            "At least one of review_val or review_hash must be true".to_string(),
         ));
     }
 
-    match integrity_api::acknowledge_integrity(
+    match integrity_api::review_integrity(
         req.item_id,
         req.item_version,
-        acknowledge_val,
-        acknowledge_hash,
+        review_val,
+        review_hash,
     ) {
-        Ok(()) => Ok(Json(AcknowledgeResponse { success: true })),
+        Ok(()) => Ok(Json(ReviewResponse { success: true })),
         Err(e) => {
             error!(
-                "Failed to acknowledge integrity for item {}, version {}: {}",
+                "Failed to review integrity for item {}, version {}: {}",
                 req.item_id, req.item_version, e
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to acknowledge: {}", e),
+                format!("Failed to review: {}", e),
             ))
         }
     }
