@@ -445,7 +445,7 @@ fn persist_analysis(
 /// indicating which analysis operations are needed.
 ///
 /// Hash state is sourced from `hash_versions` via LEFT JOIN.
-/// Val state is sourced from `item_versions` columns (val_state, val_error).
+/// Val state is sourced from `item_versions` columns.
 #[derive(Clone, Debug)]
 pub struct AnalysisItem {
     item_id: i64,
@@ -460,11 +460,6 @@ pub struct AnalysisItem {
     hash_first_scan_id: Option<i64>,
     hash_last_scan_id: Option<i64>,
     file_hash: Option<String>,
-    // From item_versions (NULL if not yet validated)
-    #[allow(dead_code)]
-    val_state: Option<i64>,
-    #[allow(dead_code)]
-    val_error: Option<String>,
     // Computed flags
     needs_hash: bool,
     needs_val: bool,
@@ -516,16 +511,6 @@ impl AnalysisItem {
         self.file_hash.as_deref()
     }
 
-    #[allow(dead_code)]
-    pub fn val_state(&self) -> Option<ValidationState> {
-        self.val_state.map(ValidationState::from_i64)
-    }
-
-    #[allow(dead_code)]
-    pub fn val_error(&self) -> Option<&str> {
-        self.val_error.as_deref()
-    }
-
     pub fn needs_hash(&self) -> bool {
         self.needs_hash
     }
@@ -555,10 +540,8 @@ impl AnalysisItem {
             hash_first_scan_id: row.get(8)?,
             hash_last_scan_id: row.get(9)?,
             file_hash: Hash::opt_blob_to_hex(row.get(10)?),
-            val_state: row.get(11)?,
-            val_error: row.get(12)?,
-            needs_hash: row.get(13)?,
-            needs_val: row.get(14)?,
+            needs_hash: row.get(11)?,
+            needs_val: row.get(12)?,
         })
     }
 
@@ -586,6 +569,7 @@ impl AnalysisItem {
                     CASE
                         WHEN ?4 = 0 THEN 0
                         WHEN i.has_validator = 0 THEN 0
+                        WHEN i.do_not_validate = 1 THEN 0
                         WHEN cv.val_state IS NULL THEN 1
                         ELSE 0
                     END AS needs_val
@@ -658,8 +642,6 @@ impl AnalysisItem {
                 hv.first_scan_id,
                 hv.last_scan_id,
                 hv.file_hash,
-                cv.val_state,
-                cv.val_error,
                 CASE
                     WHEN ?1 = 0 THEN 0
                     WHEN ?2 = 1 AND (hv.file_hash IS NULL OR hv.last_scan_id < ?3) THEN 1
@@ -669,6 +651,7 @@ impl AnalysisItem {
                 CASE
                     WHEN ?4 = 0 THEN 0
                     WHEN i.has_validator = 0 THEN 0
+                    WHEN i.do_not_validate = 1 THEN 0
                     WHEN cv.val_state IS NULL THEN 1
                     ELSE 0
                 END AS needs_val
@@ -695,7 +678,7 @@ impl AnalysisItem {
                         OR (?2 = 1 AND hv.last_scan_id < ?3)
                     ))
                     OR
-                    (?4 = 1 AND i.has_validator = 1 AND cv.val_state IS NULL)
+                    (?4 = 1 AND i.has_validator = 1 AND i.do_not_validate = 0 AND cv.val_state IS NULL)
                 )
             ORDER BY cv.item_id ASC
             LIMIT {limit}"
@@ -784,8 +767,6 @@ mod tests {
             hash_first_scan_id: Some(456),
             hash_last_scan_id: Some(460),
             file_hash: Some("abc123".to_string()),
-            val_state: Some(ValidationState::Valid.as_i64()),
-            val_error: Some("test error".to_string()),
             needs_hash: true,
             needs_val: false,
         };
@@ -796,7 +777,6 @@ mod tests {
         assert!(analysis_item.has_validator());
         assert_eq!(analysis_item.hash_first_scan_id(), Some(456));
         assert_eq!(analysis_item.file_hash(), Some("abc123"));
-        assert_eq!(analysis_item.val_error(), Some("test error"));
         assert!(analysis_item.needs_hash());
         assert!(!analysis_item.needs_val());
     }
