@@ -10,6 +10,7 @@ import { SchedulesPage } from './pages/schedules/SchedulesPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 import { ExplorePage } from './pages/explore/ExplorePage'
 import { AlertsPage } from './pages/alerts/AlertsPage'
+import { IntegrityPage } from './pages/integrity/IntegrityPage'
 import { TrendsPage } from './pages/trends/TrendsPage'
 import { BrowsePage } from './pages/browse/BrowsePage'
 import { HistoryPage } from './pages/history/HistoryPage'
@@ -65,6 +66,7 @@ function AppContent() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/explore/*" element={<ExplorePage />} />
           <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/integrity" element={<IntegrityPage />} />
           <Route path="/trends/*" element={null} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/browse" element={null} />

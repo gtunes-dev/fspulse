@@ -148,6 +148,85 @@ export async function bulkUpdateAlertStatusByFilter(
   return handleResponse<BulkUpdateAlertStatusResponse>(response)
 }
 
+// ---- Integrity API ----
+
+export interface IntegrityItem {
+  item_id: number
+  item_path: string
+  item_name: string
+  file_extension: string | null
+  do_not_validate: boolean
+  item_version: number
+  val_state: number | null
+  val_acknowledged_at: number | null
+  hash_state: number | null
+  hash_acknowledged_at: number | null
+  first_detected_at: number
+}
+
+export interface IntegrityListResponse {
+  items: IntegrityItem[]
+  total: number
+  offset: number
+  limit: number
+}
+
+export interface IntegrityQueryParams {
+  root_id: number
+  issue_type?: string
+  extensions?: string
+  status?: string
+  path_search?: string
+  offset?: number
+  limit?: number
+}
+
+export async function fetchIntegrity(
+  params: IntegrityQueryParams
+): Promise<IntegrityListResponse> {
+  const qs = new URLSearchParams()
+  qs.set('root_id', String(params.root_id))
+  if (params.issue_type) qs.set('issue_type', params.issue_type)
+  if (params.extensions) qs.set('extensions', params.extensions)
+  if (params.status) qs.set('status', params.status)
+  if (params.path_search) qs.set('path_search', params.path_search)
+  if (params.offset !== undefined) qs.set('offset', String(params.offset))
+  if (params.limit !== undefined) qs.set('limit', String(params.limit))
+  const response = await fetch(`${API_BASE}/integrity?${qs}`)
+  return handleResponse<IntegrityListResponse>(response)
+}
+
+export async function acknowledgeIntegrity(
+  itemId: number,
+  itemVersion: number,
+  acknowledgeVal: boolean,
+  acknowledgeHash: boolean
+): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE}/integrity/acknowledge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      item_id: itemId,
+      item_version: itemVersion,
+      acknowledge_val: acknowledgeVal,
+      acknowledge_hash: acknowledgeHash,
+    }),
+  })
+  return handleResponse<{ success: boolean }>(response)
+}
+
+export async function setDoNotValidate(
+  itemId: number,
+  doNotValidate: boolean
+): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE}/integrity/do-not-validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, do_not_validate: doNotValidate }),
+  })
+  return handleResponse<{ success: boolean }>(response)
+}
+
 /**
  * Delete a root and all associated data (scans, items, changes, alerts)
  */
