@@ -1144,10 +1144,15 @@ impl Scanner {
             Access::Ok
         };
 
-        let has_validator = item_type == ItemType::File && validator::has_validator_for_path(path_str);
+        let file_extension = if item_type == ItemType::File {
+            validator::file_extension_for_path(path_str)
+        } else {
+            None
+        };
+        let has_validator = file_extension.as_deref().is_some_and(validator::has_validator_extension);
 
         ctx.execute_batch_write(|c| {
-            let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type, has_validator)?;
+            let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type, has_validator, file_extension.as_deref())?;
             let counts = if item_type == ItemType::Directory { Some((0, 0, 0, 0)) } else { None };
             ItemVersion::insert_initial(c, item_id, ctx.scan.root_id(), ctx.scan.scan_id(), new_access, mod_date, size, counts)?;
 

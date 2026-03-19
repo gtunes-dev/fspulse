@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '28');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '29');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -103,18 +103,21 @@ CREATE INDEX IF NOT EXISTS idx_scans_root ON scans (root_id);
 -- ========================================
 -- Lightweight stable identity for each item across all its versions.
 CREATE TABLE IF NOT EXISTS items (
-    item_id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_id        INTEGER NOT NULL,
-    item_path      TEXT NOT NULL,
-    item_name      TEXT NOT NULL,
-    item_type      INTEGER NOT NULL,
+    item_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    root_id         INTEGER NOT NULL,
+    item_path       TEXT NOT NULL,
+    item_name       TEXT NOT NULL,
+    file_extension  TEXT,                          -- lowercase extension (e.g. 'pdf', 'jpg'), NULL for folders/extensionless
+    item_type       INTEGER NOT NULL,
     has_validator   INTEGER NOT NULL DEFAULT 0,   -- 1 if a structural validator exists for this file type
+    do_not_validate INTEGER NOT NULL DEFAULT 0,   -- 1 if user has opted this item out of validation
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     UNIQUE (root_id, item_path, item_type)
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
 CREATE INDEX IF NOT EXISTS idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
+CREATE INDEX IF NOT EXISTS idx_items_root_ext ON items (root_id, file_extension);
 
 -- ========================================
 -- Temporal item versions table
@@ -154,6 +157,16 @@ CREATE TABLE IF NOT EXISTS item_versions (
     val_scan_id     INTEGER,            -- scan in which this version was validated
     val_state       INTEGER,            -- 1=Valid, 2=Invalid
     val_error       TEXT,               -- error details when val_state=Invalid
+
+    -- User acknowledgment of integrity issues on this version.
+    -- val_acknowledged_at: set when user acknowledges an invalid validation result.
+    --   Never auto-cleared (validation is one-time per version).
+    -- hash_acknowledged_at: set when user acknowledges a suspect hash.
+    --   Auto-cleared only when the FIRST Suspect hash_version is created for
+    --   this item_version (new integrity evidence). NOT cleared on subsequent
+    --   suspect hash observations (ongoing drift is not a new signal).
+    val_acknowledged_at  INTEGER DEFAULT NULL,
+    hash_acknowledged_at INTEGER DEFAULT NULL,
 
     PRIMARY KEY (item_id, item_version),
     FOREIGN KEY (item_id) REFERENCES items(item_id),
