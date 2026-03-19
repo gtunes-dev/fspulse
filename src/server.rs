@@ -215,6 +215,13 @@ impl WebServer {
             .route("/api/query/{domain}/count", post(api::query::count_query))
             .route("/api/query/{domain}/fetch", post(api::query::fetch_query))
             .route("/api/validate-filter", post(api::query::validate_filter))
+            // Integrity endpoints
+            .route("/api/integrity", get(api::integrity::get_integrity))
+            .route("/api/integrity/acknowledge", post(api::integrity::acknowledge))
+            .route(
+                "/api/integrity/do-not-validate",
+                post(api::integrity::set_do_not_validate),
+            )
             // Alert endpoints
             .route(
                 "/api/alerts/{alert_id}/status",
