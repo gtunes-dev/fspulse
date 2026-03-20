@@ -216,12 +216,11 @@ impl WebServer {
             .route("/api/query/{domain}/fetch", post(api::query::fetch_query))
             .route("/api/validate-filter", post(api::query::validate_filter))
             // Integrity endpoints
-            .route("/api/integrity", get(api::integrity::get_integrity))
+            .route("/api/integrity/count", get(api::integrity::count))
+            .route("/api/integrity/items", get(api::integrity::get_items))
+            .route("/api/integrity/items/{item_id}/versions", get(api::integrity::get_versions))
             .route("/api/integrity/review", post(api::integrity::review))
-            .route(
-                "/api/integrity/do-not-validate",
-                post(api::integrity::set_do_not_validate),
-            )
+            .route("/api/integrity/do-not-validate", post(api::integrity::set_do_not_validate))
             // Task scheduling endpoints
             .route("/api/tasks/scan", post(api::tasks::schedule_scan))
             .route("/api/tasks/compact-database", post(api::tasks::schedule_compact_database))

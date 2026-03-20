@@ -58,7 +58,7 @@ interface ItemDetailProps {
   itemPath: string
   itemType: 'F' | 'D' | 'S' | 'O'
   isTombstone: boolean
-  scanId: number
+  scanId: number | null
   // Panel mode
   onClose?: () => void
   // Sheet mode
@@ -306,7 +306,7 @@ export function ItemDetail({
       setLoadingVersions(true)
       try {
         const versionResponse = await fetch(
-          `/api/items/${itemId}/version-history?scan_id=${scanId}&limit=${VERSIONS_PER_PAGE}`
+          `/api/items/${itemId}/version-history?${scanId !== null ? `scan_id=${scanId}&` : ''}limit=${VERSIONS_PER_PAGE}`
         )
         if (versionResponse.ok) {
           const data: VersionHistoryInitResponse = await versionResponse.json()
@@ -381,7 +381,7 @@ export function ItemDetail({
     try {
       const fromDateStr = format(fromDate, 'yyyy-MM-dd')
       const response = await fetch(
-        `/api/items/${itemId}/size-history?from_date=${fromDateStr}&to_scan_id=${scanId}`
+        `/api/items/${itemId}/size-history?from_date=${fromDateStr}${scanId !== null ? `&to_scan_id=${scanId}` : ''}`
       )
       if (response.ok) {
         const data = await response.json()
@@ -411,7 +411,7 @@ export function ItemDetail({
       }
       setLoadingChildrenCounts(true)
       try {
-        const response = await fetch(`/api/items/${itemId}/children-counts?scan_id=${scanId}`)
+        const response = await fetch(`/api/items/${itemId}/children-counts${scanId !== null ? `?scan_id=${scanId}` : ''}`)
         if (response.ok) {
           setChildrenCounts(await response.json())
         } else {
@@ -435,7 +435,7 @@ export function ItemDetail({
     }
     async function loadIntegrity() {
       try {
-        const response = await fetch(`/api/items/${itemId}/integrity-state?scan_id=${scanId}`)
+        const response = await fetch(`/api/items/${itemId}/integrity-state${scanId !== null ? `?scan_id=${scanId}` : ''}`)
         if (response.ok) {
           setIntegrityState(await response.json())
         } else {
@@ -582,7 +582,7 @@ export function ItemDetail({
     if (!anchorVersion) return null
 
     const currentStateTitle = isSheet
-      ? scanRef(scanId, anchorScanDate)
+      ? (scanId !== null ? scanRef(scanId, anchorScanDate) : null)
       : null
 
     const gridCols = isPanel ? 'grid-cols-2 gap-2' : 'grid-cols-2 gap-4'
@@ -715,7 +715,7 @@ export function ItemDetail({
     return (
       <div className="px-3 py-3">
         <div className="mb-2">
-          <p className="text-sm font-semibold">{scanRef(scanId, anchorScanDate)}</p>
+          {scanId !== null && <p className="text-sm font-semibold">{scanRef(scanId, anchorScanDate)}</p>}
         </div>
         {stateContent}
       </div>

@@ -96,58 +96,86 @@ export async function validateFilter(
 
 // ---- Integrity API ----
 
-export interface IntegrityItem {
-  item_id: number
-  item_path: string
-  item_name: string
-  file_extension: string | null
-  do_not_validate: boolean
-  item_version: number
-  val_state: number | null
-  val_reviewed_at: number | null
-  hash_state: number | null
-  hash_reviewed_at: number | null
-  first_scan_id: number
-  first_detected_at: number
-}
-
-export interface IntegrityListResponse {
-  items: IntegrityItem[]
-  total: number
-  offset: number
-  limit: number
-}
-
-export interface IntegrityQueryParams {
+/** Shared filter params for integrity endpoints. */
+export interface IntegrityFilterParams {
   root_id: number
   issue_type?: string
   extensions?: string
   status?: string
   path_search?: string
-  offset?: number
-  limit?: number
 }
 
-export async function fetchIntegrity(
-  params: IntegrityQueryParams
-): Promise<IntegrityListResponse> {
+/** Item summary row from GET /api/integrity/items. */
+export interface IntegrityItemSummary {
+  item_id: number
+  item_path: string
+  item_name: string
+  file_extension: string | null
+  do_not_validate: boolean
+  hash_unreviewed: number
+  hash_reviewed: number
+  val_unreviewed: number
+  val_reviewed: number
+}
+
+/** Version detail from GET /api/integrity/items/:id/versions. */
+export interface IntegrityVersion {
+  item_version: number
+  hash_suspicious_count: number
+  val_error: string | null
+  val_reviewed_at: number | null
+  hash_reviewed_at: number | null
+}
+
+export interface IntegrityVersionsResponse {
+  versions: IntegrityVersion[]
+  total: number
+}
+
+function filterToQs(params: IntegrityFilterParams): URLSearchParams {
   const qs = new URLSearchParams()
   qs.set('root_id', String(params.root_id))
   if (params.issue_type) qs.set('issue_type', params.issue_type)
   if (params.extensions) qs.set('extensions', params.extensions)
   if (params.status) qs.set('status', params.status)
   if (params.path_search) qs.set('path_search', params.path_search)
-  if (params.offset !== undefined) qs.set('offset', String(params.offset))
-  if (params.limit !== undefined) qs.set('limit', String(params.limit))
-  const response = await fetch(`${API_BASE}/integrity?${qs}`)
-  return handleResponse<IntegrityListResponse>(response)
+  return qs
 }
 
-export async function reviewIntegrity(
+export async function fetchIntegrityCount(
+  params: IntegrityFilterParams
+): Promise<{ total: number }> {
+  const qs = filterToQs(params)
+  const response = await fetch(`${API_BASE}/integrity/count?${qs}`)
+  return handleResponse<{ total: number }>(response)
+}
+
+export async function fetchIntegrityItems(
+  params: IntegrityFilterParams & { offset?: number; limit?: number }
+): Promise<IntegrityItemSummary[]> {
+  const qs = filterToQs(params)
+  if (params.offset !== undefined) qs.set('offset', String(params.offset))
+  if (params.limit !== undefined) qs.set('limit', String(params.limit))
+  const response = await fetch(`${API_BASE}/integrity/items?${qs}`)
+  return handleResponse<IntegrityItemSummary[]>(response)
+}
+
+export async function fetchIntegrityVersions(
   itemId: number,
-  itemVersion: number,
-  reviewVal: boolean,
-  reviewHash: boolean
+  params: IntegrityFilterParams,
+  limit?: number,
+): Promise<IntegrityVersionsResponse> {
+  const qs = filterToQs(params)
+  if (limit !== undefined) qs.set('limit', String(limit))
+  const response = await fetch(`${API_BASE}/integrity/items/${itemId}/versions?${qs}`)
+  return handleResponse<IntegrityVersionsResponse>(response)
+}
+
+export async function setIntegrityReviewed(
+  itemId: number,
+  itemVersion: number | null,
+  setVal: boolean | null,
+  setHash: boolean | null,
 ): Promise<{ success: boolean }> {
   const response = await fetch(`${API_BASE}/integrity/review`, {
     method: 'POST',
@@ -155,8 +183,8 @@ export async function reviewIntegrity(
     body: JSON.stringify({
       item_id: itemId,
       item_version: itemVersion,
-      review_val: reviewVal,
-      review_hash: reviewHash,
+      set_val: setVal,
+      set_hash: setHash,
     }),
   })
   return handleResponse<{ success: boolean }>(response)
