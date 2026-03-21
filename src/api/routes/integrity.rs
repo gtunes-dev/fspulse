@@ -140,7 +140,11 @@ pub struct VersionsParams {
 #[derive(Debug, Serialize)]
 pub struct VersionResponse {
     pub item_version: i64,
+    pub scan_id: i64,
+    pub scan_started_at: i64,
+    pub hash_version_count: i64,
     pub hash_suspicious_count: i64,
+    pub val_state: i64,
     pub val_error: Option<String>,
     pub val_reviewed_at: Option<i64>,
     pub hash_reviewed_at: Option<i64>,
@@ -166,7 +170,11 @@ pub async fn get_versions(
                 .into_iter()
                 .map(|v| VersionResponse {
                     item_version: v.item_version,
+                    scan_id: v.scan_id,
+                    scan_started_at: v.scan_started_at,
+                    hash_version_count: v.hash_version_count,
                     hash_suspicious_count: v.hash_suspicious_count,
+                    val_state: v.val_state,
                     val_error: v.val_error,
                     val_reviewed_at: v.val_reviewed_at,
                     hash_reviewed_at: v.hash_reviewed_at,

@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   ChevronDown,
-  Circle,
+  CircleHelp,
   CircleCheckBig,
   ShieldCheck,
   ShieldOff,
 } from 'lucide-react'
+import { ReviewToggle } from '@/components/shared/ReviewToggle'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -42,6 +43,7 @@ import type {
   IntegrityVersionsResponse,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { formatTimeAgo } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 
 interface Root {
@@ -72,17 +74,17 @@ function parentFolder(path: string): string {
 function CountPair({ unreviewed, reviewed }: { unreviewed: number; reviewed: number }) {
   if (unreviewed + reviewed === 0) {
     return (
-      <span className="inline-grid grid-cols-[14px_1rem_14px_1rem] items-center">
+      <span className="inline-grid grid-cols-[18px_1rem_18px_1rem] items-center">
         <span className="col-span-4 text-center text-muted-foreground">—</span>
       </span>
     )
   }
 
   return (
-    <span className="inline-grid grid-cols-[14px_1rem_14px_1rem] items-center gap-x-0.5">
-      <Circle className="h-3.5 w-3.5 text-muted-foreground" />
+    <span className="inline-grid grid-cols-[18px_1rem_18px_1rem] items-center gap-x-0.5">
+      <CircleHelp className="h-[18px] w-[18px] text-muted-foreground" />
       <span className="tabular-nums">{unreviewed}</span>
-      <CircleCheckBig className="h-3.5 w-3.5 text-muted-foreground" />
+      <CircleCheckBig className="h-[18px] w-[18px] text-muted-foreground" />
       <span className="tabular-nums text-muted-foreground">{reviewed}</span>
     </span>
   )
@@ -393,8 +395,8 @@ export function IntegrityPage() {
           <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="unreviewed">Not Reviewed</SelectItem>
-          <SelectItem value="reviewed">Reviewed</SelectItem>
+          <SelectItem value="unreviewed"><span className="inline-flex items-center gap-1.5"><CircleHelp className="h-3.5 w-3.5" />Not Reviewed</span></SelectItem>
+          <SelectItem value="reviewed"><span className="inline-flex items-center gap-1.5"><CircleCheckBig className="h-3.5 w-3.5" />Reviewed</span></SelectItem>
           <SelectItem value="all">All</SelectItem>
         </SelectContent>
       </Select>
@@ -453,10 +455,9 @@ export function IntegrityPage() {
                   const hasUnreviewed = item.hash_unreviewed + item.val_unreviewed > 0
 
                   return (
-                    <>
+                    <Fragment key={item.item_id}>
                       {/* Summary row */}
                       <TableRow
-                        key={item.item_id}
                         className="cursor-pointer"
                         onClick={() => toggleExpanded(item.item_id)}
                       >
@@ -469,8 +470,8 @@ export function IntegrityPage() {
                         <TableCell className="px-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             {item.do_not_validate
-                              ? <ShieldOff className="h-3.5 w-3.5 text-amber-500" />
-                              : <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                              ? <ShieldOff className="h-5 w-5 text-amber-500" />
+                              : <ShieldCheck className="h-5 w-5 text-muted-foreground" />
                             }
                             <Switch
                               size="sm"
@@ -519,95 +520,95 @@ export function IntegrityPage() {
                       {/* Expanded version rows */}
                       {isExpanded && (
                         <TableRow key={`${item.item_id}-detail`} className="hover:bg-transparent">
-                          <TableCell colSpan={6} className="p-0 pl-10 pr-4 pb-3">
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="text-muted-foreground border-b border-border/50">
-                                  <th className="text-left font-medium py-1 w-[70px]">Version</th>
-                                  <th className="text-left font-medium py-1">Hashes</th>
-                                  <th className="text-left font-medium py-1">Validation</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {versionData.versions.map((ver) => {
-                                  const hashInFlight = pendingOps.has(`${item.item_id}-${ver.item_version}-hash`)
-                                  const valInFlight = pendingOps.has(`${item.item_id}-${ver.item_version}-val`)
-                                  const hasHash = ver.hash_suspicious_count > 0
-                                  const hasVal = ver.val_error !== null
-                                  const hashReviewed = ver.hash_reviewed_at !== null
-                                  const valReviewed = ver.val_reviewed_at !== null
+                          <TableCell colSpan={6} className="p-0 pl-10 pr-4 py-3">
+                            <div className="border border-border rounded-lg overflow-hidden text-xs">
+                              <Table className="table-fixed">
+                                <TableHeader className="bg-muted">
+                                  <TableRow>
+                                    <TableHead className="w-[70px] text-xs py-1.5 h-auto">Version</TableHead>
+                                    <TableHead className="w-[60px] text-xs py-1.5 h-auto">Scan</TableHead>
+                                    <TableHead className="w-[70px] text-xs py-1.5 h-auto">When</TableHead>
+                                    <TableHead className="w-[220px] text-xs py-1.5 h-auto">Hashes</TableHead>
+                                    <TableHead className="text-xs py-1.5 h-auto">Validation</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {versionData.versions.map((ver) => {
+                                    const hashInFlight = pendingOps.has(`${item.item_id}-${ver.item_version}-hash`)
+                                    const valInFlight = pendingOps.has(`${item.item_id}-${ver.item_version}-val`)
+                                    const hasSuspicious = ver.hash_suspicious_count > 0
+                                    const hasValError = ver.val_state === 2
+                                    const hashReviewed = ver.hash_reviewed_at !== null
+                                    const valReviewed = ver.val_reviewed_at !== null
 
-                                  return (
-                                    <tr key={ver.item_version} className="border-b border-border/30 last:border-0">
-                                      <td className="py-1 text-muted-foreground">v{ver.item_version}</td>
-                                      <td className="py-1">
-                                        {hasHash ? (
-                                          <span className="inline-flex items-center gap-1.5">
-                                            <span className={cn(
-                                              "inline-flex items-center rounded-md border px-1.5 py-1 gap-1",
-                                              hashInFlight && "opacity-50 pointer-events-none",
-                                            )}>
-                                              <button
-                                                className={cn("transition-colors", !hashReviewed ? "text-foreground" : "text-muted-foreground/30 hover:text-muted-foreground")}
-                                                title="Not reviewed"
-                                                onClick={() => hashReviewed && handleToggleHashReview(item.item_id, ver)}
-                                              >
-                                                <Circle className="h-4 w-4" />
-                                              </button>
-                                              <button
-                                                className={cn("transition-colors", hashReviewed ? "text-foreground" : "text-muted-foreground/30 hover:text-muted-foreground")}
-                                                title="Reviewed"
-                                                onClick={() => !hashReviewed && handleToggleHashReview(item.item_id, ver)}
-                                              >
-                                                <CircleCheckBig className="h-4 w-4" />
-                                              </button>
-                                            </span>
-                                            <span>{ver.hash_suspicious_count} suspicious</span>
-                                          </span>
-                                        ) : null}
-                                      </td>
-                                      <td className="py-1">
-                                        {hasVal ? (
-                                          <span className="inline-flex items-center gap-1.5 max-w-full">
-                                            <span className={cn(
-                                              "inline-flex items-center rounded-md border px-1.5 py-1 gap-1 shrink-0",
-                                              valInFlight && "opacity-50 pointer-events-none",
-                                            )}>
-                                              <button
-                                                className={cn("transition-colors", !valReviewed ? "text-foreground" : "text-muted-foreground/30 hover:text-muted-foreground")}
-                                                title="Not reviewed"
-                                                onClick={() => valReviewed && handleToggleValReview(item.item_id, ver)}
-                                              >
-                                                <Circle className="h-4 w-4" />
-                                              </button>
-                                              <button
-                                                className={cn("transition-colors", valReviewed ? "text-foreground" : "text-muted-foreground/30 hover:text-muted-foreground")}
-                                                title="Reviewed"
-                                                onClick={() => !valReviewed && handleToggleValReview(item.item_id, ver)}
-                                              >
-                                                <CircleCheckBig className="h-4 w-4" />
-                                              </button>
-                                            </span>
-                                            <span className="truncate" title={ver.val_error!}>{ver.val_error}</span>
-                                          </span>
-                                        ) : null}
-                                      </td>
-                                    </tr>
-                                  )
-                                })}
-                                {versionData.total > versionData.versions.length && (
-                                  <tr>
-                                    <td colSpan={3} className="py-1.5 text-muted-foreground">
-                                      Showing {versionData.versions.length} of {versionData.total} versions
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
+                                    // Hash cell: suspicious > 0 → show count + toggle
+                                    //            hash_version_count > 0 but no suspicious → "Baseline"
+                                    //            hash_version_count === 0 → "Not hashed"
+                                    let hashContent: React.ReactNode
+                                    if (hasSuspicious) {
+                                      hashContent = (
+                                        <span className="inline-flex items-center gap-1.5">
+                                          <ReviewToggle
+                                            size="sm"
+                                            reviewed={hashReviewed}
+                                            onToggle={() => handleToggleHashReview(item.item_id, ver)}
+                                            disabled={hashInFlight}
+                                          />
+                                          <span>{ver.hash_suspicious_count} suspicious</span>
+                                        </span>
+                                      )
+                                    } else if (ver.hash_version_count > 0) {
+                                      hashContent = <span className="text-muted-foreground">Baseline</span>
+                                    } else {
+                                      hashContent = <span className="text-muted-foreground">Not hashed</span>
+                                    }
+
+                                    // Val cell: val_state === 2 → show error + toggle
+                                    //           val_state === 1 → "Valid"
+                                    //           val_state === 0 → "Not validated"
+                                    let valContent: React.ReactNode
+                                    if (hasValError) {
+                                      valContent = (
+                                        <span className="inline-flex items-center gap-1.5 max-w-full">
+                                          <ReviewToggle
+                                            size="sm"
+                                            reviewed={valReviewed}
+                                            onToggle={() => handleToggleValReview(item.item_id, ver)}
+                                            disabled={valInFlight}
+                                          />
+                                          <span className="truncate" title={ver.val_error!}>{ver.val_error}</span>
+                                        </span>
+                                      )
+                                    } else if (ver.val_state === 1) {
+                                      valContent = <span className="text-muted-foreground">Valid</span>
+                                    } else {
+                                      valContent = <span className="text-muted-foreground">Not validated</span>
+                                    }
+
+                                    return (
+                                      <TableRow key={ver.item_version}>
+                                        <TableCell className="py-1.5 text-muted-foreground text-xs">v{ver.item_version}</TableCell>
+                                        <TableCell className="py-1.5 text-muted-foreground text-xs">{ver.scan_id}</TableCell>
+                                        <TableCell className="py-1.5 text-muted-foreground text-xs">{formatTimeAgo(ver.scan_started_at)}</TableCell>
+                                        <TableCell className="py-1.5 text-xs">{hashContent}</TableCell>
+                                        <TableCell className="py-1.5 text-xs">{valContent}</TableCell>
+                                      </TableRow>
+                                    )
+                                  })}
+                                  {versionData.total > versionData.versions.length && (
+                                    <TableRow>
+                                      <TableCell colSpan={5} className="py-1.5 text-muted-foreground text-xs">
+                                        Showing {versionData.versions.length} of {versionData.total} versions
+                                      </TableCell>
+                                    </TableRow>
+                                  )}
+                                </TableBody>
+                              </Table>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
               </TableBody>
