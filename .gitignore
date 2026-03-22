@@ -5,6 +5,7 @@
 !.vscode/tasks.json
 !.vscode/extensions.json
 .DS_Store
+__pycache__/
 /docs/book/
 
 # Frontend
