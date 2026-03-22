@@ -113,6 +113,7 @@ export function IntegrityPage() {
 
   const [detailItemId, setDetailItemId] = useState<number | null>(null)
   const [detailItemPath, setDetailItemPath] = useState<string>('')
+  const [detailScanId, setDetailScanId] = useState<number | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
   // Expanded items: item_id -> version data
@@ -356,6 +357,7 @@ export function IntegrityPage() {
   const openDetail = (item: IntegrityItemSummary) => {
     setDetailItemId(item.item_id)
     setDetailItemPath(item.item_path)
+    setDetailScanId(item.latest_scan_id)
     setDetailOpen(true)
   }
 
@@ -527,7 +529,7 @@ export function IntegrityPage() {
                                   <TableRow>
                                     <TableHead className="w-[70px] text-xs py-1.5 h-auto">Version</TableHead>
                                     <TableHead className="w-[60px] text-xs py-1.5 h-auto">Scan</TableHead>
-                                    <TableHead className="w-[70px] text-xs py-1.5 h-auto">When</TableHead>
+                                    <TableHead className="w-[90px] text-xs py-1.5 h-auto">When</TableHead>
                                     <TableHead className="w-[220px] text-xs py-1.5 h-auto">Hashes</TableHead>
                                     <TableHead className="text-xs py-1.5 h-auto">Validation</TableHead>
                                   </TableRow>
@@ -589,7 +591,7 @@ export function IntegrityPage() {
                                       <TableRow key={ver.item_version}>
                                         <TableCell className="py-1.5 text-muted-foreground text-xs">v{ver.item_version}</TableCell>
                                         <TableCell className="py-1.5 text-muted-foreground text-xs">{ver.scan_id}</TableCell>
-                                        <TableCell className="py-1.5 text-muted-foreground text-xs">{formatTimeAgo(ver.scan_started_at)}</TableCell>
+                                        <TableCell className="py-1.5 text-muted-foreground text-xs whitespace-nowrap">{formatTimeAgo(ver.scan_started_at)}</TableCell>
                                         <TableCell className="py-1.5 text-xs">{hashContent}</TableCell>
                                         <TableCell className="py-1.5 text-xs">{valContent}</TableCell>
                                       </TableRow>
@@ -647,9 +649,10 @@ export function IntegrityPage() {
           itemPath={detailItemPath}
           itemType="F"
           isTombstone={false}
-          scanId={null}
+          scanId={detailScanId}
           open={detailOpen}
           onOpenChange={setDetailOpen}
+          onItemChanged={refreshItemsList}
         />
       )}
     </div>

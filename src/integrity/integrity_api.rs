@@ -130,6 +130,7 @@ pub struct IntegrityItemSummary {
     pub item_name: String,
     pub file_extension: Option<String>,
     pub do_not_validate: bool,
+    pub latest_scan_id: i64,
     pub hash_unreviewed: i64,
     pub hash_reviewed: i64,
     pub val_unreviewed: i64,
@@ -181,7 +182,8 @@ pub fn query_items(
              {hash_unrev_expr} AS hash_unreviewed,
              {hash_rev_expr} AS hash_reviewed,
              {val_unrev_expr} AS val_unreviewed,
-             {val_rev_expr} AS val_reviewed
+             {val_rev_expr} AS val_reviewed,
+             MAX(iv.last_scan_id) AS latest_scan_id
          FROM item_versions iv
          JOIN items i ON i.item_id = iv.item_id
          WHERE {where_clause}
@@ -204,6 +206,7 @@ pub fn query_items(
                 hash_reviewed: row.get(6)?,
                 val_unreviewed: row.get(7)?,
                 val_reviewed: row.get(8)?,
+                latest_scan_id: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

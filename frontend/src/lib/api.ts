@@ -116,6 +116,7 @@ export interface IntegrityItemSummary {
   hash_reviewed: number
   val_unreviewed: number
   val_reviewed: number
+  latest_scan_id: number
 }
 
 /** Version detail from GET /api/integrity/items/:id/versions. */

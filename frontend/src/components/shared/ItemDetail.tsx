@@ -3,7 +3,10 @@ import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
   File, Folder, FileX, FolderX, Calendar as CalendarIcon,
   HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
+  ShieldCheck, ShieldOff,
 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { setDoNotValidate } from '@/lib/api'
 import {
   Sheet,
   SheetContent,
@@ -64,6 +67,8 @@ interface ItemDetailProps {
   // Sheet mode
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  // Callback when item data is mutated (e.g. do_not_validate toggled)
+  onItemChanged?: () => void
 }
 
 interface VersionEntry {
@@ -111,6 +116,7 @@ interface ChildrenCounts {
 
 interface IntegrityState {
   has_validator: boolean
+  do_not_validate: boolean
   hash_state: number | null
   file_hash: string | null
   val_state: number | null
@@ -256,6 +262,7 @@ export function ItemDetail({
   onClose,
   open,
   onOpenChange,
+  onItemChanged,
 }: ItemDetailProps) {
   // Version history state
   const [versions, setVersions] = useState<VersionEntry[]>([])
@@ -428,25 +435,37 @@ export function ItemDetail({
 
   // ---- Integrity state (files only) ----
 
-  useEffect(() => {
+  const loadIntegrity = useCallback(async () => {
     if (!shouldLoad || itemType !== 'F') {
       setIntegrityState(null)
       return
     }
-    async function loadIntegrity() {
-      try {
-        const response = await fetch(`/api/items/${itemId}/integrity-state${scanId !== null ? `?scan_id=${scanId}` : ''}`)
-        if (response.ok) {
-          setIntegrityState(await response.json())
-        } else {
-          setIntegrityState(null)
-        }
-      } catch {
+    try {
+      const response = await fetch(`/api/items/${itemId}/integrity-state${scanId !== null ? `?scan_id=${scanId}` : ''}`)
+      if (response.ok) {
+        setIntegrityState(await response.json())
+      } else {
         setIntegrityState(null)
       }
+    } catch {
+      setIntegrityState(null)
     }
-    loadIntegrity()
   }, [shouldLoad, itemId, itemType, scanId])
+
+  useEffect(() => {
+    loadIntegrity()
+  }, [loadIntegrity])
+
+  const handleToggleValidation = async () => {
+    if (!integrityState) return
+    try {
+      await setDoNotValidate(itemId, !integrityState.do_not_validate)
+      await loadIntegrity()
+      onItemChanged?.()
+    } catch {
+      // silently fail — integrity state will be stale but not broken
+    }
+  }
 
   // Spacing constants
   const sp = {
@@ -609,7 +628,23 @@ export function ItemDetail({
         {/* Integrity (files only) */}
         {itemType === 'F' && integrityState && (
           <div className={`${isPanel ? 'mt-2 pt-2' : 'mt-4 pt-4'} border-t`}>
-            <p className={`text-sm font-semibold mb-2`}>Integrity</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold">Integrity</p>
+              <div className="flex items-center gap-1.5">
+                {integrityState.do_not_validate
+                  ? <ShieldOff className="h-4 w-4 text-amber-500" />
+                  : <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                }
+                <Switch
+                  size="sm"
+                  checked={!integrityState.do_not_validate}
+                  onCheckedChange={handleToggleValidation}
+                  className="data-[state=checked]:bg-muted-foreground"
+                  aria-label={integrityState.do_not_validate ? 'Validation disabled' : 'Validation enabled'}
+                />
+                <span className="text-xs text-muted-foreground">Validation</span>
+              </div>
+            </div>
             <div className={`text-sm ${isPanel ? 'pl-2 space-y-2' : 'pl-2 space-y-3'}`}>
               <div>
                 <div className="flex items-center gap-1">

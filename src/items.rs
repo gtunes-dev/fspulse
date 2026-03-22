@@ -533,6 +533,7 @@ pub fn get_children_counts(
 #[derive(Clone, Debug, Serialize)]
 pub struct IntegrityState {
     pub has_validator: bool,
+    pub do_not_validate: bool,
     pub hash_state: Option<i64>,
     pub file_hash: Option<Vec<u8>>,
     pub val_state: Option<i64>,
@@ -548,14 +549,17 @@ pub fn get_integrity_state(
 ) -> Result<IntegrityState, FsPulseError> {
     let conn = Database::get_connection()?;
 
-    let has_validator: bool = conn
+    let (has_validator, do_not_validate) = conn
         .query_row(
-            "SELECT has_validator FROM items WHERE item_id = ?",
+            "SELECT has_validator, do_not_validate FROM items WHERE item_id = ?",
             params![item_id],
-            |row| row.get::<_, i64>(0).map(|v| v != 0),
+            |row| Ok((
+                row.get::<_, i64>(0).map(|v| v != 0).unwrap_or(false),
+                row.get::<_, i64>(1).map(|v| v != 0).unwrap_or(false),
+            )),
         )
         .optional()?
-        .unwrap_or(false);
+        .unwrap_or((false, false));
 
     // Get the version active at this scan point
     let version_row: Option<(i64, Option<i64>, Option<String>)> = conn
@@ -575,6 +579,7 @@ pub fn get_integrity_state(
         Some((iv, vs, ve)) => (iv, vs, ve),
         None => return Ok(IntegrityState {
             has_validator,
+            do_not_validate,
             hash_state: None,
             file_hash: None,
             val_state: None,
@@ -597,6 +602,7 @@ pub fn get_integrity_state(
 
     Ok(IntegrityState {
         has_validator,
+        do_not_validate,
         hash_state: hash_row.as_ref().map(|(s, _)| *s),
         file_hash: hash_row.and_then(|(_, h)| h),
         val_state,

@@ -89,6 +89,7 @@ pub struct ItemSummaryResponse {
     pub hash_reviewed: i64,
     pub val_unreviewed: i64,
     pub val_reviewed: i64,
+    pub latest_scan_id: i64,
 }
 
 pub async fn get_items(
@@ -112,6 +113,7 @@ pub async fn get_items(
                     hash_reviewed: i.hash_reviewed,
                     val_unreviewed: i.val_unreviewed,
                     val_reviewed: i.val_reviewed,
+                    latest_scan_id: i.latest_scan_id,
                 })
                 .collect();
             Ok(Json(rows))

@@ -44,6 +44,7 @@ pub struct IntegrityStateParams {
 #[derive(Debug, Serialize)]
 pub struct IntegrityStateResponse {
     pub has_validator: bool,
+    pub do_not_validate: bool,
     pub hash_state: Option<i64>,
     pub file_hash: Option<String>,
     pub val_state: Option<i64>,
@@ -59,6 +60,7 @@ pub async fn get_integrity_state(
     match items::get_integrity_state(item_id, params.scan_id) {
         Ok(state) => Ok(Json(IntegrityStateResponse {
             has_validator: state.has_validator,
+            do_not_validate: state.do_not_validate,
             hash_state: state.hash_state,
             file_hash: state.file_hash.map(hex::encode),
             val_state: state.val_state,
