@@ -283,8 +283,12 @@ impl WebServer {
                 get(api::items::get_item_size_history),
             )
             .route(
-                "/api/items/{item_id}/version-history",
-                get(api::items::get_version_history),
+                "/api/items/{item_id}/version-count",
+                get(api::items::get_version_count),
+            )
+            .route(
+                "/api/items/{item_id}/versions",
+                get(api::items::get_versions),
             )
             .route(
                 "/api/items/{item_id}/children-counts",

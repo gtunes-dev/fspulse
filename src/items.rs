@@ -282,6 +282,7 @@ pub struct VersionHistoryEntry {
     pub last_scan_id: i64,
     pub first_scan_date: i64,
     pub last_scan_date: i64,
+    pub is_added: bool,
     pub is_deleted: bool,
     pub access: i64,
     pub mod_date: Option<i64>,
@@ -307,42 +308,27 @@ impl VersionHistoryEntry {
             last_scan_id: row.get(2)?,
             first_scan_date: row.get(3)?,
             last_scan_date: row.get(4)?,
-            is_deleted: row.get(5)?,
-            access: row.get(6)?,
-            mod_date: row.get(7)?,
-            size: row.get(8)?,
-            add_count: row.get(9)?,
-            modify_count: row.get(10)?,
-            delete_count: row.get(11)?,
-            unchanged_count: row.get(12)?,
-            hash_state: row.get(13)?,
-            file_hash: row.get(14)?,
-            val_state: row.get(15)?,
-            val_error: row.get(16)?,
+            is_added: row.get(5)?,
+            is_deleted: row.get(6)?,
+            access: row.get(7)?,
+            mod_date: row.get(8)?,
+            size: row.get(9)?,
+            add_count: row.get(10)?,
+            modify_count: row.get(11)?,
+            delete_count: row.get(12)?,
+            unchanged_count: row.get(13)?,
+            hash_state: row.get(14)?,
+            file_hash: row.get(15)?,
+            val_state: row.get(16)?,
+            val_error: row.get(17)?,
         })
     }
-}
-
-/// Response for initial version history load
-#[derive(Debug, Serialize)]
-pub struct VersionHistoryResponse {
-    pub versions: Vec<VersionHistoryEntry>,
-    pub has_more: bool,
-    pub total_count: i64,
-    pub anchor_scan_date: i64,
-}
-
-/// Response for version history pagination
-#[derive(Debug, Serialize)]
-pub struct VersionHistoryPageResponse {
-    pub versions: Vec<VersionHistoryEntry>,
-    pub has_more: bool,
 }
 
 const VERSION_HISTORY_COLUMNS: &str =
     "v.item_version, v.first_scan_id, v.last_scan_id, \
      s1.started_at, s2.started_at, \
-     v.is_deleted, v.access, \
+     v.is_added, v.is_deleted, v.access, \
      v.mod_date, v.size, \
      v.add_count, v.modify_count, v.delete_count, v.unchanged_count, \
      hv.hash_state, hv.file_hash, v.val_state, v.val_error";
@@ -357,101 +343,43 @@ const VERSION_HISTORY_JOINS: &str =
            WHERE hv2.item_id = v.item_id AND hv2.item_version = v.item_version \
        )";
 
-/// Get version history for an item, starting from a specific scan going backwards.
-/// Returns up to `limit` versions ordered by first_scan_id DESC.
-pub fn get_version_history_init(
-    item_id: i64,
-    scan_id: i64,
-    limit: i64,
-) -> Result<VersionHistoryResponse, FsPulseError> {
+/// Count total versions for an item.
+pub fn count_versions(item_id: i64) -> Result<i64, FsPulseError> {
     let conn = Database::get_connection()?;
-
-    // Get total count
-    let total_count: i64 = conn.query_row(
+    let total: i64 = conn.query_row(
         "SELECT COUNT(*) FROM item_versions WHERE item_id = ?",
         params![item_id],
         |row| row.get(0),
     )?;
-
-    if total_count == 0 {
-        return Ok(VersionHistoryResponse {
-            versions: Vec::new(),
-            has_more: false,
-            total_count: 0,
-            anchor_scan_date: 0,
-        });
-    }
-
-    // Get the anchor scan date
-    let anchor_scan_date: i64 = conn.query_row(
-        "SELECT started_at FROM scans WHERE scan_id = ?",
-        params![scan_id],
-        |row| row.get(0),
-    )?;
-
-    // Load versions from the anchor scan going backwards, joining scans for dates
-    let sql = format!(
-        "SELECT {} \
-         FROM item_versions v \
-         {} \
-         WHERE v.item_id = ? AND v.first_scan_id <= ? \
-         ORDER BY v.item_version DESC \
-         LIMIT ?",
-        VERSION_HISTORY_COLUMNS, VERSION_HISTORY_JOINS
-    );
-
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(
-        params![item_id, scan_id, limit + 1],
-        VersionHistoryEntry::from_row,
-    )?;
-
-    let mut versions: Vec<VersionHistoryEntry> = rows.collect::<Result<Vec<_>, _>>()?;
-    let has_more = versions.len() as i64 > limit;
-    if has_more {
-        versions.truncate(limit as usize);
-    }
-
-    Ok(VersionHistoryResponse {
-        versions,
-        has_more,
-        total_count,
-        anchor_scan_date,
-    })
+    Ok(total)
 }
 
-/// Get more version history (older versions) using cursor-based pagination.
-/// Returns versions with first_scan_id strictly less than `before_scan_id`.
-pub fn get_version_history_page(
+/// Get a page of version history for an item.
+/// `order` is "asc" or "desc" (by item_version).
+pub fn get_versions(
     item_id: i64,
-    before_scan_id: i64,
+    offset: i64,
     limit: i64,
-) -> Result<VersionHistoryPageResponse, FsPulseError> {
+    order: &str,
+) -> Result<Vec<VersionHistoryEntry>, FsPulseError> {
     let conn = Database::get_connection()?;
+    let order_clause = if order == "asc" { "ASC" } else { "DESC" };
 
     let sql = format!(
-        "SELECT {} \
+        "SELECT {VERSION_HISTORY_COLUMNS} \
          FROM item_versions v \
-         {} \
-         WHERE v.item_id = ? AND v.first_scan_id < ? \
-         ORDER BY v.item_version DESC \
-         LIMIT ?",
-        VERSION_HISTORY_COLUMNS, VERSION_HISTORY_JOINS
+         {VERSION_HISTORY_JOINS} \
+         WHERE v.item_id = ? \
+         ORDER BY v.item_version {order_clause} \
+         LIMIT ? OFFSET ?"
     );
 
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(
-        params![item_id, before_scan_id, limit + 1],
-        VersionHistoryEntry::from_row,
-    )?;
+    let versions = stmt
+        .query_map(params![item_id, limit, offset], VersionHistoryEntry::from_row)?
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let mut versions: Vec<VersionHistoryEntry> = rows.collect::<Result<Vec<_>, _>>()?;
-    let has_more = versions.len() as i64 > limit;
-    if has_more {
-        versions.truncate(limit as usize);
-    }
-
-    Ok(VersionHistoryPageResponse { versions, has_more })
+    Ok(versions)
 }
 
 /// Get counts of children (files and directories) for a directory item using temporal model.

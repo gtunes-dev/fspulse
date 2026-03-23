@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
   File, Folder, FileX, FolderX, Calendar as CalendarIcon,
-  HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
+  HardDrive, AlertTriangle, CircleX, ChevronDown, ChevronLeft, ChevronRight, Eye, X,
   ShieldCheck, ShieldOff,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
@@ -77,6 +77,7 @@ interface VersionEntry {
   last_scan_id: number
   first_scan_date: number
   last_scan_date: number
+  is_added: boolean
   is_deleted: boolean
   access: number
   mod_date: number | null
@@ -91,16 +92,8 @@ interface VersionEntry {
   val_error: string | null
 }
 
-interface VersionHistoryInitResponse {
+interface VersionPageResponse {
   versions: VersionEntry[]
-  has_more: boolean
-  total_count: number
-  anchor_scan_date: number
-}
-
-interface VersionHistoryPageResponse {
-  versions: VersionEntry[]
-  has_more: boolean
 }
 
 interface SizeHistoryPoint {
@@ -125,17 +118,11 @@ interface IntegrityState {
 
 type ChangeKind = 'initial' | 'modified' | 'deleted' | 'restored'
 
-interface VersionChange {
-  version: VersionEntry
-  kind: ChangeKind
-  prev: VersionEntry | null
-}
-
 type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
 // ---- Constants ----
 
-const VERSIONS_PER_PAGE = 100
+const VERSIONS_PER_PAGE = 10
 
 // ---- Helpers ----
 
@@ -174,22 +161,12 @@ function hashStateLabel(hash: number | null): string {
   }
 }
 
-function classifyChange(version: VersionEntry, prev: VersionEntry | null): ChangeKind {
-  if (!prev) return 'initial'
-  if (version.is_deleted && !prev.is_deleted) return 'deleted'
-  if (!version.is_deleted && prev.is_deleted) return 'restored'
+function classifyChange(v: VersionEntry, prev: VersionEntry | null): ChangeKind {
+  if (v.is_added) return 'initial'
+  if (v.is_deleted && prev && !prev.is_deleted) return 'deleted'
+  if (v.is_deleted) return 'deleted'
+  if (!v.is_deleted && prev?.is_deleted) return 'restored'
   return 'modified'
-}
-
-function buildChanges(versions: VersionEntry[]): VersionChange[] {
-  if (versions.length === 0) return []
-  const changes: VersionChange[] = []
-  for (let i = 0; i < versions.length; i++) {
-    const version = versions[i]
-    const prev = i + 1 < versions.length ? versions[i + 1] : null
-    changes.push({ version, kind: classifyChange(version, prev), prev })
-  }
-  return changes
 }
 
 function hasNonZeroFolderCounts(v: VersionEntry): boolean {
@@ -217,6 +194,18 @@ function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
     v.access !== prev.access ||
     hasFolderCountChanges(v, prev)
   )
+}
+
+/** Build a predecessor map from a set of versions (which may include one extra for boundary). */
+function buildPredecessorMap(allVersions: VersionEntry[]): Map<number, VersionEntry> {
+  const byVersion = new Map<number, VersionEntry>()
+  for (const v of allVersions) byVersion.set(v.item_version, v)
+  const predecessors = new Map<number, VersionEntry>()
+  for (const v of allVersions) {
+    const prev = byVersion.get(v.item_version - 1)
+    if (prev) predecessors.set(v.item_version, prev)
+  }
+  return predecessors
 }
 
 // ---- Layout helpers ----
@@ -266,11 +255,11 @@ export function ItemDetail({
 }: ItemDetailProps) {
   // Version history state
   const [versions, setVersions] = useState<VersionEntry[]>([])
+  const [predecessors, setPredecessors] = useState<Map<number, VersionEntry>>(new Map())
   const [loadingVersions, setLoadingVersions] = useState(false)
-  const [loadingMoreVersions, setLoadingMoreVersions] = useState(false)
-  const [hasMoreVersions, setHasMoreVersions] = useState(false)
   const [totalVersionCount, setTotalVersionCount] = useState(0)
-  const [anchorScanDate, setAnchorScanDate] = useState(0)
+  const [versionPage, setVersionPage] = useState(0)
+  const [versionOrder, setVersionOrder] = useState<'desc' | 'asc'>('desc')
   const [openVersions, setOpenVersions] = useState<Record<number, boolean>>({})
 
   // Size history state
@@ -289,11 +278,12 @@ export function ItemDetail({
   const [hashExpanded, setHashExpanded] = useState(false)
   const [pathExpanded, setPathExpanded] = useState(false)
 
+  // Selected version for the detail view — stored as full data, not derived from page
+  const [selectedVersion, setSelectedVersion] = useState<VersionEntry | null>(null)
+
   const isPanel = mode === 'panel'
   const isSheet = mode === 'sheet'
   const itemName = itemPath.split('/').filter(Boolean).pop() || itemPath
-  const anchorVersion = versions.length > 0 ? versions[0] : null
-  const changes = buildChanges(versions)
 
   // For sheet mode, skip data loading when not open
   const shouldLoad = isPanel || open === true
@@ -302,54 +292,107 @@ export function ItemDetail({
   useEffect(() => {
     setOpenVersions({})
     setPathExpanded(false)
+    setSelectedVersion(null)
   }, [itemId])
 
   // ---- Data loading ----
 
+  // Load version count (once per item)
   useEffect(() => {
     if (!shouldLoad) return
-
-    async function loadData() {
-      setLoadingVersions(true)
+    async function loadCount() {
       try {
-        const versionResponse = await fetch(
-          `/api/items/${itemId}/version-history?${scanId !== null ? `scan_id=${scanId}&` : ''}limit=${VERSIONS_PER_PAGE}`
-        )
-        if (versionResponse.ok) {
-          const data: VersionHistoryInitResponse = await versionResponse.json()
-          setVersions(data.versions)
-          setHasMoreVersions(data.has_more)
-          setTotalVersionCount(data.total_count)
-          setAnchorScanDate(data.anchor_scan_date)
+        const response = await fetch(`/api/items/${itemId}/version-count`)
+        if (response.ok) {
+          const data = await response.json()
+          setTotalVersionCount(data.total)
         }
-
       } catch (error) {
-        console.error('Error loading item details:', error)
-      } finally {
-        setLoadingVersions(false)
+        console.error('Error loading version count:', error)
       }
     }
+    loadCount()
+  }, [shouldLoad, itemId])
 
-    loadData()
-  }, [shouldLoad, itemId, scanId])
-
-  const loadMoreVersions = async () => {
-    if (versions.length === 0) return
-    const lastVersion = versions[versions.length - 1]
-    setLoadingMoreVersions(true)
+  // Load a page of versions with one extra record for predecessor diffs.
+  // If selectVersion is provided, select it after loading.
+  const loadVersionPage = useCallback(async (
+    page: number,
+    order: 'asc' | 'desc',
+    selectVersion?: number,
+  ) => {
+    if (!shouldLoad) return
     try {
+      const pageOffset = page * VERSIONS_PER_PAGE
+
+      // Over-request by 1 to get the predecessor for the boundary version.
+      // For desc: extra record is after the page (lower version number)
+      // For asc: extra record is before the page (lower version number)
+      const fetchOffset = order === 'asc' && pageOffset > 0 ? pageOffset - 1 : pageOffset
+      const fetchLimit = (order === 'asc' && pageOffset > 0)
+        ? VERSIONS_PER_PAGE + 1
+        : VERSIONS_PER_PAGE + 1
+
       const response = await fetch(
-        `/api/items/${itemId}/version-history?before_scan_id=${lastVersion.first_scan_id}&limit=${VERSIONS_PER_PAGE}`
+        `/api/items/${itemId}/versions?offset=${fetchOffset}&limit=${fetchLimit}&order=${order}`
       )
       if (response.ok) {
-        const data: VersionHistoryPageResponse = await response.json()
-        setVersions(prev => [...prev, ...data.versions])
-        setHasMoreVersions(data.has_more)
+        const data: VersionPageResponse = await response.json()
+        const allFetched = data.versions
+
+        // Build predecessor map from all fetched (including the extra)
+        setPredecessors(buildPredecessorMap(allFetched))
+
+        // Determine which records to display (exclude the extra)
+        let displayVersions: VersionEntry[]
+        if (order === 'desc') {
+          // Extra record is at the end (lowest version). Display first VERSIONS_PER_PAGE.
+          displayVersions = allFetched.slice(0, VERSIONS_PER_PAGE)
+        } else {
+          // For asc page 0: no predecessor needed, extra is at end
+          // For asc page 1+: extra is at start (the predecessor). Display from index 1.
+          if (pageOffset > 0 && allFetched.length > VERSIONS_PER_PAGE) {
+            displayVersions = allFetched.slice(1, VERSIONS_PER_PAGE + 1)
+          } else {
+            displayVersions = allFetched.slice(0, VERSIONS_PER_PAGE)
+          }
+        }
+
+        setVersions(displayVersions)
+        setVersionPage(page)
+
+        if (selectVersion !== undefined) {
+          const found = displayVersions.find(v => v.item_version === selectVersion)
+          if (found) setSelectedVersion(found)
+        } else if (!selectedVersion && displayVersions.length > 0) {
+          setSelectedVersion(displayVersions[0])
+        }
       }
     } catch (error) {
-      console.error('Error loading more versions:', error)
-    } finally {
-      setLoadingMoreVersions(false)
+      console.error('Error loading versions:', error)
+    }
+  }, [shouldLoad, itemId, selectedVersion])
+
+  // Initial load — show loading only on first load
+  useEffect(() => {
+    if (!shouldLoad) return
+    setLoadingVersions(true)
+    loadVersionPage(0, versionOrder).finally(() => setLoadingVersions(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldLoad, itemId]) // intentionally not including versionOrder or loadVersionPage
+
+  // When sort order changes, compute the page that contains the selected version
+  const handleOrderChange = (newOrder: 'asc' | 'desc') => {
+    if (newOrder === versionOrder) return
+    setVersionOrder(newOrder)
+    if (selectedVersion && totalVersionCount > 0) {
+      const posInNewOrder = newOrder === 'asc'
+        ? selectedVersion.item_version - 1
+        : totalVersionCount - selectedVersion.item_version
+      const newPage = Math.floor(posInNewOrder / VERSIONS_PER_PAGE)
+      loadVersionPage(newPage, newOrder, selectedVersion.item_version)
+    } else {
+      loadVersionPage(0, newOrder)
     }
   }
 
@@ -518,6 +561,24 @@ export function ItemDetail({
 
   // ---- Content rendering ----
 
+  const navigateVersion = (delta: number) => {
+    if (!selectedVersion) return
+    const newVersionNum = selectedVersion.item_version + delta
+    if (newVersionNum < 1 || newVersionNum > totalVersionCount) return
+    // If the target version is on the current page, just select it
+    const onPage = versions.find(v => v.item_version === newVersionNum)
+    if (onPage) {
+      setSelectedVersion(onPage)
+    } else {
+      // Need to load the page containing the target version
+      const posInOrder = versionOrder === 'asc'
+        ? newVersionNum - 1
+        : totalVersionCount - newVersionNum
+      const targetPage = Math.floor(posInOrder / VERSIONS_PER_PAGE)
+      loadVersionPage(targetPage, versionOrder, newVersionNum)
+    }
+  }
+
   const renderHeader = () => {
     if (isSheet) {
       return (
@@ -544,13 +605,15 @@ export function ItemDetail({
                   <Badge variant="destructive" className="text-base px-3 py-1">Deleted</Badge>
                 </div>
               )}
-              {anchorVersion && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
-                  <span className="mx-1.5">&middot;</span>
-                  Version <span className="font-mono font-semibold text-foreground">{anchorVersion.item_version}{totalVersionCount > 0 ? ` of ${totalVersionCount}` : ''}</span>
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
+                {totalVersionCount > 0 && (
+                  <>
+                    <span className="mx-1.5">&middot;</span>
+                    <span>{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</span>
+                  </>
+                )}
+              </p>
             </div>
           </div>
         </SheetHeader>
@@ -586,23 +649,53 @@ export function ItemDetail({
             <Badge variant="destructive" className="text-xs">Deleted</Badge>
           </div>
         )}
-        {anchorVersion && (
-          <p className="text-xs text-muted-foreground mt-1 pl-7">
-            Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
-            <span className="mx-1.5">&middot;</span>
-            Version <span className="font-mono font-semibold text-foreground">{anchorVersion.item_version}{totalVersionCount > 0 ? ` of ${totalVersionCount}` : ''}</span>
-          </p>
-        )}
+        <p className="text-xs text-muted-foreground mt-1 pl-7">
+          Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
+          {totalVersionCount > 0 && (
+            <>
+              <span className="mx-1.5">&middot;</span>
+              <span>{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</span>
+            </>
+          )}
+        </p>
       </div>
     )
   }
 
   const renderCurrentState = () => {
-    if (!anchorVersion) return null
+    if (!selectedVersion) return null
 
-    const currentStateTitle = isSheet
-      ? (scanId !== null ? scanRef(scanId, anchorScanDate) : null)
-      : null
+    const v = selectedVersion
+    // Navigator: left = older (lower version number), right = newer (higher version number)
+    const canGoOlder = v.item_version > 1
+    const canGoNewer = v.item_version < totalVersionCount
+
+    const navigator = (
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          disabled={!canGoOlder}
+          onClick={() => navigateVersion(-1)}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm font-medium whitespace-nowrap">
+          Version <span className="font-mono">{v.item_version}</span>
+          <span className="text-muted-foreground"> of {totalVersionCount}</span>
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          disabled={!canGoNewer}
+          onClick={() => navigateVersion(1)}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    )
 
     const gridCols = isPanel ? 'grid-cols-2 gap-2' : 'grid-cols-2 gap-4'
 
@@ -615,12 +708,12 @@ export function ItemDetail({
           </div>
           <div>
             <p className="text-muted-foreground">Modified</p>
-            <p className="font-medium">{anchorVersion.mod_date ? formatDateFull(anchorVersion.mod_date) : 'N/A'}</p>
+            <p className="font-medium">{v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
           </div>
-          {anchorVersion.size !== null && (
+          {v.size !== null && (
             <div>
               <p className="text-muted-foreground">Size</p>
-              <p className="font-medium">{formatFileSize(anchorVersion.size)}</p>
+              <p className="font-medium">{formatFileSize(v.size)}</p>
             </div>
           )}
         </div>
@@ -699,28 +792,28 @@ export function ItemDetail({
                     <span className="font-medium">{childrenCounts.file_count.toLocaleString()}</span>
                   </span>
                 </div>
-                {anchorVersion && (
+                {v && (
                   <div className={`mt-3 text-xs`}>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                       <span className="flex items-center gap-1.5">
                         <span className={`inline-block ${sp.dot} rounded-full bg-green-500`} />
                         <span className="text-muted-foreground">Added :</span>
-                        <span className="font-medium">{(anchorVersion.add_count ?? 0).toLocaleString()}</span>
+                        <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
                       </span>
                       <span className="flex items-center gap-1.5">
                         <span className={`inline-block ${sp.dot} rounded-full bg-red-500`} />
                         <span className="text-muted-foreground">Deleted :</span>
-                        <span className="font-medium">{(anchorVersion.delete_count ?? 0).toLocaleString()}</span>
+                        <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
                       </span>
                       <span className="flex items-center gap-1.5">
                         <span className={`inline-block ${sp.dot} rounded-full bg-blue-500`} />
                         <span className="text-muted-foreground">Modified :</span>
-                        <span className="font-medium">{(anchorVersion.modify_count ?? 0).toLocaleString()}</span>
+                        <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
                       </span>
                       <span className="flex items-center gap-1.5">
                         <span className={`inline-block ${sp.dot} rounded-full bg-zinc-400`} />
                         <span className="text-muted-foreground">Unchanged :</span>
-                        <span className="font-medium">{(anchorVersion.unchanged_count ?? 0).toLocaleString()}</span>
+                        <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
                       </span>
                     </div>
                   </div>
@@ -736,11 +829,12 @@ export function ItemDetail({
 
     if (isSheet) {
       return (
-        <Card className="border-2">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{currentStateTitle}</CardTitle>
-            </div>
+        <Card className="border-2 overflow-hidden">
+          <div className="flex items-center justify-center bg-muted px-4 py-2">
+            {navigator}
+          </div>
+          <CardHeader className="pt-3">
+            <p className="text-xs text-muted-foreground text-center">{scanRangeLabel(v)}</p>
           </CardHeader>
           <CardContent>{stateContent}</CardContent>
         </Card>
@@ -750,7 +844,8 @@ export function ItemDetail({
     return (
       <div className="px-3 py-3">
         <div className="mb-2">
-          {scanId !== null && <p className="text-sm font-semibold">{scanRef(scanId, anchorScanDate)}</p>}
+          {navigator}
+          <p className="text-xs text-muted-foreground mt-0.5 pl-7">{scanRangeLabel(v)}</p>
         </div>
         {stateContent}
       </div>
@@ -854,50 +949,63 @@ export function ItemDetail({
   }
 
   const renderVersionHistory = () => {
-    const trailing = totalVersionCount > 0 ? (
-      <p className="text-xs text-muted-foreground">
-        {isSheet
-          ? `Showing ${versions.length} of ${totalVersionCount.toLocaleString()} version${totalVersionCount !== 1 ? 's' : ''}`
-          : `${versions.length}/${totalVersionCount}`
-        }
-      </p>
-    ) : undefined
+    const totalPages = Math.ceil(totalVersionCount / VERSIONS_PER_PAGE)
+    const pageStart = versionPage * VERSIONS_PER_PAGE + 1
+    const pageEnd = Math.min(pageStart + versions.length - 1, totalVersionCount)
+
+    const sortControl = (
+      <Select value={versionOrder} onValueChange={(v) => handleOrderChange(v as 'asc' | 'desc')}>
+        <SelectTrigger className={isPanel ? 'h-6 w-[110px] text-xs' : 'h-7 w-[130px] text-xs'}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="desc">Newest first</SelectItem>
+          <SelectItem value="asc">Oldest first</SelectItem>
+        </SelectContent>
+      </Select>
+    )
 
     return (
-      <Section mode={mode} title="Version History" trailing={trailing}>
-        {changes.length === 0 ? (
+      <Section mode={mode} title="Version History" trailing={sortControl}>
+        {versions.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">No version history</p>
         ) : (
           <>
             <div className={isSheet ? 'border border-border rounded-lg' : 'divide-y divide-border'}>
-              {changes.map((change, idx) => {
-                const v = change.version
-                const isAnchor = changes[0].version.item_version === v.item_version
+              {versions.map((v, idx) => {
+                const prev = predecessors.get(v.item_version) ?? null
+                const kind = classifyChange(v, prev)
+                const isSelected = selectedVersion?.item_version === v.item_version
                 const isOpen = openVersions[v.item_version] || false
                 const setIsOpen = (val: boolean) => setOpenVersions(prev => ({ ...prev, [v.item_version]: val }))
                 const hasIntegrity = v.hash_state != null || v.val_state != null
-                const hasMetadataChanges = change.kind === 'modified' && change.prev && hasFieldChanges(v, change.prev)
-                const hasInitialFolderCounts = change.kind === 'initial' && hasNonZeroFolderCounts(v)
+                const hasMetadataChanges = kind === 'modified' && prev && hasFieldChanges(v, prev)
+                const hasInitialFolderCounts = kind === 'initial' && hasNonZeroFolderCounts(v)
                 const isExpandable = hasMetadataChanges || hasInitialFolderCounts || hasIntegrity
-                const prevForCounts = change.prev ?? {
-                  add_count: 0, modify_count: 0, delete_count: 0, unchanged_count: 0,
-                }
 
                 const headerContent = (
                   <>
-                    {getChangeIndicator(change.kind)}
+                    <span className="text-xs font-medium shrink-0">v{v.item_version}</span>
+                    {getChangeIndicator(kind)}
                     {v.hash_state === 2 && <AlertTriangle className={`${sp.iconLg} text-amber-500 flex-shrink-0`} />}
                     {v.val_state === 2 && <CircleX className={`${sp.iconLg} text-rose-500 flex-shrink-0`} />}
                     <p className="text-xs text-muted-foreground truncate flex-1">
                       {scanRangeLabel(v)}
                     </p>
-                    {isAnchor && <Eye className={`${sp.iconLg} text-primary flex-shrink-0`} />}
+                    {isSelected && <Eye className={`${sp.iconLg} text-primary flex-shrink-0`} />}
                   </>
                 )
 
                 return (
                   <div key={v.item_version}>
-                    <div className={cn(sp.padX, isAnchor && "bg-accent/30")}>
+                    <div
+                      className={cn(
+                        sp.padX,
+                        "cursor-pointer transition-colors",
+                        isSelected ? "bg-accent/50" : "hover:bg-accent/20"
+                      )}
+                      onClick={() => setSelectedVersion(v)}
+                    >
                       {isExpandable ? (
                         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                           <div className={`flex items-center ${sp.gap}`}>
@@ -910,26 +1018,27 @@ export function ItemDetail({
                           </div>
                           <CollapsibleContent className={`${isPanel ? 'mt-1' : 'mt-2'} ${sp.ml}`}>
                             <div className={`${sp.space} text-xs`}>
-                              {change.prev && v.mod_date !== change.prev.mod_date && (
+                              {/* Metadata diffs (modified versions with predecessor) */}
+                              {prev && v.mod_date !== prev.mod_date && (
                                 <div className={`bg-muted/50 ${sp.pad} rounded`}>
                                   <p className="font-medium flex items-center gap-1"><CalendarIcon className={sp.icon} />Modified</p>
-                                  <p className="text-muted-foreground">{change.prev.mod_date ? formatDateFull(change.prev.mod_date) : 'N/A'} &rarr; {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
+                                  <p className="text-muted-foreground">{prev.mod_date ? formatDateFull(prev.mod_date) : 'N/A'} &rarr; {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
                                 </div>
                               )}
-                              {change.prev && v.size !== change.prev.size && (
+                              {prev && v.size !== prev.size && (
                                 <div className={`bg-muted/50 ${sp.pad} rounded`}>
                                   <p className="font-medium flex items-center gap-1"><HardDrive className={sp.icon} />Size</p>
-                                  <p className="text-muted-foreground">{formatFileSize(change.prev.size)} &rarr; {formatFileSize(v.size)}</p>
+                                  <p className="text-muted-foreground">{formatFileSize(prev.size)} &rarr; {formatFileSize(v.size)}</p>
                                 </div>
                               )}
-                              {change.prev && v.access !== change.prev.access && (
+                              {prev && v.access !== prev.access && (
                                 <div className={`bg-muted/50 ${sp.pad} rounded`}>
                                   <p className="font-medium">Access</p>
-                                  <p className="text-muted-foreground">{accessLabel(change.prev.access)} &rarr; {accessLabel(v.access)}</p>
+                                  <p className="text-muted-foreground">{accessLabel(prev.access)} &rarr; {accessLabel(v.access)}</p>
                                 </div>
                               )}
 
-                              {/* Integrity state (always shown, not as diff) */}
+                              {/* Integrity state */}
                               {v.file_hash != null ? (
                                 <div className={`bg-muted/50 ${sp.pad} rounded`}>
                                   <p className="font-medium flex items-center gap-1">
@@ -962,44 +1071,80 @@ export function ItemDetail({
                                 </div>
                               )}
 
-                              {/* Folder counts diff */}
-                              {((v.add_count ?? 0) !== (prevForCounts.add_count ?? 0) || (v.delete_count ?? 0) !== (prevForCounts.delete_count ?? 0) || (v.modify_count ?? 0) !== (prevForCounts.modify_count ?? 0) || (v.unchanged_count ?? 0) !== (prevForCounts.unchanged_count ?? 0)) && (
+                              {/* Folder count diffs */}
+                              {prev && hasFolderCountChanges(v, prev) && (
                                 <div className={`bg-muted/50 ${sp.pad} rounded`}>
                                   <p className="font-medium">Folder Counts</p>
                                   <div className="mt-1 space-y-0.5">
-                                    {(v.add_count ?? 0) !== (prevForCounts.add_count ?? 0) && (
+                                    {v.add_count !== prev.add_count && (
                                       <div className="flex items-center gap-1.5">
                                         <span className={`inline-block ${sp.dot} rounded-full bg-green-500`} />
-                                        <span className="text-muted-foreground">Added :</span>
-                                        <span className="text-muted-foreground">{(prevForCounts.add_count ?? 0).toLocaleString()}</span>
+                                        <span className="text-muted-foreground">Added:</span>
+                                        <span className="text-muted-foreground">{(prev.add_count ?? 0).toLocaleString()}</span>
                                         <span>&rarr;</span>
                                         <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
                                       </div>
                                     )}
-                                    {(v.delete_count ?? 0) !== (prevForCounts.delete_count ?? 0) && (
+                                    {v.delete_count !== prev.delete_count && (
                                       <div className="flex items-center gap-1.5">
                                         <span className={`inline-block ${sp.dot} rounded-full bg-red-500`} />
-                                        <span className="text-muted-foreground">Deleted :</span>
-                                        <span className="text-muted-foreground">{(prevForCounts.delete_count ?? 0).toLocaleString()}</span>
+                                        <span className="text-muted-foreground">Deleted:</span>
+                                        <span className="text-muted-foreground">{(prev.delete_count ?? 0).toLocaleString()}</span>
                                         <span>&rarr;</span>
                                         <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
                                       </div>
                                     )}
-                                    {(v.modify_count ?? 0) !== (prevForCounts.modify_count ?? 0) && (
+                                    {v.modify_count !== prev.modify_count && (
                                       <div className="flex items-center gap-1.5">
                                         <span className={`inline-block ${sp.dot} rounded-full bg-blue-500`} />
-                                        <span className="text-muted-foreground">Modified :</span>
-                                        <span className="text-muted-foreground">{(prevForCounts.modify_count ?? 0).toLocaleString()}</span>
+                                        <span className="text-muted-foreground">Modified:</span>
+                                        <span className="text-muted-foreground">{(prev.modify_count ?? 0).toLocaleString()}</span>
                                         <span>&rarr;</span>
                                         <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
                                       </div>
                                     )}
-                                    {(v.unchanged_count ?? 0) !== (prevForCounts.unchanged_count ?? 0) && (
+                                    {v.unchanged_count !== prev.unchanged_count && (
                                       <div className="flex items-center gap-1.5">
                                         <span className={`inline-block ${sp.dot} rounded-full bg-zinc-400`} />
-                                        <span className="text-muted-foreground">Unchanged :</span>
-                                        <span className="text-muted-foreground">{(prevForCounts.unchanged_count ?? 0).toLocaleString()}</span>
+                                        <span className="text-muted-foreground">Unchanged:</span>
+                                        <span className="text-muted-foreground">{(prev.unchanged_count ?? 0).toLocaleString()}</span>
                                         <span>&rarr;</span>
+                                        <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              {/* Initial folder counts (no predecessor) */}
+                              {!prev && hasNonZeroFolderCounts(v) && (
+                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
+                                  <p className="font-medium">Folder Counts</p>
+                                  <div className="mt-1 space-y-0.5">
+                                    {(v.add_count ?? 0) > 0 && (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`inline-block ${sp.dot} rounded-full bg-green-500`} />
+                                        <span className="text-muted-foreground">Added:</span>
+                                        <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    {(v.delete_count ?? 0) > 0 && (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`inline-block ${sp.dot} rounded-full bg-red-500`} />
+                                        <span className="text-muted-foreground">Deleted:</span>
+                                        <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    {(v.modify_count ?? 0) > 0 && (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`inline-block ${sp.dot} rounded-full bg-blue-500`} />
+                                        <span className="text-muted-foreground">Modified:</span>
+                                        <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    {(v.unchanged_count ?? 0) > 0 && (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`inline-block ${sp.dot} rounded-full bg-zinc-400`} />
+                                        <span className="text-muted-foreground">Unchanged:</span>
                                         <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
                                       </div>
                                     )}
@@ -1016,15 +1161,33 @@ export function ItemDetail({
                         </div>
                       )}
                     </div>
-                    {isSheet && idx < changes.length - 1 && <Separator />}
+                    {isSheet && idx < versions.length - 1 && <Separator />}
                   </div>
                 )
               })}
             </div>
-            {hasMoreVersions && (
-              <div className={`${isPanel ? 'mt-2' : 'mt-4'} flex justify-center`}>
-                <Button variant="outline" size={isPanel ? 'sm' : 'default'} onClick={loadMoreVersions} disabled={loadingMoreVersions}>
-                  {loadingMoreVersions ? 'Loading...' : 'Load older'}
+            {totalPages > 1 && (
+              <div className={`${isPanel ? 'mt-2' : 'mt-3'} flex items-center justify-between text-xs text-muted-foreground`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={versionPage <= 0}
+                  onClick={() => loadVersionPage(versionPage - 1, versionOrder)}
+                >
+                  ← Prev
+                </Button>
+                <span>
+                  {pageStart}–{pageEnd} of {totalVersionCount}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={versionPage >= totalPages - 1}
+                  onClick={() => loadVersionPage(versionPage + 1, versionOrder)}
+                >
+                  Next →
                 </Button>
               </div>
             )}
@@ -1046,8 +1209,8 @@ export function ItemDetail({
       ) : (
         <div className={isSheet ? 'space-y-6 mt-6' : 'divide-y divide-border border-b border-border'}>
           {renderCurrentState()}
-          {renderSizeHistory()}
           {renderVersionHistory()}
+          {renderSizeHistory()}
         </div>
       )}
     </>

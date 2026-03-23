@@ -8,6 +8,7 @@ with synthetic data that exercises:
   - Correct hash mechanics (Baseline first, Suspect only after, no resets)
   - Deep suspect hash chains (21+ suspects on single item_versions)
   - Moderate suspect hash chains (3-10 suspects on ~8 items)
+  - Cross-version suspect chains (suspects on multiple versions of same item)
   - High-churn items for version-browser pagination testing (45+ versions)
   - Realistic change rates (most files unchanged most scans)
   - Correct scan aggregate counts derived from actual data
@@ -445,6 +446,20 @@ VOLATILE = {
     ID_MT_FUJI:           {10, 20, 30, 40, 50},                # 5 suspects on v2
     ID_ZANZIBAR_BEACH:    {16, 24, 32, 40, 48},                # 5 suspects on v1
     ID_TABLE_MOUNTAIN:    {8, 14, 20},                          # 3 suspects on v2
+
+    # Cross-version suspects: volatile across multiple version lifetimes
+    # Item 72 (Prague Castle.jpg): 9 versions — suspects on v2, v3, v5, v8
+    72: {4, 6, 8,                                                  # v2 spans 2-8: 3 suspects
+        10, 12, 14, 16,                                            # v3 spans 9-17: 4 suspects
+        20, 22, 24, 26, 28, 30, 32, 34,                           # v5 spans 19-34: 8 suspects
+        38, 40, 42, 44},                                           # v8 spans 37-44: 4 suspects
+    # Item 26 (NMS Travel Document 2023.pdf): 8 versions — suspects on v2, v5
+    26: {8, 10, 12, 14, 16, 18,                                   # v2 spans 7-19: 6 suspects
+        28, 30, 32, 34, 36},                                       # v5 spans 26-36: 5 suspects
+    # Item 93 (Lapland Tour.pdf): 8 versions — suspects on v1, v3, v6
+    93: {4, 6, 8,                                                  # v1 spans 1-9: 3 suspects
+        14, 16, 18, 20, 22, 24, 26, 28, 30,                       # v3 spans 12-31: 6 suspects (skip 12 for baseline)
+        38, 40, 42},                                               # v6 spans 37-43: 3 suspects
 }
 
 
@@ -1219,6 +1234,15 @@ def verify(db_path):
     # 14. Invalid validations count
     invalid_count = conn.execute("SELECT COUNT(*) FROM item_versions WHERE val_state = 2").fetchone()[0]
     checks.append(("30+ invalid validations", invalid_count >= 30, f"{invalid_count} invalids"))
+
+    # 15. Cross-version suspects (items with suspects on 2+ different versions)
+    cross_ver = conn.execute("""
+        SELECT COUNT(*) FROM (
+            SELECT item_id, COUNT(DISTINCT item_version) as ver_count
+            FROM hash_versions WHERE hash_state = 2
+            GROUP BY item_id HAVING ver_count >= 2)
+    """).fetchone()[0]
+    checks.append(("Cross-version suspects", cross_ver >= 3, f"{cross_ver} items"))
 
     conn.close()
 
