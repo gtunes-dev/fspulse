@@ -6,7 +6,8 @@ import {
   ShieldCheck, ShieldOff,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { setDoNotValidate } from '@/lib/api'
+import { ReviewToggle } from '@/components/shared/ReviewToggle'
+import { setDoNotValidate, setIntegrityReviewed } from '@/lib/api'
 import {
   Sheet,
   SheetContent,
@@ -90,6 +91,16 @@ interface VersionEntry {
   file_hash: string | null
   val_state: number | null
   val_error: string | null
+  val_reviewed_at: number | null
+  hash_reviewed_at: number | null
+}
+
+interface HashEntry {
+  first_scan_id: number
+  last_scan_id: number
+  scan_started_at: number
+  file_hash: string
+  hash_state: number
 }
 
 interface VersionPageResponse {
@@ -123,6 +134,7 @@ type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 // ---- Constants ----
 
 const VERSIONS_PER_PAGE = 10
+const HASHES_PER_PAGE = 10
 
 // ---- Helpers ----
 
@@ -149,14 +161,6 @@ function valStateLabel(val: number | null): string {
     case 1: return 'Valid'
     case 2: return 'Invalid'
     case 3: return 'No Validator'
-    default: return 'Unknown'
-  }
-}
-
-function hashStateLabel(hash: number | null): string {
-  switch (hash) {
-    case 1: return 'Baseline'
-    case 2: return 'Suspect'
     default: return 'Unknown'
   }
 }
@@ -275,7 +279,12 @@ export function ItemDetail({
 
   // Integrity state (files only)
   const [integrityState, setIntegrityState] = useState<IntegrityState | null>(null)
-  const [hashExpanded, setHashExpanded] = useState(false)
+  const [hashHistory, setHashHistory] = useState<HashEntry[]>([])
+  const [hashHistoryPage, setHashHistoryPage] = useState(0)
+  const [loadingHashHistory, setLoadingHashHistory] = useState(false)
+  const [expandedHashes, setExpandedHashes] = useState<Record<number, boolean>>({})
+  const [reviewingHash, setReviewingHash] = useState(false)
+  const [reviewingVal, setReviewingVal] = useState(false)
   const [pathExpanded, setPathExpanded] = useState(false)
 
   // Selected version for the detail view — stored as full data, not derived from page
@@ -283,7 +292,9 @@ export function ItemDetail({
 
   const isPanel = mode === 'panel'
   const isSheet = mode === 'sheet'
-  const itemName = itemPath.split('/').filter(Boolean).pop() || itemPath
+  const pathSegments = itemPath.split('/').filter(Boolean)
+  const itemName = pathSegments.pop() || itemPath
+  const parentFolder = pathSegments.pop() || ''
 
   // For sheet mode, skip data loading when not open
   const shouldLoad = isPanel || open === true
@@ -315,23 +326,21 @@ export function ItemDetail({
   }, [shouldLoad, itemId])
 
   // Load a page of versions with one extra record for predecessor diffs.
-  // If selectVersion is provided, select it after loading.
+  // selectVersion: jump to a specific version after loading.
+  // autoSelect: always select the first version (used on initial load to avoid stale closure).
   const loadVersionPage = useCallback(async (
     page: number,
     order: 'asc' | 'desc',
     selectVersion?: number,
+    autoSelect?: boolean,
   ) => {
     if (!shouldLoad) return
     try {
       const pageOffset = page * VERSIONS_PER_PAGE
 
       // Over-request by 1 to get the predecessor for the boundary version.
-      // For desc: extra record is after the page (lower version number)
-      // For asc: extra record is before the page (lower version number)
       const fetchOffset = order === 'asc' && pageOffset > 0 ? pageOffset - 1 : pageOffset
-      const fetchLimit = (order === 'asc' && pageOffset > 0)
-        ? VERSIONS_PER_PAGE + 1
-        : VERSIONS_PER_PAGE + 1
+      const fetchLimit = VERSIONS_PER_PAGE + 1
 
       const response = await fetch(
         `/api/items/${itemId}/versions?offset=${fetchOffset}&limit=${fetchLimit}&order=${order}`
@@ -346,11 +355,8 @@ export function ItemDetail({
         // Determine which records to display (exclude the extra)
         let displayVersions: VersionEntry[]
         if (order === 'desc') {
-          // Extra record is at the end (lowest version). Display first VERSIONS_PER_PAGE.
           displayVersions = allFetched.slice(0, VERSIONS_PER_PAGE)
         } else {
-          // For asc page 0: no predecessor needed, extra is at end
-          // For asc page 1+: extra is at start (the predecessor). Display from index 1.
           if (pageOffset > 0 && allFetched.length > VERSIONS_PER_PAGE) {
             displayVersions = allFetched.slice(1, VERSIONS_PER_PAGE + 1)
           } else {
@@ -364,20 +370,20 @@ export function ItemDetail({
         if (selectVersion !== undefined) {
           const found = displayVersions.find(v => v.item_version === selectVersion)
           if (found) setSelectedVersion(found)
-        } else if (!selectedVersion && displayVersions.length > 0) {
+        } else if (autoSelect && displayVersions.length > 0) {
           setSelectedVersion(displayVersions[0])
         }
       }
     } catch (error) {
       console.error('Error loading versions:', error)
     }
-  }, [shouldLoad, itemId, selectedVersion])
+  }, [shouldLoad, itemId])
 
-  // Initial load — show loading only on first load
+  // Initial load — show loading only on first load; autoSelect first version
   useEffect(() => {
     if (!shouldLoad) return
     setLoadingVersions(true)
-    loadVersionPage(0, versionOrder).finally(() => setLoadingVersions(false))
+    loadVersionPage(0, versionOrder, undefined, true).finally(() => setLoadingVersions(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldLoad, itemId]) // intentionally not including versionOrder or loadVersionPage
 
@@ -510,6 +516,68 @@ export function ItemDetail({
     }
   }
 
+  // Load hash history when selected version changes
+  const loadHashHistory = useCallback(async () => {
+    if (!shouldLoad || !selectedVersion || itemType !== 'F') {
+      setHashHistory([])
+      return
+    }
+    setLoadingHashHistory(true)
+    try {
+      const response = await fetch(
+        `/api/items/${itemId}/versions/${selectedVersion.item_version}/hashes`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setHashHistory(data.hashes || [])
+      } else {
+        setHashHistory([])
+      }
+    } catch {
+      setHashHistory([])
+    } finally {
+      setLoadingHashHistory(false)
+    }
+  }, [shouldLoad, itemId, selectedVersion, itemType])
+
+  useEffect(() => {
+    setHashHistoryPage(0)
+    setExpandedHashes({})
+    loadHashHistory()
+  }, [loadHashHistory])
+
+  // Review handlers for the selected version
+  const handleToggleHashReview = async () => {
+    if (!selectedVersion || reviewingHash) return
+    setReviewingHash(true)
+    try {
+      const isReviewed = selectedVersion.hash_reviewed_at != null
+      await setIntegrityReviewed(itemId, selectedVersion.item_version, null, !isReviewed)
+      // Reload versions page to get updated reviewed_at
+      await loadVersionPage(versionPage, versionOrder, selectedVersion.item_version)
+      onItemChanged?.()
+    } catch {
+      // silently fail
+    } finally {
+      setReviewingHash(false)
+    }
+  }
+
+  const handleToggleValReview = async () => {
+    if (!selectedVersion || reviewingVal) return
+    setReviewingVal(true)
+    try {
+      const isReviewed = selectedVersion.val_reviewed_at != null
+      await setIntegrityReviewed(itemId, selectedVersion.item_version, !isReviewed, null)
+      await loadVersionPage(versionPage, versionOrder, selectedVersion.item_version)
+      onItemChanged?.()
+    } catch {
+      // silently fail
+    } finally {
+      setReviewingVal(false)
+    }
+  }
+
   // Spacing constants
   const sp = {
     icon: isPanel ? 'h-2.5 w-2.5' : 'h-3 w-3',
@@ -582,39 +650,36 @@ export function ItemDetail({
   const renderHeader = () => {
     if (isSheet) {
       return (
-        <SheetHeader className="space-y-4">
+        <SheetHeader className="space-y-3">
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0">
               {isTombstone ? (
-                itemType === 'D' ? <FolderX className="h-12 w-12 text-destructive" /> : <FileX className="h-12 w-12 text-destructive" />
+                itemType === 'D' ? <FolderX className="h-10 w-10 text-destructive" /> : <FileX className="h-10 w-10 text-destructive" />
               ) : (
-                itemType === 'D' ? <Folder className="h-12 w-12 text-blue-500" /> : <File className="h-12 w-12 text-muted-foreground" />
+                itemType === 'D' ? <Folder className="h-10 w-10 text-blue-500" /> : <File className="h-10 w-10 text-muted-foreground" />
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <SheetTitle className="text-2xl font-bold break-words">{itemName}</SheetTitle>
+              <SheetTitle className="text-xl font-bold break-words">{itemName}</SheetTitle>
+              {parentFolder && (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  in <span className="text-foreground">{parentFolder}</span>
+                </p>
+              )}
               <button
-                className="text-sm text-muted-foreground mt-1 flex items-center gap-1 text-left w-full hover:text-foreground transition-colors"
+                className="text-xs text-muted-foreground mt-1 flex items-center gap-1 text-left w-full hover:text-foreground transition-colors"
                 onClick={() => setPathExpanded(!pathExpanded)}
               >
                 <span className={pathExpanded ? 'break-all' : 'truncate'}>{itemPath}</span>
                 <ChevronDown className={cn("h-3 w-3 flex-shrink-0 transition-transform", !pathExpanded && "-rotate-90")} />
               </button>
-              {isTombstone && (
-                <div className="mt-2">
-                  <Badge variant="destructive" className="text-base px-3 py-1">Deleted</Badge>
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground mt-1">
-                Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
-                {totalVersionCount > 0 && (
-                  <>
-                    <span className="mx-1.5">&middot;</span>
-                    <span>{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</span>
-                  </>
-                )}
-              </p>
             </div>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <span>Item <span className="font-mono font-semibold">#{itemId}</span></span>
+            <span className="text-muted-foreground">&middot;</span>
+            <span className="text-muted-foreground">{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</span>
+            {isTombstone && <Badge variant="destructive">Deleted</Badge>}
           </div>
         </SheetHeader>
       )
@@ -632,6 +697,11 @@ export function ItemDetail({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-base font-semibold truncate">{itemName}</p>
+            {parentFolder && (
+              <p className="text-xs text-muted-foreground">
+                in <span className="text-foreground">{parentFolder}</span>
+              </p>
+            )}
           </div>
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0 flex-shrink-0" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
@@ -644,20 +714,12 @@ export function ItemDetail({
           <span className={pathExpanded ? 'break-all' : 'truncate'}>{itemPath}</span>
           <ChevronDown className={cn("h-3 w-3 flex-shrink-0 transition-transform", !pathExpanded && "-rotate-90")} />
         </button>
-        {isTombstone && (
-          <div className="mt-1 pl-7">
-            <Badge variant="destructive" className="text-xs">Deleted</Badge>
-          </div>
-        )}
-        <p className="text-xs text-muted-foreground mt-1 pl-7">
-          Item <span className="font-mono font-semibold text-foreground">#{itemId}</span>
-          {totalVersionCount > 0 && (
-            <>
-              <span className="mx-1.5">&middot;</span>
-              <span>{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</span>
-            </>
-          )}
-        </p>
+        <div className="flex items-center gap-2 mt-1 pl-7 text-xs">
+          <span>Item <span className="font-mono font-semibold text-foreground">#{itemId}</span></span>
+          <span className="text-muted-foreground">&middot;</span>
+          <span className="text-muted-foreground">{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</span>
+          {isTombstone && <Badge variant="destructive" className="text-xs">Deleted</Badge>}
+        </div>
       </div>
     )
   }
@@ -697,83 +759,178 @@ export function ItemDetail({
       </div>
     )
 
-    const gridCols = isPanel ? 'grid-cols-2 gap-2' : 'grid-cols-2 gap-4'
-
     const stateContent = (
       <>
-        <div className={`grid ${gridCols} text-sm ${isPanel ? 'pl-2' : ''}`}>
-          <div>
-            <p className="text-muted-foreground">Type</p>
-            <p className="font-medium">{itemTypeLabel(itemType)}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Modified</p>
-            <p className="font-medium">{v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
-          </div>
+        {/* Metadata fields — inline label: value */}
+        <div className={`text-sm ${isPanel ? 'space-y-1' : 'space-y-1.5'}`}>
+          <p><span className="text-muted-foreground">Scans:</span> {scanRangeLabel(v)}</p>
+          <p><span className="text-muted-foreground">Type:</span> {itemTypeLabel(itemType)}</p>
+          <p><span className="text-muted-foreground">Modified:</span> {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
           {v.size !== null && (
-            <div>
-              <p className="text-muted-foreground">Size</p>
-              <p className="font-medium">{formatFileSize(v.size)}</p>
-            </div>
+            <p><span className="text-muted-foreground">Size:</span> {formatFileSize(v.size)}</p>
           )}
         </div>
 
         {/* Integrity (files only) */}
-        {itemType === 'F' && integrityState && (
-          <div className={`${isPanel ? 'mt-2 pt-2' : 'mt-4 pt-4'} border-t`}>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-semibold">Integrity</p>
-              <div className="flex items-center gap-1.5">
-                {integrityState.do_not_validate
-                  ? <ShieldOff className="h-4 w-4 text-amber-500" />
-                  : <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                }
-                <Switch
-                  size="sm"
-                  checked={!integrityState.do_not_validate}
-                  onCheckedChange={handleToggleValidation}
-                  className="data-[state=checked]:bg-muted-foreground"
-                  aria-label={integrityState.do_not_validate ? 'Validation disabled' : 'Validation enabled'}
-                />
-                <span className="text-xs text-muted-foreground">Validation</span>
-              </div>
-            </div>
-            <div className={`text-sm ${isPanel ? 'pl-2 space-y-2' : 'pl-2 space-y-3'}`}>
-              <div>
-                <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground">Hash :</span>
-                  <span>{hashStateLabel(integrityState.hash_state)}</span>
-                  {integrityState.hash_state === 2 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+        {itemType === 'F' && integrityState && (() => {
+          const suspectCount = hashHistory.filter(h => h.hash_state === 2).length
+          const hasHashes = hashHistory.length > 0
+          const hashPageCount = Math.ceil(hashHistory.length / HASHES_PER_PAGE)
+          const hashPageStart = hashHistoryPage * HASHES_PER_PAGE
+          const hashPageSlice = hashHistory.slice(hashPageStart, hashPageStart + HASHES_PER_PAGE)
+
+          return (
+            <div className={`${isPanel ? 'mt-2 pt-2' : 'mt-4 pt-4'} border-t space-y-4`}>
+              {/* Integrity heading with do-not-validate toggle */}
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Integrity</p>
+                <div className="flex items-center gap-1.5">
+                  {integrityState.do_not_validate
+                    ? <ShieldOff className="h-4 w-4 text-amber-500" />
+                    : <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  }
+                  <Switch
+                    size="sm"
+                    checked={!integrityState.do_not_validate}
+                    onCheckedChange={handleToggleValidation}
+                    className="data-[state=checked]:bg-muted-foreground"
+                    aria-label={integrityState.do_not_validate ? 'Validation disabled' : 'Validation enabled'}
+                  />
+                  <span className="text-xs text-muted-foreground">Validation</span>
                 </div>
-                {integrityState.file_hash && (
-                  <div
-                    className="flex items-center gap-1 mt-0.5 cursor-pointer"
-                    onClick={() => setHashExpanded(!hashExpanded)}
-                  >
-                    <p className="font-mono text-xs break-all">
-                      {hashExpanded ? integrityState.file_hash : integrityState.file_hash.slice(0, 8) + '\u2026'}
-                    </p>
-                    <ChevronDown className={cn("h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform", !hashExpanded && "-rotate-90")} />
-                  </div>
+              </div>
+
+              {/* Hash section */}
+              <div className="border border-border rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Hash:</span>{' '}
+                    {loadingHashHistory ? (
+                      <span className="text-muted-foreground">Loading...</span>
+                    ) : hasHashes ? (
+                      suspectCount > 0 ? (
+                        <span className="font-medium">
+                          Baseline &rarr; {suspectCount} Suspect{' '}
+                          <AlertTriangle className="inline h-3.5 w-3.5 text-amber-500 align-text-bottom" />
+                        </span>
+                      ) : (
+                        <span className="font-medium">Baseline</span>
+                      )
+                    ) : (
+                      <span className="text-muted-foreground">Not hashed</span>
+                    )}
+                  </p>
+                  {hasHashes && suspectCount > 0 && (
+                    <ReviewToggle
+                      size="sm"
+                      reviewed={v.hash_reviewed_at != null}
+                      onToggle={handleToggleHashReview}
+                      disabled={reviewingHash}
+                    />
+                  )}
+                </div>
+
+                {/* Hash timeline table */}
+                {hasHashes && (
+                  <>
+                    <div className="border border-border rounded-md overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted">
+                            <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">Scan</th>
+                            <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">State</th>
+                            <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">Hash</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {hashPageSlice.map((h, idx) => {
+                            const globalIdx = hashPageStart + idx
+                            const isExpanded = expandedHashes[globalIdx] || false
+                            return (
+                              <tr key={h.first_scan_id} className={h.hash_state === 2 ? 'bg-amber-500/5' : ''}>
+                                <td className="px-2 py-1 whitespace-nowrap text-muted-foreground">
+                                  #{h.first_scan_id} ({formatScanDate(h.scan_started_at)})
+                                </td>
+                                <td className="px-2 py-1 whitespace-nowrap">
+                                  <span className="flex items-center gap-1">
+                                    {h.hash_state === 1 ? 'Baseline' : 'Suspect'}
+                                    {h.hash_state === 2 && <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-1">
+                                  <button
+                                    className="font-mono text-left hover:text-foreground transition-colors flex items-center gap-1"
+                                    onClick={() => setExpandedHashes(prev => ({ ...prev, [globalIdx]: !isExpanded }))}
+                                  >
+                                    <span className={isExpanded ? 'break-all' : ''}>
+                                      {isExpanded ? h.file_hash : h.file_hash.slice(0, 12) + '\u2026'}
+                                    </span>
+                                    <ChevronDown className={cn("h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform", !isExpanded && "-rotate-90")} />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {hashPageCount > 1 && (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-xs px-2"
+                          disabled={hashHistoryPage <= 0}
+                          onClick={() => setHashHistoryPage(p => p - 1)}
+                        >
+                          &larr; Prev
+                        </Button>
+                        <span>
+                          {hashPageStart + 1}&ndash;{Math.min(hashPageStart + HASHES_PER_PAGE, hashHistory.length)} of {hashHistory.length}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-xs px-2"
+                          disabled={hashHistoryPage >= hashPageCount - 1}
+                          onClick={() => setHashHistoryPage(p => p + 1)}
+                        >
+                          Next &rarr;
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-              <div>
-                <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground">Validation :</span>
-                  <span>
-                    {!integrityState.has_validator && integrityState.val_state == null
-                      ? 'No Validator'
-                      : valStateLabel(integrityState.val_state)}
-                  </span>
-                  {integrityState.val_state === 2 && <CircleX className="h-3.5 w-3.5 text-rose-500" />}
+
+              {/* Validation section */}
+              <div className="border border-border rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Validation:</span>{' '}
+                    <span className="font-medium">
+                      {!integrityState.has_validator && v.val_state == null
+                        ? 'No Validator'
+                        : valStateLabel(v.val_state)}
+                    </span>
+                    {v.val_state === 2 && <CircleX className="inline h-3.5 w-3.5 text-rose-500 ml-1 align-text-bottom" />}
+                  </p>
+                  {v.val_state === 2 && (
+                    <ReviewToggle
+                      size="sm"
+                      reviewed={v.val_reviewed_at != null}
+                      onToggle={handleToggleValReview}
+                      disabled={reviewingVal}
+                    />
+                  )}
                 </div>
-                {integrityState.val_error && integrityState.val_error.trim() !== '' && (
-                  <p className="text-xs mt-0.5">{integrityState.val_error}</p>
+                {v.val_error && v.val_error.trim() !== '' && (
+                  <p className="text-xs mt-1.5 text-muted-foreground">{v.val_error}</p>
                 )}
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Children counts (directories only) */}
         {itemType === 'D' && !isTombstone && (
@@ -833,10 +990,7 @@ export function ItemDetail({
           <div className="flex items-center justify-center bg-muted px-4 py-2">
             {navigator}
           </div>
-          <CardHeader className="pt-3">
-            <p className="text-xs text-muted-foreground text-center">{scanRangeLabel(v)}</p>
-          </CardHeader>
-          <CardContent>{stateContent}</CardContent>
+          <CardContent className="pt-4">{stateContent}</CardContent>
         </Card>
       )
     }
@@ -845,7 +999,6 @@ export function ItemDetail({
       <div className="px-3 py-3">
         <div className="mb-2">
           {navigator}
-          <p className="text-xs text-muted-foreground mt-0.5 pl-7">{scanRangeLabel(v)}</p>
         </div>
         {stateContent}
       </div>

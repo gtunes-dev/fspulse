@@ -298,6 +298,10 @@ impl WebServer {
                 "/api/items/{item_id}/integrity-state",
                 get(api::items::get_integrity_state),
             )
+            .route(
+                "/api/items/{item_id}/versions/{item_version}/hashes",
+                get(api::items::get_hash_history),
+            )
             // Temporal model item endpoints
             .route(
                 "/api/items/immediate-children",

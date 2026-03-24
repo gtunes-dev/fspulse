@@ -6,7 +6,7 @@ use axum::{
 use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::items::{self, SizeHistoryPoint};
+use crate::items::{self, HashHistoryEntry, SizeHistoryPoint};
 
 /// Query parameters for size history (temporal model)
 #[derive(Debug, Deserialize)]
@@ -111,6 +111,32 @@ pub async fn get_children_counts(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to get children counts: {}", e),
+            ))
+        }
+    }
+}
+
+/// Response structure for hash history
+#[derive(Debug, Serialize)]
+pub struct HashHistoryResponse {
+    pub hashes: Vec<HashHistoryEntry>,
+}
+
+/// GET /api/items/:item_id/versions/:item_version/hashes
+/// Returns all hash versions for a given item_id and item_version, ordered chronologically
+pub async fn get_hash_history(
+    Path((item_id, item_version)): Path<(i64, i64)>,
+) -> Result<Json<HashHistoryResponse>, (StatusCode, String)> {
+    match items::get_hash_history(item_id, item_version) {
+        Ok(hashes) => Ok(Json(HashHistoryResponse { hashes })),
+        Err(e) => {
+            error!(
+                "Failed to get hash history for item {} version {}: {}",
+                item_id, item_version, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get hash history: {}", e),
             ))
         }
     }

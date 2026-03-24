@@ -274,6 +274,13 @@ fn serialize_optional_hash<S: Serializer>(
     }
 }
 
+fn serialize_hash<S: Serializer>(
+    hash: &Vec<u8>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&hex::encode(hash))
+}
+
 /// A single version entry for the ItemDetail version history
 #[derive(Clone, Debug, Serialize)]
 pub struct VersionHistoryEntry {
@@ -298,6 +305,9 @@ pub struct VersionHistoryEntry {
     pub file_hash: Option<Vec<u8>>,
     pub val_state: Option<i64>,
     pub val_error: Option<String>,
+    // Review timestamps
+    pub val_reviewed_at: Option<i64>,
+    pub hash_reviewed_at: Option<i64>,
 }
 
 impl VersionHistoryEntry {
@@ -321,6 +331,8 @@ impl VersionHistoryEntry {
             file_hash: row.get(15)?,
             val_state: row.get(16)?,
             val_error: row.get(17)?,
+            val_reviewed_at: row.get(18)?,
+            hash_reviewed_at: row.get(19)?,
         })
     }
 }
@@ -331,7 +343,8 @@ const VERSION_HISTORY_COLUMNS: &str =
      v.is_added, v.is_deleted, v.access, \
      v.mod_date, v.size, \
      v.add_count, v.modify_count, v.delete_count, v.unchanged_count, \
-     hv.hash_state, hv.file_hash, v.val_state, v.val_error";
+     hv.hash_state, hv.file_hash, v.val_state, v.val_error, \
+     v.val_reviewed_at, v.hash_reviewed_at";
 
 const VERSION_HISTORY_JOINS: &str =
     "JOIN scans s1 ON s1.scan_id = v.first_scan_id \
@@ -455,6 +468,59 @@ pub fn get_children_counts(
         file_count,
         directory_count,
     })
+}
+
+// ---- Hash history types and functions ----
+
+/// A single hash version entry for the hash history of an item version
+#[derive(Clone, Debug, Serialize)]
+pub struct HashHistoryEntry {
+    pub first_scan_id: i64,
+    pub last_scan_id: i64,
+    pub scan_started_at: i64,
+    #[serde(serialize_with = "serialize_hash")]
+    pub file_hash: Vec<u8>,
+    pub hash_state: i64,
+}
+
+impl HashHistoryEntry {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(HashHistoryEntry {
+            first_scan_id: row.get(0)?,
+            last_scan_id: row.get(1)?,
+            scan_started_at: row.get(2)?,
+            file_hash: row.get(3)?,
+            hash_state: row.get(4)?,
+        })
+    }
+}
+
+/// Get all hash versions for a given item_id and item_version, ordered chronologically.
+pub fn get_hash_history(
+    item_id: i64,
+    item_version: i64,
+) -> Result<Vec<HashHistoryEntry>, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    let sql = r#"
+        SELECT hv.first_scan_id, hv.last_scan_id, s.started_at, hv.file_hash, hv.hash_state
+        FROM hash_versions hv
+        JOIN scans s ON s.scan_id = hv.first_scan_id
+        WHERE hv.item_id = ? AND hv.item_version = ?
+        ORDER BY hv.first_scan_id ASC"#;
+
+    let mut stmt = conn.prepare_cached(sql)?;
+    let rows = stmt.query_map(
+        params![item_id, item_version],
+        HashHistoryEntry::from_row,
+    )?;
+
+    let mut history = Vec::new();
+    for row in rows {
+        history.push(row?);
+    }
+
+    Ok(history)
 }
 
 /// Response for integrity state of an item at a specific scan point
