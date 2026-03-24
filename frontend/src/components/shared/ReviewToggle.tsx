@@ -20,7 +20,7 @@ export function ReviewToggle({ reviewed, onToggle, disabled = false, size = 'def
       )}
       onClick={onToggle}
       disabled={disabled}
-      title={reviewed ? "Mark as not reviewed" : "Mark as reviewed"}
+      aria-label={reviewed ? "Mark as not reviewed" : "Mark as reviewed"}
     >
       {/* Not reviewed side */}
       <span

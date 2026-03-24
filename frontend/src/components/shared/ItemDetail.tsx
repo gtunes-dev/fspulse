@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
   File, Folder, FileX, FolderX, Calendar as CalendarIcon,
-  HardDrive, AlertTriangle, CircleX, ChevronDown, ChevronLeft, ChevronRight, Eye, X,
+  HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
   ShieldCheck, ShieldOff,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
@@ -48,6 +48,19 @@ import {
   CartesianGrid,
 } from 'recharts'
 import { Separator } from '@/components/ui/separator'
+import {
+  HoverCard,
+  HoverCardTrigger,
+  HoverCardContent,
+} from '@/components/ui/hover-card'
+import {
+  type CarouselApi,
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselPrevious,
+  CarouselNext,
+} from '@/components/ui/carousel'
 import { formatDateFull, formatScanDate } from '@/lib/dateUtils'
 import { formatFileSize } from '@/lib/formatUtils'
 import { cn } from '@/lib/utils'
@@ -286,15 +299,19 @@ export function ItemDetail({
   const [reviewingHash, setReviewingHash] = useState(false)
   const [reviewingVal, setReviewingVal] = useState(false)
   const [pathExpanded, setPathExpanded] = useState(false)
+  const [pathTruncated, setPathTruncated] = useState(false)
+  const pathRef = useRef<HTMLSpanElement>(null)
+  const [carouselApi, setCarouselApi] = useState<CarouselApi>()
+  const suppressCarouselSync = useRef(false)
 
   // Selected version for the detail view — stored as full data, not derived from page
   const [selectedVersion, setSelectedVersion] = useState<VersionEntry | null>(null)
 
   const isPanel = mode === 'panel'
   const isSheet = mode === 'sheet'
-  const pathSegments = itemPath.split('/').filter(Boolean)
-  const itemName = pathSegments.pop() || itemPath
-  const parentFolder = pathSegments.pop() || ''
+  const lastSlash = itemPath.lastIndexOf('/')
+  const itemName = lastSlash >= 0 ? itemPath.slice(lastSlash + 1) : itemPath
+  const parentPath = lastSlash > 0 ? itemPath.slice(0, lastSlash) : ''
 
   // For sheet mode, skip data loading when not open
   const shouldLoad = isPanel || open === true
@@ -303,8 +320,42 @@ export function ItemDetail({
   useEffect(() => {
     setOpenVersions({})
     setPathExpanded(false)
+    setPathTruncated(false)
     setSelectedVersion(null)
   }, [itemId])
+
+  // Detect if path text is truncated
+  useEffect(() => {
+    if (pathExpanded) return
+    const el = pathRef.current
+    if (el) setPathTruncated(el.scrollWidth > el.clientWidth)
+  }, [parentPath, pathExpanded])
+
+  // Sync carousel → selectedVersion when user swipes/clicks arrows
+  useEffect(() => {
+    if (!carouselApi) return
+    const onSelect = () => {
+      if (suppressCarouselSync.current) return
+      const idx = carouselApi.selectedScrollSnap()
+      if (idx >= 0 && idx < versions.length && versions[idx].item_version !== selectedVersion?.item_version) {
+        setSelectedVersion(versions[idx])
+      }
+    }
+    carouselApi.on('select', onSelect)
+    return () => { carouselApi.off('select', onSelect) }
+  }, [carouselApi, versions, selectedVersion])
+
+  // Sync selectedVersion → carousel when user clicks version list
+  useEffect(() => {
+    if (!carouselApi || !selectedVersion) return
+    const idx = versions.findIndex(v => v.item_version === selectedVersion.item_version)
+    if (idx >= 0 && idx !== carouselApi.selectedScrollSnap()) {
+      suppressCarouselSync.current = true
+      carouselApi.scrollTo(idx)
+      // Re-enable after animation settles
+      requestAnimationFrame(() => { suppressCarouselSync.current = false })
+    }
+  }, [carouselApi, selectedVersion, versions])
 
   // ---- Data loading ----
 
@@ -629,57 +680,39 @@ export function ItemDetail({
 
   // ---- Content rendering ----
 
-  const navigateVersion = (delta: number) => {
-    if (!selectedVersion) return
-    const newVersionNum = selectedVersion.item_version + delta
-    if (newVersionNum < 1 || newVersionNum > totalVersionCount) return
-    // If the target version is on the current page, just select it
-    const onPage = versions.find(v => v.item_version === newVersionNum)
-    if (onPage) {
-      setSelectedVersion(onPage)
-    } else {
-      // Need to load the page containing the target version
-      const posInOrder = versionOrder === 'asc'
-        ? newVersionNum - 1
-        : totalVersionCount - newVersionNum
-      const targetPage = Math.floor(posInOrder / VERSIONS_PER_PAGE)
-      loadVersionPage(targetPage, versionOrder, newVersionNum)
-    }
-  }
+
+  const pathLine = parentPath ? (
+    <button
+      className={cn(
+        "text-muted-foreground flex items-center gap-1 text-left w-full transition-colors",
+        (pathTruncated || pathExpanded) && "hover:text-foreground cursor-pointer",
+        !pathTruncated && !pathExpanded && "cursor-default",
+        isSheet ? 'text-sm' : 'text-xs',
+      )}
+      onClick={() => (pathTruncated || pathExpanded) && setPathExpanded(!pathExpanded)}
+    >
+      <span className="flex-shrink-0">in </span>
+      <span ref={pathRef} className={pathExpanded ? 'break-all' : 'truncate'}>{parentPath}</span>
+      {(pathTruncated || pathExpanded) && (
+        <ChevronDown className={cn("h-3 w-3 flex-shrink-0 transition-transform", !pathExpanded && "-rotate-90")} />
+      )}
+    </button>
+  ) : null
 
   const renderHeader = () => {
+    const icon = isTombstone
+      ? (itemType === 'D' ? <FolderX className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-destructive`} /> : <FileX className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-destructive`} />)
+      : (itemType === 'D' ? <Folder className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-blue-500`} /> : <File className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-muted-foreground`} />)
+
     if (isSheet) {
       return (
-        <SheetHeader className="space-y-3">
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0">
-              {isTombstone ? (
-                itemType === 'D' ? <FolderX className="h-10 w-10 text-destructive" /> : <FileX className="h-10 w-10 text-destructive" />
-              ) : (
-                itemType === 'D' ? <Folder className="h-10 w-10 text-blue-500" /> : <File className="h-10 w-10 text-muted-foreground" />
-              )}
-            </div>
+        <SheetHeader>
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-0.5">{icon}</div>
             <div className="flex-1 min-w-0">
-              <SheetTitle className="text-xl font-bold break-words">{itemName}</SheetTitle>
-              {parentFolder && (
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  in <span className="text-foreground">{parentFolder}</span>
-                </p>
-              )}
-              <button
-                className="text-xs text-muted-foreground mt-1 flex items-center gap-1 text-left w-full hover:text-foreground transition-colors"
-                onClick={() => setPathExpanded(!pathExpanded)}
-              >
-                <span className={pathExpanded ? 'break-all' : 'truncate'}>{itemPath}</span>
-                <ChevronDown className={cn("h-3 w-3 flex-shrink-0 transition-transform", !pathExpanded && "-rotate-90")} />
-              </button>
+              <SheetTitle className="text-lg font-bold break-words">{itemName}</SheetTitle>
+              {pathLine}
             </div>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <span>Item <span className="font-mono font-semibold">#{itemId}</span></span>
-            <span className="text-muted-foreground">&middot;</span>
-            <span className="text-muted-foreground">{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</span>
-            {isTombstone && <Badge variant="destructive">Deleted</Badge>}
           </div>
         </SheetHeader>
       )
@@ -688,91 +721,73 @@ export function ItemDetail({
     return (
       <div className="bg-card px-3 py-2 border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="flex-shrink-0">
-            {isTombstone ? (
-              itemType === 'D' ? <FolderX className="h-5 w-5 text-destructive" /> : <FileX className="h-5 w-5 text-destructive" />
-            ) : (
-              itemType === 'D' ? <Folder className="h-5 w-5 text-foreground" /> : <File className="h-5 w-5 text-muted-foreground" />
-            )}
-          </div>
+          <div className="flex-shrink-0">{icon}</div>
           <div className="flex-1 min-w-0">
             <p className="text-base font-semibold truncate">{itemName}</p>
-            {parentFolder && (
-              <p className="text-xs text-muted-foreground">
-                in <span className="text-foreground">{parentFolder}</span>
-              </p>
-            )}
+            {pathLine}
           </div>
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0 flex-shrink-0" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <button
-          className="text-xs text-muted-foreground mt-0.5 pl-7 flex items-center gap-1 text-left w-full hover:text-foreground transition-colors"
-          onClick={() => setPathExpanded(!pathExpanded)}
-        >
-          <span className={pathExpanded ? 'break-all' : 'truncate'}>{itemPath}</span>
-          <ChevronDown className={cn("h-3 w-3 flex-shrink-0 transition-transform", !pathExpanded && "-rotate-90")} />
-        </button>
-        <div className="flex items-center gap-2 mt-1 pl-7 text-xs">
-          <span>Item <span className="font-mono font-semibold text-foreground">#{itemId}</span></span>
-          <span className="text-muted-foreground">&middot;</span>
-          <span className="text-muted-foreground">{totalVersionCount} version{totalVersionCount !== 1 ? 's' : ''}</span>
-          {isTombstone && <Badge variant="destructive" className="text-xs">Deleted</Badge>}
-        </div>
       </div>
     )
   }
 
-  const renderCurrentState = () => {
-    if (!selectedVersion) return null
-
-    const v = selectedVersion
-    // Navigator: left = older (lower version number), right = newer (higher version number)
-    const canGoOlder = v.item_version > 1
-    const canGoNewer = v.item_version < totalVersionCount
-
-    const navigator = (
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0"
-          disabled={!canGoOlder}
-          onClick={() => navigateVersion(-1)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm font-medium whitespace-nowrap">
-          Version <span className="font-mono">{v.item_version}</span>
-          <span className="text-muted-foreground"> of {totalVersionCount}</span>
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0"
-          disabled={!canGoNewer}
-          onClick={() => navigateVersion(1)}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+  const renderItemProperties = () => (
+    <div className={`flex items-center justify-between text-sm ${isPanel ? 'text-xs' : ''}`}>
+      <div className="flex items-center gap-4">
+        <span><span className="text-muted-foreground">Item:</span> <span className="font-mono font-semibold">#{itemId}</span></span>
+        <span><span className="text-muted-foreground">Type:</span> {itemTypeLabel(itemType)}</span>
+        {isTombstone && <Badge variant="destructive">Deleted</Badge>}
       </div>
-    )
+      {itemType === 'F' && integrityState && (
+        <HoverCard openDelay={300}>
+          <HoverCardTrigger asChild>
+            <div className="flex items-center gap-1.5 cursor-default">
+              {integrityState.do_not_validate
+                ? <ShieldOff className="h-4 w-4 text-amber-500" />
+                : <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+              }
+              <Switch
+                size="sm"
+                checked={!integrityState.do_not_validate}
+                onCheckedChange={handleToggleValidation}
+                className="data-[state=checked]:bg-muted-foreground"
+                aria-label={integrityState.do_not_validate ? 'Validation disabled' : 'Validation enabled'}
+              />
+              <span className="text-xs text-muted-foreground">Validate</span>
+            </div>
+          </HoverCardTrigger>
+          <HoverCardContent side="bottom" align="end" className="w-56 text-xs">
+            {integrityState.do_not_validate
+              ? <p>Validation is <span className="font-semibold">disabled</span> for this file. Enable to include it in future validation scans.</p>
+              : <p>This file will be <span className="font-semibold">validated</span> during future scans. Disable to skip validation for this file.</p>
+            }
+          </HoverCardContent>
+        </HoverCard>
+      )}
+    </div>
+  )
 
-    const stateContent = (
+  // Render version detail content for a given version.
+  // Hash timeline and review controls only render for the selected version
+  // (since that data is loaded on selection). Other slides show a summary.
+  const renderVersionDetail = (v: VersionEntry) => {
+    const isSelected = v.item_version === selectedVersion?.item_version
+    const content = (
       <>
         {/* Metadata fields — inline label: value */}
         <div className={`text-sm ${isPanel ? 'space-y-1' : 'space-y-1.5'}`}>
           <p><span className="text-muted-foreground">Scans:</span> {scanRangeLabel(v)}</p>
-          <p><span className="text-muted-foreground">Type:</span> {itemTypeLabel(itemType)}</p>
           <p><span className="text-muted-foreground">Modified:</span> {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
           {v.size !== null && (
             <p><span className="text-muted-foreground">Size:</span> {formatFileSize(v.size)}</p>
           )}
         </div>
 
-        {/* Integrity (files only) */}
-        {itemType === 'F' && integrityState && (() => {
+        {/* Integrity (files only) — full detail only for selected version */}
+        {itemType === 'F' && integrityState && isSelected && (() => {
           const suspectCount = hashHistory.filter(h => h.hash_state === 2).length
           const hasHashes = hashHistory.length > 0
           const hashPageCount = Math.ceil(hashHistory.length / HASHES_PER_PAGE)
@@ -780,25 +795,7 @@ export function ItemDetail({
           const hashPageSlice = hashHistory.slice(hashPageStart, hashPageStart + HASHES_PER_PAGE)
 
           return (
-            <div className={`${isPanel ? 'mt-2 pt-2' : 'mt-4 pt-4'} border-t space-y-4`}>
-              {/* Integrity heading with do-not-validate toggle */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Integrity</p>
-                <div className="flex items-center gap-1.5">
-                  {integrityState.do_not_validate
-                    ? <ShieldOff className="h-4 w-4 text-amber-500" />
-                    : <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                  }
-                  <Switch
-                    size="sm"
-                    checked={!integrityState.do_not_validate}
-                    onCheckedChange={handleToggleValidation}
-                    className="data-[state=checked]:bg-muted-foreground"
-                    aria-label={integrityState.do_not_validate ? 'Validation disabled' : 'Validation enabled'}
-                  />
-                  <span className="text-xs text-muted-foreground">Validation</span>
-                </div>
-              </div>
+            <div className={`${isPanel ? 'mt-2 pt-2' : 'mt-3 pt-3'} border-t space-y-3`}>
 
               {/* Hash section */}
               <div className="border border-border rounded-lg p-3 space-y-2">
@@ -821,12 +818,24 @@ export function ItemDetail({
                     )}
                   </p>
                   {hasHashes && suspectCount > 0 && (
-                    <ReviewToggle
-                      size="sm"
-                      reviewed={v.hash_reviewed_at != null}
-                      onToggle={handleToggleHashReview}
-                      disabled={reviewingHash}
-                    />
+                    <HoverCard openDelay={300}>
+                      <HoverCardTrigger asChild>
+                        <span>
+                          <ReviewToggle
+                            size="sm"
+                            reviewed={v.hash_reviewed_at != null}
+                            onToggle={handleToggleHashReview}
+                            disabled={reviewingHash}
+                          />
+                        </span>
+                      </HoverCardTrigger>
+                      <HoverCardContent side="bottom" align="end" className="w-56 text-xs">
+                        {v.hash_reviewed_at != null
+                          ? <p>Mark this suspect hash as <span className="font-semibold">unreviewed</span></p>
+                          : <p>Mark this suspect hash as <span className="font-semibold">reviewed</span></p>
+                        }
+                      </HoverCardContent>
+                    </HoverCard>
                   )}
                 </div>
 
@@ -916,12 +925,24 @@ export function ItemDetail({
                     {v.val_state === 2 && <CircleX className="inline h-3.5 w-3.5 text-rose-500 ml-1 align-text-bottom" />}
                   </p>
                   {v.val_state === 2 && (
-                    <ReviewToggle
-                      size="sm"
-                      reviewed={v.val_reviewed_at != null}
-                      onToggle={handleToggleValReview}
-                      disabled={reviewingVal}
-                    />
+                    <HoverCard openDelay={300}>
+                      <HoverCardTrigger asChild>
+                        <span>
+                          <ReviewToggle
+                            size="sm"
+                            reviewed={v.val_reviewed_at != null}
+                            onToggle={handleToggleValReview}
+                            disabled={reviewingVal}
+                          />
+                        </span>
+                      </HoverCardTrigger>
+                      <HoverCardContent side="bottom" align="end" className="w-56 text-xs">
+                        {v.val_reviewed_at != null
+                          ? <p>Mark this validation error as <span className="font-semibold">unreviewed</span></p>
+                          : <p>Mark this validation error as <span className="font-semibold">reviewed</span></p>
+                        }
+                      </HoverCardContent>
+                    </HoverCard>
                   )}
                 </div>
                 {v.val_error && v.val_error.trim() !== '' && (
@@ -984,23 +1005,145 @@ export function ItemDetail({
       </>
     )
 
+    return content
+  }
+
+  const renderMainCard = () => {
+    const totalPages = Math.ceil(totalVersionCount / VERSIONS_PER_PAGE)
+    const pageStart = versionPage * VERSIONS_PER_PAGE + 1
+    const pageEnd = Math.min(pageStart + versions.length - 1, totalVersionCount)
+
+    const sortControl = (
+      <Select value={versionOrder} onValueChange={(v) => handleOrderChange(v as 'asc' | 'desc')}>
+        <SelectTrigger className={isPanel ? 'h-6 w-[110px] text-xs' : 'h-7 w-[130px] text-xs'}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="desc">Newest first</SelectItem>
+          <SelectItem value="asc">Oldest first</SelectItem>
+        </SelectContent>
+      </Select>
+    )
+
+    const versionCarousel = versions.length > 0 && (
+      <div className="flex items-start gap-2">
+        <Carousel
+          opts={{ align: 'center', watchDrag: false }}
+          setApi={setCarouselApi}
+          className="flex-1 min-w-0"
+        >
+          <div className="flex items-center gap-2">
+            <CarouselPrevious className="static translate-y-0 h-8 w-8 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <CarouselContent>
+                {versions.map((v) => (
+                  <CarouselItem key={v.item_version}>
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      <div className="bg-muted px-3 py-1.5 text-center">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Version {v.item_version} of {totalVersionCount}
+                        </p>
+                      </div>
+                      <div className={isPanel ? 'p-2' : 'p-4'}>
+                        {renderVersionDetail(v)}
+                      </div>
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </div>
+            <CarouselNext className="static translate-y-0 h-8 w-8 flex-shrink-0" />
+          </div>
+        </Carousel>
+      </div>
+    )
+
     if (isSheet) {
       return (
-        <Card className="border-2 overflow-hidden">
-          <div className="flex items-center justify-center bg-muted px-4 py-2">
-            {navigator}
+        <Card>
+          {/* Item properties */}
+          <CardContent className="py-3">
+            {renderItemProperties()}
+          </CardContent>
+          <Separator />
+
+          {/* Version detail carousel */}
+          {versionCarousel && (
+            <>
+              <CardContent className="py-3">
+                {versionCarousel}
+              </CardContent>
+            </>
+          )}
+
+          {/* Version list */}
+          <div className="bg-muted px-4 py-1.5 relative flex items-center justify-end">
+            <p className="absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-wide text-muted-foreground pointer-events-none">All Versions</p>
+            {sortControl}
           </div>
-          <CardContent className="pt-4">{stateContent}</CardContent>
+          <CardContent className="pt-3 pb-3">
+            {versions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No version history</p>
+            ) : (
+              <>
+                <div className="border border-border rounded-lg">
+                  {renderVersionRows()}
+                </div>
+                {totalPages > 1 && (
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={versionPage <= 0} onClick={() => loadVersionPage(versionPage - 1, versionOrder)}>
+                      &larr; Prev
+                    </Button>
+                    <span>{pageStart}&ndash;{pageEnd} of {totalVersionCount}</span>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" disabled={versionPage >= totalPages - 1} onClick={() => loadVersionPage(versionPage + 1, versionOrder)}>
+                      Next &rarr;
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
         </Card>
       )
     }
 
+    // Panel mode
     return (
-      <div className="px-3 py-3">
-        <div className="mb-2">
-          {navigator}
+      <div>
+        <div className="px-3 py-2 border-b border-border">
+          {renderItemProperties()}
         </div>
-        {stateContent}
+        {versionCarousel && (
+          <div className="py-3 px-3">
+            {versionCarousel}
+          </div>
+        )}
+        <div className="bg-muted/50 px-3 py-1.5 relative flex items-center justify-end border-y border-border">
+          <p className="absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-wide text-muted-foreground pointer-events-none">All Versions</p>
+          {sortControl}
+        </div>
+        <div className="px-3 py-3">
+          {versions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No version history</p>
+          ) : (
+            <>
+              <div className="divide-y divide-border">
+                {renderVersionRows()}
+              </div>
+              {totalPages > 1 && (
+                <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" disabled={versionPage <= 0} onClick={() => loadVersionPage(versionPage - 1, versionOrder)}>
+                    &larr; Prev
+                  </Button>
+                  <span>{pageStart}&ndash;{pageEnd} of {totalVersionCount}</span>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" disabled={versionPage >= totalPages - 1} onClick={() => loadVersionPage(versionPage + 1, versionOrder)}>
+                    Next &rarr;
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     )
   }
@@ -1101,30 +1244,9 @@ export function ItemDetail({
     )
   }
 
-  const renderVersionHistory = () => {
-    const totalPages = Math.ceil(totalVersionCount / VERSIONS_PER_PAGE)
-    const pageStart = versionPage * VERSIONS_PER_PAGE + 1
-    const pageEnd = Math.min(pageStart + versions.length - 1, totalVersionCount)
-
-    const sortControl = (
-      <Select value={versionOrder} onValueChange={(v) => handleOrderChange(v as 'asc' | 'desc')}>
-        <SelectTrigger className={isPanel ? 'h-6 w-[110px] text-xs' : 'h-7 w-[130px] text-xs'}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="desc">Newest first</SelectItem>
-          <SelectItem value="asc">Oldest first</SelectItem>
-        </SelectContent>
-      </Select>
-    )
-
+  const renderVersionRows = () => {
     return (
-      <Section mode={mode} title="Version History" trailing={sortControl}>
-        {versions.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">No version history</p>
-        ) : (
-          <>
-            <div className={isSheet ? 'border border-border rounded-lg' : 'divide-y divide-border'}>
+      <>
               {versions.map((v, idx) => {
                 const prev = predecessors.get(v.item_version) ?? null
                 const kind = classifyChange(v, prev)
@@ -1318,35 +1440,7 @@ export function ItemDetail({
                   </div>
                 )
               })}
-            </div>
-            {totalPages > 1 && (
-              <div className={`${isPanel ? 'mt-2' : 'mt-3'} flex items-center justify-between text-xs text-muted-foreground`}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
-                  disabled={versionPage <= 0}
-                  onClick={() => loadVersionPage(versionPage - 1, versionOrder)}
-                >
-                  ← Prev
-                </Button>
-                <span>
-                  {pageStart}–{pageEnd} of {totalVersionCount}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
-                  disabled={versionPage >= totalPages - 1}
-                  onClick={() => loadVersionPage(versionPage + 1, versionOrder)}
-                >
-                  Next →
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </Section>
+      </>
     )
   }
 
@@ -1360,9 +1454,8 @@ export function ItemDetail({
           Loading...
         </div>
       ) : (
-        <div className={isSheet ? 'space-y-6 mt-6' : 'divide-y divide-border border-b border-border'}>
-          {renderCurrentState()}
-          {renderVersionHistory()}
+        <div className={isSheet ? 'space-y-4 mt-4' : 'divide-y divide-border border-b border-border'}>
+          {renderMainCard()}
           {renderSizeHistory()}
         </div>
       )}

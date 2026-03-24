@@ -8,6 +8,11 @@ import {
   ShieldOff,
 } from 'lucide-react'
 import { ReviewToggle } from '@/components/shared/ReviewToggle'
+import {
+  HoverCard,
+  HoverCardTrigger,
+  HoverCardContent,
+} from '@/components/ui/hover-card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -470,20 +475,30 @@ export function IntegrityPage() {
                           )} />
                         </TableCell>
                         <TableCell className="px-2" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1">
-                            {item.do_not_validate
-                              ? <ShieldOff className="h-5 w-5 text-amber-500" />
-                              : <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-                            }
-                            <Switch
-                              size="sm"
-                              checked={!item.do_not_validate}
-                              onCheckedChange={() => handleToggleValidation(item)}
-                              disabled={validateInFlight}
-                              className="data-[state=checked]:bg-muted-foreground"
-                              aria-label={item.do_not_validate ? 'Validation disabled' : 'Validation enabled'}
-                            />
-                          </div>
+                          <HoverCard openDelay={300}>
+                            <HoverCardTrigger asChild>
+                              <div className="flex items-center gap-1 cursor-default">
+                                {item.do_not_validate
+                                  ? <ShieldOff className="h-5 w-5 text-amber-500" />
+                                  : <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+                                }
+                                <Switch
+                                  size="sm"
+                                  checked={!item.do_not_validate}
+                                  onCheckedChange={() => handleToggleValidation(item)}
+                                  disabled={validateInFlight}
+                                  className="data-[state=checked]:bg-muted-foreground"
+                                  aria-label={item.do_not_validate ? 'Validation disabled' : 'Validation enabled'}
+                                />
+                              </div>
+                            </HoverCardTrigger>
+                            <HoverCardContent side="bottom" align="start" className="w-56 text-xs">
+                              {item.do_not_validate
+                                ? <p>Validation is <span className="font-semibold">disabled</span> for this file. Enable to include it in future validation scans.</p>
+                                : <p>This file will be <span className="font-semibold">validated</span> during future scans. Disable to skip validation for this file.</p>
+                              }
+                            </HoverCardContent>
+                          </HoverCard>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-baseline gap-1 min-w-0">
@@ -550,12 +565,24 @@ export function IntegrityPage() {
                                     if (hasSuspicious) {
                                       hashContent = (
                                         <span className="inline-flex items-center gap-1.5">
-                                          <ReviewToggle
-                                            size="sm"
-                                            reviewed={hashReviewed}
-                                            onToggle={() => handleToggleHashReview(item.item_id, ver)}
-                                            disabled={hashInFlight}
-                                          />
+                                          <HoverCard openDelay={300}>
+                                            <HoverCardTrigger asChild>
+                                              <span>
+                                                <ReviewToggle
+                                                  size="sm"
+                                                  reviewed={hashReviewed}
+                                                  onToggle={() => handleToggleHashReview(item.item_id, ver)}
+                                                  disabled={hashInFlight}
+                                                />
+                                              </span>
+                                            </HoverCardTrigger>
+                                            <HoverCardContent side="bottom" className="w-56 text-xs">
+                                              {hashReviewed
+                                                ? <p>Mark this suspect hash as <span className="font-semibold">unreviewed</span></p>
+                                                : <p>Mark this suspect hash as <span className="font-semibold">reviewed</span></p>
+                                              }
+                                            </HoverCardContent>
+                                          </HoverCard>
                                           <span>{ver.hash_suspicious_count} suspicious</span>
                                         </span>
                                       )
@@ -572,12 +599,24 @@ export function IntegrityPage() {
                                     if (hasValError) {
                                       valContent = (
                                         <span className="inline-flex items-center gap-1.5 max-w-full">
-                                          <ReviewToggle
-                                            size="sm"
-                                            reviewed={valReviewed}
-                                            onToggle={() => handleToggleValReview(item.item_id, ver)}
-                                            disabled={valInFlight}
-                                          />
+                                          <HoverCard openDelay={300}>
+                                            <HoverCardTrigger asChild>
+                                              <span>
+                                                <ReviewToggle
+                                                  size="sm"
+                                                  reviewed={valReviewed}
+                                                  onToggle={() => handleToggleValReview(item.item_id, ver)}
+                                                  disabled={valInFlight}
+                                                />
+                                              </span>
+                                            </HoverCardTrigger>
+                                            <HoverCardContent side="bottom" className="w-56 text-xs">
+                                              {valReviewed
+                                                ? <p>Mark this validation error as <span className="font-semibold">unreviewed</span></p>
+                                                : <p>Mark this validation error as <span className="font-semibold">reviewed</span></p>
+                                              }
+                                            </HoverCardContent>
+                                          </HoverCard>
                                           <span className="truncate" title={ver.val_error!}>{ver.val_error}</span>
                                         </span>
                                       )
