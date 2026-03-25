@@ -7,30 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-03-25
+
+This release redesigns the integrity model and replaces the alerts system with a version-bound integrity architecture and a dedicated Integrity page.
+
+**Upgrade note:** Schema migration v27→v29 restructures hash and validation data into the new model and drops the alerts table. This migration may take several minutes on large databases.
+
 ### Added
-- **Integrity page**: New top-level page replacing Alerts. Shows items with hash or validation issues, filterable by issue type, file type, review status, and path. Per-version review toggles for hash and validation issues. Do-not-validate toggle per item
-- **ItemDetail version carousel**: Version detail now uses a shadcn carousel with bordered slides and left/right navigation. Hash timeline table shows all hash observations for a version with expandable hashes and pagination
-- **Review hover cards**: Hover over review toggles and validate switches to see contextual explanations of what each control does
-- **Integrity trend charts**: Trends page now shows Validation Errors and Suspicious Hashes charts with new/total series and toggle controls
-- **Integrity deep link in Root Health**: Shield icon next to each root links to the Integrity page filtered to that root
-- **Test database**: Added `generate_testdb.py` and pre-built test database with integrity scenarios
+- **Integrity page**: New top-level page replacing Alerts. Shows items with hash or validation issues, filterable by issue type, file type, review status, and path. Expandable per-item rows show version-level detail with review toggles
+- **Hash versions table**: Hash observations now tracked in a separate `hash_versions` table bound to specific item versions, supporting multiple observations per version for bit-rot detection over time
+- **Review system**: Per-version review timestamps (`val_reviewed_at`, `hash_reviewed_at`) replace alert status management. Review toggles with hover card explanations throughout the UI
+- **Do-not-validate**: Per-item flag to suppress validation across all future versions, controllable from the Integrity page and item detail panel
+- **Integrity trend charts**: Trends page shows Validation Errors and Suspicious Hashes charts with new/total series and toggle controls
+- **Integrity columns in History and Recent Activity**: Scan history shows new validation errors and suspect hashes with links to the Integrity page
+- **Integrity deep link in Root Health**: Shield icon links to the Integrity page filtered to that root
+- **Show deleted filter**: Integrity page supports filtering by deleted items
 
 ### Changed
-- **ItemDetail layout redesign**: Combined item properties and version detail into a single card. Item header shows only filename and truncatable parent path. Item-level properties (ID, type, validate toggle) separated from version-level content
-- **Trends page layout**: Items and Changes charts now side-by-side; integrity charts in a second row below
-- **Browse filter bar**: Collapsed into a single horizontal bar (no expand/collapse). Search box moved inline with tab bar
-- **Browse detail panel**: Widened to 500px for hash table readability
-- **Dashboard links**: Quick start guides now link to Integrity instead of Alerts
-- **Root Health table**: Removed alerts column; status column right-aligned
-- **Renamed dashboard to home** in frontend source tree
+- **Integrity model redesign** (schema v27→v28): Validation state moved inline onto `item_versions` as a one-time-per-version write. `item_version` is now a sequential per-item counter. Folder versions carry descendant change counts computed bottom-up in a new Analyze Scan phase. Undo log extended for hash version rollback
+- **ItemDetail redesign**: Carousel-based version navigator with combined item properties, version detail, and version list in a single card. Hash timeline table shows all hash observations per version
+- **Trends page layout**: Items and Changes charts side-by-side; integrity charts in a second row
+- **Browse filter bar**: Collapsed into a single horizontal bar with search inline in the tab bar
+- **Documentation updated**: All mdbook docs and README updated to reflect the alerts-to-integrity transition
 
 ### Removed
-- **Alerts system**: Removed AlertsPage, alerts table, alerts API routes, alerts query domain, alerts chart from Trends, alerts column from Root Health, alerts sample query from Data Explorer
-
-### Internal
-- Schema v28→v29: added `val_reviewed_at`, `hash_reviewed_at`, `do_not_validate`, `file_extension`, integrity scan counts; dropped alerts table
-- Integrity API endpoints for count, items, versions, review, and do-not-validate
-- Items API endpoints for version-count, paginated versions, hash history, integrity-state
+- **Alerts system**: Alerts table, alerts API, alerts query domain, AlertsPage, alerts chart from Trends, alerts column from Root Health and Data Explorer
 
 ## [v0.4.6] - 2026-03-06
 
