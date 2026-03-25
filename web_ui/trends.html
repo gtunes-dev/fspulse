@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "../searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d3000b55.js"></script>
+        <script src="../toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -200,18 +200,18 @@
 <li>Identify periods of high change</li>
 <li>Understand modification patterns</li>
 </ul>
-<h3 id="alert-trends"><a class="header" href="#alert-trends">Alert Trends</a></h3>
+<h3 id="integrity-trends"><a class="header" href="#integrity-trends">Integrity Trends</a></h3>
 <p>Track integrity issues over time:</p>
 <ul>
-<li>Validation failures</li>
-<li>Suspect hash changes</li>
-<li>Alert resolution patterns</li>
+<li>New validation failures per scan</li>
+<li>New suspect hash changes per scan</li>
+<li>Cumulative integrity issue counts</li>
 </ul>
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
 <h3 id="root-selection"><a class="header" href="#root-selection">Root Selection</a></h3>
 <p>Select which scan root to analyze from the dropdown. Each root maintains independent trend data.</p>
 <blockquote>
-<p><strong>Tip</strong>: If you select a root on the <a href="browse.html">Browse</a> or <a href="alerts.html">Alerts</a> page before navigating to Trends, the same root will be pre-selected automatically via the shared root context.</p>
+<p><strong>Tip</strong>: If you select a root on the <a href="browse.html">Browse</a> or <a href="integrity.html">Integrity</a> page before navigating to Trends, the same root will be pre-selected automatically via the shared root context.</p>
 </blockquote>
 <h3 id="date-range-filtering"><a class="header" href="#date-range-filtering">Date Range Filtering</a></h3>
 <p>Customize the time window:</p>
@@ -224,7 +224,7 @@
 <li>Custom range (manual date pickers)</li>
 </ul>
 <h3 id="baseline-exclusion"><a class="header" href="#baseline-exclusion">Baseline Exclusion</a></h3>
-<p>The Changes and Alerts charts offer a checkbox to exclude the first scan from the visualization. The first scan of a root often shows large numbers of “additions” and alerts which can skew trend visualizations. This toggle only appears when the first scan falls within the selected date range.</p>
+<p>The Changes and Integrity charts offer a checkbox to exclude the first scan from the visualization. The first scan of a root often shows large numbers of additions and integrity issues which can skew trend visualizations. This toggle only appears when the first scan falls within the selected date range.</p>
 <h3 id="interactive-charts"><a class="header" href="#interactive-charts">Interactive Charts</a></h3>
 <ul>
 <li>Hover for detailed values</li>
@@ -245,7 +245,7 @@
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../web_ui/alerts.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../web_ui/integrity.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -259,7 +259,7 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../web_ui/alerts.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../web_ui/integrity.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

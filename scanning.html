@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d3000b55.js"></script>
+        <script src="toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,7 +197,7 @@
 <li><strong>Hash changed items</strong> (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed</li>
 <li><strong>Hash all items</strong>: Hash all files, including those that have been previously hashed</li>
 </ul>
-<p>If a hash is detected to have changed without a corresponding metadata change (modification date or size), the file’s <code>hash_state</code> is set to <strong>Suspect</strong> and an alert is generated (see <a href="web_ui/alerts.html">Alerts</a>). If metadata did change, the hash change is considered legitimate and <code>hash_state</code> remains <strong>Baseline</strong>.</p>
+<p>If a hash is detected to have changed without a corresponding metadata change (modification date or size), the file’s <code>hash_state</code> is set to <strong>Suspect</strong>. These suspect hashes are surfaced on the <a href="web_ui/integrity.html">Integrity</a> page for review. If metadata did change, the hash change is considered legitimate and <code>hash_state</code> remains <strong>Baseline</strong>.</p>
 <h3 id="hash-states"><a class="header" href="#hash-states">Hash States</a></h3>
 <p>Hash state tracks the integrity of a file’s content hash over time. Hash states are stored in the database as:</p>
 <ul>
@@ -209,12 +209,12 @@
 <h3 id="finding-hash-changes"><a class="header" href="#finding-hash-changes">Finding Hash Changes</a></h3>
 <p>You can investigate hash changes through the web UI:</p>
 <ul>
-<li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows suspect hash changes where file metadata hasn’t changed</li>
+<li><strong><a href="web_ui/integrity.html">Integrity Page</a></strong>: Shows all suspect hash changes with review status filtering</li>
 <li><strong><a href="web_ui/browse.html">Browse Page</a></strong>: Click any item to see its version history including hash changes</li>
 <li><strong><a href="web_ui/data_explorer.html">Data Explorer</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
 <p>Example query to find items with suspect hashes (run on the Data Explorer’s Query tab):</p>
-<pre><code class="language-text">alerts where alert_type:(H) order by created_at desc
+<pre><code class="language-text">items where hash_state:(S) show default, hash_state, file_hash order by item_path
 </code></pre>
 <h2 id="validating"><a class="header" href="#validating">Validating</a></h2>
 <p>fsPulse can attempt to assess the “validity” of files.</p>
@@ -235,11 +235,11 @@
 <li><strong>I</strong>: Invalid. Validation was performed and an error was encountered</li>
 </ul>
 <p>In the case of ‘I’ (Invalid), the validation error message is stored alongside the validation state. When an item’s validation state changes, a new item version is created capturing both the old and new states.</p>
-<p>If a validation pass produces an error identical to the existing error, no new version is created — only the <code>last_val_scan</code> bookkeeping field is updated.</p>
+<p>Validation is a one-time operation per version. Once a version has been validated, it is not re-validated — the result is permanently associated with that version.</p>
 <h3 id="finding-validation-issues"><a class="header" href="#finding-validation-issues">Finding Validation Issues</a></h3>
-<p>Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:</p>
+<p>You can investigate validation failures through the web UI:</p>
 <ul>
-<li><strong><a href="web_ui/alerts.html">Alerts Page</a></strong>: Shows all items with validation failures, with filtering and status management</li>
+<li><strong><a href="web_ui/integrity.html">Integrity Page</a></strong>: Shows all items with validation failures, with filtering and review status tracking</li>
 <li><strong><a href="web_ui/browse.html">Browse Page</a></strong>: Click any item to see its validation status and error details in the inline detail panel</li>
 <li><strong><a href="web_ui/data_explorer.html">Data Explorer</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
@@ -278,7 +278,7 @@
 <li><strong>File size</strong> (files only)</li>
 </ul>
 </li>
-<li>If metadata differs, a new item version is created carrying forward unchanged properties (hash, validation) from the previous version</li>
+<li>If metadata differs, a new item version is created</li>
 <li>If unchanged, the existing version’s <code>last_scan_id</code> is updated in place</li>
 </ul>
 </li>
@@ -306,13 +306,7 @@
 <li><strong>Hashing</strong> — Computes a SHA-256 hash of file contents</li>
 <li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity (see <a href="validators.html">Validators</a>)</li>
 </ul>
-<p>If a hash or validation result changes:</p>
-<ul>
-<li>If the item already received a new version in the scanning phase (same scan), the existing version is <strong>updated in place</strong></li>
-<li>Otherwise, the previous version’s <code>last_scan_id</code> is restored and a new version is created</li>
-</ul>
-<p>This guarantees <strong>at most one new version per item per scan</strong>.</p>
-<p>If the hash and validation results are unchanged, only the bookkeeping fields (<code>last_hash_scan</code>, <code>last_val_scan</code>) are updated on the existing version.</p>
+<p>Hash results are stored in a separate <code>hash_versions</code> table, bound to the current item version. Validation results are written directly onto the item version row. See <a href="concepts.html">Concepts</a> for details on how hash and validation state are tracked.</p>
 <hr>
 <h2 id="performance-and-threading"><a class="header" href="#performance-and-threading">Performance and Threading</a></h2>
 <p>The analysis phase runs in parallel:</p>

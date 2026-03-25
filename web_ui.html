@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d3000b55.js"></script>
+        <script src="toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,7 +187,7 @@
 <ul>
 <li><strong><a href="web_ui/home.html">Home</a></strong> — Health overview showing root status, active tasks, and recent activity</li>
 <li><strong><a href="web_ui/browse.html">Browse</a></strong> — Navigate filesystem hierarchy with tree, folder, and search views</li>
-<li><strong><a href="web_ui/alerts.html">Alerts</a></strong> — Manage integrity issues and validation failures</li>
+<li><strong><a href="web_ui/integrity.html">Integrity</a></strong> — Review suspect hashes and validation failures</li>
 <li><strong><a href="web_ui/trends.html">Trends</a></strong> — Visualize historical data with interactive charts</li>
 </ul>
 <p><strong>Utility</strong> — operational and investigative pages:</p>
@@ -208,7 +208,7 @@
 </ul>
 <p>When collapsed, hovering over an icon shows a tooltip with the page name.</p>
 <h2 id="shared-root-context"><a class="header" href="#shared-root-context">Shared Root Context</a></h2>
-<p>When you select a root on Browse, Alerts, Trends, Schedules, or History, that selection is carried across pages via a URL parameter (<code>?root_id=N</code>). Selecting a root on Browse and then navigating to Alerts automatically pre-selects the same root, so you don’t need to re-select it on every page.</p>
+<p>When you select a root on Browse, Integrity, Trends, Schedules, or History, that selection is carried across pages via a URL parameter (<code>?root_id=N</code>). Selecting a root on Browse and then navigating to Integrity automatically pre-selects the same root, so you don’t need to re-select it on every page.</p>
 <h2 id="live-updates"><a class="header" href="#live-updates">Live Updates</a></h2>
 <p>The web interface uses WebSocket connections to provide real-time updates during task execution. When a scan is running, you can watch progress updates, statistics, and phase transitions as they happen. The sidebar footer also shows a compact progress indicator for the active task.</p>
 

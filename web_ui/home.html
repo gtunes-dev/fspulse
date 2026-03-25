@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "../searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d3000b55.js"></script>
+        <script src="../toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,13 +184,11 @@
 <ul>
 <li><strong>Root path</strong> — The directory being monitored</li>
 <li><strong>Last scan time</strong> — When the root was last scanned, with staleness indicators for roots that haven’t been scanned recently</li>
-<li><strong>Open alerts</strong> — Count of unresolved alerts (highlighted when non-zero)</li>
 <li><strong>Last scan outcome</strong> — Whether the most recent scan completed successfully, stopped, or errored</li>
 </ul>
-<p>If all roots show recent scans with zero alerts, you know your data is healthy. If a root shows open alerts, you know to investigate further.</p>
 <p>Each root row is clickable — clicking navigates to the <a href="browse.html">Browse</a> page for that root.</p>
 <p>When no roots have been configured, the Home page shows a welcome message with a link to the <a href="../web_ui.html">Roots</a> page to add your first root.</p>
-<!-- Screenshot: Root health summary showing a mix of healthy and alerted roots -->
+<!-- Screenshot: Root health summary -->
 <!-- ![Root Health Summary](screenshot-placeholder-health-summary.png) -->
 <hr>
 <h2 id="active-task"><a class="header" href="#active-task">Active Task</a></h2>
@@ -213,7 +211,7 @@
 <p>Tasks execute sequentially — only one task runs at a time.</p>
 <hr>
 <h2 id="recent-activity"><a class="header" href="#recent-activity">Recent Activity</a></h2>
-<p>A compact summary of recent scan and task activity, showing the last several completed operations with their outcomes. For the full activity log, click the <strong>View All</strong> link to navigate to the <a href="history.html">History</a> page.</p>
+<p>A compact summary of recent scan and task activity, showing the last several completed operations with their outcomes. Each entry shows change counts (adds, modifications, deletions) and an <strong>Integrity</strong> column that links to the <a href="integrity.html">Integrity</a> page showing any new validation errors or suspect hashes detected during that scan. For the full activity log, click the <strong>View All</strong> link to navigate to the <a href="history.html">History</a> page.</p>
 <hr>
 <h2 id="scan-now"><a class="header" href="#scan-now">Scan Now</a></h2>
 <p>Click the scan button on the active task card to initiate a scan. You’ll select:</p>

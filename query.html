@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d3000b55.js"></script>
+        <script src="toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -178,13 +178,12 @@
 <p>fsPulse provides a flexible, SQL-like query language for exploring scan results. This language supports filtering, custom column selection, ordering, and limiting the number of results.</p>
 <hr>
 <h2 id="query-structure"><a class="header" href="#query-structure">Query Structure</a></h2>
-<p>Each query begins with one of the five supported domains:</p>
+<p>Each query begins with one of the four supported domains:</p>
 <ul>
 <li><code>roots</code></li>
 <li><code>scans</code></li>
 <li><code>items</code></li>
 <li><code>versions</code></li>
-<li><code>alerts</code></li>
 </ul>
 <p>You can then add any of the following optional clauses:</p>
 <pre><code class="language-text">DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
@@ -225,7 +224,8 @@
 <tr><td><code>file_count</code></td><td>Integer</td><td>Yes</td><td>Count of files found in the scan</td></tr>
 <tr><td><code>folder_count</code></td><td>Integer</td><td>Yes</td><td>Count of directories found in the scan</td></tr>
 <tr><td><code>total_size</code></td><td>Integer</td><td>Yes</td><td>Total size in bytes of all files</td></tr>
-<tr><td><code>alert_count</code></td><td>Integer</td><td>Yes</td><td>Number of alerts created during the scan</td></tr>
+<tr><td><code>new_hash_suspect_count</code></td><td>Integer</td><td>No</td><td>New suspect hashes detected in this scan</td></tr>
+<tr><td><code>new_val_invalid_count</code></td><td>Integer</td><td>No</td><td>New validation failures detected in this scan</td></tr>
 <tr><td><code>add_count</code></td><td>Integer</td><td>Yes</td><td>Number of items added in the scan</td></tr>
 <tr><td><code>modify_count</code></td><td>Integer</td><td>Yes</td><td>Number of items modified in the scan</td></tr>
 <tr><td><code>delete_count</code></td><td>Integer</td><td>Yes</td><td>Number of items deleted in the scan</td></tr>
@@ -254,19 +254,17 @@
 <tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Full path of the item</td></tr>
 <tr><td><code>item_name</code></td><td>Path</td><td>No</td><td>Filename or directory name (last segment)</td></tr>
 <tr><td><code>item_type</code></td><td>Item Type Enum</td><td>Yes</td><td>File, Directory, Symlink, or Unknown</td></tr>
-<tr><td><code>version_id</code></td><td>Integer</td><td>No</td><td>Current version identifier</td></tr>
+<tr><td><code>item_version</code></td><td>Integer</td><td>No</td><td>Current version number</td></tr>
 <tr><td><code>first_scan_id</code></td><td>Integer</td><td>No</td><td>Scan where current version first appeared</td></tr>
 <tr><td><code>last_scan_id</code></td><td>Integer</td><td>Yes</td><td>Last scan confirming current state</td></tr>
 <tr><td><code>is_deleted</code></td><td>Boolean</td><td>Yes</td><td>True if item is currently deleted</td></tr>
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state (NoError, MetaError, ReadError)</td></tr>
 <tr><td><code>mod_date</code></td><td>Date</td><td>Yes</td><td>Last modification date</td></tr>
 <tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation (files only; null for folders)</td></tr>
 <tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
 <tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash (files only; null for folders)</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash (files only; null for folders)</td></tr>
-<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state (files only; null for folders)</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash from latest hash version (files only; null for folders)</td></tr>
+<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state from latest hash version (files only; null for folders)</td></tr>
 </tbody>
 </table>
 </div>
@@ -279,7 +277,7 @@
 <tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>version_id</code></td><td>Integer</td><td>Yes</td><td>Unique version identifier</td></tr>
+<tr><td><code>item_version</code></td><td>Integer</td><td>Yes</td><td>Version number (per-item sequence)</td></tr>
 <tr><td><code>item_id</code></td><td>Integer</td><td>Yes</td><td>Item this version belongs to</td></tr>
 <tr><td><code>root_id</code></td><td>Integer</td><td>Yes</td><td>Root directory identifier</td></tr>
 <tr><td><code>item_path</code></td><td>Path</td><td>No</td><td>Full path of the item</td></tr>
@@ -291,47 +289,14 @@
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state</td></tr>
 <tr><td><code>mod_date</code></td><td>Date</td><td>No</td><td>Last modification date</td></tr>
 <tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation (files only; null for folders)</td></tr>
-<tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash (files only; null for folders)</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash (files only; null for folders)</td></tr>
-<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state (files only; null for folders)</td></tr>
 <tr><td><code>add_count</code></td><td>Integer</td><td>No</td><td>Descendant items added (folders only; null for files)</td></tr>
 <tr><td><code>modify_count</code></td><td>Integer</td><td>No</td><td>Descendant items modified (folders only; null for files)</td></tr>
 <tr><td><code>delete_count</code></td><td>Integer</td><td>No</td><td>Descendant items deleted (folders only; null for files)</td></tr>
 <tr><td><code>unchanged_count</code></td><td>Integer</td><td>No</td><td>Descendant items unchanged (folders only; null for files)</td></tr>
-<tr><td><code>val_unknown_count</code></td><td>Integer</td><td>No</td><td>Descendant files with unknown validation (folders only)</td></tr>
-<tr><td><code>val_valid_count</code></td><td>Integer</td><td>No</td><td>Descendant files with valid validation (folders only)</td></tr>
-<tr><td><code>val_invalid_count</code></td><td>Integer</td><td>No</td><td>Descendant files with invalid validation (folders only)</td></tr>
-<tr><td><code>val_no_validator_count</code></td><td>Integer</td><td>No</td><td>Descendant files with no validator (folders only)</td></tr>
-<tr><td><code>hash_unknown_count</code></td><td>Integer</td><td>No</td><td>Descendant files with unknown hash state (folders only)</td></tr>
-<tr><td><code>hash_baseline_count</code></td><td>Integer</td><td>No</td><td>Descendant files with baseline hash state (folders only)</td></tr>
-<tr><td><code>hash_suspect_count</code></td><td>Integer</td><td>No</td><td>Descendant files with suspect hash state (folders only)</td></tr>
-</tbody>
-</table>
-</div>
-<hr>
-<h3 id="alerts-domain"><a class="header" href="#alerts-domain"><code>alerts</code> Domain</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>alert_id</code></td><td>Integer</td><td>No</td><td>Unique alert identifier</td></tr>
-<tr><td><code>alert_type</code></td><td>Alert Type Enum</td><td>Yes</td><td>Type of alert</td></tr>
-<tr><td><code>alert_status</code></td><td>Alert Status Enum</td><td>Yes</td><td>Current status (Open, Flagged, Dismissed)</td></tr>
-<tr><td><code>root_id</code></td><td>Integer</td><td>No</td><td>Root directory identifier</td></tr>
-<tr><td><code>scan_id</code></td><td>Integer</td><td>No</td><td>Scan that generated the alert</td></tr>
-<tr><td><code>item_id</code></td><td>Integer</td><td>No</td><td>Item the alert is about</td></tr>
-<tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Path of the affected item</td></tr>
-<tr><td><code>created_at</code></td><td>Date</td><td>Yes</td><td>When the alert was created</td></tr>
-<tr><td><code>updated_at</code></td><td>Date</td><td>No</td><td>When the alert status was last changed</td></tr>
-<tr><td><code>prev_hash_scan</code></td><td>Integer</td><td>No</td><td>Previous hash scan (for suspect hash)</td></tr>
-<tr><td><code>hash_old</code></td><td>String</td><td>No</td><td>Previous hash value</td></tr>
-<tr><td><code>hash_new</code></td><td>String</td><td>No</td><td>New hash value</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>Yes</td><td>Validation error message</td></tr>
+<tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash from latest hash version (files only; null for folders)</td></tr>
+<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state from latest hash version (files only; null for folders)</td></tr>
 </tbody>
 </table>
 </div>
@@ -355,8 +320,6 @@
 <tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code>, <code>null</code>, <code>not null</code></td><td>Valid, Invalid, No Validator, Unknown. Null for folders. Unquoted.</td></tr>
 <tr><td>Hash State</td><td><code>V</code>, <code>S</code>, <code>U</code>, <code>null</code>, <code>not null</code></td><td>Valid, Suspect, Unknown. Null for folders. Unquoted.</td></tr>
 <tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>S</code>, <code>U</code></td><td>File, Directory, Symlink, Unknown. Unquoted.</td></tr>
-<tr><td>Alert Type Enum</td><td><code>H</code>, <code>I</code>, <code>A</code></td><td>Suspect Hash, Invalid Item, Access Denied. Unquoted.</td></tr>
-<tr><td>Alert Status Enum</td><td><code>O</code>, <code>F</code>, <code>D</code></td><td>Open, Flagged, Dismissed. Unquoted.</td></tr>
 <tr><td>Scan State Enum</td><td><code>S</code>, <code>W</code>, <code>AF</code>, <code>AS</code>, <code>C</code>, <code>P</code>, <code>E</code></td><td>Scanning, Sweeping, Analyzing Files, Analyzing Scan, Completed, Stopped, Error. <code>A</code> is shorthand for <code>AF</code>. Unquoted.</td></tr>
 <tr><td>Access Status</td><td><code>N</code>, <code>M</code>, <code>R</code></td><td>No Error, Meta Error, Read Error. Unquoted.</td></tr>
 </tbody>
@@ -431,14 +394,11 @@ versions where val_state:(I) show default, val_error order by first_scan_id desc
 # Items with suspect hash state
 items where hash_state:(S) show default, hash_state, file_hash order by item_path
 
-# Open or flagged alerts for suspect hashes
-alerts where alert_type:(H), alert_status:(O, F) order by created_at desc
-
 # Scans with timestamps for programmatic processing
 scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10
 
-# Scans with change and alert counts
-scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by started_at desc
+# Scans with change and integrity counts
+scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, new_hash_suspect_count, new_val_invalid_count order by started_at desc
 </code></pre>
 <hr>
 <p>See also: <a href="web_ui/data_explorer.html">Data Explorer</a> · <a href="validators.html">Validators</a> · <a href="configuration.html">Configuration</a></p>

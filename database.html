@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d3000b55.js"></script>
+        <script src="toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -247,7 +247,7 @@ dir = "/path/to/custom/directory"
 <tr><td><code>scans</code></td><td>Individual scan executions with timing, settings, and summary statistics</td></tr>
 <tr><td><code>items</code></td><td>Stable identity for each discovered file or folder (path, type, root)</td></tr>
 <tr><td><code>item_versions</code></td><td>Temporal state — one row per distinct state of an item, with full metadata snapshot</td></tr>
-<tr><td><code>alerts</code></td><td>Integrity issues (suspect hashes, validation failures, access errors)</td></tr>
+<tr><td><code>hash_versions</code></td><td>Hash observations — SHA-256 hashes bound to specific item versions, with integrity state</td></tr>
 <tr><td><code>scan_schedules</code></td><td>Recurring scan configurations (timing, options)</td></tr>
 <tr><td><code>tasks</code></td><td>Work queue entries for scans and other operations</td></tr>
 <tr><td><code>scan_undo_log</code></td><td>Transient rollback support for in-progress scans</td></tr>
@@ -260,9 +260,9 @@ dir = "/path/to/custom/directory"
 <li><code>first_scan_id</code> — the scan where this state was first observed</li>
 <li><code>last_scan_id</code> — the most recent scan where this state was confirmed</li>
 </ul>
-<p>An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, hash, validation, or deletion status).</p>
+<p>An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, access, or deletion status). Hash observations are stored separately in <code>hash_versions</code>, and validation results are written directly onto the version row.</p>
 <h3 id="schema-versioning"><a class="header" href="#schema-versioning">Schema Versioning</a></h3>
-<p>The schema is versioned (currently version 24) and automatically migrated on startup. fsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
+<p>The schema is versioned (currently version 29) and automatically migrated on startup. fsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
 <hr>
 <h2 id="database-compaction"><a class="header" href="#database-compaction">Database Compaction</a></h2>
 <p>Over time, deletions and updates can leave unused space in the database file. The Settings page provides a <strong>Compact Database</strong> action that reclaims this space by running SQLite’s VACUUM command.</p>

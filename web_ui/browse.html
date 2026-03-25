@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "../searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-d3000b55.js"></script>
+        <script src="../toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -245,8 +245,9 @@
 </ul>
 <h3 id="file-integrity-files-only"><a class="header" href="#file-integrity-files-only">File Integrity (Files Only)</a></h3>
 <ul>
-<li><strong>Hash state</strong>: Displayed as Baseline, Suspect, or Unknown with a colored icon. Click to expand/collapse the full SHA-256 hash value.</li>
-<li><strong>Validation state</strong>: Displayed as Valid, Invalid, Unknown, or No Validator. If invalid, the validation error message is shown.</li>
+<li><strong>Hash state</strong>: Displayed as Baseline, Suspect, or Unknown with a colored icon. Click to expand/collapse the full SHA-256 hash value. If suspect, a review toggle is shown.</li>
+<li><strong>Validation state</strong>: Displayed as Valid, Invalid, Unknown, or No Validator. If invalid, the validation error message is shown with a review toggle.</li>
+<li><strong>Validate toggle</strong>: Enable or disable future validation for this item.</li>
 </ul>
 <h3 id="directory-children-counts-directories-only"><a class="header" href="#directory-children-counts-directories-only">Directory Children Counts (Directories Only)</a></h3>
 <ul>
@@ -268,13 +269,6 @@
 <li>The version corresponding to the currently viewed scan is highlighted with an eye icon</li>
 <li>Load older versions on demand</li>
 </ul>
-<h3 id="alerts"><a class="header" href="#alerts">Alerts</a></h3>
-<ul>
-<li>Any alerts associated with this item (suspect hashes, validation failures, access errors)</li>
-<li>Each alert shows its type, timestamp, and details</li>
-<li><strong>Alert status is editable directly from the panel</strong> — use the dropdown to change between Open, Flagged, and Dismissed without leaving the Browse page</li>
-<li>Load more alerts on demand</li>
-</ul>
 <p>Close the detail panel by clicking the close button.</p>
 <hr>
 <h2 id="comparison-mode"><a class="header" href="#comparison-mode">Comparison Mode</a></h2>
@@ -290,7 +284,7 @@
 <hr>
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <ul>
-<li><strong>Investigation</strong>: Drill into specific files when alerts are triggered — click an alert’s item, then inspect version history and validation errors</li>
+<li><strong>Investigation</strong>: Drill into specific files from the <a href="integrity.html">Integrity</a> page, then inspect version history and validation errors</li>
 <li><strong>Capacity analysis</strong>: Use Folder view sorted by Size to find what’s consuming space</li>
 <li><strong>Change review</strong>: Browse at two scan points in comparison mode to see exactly what changed</li>
 <li><strong>Integrity audit</strong>: Use hash state and validation state filters to focus on files with suspect or invalid states</li>
@@ -306,7 +300,7 @@
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../web_ui/alerts.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../web_ui/integrity.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -320,7 +314,7 @@
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../web_ui/alerts.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../web_ui/integrity.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

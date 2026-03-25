@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d3000b55.js"></script>
+        <script src="toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,7 +190,7 @@ fsPulse <strong>never modifies your files</strong>. It requires only read access
 fsPulse makes no outbound network requests. All functionality runs entirely on your local system, with no external dependencies or telemetry.</p>
 </blockquote>
 <h2 id="what-is-fspulse"><a class="header" href="#what-is-fspulse">What is fsPulse?</a></h2>
-<p><strong>fsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. fsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.</strong></p>
+<p><strong>fsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. fsPulse provides continuous awareness through automated scanning, historical trend analysis, and a dedicated integrity view for reviewing issues.</strong></p>
 <p>Your filesystem is constantly evolving—files are added, modified, and deleted. Storage grows. But <strong>invisible problems</strong> hide beneath the surface: bit rot silently corrupts data, ransomware alters files while preserving timestamps, and you don’t realize directories have bloated.</p>
 <p>fsPulse gives you <strong>continuous awareness</strong> of both the visible and invisible:</p>
 <p><strong>Monitor Change &amp; Growth:</strong></p>
@@ -205,19 +205,19 @@ fsPulse makes no outbound network requests. All functionality runs entirely on y
 <li><strong>Format Validation</strong>: Reads and validates file structures to detect corruption in FLAC, JPEG, PNG, PDF, and more</li>
 </ul>
 <p>Whether you’re managing storage capacity, tracking project evolution, or ensuring data integrity, fsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.</p>
-<!-- Screenshot: Home page showing root health summary with alert counts and last scan times -->
+<!-- Screenshot: Home page showing root health summary with last scan times -->
 <!-- ![fsPulse Home](screenshot-placeholder-home.png) -->
 <h2 id="key-capabilities"><a class="header" href="#key-capabilities">Key Capabilities</a></h2>
 <ul>
-<li><strong>Health-at-a-Glance Overview</strong> — See the status of all monitored directories immediately: open alerts, last scan times, and overall health</li>
+<li><strong>Health-at-a-Glance Overview</strong> — See the status of all monitored directories immediately: integrity issues, last scan times, and overall health</li>
 <li><strong>Continuous Monitoring</strong> — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically</li>
 <li><strong>Temporal Versioning</strong> — Every item’s state is tracked over time; browse your filesystem as it appeared at any past scan</li>
 <li><strong>Size &amp; Growth Tracking</strong> — Monitor directory sizes and visualize storage trends over time with dual-format units</li>
 <li><strong>Change Detection</strong> — Track all file additions, modifications, and deletions through version history</li>
 <li><strong>Integrity Verification</strong> — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types</li>
-<li><strong>Historical Trends</strong> — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts</li>
-<li><strong>Alert System</strong> — Suspect hash changes and validation failures flagged immediately with status management</li>
-<li><strong>Powerful Query Language</strong> — SQL-inspired syntax for filtering, sorting, and analyzing across five data domains</li>
+<li><strong>Integrity Management</strong> — Dedicated Integrity page surfaces suspect hashes and validation failures with review tracking</li>
+<li><strong>Historical Trends</strong> — Interactive trend charts show how your data evolves: sizes, counts, changes, and integrity metrics</li>
+<li><strong>Powerful Query Language</strong> — SQL-inspired syntax for filtering, sorting, and analyzing across four data domains</li>
 <li><strong>Web-First Design</strong> — Elegant web UI for all operations including scanning, browsing, querying, and configuration</li>
 </ul>
 <h2 id="running-fspulse"><a class="header" href="#running-fspulse">Running fsPulse</a></h2>
@@ -225,7 +225,7 @@ fsPulse makes no outbound network requests. All functionality runs entirely on y
 <pre><code class="language-sh">fspulse
 </code></pre>
 <p>Then open <strong>http://localhost:8080</strong> in your browser to access the web interface.</p>
-<p>The web UI provides complete functionality for managing roots, scheduling and monitoring scans, browsing your filesystem data, running queries, and managing alerts. Configuration is done through environment variables or a config file—see <a href="configuration.html">Configuration</a> for details.</p>
+<p>The web UI provides complete functionality for managing roots, scheduling and monitoring scans, browsing your filesystem data, running queries, and reviewing integrity issues. Configuration is done through environment variables or a config file—see <a href="configuration.html">Configuration</a> for details.</p>
 <p>fsPulse is designed to scale across large file systems while maintaining clarity and control for the user.</p>
 <hr>
 <p>This book provides comprehensive documentation for all aspects of fsPulse. Start with <a href="getting_started.html">Getting Started</a> for installation, or jump to any section that interests you.</p>

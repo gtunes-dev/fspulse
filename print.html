@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d3000b55.js"></script>
+        <script src="toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,7 +191,7 @@ fsPulse <strong>never modifies your files</strong>. It requires only read access
 fsPulse makes no outbound network requests. All functionality runs entirely on your local system, with no external dependencies or telemetry.</p>
 </blockquote>
 <h2 id="what-is-fspulse"><a class="header" href="#what-is-fspulse">What is fsPulse?</a></h2>
-<p><strong>fsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. fsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.</strong></p>
+<p><strong>fsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. fsPulse provides continuous awareness through automated scanning, historical trend analysis, and a dedicated integrity view for reviewing issues.</strong></p>
 <p>Your filesystem is constantly evolving—files are added, modified, and deleted. Storage grows. But <strong>invisible problems</strong> hide beneath the surface: bit rot silently corrupts data, ransomware alters files while preserving timestamps, and you don’t realize directories have bloated.</p>
 <p>fsPulse gives you <strong>continuous awareness</strong> of both the visible and invisible:</p>
 <p><strong>Monitor Change &amp; Growth:</strong></p>
@@ -206,19 +206,19 @@ fsPulse makes no outbound network requests. All functionality runs entirely on y
 <li><strong>Format Validation</strong>: Reads and validates file structures to detect corruption in FLAC, JPEG, PNG, PDF, and more</li>
 </ul>
 <p>Whether you’re managing storage capacity, tracking project evolution, or ensuring data integrity, fsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.</p>
-<!-- Screenshot: Home page showing root health summary with alert counts and last scan times -->
+<!-- Screenshot: Home page showing root health summary with last scan times -->
 <!-- ![fsPulse Home](screenshot-placeholder-home.png) -->
 <h2 id="key-capabilities"><a class="header" href="#key-capabilities">Key Capabilities</a></h2>
 <ul>
-<li><strong>Health-at-a-Glance Overview</strong> — See the status of all monitored directories immediately: open alerts, last scan times, and overall health</li>
+<li><strong>Health-at-a-Glance Overview</strong> — See the status of all monitored directories immediately: integrity issues, last scan times, and overall health</li>
 <li><strong>Continuous Monitoring</strong> — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically</li>
 <li><strong>Temporal Versioning</strong> — Every item’s state is tracked over time; browse your filesystem as it appeared at any past scan</li>
 <li><strong>Size &amp; Growth Tracking</strong> — Monitor directory sizes and visualize storage trends over time with dual-format units</li>
 <li><strong>Change Detection</strong> — Track all file additions, modifications, and deletions through version history</li>
 <li><strong>Integrity Verification</strong> — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types</li>
-<li><strong>Historical Trends</strong> — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts</li>
-<li><strong>Alert System</strong> — Suspect hash changes and validation failures flagged immediately with status management</li>
-<li><strong>Powerful Query Language</strong> — SQL-inspired syntax for filtering, sorting, and analyzing across five data domains</li>
+<li><strong>Integrity Management</strong> — Dedicated Integrity page surfaces suspect hashes and validation failures with review tracking</li>
+<li><strong>Historical Trends</strong> — Interactive trend charts show how your data evolves: sizes, counts, changes, and integrity metrics</li>
+<li><strong>Powerful Query Language</strong> — SQL-inspired syntax for filtering, sorting, and analyzing across four data domains</li>
 <li><strong>Web-First Design</strong> — Elegant web UI for all operations including scanning, browsing, querying, and configuration</li>
 </ul>
 <h2 id="running-fspulse"><a class="header" href="#running-fspulse">Running fsPulse</a></h2>
@@ -226,7 +226,7 @@ fsPulse makes no outbound network requests. All functionality runs entirely on y
 <pre><code class="language-sh">fspulse
 </code></pre>
 <p>Then open <strong>http://localhost:8080</strong> in your browser to access the web interface.</p>
-<p>The web UI provides complete functionality for managing roots, scheduling and monitoring scans, browsing your filesystem data, running queries, and managing alerts. Configuration is done through environment variables or a config file—see <a href="#configuration-4">Configuration</a> for details.</p>
+<p>The web UI provides complete functionality for managing roots, scheduling and monitoring scans, browsing your filesystem data, running queries, and reviewing integrity issues. Configuration is done through environment variables or a config file—see <a href="#configuration-4">Configuration</a> for details.</p>
 <p>fsPulse is designed to scale across large file systems while maintaining clarity and control for the user.</p>
 <hr>
 <p>This book provides comprehensive documentation for all aspects of fsPulse. Start with <a href="#getting-started">Getting Started</a> for installation, or jump to any section that interests you.</p>
@@ -309,13 +309,13 @@ cargo build --release
 <p>Then open your browser to <strong>http://localhost:8080</strong> to access the web interface.</p>
 <p>fsPulse is a <strong>web-first application</strong>. All functionality is available through the web UI:</p>
 <ul>
-<li>Health overview with root status and alert counts</li>
+<li>Health overview with root status and integrity summaries</li>
 <li>Root and schedule management</li>
 <li>Interactive browsing with tree, folder, and search views</li>
 <li>Point-in-time filesystem snapshots and comparison</li>
-<li>Integrity filtering by hash state and validation state</li>
-<li>Powerful query interface across five data domains</li>
-<li>Alert management and configuration</li>
+<li>Integrity page for reviewing suspect hashes and validation failures</li>
+<li>Powerful query interface across four data domains</li>
+<li>Configuration management</li>
 </ul>
 <h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
 <p>fsPulse is configured through environment variables or a config file, not command-line flags:</p>
@@ -855,9 +855,9 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <h2 id="exploring-your-data"><a class="header" href="#exploring-your-data">Exploring Your Data</a></h2>
 <p>After your first scan completes:</p>
 <ul>
-<li><strong>Home</strong> — See the health status of your root, including any alerts generated</li>
-<li><strong>Browse</strong> — Navigate your filesystem hierarchy with tree, folder, or search views. Open the detail panel to inspect any file’s metadata, size history, version history, and alerts.</li>
-<li><strong>Alerts</strong> — Check for any integrity issues detected (suspect hash changes, validation failures, access errors)</li>
+<li><strong>Home</strong> — See the health status of your root, including any new integrity issues</li>
+<li><strong>Browse</strong> — Navigate your filesystem hierarchy with tree, folder, or search views. Open the detail panel to inspect any file’s metadata, size history, version history, and integrity state.</li>
+<li><strong>Integrity</strong> — Review any integrity issues detected (suspect hash changes, validation failures)</li>
 <li><strong>Trends</strong> — View charts and trends (requires multiple scans to generate meaningful data)</li>
 <li><strong>Data Explorer</strong> — Run queries against your scan data using the visual builder or free-form query language</li>
 </ul>
@@ -905,7 +905,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>Hash changed items</strong> (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed</li>
 <li><strong>Hash all items</strong>: Hash all files, including those that have been previously hashed</li>
 </ul>
-<p>If a hash is detected to have changed without a corresponding metadata change (modification date or size), the file’s <code>hash_state</code> is set to <strong>Suspect</strong> and an alert is generated (see <a href="#alerts-1">Alerts</a>). If metadata did change, the hash change is considered legitimate and <code>hash_state</code> remains <strong>Baseline</strong>.</p>
+<p>If a hash is detected to have changed without a corresponding metadata change (modification date or size), the file’s <code>hash_state</code> is set to <strong>Suspect</strong>. These suspect hashes are surfaced on the <a href="#integrity">Integrity</a> page for review. If metadata did change, the hash change is considered legitimate and <code>hash_state</code> remains <strong>Baseline</strong>.</p>
 <h3 id="hash-states"><a class="header" href="#hash-states">Hash States</a></h3>
 <p>Hash state tracks the integrity of a file’s content hash over time. Hash states are stored in the database as:</p>
 <ul>
@@ -917,12 +917,12 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <h3 id="finding-hash-changes"><a class="header" href="#finding-hash-changes">Finding Hash Changes</a></h3>
 <p>You can investigate hash changes through the web UI:</p>
 <ul>
-<li><strong><a href="#alerts-1">Alerts Page</a></strong>: Shows suspect hash changes where file metadata hasn’t changed</li>
+<li><strong><a href="#integrity">Integrity Page</a></strong>: Shows all suspect hash changes with review status filtering</li>
 <li><strong><a href="#browse">Browse Page</a></strong>: Click any item to see its version history including hash changes</li>
 <li><strong><a href="#data-explorer">Data Explorer</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
 <p>Example query to find items with suspect hashes (run on the Data Explorer’s Query tab):</p>
-<pre><code class="language-text">alerts where alert_type:(H) order by created_at desc
+<pre><code class="language-text">items where hash_state:(S) show default, hash_state, file_hash order by item_path
 </code></pre>
 <h2 id="validating"><a class="header" href="#validating">Validating</a></h2>
 <p>fsPulse can attempt to assess the “validity” of files.</p>
@@ -943,11 +943,11 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>I</strong>: Invalid. Validation was performed and an error was encountered</li>
 </ul>
 <p>In the case of ‘I’ (Invalid), the validation error message is stored alongside the validation state. When an item’s validation state changes, a new item version is created capturing both the old and new states.</p>
-<p>If a validation pass produces an error identical to the existing error, no new version is created — only the <code>last_val_scan</code> bookkeeping field is updated.</p>
+<p>Validation is a one-time operation per version. Once a version has been validated, it is not re-validated — the result is permanently associated with that version.</p>
 <h3 id="finding-validation-issues"><a class="header" href="#finding-validation-issues">Finding Validation Issues</a></h3>
-<p>Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:</p>
+<p>You can investigate validation failures through the web UI:</p>
 <ul>
-<li><strong><a href="#alerts-1">Alerts Page</a></strong>: Shows all items with validation failures, with filtering and status management</li>
+<li><strong><a href="#integrity">Integrity Page</a></strong>: Shows all items with validation failures, with filtering and review status tracking</li>
 <li><strong><a href="#browse">Browse Page</a></strong>: Click any item to see its validation status and error details in the inline detail panel</li>
 <li><strong><a href="#data-explorer">Data Explorer</a></strong>: Use the <strong>Query</strong> tab to run custom queries</li>
 </ul>
@@ -986,7 +986,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>File size</strong> (files only)</li>
 </ul>
 </li>
-<li>If metadata differs, a new item version is created carrying forward unchanged properties (hash, validation) from the previous version</li>
+<li>If metadata differs, a new item version is created</li>
 <li>If unchanged, the existing version’s <code>last_scan_id</code> is updated in place</li>
 </ul>
 </li>
@@ -1014,13 +1014,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>Hashing</strong> — Computes a SHA-256 hash of file contents</li>
 <li><strong>Validation</strong> — Uses file-type-specific validators to check content integrity (see <a href="#validators">Validators</a>)</li>
 </ul>
-<p>If a hash or validation result changes:</p>
-<ul>
-<li>If the item already received a new version in the scanning phase (same scan), the existing version is <strong>updated in place</strong></li>
-<li>Otherwise, the previous version’s <code>last_scan_id</code> is restored and a new version is created</li>
-</ul>
-<p>This guarantees <strong>at most one new version per item per scan</strong>.</p>
-<p>If the hash and validation results are unchanged, only the bookkeeping fields (<code>last_hash_scan</code>, <code>last_val_scan</code>) are updated on the existing version.</p>
+<p>Hash results are stored in a separate <code>hash_versions</code> table, bound to the current item version. Validation results are written directly onto the item version row. See <a href="#concepts">Concepts</a> for details on how hash and validation state are tracked.</p>
 <hr>
 <h2 id="performance-and-threading"><a class="header" href="#performance-and-threading">Performance and Threading</a></h2>
 <p>The analysis phase runs in parallel:</p>
@@ -1057,7 +1051,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <ul>
 <li><strong><a href="#home">Home</a></strong> — Health overview showing root status, active tasks, and recent activity</li>
 <li><strong><a href="#browse">Browse</a></strong> — Navigate filesystem hierarchy with tree, folder, and search views</li>
-<li><strong><a href="#alerts-1">Alerts</a></strong> — Manage integrity issues and validation failures</li>
+<li><strong><a href="#integrity">Integrity</a></strong> — Review suspect hashes and validation failures</li>
 <li><strong><a href="#trends">Trends</a></strong> — Visualize historical data with interactive charts</li>
 </ul>
 <p><strong>Utility</strong> — operational and investigative pages:</p>
@@ -1078,7 +1072,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 </ul>
 <p>When collapsed, hovering over an icon shows a tooltip with the page name.</p>
 <h2 id="shared-root-context"><a class="header" href="#shared-root-context">Shared Root Context</a></h2>
-<p>When you select a root on Browse, Alerts, Trends, Schedules, or History, that selection is carried across pages via a URL parameter (<code>?root_id=N</code>). Selecting a root on Browse and then navigating to Alerts automatically pre-selects the same root, so you don’t need to re-select it on every page.</p>
+<p>When you select a root on Browse, Integrity, Trends, Schedules, or History, that selection is carried across pages via a URL parameter (<code>?root_id=N</code>). Selecting a root on Browse and then navigating to Integrity automatically pre-selects the same root, so you don’t need to re-select it on every page.</p>
 <h2 id="live-updates"><a class="header" href="#live-updates">Live Updates</a></h2>
 <p>The web interface uses WebSocket connections to provide real-time updates during task execution. When a scan is running, you can watch progress updates, statistics, and phase transitions as they happen. The sidebar footer also shows a compact progress indicator for the active task.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -1092,13 +1086,11 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <ul>
 <li><strong>Root path</strong> — The directory being monitored</li>
 <li><strong>Last scan time</strong> — When the root was last scanned, with staleness indicators for roots that haven’t been scanned recently</li>
-<li><strong>Open alerts</strong> — Count of unresolved alerts (highlighted when non-zero)</li>
 <li><strong>Last scan outcome</strong> — Whether the most recent scan completed successfully, stopped, or errored</li>
 </ul>
-<p>If all roots show recent scans with zero alerts, you know your data is healthy. If a root shows open alerts, you know to investigate further.</p>
 <p>Each root row is clickable — clicking navigates to the <a href="#browse">Browse</a> page for that root.</p>
 <p>When no roots have been configured, the Home page shows a welcome message with a link to the <a href="#interface">Roots</a> page to add your first root.</p>
-<!-- Screenshot: Root health summary showing a mix of healthy and alerted roots -->
+<!-- Screenshot: Root health summary -->
 <!-- ![Root Health Summary](screenshot-placeholder-health-summary.png) -->
 <hr>
 <h2 id="active-task"><a class="header" href="#active-task">Active Task</a></h2>
@@ -1121,7 +1113,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <p>Tasks execute sequentially — only one task runs at a time.</p>
 <hr>
 <h2 id="recent-activity"><a class="header" href="#recent-activity">Recent Activity</a></h2>
-<p>A compact summary of recent scan and task activity, showing the last several completed operations with their outcomes. For the full activity log, click the <strong>View All</strong> link to navigate to the <a href="#history">History</a> page.</p>
+<p>A compact summary of recent scan and task activity, showing the last several completed operations with their outcomes. Each entry shows change counts (adds, modifications, deletions) and an <strong>Integrity</strong> column that links to the <a href="#integrity">Integrity</a> page showing any new validation errors or suspect hashes detected during that scan. For the full activity log, click the <strong>View All</strong> link to navigate to the <a href="#history">History</a> page.</p>
 <hr>
 <h2 id="scan-now"><a class="header" href="#scan-now">Scan Now</a></h2>
 <p>Click the scan button on the active task card to initiate a scan. You’ll select:</p>
@@ -1211,8 +1203,9 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 </ul>
 <h3 id="file-integrity-files-only"><a class="header" href="#file-integrity-files-only">File Integrity (Files Only)</a></h3>
 <ul>
-<li><strong>Hash state</strong>: Displayed as Baseline, Suspect, or Unknown with a colored icon. Click to expand/collapse the full SHA-256 hash value.</li>
-<li><strong>Validation state</strong>: Displayed as Valid, Invalid, Unknown, or No Validator. If invalid, the validation error message is shown.</li>
+<li><strong>Hash state</strong>: Displayed as Baseline, Suspect, or Unknown with a colored icon. Click to expand/collapse the full SHA-256 hash value. If suspect, a review toggle is shown.</li>
+<li><strong>Validation state</strong>: Displayed as Valid, Invalid, Unknown, or No Validator. If invalid, the validation error message is shown with a review toggle.</li>
+<li><strong>Validate toggle</strong>: Enable or disable future validation for this item.</li>
 </ul>
 <h3 id="directory-children-counts-directories-only"><a class="header" href="#directory-children-counts-directories-only">Directory Children Counts (Directories Only)</a></h3>
 <ul>
@@ -1234,13 +1227,6 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li>The version corresponding to the currently viewed scan is highlighted with an eye icon</li>
 <li>Load older versions on demand</li>
 </ul>
-<h3 id="alerts"><a class="header" href="#alerts">Alerts</a></h3>
-<ul>
-<li>Any alerts associated with this item (suspect hashes, validation failures, access errors)</li>
-<li>Each alert shows its type, timestamp, and details</li>
-<li><strong>Alert status is editable directly from the panel</strong> — use the dropdown to change between Open, Flagged, and Dismissed without leaving the Browse page</li>
-<li>Load more alerts on demand</li>
-</ul>
 <p>Close the detail panel by clicking the close button.</p>
 <hr>
 <h2 id="comparison-mode"><a class="header" href="#comparison-mode">Comparison Mode</a></h2>
@@ -1256,7 +1242,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <hr>
 <h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
 <ul>
-<li><strong>Investigation</strong>: Drill into specific files when alerts are triggered — click an alert’s item, then inspect version history and validation errors</li>
+<li><strong>Investigation</strong>: Drill into specific files from the <a href="#integrity">Integrity</a> page, then inspect version history and validation errors</li>
 <li><strong>Capacity analysis</strong>: Use Folder view sorted by Size to find what’s consuming space</li>
 <li><strong>Change review</strong>: Browse at two scan points in comparison mode to see exactly what changed</li>
 <li><strong>Integrity audit</strong>: Use hash state and validation state filters to focus on files with suspect or invalid states</li>
@@ -1264,31 +1250,14 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>Point-in-time browsing</strong>: Use the scan picker to see the filesystem as it was at any past scan</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="alerts-1"><a class="header" href="#alerts-1">Alerts</a></h1>
-<p>The Alerts page provides a centralized view for managing integrity issues detected during scans.</p>
-<h2 id="alert-types"><a class="header" href="#alert-types">Alert Types</a></h2>
-<p>fsPulse generates three types of alerts:</p>
-<h3 id="access-denied"><a class="header" href="#access-denied">Access Denied</a></h3>
-<p>Triggered when fsPulse is unable to access an item or folder. These alerts can occur during either the scan phase or the analysis phase:</p>
-<p><strong>During Scan Phase:</strong></p>
-<ul>
-<li>Unable to retrieve item metadata (type, size, or modification date)</li>
-<li>Unable to enumerate folder contents (typically due to permission restrictions)</li>
-</ul>
-<p><strong>During Analysis Phase:</strong></p>
-<ul>
-<li>Unable to read a file for hashing or validation</li>
-</ul>
-<p><strong>Notes:</strong></p>
-<ul>
-<li>If fsPulse cannot determine an item’s type from metadata, the item is recorded as an instance of the “Unknown” type</li>
-<li>Items with failed metadata retrieval, whether “Unknown” or otherwise, are not examined during the analysis phase</li>
-</ul>
-<h3 id="suspect-hash-changes"><a class="header" href="#suspect-hash-changes">Suspect Hash Changes</a></h3>
-<p>Triggered when:</p>
+<h1 id="integrity"><a class="header" href="#integrity">Integrity</a></h1>
+<p>The Integrity page provides a centralized view for reviewing and managing integrity issues detected during scans. It surfaces two kinds of issues: <strong>suspect hashes</strong> (file content changed without a metadata change) and <strong>validation errors</strong> (format validation detected corruption).</p>
+<h2 id="issue-types"><a class="header" href="#issue-types">Issue Types</a></h2>
+<h3 id="suspicious-hashes"><a class="header" href="#suspicious-hashes">Suspicious Hashes</a></h3>
+<p>Detected when:</p>
 <ul>
 <li>A file’s hash changes between scans</li>
-<li>The file’s modification time has NOT changed</li>
+<li>The file’s modification time and size have NOT changed</li>
 </ul>
 <p>This pattern indicates potential:</p>
 <ul>
@@ -1296,8 +1265,8 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li>Tampering or malicious modification</li>
 <li>Filesystem anomalies</li>
 </ul>
-<h3 id="invalid-items"><a class="header" href="#invalid-items">Invalid Items</a></h3>
-<p>Triggered when format validation fails:</p>
+<h3 id="validation-errors"><a class="header" href="#validation-errors">Validation Errors</a></h3>
+<p>Detected when format validation fails:</p>
 <ul>
 <li>FLAC audio files with invalid structure</li>
 <li>JPEG/PNG images that fail format checks</li>
@@ -1305,53 +1274,53 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li>Other validated file types with detected issues</li>
 </ul>
 <p>See <a href="#validators">Validators</a> for details on supported file types.</p>
-<h2 id="alert-status"><a class="header" href="#alert-status">Alert Status</a></h2>
-<p>Each alert can be in one of three states:</p>
+<h2 id="review-status"><a class="header" href="#review-status">Review Status</a></h2>
+<p>Each integrity issue can be in one of two states:</p>
 <ul>
-<li><strong>Open</strong>: New alert requiring attention</li>
-<li><strong>Flagged</strong>: Marked for follow-up or further investigation</li>
-<li><strong>Dismissed</strong>: Reviewed and determined to be non-critical</li>
+<li><strong>Unreviewed</strong>: The issue has not been acknowledged by the user</li>
+<li><strong>Reviewed</strong>: The user has acknowledged the issue</li>
 </ul>
-<h2 id="managing-alerts"><a class="header" href="#managing-alerts">Managing Alerts</a></h2>
-<h3 id="filtering"><a class="header" href="#filtering">Filtering</a></h3>
-<p>Filter alerts by:</p>
+<p>Marking an issue as reviewed records a timestamp. Review status is tracked independently for hash issues and validation issues on each item version.</p>
+<h2 id="filtering"><a class="header" href="#filtering">Filtering</a></h2>
+<p>Filter integrity issues by:</p>
 <ul>
-<li>Status (Open/Flagged/Dismissed)</li>
-<li>Alert type (Access denied/Hash change/Validation failure)</li>
-<li>Root</li>
-<li>Time range</li>
-<li>Path search</li>
+<li><strong>Issue type</strong> — Suspicious hashes, Validation errors, or All</li>
+<li><strong>File type</strong> — All file types, Image files, PDF files, Audio files</li>
+<li><strong>Review status</strong> — Not Reviewed, Reviewed, or All</li>
+<li><strong>Root</strong> — Show issues for a specific monitored directory</li>
+<li><strong>Path search</strong> — Filter by item path</li>
+<li><strong>Show deleted</strong> — Include or exclude items that are currently deleted</li>
 </ul>
 <blockquote>
-<p><strong>Tip</strong>: If you select a root on the <a href="#browse">Browse</a> or <a href="#trends">Trends</a> page before navigating to Alerts, the same root will be pre-selected automatically via the shared root context.</p>
+<p><strong>Tip</strong>: If you select a root on the <a href="#browse">Browse</a> or <a href="#trends">Trends</a> page before navigating to Integrity, the same root will be pre-selected automatically via the shared root context.</p>
 </blockquote>
-<h3 id="status-actions"><a class="header" href="#status-actions">Status Actions</a></h3>
+<h2 id="issue-table"><a class="header" href="#issue-table">Issue Table</a></h2>
+<p>The main table shows one row per item that has integrity issues. Each row displays:</p>
 <ul>
-<li><strong>Flag</strong>: Mark alert for follow-up</li>
-<li><strong>Dismiss</strong>: Acknowledge and close the alert</li>
-<li><strong>Reopen</strong>: Change dismissed alert back to open</li>
+<li><strong>Validate toggle</strong> — Enable or disable future validation for this item</li>
+<li><strong>File name</strong> — With parent folder context</li>
+<li><strong>Hashes</strong> — Count of unreviewed and reviewed hash issues</li>
+<li><strong>Validation</strong> — Count of unreviewed and reviewed validation issues</li>
+<li><strong>Review All</strong> — Button to mark all issues on this item as reviewed</li>
 </ul>
-<h3 id="batch-operations"><a class="header" href="#batch-operations">Batch Operations</a></h3>
-<p>Select multiple alerts to update status in bulk.</p>
-<h2 id="alert-details"><a class="header" href="#alert-details">Alert Details</a></h2>
-<p>Click an alert to view:</p>
+<h3 id="expanding-items"><a class="header" href="#expanding-items">Expanding Items</a></h3>
+<p>Click the expand toggle on any row to see the version history for that item, showing detailed hash and validation state for each version. From the expanded view you can review individual issues at the version level.</p>
+<h2 id="reviewing-issues"><a class="header" href="#reviewing-issues">Reviewing Issues</a></h2>
+<p>Reviews are a lightweight acknowledgment mechanism — they indicate that you have seen and considered an integrity issue.</p>
 <ul>
-<li>Item path and metadata</li>
-<li>Alert timestamp</li>
-<li>Access error details (for access denied alerts)</li>
-<li>Hash change details: previous and new hash values (for suspect hash alerts)</li>
-<li>Validation error message (for invalid items)</li>
-<li>Link to item in Browse view</li>
+<li><strong>Review individual issues</strong>: Expand an item and use the review toggle on a specific version’s hash or validation issue</li>
+<li><strong>Review all issues on an item</strong>: Click the “Review All” button on the item row</li>
+<li>Review status can be toggled back to unreviewed if needed</li>
 </ul>
 <h2 id="integration-with-browse"><a class="header" href="#integration-with-browse">Integration with Browse</a></h2>
-<p>Alerts are also displayed in the <a href="#browse">Browse</a> page’s item detail panel, providing context when investigating specific files. You can change alert status directly from the Browse detail panel without navigating to the Alerts page.</p>
+<p>Integrity issues are also visible in the <a href="#browse">Browse</a> page’s item detail panel, where you can see hash and validation state for each version and toggle review status directly.</p>
 <h2 id="workflow-recommendations"><a class="header" href="#workflow-recommendations">Workflow Recommendations</a></h2>
 <ol>
-<li><strong>Review Open Alerts</strong>: Check the <a href="#home">Home</a> page for alert counts, then navigate here</li>
-<li><strong>Investigate</strong>: Use Browse to examine affected items</li>
-<li><strong>Triage</strong>: Flag important issues, dismiss false positives</li>
-<li><strong>Restore</strong>: Use backups to restore corrupted files if needed</li>
-<li><strong>Track</strong>: Monitor alert trends on the <a href="#trends">Trends</a> page</li>
+<li><strong>Check Home</strong>: The <a href="#home">Home</a> page shows integrity issue counts per root in the recent activity section</li>
+<li><strong>Filter</strong>: Use issue type and review status filters to focus on what matters</li>
+<li><strong>Investigate</strong>: Expand items to see version details, or click through to Browse for full context</li>
+<li><strong>Review</strong>: Mark issues as reviewed once you’ve assessed them</li>
+<li><strong>Track</strong>: Monitor integrity trends on the <a href="#trends">Trends</a> page</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="trends"><a class="header" href="#trends">Trends</a></h1>
@@ -1380,18 +1349,18 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li>Identify periods of high change</li>
 <li>Understand modification patterns</li>
 </ul>
-<h3 id="alert-trends"><a class="header" href="#alert-trends">Alert Trends</a></h3>
+<h3 id="integrity-trends"><a class="header" href="#integrity-trends">Integrity Trends</a></h3>
 <p>Track integrity issues over time:</p>
 <ul>
-<li>Validation failures</li>
-<li>Suspect hash changes</li>
-<li>Alert resolution patterns</li>
+<li>New validation failures per scan</li>
+<li>New suspect hash changes per scan</li>
+<li>Cumulative integrity issue counts</li>
 </ul>
 <h2 id="features"><a class="header" href="#features">Features</a></h2>
 <h3 id="root-selection"><a class="header" href="#root-selection">Root Selection</a></h3>
 <p>Select which scan root to analyze from the dropdown. Each root maintains independent trend data.</p>
 <blockquote>
-<p><strong>Tip</strong>: If you select a root on the <a href="#browse">Browse</a> or <a href="#alerts-1">Alerts</a> page before navigating to Trends, the same root will be pre-selected automatically via the shared root context.</p>
+<p><strong>Tip</strong>: If you select a root on the <a href="#browse">Browse</a> or <a href="#integrity">Integrity</a> page before navigating to Trends, the same root will be pre-selected automatically via the shared root context.</p>
 </blockquote>
 <h3 id="date-range-filtering"><a class="header" href="#date-range-filtering">Date Range Filtering</a></h3>
 <p>Customize the time window:</p>
@@ -1404,7 +1373,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li>Custom range (manual date pickers)</li>
 </ul>
 <h3 id="baseline-exclusion"><a class="header" href="#baseline-exclusion">Baseline Exclusion</a></h3>
-<p>The Changes and Alerts charts offer a checkbox to exclude the first scan from the visualization. The first scan of a root often shows large numbers of “additions” and alerts which can skew trend visualizations. This toggle only appears when the first scan falls within the selected date range.</p>
+<p>The Changes and Integrity charts offer a checkbox to exclude the first scan from the visualization. The first scan of a root often shows large numbers of additions and integrity issues which can skew trend visualizations. This toggle only appears when the first scan falls within the selected date range.</p>
 <h3 id="interactive-charts"><a class="header" href="#interactive-charts">Interactive Charts</a></h3>
 <ul>
 <li>Hover for detailed values</li>
@@ -1434,7 +1403,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li><strong>State</strong> (Completed, Stopped, Error)</li>
 <li><strong>Item counts</strong> — files, folders, and total size discovered</li>
 <li><strong>Change counts</strong> — additions, modifications, and deletions detected</li>
-<li><strong>Alert count</strong> — validation failures and suspect hash changes generated</li>
+<li><strong>Integrity</strong> — new validation errors and suspect hashes detected, linking to the <a href="#integrity">Integrity</a> page</li>
 <li><strong>Scan options</strong> — whether hashing and validation were enabled</li>
 </ul>
 <hr>
@@ -1450,7 +1419,7 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <ul>
 <li><strong>Schedule verification</strong>: Confirm that scheduled scans ran as expected</li>
 <li><strong>Troubleshooting</strong>: Identify scans that stopped or errored, and review their details</li>
-<li><strong>Trend awareness</strong>: Notice patterns in change counts or alert frequency across scans</li>
+<li><strong>Trend awareness</strong>: Notice patterns in change counts or integrity issues across scans</li>
 <li><strong>Audit trail</strong>: Review what the system has been doing over any time period</li>
 </ul>
 <blockquote>
@@ -1462,13 +1431,13 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
 <p>Data Explorer offers two ways to query your data:</p>
 <ul>
-<li><strong>Structured tabs</strong> (Roots, Scans, Items, Versions, Alerts) — Visual query builder with column selection, sorting, and filtering</li>
+<li><strong>Structured tabs</strong> (Roots, Scans, Items, Versions) — Visual query builder with column selection, sorting, and filtering</li>
 <li><strong>Query tab</strong> — Free-form query entry using fsPulse’s query language</li>
 </ul>
 <!-- Screenshot: Data Explorer showing the structured Items tab with column selector and results -->
 <!-- ![Data Explorer - Structured Query](screenshot-placeholder-data-explorer-structured.png) -->
 <h2 id="structured-query-tabs"><a class="header" href="#structured-query-tabs">Structured Query Tabs</a></h2>
-<p>The <strong>Roots</strong>, <strong>Scans</strong>, <strong>Items</strong>, <strong>Versions</strong>, and <strong>Alerts</strong> tabs provide a visual interface for building queries without writing query syntax.</p>
+<p>The <strong>Roots</strong>, <strong>Scans</strong>, <strong>Items</strong>, and <strong>Versions</strong> tabs provide a visual interface for building queries without writing query syntax.</p>
 <h3 id="layout"><a class="header" href="#layout">Layout</a></h3>
 <p>Each structured tab displays:</p>
 <ul>
@@ -1518,11 +1487,11 @@ Click the reset button in the column header to restore all columns to their defa
 <pre><code class="language-text">items limit 10
 items where item_type:(F) show item_path, size limit 25
 items where item_type:(F), size:(&gt;1000000) show item_path, size order by size desc limit 20
-alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
 versions where item_id:(42) order by first_scan_id
+versions where val_state:(I) show default, val_error order by first_scan_id desc
 </code></pre>
 <h2 id="query-domains"><a class="header" href="#query-domains">Query Domains</a></h2>
-<p>Both interfaces support querying five data domains:</p>
+<p>Both interfaces support querying four data domains:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -1533,7 +1502,6 @@ versions where item_id:(42) order by first_scan_id
 <tr><td><strong>scans</strong></td><td>Scan metadata and statistics</td></tr>
 <tr><td><strong>items</strong></td><td>Files and folders with their latest version state</td></tr>
 <tr><td><strong>versions</strong></td><td>Item version history — one row per distinct state</td></tr>
-<tr><td><strong>alerts</strong></td><td>Integrity issues and validation failures</td></tr>
 </tbody>
 </table>
 </div>
@@ -1665,7 +1633,7 @@ versions where item_id:(42) order by first_scan_id
 <li>Running and monitoring scans</li>
 <li>Browsing your filesystem data</li>
 <li>Querying and exploring results</li>
-<li>Managing alerts</li>
+<li>Reviewing integrity issues</li>
 </ul>
 <hr>
 <h2 id="configuration-3"><a class="header" href="#configuration-3">Configuration</a></h2>
@@ -1713,13 +1681,12 @@ fspulse --version
 <p>fsPulse provides a flexible, SQL-like query language for exploring scan results. This language supports filtering, custom column selection, ordering, and limiting the number of results.</p>
 <hr>
 <h2 id="query-structure"><a class="header" href="#query-structure">Query Structure</a></h2>
-<p>Each query begins with one of the five supported domains:</p>
+<p>Each query begins with one of the four supported domains:</p>
 <ul>
 <li><code>roots</code></li>
 <li><code>scans</code></li>
 <li><code>items</code></li>
 <li><code>versions</code></li>
-<li><code>alerts</code></li>
 </ul>
 <p>You can then add any of the following optional clauses:</p>
 <pre><code class="language-text">DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
@@ -1760,7 +1727,8 @@ fspulse --version
 <tr><td><code>file_count</code></td><td>Integer</td><td>Yes</td><td>Count of files found in the scan</td></tr>
 <tr><td><code>folder_count</code></td><td>Integer</td><td>Yes</td><td>Count of directories found in the scan</td></tr>
 <tr><td><code>total_size</code></td><td>Integer</td><td>Yes</td><td>Total size in bytes of all files</td></tr>
-<tr><td><code>alert_count</code></td><td>Integer</td><td>Yes</td><td>Number of alerts created during the scan</td></tr>
+<tr><td><code>new_hash_suspect_count</code></td><td>Integer</td><td>No</td><td>New suspect hashes detected in this scan</td></tr>
+<tr><td><code>new_val_invalid_count</code></td><td>Integer</td><td>No</td><td>New validation failures detected in this scan</td></tr>
 <tr><td><code>add_count</code></td><td>Integer</td><td>Yes</td><td>Number of items added in the scan</td></tr>
 <tr><td><code>modify_count</code></td><td>Integer</td><td>Yes</td><td>Number of items modified in the scan</td></tr>
 <tr><td><code>delete_count</code></td><td>Integer</td><td>Yes</td><td>Number of items deleted in the scan</td></tr>
@@ -1789,19 +1757,17 @@ fspulse --version
 <tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Full path of the item</td></tr>
 <tr><td><code>item_name</code></td><td>Path</td><td>No</td><td>Filename or directory name (last segment)</td></tr>
 <tr><td><code>item_type</code></td><td>Item Type Enum</td><td>Yes</td><td>File, Directory, Symlink, or Unknown</td></tr>
-<tr><td><code>version_id</code></td><td>Integer</td><td>No</td><td>Current version identifier</td></tr>
+<tr><td><code>item_version</code></td><td>Integer</td><td>No</td><td>Current version number</td></tr>
 <tr><td><code>first_scan_id</code></td><td>Integer</td><td>No</td><td>Scan where current version first appeared</td></tr>
 <tr><td><code>last_scan_id</code></td><td>Integer</td><td>Yes</td><td>Last scan confirming current state</td></tr>
 <tr><td><code>is_deleted</code></td><td>Boolean</td><td>Yes</td><td>True if item is currently deleted</td></tr>
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state (NoError, MetaError, ReadError)</td></tr>
 <tr><td><code>mod_date</code></td><td>Date</td><td>Yes</td><td>Last modification date</td></tr>
 <tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation (files only; null for folders)</td></tr>
 <tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
 <tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash (files only; null for folders)</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash (files only; null for folders)</td></tr>
-<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state (files only; null for folders)</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash from latest hash version (files only; null for folders)</td></tr>
+<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state from latest hash version (files only; null for folders)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1814,7 +1780,7 @@ fspulse --version
 <tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>version_id</code></td><td>Integer</td><td>Yes</td><td>Unique version identifier</td></tr>
+<tr><td><code>item_version</code></td><td>Integer</td><td>Yes</td><td>Version number (per-item sequence)</td></tr>
 <tr><td><code>item_id</code></td><td>Integer</td><td>Yes</td><td>Item this version belongs to</td></tr>
 <tr><td><code>root_id</code></td><td>Integer</td><td>Yes</td><td>Root directory identifier</td></tr>
 <tr><td><code>item_path</code></td><td>Path</td><td>No</td><td>Full path of the item</td></tr>
@@ -1826,47 +1792,14 @@ fspulse --version
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state</td></tr>
 <tr><td><code>mod_date</code></td><td>Date</td><td>No</td><td>Last modification date</td></tr>
 <tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>last_val_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated validation (files only; null for folders)</td></tr>
-<tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
-<tr><td><code>last_hash_scan</code></td><td>Integer</td><td>No</td><td>Last scan that evaluated the hash (files only; null for folders)</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash (files only; null for folders)</td></tr>
-<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state (files only; null for folders)</td></tr>
 <tr><td><code>add_count</code></td><td>Integer</td><td>No</td><td>Descendant items added (folders only; null for files)</td></tr>
 <tr><td><code>modify_count</code></td><td>Integer</td><td>No</td><td>Descendant items modified (folders only; null for files)</td></tr>
 <tr><td><code>delete_count</code></td><td>Integer</td><td>No</td><td>Descendant items deleted (folders only; null for files)</td></tr>
 <tr><td><code>unchanged_count</code></td><td>Integer</td><td>No</td><td>Descendant items unchanged (folders only; null for files)</td></tr>
-<tr><td><code>val_unknown_count</code></td><td>Integer</td><td>No</td><td>Descendant files with unknown validation (folders only)</td></tr>
-<tr><td><code>val_valid_count</code></td><td>Integer</td><td>No</td><td>Descendant files with valid validation (folders only)</td></tr>
-<tr><td><code>val_invalid_count</code></td><td>Integer</td><td>No</td><td>Descendant files with invalid validation (folders only)</td></tr>
-<tr><td><code>val_no_validator_count</code></td><td>Integer</td><td>No</td><td>Descendant files with no validator (folders only)</td></tr>
-<tr><td><code>hash_unknown_count</code></td><td>Integer</td><td>No</td><td>Descendant files with unknown hash state (folders only)</td></tr>
-<tr><td><code>hash_baseline_count</code></td><td>Integer</td><td>No</td><td>Descendant files with baseline hash state (folders only)</td></tr>
-<tr><td><code>hash_suspect_count</code></td><td>Integer</td><td>No</td><td>Descendant files with suspect hash state (folders only)</td></tr>
-</tbody>
-</table>
-</div>
-<hr>
-<h3 id="alerts-domain"><a class="header" href="#alerts-domain"><code>alerts</code> Domain</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
-</thead>
-<tbody>
-<tr><td><code>alert_id</code></td><td>Integer</td><td>No</td><td>Unique alert identifier</td></tr>
-<tr><td><code>alert_type</code></td><td>Alert Type Enum</td><td>Yes</td><td>Type of alert</td></tr>
-<tr><td><code>alert_status</code></td><td>Alert Status Enum</td><td>Yes</td><td>Current status (Open, Flagged, Dismissed)</td></tr>
-<tr><td><code>root_id</code></td><td>Integer</td><td>No</td><td>Root directory identifier</td></tr>
-<tr><td><code>scan_id</code></td><td>Integer</td><td>No</td><td>Scan that generated the alert</td></tr>
-<tr><td><code>item_id</code></td><td>Integer</td><td>No</td><td>Item the alert is about</td></tr>
-<tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Path of the affected item</td></tr>
-<tr><td><code>created_at</code></td><td>Date</td><td>Yes</td><td>When the alert was created</td></tr>
-<tr><td><code>updated_at</code></td><td>Date</td><td>No</td><td>When the alert status was last changed</td></tr>
-<tr><td><code>prev_hash_scan</code></td><td>Integer</td><td>No</td><td>Previous hash scan (for suspect hash)</td></tr>
-<tr><td><code>hash_old</code></td><td>String</td><td>No</td><td>Previous hash value</td></tr>
-<tr><td><code>hash_new</code></td><td>String</td><td>No</td><td>New hash value</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>Yes</td><td>Validation error message</td></tr>
+<tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
+<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
+<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash from latest hash version (files only; null for folders)</td></tr>
+<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state from latest hash version (files only; null for folders)</td></tr>
 </tbody>
 </table>
 </div>
@@ -1890,8 +1823,6 @@ fspulse --version
 <tr><td>Validation Status</td><td><code>V</code>, <code>I</code>, <code>N</code>, <code>U</code>, <code>null</code>, <code>not null</code></td><td>Valid, Invalid, No Validator, Unknown. Null for folders. Unquoted.</td></tr>
 <tr><td>Hash State</td><td><code>V</code>, <code>S</code>, <code>U</code>, <code>null</code>, <code>not null</code></td><td>Valid, Suspect, Unknown. Null for folders. Unquoted.</td></tr>
 <tr><td>Item Type Enum</td><td><code>F</code>, <code>D</code>, <code>S</code>, <code>U</code></td><td>File, Directory, Symlink, Unknown. Unquoted.</td></tr>
-<tr><td>Alert Type Enum</td><td><code>H</code>, <code>I</code>, <code>A</code></td><td>Suspect Hash, Invalid Item, Access Denied. Unquoted.</td></tr>
-<tr><td>Alert Status Enum</td><td><code>O</code>, <code>F</code>, <code>D</code></td><td>Open, Flagged, Dismissed. Unquoted.</td></tr>
 <tr><td>Scan State Enum</td><td><code>S</code>, <code>W</code>, <code>AF</code>, <code>AS</code>, <code>C</code>, <code>P</code>, <code>E</code></td><td>Scanning, Sweeping, Analyzing Files, Analyzing Scan, Completed, Stopped, Error. <code>A</code> is shorthand for <code>AF</code>. Unquoted.</td></tr>
 <tr><td>Access Status</td><td><code>N</code>, <code>M</code>, <code>R</code></td><td>No Error, Meta Error, Read Error. Unquoted.</td></tr>
 </tbody>
@@ -1966,14 +1897,11 @@ versions where val_state:(I) show default, val_error order by first_scan_id desc
 # Items with suspect hash state
 items where hash_state:(S) show default, hash_state, file_hash order by item_path
 
-# Open or flagged alerts for suspect hashes
-alerts where alert_type:(H), alert_status:(O, F) order by created_at desc
-
 # Scans with timestamps for programmatic processing
 scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10
 
-# Scans with change and alert counts
-scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by started_at desc
+# Scans with change and integrity counts
+scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, new_hash_suspect_count, new_val_invalid_count order by started_at desc
 </code></pre>
 <hr>
 <p>See also: <a href="#data-explorer">Data Explorer</a> · <a href="#validators">Validators</a> · <a href="#configuration-4">Configuration</a></p>
@@ -2311,7 +2239,7 @@ fspulse serve
 <p>These topics are useful for developers, contributors, or users who want to understand fsPulse’s architecture more deeply.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="concepts"><a class="header" href="#concepts">Concepts</a></h1>
-<p>fsPulse tracks the state of your filesystem over time using a <strong>temporal versioning</strong> model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.</p>
+<p>fsPulse tracks the state of your filesystem over time using a <strong>temporal versioning</strong> model. The core entities — roots, scans, items, item versions, hash versions, schedules, and tasks — form a layered model for understanding how your data evolves.</p>
 <hr>
 <h2 id="root"><a class="header" href="#root">Root</a></h2>
 <p>A <strong>root</strong> is the starting point for a scan. It represents a specific path on the filesystem that you tell fsPulse to track.</p>
@@ -2330,7 +2258,7 @@ fspulse serve
 <li>Counts of files, folders, and total size discovered</li>
 <li>Counts of additions, modifications, and deletions detected</li>
 <li>Counts of files in each validation state and hash state</li>
-<li>Any alerts generated</li>
+<li>Counts of new integrity issues (suspect hashes and validation failures) detected</li>
 </ul>
 <p>Scans are always tied to a root via <code>root_id</code> and are ordered chronologically by <code>started_at</code>.</p>
 <hr>
@@ -2352,10 +2280,9 @@ fspulse serve
 <li><strong>Deletion status</strong> — whether the item existed or had been deleted</li>
 <li><strong>Access status</strong> — whether the item could be read successfully</li>
 <li><strong>Metadata</strong> — modification date and size</li>
-<li><strong>Validation state</strong> — format validation state and any error message (files only; null for folders)</li>
-<li><strong>Hash and hash state</strong> — SHA-256 content hash and hash integrity state (files only; null for folders). See <a href="#hash-states">Scanning - Hash States</a></li>
+<li><strong>Validation state</strong> — format validation result and any error message (files only; null for folders)</li>
+<li><strong>Review timestamps</strong> — <code>val_reviewed_at</code> and <code>hash_reviewed_at</code> record when a user acknowledged integrity issues on this version (files only)</li>
 <li><strong>Descendant change counts</strong> — add, modify, delete, and unchanged counts for child items (folders only; null for files)</li>
-<li><strong>Descendant state counts</strong> — counts of descendant files in each validation and hash state (folders only; null for files)</li>
 </ul>
 <p>An item that exists unchanged across 50 scans has exactly <strong>one version row</strong>. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.</p>
 <h3 id="deriving-change-types"><a class="header" href="#deriving-change-types">Deriving Change Types</a></h3>
@@ -2366,14 +2293,18 @@ fspulse serve
 <li><strong>Modify</strong>: Previous version exists, neither is deleted, and state differs</li>
 </ul>
 <hr>
-<h2 id="alert"><a class="header" href="#alert">Alert</a></h2>
-<p>An <strong>alert</strong> flags a potential integrity issue detected during scanning. There are three alert types:</p>
+<h2 id="hash-version"><a class="header" href="#hash-version">Hash Version</a></h2>
+<p>A <strong>hash version</strong> tracks the SHA-256 content hash of a file over time, bound to a specific item version. Hash observations are stored in a separate <code>hash_versions</code> table.</p>
+<p>Each hash version records:</p>
 <ul>
-<li><strong>Suspect Hash</strong> — file content hash changed but modification time did not, suggesting bit rot or tampering</li>
-<li><strong>Invalid Item</strong> — format validation detected corruption in a supported file type</li>
-<li><strong>Access Denied</strong> — fsPulse could not access the item’s metadata or contents</li>
+<li>The hash value</li>
+<li>A <strong>hash state</strong>: Baseline (first hash for a version, or hash change explained by metadata change) or Suspect (hash changed without a metadata change — possible bit rot or tampering)</li>
+<li>A temporal range (<code>first_scan_id</code> to <code>last_scan_id</code>) indicating when this hash was observed</li>
 </ul>
-<p>Alerts have statuses (Open, Flagged, Dismissed) for triage workflows.</p>
+<p>An item version can have zero hash observations (never hashed), one (stable hash), or multiple (hash changed between scans). See <a href="#hash-states">Scanning - Hash States</a> for details.</p>
+<hr>
+<h2 id="integrity-reviews"><a class="header" href="#integrity-reviews">Integrity Reviews</a></h2>
+<p>Integrity issues — suspect hashes and validation failures — are surfaced on the <a href="#integrity">Integrity</a> page. Users acknowledge issues by marking them as <strong>reviewed</strong>, which records a timestamp on the item version. Reviews are a lightweight acknowledgment mechanism tracked independently for hash and validation issues on each version.</p>
 <hr>
 <h2 id="schedule"><a class="header" href="#schedule">Schedule</a></h2>
 <p>A <strong>schedule</strong> defines automatic recurring scans. Schedules specify:</p>
@@ -2392,9 +2323,9 @@ fspulse serve
 <pre><code class="language-text">Root
  ├── Schedule (recurring scan configuration)
  ├── Scan (one per execution)
- │    └── Alert (integrity issues found)
  └── Item (stable identity)
       └── Item Version (state at a point in time)
+           └── Hash Version (hash observation over time)
 </code></pre>
 <hr>
 <p>These concepts form the foundation of fsPulse’s scanning, browsing, and query capabilities.</p>
@@ -2472,7 +2403,7 @@ dir = "/path/to/custom/directory"
 <tr><td><code>scans</code></td><td>Individual scan executions with timing, settings, and summary statistics</td></tr>
 <tr><td><code>items</code></td><td>Stable identity for each discovered file or folder (path, type, root)</td></tr>
 <tr><td><code>item_versions</code></td><td>Temporal state — one row per distinct state of an item, with full metadata snapshot</td></tr>
-<tr><td><code>alerts</code></td><td>Integrity issues (suspect hashes, validation failures, access errors)</td></tr>
+<tr><td><code>hash_versions</code></td><td>Hash observations — SHA-256 hashes bound to specific item versions, with integrity state</td></tr>
 <tr><td><code>scan_schedules</code></td><td>Recurring scan configurations (timing, options)</td></tr>
 <tr><td><code>tasks</code></td><td>Work queue entries for scans and other operations</td></tr>
 <tr><td><code>scan_undo_log</code></td><td>Transient rollback support for in-progress scans</td></tr>
@@ -2485,9 +2416,9 @@ dir = "/path/to/custom/directory"
 <li><code>first_scan_id</code> — the scan where this state was first observed</li>
 <li><code>last_scan_id</code> — the most recent scan where this state was confirmed</li>
 </ul>
-<p>An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, hash, validation, or deletion status).</p>
+<p>An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, access, or deletion status). Hash observations are stored separately in <code>hash_versions</code>, and validation results are written directly onto the version row.</p>
 <h3 id="schema-versioning"><a class="header" href="#schema-versioning">Schema Versioning</a></h3>
-<p>The schema is versioned (currently version 24) and automatically migrated on startup. fsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
+<p>The schema is versioned (currently version 29) and automatically migrated on startup. fsPulse handles all upgrades transparently — no manual migration steps are needed.</p>
 <hr>
 <h2 id="database-compaction"><a class="header" href="#database-compaction">Database Compaction</a></h2>
 <p>Over time, deletions and updates can leave unused space in the database file. The Settings page provides a <strong>Compact Database</strong> action that reclaims this space by running SQLite’s VACUUM command.</p>

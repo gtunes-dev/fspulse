@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7ecc3b66.js";
+            window.path_to_searchindex_js = "searchindex-1f590892.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d3000b55.js"></script>
+        <script src="toc-db91e64e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,7 +175,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="concepts"><a class="header" href="#concepts">Concepts</a></h1>
-<p>fsPulse tracks the state of your filesystem over time using a <strong>temporal versioning</strong> model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.</p>
+<p>fsPulse tracks the state of your filesystem over time using a <strong>temporal versioning</strong> model. The core entities — roots, scans, items, item versions, hash versions, schedules, and tasks — form a layered model for understanding how your data evolves.</p>
 <hr>
 <h2 id="root"><a class="header" href="#root">Root</a></h2>
 <p>A <strong>root</strong> is the starting point for a scan. It represents a specific path on the filesystem that you tell fsPulse to track.</p>
@@ -194,7 +194,7 @@
 <li>Counts of files, folders, and total size discovered</li>
 <li>Counts of additions, modifications, and deletions detected</li>
 <li>Counts of files in each validation state and hash state</li>
-<li>Any alerts generated</li>
+<li>Counts of new integrity issues (suspect hashes and validation failures) detected</li>
 </ul>
 <p>Scans are always tied to a root via <code>root_id</code> and are ordered chronologically by <code>started_at</code>.</p>
 <hr>
@@ -216,10 +216,9 @@
 <li><strong>Deletion status</strong> — whether the item existed or had been deleted</li>
 <li><strong>Access status</strong> — whether the item could be read successfully</li>
 <li><strong>Metadata</strong> — modification date and size</li>
-<li><strong>Validation state</strong> — format validation state and any error message (files only; null for folders)</li>
-<li><strong>Hash and hash state</strong> — SHA-256 content hash and hash integrity state (files only; null for folders). See <a href="scanning.html#hash-states">Scanning - Hash States</a></li>
+<li><strong>Validation state</strong> — format validation result and any error message (files only; null for folders)</li>
+<li><strong>Review timestamps</strong> — <code>val_reviewed_at</code> and <code>hash_reviewed_at</code> record when a user acknowledged integrity issues on this version (files only)</li>
 <li><strong>Descendant change counts</strong> — add, modify, delete, and unchanged counts for child items (folders only; null for files)</li>
-<li><strong>Descendant state counts</strong> — counts of descendant files in each validation and hash state (folders only; null for files)</li>
 </ul>
 <p>An item that exists unchanged across 50 scans has exactly <strong>one version row</strong>. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.</p>
 <h3 id="deriving-change-types"><a class="header" href="#deriving-change-types">Deriving Change Types</a></h3>
@@ -230,14 +229,18 @@
 <li><strong>Modify</strong>: Previous version exists, neither is deleted, and state differs</li>
 </ul>
 <hr>
-<h2 id="alert"><a class="header" href="#alert">Alert</a></h2>
-<p>An <strong>alert</strong> flags a potential integrity issue detected during scanning. There are three alert types:</p>
+<h2 id="hash-version"><a class="header" href="#hash-version">Hash Version</a></h2>
+<p>A <strong>hash version</strong> tracks the SHA-256 content hash of a file over time, bound to a specific item version. Hash observations are stored in a separate <code>hash_versions</code> table.</p>
+<p>Each hash version records:</p>
 <ul>
-<li><strong>Suspect Hash</strong> — file content hash changed but modification time did not, suggesting bit rot or tampering</li>
-<li><strong>Invalid Item</strong> — format validation detected corruption in a supported file type</li>
-<li><strong>Access Denied</strong> — fsPulse could not access the item’s metadata or contents</li>
+<li>The hash value</li>
+<li>A <strong>hash state</strong>: Baseline (first hash for a version, or hash change explained by metadata change) or Suspect (hash changed without a metadata change — possible bit rot or tampering)</li>
+<li>A temporal range (<code>first_scan_id</code> to <code>last_scan_id</code>) indicating when this hash was observed</li>
 </ul>
-<p>Alerts have statuses (Open, Flagged, Dismissed) for triage workflows.</p>
+<p>An item version can have zero hash observations (never hashed), one (stable hash), or multiple (hash changed between scans). See <a href="scanning.html#hash-states">Scanning - Hash States</a> for details.</p>
+<hr>
+<h2 id="integrity-reviews"><a class="header" href="#integrity-reviews">Integrity Reviews</a></h2>
+<p>Integrity issues — suspect hashes and validation failures — are surfaced on the <a href="web_ui/integrity.html">Integrity</a> page. Users acknowledge issues by marking them as <strong>reviewed</strong>, which records a timestamp on the item version. Reviews are a lightweight acknowledgment mechanism tracked independently for hash and validation issues on each version.</p>
 <hr>
 <h2 id="schedule"><a class="header" href="#schedule">Schedule</a></h2>
 <p>A <strong>schedule</strong> defines automatic recurring scans. Schedules specify:</p>
@@ -256,9 +259,9 @@
 <pre><code class="language-text">Root
  ├── Schedule (recurring scan configuration)
  ├── Scan (one per execution)
- │    └── Alert (integrity issues found)
  └── Item (stable identity)
       └── Item Version (state at a point in time)
+           └── Hash Version (hash observation over time)
 </code></pre>
 <hr>
 <p>These concepts form the foundation of fsPulse’s scanning, browsing, and query capabilities.</p>
