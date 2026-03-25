@@ -30,7 +30,7 @@ When configuring a scan in the web UI, you can enable hashing with these options
 - **Hash changed items** (default): Compute hashes for items that have never been hashed or whose file size or modification date has changed
 - **Hash all items**: Hash all files, including those that have been previously hashed
 
-If a hash is detected to have changed without a corresponding metadata change (modification date or size), the file's `hash_state` is set to **Suspect** and an alert is generated (see [Alerts](web_ui/alerts.md)). If metadata did change, the hash change is considered legitimate and `hash_state` remains **Baseline**.
+If a hash is detected to have changed without a corresponding metadata change (modification date or size), the file's `hash_state` is set to **Suspect**. These suspect hashes are surfaced on the [Integrity](web_ui/integrity.md) page for review. If metadata did change, the hash change is considered legitimate and `hash_state` remains **Baseline**.
 
 ### Hash States
 
@@ -44,13 +44,13 @@ The first hash computed for any item version is always Baseline — it establish
 ### Finding Hash Changes
 
 You can investigate hash changes through the web UI:
-- **[Alerts Page](web_ui/alerts.md)**: Shows suspect hash changes where file metadata hasn't changed
+- **[Integrity Page](web_ui/integrity.md)**: Shows all suspect hash changes with review status filtering
 - **[Browse Page](web_ui/browse.md)**: Click any item to see its version history including hash changes
 - **[Data Explorer](web_ui/data_explorer.md)**: Use the **Query** tab to run custom queries
 
 Example query to find items with suspect hashes (run on the Data Explorer's Query tab):
 ```text
-alerts where alert_type:(H) order by created_at desc
+items where hash_state:(S) show default, hash_state, file_hash order by item_path
 ```
 
 ## Validating
@@ -77,12 +77,12 @@ Validation applies only to files — folders do not have a validation state. Val
 
 In the case of 'I' (Invalid), the validation error message is stored alongside the validation state. When an item's validation state changes, a new item version is created capturing both the old and new states.
 
-If a validation pass produces an error identical to the existing error, no new version is created — only the `last_val_scan` bookkeeping field is updated.
+Validation is a one-time operation per version. Once a version has been validated, it is not re-validated — the result is permanently associated with that version.
 
 ### Finding Validation Issues
 
-Invalid items are automatically flagged as alerts. You can investigate validation failures through the web UI:
-- **[Alerts Page](web_ui/alerts.md)**: Shows all items with validation failures, with filtering and status management
+You can investigate validation failures through the web UI:
+- **[Integrity Page](web_ui/integrity.md)**: Shows all items with validation failures, with filtering and review status tracking
 - **[Browse Page](web_ui/browse.md)**: Click any item to see its validation status and error details in the inline detail panel
 - **[Data Explorer](web_ui/data_explorer.md)**: Use the **Query** tab to run custom queries
 
@@ -123,7 +123,7 @@ The directory tree is deeply traversed. For each file or folder encountered:
   - fsPulse compares current filesystem metadata:
     - **Modification date** (files and folders)
     - **File size** (files only)
-  - If metadata differs, a new item version is created carrying forward unchanged properties (hash, validation) from the previous version
+  - If metadata differs, a new item version is created
   - If unchanged, the existing version's `last_scan_id` is updated in place
 - If the path matches a **deleted** item (previous version has `is_deleted = true`):
   - A new version is created with `is_deleted = false` (rehydration)
@@ -151,14 +151,7 @@ This phase runs only if hashing and/or validation is enabled (see [Hashing](#has
 - **Hashing** — Computes a SHA-256 hash of file contents
 - **Validation** — Uses file-type-specific validators to check content integrity (see [Validators](validators.md))
 
-If a hash or validation result changes:
-
-- If the item already received a new version in the scanning phase (same scan), the existing version is **updated in place**
-- Otherwise, the previous version's `last_scan_id` is restored and a new version is created
-
-This guarantees **at most one new version per item per scan**.
-
-If the hash and validation results are unchanged, only the bookkeeping fields (`last_hash_scan`, `last_val_scan`) are updated on the existing version.
+Hash results are stored in a separate `hash_versions` table, bound to the current item version. Validation results are written directly onto the item version row. See [Concepts](concepts.md) for details on how hash and validation state are tracked.
 
 ---
 

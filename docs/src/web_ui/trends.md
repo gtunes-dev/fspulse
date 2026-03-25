@@ -28,12 +28,12 @@ Visualize filesystem activity:
 - Identify periods of high change
 - Understand modification patterns
 
-### Alert Trends
+### Integrity Trends
 
 Track integrity issues over time:
-- Validation failures
-- Suspect hash changes
-- Alert resolution patterns
+- New validation failures per scan
+- New suspect hash changes per scan
+- Cumulative integrity issue counts
 
 ## Features
 
@@ -41,7 +41,7 @@ Track integrity issues over time:
 
 Select which scan root to analyze from the dropdown. Each root maintains independent trend data.
 
-> **Tip**: If you select a root on the [Browse](browse.md) or [Alerts](alerts.md) page before navigating to Trends, the same root will be pre-selected automatically via the shared root context.
+> **Tip**: If you select a root on the [Browse](browse.md) or [Integrity](integrity.md) page before navigating to Trends, the same root will be pre-selected automatically via the shared root context.
 
 ### Date Range Filtering
 
@@ -55,7 +55,7 @@ Customize the time window:
 
 ### Baseline Exclusion
 
-The Changes and Alerts charts offer a checkbox to exclude the first scan from the visualization. The first scan of a root often shows large numbers of "additions" and alerts which can skew trend visualizations. This toggle only appears when the first scan falls within the selected date range.
+The Changes and Integrity charts offer a checkbox to exclude the first scan from the visualization. The first scan of a root often shows large numbers of additions and integrity issues which can skew trend visualizations. This toggle only appears when the first scan falls within the selected date range.
 
 ### Interactive Charts
 

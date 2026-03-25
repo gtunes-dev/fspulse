@@ -25,7 +25,7 @@ Once running, open your browser to access the full web interface for:
 - Running and monitoring scans
 - Browsing your filesystem data
 - Querying and exploring results
-- Managing alerts
+- Reviewing integrity issues
 
 ---
 

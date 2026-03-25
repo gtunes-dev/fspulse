@@ -88,7 +88,7 @@ The database schema reflects fsPulse's temporal versioning model:
 | `scans` | Individual scan executions with timing, settings, and summary statistics |
 | `items` | Stable identity for each discovered file or folder (path, type, root) |
 | `item_versions` | Temporal state — one row per distinct state of an item, with full metadata snapshot |
-| `alerts` | Integrity issues (suspect hashes, validation failures, access errors) |
+| `hash_versions` | Hash observations — SHA-256 hashes bound to specific item versions, with integrity state |
 | `scan_schedules` | Recurring scan configurations (timing, options) |
 | `tasks` | Work queue entries for scans and other operations |
 | `scan_undo_log` | Transient rollback support for in-progress scans |
@@ -100,11 +100,11 @@ The `items` table stores only identity information (root, path, name, type). All
 - `first_scan_id` — the scan where this state was first observed
 - `last_scan_id` — the most recent scan where this state was confirmed
 
-An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, hash, validation, or deletion status).
+An item that remains unchanged across many scans has a single version row. A new version row is created only when observable state changes (metadata, access, or deletion status). Hash observations are stored separately in `hash_versions`, and validation results are written directly onto the version row.
 
 ### Schema Versioning
 
-The schema is versioned (currently version 24) and automatically migrated on startup. fsPulse handles all upgrades transparently — no manual migration steps are needed.
+The schema is versioned (currently version 29) and automatically migrated on startup. fsPulse handles all upgrades transparently — no manual migration steps are needed.
 
 ---
 

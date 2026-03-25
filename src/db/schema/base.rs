@@ -162,11 +162,8 @@ CREATE TABLE IF NOT EXISTS item_versions (
 
     -- User review of integrity issues on this version.
     -- val_reviewed_at: set when user marks this version's validation issue as reviewed.
-    --   Never auto-cleared (validation is one-time per version).
     -- hash_reviewed_at: set when user marks this version's hash integrity issue as reviewed.
-    --   Auto-cleared only when the FIRST Suspect hash_version is created for
-    --   this item_version (new integrity evidence). NOT cleared on subsequent
-    --   suspect hash observations (ongoing drift is not a new signal).
+    -- Both are user-initiated only: NULL until set by user action, never auto-cleared.
     val_reviewed_at  INTEGER DEFAULT NULL,
     hash_reviewed_at INTEGER DEFAULT NULL,
 

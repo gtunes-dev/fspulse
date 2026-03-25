@@ -31,9 +31,9 @@ You'll see the **Home** page. On first launch with no roots configured, it will 
 
 After your first scan completes:
 
-- **Home** — See the health status of your root, including any alerts generated
-- **Browse** — Navigate your filesystem hierarchy with tree, folder, or search views. Open the detail panel to inspect any file's metadata, size history, version history, and alerts.
-- **Alerts** — Check for any integrity issues detected (suspect hash changes, validation failures, access errors)
+- **Home** — See the health status of your root, including any new integrity issues
+- **Browse** — Navigate your filesystem hierarchy with tree, folder, or search views. Open the detail panel to inspect any file's metadata, size history, version history, and integrity state.
+- **Integrity** — Review any integrity issues detected (suspect hash changes, validation failures)
 - **Trends** — View charts and trends (requires multiple scans to generate meaningful data)
 - **Data Explorer** — Run queries against your scan data using the visual builder or free-form query language
 

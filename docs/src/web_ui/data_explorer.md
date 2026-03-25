@@ -6,7 +6,7 @@ The Data Explorer provides both visual query building and free-form query capabi
 
 Data Explorer offers two ways to query your data:
 
-- **Structured tabs** (Roots, Scans, Items, Versions, Alerts) — Visual query builder with column selection, sorting, and filtering
+- **Structured tabs** (Roots, Scans, Items, Versions) — Visual query builder with column selection, sorting, and filtering
 - **Query tab** — Free-form query entry using fsPulse's query language
 
 <!-- Screenshot: Data Explorer showing the structured Items tab with column selector and results -->
@@ -14,7 +14,7 @@ Data Explorer offers two ways to query your data:
 
 ## Structured Query Tabs
 
-The **Roots**, **Scans**, **Items**, **Versions**, and **Alerts** tabs provide a visual interface for building queries without writing query syntax.
+The **Roots**, **Scans**, **Items**, and **Versions** tabs provide a visual interface for building queries without writing query syntax.
 
 ### Layout
 
@@ -73,13 +73,13 @@ The Query tab includes sample queries you can click to populate the input:
 items limit 10
 items where item_type:(F) show item_path, size limit 25
 items where item_type:(F), size:(>1000000) show item_path, size order by size desc limit 20
-alerts where alert_status:(O) show alert_type, item_path, created_at limit 15
 versions where item_id:(42) order by first_scan_id
+versions where val_state:(I) show default, val_error order by first_scan_id desc
 ```
 
 ## Query Domains
 
-Both interfaces support querying five data domains:
+Both interfaces support querying four data domains:
 
 | Domain | Description |
 |--------|-------------|
@@ -87,7 +87,6 @@ Both interfaces support querying five data domains:
 | **scans** | Scan metadata and statistics |
 | **items** | Files and folders with their latest version state |
 | **versions** | Item version history — one row per distinct state |
-| **alerts** | Integrity issues and validation failures |
 
 ## When to Use Each Interface
 

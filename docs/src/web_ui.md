@@ -20,7 +20,7 @@ The left sidebar organizes pages into two groups:
 
 - **[Home](web_ui/home.md)** — Health overview showing root status, active tasks, and recent activity
 - **[Browse](web_ui/browse.md)** — Navigate filesystem hierarchy with tree, folder, and search views
-- **[Alerts](web_ui/alerts.md)** — Manage integrity issues and validation failures
+- **[Integrity](web_ui/integrity.md)** — Review suspect hashes and validation failures
 - **[Trends](web_ui/trends.md)** — Visualize historical data with interactive charts
 
 **Utility** — operational and investigative pages:
@@ -43,7 +43,7 @@ When collapsed, hovering over an icon shows a tooltip with the page name.
 
 ## Shared Root Context
 
-When you select a root on Browse, Alerts, Trends, Schedules, or History, that selection is carried across pages via a URL parameter (`?root_id=N`). Selecting a root on Browse and then navigating to Alerts automatically pre-selects the same root, so you don't need to re-select it on every page.
+When you select a root on Browse, Integrity, Trends, Schedules, or History, that selection is carried across pages via a URL parameter (`?root_id=N`). Selecting a root on Browse and then navigating to Integrity automatically pre-selects the same root, so you don't need to re-select it on every page.
 
 ## Live Updates
 

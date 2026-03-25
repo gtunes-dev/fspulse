@@ -86,8 +86,9 @@ Clicking any item opens an inline detail panel within the card. The panel can be
 - First seen scan and total version count
 
 ### File Integrity (Files Only)
-- **Hash state**: Displayed as Baseline, Suspect, or Unknown with a colored icon. Click to expand/collapse the full SHA-256 hash value.
-- **Validation state**: Displayed as Valid, Invalid, Unknown, or No Validator. If invalid, the validation error message is shown.
+- **Hash state**: Displayed as Baseline, Suspect, or Unknown with a colored icon. Click to expand/collapse the full SHA-256 hash value. If suspect, a review toggle is shown.
+- **Validation state**: Displayed as Valid, Invalid, Unknown, or No Validator. If invalid, the validation error message is shown with a review toggle.
+- **Validate toggle**: Enable or disable future validation for this item.
 
 ### Directory Children Counts (Directories Only)
 - Immediate file and folder counts
@@ -105,12 +106,6 @@ Clicking any item opens an inline detail panel within the card. The panel can be
 - For directories: shows changes in descendant counts and integrity counts
 - The version corresponding to the currently viewed scan is highlighted with an eye icon
 - Load older versions on demand
-
-### Alerts
-- Any alerts associated with this item (suspect hashes, validation failures, access errors)
-- Each alert shows its type, timestamp, and details
-- **Alert status is editable directly from the panel** — use the dropdown to change between Open, Flagged, and Dismissed without leaving the Browse page
-- Load more alerts on demand
 
 Close the detail panel by clicking the close button.
 
@@ -134,7 +129,7 @@ Close the second card by clicking **Show Compare** again.
 
 ## Use Cases
 
-- **Investigation**: Drill into specific files when alerts are triggered — click an alert's item, then inspect version history and validation errors
+- **Investigation**: Drill into specific files from the [Integrity](integrity.md) page, then inspect version history and validation errors
 - **Capacity analysis**: Use Folder view sorted by Size to find what's consuming space
 - **Change review**: Browse at two scan points in comparison mode to see exactly what changed
 - **Integrity audit**: Use hash state and validation state filters to focus on files with suspect or invalid states

@@ -10,7 +10,7 @@
 - [Interface](web_ui.md)
   - [Home](web_ui/home.md)
   - [Browse](web_ui/browse.md)
-  - [Alerts](web_ui/alerts.md)
+  - [Integrity](web_ui/integrity.md)
   - [Trends](web_ui/trends.md)
   - [History](web_ui/history.md)
   - [Data Explorer](web_ui/data_explorer.md)

@@ -1,6 +1,6 @@
 # Concepts
 
-fsPulse tracks the state of your filesystem over time using a **temporal versioning** model. The core entities — roots, scans, items, item versions, alerts, schedules, and tasks — form a layered model for understanding how your data evolves.
+fsPulse tracks the state of your filesystem over time using a **temporal versioning** model. The core entities — roots, scans, items, item versions, hash versions, schedules, and tasks — form a layered model for understanding how your data evolves.
 
 ---
 ## Root
@@ -23,7 +23,7 @@ Each scan records:
 - Counts of files, folders, and total size discovered
 - Counts of additions, modifications, and deletions detected
 - Counts of files in each validation state and hash state
-- Any alerts generated
+- Counts of new integrity issues (suspect hashes and validation failures) detected
 
 Scans are always tied to a root via `root_id` and are ordered chronologically by `started_at`.
 
@@ -50,10 +50,9 @@ Each version contains:
 - **Deletion status** — whether the item existed or had been deleted
 - **Access status** — whether the item could be read successfully
 - **Metadata** — modification date and size
-- **Validation state** — format validation state and any error message (files only; null for folders)
-- **Hash and hash state** — SHA-256 content hash and hash integrity state (files only; null for folders). See [Scanning - Hash States](scanning.md#hash-states)
+- **Validation state** — format validation result and any error message (files only; null for folders)
+- **Review timestamps** — `val_reviewed_at` and `hash_reviewed_at` record when a user acknowledged integrity issues on this version (files only)
 - **Descendant change counts** — add, modify, delete, and unchanged counts for child items (folders only; null for files)
-- **Descendant state counts** — counts of descendant files in each validation and hash state (folders only; null for files)
 
 An item that exists unchanged across 50 scans has exactly **one version row**. You never need to examine multiple versions to reconstruct the current state — each version is a complete snapshot.
 
@@ -66,14 +65,22 @@ Change types are derived by comparing adjacent versions of an item:
 
 ---
 
-## Alert
+## Hash Version
 
-An **alert** flags a potential integrity issue detected during scanning. There are three alert types:
-- **Suspect Hash** — file content hash changed but modification time did not, suggesting bit rot or tampering
-- **Invalid Item** — format validation detected corruption in a supported file type
-- **Access Denied** — fsPulse could not access the item's metadata or contents
+A **hash version** tracks the SHA-256 content hash of a file over time, bound to a specific item version. Hash observations are stored in a separate `hash_versions` table.
 
-Alerts have statuses (Open, Flagged, Dismissed) for triage workflows.
+Each hash version records:
+- The hash value
+- A **hash state**: Baseline (first hash for a version, or hash change explained by metadata change) or Suspect (hash changed without a metadata change — possible bit rot or tampering)
+- A temporal range (`first_scan_id` to `last_scan_id`) indicating when this hash was observed
+
+An item version can have zero hash observations (never hashed), one (stable hash), or multiple (hash changed between scans). See [Scanning - Hash States](scanning.md#hash-states) for details.
+
+---
+
+## Integrity Reviews
+
+Integrity issues — suspect hashes and validation failures — are surfaced on the [Integrity](web_ui/integrity.md) page. Users acknowledge issues by marking them as **reviewed**, which records a timestamp on the item version. Reviews are a lightweight acknowledgment mechanism tracked independently for hash and validation issues on each version.
 
 ---
 
@@ -102,9 +109,9 @@ Tasks can be paused globally, and individual tasks can be stopped while in progr
 Root
  ├── Schedule (recurring scan configuration)
  ├── Scan (one per execution)
- │    └── Alert (integrity issues found)
  └── Item (stable identity)
       └── Item Version (state at a point in time)
+           └── Hash Version (hash observation over time)
 ```
 
 ---

@@ -6,13 +6,12 @@ fsPulse provides a flexible, SQL-like query language for exploring scan results.
 
 ## Query Structure
 
-Each query begins with one of the five supported domains:
+Each query begins with one of the four supported domains:
 
 - `roots`
 - `scans`
 - `items`
 - `versions`
-- `alerts`
 
 You can then add any of the following optional clauses:
 
@@ -52,7 +51,8 @@ Each domain has a set of available columns. Columns marked as **default** are sh
 | `file_count`    | Integer         | Yes     | Count of files found in the scan               |
 | `folder_count`  | Integer         | Yes     | Count of directories found in the scan         |
 | `total_size`    | Integer         | Yes     | Total size in bytes of all files               |
-| `alert_count`   | Integer         | Yes     | Number of alerts created during the scan       |
+| `new_hash_suspect_count` | Integer | No   | New suspect hashes detected in this scan       |
+| `new_val_invalid_count` | Integer  | No   | New validation failures detected in this scan  |
 | `add_count`     | Integer         | Yes     | Number of items added in the scan              |
 | `modify_count`  | Integer         | Yes     | Number of items modified in the scan           |
 | `delete_count`  | Integer         | Yes     | Number of items deleted in the scan            |
@@ -78,19 +78,17 @@ The `items` domain queries each item's **latest version** — the most recent kn
 | `item_path`     | Path              | Yes     | Full path of the item                    |
 | `item_name`     | Path              | No      | Filename or directory name (last segment)|
 | `item_type`     | Item Type Enum    | Yes     | File, Directory, Symlink, or Unknown     |
-| `version_id`    | Integer           | No      | Current version identifier               |
+| `item_version`  | Integer           | No      | Current version number                   |
 | `first_scan_id` | Integer           | No      | Scan where current version first appeared|
 | `last_scan_id`  | Integer           | Yes     | Last scan confirming current state       |
 | `is_deleted`    | Boolean           | Yes     | True if item is currently deleted        |
 | `access`        | Access Status     | No      | Access state (NoError, MetaError, ReadError) |
 | `mod_date`      | Date              | Yes     | Last modification date                   |
 | `size`          | Integer           | No      | File size in bytes                       |
-| `last_val_scan` | Integer           | No      | Last scan that evaluated validation (files only; null for folders) |
 | `val_state`     | Validation Status | No      | Validation state (files only; null for folders) |
 | `val_error`     | String            | No      | Validation error message (files only; null for folders) |
-| `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash (files only; null for folders) |
-| `file_hash`     | String            | No      | SHA-256 content hash (files only; null for folders) |
-| `hash_state`    | Hash State        | No      | Hash integrity state (files only; null for folders) |
+| `file_hash`     | String            | No      | SHA-256 content hash from latest hash version (files only; null for folders) |
+| `hash_state`    | Hash State        | No      | Hash integrity state from latest hash version (files only; null for folders) |
 
 ---
 
@@ -100,7 +98,7 @@ The `versions` domain queries individual item version rows — each representing
 
 | Column          | Type              | Default | Description                              |
 |-----------------|-------------------|---------|------------------------------------------|
-| `version_id`    | Integer           | Yes     | Unique version identifier                |
+| `item_version`  | Integer           | Yes     | Version number (per-item sequence)       |
 | `item_id`       | Integer           | Yes     | Item this version belongs to             |
 | `root_id`       | Integer           | Yes     | Root directory identifier                |
 | `item_path`     | Path              | No      | Full path of the item                    |
@@ -112,43 +110,14 @@ The `versions` domain queries individual item version rows — each representing
 | `access`        | Access Status     | No      | Access state                             |
 | `mod_date`      | Date              | No      | Last modification date                   |
 | `size`          | Integer           | No      | File size in bytes                       |
-| `last_val_scan` | Integer           | No      | Last scan that evaluated validation (files only; null for folders) |
-| `val_state`     | Validation Status | No      | Validation state (files only; null for folders) |
-| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
-| `last_hash_scan`| Integer           | No      | Last scan that evaluated the hash (files only; null for folders) |
-| `file_hash`     | String            | No      | SHA-256 content hash (files only; null for folders) |
-| `hash_state`    | Hash State        | No      | Hash integrity state (files only; null for folders) |
 | `add_count`     | Integer           | No      | Descendant items added (folders only; null for files) |
 | `modify_count`  | Integer           | No      | Descendant items modified (folders only; null for files) |
 | `delete_count`  | Integer           | No      | Descendant items deleted (folders only; null for files) |
 | `unchanged_count` | Integer         | No      | Descendant items unchanged (folders only; null for files) |
-| `val_unknown_count` | Integer       | No      | Descendant files with unknown validation (folders only) |
-| `val_valid_count` | Integer         | No      | Descendant files with valid validation (folders only) |
-| `val_invalid_count` | Integer       | No      | Descendant files with invalid validation (folders only) |
-| `val_no_validator_count` | Integer  | No      | Descendant files with no validator (folders only) |
-| `hash_unknown_count` | Integer      | No      | Descendant files with unknown hash state (folders only) |
-| `hash_baseline_count` | Integer     | No      | Descendant files with baseline hash state (folders only) |
-| `hash_suspect_count` | Integer   | No      | Descendant files with suspect hash state (folders only) |
-
----
-
-### `alerts` Domain
-
-| Column          | Type              | Default | Description                              |
-|-----------------|-------------------|---------|------------------------------------------|
-| `alert_id`      | Integer           | No      | Unique alert identifier                  |
-| `alert_type`    | Alert Type Enum   | Yes     | Type of alert                            |
-| `alert_status`  | Alert Status Enum | Yes     | Current status (Open, Flagged, Dismissed)|
-| `root_id`       | Integer           | No      | Root directory identifier                |
-| `scan_id`       | Integer           | No      | Scan that generated the alert            |
-| `item_id`       | Integer           | No      | Item the alert is about                  |
-| `item_path`     | Path              | Yes     | Path of the affected item                |
-| `created_at`    | Date              | Yes     | When the alert was created               |
-| `updated_at`    | Date              | No      | When the alert status was last changed   |
-| `prev_hash_scan`| Integer           | No      | Previous hash scan (for suspect hash) |
-| `hash_old`      | String            | No      | Previous hash value                      |
-| `hash_new`      | String            | No      | New hash value                           |
-| `val_error`     | String            | Yes     | Validation error message                 |
+| `val_state`     | Validation Status | No      | Validation state (files only; null for folders) |
+| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
+| `file_hash`     | String            | No      | SHA-256 content hash from latest hash version (files only; null for folders) |
+| `hash_state`    | Hash State        | No      | Hash integrity state from latest hash version (files only; null for folders) |
 
 ---
 
@@ -172,8 +141,6 @@ Values must match the column's type. You can use individual values, ranges (when
 | Validation Status   | `V`, `I`, `N`, `U`, `null`, `not null`                 | Valid, Invalid, No Validator, Unknown. Null for folders. Unquoted.     |
 | Hash State          | `V`, `S`, `U`, `null`, `not null`                      | Valid, Suspect, Unknown. Null for folders. Unquoted.               |
 | Item Type Enum      | `F`, `D`, `S`, `U`                                    | File, Directory, Symlink, Unknown. Unquoted.                          |
-| Alert Type Enum     | `H`, `I`, `A`                                         | Suspect Hash, Invalid Item, Access Denied. Unquoted.               |
-| Alert Status Enum   | `O`, `F`, `D`                                         | Open, Flagged, Dismissed. Unquoted.                                   |
 | Scan State Enum     | `S`, `W`, `AF`, `AS`, `C`, `P`, `E`                   | Scanning, Sweeping, Analyzing Files, Analyzing Scan, Completed, Stopped, Error. `A` is shorthand for `AF`. Unquoted. |
 | Access Status       | `N`, `M`, `R`                                         | No Error, Meta Error, Read Error. Unquoted.                           |
 
@@ -267,14 +234,11 @@ versions where val_state:(I) show default, val_error order by first_scan_id desc
 # Items with suspect hash state
 items where hash_state:(S) show default, hash_state, file_hash order by item_path
 
-# Open or flagged alerts for suspect hashes
-alerts where alert_type:(H), alert_status:(O, F) order by created_at desc
-
 # Scans with timestamps for programmatic processing
 scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10
 
-# Scans with change and alert counts
-scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, alert_count order by started_at desc
+# Scans with change and integrity counts
+scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, new_hash_suspect_count, new_val_invalid_count order by started_at desc
 ```
 
 ---

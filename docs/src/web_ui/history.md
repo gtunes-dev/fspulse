@@ -16,7 +16,7 @@ The History page shows a paginated table of completed scans and tasks with key i
 - **State** (Completed, Stopped, Error)
 - **Item counts** — files, folders, and total size discovered
 - **Change counts** — additions, modifications, and deletions detected
-- **Alert count** — validation failures and suspect hash changes generated
+- **Integrity** — new validation errors and suspect hashes detected, linking to the [Integrity](integrity.md) page
 - **Scan options** — whether hashing and validation were enabled
 
 ---
@@ -34,7 +34,7 @@ Filter the activity log by:
 
 - **Schedule verification**: Confirm that scheduled scans ran as expected
 - **Troubleshooting**: Identify scans that stopped or errored, and review their details
-- **Trend awareness**: Notice patterns in change counts or alert frequency across scans
+- **Trend awareness**: Notice patterns in change counts or integrity issues across scans
 - **Audit trail**: Review what the system has been doing over any time period
 
 > **Tip**: The [Home](home.md) page shows a compact summary of recent activity. Use the History page when you need the full, filterable log.

@@ -14,7 +14,7 @@
 
 ## What is fsPulse?
 
-**fsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. fsPulse provides continuous awareness through automated scanning, historical trend analysis, and intelligent alerting.**
+**fsPulse is a comprehensive filesystem monitoring and integrity tool that gives you complete visibility into your critical directories. Track your data as it grows and changes over time, detect unexpected modifications, and catch silent threats like bit rot and corruption before they become disasters. fsPulse provides continuous awareness through automated scanning, historical trend analysis, and a dedicated integrity view for reviewing issues.**
 
 Your filesystem is constantly evolving—files are added, modified, and deleted. Storage grows. But **invisible problems** hide beneath the surface: bit rot silently corrupts data, ransomware alters files while preserving timestamps, and you don't realize directories have bloated.
 
@@ -31,20 +31,20 @@ fsPulse gives you **continuous awareness** of both the visible and invisible:
 
 Whether you're managing storage capacity, tracking project evolution, or ensuring data integrity, fsPulse provides the visibility and peace of mind that comes from truly knowing the state of your data.
 
-<!-- Screenshot: Home page showing root health summary with alert counts and last scan times -->
+<!-- Screenshot: Home page showing root health summary with last scan times -->
 <!-- ![fsPulse Home](screenshot-placeholder-home.png) -->
 
 ## Key Capabilities
 
-- **Health-at-a-Glance Overview** — See the status of all monitored directories immediately: open alerts, last scan times, and overall health
+- **Health-at-a-Glance Overview** — See the status of all monitored directories immediately: integrity issues, last scan times, and overall health
 - **Continuous Monitoring** — Schedule recurring scans (daily, weekly, monthly, or custom intervals) to track your filesystem automatically
 - **Temporal Versioning** — Every item's state is tracked over time; browse your filesystem as it appeared at any past scan
 - **Size & Growth Tracking** — Monitor directory sizes and visualize storage trends over time with dual-format units
 - **Change Detection** — Track all file additions, modifications, and deletions through version history
 - **Integrity Verification** — SHA2 hashing detects bit rot and tampering; format validators catch corruption in supported file types
-- **Historical Trends** — Interactive trend charts show how your data evolves: sizes, counts, changes, and alerts
-- **Alert System** — Suspect hash changes and validation failures flagged immediately with status management
-- **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing across five data domains
+- **Integrity Management** — Dedicated Integrity page surfaces suspect hashes and validation failures with review tracking
+- **Historical Trends** — Interactive trend charts show how your data evolves: sizes, counts, changes, and integrity metrics
+- **Powerful Query Language** — SQL-inspired syntax for filtering, sorting, and analyzing across four data domains
 - **Web-First Design** — Elegant web UI for all operations including scanning, browsing, querying, and configuration
 
 ## Running fsPulse
@@ -57,7 +57,7 @@ fspulse
 
 Then open **http://localhost:8080** in your browser to access the web interface.
 
-The web UI provides complete functionality for managing roots, scheduling and monitoring scans, browsing your filesystem data, running queries, and managing alerts. Configuration is done through environment variables or a config file—see [Configuration](configuration.md) for details.
+The web UI provides complete functionality for managing roots, scheduling and monitoring scans, browsing your filesystem data, running queries, and reviewing integrity issues. Configuration is done through environment variables or a config file—see [Configuration](configuration.md) for details.
 
 fsPulse is designed to scale across large file systems while maintaining clarity and control for the user.
 
