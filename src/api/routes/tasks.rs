@@ -114,6 +114,8 @@ pub struct TaskHistoryResponseRow {
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
     pub was_restarted: Option<bool>,
+    pub new_val_invalid_count: Option<i64>,
+    pub new_hash_suspect_count: Option<i64>,
 }
 
 /// Response structure for task history fetch
@@ -169,6 +171,8 @@ pub async fn get_task_history_fetch(
             modify_count: row.modify_count,
             delete_count: row.delete_count,
             was_restarted: row.was_restarted,
+            new_val_invalid_count: row.new_val_invalid_count,
+            new_hash_suspect_count: row.new_hash_suspect_count,
         })
         .collect();
 

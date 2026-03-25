@@ -49,6 +49,10 @@ function AppContent() {
     })
   }, [location.pathname, mainElement])
 
+  if (backendConnected === null) {
+    return null // First connection attempt in progress — don't flash anything
+  }
+
   if (!backendConnected) {
     return <BackendUnavailablePage />
   }

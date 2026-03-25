@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/table'
 import { formatDateTimeShort } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
-import { CheckCircle, XCircle, AlertTriangle, Calendar, Play } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, CircleX, Calendar, Play, Hash } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { RootCard } from '@/components/shared/RootCard'
 import { TaskTypeFilter } from '@/components/shared/TaskTypeFilter'
@@ -34,6 +34,8 @@ interface HistoryRow {
   modify_count: number | null
   delete_count: number | null
   was_restarted: boolean | null
+  new_val_invalid_count: number | null
+  new_hash_suspect_count: number | null
 }
 
 interface Root {
@@ -265,6 +267,7 @@ export function HistoryPage() {
                     <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide w-[120px]">Duration</TableHead>
                     <TableHead className="text-center uppercase text-xs tracking-wide">Changes</TableHead>
+                    <TableHead className="text-center uppercase text-xs tracking-wide">Integrity</TableHead>
                     <TableHead className="text-right uppercase text-xs tracking-wide">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -339,6 +342,33 @@ export function HistoryPage() {
                       <TableCell className="text-center">
                         {isScan(task) ? (
                           formatChanges(task.add_count, task.modify_count, task.delete_count)
+                        ) : (
+                          <span className="text-muted-foreground">&mdash;</span>
+                        )}
+                      </TableCell>
+
+                      {/* Integrity */}
+                      <TableCell className="text-center">
+                        {isScan(task) && (task.new_val_invalid_count || task.new_hash_suspect_count) ? (
+                          <Link
+                            to={`/integrity?root_id=${task.root_id}`}
+                            className="inline-flex items-center gap-2.5 text-sm hover:underline"
+                          >
+                            {task.new_val_invalid_count ? (
+                              <span className="inline-flex items-center gap-1 text-rose-500">
+                                <CircleX className="h-3.5 w-3.5" />
+                                {task.new_val_invalid_count}
+                              </span>
+                            ) : null}
+                            {task.new_hash_suspect_count ? (
+                              <span className="inline-flex items-center gap-1 text-amber-500">
+                                <Hash className="h-3.5 w-3.5" />
+                                {task.new_hash_suspect_count}
+                              </span>
+                            ) : null}
+                          </Link>
+                        ) : isScan(task) ? (
+                          <span className="text-muted-foreground">&mdash;</span>
                         ) : (
                           <span className="text-muted-foreground">&mdash;</span>
                         )}

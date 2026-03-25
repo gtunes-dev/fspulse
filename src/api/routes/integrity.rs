@@ -14,6 +14,7 @@ fn parse_filter(
     extensions: Option<String>,
     status: Option<String>,
     path_search: Option<String>,
+    show_deleted: Option<bool>,
 ) -> IntegrityFilter {
     let exts = extensions
         .as_deref()
@@ -29,6 +30,7 @@ fn parse_filter(
         extensions: exts,
         status: status.unwrap_or_else(|| "unreviewed".to_string()),
         path_search,
+        show_deleted: show_deleted.unwrap_or(false),
     }
 }
 
@@ -43,6 +45,7 @@ pub struct CountParams {
     pub extensions: Option<String>,
     pub status: Option<String>,
     pub path_search: Option<String>,
+    pub show_deleted: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -53,7 +56,7 @@ pub struct CountResponse {
 pub async fn count(
     Query(p): Query<CountParams>,
 ) -> Result<Json<CountResponse>, (StatusCode, String)> {
-    let filter = parse_filter(p.root_id, p.issue_type, p.extensions, p.status, p.path_search);
+    let filter = parse_filter(p.root_id, p.issue_type, p.extensions, p.status, p.path_search, p.show_deleted);
     match integrity_api::count_items(&filter) {
         Ok(total) => Ok(Json(CountResponse { total })),
         Err(e) => {
@@ -74,6 +77,7 @@ pub struct ItemsParams {
     pub extensions: Option<String>,
     pub status: Option<String>,
     pub path_search: Option<String>,
+    pub show_deleted: Option<bool>,
     pub offset: Option<i64>,
     pub limit: Option<i64>,
 }
@@ -95,7 +99,7 @@ pub struct ItemSummaryResponse {
 pub async fn get_items(
     Query(p): Query<ItemsParams>,
 ) -> Result<Json<Vec<ItemSummaryResponse>>, (StatusCode, String)> {
-    let filter = parse_filter(p.root_id, p.issue_type, p.extensions, p.status, p.path_search);
+    let filter = parse_filter(p.root_id, p.issue_type, p.extensions, p.status, p.path_search, p.show_deleted);
     let offset = p.offset.unwrap_or(0).max(0);
     let limit = p.limit.unwrap_or(50).clamp(1, 200);
 
@@ -136,6 +140,7 @@ pub struct VersionsParams {
     pub extensions: Option<String>,
     pub status: Option<String>,
     pub path_search: Option<String>,
+    pub show_deleted: Option<bool>,
     pub limit: Option<i64>,
 }
 
@@ -162,7 +167,7 @@ pub async fn get_versions(
     Path(item_id): Path<i64>,
     Query(p): Query<VersionsParams>,
 ) -> Result<Json<VersionsListResponse>, (StatusCode, String)> {
-    let filter = parse_filter(p.root_id, p.issue_type, p.extensions, p.status, p.path_search);
+    let filter = parse_filter(p.root_id, p.issue_type, p.extensions, p.status, p.path_search, p.show_deleted);
     let limit = p.limit.unwrap_or(5).clamp(1, 100);
 
     match integrity_api::query_versions(&filter, item_id, limit) {

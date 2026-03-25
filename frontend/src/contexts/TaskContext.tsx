@@ -17,7 +17,7 @@ interface TaskContextType {
   pauseUntil: number | null
   lastTaskCompletedAt: number | null
   lastTaskScheduledAt: number | null
-  backendConnected: boolean
+  backendConnected: boolean | null
   stopTask: (taskId: number) => Promise<void>
   pauseTasks: (durationSeconds: number) => Promise<void>
   unpauseTasks: () => Promise<void>
@@ -54,13 +54,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const [pauseState, setPauseState] = useState<PauseState | null>(null)
   const [lastTaskCompletedAt, setLastTaskCompletedAt] = useState<number | null>(null)
   const [lastTaskScheduledAt, setLastTaskScheduledAt] = useState<number | null>(null)
-  const [backendConnected, setBackendConnected] = useState(false)
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
 
   const isPaused = pauseState?.paused ?? false
   const pauseUntil = pauseState?.pauseUntil ?? null
 
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
+  const wsIdRef = useRef(0)
   const lastProcessedState = useRef<{ task_id: number | null; status: TaskStatus | null }>({ task_id: null, status: null })
 
   // Update stable fields only when they actually change
@@ -152,11 +153,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
     if (wsRef.current) wsRef.current.close()
 
+    const myId = ++wsIdRef.current
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${protocol}//${window.location.host}${WS_PROGRESS_ENDPOINT}`)
     wsRef.current = ws
 
     ws.onopen = () => {
+      if (myId !== wsIdRef.current) return
       setBackendConnected(true)
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current)
@@ -165,6 +169,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     }
 
     ws.onmessage = (event) => {
+      if (myId !== wsIdRef.current) return
       try {
         handleBroadcastMessage(JSON.parse(event.data))
       } catch (error) {
@@ -175,6 +180,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     ws.onerror = (error) => console.error('WebSocket error:', error)
 
     ws.onclose = () => {
+      if (myId !== wsIdRef.current) return
       setBackendConnected(false)
       if (!reconnectTimerRef.current) {
         reconnectTimerRef.current = window.setTimeout(async () => {
@@ -226,6 +232,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     connectWebSocket()
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      wsIdRef.current++  // Invalidate any in-flight socket callbacks
       wsRef.current?.close()
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
     }

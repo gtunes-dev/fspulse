@@ -1371,7 +1371,9 @@ impl TaskEntry {
                 sc.add_count,
                 sc.modify_count,
                 sc.delete_count,
-                sc.was_restarted
+                sc.was_restarted,
+                sc.new_val_invalid_count,
+                sc.new_hash_suspect_count
              FROM tasks t
              LEFT JOIN roots r ON t.root_id = r.root_id
              LEFT JOIN scan_schedules s ON t.schedule_id = s.schedule_id
@@ -1414,6 +1416,8 @@ impl TaskEntry {
                     modify_count: row.get(11)?,
                     delete_count: row.get(12)?,
                     was_restarted: row.get(13)?,
+                    new_val_invalid_count: row.get(14)?,
+                    new_hash_suspect_count: row.get(15)?,
                 })
             })
             .map_err(FsPulseError::DatabaseError)?
@@ -1498,6 +1502,8 @@ pub struct TaskHistoryRow {
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
     pub was_restarted: Option<bool>,
+    pub new_val_invalid_count: Option<i64>,
+    pub new_hash_suspect_count: Option<i64>,
 }
 
 /// Schedule with root path and next scan time

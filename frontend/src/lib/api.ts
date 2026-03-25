@@ -103,6 +103,7 @@ export interface IntegrityFilterParams {
   extensions?: string
   status?: string
   path_search?: string
+  show_deleted?: boolean
 }
 
 /** Item summary row from GET /api/integrity/items. */
@@ -144,6 +145,7 @@ function filterToQs(params: IntegrityFilterParams): URLSearchParams {
   if (params.extensions) qs.set('extensions', params.extensions)
   if (params.status) qs.set('status', params.status)
   if (params.path_search) qs.set('path_search', params.path_search)
+  if (params.show_deleted) qs.set('show_deleted', 'true')
   return qs
 }
 

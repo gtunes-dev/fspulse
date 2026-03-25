@@ -108,12 +108,13 @@ export function IntegrityPage() {
   const [fileType, setFileType] = useState<string>(searchParams.get('file_type') || 'all')
   const [status, setStatus] = useState<string>(searchParams.get('status') || 'unreviewed')
   const [pathSearch, setPathSearch] = useState<string>(searchParams.get('q') || '')
+  const [showDeleted, setShowDeleted] = useState<boolean>(searchParams.get('show_deleted') === 'true')
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '1') || 1)
 
   const [roots, setRoots] = useState<Root[]>([])
   const [items, setItems] = useState<IntegrityItemSummary[]>([])
   const [total, setTotal] = useState(0)
-  const [initialLoading, setInitialLoading] = useState(false)
+  const [hasFetched, setHasFetched] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [detailItemId, setDetailItemId] = useState<number | null>(null)
@@ -139,8 +140,9 @@ export function IntegrityPage() {
       extensions: fileType === 'all' ? undefined : fileType,
       status,
       path_search: pathSearch || undefined,
+      show_deleted: showDeleted || undefined,
     }
-  }, [selectedRootId, issueType, fileType, status, pathSearch])
+  }, [selectedRootId, issueType, fileType, status, pathSearch, showDeleted])
 
   // --- Data fetching ---
 
@@ -184,15 +186,13 @@ export function IntegrityPage() {
     const filter = buildFilter()
     if (!filter) return
 
-    setInitialLoading(true)
     setError(null)
     setExpandedData(new Map())
     try {
       await Promise.all([fetchCount(filter), fetchItems(filter)])
+      setHasFetched(true)
     } catch {
       setError('Failed to load integrity data')
-    } finally {
-      setInitialLoading(false)
     }
   }, [buildFilter, fetchCount, fetchItems])
 
@@ -209,14 +209,14 @@ export function IntegrityPage() {
 
   // On filter change: reset page and fetch count + items
   useEffect(() => {
-    const key = `${selectedRootId}|${issueType}|${fileType}|${status}|${pathSearch}`
+    const key = `${selectedRootId}|${issueType}|${fileType}|${status}|${pathSearch}|${showDeleted}`
     if (!isInitialLoad.current && key !== lastFilterKeyRef.current) {
       setCurrentPage(1)
     }
     isInitialLoad.current = false
     lastFilterKeyRef.current = key
     fetchFilterData()
-  }, [fetchFilterData, selectedRootId, issueType, fileType, status, pathSearch])
+  }, [fetchFilterData, selectedRootId, issueType, fileType, status, pathSearch, showDeleted])
 
 
   // Re-fetch on task completion
@@ -413,6 +413,19 @@ export function IntegrityPage() {
         onChange={handlePathSearchChange}
         placeholder="Search path..."
       />
+
+      <label className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={showDeleted}
+          onChange={(e) => {
+            setShowDeleted(e.target.checked)
+            syncUrl({ show_deleted: e.target.checked ? 'true' : '' })
+          }}
+          className="cursor-pointer"
+        />
+        <span className="text-muted-foreground">Show deleted</span>
+      </label>
     </>
   )
 
@@ -432,9 +445,8 @@ export function IntegrityPage() {
 
         {!selectedRootId ? (
           <p className="text-sm text-muted-foreground">Select a root to view integrity issues.</p>
-        ) : initialLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : items.length === 0 ? (
+        ) : !hasFetched ? null
+        : items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {status === 'unreviewed'
               ? 'All integrity issues have been reviewed.'

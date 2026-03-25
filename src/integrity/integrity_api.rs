@@ -17,6 +17,8 @@ pub struct IntegrityFilter {
     pub status: String,
     /// Substring match on item_path
     pub path_search: Option<String>,
+    /// If false (default), exclude versions where is_deleted = 1
+    pub show_deleted: bool,
 }
 
 /// This version has a validation issue.
@@ -93,6 +95,9 @@ fn build_version_where(f: &IntegrityFilter) -> (String, Vec<Value>) {
         "i.item_type = 0".to_string(),
         format!("({inclusion})"),
     ];
+    if !f.show_deleted {
+        parts.push("iv.is_deleted = 0".to_string());
+    }
     parts.extend(extra_clauses);
 
     let mut vals: Vec<Value> = vec![Value::Integer(f.root_id)];
