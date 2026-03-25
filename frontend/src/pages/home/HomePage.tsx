@@ -29,7 +29,7 @@ import { countQuery } from '@/lib/api'
  *
  * Without any parameter, the page uses actual database counts to determine state.
  */
-export function DashboardPage() {
+export function HomePage() {
   const [searchParams] = useSearchParams()
   const { isPaused, pauseUntil } = useTaskContext()
   const [loading, setLoading] = useState(true)

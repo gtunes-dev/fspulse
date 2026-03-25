@@ -4,7 +4,7 @@ import { TaskProvider, useTaskContext } from './contexts/TaskContext'
 import { ScrollContext } from './contexts/ScrollContext'
 import { AppSidebar } from './components/layout/Sidebar'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
-import { DashboardPage } from './pages/dashboard/DashboardPage'
+import { HomePage } from './pages/home/HomePage'
 import { RootsPage } from './pages/roots/RootsPage'
 import { SchedulesPage } from './pages/schedules/SchedulesPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
@@ -59,7 +59,7 @@ function AppContent() {
       <SidebarInset ref={mainRef} className="overflow-auto p-6">
         <ScrollContext.Provider value={mainElement}>
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/" element={<HomePage />} />
           <Route path="/roots" element={<RootsPage />} />
           <Route path="/schedules" element={<SchedulesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
