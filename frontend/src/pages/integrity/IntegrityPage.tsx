@@ -218,12 +218,6 @@ export function IntegrityPage() {
     fetchFilterData()
   }, [fetchFilterData, selectedRootId, issueType, fileType, status, pathSearch])
 
-  // On page change only: fetch items (not count)
-  const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(page)
-    syncUrl({ page: String(page) })
-    // fetchPageData will be triggered by the currentPage dep in fetchItems
-  }, [])
 
   // Re-fetch on task completion
   useEffect(() => {
@@ -272,6 +266,12 @@ export function IntegrityPage() {
       return next
     }, { replace: true })
   }, [setSearchParams])
+
+  // On page change only: fetch items (not count)
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page)
+    syncUrl({ page: String(page) })
+  }, [syncUrl])
 
   const handleRootChange = useCallback((rootId: string) => {
     setSelectedRootId(rootId)
