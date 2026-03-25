@@ -275,7 +275,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
   // Detail panel shows the active view's selection
   const detailPanel = activeSelection && selectedRoot && resolvedScanId ? (
     <div className={cn(
-      "w-96 flex-shrink-0",
+      "w-[500px] flex-shrink-0",
       detailOnRight ? 'border-l border-border' : 'border-r border-border'
     )}>
       <div className="sticky top-0">
