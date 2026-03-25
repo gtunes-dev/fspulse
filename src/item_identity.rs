@@ -155,13 +155,14 @@ impl ItemIdentity {
         path: &str,
         item_type: ItemType,
         has_validator: bool,
+        file_extension: Option<&str>,
     ) -> Result<i64, FsPulseError> {
         let item_name = Utils::display_path_name(path);
 
         conn.execute(
-            "INSERT INTO items (root_id, item_path, item_name, item_type, has_validator)
-             VALUES (?, ?, ?, ?, ?)",
-            params![root_id, path, item_name, item_type.as_i64(), has_validator as i64],
+            "INSERT INTO items (root_id, item_path, item_name, item_type, has_validator, file_extension)
+             VALUES (?, ?, ?, ?, ?, ?)",
+            params![root_id, path, item_name, item_type.as_i64(), has_validator as i64, file_extension],
         )?;
 
         let item_id: i64 = conn.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;

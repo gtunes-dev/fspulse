@@ -274,6 +274,13 @@ fn serialize_optional_hash<S: Serializer>(
     }
 }
 
+fn serialize_hash<S: Serializer>(
+    hash: &Vec<u8>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&hex::encode(hash))
+}
+
 /// A single version entry for the ItemDetail version history
 #[derive(Clone, Debug, Serialize)]
 pub struct VersionHistoryEntry {
@@ -282,6 +289,7 @@ pub struct VersionHistoryEntry {
     pub last_scan_id: i64,
     pub first_scan_date: i64,
     pub last_scan_date: i64,
+    pub is_added: bool,
     pub is_deleted: bool,
     pub access: i64,
     pub mod_date: Option<i64>,
@@ -297,6 +305,9 @@ pub struct VersionHistoryEntry {
     pub file_hash: Option<Vec<u8>>,
     pub val_state: Option<i64>,
     pub val_error: Option<String>,
+    // Review timestamps
+    pub val_reviewed_at: Option<i64>,
+    pub hash_reviewed_at: Option<i64>,
 }
 
 impl VersionHistoryEntry {
@@ -307,45 +318,33 @@ impl VersionHistoryEntry {
             last_scan_id: row.get(2)?,
             first_scan_date: row.get(3)?,
             last_scan_date: row.get(4)?,
-            is_deleted: row.get(5)?,
-            access: row.get(6)?,
-            mod_date: row.get(7)?,
-            size: row.get(8)?,
-            add_count: row.get(9)?,
-            modify_count: row.get(10)?,
-            delete_count: row.get(11)?,
-            unchanged_count: row.get(12)?,
-            hash_state: row.get(13)?,
-            file_hash: row.get(14)?,
-            val_state: row.get(15)?,
-            val_error: row.get(16)?,
+            is_added: row.get(5)?,
+            is_deleted: row.get(6)?,
+            access: row.get(7)?,
+            mod_date: row.get(8)?,
+            size: row.get(9)?,
+            add_count: row.get(10)?,
+            modify_count: row.get(11)?,
+            delete_count: row.get(12)?,
+            unchanged_count: row.get(13)?,
+            hash_state: row.get(14)?,
+            file_hash: row.get(15)?,
+            val_state: row.get(16)?,
+            val_error: row.get(17)?,
+            val_reviewed_at: row.get(18)?,
+            hash_reviewed_at: row.get(19)?,
         })
     }
-}
-
-/// Response for initial version history load
-#[derive(Debug, Serialize)]
-pub struct VersionHistoryResponse {
-    pub versions: Vec<VersionHistoryEntry>,
-    pub has_more: bool,
-    pub total_count: i64,
-    pub anchor_scan_date: i64,
-}
-
-/// Response for version history pagination
-#[derive(Debug, Serialize)]
-pub struct VersionHistoryPageResponse {
-    pub versions: Vec<VersionHistoryEntry>,
-    pub has_more: bool,
 }
 
 const VERSION_HISTORY_COLUMNS: &str =
     "v.item_version, v.first_scan_id, v.last_scan_id, \
      s1.started_at, s2.started_at, \
-     v.is_deleted, v.access, \
+     v.is_added, v.is_deleted, v.access, \
      v.mod_date, v.size, \
      v.add_count, v.modify_count, v.delete_count, v.unchanged_count, \
-     hv.hash_state, hv.file_hash, v.val_state, v.val_error";
+     hv.hash_state, hv.file_hash, v.val_state, v.val_error, \
+     v.val_reviewed_at, v.hash_reviewed_at";
 
 const VERSION_HISTORY_JOINS: &str =
     "JOIN scans s1 ON s1.scan_id = v.first_scan_id \
@@ -357,101 +356,43 @@ const VERSION_HISTORY_JOINS: &str =
            WHERE hv2.item_id = v.item_id AND hv2.item_version = v.item_version \
        )";
 
-/// Get version history for an item, starting from a specific scan going backwards.
-/// Returns up to `limit` versions ordered by first_scan_id DESC.
-pub fn get_version_history_init(
-    item_id: i64,
-    scan_id: i64,
-    limit: i64,
-) -> Result<VersionHistoryResponse, FsPulseError> {
+/// Count total versions for an item.
+pub fn count_versions(item_id: i64) -> Result<i64, FsPulseError> {
     let conn = Database::get_connection()?;
-
-    // Get total count
-    let total_count: i64 = conn.query_row(
+    let total: i64 = conn.query_row(
         "SELECT COUNT(*) FROM item_versions WHERE item_id = ?",
         params![item_id],
         |row| row.get(0),
     )?;
-
-    if total_count == 0 {
-        return Ok(VersionHistoryResponse {
-            versions: Vec::new(),
-            has_more: false,
-            total_count: 0,
-            anchor_scan_date: 0,
-        });
-    }
-
-    // Get the anchor scan date
-    let anchor_scan_date: i64 = conn.query_row(
-        "SELECT started_at FROM scans WHERE scan_id = ?",
-        params![scan_id],
-        |row| row.get(0),
-    )?;
-
-    // Load versions from the anchor scan going backwards, joining scans for dates
-    let sql = format!(
-        "SELECT {} \
-         FROM item_versions v \
-         {} \
-         WHERE v.item_id = ? AND v.first_scan_id <= ? \
-         ORDER BY v.item_version DESC \
-         LIMIT ?",
-        VERSION_HISTORY_COLUMNS, VERSION_HISTORY_JOINS
-    );
-
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(
-        params![item_id, scan_id, limit + 1],
-        VersionHistoryEntry::from_row,
-    )?;
-
-    let mut versions: Vec<VersionHistoryEntry> = rows.collect::<Result<Vec<_>, _>>()?;
-    let has_more = versions.len() as i64 > limit;
-    if has_more {
-        versions.truncate(limit as usize);
-    }
-
-    Ok(VersionHistoryResponse {
-        versions,
-        has_more,
-        total_count,
-        anchor_scan_date,
-    })
+    Ok(total)
 }
 
-/// Get more version history (older versions) using cursor-based pagination.
-/// Returns versions with first_scan_id strictly less than `before_scan_id`.
-pub fn get_version_history_page(
+/// Get a page of version history for an item.
+/// `order` is "asc" or "desc" (by item_version).
+pub fn get_versions(
     item_id: i64,
-    before_scan_id: i64,
+    offset: i64,
     limit: i64,
-) -> Result<VersionHistoryPageResponse, FsPulseError> {
+    order: &str,
+) -> Result<Vec<VersionHistoryEntry>, FsPulseError> {
     let conn = Database::get_connection()?;
+    let order_clause = if order == "asc" { "ASC" } else { "DESC" };
 
     let sql = format!(
-        "SELECT {} \
+        "SELECT {VERSION_HISTORY_COLUMNS} \
          FROM item_versions v \
-         {} \
-         WHERE v.item_id = ? AND v.first_scan_id < ? \
-         ORDER BY v.item_version DESC \
-         LIMIT ?",
-        VERSION_HISTORY_COLUMNS, VERSION_HISTORY_JOINS
+         {VERSION_HISTORY_JOINS} \
+         WHERE v.item_id = ? \
+         ORDER BY v.item_version {order_clause} \
+         LIMIT ? OFFSET ?"
     );
 
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(
-        params![item_id, before_scan_id, limit + 1],
-        VersionHistoryEntry::from_row,
-    )?;
+    let versions = stmt
+        .query_map(params![item_id, limit, offset], VersionHistoryEntry::from_row)?
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let mut versions: Vec<VersionHistoryEntry> = rows.collect::<Result<Vec<_>, _>>()?;
-    let has_more = versions.len() as i64 > limit;
-    if has_more {
-        versions.truncate(limit as usize);
-    }
-
-    Ok(VersionHistoryPageResponse { versions, has_more })
+    Ok(versions)
 }
 
 /// Get counts of children (files and directories) for a directory item using temporal model.
@@ -529,10 +470,64 @@ pub fn get_children_counts(
     })
 }
 
+// ---- Hash history types and functions ----
+
+/// A single hash version entry for the hash history of an item version
+#[derive(Clone, Debug, Serialize)]
+pub struct HashHistoryEntry {
+    pub first_scan_id: i64,
+    pub last_scan_id: i64,
+    pub scan_started_at: i64,
+    #[serde(serialize_with = "serialize_hash")]
+    pub file_hash: Vec<u8>,
+    pub hash_state: i64,
+}
+
+impl HashHistoryEntry {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(HashHistoryEntry {
+            first_scan_id: row.get(0)?,
+            last_scan_id: row.get(1)?,
+            scan_started_at: row.get(2)?,
+            file_hash: row.get(3)?,
+            hash_state: row.get(4)?,
+        })
+    }
+}
+
+/// Get all hash versions for a given item_id and item_version, ordered chronologically.
+pub fn get_hash_history(
+    item_id: i64,
+    item_version: i64,
+) -> Result<Vec<HashHistoryEntry>, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    let sql = r#"
+        SELECT hv.first_scan_id, hv.last_scan_id, s.started_at, hv.file_hash, hv.hash_state
+        FROM hash_versions hv
+        JOIN scans s ON s.scan_id = hv.first_scan_id
+        WHERE hv.item_id = ? AND hv.item_version = ?
+        ORDER BY hv.first_scan_id ASC"#;
+
+    let mut stmt = conn.prepare_cached(sql)?;
+    let rows = stmt.query_map(
+        params![item_id, item_version],
+        HashHistoryEntry::from_row,
+    )?;
+
+    let mut history = Vec::new();
+    for row in rows {
+        history.push(row?);
+    }
+
+    Ok(history)
+}
+
 /// Response for integrity state of an item at a specific scan point
 #[derive(Clone, Debug, Serialize)]
 pub struct IntegrityState {
     pub has_validator: bool,
+    pub do_not_validate: bool,
     pub hash_state: Option<i64>,
     pub file_hash: Option<Vec<u8>>,
     pub val_state: Option<i64>,
@@ -548,14 +543,17 @@ pub fn get_integrity_state(
 ) -> Result<IntegrityState, FsPulseError> {
     let conn = Database::get_connection()?;
 
-    let has_validator: bool = conn
+    let (has_validator, do_not_validate) = conn
         .query_row(
-            "SELECT has_validator FROM items WHERE item_id = ?",
+            "SELECT has_validator, do_not_validate FROM items WHERE item_id = ?",
             params![item_id],
-            |row| row.get::<_, i64>(0).map(|v| v != 0),
+            |row| Ok((
+                row.get::<_, i64>(0).map(|v| v != 0).unwrap_or(false),
+                row.get::<_, i64>(1).map(|v| v != 0).unwrap_or(false),
+            )),
         )
         .optional()?
-        .unwrap_or(false);
+        .unwrap_or((false, false));
 
     // Get the version active at this scan point
     let version_row: Option<(i64, Option<i64>, Option<String>)> = conn
@@ -575,6 +573,7 @@ pub fn get_integrity_state(
         Some((iv, vs, ve)) => (iv, vs, ve),
         None => return Ok(IntegrityState {
             has_validator,
+            do_not_validate,
             hash_state: None,
             file_hash: None,
             val_state: None,
@@ -597,6 +596,7 @@ pub fn get_integrity_state(
 
     Ok(IntegrityState {
         has_validator,
+        do_not_validate,
         hash_state: hash_row.as_ref().map(|(s, _)| *s),
         file_hash: hash_row.and_then(|(_, h)| h),
         val_state,

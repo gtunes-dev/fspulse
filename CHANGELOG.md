@@ -7,10 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Integrity page**: New top-level page replacing Alerts. Shows items with hash or validation issues, filterable by issue type, file type, review status, and path. Per-version review toggles for hash and validation issues. Do-not-validate toggle per item
+- **ItemDetail version carousel**: Version detail now uses a shadcn carousel with bordered slides and left/right navigation. Hash timeline table shows all hash observations for a version with expandable hashes and pagination
+- **Review hover cards**: Hover over review toggles and validate switches to see contextual explanations of what each control does
+- **Integrity trend charts**: Trends page now shows Validation Errors and Suspicious Hashes charts with new/total series and toggle controls
+- **Integrity deep link in Root Health**: Shield icon next to each root links to the Integrity page filtered to that root
+- **Test database**: Added `generate_testdb.py` and pre-built test database with integrity scenarios
+
 ### Changed
-- **Separated hash and validation from item versions**: Hash and validation state now live in dedicated `hash_versions` and `val_versions` tables with composite PK `(item_id, first_scan_id)` and WITHOUT ROWID, instead of columns on `item_versions`. Analysis phase runs from a new `src/integrity/` module. Temporal queries use LEFT JOIN with MAX(first_scan_id) subqueries (schema v27→v28)
-- **Added `has_validator` flag to items table**: Boolean column on `items` indicates whether a structural validator exists for the file's extension, eliminating NoValidator rows from `val_versions`. Query filter maps N (NoValidator) and U (Unknown) to item-level predicates instead of val_version lookups (schema v27→v28)
-- **Lightweight validator existence check**: `has_validator_for_path` uses a `matches!` check instead of allocating a boxed validator object, used during scanning for new items
+- **ItemDetail layout redesign**: Combined item properties and version detail into a single card. Item header shows only filename and truncatable parent path. Item-level properties (ID, type, validate toggle) separated from version-level content
+- **Trends page layout**: Items and Changes charts now side-by-side; integrity charts in a second row below
+- **Browse filter bar**: Collapsed into a single horizontal bar (no expand/collapse). Search box moved inline with tab bar
+- **Browse detail panel**: Widened to 500px for hash table readability
+- **Dashboard links**: Quick start guides now link to Integrity instead of Alerts
+- **Root Health table**: Removed alerts column; status column right-aligned
+- **Renamed dashboard to home** in frontend source tree
+
+### Removed
+- **Alerts system**: Removed AlertsPage, alerts table, alerts API routes, alerts query domain, alerts chart from Trends, alerts column from Root Health, alerts sample query from Data Explorer
+
+### Internal
+- Schema v28→v29: added `val_reviewed_at`, `hash_reviewed_at`, `do_not_validate`, `file_extension`, integrity scan counts; dropped alerts table
+- Integrity API endpoints for count, items, versions, review, and do-not-validate
+- Items API endpoints for version-count, paginated versions, hash history, integrity-state
 
 ## [v0.4.6] - 2026-03-06
 

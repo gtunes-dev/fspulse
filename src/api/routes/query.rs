@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::FsPulseError;
 use crate::query::columns::{
-    ColMap, ColSpec, ColType, ALERTS_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS,
+    ColMap, ColSpec, ColType, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS,
     SCANS_QUERY_COLS, VERSIONS_QUERY_COLS,
 };
 use crate::query::{ColAlign, QueryProcessor};
@@ -112,7 +112,6 @@ pub async fn get_metadata(
     Path(domain): Path<String>,
 ) -> Result<Json<MetadataResponse>, StatusCode> {
     let col_map = match domain.as_str() {
-        "alerts" => &ALERTS_QUERY_COLS,
         "items" => &ITEMS_QUERY_COLS,
         "versions" => &VERSIONS_QUERY_COLS,
         "scans" => &SCANS_QUERY_COLS,
@@ -266,7 +265,6 @@ pub async fn validate_filter(
     Json(req): Json<ValidateFilterRequest>,
 ) -> Result<Json<ValidateFilterResponse>, StatusCode> {
     let col_map = match req.domain.as_str() {
-        "alerts" => &ALERTS_QUERY_COLS,
         "items" => &ITEMS_QUERY_COLS,
         "versions" => &VERSIONS_QUERY_COLS,
         "scans" => &SCANS_QUERY_COLS,
@@ -317,7 +315,6 @@ fn build_count_query_string(domain: &str, req: &QueryRequest) -> Result<String, 
 /// Get column map for a domain
 fn get_col_map(domain: &str) -> Option<&'static ColMap> {
     match domain {
-        "alerts" => Some(&ALERTS_QUERY_COLS),
         "items" => Some(&ITEMS_QUERY_COLS),
         "versions" => Some(&VERSIONS_QUERY_COLS),
         "scans" => Some(&SCANS_QUERY_COLS),

@@ -17,7 +17,6 @@
 // 4. Completed
 // 5. Stopped
 
-use crate::alerts::Alerts;
 use crate::item_identity::{Access, ExistingItem, ItemIdentity, ItemType};
 use crate::item_version::ItemVersion;
 use crate::roots::Root;
@@ -949,12 +948,6 @@ impl Scanner {
         }
     }
 
-    /// Returns true if an AccessDenied alert should be created.
-    /// Alert is created when access transitions from Ok to an error state.
-    fn should_alert_access_denied(old_access: Access, new_access: Access) -> bool {
-        old_access == Access::Ok && new_access != Access::Ok
-    }
-
     fn handle_scan_item(
         ctx: &mut ScanContext,
         item_type: ItemType,
@@ -1072,13 +1065,6 @@ impl Scanner {
                 c, existing_item.item_id, ctx.scan.root_id(), ctx.scan.scan_id(), new_access, mod_date, size, counts,
             )?;
 
-            // For rehydration, we alert whenever new_access is not Ok, regardless of what
-            // the old access state was (since the item was a tombstone, any new access
-            // error is a problem worth alerting on, similar to a brand new item)
-            if new_access != Access::Ok {
-                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), existing_item.item_id)?;
-            }
-
             Ok(())
         })
     }
@@ -1090,7 +1076,7 @@ impl Scanner {
         item_type: ItemType,
         mod_date: Option<i64>,
         size: Option<i64>,
-        old_access: Access,
+        _old_access: Access,
         new_access: Access,
     ) -> Result<(), FsPulseError> {
         ctx.execute_batch_write(|c| {
@@ -1102,10 +1088,6 @@ impl Scanner {
                 false, new_access, mod_date, size, &existing_item.version,
                 item_type == ItemType::Directory,
             )?;
-
-            if Scanner::should_alert_access_denied(old_access, new_access) {
-                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), existing_item.item_id)?;
-            }
 
             Ok(())
         })
@@ -1144,16 +1126,17 @@ impl Scanner {
             Access::Ok
         };
 
-        let has_validator = item_type == ItemType::File && validator::has_validator_for_path(path_str);
+        let file_extension = if item_type == ItemType::File {
+            validator::file_extension_for_path(path_str)
+        } else {
+            None
+        };
+        let has_validator = file_extension.as_deref().is_some_and(validator::has_validator_extension);
 
         ctx.execute_batch_write(|c| {
-            let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type, has_validator)?;
+            let item_id = ItemIdentity::insert(c, ctx.scan.root_id(), path_str, item_type, has_validator, file_extension.as_deref())?;
             let counts = if item_type == ItemType::Directory { Some((0, 0, 0, 0)) } else { None };
             ItemVersion::insert_initial(c, item_id, ctx.scan.root_id(), ctx.scan.scan_id(), new_access, mod_date, size, counts)?;
-
-            if new_access != Access::Ok {
-                Alerts::add_access_denied_alert(c, ctx.scan.scan_id(), item_id)?;
-            }
 
             Ok(())
         })

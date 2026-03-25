@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Home,
   FolderTree,
-  TriangleAlert,
+  ShieldAlert,
   TrendingUp,
   Clock,
   HardDrive,
@@ -34,7 +34,7 @@ import {
 import { ShutdownDialog } from './ShutdownDialog'
 
 // Pages where root_id context is meaningful
-const ROOT_SCOPED_PATHS = ['/browse', '/alerts', '/trends', '/schedules', '/history']
+const ROOT_SCOPED_PATHS = ['/browse', '/integrity', '/trends', '/schedules', '/history']
 
 function shortenPath(path: string, maxLength = 30): string {
   if (!path || path.length <= maxLength) return path
@@ -80,7 +80,7 @@ export function AppSidebar() {
   const primaryNavItems = [
     { icon: Home, label: 'Home', to: '/', end: true },
     { icon: FolderTree, label: 'Browse', to: '/browse', end: true },
-    { icon: TriangleAlert, label: 'Alerts', to: '/alerts', end: true },
+    { icon: ShieldAlert, label: 'Integrity', to: '/integrity', end: true },
     { icon: TrendingUp, label: 'Trends', to: '/trends/scan-trends', end: false },
   ]
 

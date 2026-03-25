@@ -1,4 +1,3 @@
-use crate::alerts::{AlertStatus, AlertType};
 use crate::hash::HashState;
 use crate::items::{Access, ItemType};
 use crate::query::columns::ColAlign;
@@ -113,32 +112,6 @@ impl Format {
             Format::Full => Ok(val.full_name().to_owned()),
             _ => Err(FsPulseError::Error(
                 "Invalid validation state format".into(),
-            )),
-        }
-    }
-
-    pub fn format_alert_type(
-        alert_type: AlertType,
-        format: Format,
-    ) -> Result<String, FsPulseError> {
-        match format {
-            Format::Short | Format::None => Ok(alert_type.short_name().to_owned()),
-            Format::Full => Ok(alert_type.full_name().to_owned()),
-            _ => Err(FsPulseError::Error(
-                "Invalid alert type state format".into(),
-            )),
-        }
-    }
-
-    pub fn format_alert_status(
-        alert_status: AlertStatus,
-        format: Format,
-    ) -> Result<String, FsPulseError> {
-        match format {
-            Format::Short | Format::None => Ok(alert_status.short_name().to_owned()),
-            Format::Full => Ok(alert_status.full_name().to_owned()),
-            _ => Err(FsPulseError::Error(
-                "Invalid alert type state format".into(),
             )),
         }
     }
@@ -297,8 +270,6 @@ impl Show {
                 | Rule::path_show
                 | Rule::val_state_show
                 | Rule::item_type_show
-                | Rule::alert_type_show
-                | Rule::alert_status_show
                 | Rule::scan_state_show
                 | Rule::access_show
                 | Rule::hash_state_show => {

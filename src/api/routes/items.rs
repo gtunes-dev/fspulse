@@ -6,7 +6,7 @@ use axum::{
 use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::items::{self, SizeHistoryPoint};
+use crate::items::{self, HashHistoryEntry, SizeHistoryPoint};
 
 /// Query parameters for size history (temporal model)
 #[derive(Debug, Deserialize)]
@@ -44,6 +44,7 @@ pub struct IntegrityStateParams {
 #[derive(Debug, Serialize)]
 pub struct IntegrityStateResponse {
     pub has_validator: bool,
+    pub do_not_validate: bool,
     pub hash_state: Option<i64>,
     pub file_hash: Option<String>,
     pub val_state: Option<i64>,
@@ -59,6 +60,7 @@ pub async fn get_integrity_state(
     match items::get_integrity_state(item_id, params.scan_id) {
         Ok(state) => Ok(Json(IntegrityStateResponse {
             has_validator: state.has_validator,
+            do_not_validate: state.do_not_validate,
             hash_state: state.hash_state,
             file_hash: state.file_hash.map(hex::encode),
             val_state: state.val_state,
@@ -109,6 +111,32 @@ pub async fn get_children_counts(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to get children counts: {}", e),
+            ))
+        }
+    }
+}
+
+/// Response structure for hash history
+#[derive(Debug, Serialize)]
+pub struct HashHistoryResponse {
+    pub hashes: Vec<HashHistoryEntry>,
+}
+
+/// GET /api/items/:item_id/versions/:item_version/hashes
+/// Returns all hash versions for a given item_id and item_version, ordered chronologically
+pub async fn get_hash_history(
+    Path((item_id, item_version)): Path<(i64, i64)>,
+) -> Result<Json<HashHistoryResponse>, (StatusCode, String)> {
+    match items::get_hash_history(item_id, item_version) {
+        Ok(hashes) => Ok(Json(HashHistoryResponse { hashes })),
+        Err(e) => {
+            error!(
+                "Failed to get hash history for item {} version {}: {}",
+                item_id, item_version, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get hash history: {}", e),
             ))
         }
     }
@@ -237,60 +265,41 @@ pub async fn search_items(
     }
 }
 
-/// Query parameters for version history
-#[derive(Debug, Deserialize)]
-pub struct VersionHistoryParams {
-    /// For initial load: the scan to anchor around
-    pub scan_id: Option<i64>,
-    /// For pagination: load versions older than this scan
-    pub before_scan_id: Option<i64>,
-    /// Maximum versions to return (default 500)
-    pub limit: Option<i64>,
+/// GET /api/items/:item_id/version-count
+pub async fn get_version_count(
+    Path(item_id): Path<i64>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    match items::count_versions(item_id) {
+        Ok(total) => Ok(Json(serde_json::json!({ "total": total }))),
+        Err(e) => {
+            error!("Failed to count versions for item {}: {}", item_id, e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed: {}", e)))
+        }
+    }
 }
 
-/// GET /api/items/:item_id/version-history?scan_id=42&limit=500
-/// GET /api/items/:item_id/version-history?before_scan_id=10&limit=100
-/// Returns version history for an item, either anchored at a scan or paginated
-pub async fn get_version_history(
-    Path(item_id): Path<i64>,
-    Query(params): Query<VersionHistoryParams>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let limit = params.limit.unwrap_or(500).min(500);
+#[derive(Debug, Deserialize)]
+pub struct VersionsParams {
+    pub offset: Option<i64>,
+    pub limit: Option<i64>,
+    /// "asc" or "desc" (by item_version). Default: "desc" (newest first).
+    pub order: Option<String>,
+}
 
-    if let Some(scan_id) = params.scan_id {
-        // Initial load: anchored at a specific scan
-        match items::get_version_history_init(item_id, scan_id, limit) {
-            Ok(response) => Ok(Json(serde_json::to_value(response).unwrap())),
-            Err(e) => {
-                error!(
-                    "Failed to get version history for item {}, scan {}: {}",
-                    item_id, scan_id, e
-                );
-                Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get version history: {}", e),
-                ))
-            }
+/// GET /api/items/:item_id/versions?offset=0&limit=10&order=desc
+pub async fn get_versions(
+    Path(item_id): Path<i64>,
+    Query(params): Query<VersionsParams>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let offset = params.offset.unwrap_or(0).max(0);
+    let limit = params.limit.unwrap_or(10).clamp(1, 100);
+    let order = params.order.as_deref().unwrap_or("desc");
+
+    match items::get_versions(item_id, offset, limit, order) {
+        Ok(versions) => Ok(Json(serde_json::json!({ "versions": versions }))),
+        Err(e) => {
+            error!("Failed to get versions for item {}: {}", item_id, e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed: {}", e)))
         }
-    } else if let Some(before_scan_id) = params.before_scan_id {
-        // Pagination: load older versions
-        match items::get_version_history_page(item_id, before_scan_id, limit) {
-            Ok(response) => Ok(Json(serde_json::to_value(response).unwrap())),
-            Err(e) => {
-                error!(
-                    "Failed to get version history page for item {}: {}",
-                    item_id, e
-                );
-                Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get version history: {}", e),
-                ))
-            }
-        }
-    } else {
-        Err((
-            StatusCode::BAD_REQUEST,
-            "Either scan_id or before_scan_id must be provided".to_string(),
-        ))
     }
 }

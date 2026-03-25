@@ -5,23 +5,23 @@
 
 query = { SOI ~ WS* ~ query_type ~ where_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ offset_clause? ~ WS* ~ EOI }
 
-query_type = { "roots" | "scans" | "items" | "versions" | "alerts" }
+query_type = { "roots" | "scans" | "items" | "versions" }
 
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
-filter       = _{ id_filter | date_filter | bool_filter | string_filter | hash_filter | path_filter | val_state_filter | hash_state_filter | item_type_filter | alert_type_filter | alert_status_filter | scan_state_filter | access_filter | int_filter }
+filter       = _{ id_filter | date_filter | bool_filter | string_filter | hash_filter | path_filter | val_state_filter | hash_state_filter | item_type_filter | scan_state_filter | access_filter | int_filter }
 
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | hash_show | path_show | val_state_show | hash_state_show | item_type_show | alert_type_show | alert_status_show | scan_state_show | access_show | int_show }
+show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | hash_show | path_show | val_state_show | hash_state_show | item_type_show | scan_state_show | access_show | int_show }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { id_col | date_col | bool_col | string_col | hash_col | path_col | val_state_col | hash_state_col | item_type_col | alert_type_col | alert_status_col | scan_state_col | access_col | int_col }
+order_column =  { id_col | date_col | bool_col | string_col | hash_col | path_col | val_state_col | hash_state_col | item_type_col | scan_state_col | access_col | int_col }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause
@@ -44,14 +44,12 @@ path_filter_EOI         = { WS* ~ path_filter_values ~ WS* ~ EOI }
 val_state_filter_EOI    = { WS* ~ val_state_filter_values ~ WS* ~ EOI }
 hash_state_filter_EOI   = { WS* ~ hash_state_filter_values ~ WS* ~ EOI }
 item_type_filter_EOI    = { WS* ~ item_type_filter_values ~ WS* ~ EOI }
-alert_type_filter_EOI   = { WS* ~ alert_type_filter_values ~ WS* ~ EOI }
-alert_status_filter_EOI = { WS* ~ alert_status_filter_values ~ WS* ~ EOI }
 scan_state_filter_EOI   = { WS* ~ scan_state_filter_values ~ WS* ~ EOI }
 access_filter_EOI       = { WS* ~ access_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "alert_id" | "root_id" | "scan_id" | "item_id" | "item_version" | "first_scan_id" | "last_scan_id" | "last_hash_scan" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
+id_col = { "root_id" | "scan_id" | "item_id" | "item_version" | "first_scan_id" | "last_scan_id" | "last_hash_scan" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
 
 id_show = { id_col }
 
@@ -215,65 +213,6 @@ item_type               =  {
   | ^"U"
 }
 
-alert_type_col = { "alert_type" }
-
-alert_type_show         =  { alert_type_col ~ alert_type_modifier? }
-alert_type_modifier     = _{ WS* ~ "@" ~ WS* ~ alert_type_display_mode }
-alert_type_display_mode =  { full | short }
-
-alert_type_filter        =  { alert_type_col ~ alert_type_filter_body }
-alert_type_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ alert_type_filter_values ~ WS* ~ RPAREN }
-alert_type_filter_values = _{ alert_type_spec ~ (WS* ~ COMMA ~ WS* ~ alert_type_spec)* }
-alert_type_spec          = _{ null | not_null | alert_type }
-alert_type               =  {
-    "SUSPICIOUS HASH"
-  | "suspicious hash"
-  | "Suspicious Hash"
-  | "SUSPECTHASH"
-  | "suspecthash"
-  | "SuspectHash"
-  | "INVALID ITEM"
-  | "invalid item"
-  | "Invalid Item"
-  | "INVALIDITEM"
-  | "invaliditem"
-  | "InvalidItem"
-  | "ACCESS DENIED"
-  | "access denied"
-  | "Access Denied"
-  | "ACCESSDENIED"
-  | "accessdenied"
-  | "AccessDenied"
-  | ^"H"
-  | ^"I"
-  | ^"A"
-}
-
-alert_status_col = { "alert_status" }
-
-alert_status_show         =  { alert_status_col ~ alert_status_modifier? }
-alert_status_modifier     = _{ WS* ~ "@" ~ WS* ~ alert_status_display_mode }
-alert_status_display_mode =  { full | short }
-
-alert_status_filter        =  { alert_status_col ~ alert_status_filter_body }
-alert_status_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ alert_status_filter_values ~ WS* ~ RPAREN }
-alert_status_filter_values = _{ alert_status_spec ~ (WS* ~ COMMA ~ WS* ~ alert_status_spec)* }
-alert_status_spec          = _{ null | not_null | alert_status }
-alert_status               =  {
-    "OPEN"
-  | "open"
-  | "Open"
-  | "FLAGGED"
-  | "flagged"
-  | "Flagged"
-  | "DISMISSED"
-  | "dismissed"
-  | "Dismissed"
-  | ^"O"
-  | ^"F"
-  | ^"D"
-}
-
 // Scan State Columns
 scan_state_col = { "scan_state" }
 
@@ -361,7 +300,7 @@ access               =  {
 }
 
 // Integer columns
-int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "alert_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_baseline_count" | "hash_suspect_count" }
+int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "new_hash_suspect_count" | "new_val_invalid_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_baseline_count" | "hash_suspect_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

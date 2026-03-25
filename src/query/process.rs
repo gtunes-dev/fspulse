@@ -4,7 +4,7 @@ use rusqlite::{Row, Statement, ToSql};
 
 use super::{
     columns::{
-        ColSet, ALERTS_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS,
+        ColSet, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS,
         VERSIONS_QUERY_COLS,
     },
     filter::{BoolFilter, EnumFilter, IntFilter},
@@ -12,7 +12,6 @@ use super::{
 };
 
 use crate::{
-    alerts::{AlertStatus, AlertType},
     db::Database,
     error::FsPulseError,
     hash::Hash,
@@ -283,79 +282,7 @@ fn make_query(query_type: &str, count_only: bool) -> Box<dyn Query> {
                 ColSet::new(&VERSIONS_QUERY_COLS),
             ),
         }),
-        ("alerts", _) => Box::new(AlertsQuery {
-            imp: QueryImpl::new(QueryImpl::ALERTS_SQL_QUERY, ColSet::new(&ALERTS_QUERY_COLS)),
-        }),
         _ => unreachable!(),
-    }
-}
-
-struct AlertsQuery {
-    imp: QueryImpl,
-}
-
-impl Query for AlertsQuery {
-    fn query_impl(&self) -> &QueryImpl {
-        &self.imp
-    }
-
-    fn query_impl_mut(&mut self) -> &mut QueryImpl {
-        &mut self.imp
-    }
-
-    fn build_query_result(
-        &mut self,
-        sql_statement: &mut Statement,
-        sql_params: &[&dyn ToSql],
-        query_result: &mut dyn QueryResult,
-    ) -> Result<(), FsPulseError> {
-        let rows = sql_statement.query_map(sql_params, AlertsQueryRow::from_row)?;
-
-        query_result.prepare(&mut self.query_impl_mut().show);
-
-        for row in rows {
-            let alerts_query_row: AlertsQueryRow = row?;
-            self.append_alerts_row(&alerts_query_row, query_result)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl AlertsQuery {
-    pub fn append_alerts_row(
-        &self,
-        alert: &AlertsQueryRow,
-        query_result: &mut dyn QueryResult,
-    ) -> Result<(), FsPulseError> {
-        let mut row: Vec<String> = Vec::new();
-
-        for col in &self.show().display_cols {
-            let col_string = match col.display_col {
-                "alert_id" => Format::format_i64(alert.alert_id),
-                "alert_type" => Format::format_alert_type(alert.alert_type, col.format)?,
-                "alert_status" => Format::format_alert_status(alert.alert_status, col.format)?,
-                "root_id" => Format::format_i64(alert.root_id),
-                "scan_id" => Format::format_i64(alert.scan_id),
-                "item_id" => Format::format_i64(alert.item_id),
-                "item_path" => Format::format_path(&alert.item_path, col.format)?,
-                "created_at" => Format::format_date(alert.created_at, col.format)?,
-                "updated_at" => Format::format_opt_date(alert.updated_at, col.format)?,
-                "prev_hash_scan" => Format::format_opt_i64(alert.prev_hash_scan),
-                "hash_old" => Format::format_opt_string(&alert.hash_old),
-                "hash_new" => Format::format_opt_string(&alert.hash_new),
-                "val_error" => Format::format_opt_string(&alert.val_error),
-                _ => {
-                    return Err(FsPulseError::Error("Invalid column".into()));
-                }
-            };
-
-            row.push(col_string);
-        }
-
-        query_result.add_row(row);
-
-        Ok(())
     }
 }
 
@@ -542,7 +469,8 @@ impl ScansQuery {
                 "file_count" => Format::format_opt_i64(scan.file_count),
                 "folder_count" => Format::format_opt_i64(scan.folder_count),
                 "total_size" => Format::format_opt_i64(scan.total_size),
-                "alert_count" => Format::format_opt_i64(scan.alert_count),
+                "new_hash_suspect_count" => Format::format_opt_i64(scan.new_hash_suspect_count),
+                "new_val_invalid_count" => Format::format_opt_i64(scan.new_val_invalid_count),
                 "add_count" => Format::format_opt_i64(scan.add_count),
                 "modify_count" => Format::format_opt_i64(scan.modify_count),
                 "delete_count" => Format::format_opt_i64(scan.delete_count),
@@ -713,17 +641,6 @@ impl QueryImpl {
         {limit_clause}
         {offset_clause}";
 
-    const ALERTS_SQL_QUERY: &str = "SELECT {select_list}
-        FROM alerts
-        JOIN items
-          ON alerts.item_id = items.item_id
-        JOIN scans
-            ON alerts.scan_id = scans.scan_id
-        {where_clause}
-        {order_clause}
-        {limit_clause}
-        {offset_clause}";
-
     fn new(sql_template: &'static str, col_set: ColSet) -> Self {
         QueryImpl {
             sql_template,
@@ -858,7 +775,8 @@ pub struct ScansQueryRow {
     file_count: Option<i64>,
     folder_count: Option<i64>,
     total_size: Option<i64>,
-    alert_count: Option<i64>,
+    new_hash_suspect_count: Option<i64>,
+    new_val_invalid_count: Option<i64>,
     add_count: Option<i64>,
     modify_count: Option<i64>,
     delete_count: Option<i64>,
@@ -889,54 +807,19 @@ impl ScansQueryRow {
             file_count: row.get(10)?,
             folder_count: row.get(11)?,
             total_size: row.get(12)?,
-            alert_count: row.get(13)?,
-            add_count: row.get(14)?,
-            modify_count: row.get(15)?,
-            delete_count: row.get(16)?,
-            val_unknown_count: row.get(17)?,
-            val_valid_count: row.get(18)?,
-            val_invalid_count: row.get(19)?,
-            val_no_validator_count: row.get(20)?,
-            hash_unknown_count: row.get(21)?,
-            hash_baseline_count: row.get(22)?,
-            hash_suspect_count: row.get(23)?,
-            error: row.get(24)?,
-        })
-    }
-}
-
-pub struct AlertsQueryRow {
-    alert_id: i64,
-    alert_type: AlertType,
-    alert_status: AlertStatus,
-    root_id: i64,
-    scan_id: i64,
-    item_id: i64,
-    item_path: String,
-    created_at: i64,
-    updated_at: Option<i64>,
-    prev_hash_scan: Option<i64>,
-    hash_old: Option<String>,
-    hash_new: Option<String>,
-    val_error: Option<String>,
-}
-
-impl AlertsQueryRow {
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(AlertsQueryRow {
-            alert_id: row.get(0)?,
-            alert_type: AlertType::from_i64(row.get(1)?),
-            alert_status: AlertStatus::from_i64(row.get(2)?),
-            root_id: row.get(3)?,
-            scan_id: row.get(4)?,
-            item_id: row.get(5)?,
-            item_path: row.get(6)?,
-            created_at: row.get(7)?,
-            updated_at: row.get(8)?,
-            prev_hash_scan: row.get(9)?,
-            hash_old: Hash::opt_blob_to_hex(row.get(10)?),
-            hash_new: Hash::opt_blob_to_hex(row.get(11)?),
-            val_error: row.get(12)?,
+            new_hash_suspect_count: row.get(13)?,
+            new_val_invalid_count: row.get(14)?,
+            add_count: row.get(15)?,
+            modify_count: row.get(16)?,
+            delete_count: row.get(17)?,
+            val_unknown_count: row.get(18)?,
+            val_valid_count: row.get(19)?,
+            val_invalid_count: row.get(20)?,
+            val_no_validator_count: row.get(21)?,
+            hash_unknown_count: row.get(22)?,
+            hash_baseline_count: row.get(23)?,
+            hash_suspect_count: row.get(24)?,
+            error: row.get(25)?,
         })
     }
 }
@@ -1066,8 +949,6 @@ impl QueryProcessor {
                 }
                 Rule::scan_state_filter
                 | Rule::item_type_filter
-                | Rule::alert_type_filter
-                | Rule::alert_status_filter
                 | Rule::val_state_filter
                 | Rule::access_filter
                 | Rule::hash_state_filter => {

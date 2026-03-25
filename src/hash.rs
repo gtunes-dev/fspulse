@@ -92,11 +92,6 @@ impl Hash {
         hex::decode(hex).expect("invalid hex string in hash")
     }
 
-    /// Decode an optional hex-encoded hash string to raw bytes for BLOB storage.
-    pub fn opt_hex_to_blob(hex: Option<&str>) -> Option<Vec<u8>> {
-        hex.map(Self::hex_to_blob)
-    }
-
     /// Encode raw BLOB bytes to a hex string for display.
     pub fn blob_to_hex(blob: Vec<u8>) -> String {
         hex::encode(blob)

@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use rusqlite::Connection;
 
-use crate::alerts::Alerts;
 use crate::error::FsPulseError;
 use crate::hash::Hash;
 use super::analysis::AnalysisItem;
@@ -24,8 +23,7 @@ pub fn compute_hash(
 /// Persist hash results to `hash_versions`.
 ///
 /// If the hash changed (or is new), inserts a new row. If unchanged, extends
-/// `last_scan_id` on the existing row. Handles suspect hash detection via
-/// `meta_changed_between`.
+/// `last_scan_id` on the existing row.
 pub fn persist_hash(
     conn: &Connection,
     scan: &Scan,
@@ -37,32 +35,13 @@ pub fn persist_hash(
 
     if hash_changed {
         if analysis_item.hash_first_scan_id().is_none() {
-            // First hash ever for this version — Baseline
+            // First hash for this item_version — Baseline
             hash_state = HashState::Baseline;
         } else {
-            // Hash changed with previous hash — check if metadata changed between
-            // the last hash confirmation and now to determine Baseline vs Suspect
-            let hash_last_scan = analysis_item.hash_last_scan_id().unwrap();
-            let meta_changed = Alerts::meta_changed_between(
-                conn,
-                analysis_item.item_id(),
-                hash_last_scan,
-                scan.scan_id(),
-            )?;
-
-            if meta_changed {
-                hash_state = HashState::Baseline;
-            } else {
-                hash_state = HashState::Suspect;
-                Alerts::add_suspect_hash_alert(
-                    conn,
-                    scan.scan_id(),
-                    analysis_item.item_id(),
-                    analysis_item.hash_first_scan_id(),
-                    analysis_item.file_hash(),
-                    new_hash.unwrap(),
-                )?;
-            }
+            // Hash changed within same item_version — always Suspect.
+            // Metadata changes (mod_date, size) always produce a new item_version,
+            // so any hash change on the same version is content-only and suspicious.
+            hash_state = HashState::Suspect;
         }
 
         // Insert new hash_version row
@@ -89,3 +68,4 @@ pub fn persist_hash(
 
     Ok(())
 }
+

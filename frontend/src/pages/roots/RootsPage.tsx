@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { RootsTable } from './RootsTable'
 import { AddRootDialog } from './AddRootDialog'
-import { ManualScanDialog } from '../dashboard/ManualScanDialog'
+import { ManualScanDialog } from '../home/ManualScanDialog'
 
 export function RootsPage() {
   const [addRootDialogOpen, setAddRootDialogOpen] = useState(false)

@@ -1,5 +1,4 @@
 use crate::{
-    alerts::{AlertStatus, AlertType},
     error::FsPulseError,
     hash::HashState,
     items::{Access, ItemType},
@@ -605,8 +604,6 @@ type EnumParser = fn(&str) -> Option<i64>;
 static ENUM_PARSERS: Map<&'static str, EnumParser> = phf_map! {
     "scan_state" => ScanState::from_token,
 "item_type" => ItemType::from_token,
-"alert_type" => AlertType::from_token,
-"alert_status" => AlertStatus::from_token,
 "val_state" => ValidationState::from_token,
 "access" => Access::from_token,
 "hash_state" => HashState::from_token,
@@ -1393,79 +1390,6 @@ mod tests {
         assert!(
             result.is_ok(),
             "Failed to parse multiple short codes: {:?}",
-            result.err()
-        );
-    }
-
-    // ==================================================================================
-    // Alert Type Filter Tests (EnumFilter - integer-backed)
-    // ==================================================================================
-
-    #[test]
-    fn test_alert_type_filter_suspect_hash() {
-        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "H");
-        assert!(result.is_ok(), "Failed to parse 'H': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "h");
-        assert!(result.is_ok(), "Failed to parse 'h': {:?}", result.err());
-    }
-
-    #[test]
-    fn test_alert_type_filter_invalid_file() {
-        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "I");
-        assert!(result.is_ok(), "Failed to parse 'I': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "i");
-        assert!(result.is_ok(), "Failed to parse 'i': {:?}", result.err());
-    }
-
-    #[test]
-    fn test_alert_type_filter_multiple() {
-        let result = QueryParser::parse(Rule::alert_type_filter_EOI, "H, I");
-        assert!(
-            result.is_ok(),
-            "Failed to parse multiple alert types: {:?}",
-            result.err()
-        );
-    }
-
-    // ==================================================================================
-    // Alert Status Filter Tests (EnumFilter - integer-backed)
-    // ==================================================================================
-
-    #[test]
-    fn test_alert_status_filter_dismissed() {
-        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "D");
-        assert!(result.is_ok(), "Failed to parse 'D': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "d");
-        assert!(result.is_ok(), "Failed to parse 'd': {:?}", result.err());
-    }
-
-    #[test]
-    fn test_alert_status_filter_flagged() {
-        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "F");
-        assert!(result.is_ok(), "Failed to parse 'F': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "f");
-        assert!(result.is_ok(), "Failed to parse 'f': {:?}", result.err());
-    }
-
-    #[test]
-    fn test_alert_status_filter_open() {
-        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "O");
-        assert!(result.is_ok(), "Failed to parse 'O': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "o");
-        assert!(result.is_ok(), "Failed to parse 'o': {:?}", result.err());
-    }
-
-    #[test]
-    fn test_alert_status_filter_multiple() {
-        let result = QueryParser::parse(Rule::alert_status_filter_EOI, "D, F, O");
-        assert!(
-            result.is_ok(),
-            "Failed to parse multiple alert statuses: {:?}",
             result.err()
         );
     }

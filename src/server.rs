@@ -215,19 +215,12 @@ impl WebServer {
             .route("/api/query/{domain}/count", post(api::query::count_query))
             .route("/api/query/{domain}/fetch", post(api::query::fetch_query))
             .route("/api/validate-filter", post(api::query::validate_filter))
-            // Alert endpoints
-            .route(
-                "/api/alerts/{alert_id}/status",
-                put(api::alerts::update_alert_status),
-            )
-            .route(
-                "/api/alerts/bulk-status",
-                put(api::alerts::bulk_update_alert_status),
-            )
-            .route(
-                "/api/alerts/bulk-status-by-filter",
-                put(api::alerts::bulk_update_alert_status_by_filter),
-            )
+            // Integrity endpoints
+            .route("/api/integrity/count", get(api::integrity::count))
+            .route("/api/integrity/items", get(api::integrity::get_items))
+            .route("/api/integrity/items/{item_id}/versions", get(api::integrity::get_versions))
+            .route("/api/integrity/review", post(api::integrity::review))
+            .route("/api/integrity/do-not-validate", post(api::integrity::set_do_not_validate))
             // Task scheduling endpoints
             .route("/api/tasks/scan", post(api::tasks::schedule_scan))
             .route("/api/tasks/compact-database", post(api::tasks::schedule_compact_database))
@@ -290,8 +283,12 @@ impl WebServer {
                 get(api::items::get_item_size_history),
             )
             .route(
-                "/api/items/{item_id}/version-history",
-                get(api::items::get_version_history),
+                "/api/items/{item_id}/version-count",
+                get(api::items::get_version_count),
+            )
+            .route(
+                "/api/items/{item_id}/versions",
+                get(api::items::get_versions),
             )
             .route(
                 "/api/items/{item_id}/children-counts",
@@ -300,6 +297,10 @@ impl WebServer {
             .route(
                 "/api/items/{item_id}/integrity-state",
                 get(api::items::get_integrity_state),
+            )
+            .route(
+                "/api/items/{item_id}/versions/{item_version}/hashes",
+                get(api::items::get_hash_history),
             )
             // Temporal model item endpoints
             .route(

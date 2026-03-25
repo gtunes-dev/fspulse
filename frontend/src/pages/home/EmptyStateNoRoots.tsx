@@ -86,11 +86,11 @@ export function EmptyStateNoRoots() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <button
-                    onClick={() => navigate('/alerts')}
+                    onClick={() => navigate('/integrity')}
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Visit <strong>Alerts</strong> to see issues that have been detected in specific files
+                      Visit <strong>Integrity</strong> to review hash and validation issues
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>

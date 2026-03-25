@@ -318,7 +318,7 @@ fn analyze_item(
 /// Persist hash and validation results to the database.
 ///
 /// Writes to `hash_versions` table and val columns on `item_versions`.
-/// Also handles access state changes on `item_versions` and alert creation.
+/// Also handles access state changes on `item_versions`.
 #[allow(clippy::too_many_arguments)]
 fn persist_analysis(
     scan: &Scan,
@@ -418,23 +418,6 @@ fn persist_analysis(
             }
         }
 
-        // Alerts
-        if analysis_item.needs_val() && new_val == ValidationState::Invalid {
-            crate::alerts::Alerts::add_invalid_item_alert(
-                c,
-                scan.scan_id(),
-                analysis_item.item_id(),
-                new_val_error.as_deref().unwrap_or("Unknown error"),
-            )?;
-        }
-
-        if access_changed {
-            let should_alert = should_alert_access_denied(analysis_item.access(), new_access_value);
-            if should_alert {
-                crate::alerts::Alerts::add_access_denied_alert(c, scan.scan_id(), analysis_item.item_id())?;
-            }
-        }
-
         Ok(())
     })?;
 
@@ -445,7 +428,7 @@ fn persist_analysis(
 /// indicating which analysis operations are needed.
 ///
 /// Hash state is sourced from `hash_versions` via LEFT JOIN.
-/// Val state is sourced from `item_versions` columns (val_state, val_error).
+/// Val state is sourced from `item_versions` columns.
 #[derive(Clone, Debug)]
 pub struct AnalysisItem {
     item_id: i64,
@@ -458,13 +441,7 @@ pub struct AnalysisItem {
     has_validator: bool,
     // From hash_versions (NULL if never hashed for this version)
     hash_first_scan_id: Option<i64>,
-    hash_last_scan_id: Option<i64>,
     file_hash: Option<String>,
-    // From item_versions (NULL if not yet validated)
-    #[allow(dead_code)]
-    val_state: Option<i64>,
-    #[allow(dead_code)]
-    val_error: Option<String>,
     // Computed flags
     needs_hash: bool,
     needs_val: bool,
@@ -508,22 +485,8 @@ impl AnalysisItem {
         self.hash_first_scan_id
     }
 
-    pub fn hash_last_scan_id(&self) -> Option<i64> {
-        self.hash_last_scan_id
-    }
-
     pub fn file_hash(&self) -> Option<&str> {
         self.file_hash.as_deref()
-    }
-
-    #[allow(dead_code)]
-    pub fn val_state(&self) -> Option<ValidationState> {
-        self.val_state.map(ValidationState::from_i64)
-    }
-
-    #[allow(dead_code)]
-    pub fn val_error(&self) -> Option<&str> {
-        self.val_error.as_deref()
     }
 
     pub fn needs_hash(&self) -> bool {
@@ -553,12 +516,9 @@ impl AnalysisItem {
             size: row.get(6)?,
             has_validator: row.get::<_, i64>(7)? != 0,
             hash_first_scan_id: row.get(8)?,
-            hash_last_scan_id: row.get(9)?,
-            file_hash: Hash::opt_blob_to_hex(row.get(10)?),
-            val_state: row.get(11)?,
-            val_error: row.get(12)?,
-            needs_hash: row.get(13)?,
-            needs_val: row.get(14)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(9)?),
+            needs_hash: row.get(10)?,
+            needs_val: row.get(11)?,
         })
     }
 
@@ -586,6 +546,7 @@ impl AnalysisItem {
                     CASE
                         WHEN ?4 = 0 THEN 0
                         WHEN i.has_validator = 0 THEN 0
+                        WHEN i.do_not_validate = 1 THEN 0
                         WHEN cv.val_state IS NULL THEN 1
                         ELSE 0
                     END AS needs_val
@@ -656,10 +617,7 @@ impl AnalysisItem {
                 cv.size,
                 i.has_validator,
                 hv.first_scan_id,
-                hv.last_scan_id,
                 hv.file_hash,
-                cv.val_state,
-                cv.val_error,
                 CASE
                     WHEN ?1 = 0 THEN 0
                     WHEN ?2 = 1 AND (hv.file_hash IS NULL OR hv.last_scan_id < ?3) THEN 1
@@ -669,6 +627,7 @@ impl AnalysisItem {
                 CASE
                     WHEN ?4 = 0 THEN 0
                     WHEN i.has_validator = 0 THEN 0
+                    WHEN i.do_not_validate = 1 THEN 0
                     WHEN cv.val_state IS NULL THEN 1
                     ELSE 0
                 END AS needs_val
@@ -695,7 +654,7 @@ impl AnalysisItem {
                         OR (?2 = 1 AND hv.last_scan_id < ?3)
                     ))
                     OR
-                    (?4 = 1 AND i.has_validator = 1 AND cv.val_state IS NULL)
+                    (?4 = 1 AND i.has_validator = 1 AND i.do_not_validate = 0 AND cv.val_state IS NULL)
                 )
             ORDER BY cv.item_id ASC
             LIMIT {limit}"
@@ -762,9 +721,6 @@ fn is_interrupted(interrupt_token: &Arc<AtomicBool>) -> bool {
     interrupt_token.load(Ordering::Acquire)
 }
 
-fn should_alert_access_denied(old_access: Access, new_access: Access) -> bool {
-    new_access != Access::Ok && old_access == Access::Ok
-}
 
 #[cfg(test)]
 mod tests {
@@ -782,10 +738,7 @@ mod tests {
             size: Some(2000),
             has_validator: true,
             hash_first_scan_id: Some(456),
-            hash_last_scan_id: Some(460),
             file_hash: Some("abc123".to_string()),
-            val_state: Some(ValidationState::Valid.as_i64()),
-            val_error: Some("test error".to_string()),
             needs_hash: true,
             needs_val: false,
         };
@@ -796,7 +749,6 @@ mod tests {
         assert!(analysis_item.has_validator());
         assert_eq!(analysis_item.hash_first_scan_id(), Some(456));
         assert_eq!(analysis_item.file_hash(), Some("abc123"));
-        assert_eq!(analysis_item.val_error(), Some("test error"));
         assert!(analysis_item.needs_hash());
         assert!(!analysis_item.needs_val());
     }

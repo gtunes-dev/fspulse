@@ -13,8 +13,6 @@ export type ColumnType =
   | 'Int'
   | 'ItemType'
   | 'ChangeType'
-  | 'AlertType'
-  | 'AlertStatus'
   | 'ValState'
 
 export interface FilterInfo {
@@ -202,32 +200,4 @@ export interface ScheduleWithRoot extends Schedule {
 
 // Trends Page Types
 
-export type AlertStatusValue = 'O' | 'F' | 'D' // Open, Flagged, Dismissed
-export type AlertTypeValue = 'H' | 'I' | 'A' // Suspect Hash, Invalid Item, Access Denied
 export type ContextFilterType = 'all' | 'root' | 'scan'
-
-export interface UpdateAlertStatusRequest {
-  status: AlertStatusValue
-}
-
-export interface UpdateAlertStatusResponse {
-  success: boolean
-}
-
-export interface BulkUpdateAlertStatusRequest {
-  alert_ids: number[]
-  status: AlertStatusValue
-}
-
-export interface BulkUpdateAlertStatusByFilterRequest {
-  status: AlertStatusValue
-  status_filter?: string
-  type_filter?: string
-  root_id?: number
-  item_path?: string
-}
-
-export interface BulkUpdateAlertStatusResponse {
-  success: boolean
-  updated_count: number
-}

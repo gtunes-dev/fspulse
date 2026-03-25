@@ -5,11 +5,6 @@ import type {
   QueryRequest,
   ValidateFilterRequest,
   ValidateFilterResponse,
-  UpdateAlertStatusRequest,
-  UpdateAlertStatusResponse,
-  BulkUpdateAlertStatusRequest,
-  BulkUpdateAlertStatusByFilterRequest,
-  BulkUpdateAlertStatusResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -42,7 +37,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 /**
- * Fetch column metadata for a given domain (roots, scans, items, changes, alerts)
+ * Fetch column metadata for a given domain (roots, scans, items, versions)
  */
 export async function fetchMetadata(domain: string): Promise<MetadataResponse> {
   const response = await fetch(`${API_BASE}/query/${domain}/metadata`)
@@ -99,57 +94,121 @@ export async function validateFilter(
   return handleResponse<ValidateFilterResponse>(response)
 }
 
-/**
- * Update the status of an alert
- */
-export async function updateAlertStatus(
-  alertId: number,
-  request: UpdateAlertStatusRequest
-): Promise<UpdateAlertStatusResponse> {
-  const response = await fetch(`${API_BASE}/alerts/${alertId}/status`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
+// ---- Integrity API ----
+
+/** Shared filter params for integrity endpoints. */
+export interface IntegrityFilterParams {
+  root_id: number
+  issue_type?: string
+  extensions?: string
+  status?: string
+  path_search?: string
+}
+
+/** Item summary row from GET /api/integrity/items. */
+export interface IntegrityItemSummary {
+  item_id: number
+  item_path: string
+  item_name: string
+  file_extension: string | null
+  do_not_validate: boolean
+  hash_unreviewed: number
+  hash_reviewed: number
+  val_unreviewed: number
+  val_reviewed: number
+  latest_scan_id: number
+}
+
+/** Version detail from GET /api/integrity/items/:id/versions. */
+export interface IntegrityVersion {
+  item_version: number
+  scan_id: number
+  scan_started_at: number
+  hash_version_count: number
+  hash_suspicious_count: number
+  val_state: number
+  val_error: string | null
+  val_reviewed_at: number | null
+  hash_reviewed_at: number | null
+}
+
+export interface IntegrityVersionsResponse {
+  versions: IntegrityVersion[]
+  total: number
+}
+
+function filterToQs(params: IntegrityFilterParams): URLSearchParams {
+  const qs = new URLSearchParams()
+  qs.set('root_id', String(params.root_id))
+  if (params.issue_type) qs.set('issue_type', params.issue_type)
+  if (params.extensions) qs.set('extensions', params.extensions)
+  if (params.status) qs.set('status', params.status)
+  if (params.path_search) qs.set('path_search', params.path_search)
+  return qs
+}
+
+export async function fetchIntegrityCount(
+  params: IntegrityFilterParams
+): Promise<{ total: number }> {
+  const qs = filterToQs(params)
+  const response = await fetch(`${API_BASE}/integrity/count?${qs}`)
+  return handleResponse<{ total: number }>(response)
+}
+
+export async function fetchIntegrityItems(
+  params: IntegrityFilterParams & { offset?: number; limit?: number }
+): Promise<IntegrityItemSummary[]> {
+  const qs = filterToQs(params)
+  if (params.offset !== undefined) qs.set('offset', String(params.offset))
+  if (params.limit !== undefined) qs.set('limit', String(params.limit))
+  const response = await fetch(`${API_BASE}/integrity/items?${qs}`)
+  return handleResponse<IntegrityItemSummary[]>(response)
+}
+
+export async function fetchIntegrityVersions(
+  itemId: number,
+  params: IntegrityFilterParams,
+  limit?: number,
+): Promise<IntegrityVersionsResponse> {
+  const qs = filterToQs(params)
+  if (limit !== undefined) qs.set('limit', String(limit))
+  const response = await fetch(`${API_BASE}/integrity/items/${itemId}/versions?${qs}`)
+  return handleResponse<IntegrityVersionsResponse>(response)
+}
+
+export async function setIntegrityReviewed(
+  itemId: number,
+  itemVersion: number | null,
+  setVal: boolean | null,
+  setHash: boolean | null,
+): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE}/integrity/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      item_id: itemId,
+      item_version: itemVersion,
+      set_val: setVal,
+      set_hash: setHash,
+    }),
   })
-  return handleResponse<UpdateAlertStatusResponse>(response)
+  return handleResponse<{ success: boolean }>(response)
+}
+
+export async function setDoNotValidate(
+  itemId: number,
+  doNotValidate: boolean
+): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE}/integrity/do-not-validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, do_not_validate: doNotValidate }),
+  })
+  return handleResponse<{ success: boolean }>(response)
 }
 
 /**
- * Bulk update the status of multiple alerts by their IDs
- */
-export async function bulkUpdateAlertStatus(
-  request: BulkUpdateAlertStatusRequest
-): Promise<BulkUpdateAlertStatusResponse> {
-  const response = await fetch(`${API_BASE}/alerts/bulk-status`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  })
-  return handleResponse<BulkUpdateAlertStatusResponse>(response)
-}
-
-/**
- * Bulk update the status of all alerts matching filter criteria
- */
-export async function bulkUpdateAlertStatusByFilter(
-  request: BulkUpdateAlertStatusByFilterRequest
-): Promise<BulkUpdateAlertStatusResponse> {
-  const response = await fetch(`${API_BASE}/alerts/bulk-status-by-filter`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(request),
-  })
-  return handleResponse<BulkUpdateAlertStatusResponse>(response)
-}
-
-/**
- * Delete a root and all associated data (scans, items, changes, alerts)
+ * Delete a root and all associated data (scans, items, versions)
  */
 export async function deleteRoot(rootId: number): Promise<void> {
   const response = await fetch(`${API_BASE}/roots/${rootId}`, {

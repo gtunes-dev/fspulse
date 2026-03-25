@@ -1,4 +1,3 @@
-mod alerts;
 mod api;
 mod cli;
 mod config;
