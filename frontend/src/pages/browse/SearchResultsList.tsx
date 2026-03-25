@@ -163,7 +163,7 @@ export function SearchResultsList({
   return (
     <div
       ref={parentRef}
-      className="p-4"
+      className="p-4 overflow-hidden"
     >
       {loading ? (
         <div className="flex items-center justify-center h-32 text-muted-foreground">
@@ -199,7 +199,7 @@ export function SearchResultsList({
                   transform: `translateY(${virtualItem.start - scrollMargin}px)`,
                 }}
               >
-                <div className="flex flex-col">
+                <div className="flex flex-col min-w-0 overflow-hidden">
                   <TreeNode
                     item={item}
                     expandable={false}
@@ -207,7 +207,7 @@ export function SearchResultsList({
                     onItemSelect={onItemSelect}
                     isSelected={selectedItemId === item.item_id}
                   />
-                  <span className="text-xs text-muted-foreground pl-14 -mt-1">
+                  <span className="text-xs text-muted-foreground pl-14 -mt-1 truncate">
                     {getParentPath(item.item_path)}
                   </span>
                 </div>

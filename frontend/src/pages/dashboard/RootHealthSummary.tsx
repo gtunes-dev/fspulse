@@ -9,7 +9,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import {
   CheckCircle,
   XCircle,
@@ -17,19 +16,14 @@ import {
   Clock,
   Loader2,
   FolderTree,
+  ShieldAlert,
   Calendar,
   TrendingUp,
 } from 'lucide-react'
 import { formatDateRelative } from '@/lib/dateUtils'
-import { countQuery } from '@/lib/api'
 import { shortenPath } from '@/lib/pathUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import type { RootWithScan } from '@/lib/types'
-
-interface RootHealth extends RootWithScan {
-  openAlertCount: number
-  flaggedAlertCount: number
-}
 
 const scanStateIcon = (state: string) => {
   switch (state) {
@@ -46,48 +40,17 @@ const scanStateIcon = (state: string) => {
 
 export function RootHealthSummary() {
   const { lastTaskCompletedAt, currentTaskId } = useTaskContext()
-  const [roots, setRoots] = useState<RootHealth[]>([])
+  const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadHealthData() {
       try {
         setLoading(true)
-
-        // Fetch roots with last scan info
         const response = await fetch('/api/roots/with-scans')
         if (!response.ok) return
         const rootsData: RootWithScan[] = await response.json()
-
-        // Fetch open and flagged alert counts for each root in parallel
-        const healthData: RootHealth[] = await Promise.all(
-          rootsData.map(async (root) => {
-            const alertColumns = [{ name: 'alert_id', visible: true, sort_direction: 'none' as const, position: 0 }]
-            const rootFilter = { column: 'root_id', value: String(root.root_id) }
-
-            try {
-              const [openResult, flaggedResult] = await Promise.all([
-                countQuery('alerts', {
-                  columns: alertColumns,
-                  filters: [rootFilter, { column: 'alert_status', value: 'O' }],
-                }),
-                countQuery('alerts', {
-                  columns: alertColumns,
-                  filters: [rootFilter, { column: 'alert_status', value: 'F' }],
-                }),
-              ])
-              return {
-                ...root,
-                openAlertCount: openResult.count,
-                flaggedAlertCount: flaggedResult.count,
-              }
-            } catch {
-              return { ...root, openAlertCount: 0, flaggedAlertCount: 0 }
-            }
-          })
-        )
-
-        setRoots(healthData)
+        setRoots(rootsData)
       } catch (err) {
         console.error('Error loading root health data:', err)
       } finally {
@@ -118,8 +81,7 @@ export function RootHealthSummary() {
               <TableRow>
                 <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
                 <TableHead className="uppercase text-xs tracking-wide">Last Scan</TableHead>
-                <TableHead className="uppercase text-xs tracking-wide">Status</TableHead>
-                <TableHead className="text-right uppercase text-xs tracking-wide">Alerts</TableHead>
+                <TableHead className="text-right uppercase text-xs tracking-wide">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -137,6 +99,13 @@ export function RootHealthSummary() {
                           title="Browse files"
                         >
                           <FolderTree className="h-4 w-4" />
+                        </Link>
+                        <Link
+                          to={`/integrity?root_id=${root.root_id}`}
+                          className="text-muted-foreground hover:text-primary p-0.5 rounded"
+                          title="View integrity"
+                        >
+                          <ShieldAlert className="h-4 w-4" />
                         </Link>
                         <Link
                           to={`/trends/scan-trends?root_id=${root.root_id}`}
@@ -165,36 +134,15 @@ export function RootHealthSummary() {
                       <span className="text-muted-foreground text-sm">Never scanned</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-right">
                     {root.last_scan ? (
-                      <span className="flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1.5">
                         {scanStateIcon(root.last_scan.state)}
                         <span className="text-sm">{root.last_scan.state}</span>
                       </span>
                     ) : (
                       <span className="text-muted-foreground">&mdash;</span>
                     )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {root.openAlertCount > 0 ? (
-                        <Link to={`/alerts?root_id=${root.root_id}&alert_status=O`} title="Open alerts">
-                          <Badge variant="destructive">
-                            {root.openAlertCount} open
-                          </Badge>
-                        </Link>
-                      ) : null}
-                      {root.flaggedAlertCount > 0 ? (
-                        <Link to={`/alerts?root_id=${root.root_id}&alert_status=F`} title="Flagged alerts">
-                          <Badge variant="outline" className="border-amber-500 text-amber-600 dark:text-amber-400">
-                            {root.flaggedAlertCount} flagged
-                          </Badge>
-                        </Link>
-                      ) : null}
-                      {root.openAlertCount === 0 && root.flaggedAlertCount === 0 && (
-                        <span className="text-muted-foreground text-sm">None</span>
-                      )}
-                    </div>
                   </TableCell>
                 </TableRow>
               ))}

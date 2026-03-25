@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FolderTree, FolderOpen, Search, ArrowLeftRight, ChevronDown, SlidersHorizontal } from 'lucide-react'
+import { FolderTree, FolderOpen, Search, ArrowLeftRight, SlidersHorizontal } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { RootPicker } from '@/components/shared/RootPicker'
 import { CompactScanBar } from '@/components/shared/CompactScanBar'
 import { SearchFilter } from '@/components/shared/SearchFilter'
@@ -57,7 +56,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
   const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hiddenKinds, setHiddenKinds] = useState<Set<ChangeKind>>(new Set())
-  const [filtersOpen, setFiltersOpen] = useState(true)
   const [searchFilter, setSearchFilter] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   // Per-view selection: each tab has its own independently selected item
@@ -254,8 +252,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
       {/* Search placeholder when no query */}
       {viewMode === 'search' && !hasSearchQuery && (
         <div className="flex-1 min-h-0">
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            Type a search query to find files and folders
+          <div className="flex items-center justify-center h-32 text-muted-foreground">
+            No results found
           </div>
         </div>
       )}
@@ -313,8 +311,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
           />
         )}
 
-        {/* View mode tabs + layout control */}
-        <div className="flex items-center gap-3 overflow-hidden">
+        {/* View mode tabs + search + layout control */}
+        <div className="flex items-center gap-3">
           <Tabs value={viewMode} onValueChange={handleViewModeChange}>
             <TabsList className="shrink-0">
               <TabsTrigger value="tree" className="gap-1.5">
@@ -332,6 +330,14 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
             </TabsList>
           </Tabs>
 
+          {viewMode === 'search' && (
+            <SearchFilter
+              value={searchFilter}
+              onChange={handleSearchChange}
+              placeholder="Search files and folders..."
+            />
+          )}
+
           <div className="flex-1" />
 
           <button
@@ -343,77 +349,48 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
           </button>
         </div>
 
-        {/* Collapsible filter panel */}
-        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
-          <div className="border border-border rounded-lg bg-muted/30">
-            {/* Header row — always visible */}
-            <div className="flex items-center px-3 py-1.5">
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-2 border-none bg-transparent p-0 cursor-pointer">
-                  <ChevronDown className={cn("h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform", !filtersOpen && "-rotate-90")} />
-                  <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-sm font-medium">Filters</span>
+        {/* Filter bar */}
+        <div className="flex items-center gap-3 px-3 py-1.5 border border-border rounded-lg bg-muted/30">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          <span className="text-xs font-medium text-muted-foreground flex-shrink-0">Change Type</span>
+          <div className="flex items-center gap-1">
+            {([
+              { kind: 'added' as ChangeKind, label: 'Added', color: 'bg-green-500', ring: 'ring-green-500/40' },
+              { kind: 'modified' as ChangeKind, label: 'Modified', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
+              { kind: 'deleted' as ChangeKind, label: 'Deleted', color: 'bg-red-500', ring: 'ring-red-500/40' },
+              { kind: 'unchanged' as ChangeKind, label: 'Unchanged', color: 'bg-zinc-400', ring: 'ring-zinc-400/40' },
+            ]).map(({ kind, label, color, ring }) => {
+              const visible = !hiddenKinds.has(kind)
+              return (
+                <button
+                  key={kind}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors whitespace-nowrap',
+                    visible
+                      ? 'text-foreground hover:bg-accent'
+                      : 'text-muted-foreground/40 hover:bg-accent/50'
+                  )}
+                  onClick={() => setHiddenKinds(prev => {
+                    const next = new Set(prev)
+                    if (next.has(kind)) next.delete(kind)
+                    else next.add(kind)
+                    return next
+                  })}
+                >
+                  <span
+                    className={cn(
+                      'inline-block w-2.5 h-2.5 rounded-full transition-all flex-shrink-0',
+                      visible
+                        ? `${color} ring-2 ${ring}`
+                        : 'bg-transparent ring-1 ring-muted-foreground/25'
+                    )}
+                  />
+                  {label}
                 </button>
-              </CollapsibleTrigger>
-            </div>
-
-            {/* Expandable content — change type filter */}
-            <CollapsibleContent>
-              <div className="flex gap-5 px-4 pb-3 overflow-hidden">
-                {/* Change column */}
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground border-b border-border pb-1 mb-1.5">Change Type</div>
-                  <div className="flex flex-col gap-0.5">
-                    {([
-                      { kind: 'added' as ChangeKind, label: 'Added', color: 'bg-green-500', ring: 'ring-green-500/40' },
-                      { kind: 'modified' as ChangeKind, label: 'Modified', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
-                      { kind: 'deleted' as ChangeKind, label: 'Deleted', color: 'bg-red-500', ring: 'ring-red-500/40' },
-                      { kind: 'unchanged' as ChangeKind, label: 'Unchanged', color: 'bg-zinc-400', ring: 'ring-zinc-400/40' },
-                    ]).map(({ kind, label, color, ring }) => {
-                      const visible = !hiddenKinds.has(kind)
-                      return (
-                        <button
-                          key={kind}
-                          className={cn(
-                            'inline-flex items-center gap-2 px-2 py-0.5 rounded text-sm cursor-pointer transition-colors text-left whitespace-nowrap',
-                            visible
-                              ? 'text-foreground hover:bg-accent'
-                              : 'text-muted-foreground/40 hover:bg-accent/50'
-                          )}
-                          onClick={() => setHiddenKinds(prev => {
-                            const next = new Set(prev)
-                            if (next.has(kind)) next.delete(kind)
-                            else next.add(kind)
-                            return next
-                          })}
-                        >
-                          <span
-                            className={cn(
-                              'inline-block w-3 h-3 rounded-full transition-all flex-shrink-0',
-                              visible
-                                ? `${color} ring-2 ${ring}`
-                                : 'bg-transparent ring-1 ring-muted-foreground/25'
-                            )}
-                          />
-                          {label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-            </CollapsibleContent>
+              )
+            })}
           </div>
-        </Collapsible>
-
-        {/* Search filter — visible in search mode */}
-        {viewMode === 'search' && (
-          <SearchFilter
-            value={searchFilter}
-            onChange={handleSearchChange}
-            placeholder="Search files and folders..."
-          />
-        )}
+        </div>
 
         {/* Content area: content view + detail panel side by side */}
         <div className="flex-1 flex border border-border rounded-lg overflow-hidden">

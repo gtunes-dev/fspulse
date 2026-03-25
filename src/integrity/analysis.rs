@@ -318,7 +318,7 @@ fn analyze_item(
 /// Persist hash and validation results to the database.
 ///
 /// Writes to `hash_versions` table and val columns on `item_versions`.
-/// Also handles access state changes on `item_versions` and alert creation.
+/// Also handles access state changes on `item_versions`.
 #[allow(clippy::too_many_arguments)]
 fn persist_analysis(
     scan: &Scan,
