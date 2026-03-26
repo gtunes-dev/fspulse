@@ -86,7 +86,6 @@ export function DeleteRootDialog({
               <li>Scans</li>
               <li>Items</li>
               <li>Changes</li>
-              <li>Alerts</li>
             </ul>
           </div>
 

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Scan detail sheet on Roots page**: Remove references to deleted `alert_count` column that caused the scan detail sheet to fail with "Internal Server Error" when clicking on scan info
+
 ## [v0.5.2] - 2026-03-25
 
 Follow-up to v0.5.0, which introduced the integrity model redesign and Integrity page. See the [v0.5.0 changelog entry](#v050---2026-03-25) for full details on the new integrity architecture, hash version tracking, review system, and the removal of the alerts system.

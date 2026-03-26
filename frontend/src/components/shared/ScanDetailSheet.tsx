@@ -28,7 +28,6 @@ interface ScanDetails {
   add_count: number
   modify_count: number
   delete_count: number
-  alert_count: number
   file_count: number
   folder_count: number
   total_size: number | null
@@ -43,10 +42,9 @@ const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'add_count', visible: true, sort_direction: 'none', position: 4 },
   { name: 'modify_count', visible: true, sort_direction: 'none', position: 5 },
   { name: 'delete_count', visible: true, sort_direction: 'none', position: 6 },
-  { name: 'alert_count', visible: true, sort_direction: 'none', position: 7 },
-  { name: 'file_count', visible: true, sort_direction: 'none', position: 8 },
-  { name: 'folder_count', visible: true, sort_direction: 'none', position: 9 },
-  { name: 'total_size', visible: true, sort_direction: 'none', position: 10 },
+  { name: 'file_count', visible: true, sort_direction: 'none', position: 7 },
+  { name: 'folder_count', visible: true, sort_direction: 'none', position: 8 },
+  { name: 'total_size', visible: true, sort_direction: 'none', position: 9 },
 ]
 
 // Column specifications for root query
@@ -107,10 +105,9 @@ export function ScanDetailSheet({
           add_count: parseInt(row[4]) || 0,
           modify_count: parseInt(row[5]) || 0,
           delete_count: parseInt(row[6]) || 0,
-          alert_count: parseInt(row[7]) || 0,
-          file_count: parseInt(row[8]) || 0,
-          folder_count: parseInt(row[9]) || 0,
-          total_size: row[10] && row[10] !== '-' ? parseInt(row[10]) : null,
+          file_count: parseInt(row[7]) || 0,
+          folder_count: parseInt(row[8]) || 0,
+          total_size: row[9] && row[9] !== '-' ? parseInt(row[9]) : null,
         })
       } catch (error) {
         console.error('Error loading scan details:', error)
@@ -238,20 +235,12 @@ export function ScanDetailSheet({
                     )}
                   </div>
 
-                  {/* Alerts and Items */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Alerts</p>
-                      <p className={`text-base font-semibold mt-1 ${details.alert_count > 0 ? 'text-red-600' : ''}`}>
-                        {details.alert_count}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-muted-foreground">Items Scanned</p>
-                      <p className="text-base font-semibold mt-1">
-                        {details.file_count.toLocaleString()} files, {details.folder_count.toLocaleString()} folders
-                      </p>
-                    </div>
+                  {/* Items Scanned */}
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Items Scanned</p>
+                    <p className="text-base font-semibold mt-1">
+                      {details.file_count.toLocaleString()} files, {details.folder_count.toLocaleString()} folders
+                    </p>
                   </div>
                 </div>
               </CardContent>

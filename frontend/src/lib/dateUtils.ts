@@ -65,7 +65,7 @@ export function formatDateRelative(timestampSeconds: number): string {
 
 /**
  * Format timestamp as compact relative time
- * Used for: Alerts page "Created" column
+ * Used for: compact timestamp display
  *
  * Returns:
  * - "Just now" for <1 minute
