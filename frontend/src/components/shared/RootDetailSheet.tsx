@@ -14,6 +14,7 @@ import { fetchQuery, countQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateFull } from '@/lib/dateUtils'
 import { formatFileSize } from '@/lib/formatUtils'
+import { ChangeIcons } from '@/components/shared/ChangeIcons'
 
 interface RootDetailSheetProps {
   rootId: number
@@ -34,7 +35,6 @@ interface Scan {
   add_count: number
   modify_count: number
   delete_count: number
-  alert_count: number
   file_count: number
   folder_count: number
   total_size: number | null
@@ -50,10 +50,9 @@ const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'add_count', visible: true, sort_direction: 'none', position: 3 },
   { name: 'modify_count', visible: true, sort_direction: 'none', position: 4 },
   { name: 'delete_count', visible: true, sort_direction: 'none', position: 5 },
-  { name: 'alert_count', visible: true, sort_direction: 'none', position: 6 },
-  { name: 'file_count', visible: true, sort_direction: 'none', position: 7 },
-  { name: 'folder_count', visible: true, sort_direction: 'none', position: 8 },
-  { name: 'total_size', visible: true, sort_direction: 'none', position: 9 },
+  { name: 'file_count', visible: true, sort_direction: 'none', position: 6 },
+  { name: 'folder_count', visible: true, sort_direction: 'none', position: 7 },
+  { name: 'total_size', visible: true, sort_direction: 'none', position: 8 },
 ]
 
 // Row parsing helper
@@ -65,10 +64,9 @@ function parseScanRow(row: string[]): Scan {
     add_count: parseInt(row[3]) || 0,
     modify_count: parseInt(row[4]) || 0,
     delete_count: parseInt(row[5]) || 0,
-    alert_count: parseInt(row[6]) || 0,
-    file_count: parseInt(row[7]) || 0,
-    folder_count: parseInt(row[8]) || 0,
-    total_size: row[9] && row[9] !== '-' ? parseInt(row[9]) : null,
+    file_count: parseInt(row[6]) || 0,
+    folder_count: parseInt(row[7]) || 0,
+    total_size: row[8] && row[8] !== '-' ? parseInt(row[8]) : null,
   }
 }
 
@@ -150,16 +148,6 @@ export function RootDetailSheet({
     } finally {
       setLoadingMoreScans(false)
     }
-  }
-
-  const formatChanges = (add: number, modify: number, del: number): string => {
-    const changes = []
-    if (add > 0) changes.push(`${add} ${add === 1 ? 'add' : 'adds'}`)
-    if (modify > 0) changes.push(`${modify} ${modify === 1 ? 'mod' : 'mods'}`)
-    if (del > 0) changes.push(`${del} ${del === 1 ? 'del' : 'dels'}`)
-
-    if (changes.length === 0) return 'No changes'
-    return changes.join(', ')
   }
 
   const getStatusBadge = (state: string) => {
@@ -290,10 +278,7 @@ export function RootDetailSheet({
                                 {/* Stats grid */}
                                 <div className="space-y-1 text-xs">
                                   <div className="flex items-center justify-between">
-                                    <div>
-                                      <span className="text-muted-foreground">Changes: </span>
-                                      <span className="font-medium">{formatChanges(scan.add_count, scan.modify_count, scan.delete_count)}</span>
-                                    </div>
+                                    <ChangeIcons add={scan.add_count} modify={scan.modify_count} del={scan.delete_count} />
                                     {scan.total_size !== null && (
                                       <div>
                                         <span className="text-muted-foreground">Size: </span>
@@ -302,12 +287,6 @@ export function RootDetailSheet({
                                     )}
                                   </div>
                                   <div className="flex items-center justify-between">
-                                    <div>
-                                      <span className="text-muted-foreground">Alerts: </span>
-                                      <span className={`font-medium ${scan.alert_count > 0 ? 'text-red-600' : ''}`}>
-                                        {scan.alert_count}
-                                      </span>
-                                    </div>
                                     <div>
                                       <span className="text-muted-foreground">Items: </span>
                                       <span className="font-medium">{scan.file_count.toLocaleString()} files, {scan.folder_count.toLocaleString()} folders</span>

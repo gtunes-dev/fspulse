@@ -1,4 +1,4 @@
-import { Plus, Triangle, Minus } from 'lucide-react'
+import { Plus, Triangle, X } from 'lucide-react'
 
 interface ChangeIconsProps {
   add: number | null
@@ -19,13 +19,13 @@ export function ChangeIcons({ add, modify, del }: ChangeIconsProps) {
       ) : null}
       {modify ? (
         <span className="inline-flex items-center gap-1 text-blue-500">
-          <Triangle className="h-3 w-3" />
+          <Triangle className="h-3 w-3" fill="currentColor" />
           {modify}
         </span>
       ) : null}
       {del ? (
         <span className="inline-flex items-center gap-1 text-red-500">
-          <Minus className="h-3.5 w-3.5" />
+          <X className="h-3.5 w-3.5" />
           {del}
         </span>
       ) : null}

@@ -1,3 +1,4 @@
+import { Plus, Triangle, X, Minus } from 'lucide-react'
 import type { ChangeKind } from '@/lib/pathUtils'
 
 interface ChangeDotsProps {
@@ -9,14 +10,13 @@ interface ChangeDotsProps {
   unchangedCount?: number | null
 }
 
-// Single dot styling (files and unchanged directories)
-const DOT = 'w-[7px] h-[7px] rounded-full'
-const DOT_BOX = 'relative inline-block w-4 h-4 flex-shrink-0'
+const ICON_BOX = 'inline-flex items-center justify-center w-4 h-4 flex-shrink-0'
+const ICON_SIZE = 'h-3.5 w-3.5'
 
 /**
  * Renders change-kind indicators for items in browse views.
  *
- * Files: single colored dot for their own change state.
+ * Files: a colored icon for their own change state.
  *
  * Directories: a fixed 2×2 grid showing which change types exist among
  * descendants. The folder icon itself carries the folder's own change
@@ -32,21 +32,21 @@ const DOT_BOX = 'relative inline-block w-4 h-4 flex-shrink-0'
  * total alive) computed at the data mapping layer.
  */
 export function ChangeDots({ changeKind, isDir, addCount, modifyCount, deleteCount, unchangedCount }: ChangeDotsProps) {
-  // Files: single dot for own state
+  // Files: icon for own state
   if (!isDir) {
-    const color =
-      changeKind === 'added' ? 'bg-green-500' :
-      changeKind === 'modified' ? 'bg-blue-500' :
-      changeKind === 'deleted' ? 'bg-red-500' :
-      'bg-zinc-400'
     const tooltip =
       changeKind === 'added' ? 'Added' :
       changeKind === 'modified' ? 'Modified' :
       changeKind === 'deleted' ? 'Deleted' :
       'Unchanged'
+    const icon =
+      changeKind === 'added' ? <Plus className={`${ICON_SIZE} text-green-500`} /> :
+      changeKind === 'modified' ? <Triangle className={`${ICON_SIZE} text-blue-500`} fill="currentColor" /> :
+      changeKind === 'deleted' ? <X className={`${ICON_SIZE} text-red-500`} /> :
+      <Minus className={`${ICON_SIZE} text-foreground`} />
     return (
-      <span className={DOT_BOX} title={tooltip}>
-        <span className={`absolute left-[4.5px] top-[4.5px] ${DOT} ${color}`} />
+      <span className={ICON_BOX} title={tooltip}>
+        {icon}
       </span>
     )
   }

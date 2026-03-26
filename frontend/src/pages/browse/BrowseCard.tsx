@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FolderTree, FolderOpen, Search, ArrowLeftRight, SlidersHorizontal } from 'lucide-react'
+import { FolderTree, FolderOpen, Search, ArrowLeftRight, SlidersHorizontal, Plus, Triangle, X, Minus } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -355,11 +355,11 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
           <span className="text-xs font-medium text-muted-foreground flex-shrink-0">Change Type</span>
           <div className="flex items-center gap-1">
             {([
-              { kind: 'added' as ChangeKind, label: 'Added', color: 'bg-green-500', ring: 'ring-green-500/40' },
-              { kind: 'modified' as ChangeKind, label: 'Modified', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
-              { kind: 'deleted' as ChangeKind, label: 'Deleted', color: 'bg-red-500', ring: 'ring-red-500/40' },
-              { kind: 'unchanged' as ChangeKind, label: 'Unchanged', color: 'bg-zinc-400', ring: 'ring-zinc-400/40' },
-            ]).map(({ kind, label, color, ring }) => {
+              { kind: 'added' as ChangeKind, label: 'Added', color: 'text-green-500', Icon: Plus, filled: false },
+              { kind: 'modified' as ChangeKind, label: 'Modified', color: 'text-blue-500', Icon: Triangle, filled: true },
+              { kind: 'deleted' as ChangeKind, label: 'Deleted', color: 'text-red-500', Icon: X, filled: false },
+              { kind: 'unchanged' as ChangeKind, label: 'Unchanged', color: 'text-foreground', Icon: Minus, filled: false },
+            ]).map(({ kind, label, color, Icon, filled }) => {
               const visible = !hiddenKinds.has(kind)
               return (
                 <button
@@ -377,13 +377,12 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
                     return next
                   })}
                 >
-                  <span
+                  <Icon
                     className={cn(
-                      'inline-block w-2.5 h-2.5 rounded-full transition-all flex-shrink-0',
-                      visible
-                        ? `${color} ring-2 ${ring}`
-                        : 'bg-transparent ring-1 ring-muted-foreground/25'
+                      'h-4 w-4 flex-shrink-0 transition-all',
+                      visible ? color : 'text-muted-foreground/25'
                     )}
+                    {...(filled ? { fill: 'currentColor' } : {})}
                   />
                   {label}
                 </button>

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Unified change type icons**: Replace colored dots with lucide icons (Plus, Triangle filled, X, Minus) across Browse page filters, ChangeDots file indicators, ItemDetail version cards and folder counts, and Trends page Changes chart legend
+- **Delete icon**: Change delete icon from Minus to X across all change type displays (Home, History, Browse, ItemDetail, Trends)
+- **Unchanged icon**: Add Minus icon for Unchanged change type using foreground color (adapts to light/dark mode)
+- **Icon sizing**: Bump change type icon sizes across Browse and ItemDetail for better visibility
+
+### Fixed
+- **Root detail recent scans**: Remove references to deleted `alert_count` column that caused the Recent Scans list to fail silently and show "No scans recorded"
+- **Root detail scan changes**: Replace text-based change summary with `ChangeIcons` component for visual consistency
+
 ## [v0.5.1] - 2026-03-25
 
 This is a follow-up to v0.5.0, which introduced the integrity model redesign and Integrity page. See the [v0.5.0 changelog entry](#v050---2026-03-25) for full details on the new integrity architecture, hash version tracking, review system, and the removal of the alerts system.

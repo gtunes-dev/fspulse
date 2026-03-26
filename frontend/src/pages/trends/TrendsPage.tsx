@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
-import { Calendar as CalendarIcon } from 'lucide-react'
+import { Calendar as CalendarIcon, Plus, Triangle, X, Minus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import {
@@ -691,11 +691,11 @@ export function TrendsPage() {
                       <Legend content={() => (
                         <div className="flex items-center justify-center gap-1 pt-1">
                           {([
-                            { key: 'add_count', label: 'Added', color: 'bg-green-500', ring: 'ring-green-500/40' },
-                            { key: 'modify_count', label: 'Modified', color: 'bg-blue-500', ring: 'ring-blue-500/40' },
-                            { key: 'delete_count', label: 'Deleted', color: 'bg-red-500', ring: 'ring-red-500/40' },
-                            { key: 'unchanged_count', label: 'Unchanged', color: 'bg-gray-400', ring: 'ring-gray-400/40' },
-                          ]).map(({ key, label, color, ring }) => {
+                            { key: 'add_count', label: 'Added', color: 'text-green-500', Icon: Plus, filled: false },
+                            { key: 'modify_count', label: 'Modified', color: 'text-blue-500', Icon: Triangle, filled: true },
+                            { key: 'delete_count', label: 'Deleted', color: 'text-red-500', Icon: X, filled: false },
+                            { key: 'unchanged_count', label: 'Unchanged', color: 'text-foreground', Icon: Minus, filled: false },
+                          ]).map(({ key, label, color, Icon, filled }) => {
                             const visible = !hiddenChangeSeries.has(key)
                             return (
                               <button
@@ -713,13 +713,12 @@ export function TrendsPage() {
                                   return next
                                 })}}
                               >
-                                <span
+                                <Icon
                                   className={cn(
-                                    'inline-block w-3 h-3 rounded-full transition-all flex-shrink-0',
-                                    visible
-                                      ? `${color} ring-2 ${ring}`
-                                      : 'bg-transparent ring-1 ring-muted-foreground/25'
+                                    'h-4 w-4 flex-shrink-0 transition-all',
+                                    visible ? color : 'text-muted-foreground/25'
                                   )}
+                                  {...(filled ? { fill: 'currentColor' } : {})}
                                 />
                                 {label}
                               </button>

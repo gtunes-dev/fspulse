@@ -3,7 +3,7 @@ import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
   File, Folder, FileX, FolderX, Calendar as CalendarIcon,
   HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
-  ShieldCheck, ShieldOff,
+  ShieldCheck, ShieldOff, Plus, Triangle, Minus,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { ReviewToggle } from '@/components/shared/ReviewToggle'
@@ -631,7 +631,7 @@ export function ItemDetail({
 
   // Spacing constants
   const sp = {
-    icon: isPanel ? 'h-2.5 w-2.5' : 'h-3 w-3',
+    icon: isPanel ? 'h-3 w-3' : 'h-3.5 w-3.5',
     iconLg: isPanel ? 'h-3 w-3' : 'h-3.5 w-3.5',
     gap: isPanel ? 'gap-1.5' : 'gap-2',
     pad: isPanel ? 'p-1.5' : 'p-2',
@@ -647,11 +647,11 @@ export function ItemDetail({
   // ---- Badge/indicator renderers ----
 
   const getChangeIndicator = (kind: ChangeKind) => {
-    const dotColor =
-      kind === 'initial' ? 'bg-green-500' :
-      kind === 'modified' ? 'bg-blue-500' :
-      kind === 'deleted' ? 'bg-red-500' :
-      'bg-green-500' // restored
+    const icon =
+      kind === 'initial' ? <Plus className={`${sp.icon} text-green-500`} /> :
+      kind === 'modified' ? <Triangle className={`${sp.icon} text-blue-500`} fill="currentColor" /> :
+      kind === 'deleted' ? <X className={`${sp.icon} text-red-500`} /> :
+      <Plus className={`${sp.icon} text-green-500`} /> // restored
     const label =
       kind === 'initial' ? 'Added' :
       kind === 'modified' ? 'Modified' :
@@ -659,7 +659,7 @@ export function ItemDetail({
       'Restored'
     return (
       <span className={`inline-flex items-center ${sp.gap} text-xs flex-shrink-0`}>
-        <span className={`inline-block ${sp.dot} rounded-full ${dotColor}`} />
+        {icon}
         <span>{label}</span>
       </span>
     )
@@ -974,22 +974,22 @@ export function ItemDetail({
                   <div className={`mt-3 text-xs`}>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                       <span className="flex items-center gap-1.5">
-                        <span className={`inline-block ${sp.dot} rounded-full bg-green-500`} />
+                        <Plus className={`${sp.icon} text-green-500 flex-shrink-0`} />
                         <span className="text-muted-foreground">Added :</span>
                         <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <span className={`inline-block ${sp.dot} rounded-full bg-red-500`} />
+                        <X className={`${sp.icon} text-red-500 flex-shrink-0`} />
                         <span className="text-muted-foreground">Deleted :</span>
                         <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <span className={`inline-block ${sp.dot} rounded-full bg-blue-500`} />
+                        <Triangle className={`${sp.icon} text-blue-500 flex-shrink-0`} fill="currentColor" />
                         <span className="text-muted-foreground">Modified :</span>
                         <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <span className={`inline-block ${sp.dot} rounded-full bg-zinc-400`} />
+                        <Minus className={`${sp.icon} text-foreground flex-shrink-0`} />
                         <span className="text-muted-foreground">Unchanged :</span>
                         <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
                       </span>
@@ -1353,7 +1353,7 @@ export function ItemDetail({
                                   <div className="mt-1 space-y-0.5">
                                     {v.add_count !== prev.add_count && (
                                       <div className="flex items-center gap-1.5">
-                                        <span className={`inline-block ${sp.dot} rounded-full bg-green-500`} />
+                                        <Plus className={`${sp.icon} text-green-500 flex-shrink-0`} />
                                         <span className="text-muted-foreground">Added:</span>
                                         <span className="text-muted-foreground">{(prev.add_count ?? 0).toLocaleString()}</span>
                                         <span>&rarr;</span>
@@ -1362,7 +1362,7 @@ export function ItemDetail({
                                     )}
                                     {v.delete_count !== prev.delete_count && (
                                       <div className="flex items-center gap-1.5">
-                                        <span className={`inline-block ${sp.dot} rounded-full bg-red-500`} />
+                                        <X className={`${sp.icon} text-red-500 flex-shrink-0`} />
                                         <span className="text-muted-foreground">Deleted:</span>
                                         <span className="text-muted-foreground">{(prev.delete_count ?? 0).toLocaleString()}</span>
                                         <span>&rarr;</span>
@@ -1371,7 +1371,7 @@ export function ItemDetail({
                                     )}
                                     {v.modify_count !== prev.modify_count && (
                                       <div className="flex items-center gap-1.5">
-                                        <span className={`inline-block ${sp.dot} rounded-full bg-blue-500`} />
+                                        <Triangle className={`${sp.icon} text-blue-500 flex-shrink-0`} fill="currentColor" />
                                         <span className="text-muted-foreground">Modified:</span>
                                         <span className="text-muted-foreground">{(prev.modify_count ?? 0).toLocaleString()}</span>
                                         <span>&rarr;</span>
@@ -1380,7 +1380,7 @@ export function ItemDetail({
                                     )}
                                     {v.unchanged_count !== prev.unchanged_count && (
                                       <div className="flex items-center gap-1.5">
-                                        <span className={`inline-block ${sp.dot} rounded-full bg-zinc-400`} />
+                                        <Minus className={`${sp.icon} text-foreground flex-shrink-0`} />
                                         <span className="text-muted-foreground">Unchanged:</span>
                                         <span className="text-muted-foreground">{(prev.unchanged_count ?? 0).toLocaleString()}</span>
                                         <span>&rarr;</span>
@@ -1397,28 +1397,28 @@ export function ItemDetail({
                                   <div className="mt-1 space-y-0.5">
                                     {(v.add_count ?? 0) > 0 && (
                                       <div className="flex items-center gap-1.5">
-                                        <span className={`inline-block ${sp.dot} rounded-full bg-green-500`} />
+                                        <Plus className={`${sp.icon} text-green-500 flex-shrink-0`} />
                                         <span className="text-muted-foreground">Added:</span>
                                         <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
                                       </div>
                                     )}
                                     {(v.delete_count ?? 0) > 0 && (
                                       <div className="flex items-center gap-1.5">
-                                        <span className={`inline-block ${sp.dot} rounded-full bg-red-500`} />
+                                        <X className={`${sp.icon} text-red-500 flex-shrink-0`} />
                                         <span className="text-muted-foreground">Deleted:</span>
                                         <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
                                       </div>
                                     )}
                                     {(v.modify_count ?? 0) > 0 && (
                                       <div className="flex items-center gap-1.5">
-                                        <span className={`inline-block ${sp.dot} rounded-full bg-blue-500`} />
+                                        <Triangle className={`${sp.icon} text-blue-500 flex-shrink-0`} fill="currentColor" />
                                         <span className="text-muted-foreground">Modified:</span>
                                         <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
                                       </div>
                                     )}
                                     {(v.unchanged_count ?? 0) > 0 && (
                                       <div className="flex items-center gap-1.5">
-                                        <span className={`inline-block ${sp.dot} rounded-full bg-zinc-400`} />
+                                        <Minus className={`${sp.icon} text-foreground flex-shrink-0`} />
                                         <span className="text-muted-foreground">Unchanged:</span>
                                         <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
                                       </div>
