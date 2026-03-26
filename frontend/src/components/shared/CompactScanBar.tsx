@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { formatScanDate, formatTime } from '@/lib/dateUtils'
+import { ChangeIcons } from '@/components/shared/ChangeIcons'
 
 interface CompactScanBarProps {
   rootId: number
@@ -24,14 +25,6 @@ interface ScanSummary {
   add_count: number | null
   modify_count: number | null
   delete_count: number | null
-}
-
-function formatChanges(add: number | null, modify: number | null, del: number | null): string {
-  const parts: string[] = []
-  if (add && add > 0) parts.push(`${add} ${add === 1 ? 'add' : 'adds'}`)
-  if (modify && modify > 0) parts.push(`${modify} ${modify === 1 ? 'mod' : 'mods'}`)
-  if (del && del > 0) parts.push(`${del} ${del === 1 ? 'del' : 'dels'}`)
-  return parts.length > 0 ? parts.join(', ') : 'no changes'
 }
 
 export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan }: CompactScanBarProps) {
@@ -404,9 +397,12 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
                                 {formatTime(scan.started_at)}
                               </span>
                             </div>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {formatChanges(scan.add_count, scan.modify_count, scan.delete_count)}
-                            </p>
+                            <div className="text-xs">
+                              <ChangeIcons add={scan.add_count} modify={scan.modify_count} del={scan.delete_count} />
+                              {!scan.add_count && !scan.modify_count && !scan.delete_count && (
+                                <span className="text-muted-foreground">no changes</span>
+                              )}
+                            </div>
                           </div>
                         </button>
                       ))}
