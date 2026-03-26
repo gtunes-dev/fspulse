@@ -35,6 +35,9 @@ pub fn run_analysis_phase(
     let is_hash = scan.analysis_spec().is_hash();
     let is_val = scan.analysis_spec().is_val();
 
+    // Compute disabled validation extensions once from config
+    let disabled_exts = crate::validate::validator::disabled_extensions();
+
     // If the scan doesn't hash or validate, skip to scan analyzing
     if !is_hash && !is_val {
         check_interrupted(interrupt_token)?;
@@ -50,7 +53,7 @@ pub fn run_analysis_phase(
     let initial_hwm = initial_state.high_water_mark;
 
     let (analyze_total, analyze_done) =
-        AnalysisItem::get_analysis_counts(&conn, scan.root_id(), scan.scan_id(), scan.analysis_spec(), initial_hwm)?;
+        AnalysisItem::get_analysis_counts(&conn, scan.root_id(), scan.scan_id(), scan.analysis_spec(), initial_hwm, &disabled_exts)?;
 
     // Set up counter-based progress tracking
     task_progress.set_progress_total(analyze_total, analyze_done, Some("files"));
@@ -110,6 +113,7 @@ pub fn run_analysis_phase(
             scan.analysis_spec(),
             last_item_id,
             100,
+            &disabled_exts,
         )?;
 
         if analysis_items.is_empty() {
@@ -522,18 +526,50 @@ impl AnalysisItem {
         })
     }
 
+    /// Build a SQL WHEN clause to exclude disabled extensions from needs_val.
+    /// Returns empty string if no extensions are disabled.
+    /// The returned clause is safe to inject directly — values come from hardcoded constants.
+    fn build_ext_exclusion_clause(disabled_exts: &[&str]) -> String {
+        if disabled_exts.is_empty() {
+            String::new()
+        } else {
+            let quoted: Vec<String> = disabled_exts.iter().map(|e| format!("'{}'", e)).collect();
+            format!(
+                "WHEN i.file_extension IN ({}) THEN 0\n                        ",
+                quoted.join(", ")
+            )
+        }
+    }
+
+    /// Build a SQL AND clause to exclude disabled extensions from the WHERE filter.
+    /// Returns empty string if no extensions are disabled.
+    fn build_ext_not_in_clause(disabled_exts: &[&str]) -> String {
+        if disabled_exts.is_empty() {
+            String::new()
+        } else {
+            let quoted: Vec<String> = disabled_exts.iter().map(|e| format!("'{}'", e)).collect();
+            format!(
+                "\n                        AND i.file_extension NOT IN ({})",
+                quoted.join(", ")
+            )
+        }
+    }
+
     pub fn get_analysis_counts(
         conn: &Connection,
         root_id: i64,
         scan_id: i64,
         analysis_spec: &AnalysisSpec,
         last_item_id: i64,
+        disabled_exts: &[&str],
     ) -> Result<(u64, u64), FsPulseError> {
         // Driven by idx_versions_root_lastscan (root_id, last_scan_id) to find
         // alive versions for this root at this scan. The item_id filter provides
         // cursor-based pagination.
-        let sql = r#"
-            WITH candidates AS (
+        let ext_exclusion = Self::build_ext_exclusion_clause(disabled_exts);
+
+        let sql = format!(
+            "WITH candidates AS (
                 SELECT
                     hv.last_scan_id AS hash_last_scan,
                     cv.val_scan_id,
@@ -547,7 +583,7 @@ impl AnalysisItem {
                         WHEN ?4 = 0 THEN 0
                         WHEN i.has_validator = 0 THEN 0
                         WHEN i.do_not_validate = 1 THEN 0
-                        WHEN cv.val_state IS NULL THEN 1
+                        {ext_exclusion}WHEN cv.val_state IS NULL THEN 1
                         ELSE 0
                     END AS needs_val
                 FROM item_versions cv
@@ -574,9 +610,10 @@ impl AnalysisItem {
                     WHEN (needs_hash = 1 AND hash_last_scan = ?3)
                     OR (needs_val = 1 AND val_scan_id = ?3)
                     THEN 1 ELSE 0 END), 0) AS total_done
-            FROM candidates"#;
+            FROM candidates"
+        );
 
-        let mut stmt = conn.prepare_cached(sql)?;
+        let mut stmt = conn.prepare_cached(&sql)?;
         let mut rows = stmt.query(params![
             analysis_spec.is_hash() as i64,
             analysis_spec.hash_all() as i64,
@@ -602,10 +639,14 @@ impl AnalysisItem {
         analysis_spec: &AnalysisSpec,
         last_item_id: i64,
         limit: usize,
+        disabled_exts: &[&str],
     ) -> Result<Vec<AnalysisItem>, FsPulseError> {
         // Driven by idx_versions_root_lastscan (root_id, last_scan_id) to find
         // alive versions for this root at this scan. The item_id filter and ORDER BY
         // provide cursor-based pagination (each item has at most one alive version).
+        let ext_exclusion = Self::build_ext_exclusion_clause(disabled_exts);
+        let ext_not_in = Self::build_ext_not_in_clause(disabled_exts);
+
         let query = format!(
             "SELECT
                 cv.item_id,
@@ -628,7 +669,7 @@ impl AnalysisItem {
                     WHEN ?4 = 0 THEN 0
                     WHEN i.has_validator = 0 THEN 0
                     WHEN i.do_not_validate = 1 THEN 0
-                    WHEN cv.val_state IS NULL THEN 1
+                    {ext_exclusion}WHEN cv.val_state IS NULL THEN 1
                     ELSE 0
                 END AS needs_val
             FROM item_versions cv
@@ -654,7 +695,7 @@ impl AnalysisItem {
                         OR (?2 = 1 AND hv.last_scan_id < ?3)
                     ))
                     OR
-                    (?4 = 1 AND i.has_validator = 1 AND i.do_not_validate = 0 AND cv.val_state IS NULL)
+                    (?4 = 1 AND i.has_validator = 1 AND i.do_not_validate = 0 AND cv.val_state IS NULL{ext_not_in})
                 )
             ORDER BY cv.item_id ASC
             LIMIT {limit}"

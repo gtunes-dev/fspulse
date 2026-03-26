@@ -106,6 +106,29 @@ pub fn file_extension_for_path<P: AsRef<Path>>(path: P) -> Option<String> {
         .map(|e| e.to_ascii_lowercase())
 }
 
+/// Extensions belonging to the Image validator group.
+pub const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "tiff", "bmp"];
+/// Extensions belonging to the PDF validator group.
+pub const PDF_EXTENSIONS: &[&str] = &["pdf"];
+/// Extensions belonging to the Audio validator group.
+pub const AUDIO_EXTENSIONS: &[&str] = &["flac"];
+
+/// Collect extensions that are disabled based on config settings.
+/// Returns a Vec of lowercase extension strings that should be excluded from validation.
+pub fn disabled_extensions() -> Vec<&'static str> {
+    let mut disabled = Vec::new();
+    if !crate::config::Config::get_validation_images() {
+        disabled.extend_from_slice(IMAGE_EXTENSIONS);
+    }
+    if !crate::config::Config::get_validation_pdf() {
+        disabled.extend_from_slice(PDF_EXTENSIONS);
+    }
+    if !crate::config::Config::get_validation_audio() {
+        disabled.extend_from_slice(AUDIO_EXTENSIONS);
+    }
+    disabled
+}
+
 /// Check whether a lowercase extension string has a structural validator.
 pub fn has_validator_extension(ext: &str) -> bool {
     matches!(

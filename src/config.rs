@@ -254,6 +254,9 @@ pub struct Config {
     pub logging_fspulse: ConfigValue<String>,
     pub logging_lopdf: ConfigValue<String>,
     pub database_dir: ConfigValue<String>,
+    pub validation_images: ConfigValue<bool>,
+    pub validation_pdf: ConfigValue<bool>,
+    pub validation_audio: ConfigValue<bool>,
 }
 
 // =============================================================================
@@ -354,6 +357,24 @@ fn validate_database_dir(
     Ok(dir)
 }
 
+fn extract_bool(value: &toml::Value) -> Result<bool, String> {
+    match value {
+        toml::Value::Boolean(b) => Ok(*b),
+        toml::Value::String(s) => match s.trim().to_lowercase().as_str() {
+            "true" | "1" | "yes" => Ok(true),
+            "false" | "0" | "no" => Ok(false),
+            _ => Err(format!("must be true or false, got '{}'", s)),
+        },
+        _ => Err("must be a boolean".to_string()),
+    }
+}
+
+fn validate_bool(value: &toml::Value, source: ConfigSource) -> Result<bool, FsPulseError> {
+    extract_bool(value).map_err(|e| {
+        FsPulseError::ConfigError(format!("{}, from {:?}", e, source))
+    })
+}
+
 // =============================================================================
 // Public Configuration File Helpers
 // =============================================================================
@@ -447,6 +468,11 @@ fn create_default_config_file(config_path: &PathBuf) -> Result<(), FsPulseError>
 # [database]
 # dir = ""             # Default: "" (empty = use data directory)
 #                      # Set to a custom path to override
+#
+# [validation]
+# images = true        # Default: true (validate JPG, PNG, GIF, TIFF, BMP)
+# pdf = false          # Default: false (validate PDF files - experimental)
+# audio = true         # Default: true (validate FLAC files)
 "#;
 
     fs::write(config_path, template)
@@ -567,6 +593,9 @@ impl Default for Config {
                 true,
                 validate_database_dir,
             ),
+            validation_images: ConfigValue::new(true, ("validation", "images"), false, validate_bool),
+            validation_pdf: ConfigValue::new(false, ("validation", "pdf"), false, validate_bool),
+            validation_audio: ConfigValue::new(true, ("validation", "audio"), false, validate_bool),
         }
     }
 }
@@ -649,6 +678,9 @@ impl Config {
         config.logging_fspulse.take(&mut toml_map, &mut env_map)?;
         config.logging_lopdf.take(&mut toml_map, &mut env_map)?;
         config.database_dir.take(&mut toml_map, &mut env_map)?;
+        config.validation_images.take(&mut toml_map, &mut env_map)?;
+        config.validation_pdf.take(&mut toml_map, &mut env_map)?;
+        config.validation_audio.take(&mut toml_map, &mut env_map)?;
 
         // Step 6: Check for unknown keys
         check_for_unknown_keys(&toml_map, &env_map)?;
@@ -820,6 +852,66 @@ impl Config {
     pub fn delete_database_dir(project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
         let config_path = get_config_path(project_dirs);
         Self::with_config_write(|config| config.database_dir.delete_file_value(&config_path))
+    }
+
+    // Validation Images
+
+    pub fn get_validation_images() -> bool {
+        Self::with_config_read(|config| *config.validation_images.get())
+    }
+
+    pub fn get_validation_images_value() -> ConfigValue<bool> {
+        Self::with_config_read(|config| config.validation_images.clone())
+    }
+
+    pub fn set_validation_images(val: bool, project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
+        let config_path = get_config_path(project_dirs);
+        Self::with_config_write(|config| config.validation_images.set_file_value(val, &config_path))
+    }
+
+    pub fn delete_validation_images(project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
+        let config_path = get_config_path(project_dirs);
+        Self::with_config_write(|config| config.validation_images.delete_file_value(&config_path))
+    }
+
+    // Validation PDF
+
+    pub fn get_validation_pdf() -> bool {
+        Self::with_config_read(|config| *config.validation_pdf.get())
+    }
+
+    pub fn get_validation_pdf_value() -> ConfigValue<bool> {
+        Self::with_config_read(|config| config.validation_pdf.clone())
+    }
+
+    pub fn set_validation_pdf(val: bool, project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
+        let config_path = get_config_path(project_dirs);
+        Self::with_config_write(|config| config.validation_pdf.set_file_value(val, &config_path))
+    }
+
+    pub fn delete_validation_pdf(project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
+        let config_path = get_config_path(project_dirs);
+        Self::with_config_write(|config| config.validation_pdf.delete_file_value(&config_path))
+    }
+
+    // Validation Audio
+
+    pub fn get_validation_audio() -> bool {
+        Self::with_config_read(|config| *config.validation_audio.get())
+    }
+
+    pub fn get_validation_audio_value() -> ConfigValue<bool> {
+        Self::with_config_read(|config| config.validation_audio.clone())
+    }
+
+    pub fn set_validation_audio(val: bool, project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
+        let config_path = get_config_path(project_dirs);
+        Self::with_config_write(|config| config.validation_audio.set_file_value(val, &config_path))
+    }
+
+    pub fn delete_validation_audio(project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
+        let config_path = get_config_path(project_dirs);
+        Self::with_config_write(|config| config.validation_audio.delete_file_value(&config_path))
     }
 
     // Data Directory (special, not a ConfigValue - read-only)

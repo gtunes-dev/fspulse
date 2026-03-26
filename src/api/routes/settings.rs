@@ -26,6 +26,9 @@ pub struct SettingsResponse {
     pub server_host: ConfigSetting<String>,
     pub server_port: ConfigSetting<u16>,
     pub database_dir: ConfigSetting<String>,
+    pub validation_images: ConfigSetting<bool>,
+    pub validation_pdf: ConfigSetting<bool>,
+    pub validation_audio: ConfigSetting<bool>,
 }
 
 /// Request structure for PUT /api/settings
@@ -37,6 +40,9 @@ pub struct SettingsUpdateRequest {
     pub logging_fspulse: Option<String>,
     pub logging_lopdf: Option<String>,
     pub database_dir: Option<String>,
+    pub validation_images: Option<bool>,
+    pub validation_pdf: Option<bool>,
+    pub validation_audio: Option<bool>,
 }
 
 /// Request structure for DELETE /api/settings
@@ -120,6 +126,42 @@ pub async fn get_settings() -> Result<Json<SettingsResponse>, (StatusCode, Strin
         editable: dir_value.env_value.is_none(),
     };
 
+    // Validation Images
+    let val_images_value = config::Config::get_validation_images_value();
+    let val_images_setting = ConfigSetting {
+        env_value: val_images_value.env_value,
+        file_value: val_images_value.file_value,
+        file_value_original: val_images_value.file_value_original,
+        default_value: val_images_value.default_value,
+        env_var: "FSPULSE_VALIDATION_IMAGES".to_string(),
+        requires_restart: val_images_value.requires_restart,
+        editable: val_images_value.env_value.is_none(),
+    };
+
+    // Validation PDF
+    let val_pdf_value = config::Config::get_validation_pdf_value();
+    let val_pdf_setting = ConfigSetting {
+        env_value: val_pdf_value.env_value,
+        file_value: val_pdf_value.file_value,
+        file_value_original: val_pdf_value.file_value_original,
+        default_value: val_pdf_value.default_value,
+        env_var: "FSPULSE_VALIDATION_PDF".to_string(),
+        requires_restart: val_pdf_value.requires_restart,
+        editable: val_pdf_value.env_value.is_none(),
+    };
+
+    // Validation Audio
+    let val_audio_value = config::Config::get_validation_audio_value();
+    let val_audio_setting = ConfigSetting {
+        env_value: val_audio_value.env_value,
+        file_value: val_audio_value.file_value,
+        file_value_original: val_audio_value.file_value_original,
+        default_value: val_audio_value.default_value,
+        env_var: "FSPULSE_VALIDATION_AUDIO".to_string(),
+        requires_restart: val_audio_value.requires_restart,
+        editable: val_audio_value.env_value.is_none(),
+    };
+
     let response = SettingsResponse {
         analysis_threads: threads_setting,
         logging_fspulse: fspulse_setting,
@@ -127,6 +169,9 @@ pub async fn get_settings() -> Result<Json<SettingsResponse>, (StatusCode, Strin
         server_host: host_setting,
         server_port: port_setting,
         database_dir: dir_setting,
+        validation_images: val_images_setting,
+        validation_pdf: val_pdf_setting,
+        validation_audio: val_audio_setting,
     };
 
     Ok(Json(response))
@@ -198,6 +243,27 @@ pub async fn update_settings(
         updated = true;
     }
 
+    // Update validation images if provided
+    if let Some(val) = request.validation_images {
+        config::Config::set_validation_images(val, &project_dirs)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        updated = true;
+    }
+
+    // Update validation pdf if provided
+    if let Some(val) = request.validation_pdf {
+        config::Config::set_validation_pdf(val, &project_dirs)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        updated = true;
+    }
+
+    // Update validation audio if provided
+    if let Some(val) = request.validation_audio {
+        config::Config::set_validation_audio(val, &project_dirs)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        updated = true;
+    }
+
     if updated {
         Ok((StatusCode::OK, "Configuration updated successfully"))
     } else {
@@ -246,6 +312,18 @@ pub async fn delete_settings(
         }
         "database_dir" => {
             config::Config::delete_database_dir(&project_dirs)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        }
+        "validation_images" => {
+            config::Config::delete_validation_images(&project_dirs)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        }
+        "validation_pdf" => {
+            config::Config::delete_validation_pdf(&project_dirs)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        }
+        "validation_audio" => {
+            config::Config::delete_validation_audio(&project_dirs)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         }
         _ => {

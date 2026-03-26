@@ -38,6 +38,9 @@ interface SettingsResponse {
   server_host: ConfigSetting<string>
   server_port: ConfigSetting<number>
   database_dir: ConfigSetting<string>
+  validation_images: ConfigSetting<boolean>
+  validation_pdf: ConfigSetting<boolean>
+  validation_audio: ConfigSetting<boolean>
 }
 
 export function SettingsContent() {
@@ -181,7 +184,7 @@ export function SettingsContent() {
       setSaveMessage(null)
 
       // Build request based on which setting is being edited
-      let requestBody: Record<string, string | number> = {}
+      let requestBody: Record<string, string | number | boolean> = {}
 
       if (editingSetting === 'analysis_threads') {
         const threads = parseInt(editValue, 10)
@@ -205,6 +208,12 @@ export function SettingsContent() {
         requestBody = { logging_lopdf: editValue }
       } else if (editingSetting === 'database_dir') {
         requestBody = { database_dir: editValue }
+      } else if (editingSetting === 'validation_images') {
+        requestBody = { validation_images: editValue === 'true' }
+      } else if (editingSetting === 'validation_pdf') {
+        requestBody = { validation_pdf: editValue === 'true' }
+      } else if (editingSetting === 'validation_audio') {
+        requestBody = { validation_audio: editValue === 'true' }
       }
 
       const response = await fetch('/api/settings', {
@@ -241,7 +250,7 @@ export function SettingsContent() {
     }
   }
 
-  function handleEditSetting(settingKey: string, currentValue: string | number) {
+  function handleEditSetting(settingKey: string, currentValue: string | number | boolean) {
     setEditingSetting(settingKey)
     setEditValue(String(currentValue))
     setSaveMessage(null)
@@ -285,7 +294,7 @@ export function SettingsContent() {
     }
   }
 
-  const ValueDisplay = ({ value }: { value: string | number | null }) => {
+  const ValueDisplay = ({ value }: { value: string | number | boolean | null }) => {
     if (value === null || value === undefined || value === '') {
       return <CircleDashed className="w-4 h-4 text-muted-foreground" />
     }
@@ -301,8 +310,8 @@ export function SettingsContent() {
   }: {
     name: string
     description: string
-    setting: ConfigSetting<string | number>
-    defaultValue: string | number
+    setting: ConfigSetting<string | number | boolean>
+    defaultValue: string | number | boolean
     settingKey: string
   }) => {
     // Define which field is currently active (exactly one will be active)
@@ -516,6 +525,32 @@ export function SettingsContent() {
                       defaultValue=""
                       settingKey="database_dir"
                     />
+                    <tr>
+                      <td colSpan={4} className="px-4 py-2 bg-muted/30 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-border">
+                        Validation
+                      </td>
+                    </tr>
+                    <SettingRow
+                      name="Validate Images"
+                      description="Validate JPG, JPEG, PNG, GIF, TIFF, BMP files"
+                      setting={settings.validation_images}
+                      defaultValue={true}
+                      settingKey="validation_images"
+                    />
+                    <SettingRow
+                      name="Validate PDF Documents (Experimental)"
+                      description="Validate PDF files"
+                      setting={settings.validation_pdf}
+                      defaultValue={false}
+                      settingKey="validation_pdf"
+                    />
+                    <SettingRow
+                      name="Validate Audio Files"
+                      description="Validate FLAC files"
+                      setting={settings.validation_audio}
+                      defaultValue={true}
+                      settingKey="validation_audio"
+                    />
                   </tbody>
                 </table>
               </div>
@@ -586,6 +621,30 @@ export function SettingsContent() {
                     setting: settings.database_dir,
                     defaultValue: '',
                     inputType: 'text',
+                  },
+                  'validation_images': {
+                    title: 'Validate Images',
+                    description: 'Enable or disable structural validation of image files (JPG, JPEG, PNG, GIF, TIFF, BMP). Validation is experimental and may produce false positives.',
+                    setting: settings.validation_images,
+                    defaultValue: true,
+                    inputType: 'select',
+                    options: ['true', 'false'],
+                  },
+                  'validation_pdf': {
+                    title: 'Validate PDF Documents (Experimental)',
+                    description: 'Enable or disable structural validation of PDF files. This validator is experimental and may produce false positives.',
+                    setting: settings.validation_pdf,
+                    defaultValue: false,
+                    inputType: 'select',
+                    options: ['true', 'false'],
+                  },
+                  'validation_audio': {
+                    title: 'Validate Audio Files',
+                    description: 'Enable or disable structural validation of audio files (FLAC). Validation is experimental and may produce false positives.',
+                    setting: settings.validation_audio,
+                    defaultValue: true,
+                    inputType: 'select',
+                    options: ['true', 'false'],
                   },
                 }[editingSetting]
 
