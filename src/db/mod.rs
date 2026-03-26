@@ -7,7 +7,7 @@ use schema::{
     Migration, CREATE_SCHEMA_SQL, MIGRATION_10_TO_11, MIGRATION_11_TO_12, MIGRATION_12_TO_13,
     MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17,
     MIGRATION_17_TO_18, MIGRATION_18_TO_19, MIGRATION_19_TO_20, MIGRATION_20_TO_21,
-    MIGRATION_21_TO_22, MIGRATION_22_TO_23, MIGRATION_23_TO_24, MIGRATION_24_TO_25, MIGRATION_25_TO_26, MIGRATION_26_TO_27, MIGRATION_27_TO_28, MIGRATION_28_TO_29, MIGRATION_2_TO_3, MIGRATION_3_TO_4, MIGRATION_4_TO_5,
+    MIGRATION_21_TO_22, MIGRATION_22_TO_23, MIGRATION_23_TO_24, MIGRATION_24_TO_25, MIGRATION_25_TO_26, MIGRATION_26_TO_27, MIGRATION_27_TO_28, MIGRATION_28_TO_29, MIGRATION_29_TO_30, MIGRATION_2_TO_3, MIGRATION_3_TO_4, MIGRATION_4_TO_5,
     MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8, MIGRATION_8_TO_9, MIGRATION_9_TO_10,
 };
 use log::{error, info};
@@ -23,7 +23,7 @@ use std::time::Duration;
 use std::env;
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 29;
+const CURRENT_SCHEMA_VERSION: u32 = 30;
 
 // Connection pool configuration
 const POOL_MAX_SIZE: u32 = 15;
@@ -544,6 +544,7 @@ fn run_migrations(conn: &Connection, from_version: u32, total_steps: u32) -> Res
             26 => upgrade_schema(conn, db_version, &MIGRATION_26_TO_27, step, total_steps)?,
             27 => upgrade_schema(conn, db_version, &MIGRATION_27_TO_28, step, total_steps)?,
             28 => upgrade_schema(conn, db_version, &MIGRATION_28_TO_29, step, total_steps)?,
+            29 => upgrade_schema(conn, db_version, &MIGRATION_29_TO_30, step, total_steps)?,
             _ => {
                 let msg = format!(
                     "No migration path from schema v{} to v{}",

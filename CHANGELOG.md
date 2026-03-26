@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Scan count data repair** (schema v29→v30): Fix incorrect historical `file_count` and `folder_count` on scans where the v27→v28 overlap cleanup incorrectly marked folders as deleted while their descendant files remained alive. Repairs folder deletion flags and recomputes population, change, and integrity counts for affected scans
+
 ## [v0.5.0] - 2026-03-25
 
 This release redesigns the integrity model and replaces the alerts system with a version-bound integrity architecture and a dedicated Integrity page.
