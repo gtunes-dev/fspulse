@@ -30,7 +30,7 @@ export function KeepAlivePage({ isActive, children }: KeepAlivePageProps) {
   if (!visited) return null
 
   return (
-    <div className={isActive ? '' : 'hidden'}>
+    <div className={isActive ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
       {children(isActive)}
     </div>
   )

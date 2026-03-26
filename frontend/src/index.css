@@ -124,6 +124,13 @@
   }
 }
 
+/* ScrollArea: disable table layout on content wrapper to prevent
+   intrinsic-width sizing that breaks constrained panels */
+.scroll-area-block-content > [data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  min-width: 0 !important;
+}
+
 /* Indeterminate progress bar animation */
 @keyframes progress-shimmer {
   0% {

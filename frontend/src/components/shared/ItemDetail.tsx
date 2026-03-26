@@ -1026,16 +1026,15 @@ export function ItemDetail({
     )
 
     const versionCarousel = versions.length > 0 && (
-      <div className="flex items-start gap-2">
-        <Carousel
-          opts={{ align: 'center', watchDrag: false }}
-          setApi={setCarouselApi}
-          className="flex-1 min-w-0"
-        >
-          <div className="flex items-center gap-2">
-            <CarouselPrevious className="static translate-y-0 h-8 w-8 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <CarouselContent>
+      <Carousel
+        opts={{ align: 'center', watchDrag: false }}
+        setApi={setCarouselApi}
+        className="w-full"
+      >
+        <div className="flex items-center gap-1">
+          <CarouselPrevious className="static translate-y-0 h-7 w-7 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <CarouselContent>
                 {versions.map((v) => (
                   <CarouselItem key={v.item_version}>
                     <div className="border border-border rounded-lg overflow-hidden">
@@ -1052,10 +1051,9 @@ export function ItemDetail({
                 ))}
               </CarouselContent>
             </div>
-            <CarouselNext className="static translate-y-0 h-8 w-8 flex-shrink-0" />
-          </div>
-        </Carousel>
-      </div>
+          <CarouselNext className="static translate-y-0 h-7 w-7 flex-shrink-0" />
+        </div>
+      </Carousel>
     )
 
     if (isSheet) {
@@ -1114,7 +1112,7 @@ export function ItemDetail({
           {renderItemProperties()}
         </div>
         {versionCarousel && (
-          <div className="py-3 px-3">
+          <div className="py-2 px-1.5">
             {versionCarousel}
           </div>
         )}

@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type RefCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FolderTree, FolderOpen, Search, ArrowLeftRight, SlidersHorizontal, Plus, Triangle, X, Minus } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RootPicker } from '@/components/shared/RootPicker'
@@ -16,6 +17,7 @@ import { FileTreeView } from './FileTreeView'
 import type { FileTreeViewHandle } from './FileTreeView'
 import { FolderView } from './FolderView'
 import { SearchResultsList } from './SearchResultsList'
+import { ScrollContext } from '@/contexts/ScrollContext'
 
 interface Root {
   root_id: number
@@ -76,6 +78,12 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
   // Refs for view sync
   const treeRef = useRef<FileTreeViewHandle>(null)
   const previousViewRef = useRef<ViewMode>('tree')
+
+  // Local scroll container for the browse column (replaces <main> for virtualizers)
+  const [browseScrollElement, setBrowseScrollElement] = useState<HTMLElement | null>(null)
+  const browseScrollRef: RefCallback<HTMLDivElement> = useCallback((node) => {
+    setBrowseScrollElement(node)
+  }, [])
 
   // Shared data cache for Tree and Folder views
   const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
@@ -207,7 +215,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
 
   // Build the content view — all views always mounted, toggled via CSS
   const contentView = selectedRoot && resolvedScanId ? (
-    <div className="flex-1 min-w-0 flex flex-col">
+    <>
       {/* Tree View — always rendered */}
       <div className={viewMode === 'tree' ? '' : 'hidden'}>
         <FileTreeView
@@ -253,47 +261,49 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
 
       {/* Search placeholder when no query */}
       {viewMode === 'search' && !hasSearchQuery && (
-        <div className="flex-1 min-h-0">
-          <div className="flex items-center justify-center h-32 text-muted-foreground">
-            No results found
-          </div>
+        <div className="flex items-center justify-center h-32 text-muted-foreground">
+          No results found
         </div>
       )}
-    </div>
+    </>
   ) : (
-    <div className="flex-1 min-h-0 min-w-0">
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        {!selectedRoot
-          ? 'Select a root'
-          : scanStatus === 'no-scan'
-            ? 'No scan data available'
-            : 'Resolving scan...'}
-      </div>
+    <div className="flex items-center justify-center h-full text-muted-foreground">
+      {!selectedRoot
+        ? 'Select a root'
+        : scanStatus === 'no-scan'
+          ? 'No scan data available'
+          : 'Resolving scan...'}
     </div>
   )
 
-  // Detail panel shows the active view's selection
-  const detailPanel = activeSelection && selectedRoot && resolvedScanId ? (
+  // Detail panel — always visible when scan is resolved, with empty state placeholder
+  const detailPanel = selectedRoot && resolvedScanId ? (
     <div className={cn(
-      "w-[500px] flex-shrink-0",
+      "w-[420px] flex-shrink-0",
       detailOnRight ? 'border-l border-border' : 'border-r border-border'
     )}>
-      <div className="sticky top-0">
-        <ItemDetail
-          mode="panel"
-          itemId={activeSelection.itemId}
-          itemPath={activeSelection.itemPath}
-          itemType={activeSelection.itemType}
-          isTombstone={activeSelection.isTombstone}
-          scanId={resolvedScanId}
-          onClose={handleDetailClose}
-        />
-      </div>
+      {activeSelection ? (
+        <ScrollArea className="h-full scroll-area-block-content">
+          <ItemDetail
+            mode="panel"
+            itemId={activeSelection.itemId}
+            itemPath={activeSelection.itemPath}
+            itemType={activeSelection.itemType}
+            isTombstone={activeSelection.isTombstone}
+            scanId={resolvedScanId}
+            onClose={handleDetailClose}
+          />
+        </ScrollArea>
+      ) : (
+        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+          Select an item to view details
+        </div>
+      )}
     </div>
   ) : null
 
   return (
-    <Card className="flex-1 min-w-0 flex flex-col">
+    <Card className="flex-1 min-w-0 min-h-0 flex flex-col">
       <CardHeader>
         <RootPicker
           roots={roots}
@@ -302,7 +312,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
           variant="title"
         />
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-3">
+      <CardContent className="flex-1 min-h-0 flex flex-col gap-3">
         {/* Compact scan bar */}
         {selectedRoot && (
           <CompactScanBar
@@ -410,13 +420,17 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
         </div>
 
         {/* Content area: title bar + content view + detail panel */}
-        <div className="flex-1 flex flex-col border border-border rounded-lg overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col border border-border rounded-lg overflow-hidden">
           {resolvedScanId && (
             <ScanSummaryBar scanId={resolvedScanId} />
           )}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 min-h-0 flex overflow-hidden">
             {!detailOnRight && detailPanel}
-            {contentView}
+            <ScrollContext.Provider value={browseScrollElement}>
+              <ScrollArea viewportRef={browseScrollRef} className="flex-1 min-w-0">
+                {contentView}
+              </ScrollArea>
+            </ScrollContext.Provider>
             {detailOnRight && detailPanel}
           </div>
         </div>

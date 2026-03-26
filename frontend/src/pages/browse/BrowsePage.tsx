@@ -87,7 +87,7 @@ export function BrowsePage({ isActive = true }: BrowsePageProps) {
   }
 
   return (
-    <div className="flex flex-col min-h-full gap-4">
+    <div className="flex flex-col h-full gap-4">
       {/* Page header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Browse</h1>
@@ -103,7 +103,7 @@ export function BrowsePage({ isActive = true }: BrowsePageProps) {
       </div>
 
       {/* Card container */}
-      <div className="flex gap-4 flex-1">
+      <div className="flex gap-4 flex-1 min-h-0">
         <BrowseCard
           roots={roots}
           defaultRootId={defaultRootId}
