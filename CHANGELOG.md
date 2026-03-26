@@ -7,29 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.2] - 2026-03-25
+
+Follow-up to v0.5.0, which introduced the integrity model redesign and Integrity page. See the [v0.5.0 changelog entry](#v050---2026-03-25) for full details on the new integrity architecture, hash version tracking, review system, and the removal of the alerts system.
+
 ### Changed
 - **Unified change type icons**: Replace colored dots with lucide icons (Plus, Triangle filled, X, Minus) across Browse page filters, ChangeDots file indicators, ItemDetail version cards and folder counts, and Trends page Changes chart legend
 - **Delete icon**: Change delete icon from Minus to X across all change type displays (Home, History, Browse, ItemDetail, Trends)
 - **Unchanged icon**: Add Minus icon for Unchanged change type using foreground color (adapts to light/dark mode)
 - **Icon sizing**: Bump change type icon sizes across Browse and ItemDetail for better visibility
-
-### Fixed
-- **Root detail recent scans**: Remove references to deleted `alert_count` column that caused the Recent Scans list to fail silently and show "No scans recorded"
-- **Root detail scan changes**: Replace text-based change summary with `ChangeIcons` component for visual consistency
-
-## [v0.5.1] - 2026-03-25
-
-This is a follow-up to v0.5.0, which introduced the integrity model redesign and Integrity page. See the [v0.5.0 changelog entry](#v050---2026-03-25) for full details on the new integrity architecture, hash version tracking, review system, and the removal of the alerts system.
-
-### Fixed
-- **Scan count data repair** (schema v29→v30): Fix incorrect historical `file_count` and `folder_count` on scans where the v27→v28 overlap cleanup incorrectly marked folders as deleted while their descendant files remained alive. Repairs folder deletion flags and recomputes population, change, and integrity counts for affected scans
-- **Integrity version expansion crash**: Fix error when expanding items on the Integrity page that have only hash issues (no validation failure). `val_state` was incorrectly typed as non-nullable, causing a database read failure on NULL values
-
-### Changed
 - **Changes column icons**: Replace text characters (+, ~, -) with lucide icons (Plus, Triangle, Minus) in Home and History page change columns for visual consistency with integrity icons
 - **Integrity column ordering**: Show hash count before validation count in Home and History integrity columns
 - **Trends chart ordering**: Swap Suspicious Hashes and Validation Errors charts so hash appears first, matching integrity column order
 - **DRY change icons**: Extract shared `ChangeIcons` component used by both Home and History pages
+
+### Fixed
+- **Scan count data repair** (schema v29→v30): Fix incorrect historical `file_count` and `folder_count` on scans where the v27→v28 overlap cleanup incorrectly marked folders as deleted while their descendant files remained alive. Repairs folder deletion flags and recomputes population, change, and integrity counts for affected scans
+- **Integrity version expansion crash**: Fix error when expanding items on the Integrity page that have only hash issues (no validation failure). `val_state` was incorrectly typed as non-nullable, causing a database read failure on NULL values
+- **Root detail recent scans**: Remove references to deleted `alert_count` column that caused the Recent Scans list to fail silently and show "No scans recorded"
+- **Root detail scan changes**: Replace text-based change summary with `ChangeIcons` component for visual consistency
 
 ## [v0.5.0] - 2026-03-25
 
