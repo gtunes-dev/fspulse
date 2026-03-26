@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Scan count data repair** (schema v29→v30): Fix incorrect historical `file_count` and `folder_count` on scans where the v27→v28 overlap cleanup incorrectly marked folders as deleted while their descendant files remained alive. Repairs folder deletion flags and recomputes population, change, and integrity counts for affected scans
+- **Integrity version expansion crash**: Fix error when expanding items on the Integrity page that have only hash issues (no validation failure). `val_state` was incorrectly typed as non-nullable, causing a database read failure on NULL values
+
+### Changed
+- **Changes column icons**: Replace text characters (+, ~, -) with lucide icons (Plus, Triangle, Minus) in Home and History page change columns for visual consistency with integrity icons
+- **Integrity column ordering**: Show hash count before validation count in Home and History integrity columns
+- **Trends chart ordering**: Swap Suspicious Hashes and Validation Errors charts so hash appears first, matching integrity column order
+- **DRY change icons**: Extract shared `ChangeIcons` component used by both Home and History pages
 
 ## [v0.5.0] - 2026-03-25
 

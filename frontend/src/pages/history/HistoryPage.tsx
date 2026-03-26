@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,7 @@ import {
 import { formatDateTimeShort } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import { CheckCircle, XCircle, AlertTriangle, CircleX, Calendar, Play, Hash } from 'lucide-react'
+import { ChangeIcons } from '@/components/shared/ChangeIcons'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { RootCard } from '@/components/shared/RootCard'
 import { TaskTypeFilter } from '@/components/shared/TaskTypeFilter'
@@ -180,13 +181,9 @@ export function HistoryPage() {
   }, [lastTaskCompletedAt, selectedRootId, selectedType, currentPage])
 
   // Helpers
-  const formatChanges = (add: number | null, modify: number | null, del: number | null): string => {
-    const changes = []
-    if (add && add > 0) changes.push(`${add} ${add === 1 ? 'add' : 'adds'}`)
-    if (modify && modify > 0) changes.push(`${modify} ${modify === 1 ? 'mod' : 'mods'}`)
-    if (del && del > 0) changes.push(`${del} ${del === 1 ? 'del' : 'dels'}`)
-    if (changes.length === 0) return 'No changes'
-    return changes.join(', ')
+  const formatChanges = (add: number | null, modify: number | null, del: number | null): React.ReactNode => {
+    if (!add && !modify && !del) return <span className="text-muted-foreground">No changes</span>
+    return <ChangeIcons add={add} modify={modify} del={del} />
   }
 
   const formatDuration = (task: HistoryRow): string => {
@@ -354,16 +351,16 @@ export function HistoryPage() {
                             to={`/integrity?root_id=${task.root_id}`}
                             className="inline-flex items-center gap-2.5 text-sm hover:underline"
                           >
-                            {task.new_val_invalid_count ? (
-                              <span className="inline-flex items-center gap-1 text-rose-500">
-                                <CircleX className="h-3.5 w-3.5" />
-                                {task.new_val_invalid_count}
-                              </span>
-                            ) : null}
                             {task.new_hash_suspect_count ? (
                               <span className="inline-flex items-center gap-1 text-amber-500">
                                 <Hash className="h-3.5 w-3.5" />
                                 {task.new_hash_suspect_count}
+                              </span>
+                            ) : null}
+                            {task.new_val_invalid_count ? (
+                              <span className="inline-flex items-center gap-1 text-rose-500">
+                                <CircleX className="h-3.5 w-3.5" />
+                                {task.new_val_invalid_count}
                               </span>
                             ) : null}
                           </Link>

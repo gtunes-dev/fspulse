@@ -127,7 +127,7 @@ export interface IntegrityVersion {
   scan_started_at: number
   hash_version_count: number
   hash_suspicious_count: number
-  val_state: number
+  val_state: number | null
   val_error: string | null
   val_reviewed_at: number | null
   hash_reviewed_at: number | null

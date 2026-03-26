@@ -229,7 +229,7 @@ pub struct IntegrityVersion {
     pub scan_started_at: i64,
     pub hash_version_count: i64,
     pub hash_suspicious_count: i64,
-    pub val_state: i64,
+    pub val_state: Option<i64>,
     pub val_error: Option<String>,
     pub val_reviewed_at: Option<i64>,
     pub hash_reviewed_at: Option<i64>,

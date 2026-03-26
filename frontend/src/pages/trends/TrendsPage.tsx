@@ -749,84 +749,8 @@ export function TrendsPage() {
 
             </div>
 
-            {/* Integrity - Validation and Hashes - Side by side */}
+            {/* Integrity - Hashes and Validation - Side by side */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Validation Chart */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle>Validation Errors</CardTitle>
-                  <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
-                    <input type="checkbox" checked={hideEmptyValScans} onChange={(e) => setHideEmptyValScans(e.target.checked)} className="cursor-pointer" />
-                    <span className="text-muted-foreground">Hide empty</span>
-                  </label>
-                </CardHeader>
-                <CardContent>
-                  {valData.length === 0 ? (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No scans to display</div>
-                  ) : (
-                    <div ref={valChartRef}>
-                      <ChartContainer
-                        config={{
-                          new_val_invalid_count: { label: 'New Errors', color: 'hsl(347 77% 50%)' },
-                          val_invalid_count: { label: 'Total Errors', color: 'hsl(347 77% 70%)' },
-                        }}
-                        className="aspect-auto h-[300px]"
-                      >
-                        <BarChart
-                          data={valData.map((d) => ({
-                            date: format(new Date(d.started_at * 1000), 'MMM dd'),
-                            new_val_invalid_count: d.new_val_invalid_count,
-                            val_invalid_count: d.val_invalid_count,
-                            scan_id: d.scan_id,
-                          }))}
-                          onClick={handleChartClick}
-                          onMouseMove={handleBarChartMouseMove(valChartRef)}
-                          onMouseLeave={handleBarChartMouseLeave(valChartRef)}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                          <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                          <YAxis allowDecimals={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                          <Legend content={() => (
-                            <div className="flex items-center justify-center gap-1 pt-1">
-                              {([
-                                { key: 'new_val_invalid_count', label: 'New Errors', color: 'bg-rose-500', ring: 'ring-rose-500/40' },
-                                { key: 'val_invalid_count', label: 'Total Errors', color: 'bg-rose-300', ring: 'ring-rose-300/40' },
-                              ]).map(({ key, label, color, ring }) => {
-                                const visible = !hiddenValSeries.has(key)
-                                return (
-                                  <button
-                                    key={key}
-                                    className={cn(
-                                      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors text-left',
-                                      visible ? 'text-foreground hover:bg-accent' : 'text-muted-foreground/40 hover:bg-accent/50'
-                                    )}
-                                    onClick={(e) => { e.stopPropagation(); setHiddenValSeries(prev => {
-                                      const next = new Set(prev)
-                                      if (next.has(key)) next.delete(key); else next.add(key)
-                                      return next
-                                    })}}
-                                  >
-                                    <span className={cn('inline-block w-3 h-3 rounded-full transition-all flex-shrink-0', visible ? `${color} ring-2 ${ring}` : 'bg-transparent ring-1 ring-muted-foreground/25')} />
-                                    {label}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )} />
-                          {!hiddenValSeries.has('new_val_invalid_count') && (
-                            <Bar dataKey="new_val_invalid_count" fill="var(--color-new_val_invalid_count)" name="New Errors" />
-                          )}
-                          {!hiddenValSeries.has('val_invalid_count') && (
-                            <Bar dataKey="val_invalid_count" fill="var(--color-val_invalid_count)" name="Total Errors" />
-                          )}
-                        </BarChart>
-                      </ChartContainer>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
               {/* Hashes Chart */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -895,6 +819,82 @@ export function TrendsPage() {
                           )}
                           {!hiddenHashSeries.has('hash_suspect_count') && (
                             <Bar dataKey="hash_suspect_count" fill="var(--color-hash_suspect_count)" name="Total Suspicious" />
+                          )}
+                        </BarChart>
+                      </ChartContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Validation Chart */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle>Validation Errors</CardTitle>
+                  <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                    <input type="checkbox" checked={hideEmptyValScans} onChange={(e) => setHideEmptyValScans(e.target.checked)} className="cursor-pointer" />
+                    <span className="text-muted-foreground">Hide empty</span>
+                  </label>
+                </CardHeader>
+                <CardContent>
+                  {valData.length === 0 ? (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No scans to display</div>
+                  ) : (
+                    <div ref={valChartRef}>
+                      <ChartContainer
+                        config={{
+                          new_val_invalid_count: { label: 'New Errors', color: 'hsl(347 77% 50%)' },
+                          val_invalid_count: { label: 'Total Errors', color: 'hsl(347 77% 70%)' },
+                        }}
+                        className="aspect-auto h-[300px]"
+                      >
+                        <BarChart
+                          data={valData.map((d) => ({
+                            date: format(new Date(d.started_at * 1000), 'MMM dd'),
+                            new_val_invalid_count: d.new_val_invalid_count,
+                            val_invalid_count: d.val_invalid_count,
+                            scan_id: d.scan_id,
+                          }))}
+                          onClick={handleChartClick}
+                          onMouseMove={handleBarChartMouseMove(valChartRef)}
+                          onMouseLeave={handleBarChartMouseLeave(valChartRef)}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                          <YAxis allowDecimals={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                          <Legend content={() => (
+                            <div className="flex items-center justify-center gap-1 pt-1">
+                              {([
+                                { key: 'new_val_invalid_count', label: 'New Errors', color: 'bg-rose-500', ring: 'ring-rose-500/40' },
+                                { key: 'val_invalid_count', label: 'Total Errors', color: 'bg-rose-300', ring: 'ring-rose-300/40' },
+                              ]).map(({ key, label, color, ring }) => {
+                                const visible = !hiddenValSeries.has(key)
+                                return (
+                                  <button
+                                    key={key}
+                                    className={cn(
+                                      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors text-left',
+                                      visible ? 'text-foreground hover:bg-accent' : 'text-muted-foreground/40 hover:bg-accent/50'
+                                    )}
+                                    onClick={(e) => { e.stopPropagation(); setHiddenValSeries(prev => {
+                                      const next = new Set(prev)
+                                      if (next.has(key)) next.delete(key); else next.add(key)
+                                      return next
+                                    })}}
+                                  >
+                                    <span className={cn('inline-block w-3 h-3 rounded-full transition-all flex-shrink-0', visible ? `${color} ring-2 ${ring}` : 'bg-transparent ring-1 ring-muted-foreground/25')} />
+                                    {label}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )} />
+                          {!hiddenValSeries.has('new_val_invalid_count') && (
+                            <Bar dataKey="new_val_invalid_count" fill="var(--color-new_val_invalid_count)" name="New Errors" />
+                          )}
+                          {!hiddenValSeries.has('val_invalid_count') && (
+                            <Bar dataKey="val_invalid_count" fill="var(--color-val_invalid_count)" name="Total Errors" />
                           )}
                         </BarChart>
                       </ChartContainer>

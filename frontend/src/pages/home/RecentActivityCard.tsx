@@ -13,6 +13,7 @@ import { formatTimeAgo } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import { shortenPath } from '@/lib/pathUtils'
 import { CheckCircle, XCircle, AlertTriangle, CircleX, ArrowRight, Hash } from 'lucide-react'
+import { ChangeIcons } from '@/components/shared/ChangeIcons'
 
 interface TaskHistoryRow {
   task_id: number
@@ -138,11 +139,7 @@ export function RecentActivityCard() {
                   {/* Changes */}
                   <TableCell className="text-center text-sm">
                     {task.task_type === 'scan' && (task.add_count || task.modify_count || task.delete_count) ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        {task.add_count ? <span className="text-green-500">+{task.add_count}</span> : null}
-                        {task.modify_count ? <span className="text-blue-500">~{task.modify_count}</span> : null}
-                        {task.delete_count ? <span className="text-red-500">-{task.delete_count}</span> : null}
-                      </span>
+                      <ChangeIcons add={task.add_count} modify={task.modify_count} del={task.delete_count} />
                     ) : (
                       <span className="text-muted-foreground">&mdash;</span>
                     )}
@@ -155,16 +152,16 @@ export function RecentActivityCard() {
                         to={`/integrity?root_id=${task.root_id}`}
                         className="inline-flex items-center gap-2.5 text-sm hover:underline"
                       >
-                        {task.new_val_invalid_count ? (
-                          <span className="inline-flex items-center gap-1 text-rose-500">
-                            <CircleX className="h-3.5 w-3.5" />
-                            {task.new_val_invalid_count}
-                          </span>
-                        ) : null}
                         {task.new_hash_suspect_count ? (
                           <span className="inline-flex items-center gap-1 text-amber-500">
                             <Hash className="h-3.5 w-3.5" />
                             {task.new_hash_suspect_count}
+                          </span>
+                        ) : null}
+                        {task.new_val_invalid_count ? (
+                          <span className="inline-flex items-center gap-1 text-rose-500">
+                            <CircleX className="h-3.5 w-3.5" />
+                            {task.new_val_invalid_count}
                           </span>
                         ) : null}
                       </Link>
