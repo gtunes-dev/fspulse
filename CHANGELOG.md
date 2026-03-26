@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.1] - 2026-03-25
+
+This is a follow-up to v0.5.0, which introduced the integrity model redesign and Integrity page. See the [v0.5.0 changelog entry](#v050---2026-03-25) for full details on the new integrity architecture, hash version tracking, review system, and the removal of the alerts system.
+
 ### Fixed
 - **Scan count data repair** (schema v29→v30): Fix incorrect historical `file_count` and `folder_count` on scans where the v27→v28 overlap cleanup incorrectly marked folders as deleted while their descendant files remained alive. Repairs folder deletion flags and recomputes population, change, and integrity counts for affected scans
 - **Integrity version expansion crash**: Fix error when expanding items on the Integrity page that have only hash issues (no validation failure). `val_state` was incorrectly typed as non-nullable, causing a database read failure on NULL values
