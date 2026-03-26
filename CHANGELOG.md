@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.3] - 2026-03-26
+
+Follow-up to v0.5.0, which introduced the integrity model redesign and Integrity page. See the [v0.5.0 changelog entry](#v050---2026-03-25) for full details on the new integrity architecture, hash version tracking, review system, and the removal of the alerts system.
+
 ### Added
 - **Scan summary bar on Browse page**: Display scan metadata (date, file count, folder count, total size, change icons) as a title bar above the tree/folder/search content area. Clickable to open full scan detail sheet
 - **Scan list change icons**: Replace text-based change summaries in the calendar scan picker with the shared `ChangeIcons` component for visual consistency with History and Home pages
