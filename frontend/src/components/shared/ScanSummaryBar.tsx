@@ -120,6 +120,7 @@ export function ScanSummaryBar({ scanId }: ScanSummaryBarProps) {
         scanId={scanId}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+        showBrowseLink={false}
       />
     </>
   )

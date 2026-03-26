@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import { Calendar as CalendarIcon, Plus, Triangle, X, Minus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ import {
   Legend,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { ScanDetailSheet } from '@/components/shared/ScanDetailSheet'
 import { fetchQuery } from '@/lib/api'
 import { useTaskContext } from '@/contexts/TaskContext'
 import type { ColumnSpec } from '@/lib/types'
@@ -64,8 +65,8 @@ type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
 export function TrendsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
   const { lastTaskCompletedAt } = useTaskContext()
+  const [detailScanId, setDetailScanId] = useState<number | null>(null)
 
   // Support deep-linking via URL params (e.g., from Dashboard root health card)
   const initialRootId = searchParams.get('root_id') || ''
@@ -144,7 +145,7 @@ export function TrendsPage() {
       // Bar onClick: (data) where scan_id is in data.payload or data directly
       const scanId = fromActivePayload ?? arg?.payload?.scan_id ?? arg?.scan_id
       if (scanId) {
-        navigate(`/browse?root_id=${selectedRootId}&scan_id=${scanId}`)
+        setDetailScanId(scanId)
         return
       }
     }
@@ -905,6 +906,14 @@ export function TrendsPage() {
           </div>
         )}
       </RootCard>
+
+      {detailScanId !== null && (
+        <ScanDetailSheet
+          scanId={detailScanId}
+          open={true}
+          onOpenChange={(open) => { if (!open) setDetailScanId(null) }}
+        />
+      )}
     </div>
   )
 }

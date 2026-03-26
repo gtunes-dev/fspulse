@@ -10,9 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Scan summary bar on Browse page**: Display scan metadata (date, file count, folder count, total size, change icons) as a title bar above the tree/folder/search content area. Clickable to open full scan detail sheet
 - **Scan list change icons**: Replace text-based change summaries in the calendar scan picker with the shared `ChangeIcons` component for visual consistency with History and Home pages
+- **Independent scroll regions on Browse page**: Tree/folder/search and item detail panel scroll independently, preventing detail panel from scrolling out of view. Detail panel always visible with empty state placeholder
+- **Browse link in scan detail sheet**: Navigate from scan details to Browse page viewing that scan. Hidden when already on Browse page
 
 ### Changed
 - **Browse filter control**: Move change type filter from a full-width bar into a popover triggered by a button with a ChangeDots-style 2x2 grid indicator, reclaiming vertical space on the Browse page
+- **Scan detail sheet redesign**: Match ItemDetail styling (header, fonts, layout). Add scan duration, scan options, integrity table (new/total suspect hashes and validation errors), error display. Use shared ChangeIcons and icon patterns from Browse/History pages
+- **Trends page chart clicks**: Open scan detail sheet instead of navigating directly to Browse, with browse link available from the sheet
 
 ### Fixed
 - **Scan detail sheet on Roots page**: Remove references to deleted `alert_count` column that caused the scan detail sheet to fail with "Internal Server Error" when clicking on scan info
