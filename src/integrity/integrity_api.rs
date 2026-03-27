@@ -335,18 +335,30 @@ pub fn set_reviewed(
 
     if let Some(val) = set_val {
         let ts: Option<i64> = if val { Some(now) } else { None };
+        // When marking reviewed (val=true): only set timestamp on versions that
+        // have a validation error and haven't been reviewed yet.
+        // When marking unreviewed (val=false): clear timestamp on reviewed versions.
+        let guard = if val {
+            "AND val_reviewed_at IS NULL"
+        } else {
+            "AND val_reviewed_at IS NOT NULL"
+        };
         match item_version {
             Some(v) => {
                 conn.execute(
-                    "UPDATE item_versions SET val_reviewed_at = ?
-                     WHERE item_id = ? AND item_version = ? AND val_state = 2",
+                    &format!(
+                        "UPDATE item_versions SET val_reviewed_at = ?
+                         WHERE item_id = ? AND item_version = ? AND val_state = 2 {guard}"
+                    ),
                     rusqlite::params![ts, item_id, v],
                 )?;
             }
             None => {
                 conn.execute(
-                    "UPDATE item_versions SET val_reviewed_at = ?
-                     WHERE item_id = ? AND val_state = 2",
+                    &format!(
+                        "UPDATE item_versions SET val_reviewed_at = ?
+                         WHERE item_id = ? AND val_state = 2 {guard}"
+                    ),
                     rusqlite::params![ts, item_id],
                 )?;
             }
@@ -359,11 +371,17 @@ pub fn set_reviewed(
             Some(v) => format!("AND item_versions.item_version = {v}"),
             None => String::new(),
         };
+        let guard = if val {
+            "AND hash_reviewed_at IS NULL"
+        } else {
+            "AND hash_reviewed_at IS NOT NULL"
+        };
         conn.execute(
             &format!(
                 "UPDATE item_versions SET hash_reviewed_at = ?
                  WHERE item_id = ?
                    {version_filter}
+                   {guard}
                    AND EXISTS (
                        SELECT 1 FROM hash_versions hv
                        WHERE hv.item_id = item_versions.item_id
@@ -386,4 +404,125 @@ pub fn set_do_not_validate(item_id: i64, do_not_validate: bool) -> Result<(), Fs
         rusqlite::params![do_not_validate as i64, item_id],
     )?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Bulk review: by item IDs or by filter
+// ---------------------------------------------------------------------------
+
+/// Mark multiple items as reviewed by their IDs.
+pub fn bulk_review_by_ids(
+    item_ids: &[i64],
+    set_val: Option<bool>,
+    set_hash: Option<bool>,
+) -> Result<u64, FsPulseError> {
+    let conn = Database::get_connection()?;
+    let now = chrono::Utc::now().timestamp();
+    let mut affected = 0u64;
+
+    for chunk in item_ids.chunks(500) {
+        let placeholders: String = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+
+        if let Some(val) = set_val {
+            let ts: Option<i64> = if val { Some(now) } else { None };
+            let guard = if val { "AND val_reviewed_at IS NULL" } else { "AND val_reviewed_at IS NOT NULL" };
+            let sql = format!(
+                "UPDATE item_versions SET val_reviewed_at = ?
+                 WHERE item_id IN ({placeholders}) AND val_state = 2 {guard}"
+            );
+            let mut params: Vec<Value> = vec![match ts {
+                Some(t) => Value::Integer(t),
+                None => Value::Null,
+            }];
+            for id in chunk {
+                params.push(Value::Integer(*id));
+            }
+            let refs: Vec<&dyn rusqlite::ToSql> =
+                params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+            affected += conn.execute(&sql, refs.as_slice())? as u64;
+        }
+
+        if let Some(val) = set_hash {
+            let ts: Option<i64> = if val { Some(now) } else { None };
+            let guard = if val { "AND hash_reviewed_at IS NULL" } else { "AND hash_reviewed_at IS NOT NULL" };
+            let sql = format!(
+                "UPDATE item_versions SET hash_reviewed_at = ?
+                 WHERE item_id IN ({placeholders})
+                   {guard}
+                   AND EXISTS (
+                       SELECT 1 FROM hash_versions hv
+                       WHERE hv.item_id = item_versions.item_id
+                         AND hv.item_version = item_versions.item_version
+                         AND hv.hash_state = 2
+                   )"
+            );
+            let mut params: Vec<Value> = vec![match ts {
+                Some(t) => Value::Integer(t),
+                None => Value::Null,
+            }];
+            for id in chunk {
+                params.push(Value::Integer(*id));
+            }
+            let refs: Vec<&dyn rusqlite::ToSql> =
+                params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+            affected += conn.execute(&sql, refs.as_slice())? as u64;
+        }
+    }
+
+    Ok(affected)
+}
+
+/// Mark all items matching a filter as reviewed.
+pub fn bulk_review_by_filter(
+    filter: &IntegrityFilter,
+    set_val: Option<bool>,
+    set_hash: Option<bool>,
+) -> Result<u64, FsPulseError> {
+    let conn = Database::get_connection()?;
+    let now = chrono::Utc::now().timestamp();
+    let (where_clause, vals) = build_version_where(filter);
+    let mut affected = 0u64;
+
+    if let Some(val) = set_val {
+        let ts: Option<i64> = if val { Some(now) } else { None };
+        let guard = if val { "AND val_reviewed_at IS NULL" } else { "AND val_reviewed_at IS NOT NULL" };
+        let sql = format!(
+            "UPDATE item_versions SET val_reviewed_at = ?
+             WHERE val_state = 2 {guard} AND item_id IN (
+                 SELECT DISTINCT i.item_id
+                 FROM item_versions iv
+                 JOIN items i ON i.item_id = iv.item_id
+                 WHERE {where_clause}
+             )"
+        );
+        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&ts];
+        params.extend(vals.iter().map(|v| v as &dyn rusqlite::ToSql));
+        affected += conn.execute(&sql, params.as_slice())? as u64;
+    }
+
+    if let Some(val) = set_hash {
+        let ts: Option<i64> = if val { Some(now) } else { None };
+        let guard = if val { "AND hash_reviewed_at IS NULL" } else { "AND hash_reviewed_at IS NOT NULL" };
+        let sql = format!(
+            "UPDATE item_versions SET hash_reviewed_at = ?
+             WHERE item_id IN (
+                 SELECT DISTINCT i.item_id
+                 FROM item_versions iv
+                 JOIN items i ON i.item_id = iv.item_id
+                 WHERE {where_clause}
+             )
+             {guard}
+             AND EXISTS (
+                 SELECT 1 FROM hash_versions hv
+                 WHERE hv.item_id = item_versions.item_id
+                   AND hv.item_version = item_versions.item_version
+                   AND hv.hash_state = 2
+             )"
+        );
+        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&ts];
+        params.extend(vals.iter().map(|v| v as &dyn rusqlite::ToSql));
+        affected += conn.execute(&sql, params.as_slice())? as u64;
+    }
+
+    Ok(affected)
 }

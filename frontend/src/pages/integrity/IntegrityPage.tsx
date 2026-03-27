@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import {
   ChevronDown,
   CircleHelp,
   CircleCheckBig,
+  Info,
   ShieldCheck,
   ShieldOff,
 } from 'lucide-react'
@@ -14,6 +15,15 @@ import {
   HoverCardContent,
 } from '@/components/ui/hover-card'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -38,6 +48,7 @@ import {
   fetchIntegrityItems,
   fetchIntegrityVersions,
   setIntegrityReviewed,
+  bulkReviewIntegrity,
   setDoNotValidate,
   fetchQuery,
 } from '@/lib/api'
@@ -126,6 +137,12 @@ export function IntegrityPage() {
   const [expandedData, setExpandedData] = useState<Map<number, IntegrityVersionsResponse>>(new Map())
   const [pendingOps, setPendingOps] = useState<Set<string>>(new Set())
 
+  // Checkbox selection for bulk review
+  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set())
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
+  const [bulkReviewMode, setBulkReviewMode] = useState<'selected' | 'all'>('selected')
+  const [bulkReviewing, setBulkReviewing] = useState(false)
+
   const isInitialLoad = useRef(true)
   const lastFilterKeyRef = useRef<string>('')
 
@@ -188,6 +205,7 @@ export function IntegrityPage() {
 
     setError(null)
     setExpandedData(new Map())
+    setSelectedItems(new Set())
     try {
       await Promise.all([fetchCount(filter), fetchItems(filter)])
       setHasFetched(true)
@@ -270,6 +288,7 @@ export function IntegrityPage() {
   // On page change only: fetch items (not count)
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page)
+    setSelectedItems(new Set())
     syncUrl({ page: String(page) })
   }, [syncUrl])
 
@@ -359,6 +378,65 @@ export function IntegrityPage() {
     })
   }
 
+  // --- Selection & bulk review ---
+
+  const toggleItemSelection = (itemId: number) => {
+    setSelectedItems((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    const allPageIds = items.map((i) => i.item_id)
+    const allSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedItems.has(id))
+    if (allSelected) {
+      setSelectedItems(new Set())
+    } else {
+      setSelectedItems(new Set(allPageIds))
+    }
+  }
+
+  const headerCheckState = (): boolean | 'indeterminate' => {
+    if (items.length === 0) return false
+    const allPageIds = items.map((i) => i.item_id)
+    const selectedCount = allPageIds.filter((id) => selectedItems.has(id)).length
+    if (selectedCount === 0) return false
+    if (selectedCount === allPageIds.length) return true
+    return 'indeterminate'
+  }
+
+  const handleBulkReview = async () => {
+    setBulkReviewing(true)
+    try {
+      const flags = reviewFlags(true)
+      if (bulkReviewMode === 'selected') {
+        await bulkReviewIntegrity({
+          item_ids: Array.from(selectedItems),
+          set_val: flags.set_val,
+          set_hash: flags.set_hash,
+        })
+      } else {
+        const filter = buildFilter()
+        if (!filter) return
+        await bulkReviewIntegrity({
+          filter,
+          set_val: flags.set_val,
+          set_hash: flags.set_hash,
+        })
+      }
+      setSelectedItems(new Set())
+      setBulkConfirmOpen(false)
+      await fetchFilterData()
+    } catch {
+      setError('Bulk review failed')
+    } finally {
+      setBulkReviewing(false)
+    }
+  }
+
   const openDetail = (item: IntegrityItemSummary) => {
     setDetailItemId(item.item_id)
     setDetailItemPath(item.item_path)
@@ -433,6 +511,15 @@ export function IntegrityPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Integrity</h1>
 
+      <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3">
+        <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-sm text-muted-foreground">
+          File validation uses third-party libraries to detect structural issues and may produce false positives.
+          You can enable or disable validation for specific file types in{' '}
+          <Link to="/settings" className="font-medium text-primary hover:underline">Settings</Link>.
+        </p>
+      </div>
+
       <RootCard
         roots={roots}
         selectedRootId={selectedRootId}
@@ -454,10 +541,40 @@ export function IntegrityPage() {
           </p>
         ) : (
           <>
+            <div className="flex items-center gap-3">
+              {selectedItems.size > 0 ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => { setBulkReviewMode('selected'); setBulkConfirmOpen(true) }}
+                >
+                  <CircleCheckBig className="h-3.5 w-3.5" />
+                  Review {selectedItems.size} Selected
+                </Button>
+              ) : (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => { setBulkReviewMode('all'); setBulkConfirmOpen(true) }}
+                >
+                  <CircleCheckBig className="h-3.5 w-3.5" />
+                  Review All ({total})
+                </Button>
+              )}
+            </div>
+
             <div className="border border-border rounded-lg overflow-hidden">
             <Table>
               <TableHeader className="bg-muted">
                 <TableRow>
+                  <TableHead className="w-[30px] px-2">
+                    <Checkbox
+                      checked={headerCheckState()}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead className="w-[30px]" />
                   <TableHead className="w-[60px] uppercase text-xs tracking-wide">Validate</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">File</TableHead>
@@ -480,6 +597,12 @@ export function IntegrityPage() {
                         className="cursor-pointer"
                         onClick={() => toggleExpanded(item.item_id)}
                       >
+                        <TableCell className="px-2" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedItems.has(item.item_id)}
+                            onCheckedChange={() => toggleItemSelection(item.item_id)}
+                          />
+                        </TableCell>
                         <TableCell className="px-2">
                           <ChevronDown className={cn(
                             "h-3.5 w-3.5 text-muted-foreground transition-transform",
@@ -541,7 +664,7 @@ export function IntegrityPage() {
                             disabled={!hasUnreviewed || pendingOps.has(`review-all-${item.item_id}`)}
                           >
                             <CircleCheckBig className="h-3.5 w-3.5" />
-                            Review All
+                            Review
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -549,7 +672,7 @@ export function IntegrityPage() {
                       {/* Expanded version rows */}
                       {isExpanded && (
                         <TableRow key={`${item.item_id}-detail`} className="hover:bg-transparent">
-                          <TableCell colSpan={6} className="p-0 pl-10 pr-4 py-3">
+                          <TableCell colSpan={7} className="p-0 pl-10 pr-4 py-3">
                             <div className="border border-border rounded-lg overflow-hidden text-xs">
                               <Table className="table-fixed">
                                 <TableHeader className="bg-muted">
@@ -706,6 +829,44 @@ export function IntegrityPage() {
           onItemChanged={refreshItemsList}
         />
       )}
+
+      <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Review</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  {`This will mark ${
+                    issueType === 'hash' ? 'suspicious hashes' :
+                    issueType === 'val' ? 'validation errors' :
+                    'suspicious hashes and validation errors'
+                  } as "reviewed" on ${
+                    bulkReviewMode === 'selected'
+                      ? `the ${selectedItems.size} selected item${selectedItems.size === 1 ? '' : 's'}`
+                      : `all ${total} item${total === 1 ? '' : 's'} matching the current filters`
+                  }.`}
+                </p>
+                <p>
+                  All item versions of the matching items will be marked "reviewed". Previously reviewed items will not be modified.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkConfirmOpen(false)}
+              disabled={bulkReviewing}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleBulkReview} disabled={bulkReviewing}>
+              {bulkReviewing ? 'Reviewing...' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

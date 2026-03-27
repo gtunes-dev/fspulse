@@ -220,6 +220,7 @@ impl WebServer {
             .route("/api/integrity/items", get(api::integrity::get_items))
             .route("/api/integrity/items/{item_id}/versions", get(api::integrity::get_versions))
             .route("/api/integrity/review", post(api::integrity::review))
+            .route("/api/integrity/bulk-review", post(api::integrity::bulk_review))
             .route("/api/integrity/do-not-validate", post(api::integrity::set_do_not_validate))
             // Task scheduling endpoints
             .route("/api/tasks/scan", post(api::tasks::schedule_scan))

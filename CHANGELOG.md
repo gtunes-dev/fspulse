@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Validation settings**: Add per-validator-group settings to enable or disable file validation for Images (JPG, JPEG, PNG, GIF, TIFF, BMP), PDF, and Audio (FLAC). Settings appear in a new "Validation" section on the Settings page and take effect on the next scan. PDF validation defaults to off due to high false positive rates
 - **Scan filtering for disabled validators**: File Analysis phase skips validation for file types whose validator group is disabled in settings, both in item counts and batch fetching
+- **Integrity info box**: Informational banner on the Integrity page explaining that validation may produce false positives, with a link to Settings
+- **Batch review on Integrity page**: Checkbox selection for items with bulk "Review Selected" and "Review All" actions. Confirmation dialog describes exactly which issue types will be marked reviewed. Review timestamps are guarded against overwriting previously reviewed items
+
+### Changed
+- **Per-row Review button**: Renamed from "Review All" to "Review" to distinguish from the new bulk "Review All" action
+
+### Fixed
+- **Review timestamp guards**: Existing per-item review now guards against overwriting previously set review timestamps
 
 ## [v0.5.3] - 2026-03-26
 

@@ -197,6 +197,22 @@ export async function setIntegrityReviewed(
   return handleResponse<{ success: boolean }>(response)
 }
 
+export async function bulkReviewIntegrity(
+  request: {
+    item_ids?: number[]
+    filter?: IntegrityFilterParams
+    set_val: boolean | null
+    set_hash: boolean | null
+  },
+): Promise<{ success: boolean; affected: number }> {
+  const response = await fetch(`${API_BASE}/integrity/bulk-review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  return handleResponse<{ success: boolean; affected: number }>(response)
+}
+
 export async function setDoNotValidate(
   itemId: number,
   doNotValidate: boolean

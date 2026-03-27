@@ -232,6 +232,79 @@ pub async fn review(
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/integrity/bulk-review
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct BulkReviewFilter {
+    pub root_id: i64,
+    pub issue_type: Option<String>,
+    pub extensions: Option<String>,
+    pub status: Option<String>,
+    pub path_search: Option<String>,
+    pub show_deleted: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkReviewRequest {
+    /// If present, review these specific items
+    pub item_ids: Option<Vec<i64>>,
+    /// If present (and item_ids is None), review all items matching this filter
+    pub filter: Option<BulkReviewFilter>,
+    pub set_val: Option<bool>,
+    pub set_hash: Option<bool>,
+}
+
+pub async fn bulk_review(
+    Json(req): Json<BulkReviewRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if req.set_val.is_none() && req.set_hash.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "At least one of set_val or set_hash must be provided".to_string(),
+        ));
+    }
+
+    let affected = if let Some(ids) = req.item_ids {
+        if ids.is_empty() {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "item_ids must not be empty".to_string(),
+            ));
+        }
+        integrity_api::bulk_review_by_ids(&ids, req.set_val, req.set_hash)
+    } else if let Some(f) = req.filter {
+        let filter = parse_filter(
+            f.root_id,
+            f.issue_type,
+            f.extensions,
+            f.status,
+            f.path_search,
+            f.show_deleted,
+        );
+        integrity_api::bulk_review_by_filter(&filter, req.set_val, req.set_hash)
+    } else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Either item_ids or filter must be provided".to_string(),
+        ));
+    };
+
+    match affected {
+        Ok(count) => Ok(Json(
+            serde_json::json!({ "success": true, "affected": count }),
+        )),
+        Err(e) => {
+            error!("bulk review failed: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed: {}", e),
+            ))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/integrity/do-not-validate
 // ---------------------------------------------------------------------------
 
