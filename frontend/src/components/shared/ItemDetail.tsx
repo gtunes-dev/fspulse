@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
-  File, Folder, FileX, FolderX, Calendar as CalendarIcon,
+  File, Folder, Calendar as CalendarIcon,
   HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
   ShieldCheck, ShieldOff, Plus, Triangle, Minus,
 } from 'lucide-react'
@@ -700,9 +700,9 @@ export function ItemDetail({
   ) : null
 
   const renderHeader = () => {
-    const icon = isTombstone
-      ? (itemType === 'D' ? <FolderX className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-destructive`} /> : <FileX className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-destructive`} />)
-      : (itemType === 'D' ? <Folder className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-blue-500`} /> : <File className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-muted-foreground`} />)
+    const icon = itemType === 'D'
+      ? <Folder className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-foreground`} />
+      : <File className={`${isSheet ? 'h-8 w-8' : 'h-5 w-5'} text-muted-foreground`} />
 
     if (isSheet) {
       return (

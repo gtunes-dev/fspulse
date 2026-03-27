@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import { fetchQuery, countQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateFull } from '@/lib/dateUtils'
-import { formatFileSize } from '@/lib/formatUtils'
+import { formatCount, formatFileSize } from '@/lib/formatUtils'
 import { ChangeIcons } from '@/components/shared/ChangeIcons'
 
 interface RootDetailSheetProps {
@@ -213,12 +213,12 @@ export function RootDetailSheet({
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Active Schedules</p>
                     <p className="text-base font-semibold mt-1">
-                      {scheduleCount === 0 ? 'None' : scheduleCount}
+                      {scheduleCount === 0 ? 'None' : formatCount(scheduleCount)}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Total Scans</p>
-                    <p className="text-base font-semibold mt-1">{totalScans}</p>
+                    <p className="text-base font-semibold mt-1">{formatCount(totalScans)}</p>
                   </div>
                   {scans.length > 0 && (
                     <div>
@@ -242,7 +242,7 @@ export function RootDetailSheet({
                   <CardTitle>Recent Scans</CardTitle>
                   {totalScans > SCANS_PER_PAGE && (
                     <p className="text-sm text-muted-foreground">
-                      Showing {scans.length} of {totalScans} scan{totalScans !== 1 ? 's' : ''}
+                      Showing {formatCount(scans.length)} of {formatCount(totalScans)} scan{totalScans !== 1 ? 's' : ''}
                     </p>
                   )}
                 </div>

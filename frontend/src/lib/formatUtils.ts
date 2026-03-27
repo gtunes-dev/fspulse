@@ -1,4 +1,13 @@
 /**
+ * Format a numeric count with locale-appropriate thousands separators.
+ * Example: 20640 -> "20,640"
+ */
+export function formatCount(value: number | null | undefined): string {
+  if (value == null) return '0'
+  return value.toLocaleString()
+}
+
+/**
  * Format file sizes with both decimal (KB) and binary (KiB) representations
  * for cross-platform clarity
  */

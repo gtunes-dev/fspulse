@@ -1,6 +1,6 @@
 import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileSymlink, FileQuestion } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { FlatTreeItem } from '@/lib/pathUtils'
+import type { FlatTreeItem, ChangeKind } from '@/lib/pathUtils'
 import { ChangeDots } from '@/components/shared/ChangeDots'
 import { IntegrityIcons } from '@/components/shared/IntegrityIcons'
 
@@ -16,6 +16,8 @@ interface TreeNodeProps {
   onItemSelect?: (item: { itemId: number; itemPath: string; itemType: string; isTombstone: boolean }) => void
   /** Whether this node is the currently selected item */
   isSelected?: boolean
+  /** Change types hidden by the filter */
+  hiddenKinds?: Set<ChangeKind>
 }
 
 function getFileIcon(type: string) {
@@ -39,6 +41,7 @@ export function TreeNode({
   showPathTooltip = false,
   onItemSelect,
   isSelected = false,
+  hiddenKinds,
 }: TreeNodeProps) {
   const handleItemClick = () => {
     onItemSelect?.({
@@ -114,6 +117,7 @@ export function TreeNode({
         modifyCount={item.modify_count}
         deleteCount={item.delete_count}
         unchangedCount={item.unchanged_count}
+        hiddenKinds={hiddenKinds}
       />
       <span
         className="cursor-pointer truncate"

@@ -59,6 +59,7 @@ import type {
   IntegrityVersionsResponse,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { formatCount } from '@/lib/formatUtils'
 import { formatTimeAgo } from '@/lib/dateUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 
@@ -99,9 +100,9 @@ function CountPair({ unreviewed, reviewed }: { unreviewed: number; reviewed: num
   return (
     <span className="inline-grid grid-cols-[18px_1rem_18px_1rem] items-center gap-x-0.5">
       <CircleHelp className="h-[18px] w-[18px] text-muted-foreground" />
-      <span className="tabular-nums">{unreviewed}</span>
+      <span className="tabular-nums">{formatCount(unreviewed)}</span>
       <CircleCheckBig className="h-[18px] w-[18px] text-muted-foreground" />
-      <span className="tabular-nums text-muted-foreground">{reviewed}</span>
+      <span className="tabular-nums text-muted-foreground">{formatCount(reviewed)}</span>
     </span>
   )
 }
@@ -560,7 +561,7 @@ export function IntegrityPage() {
                   onClick={() => { setBulkReviewMode('all'); setBulkConfirmOpen(true) }}
                 >
                   <CircleCheckBig className="h-3.5 w-3.5" />
-                  Review All ({total})
+                  Review All ({formatCount(total)})
                 </Button>
               )}
             </div>
@@ -801,7 +802,7 @@ export function IntegrityPage() {
                 ← Prev
               </Button>
               <span>
-                Showing {offset + 1}–{Math.min(offset + items.length, total)} of {total}
+                Showing {formatCount(offset + 1)}–{formatCount(Math.min(offset + items.length, total))} of {formatCount(total)}
               </span>
               <Button
                 variant="outline"
@@ -843,8 +844,8 @@ export function IntegrityPage() {
                     'suspicious hashes and validation errors'
                   } as "reviewed" on ${
                     bulkReviewMode === 'selected'
-                      ? `the ${selectedItems.size} selected item${selectedItems.size === 1 ? '' : 's'}`
-                      : `all ${total} item${total === 1 ? '' : 's'} matching the current filters`
+                      ? `the ${formatCount(selectedItems.size)} selected item${selectedItems.size === 1 ? '' : 's'}`
+                      : `all ${formatCount(total)} item${total === 1 ? '' : 's'} matching the current filters`
                   }.`}
                 </p>
                 <p>

@@ -4,7 +4,6 @@ import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatFileSizeCompact } from '@/lib/formatUtils'
 import { formatDateTimeShort } from '@/lib/dateUtils'
-import { ChangeIcons } from '@/components/shared/ChangeIcons'
 import { ScanDetailSheet } from '@/components/shared/ScanDetailSheet'
 
 interface ScanSummaryBarProps {
@@ -17,9 +16,6 @@ interface ScanSummary {
   file_count: number
   folder_count: number
   total_size: number | null
-  add_count: number
-  modify_count: number
-  delete_count: number
 }
 
 const SCAN_COLUMNS: ColumnSpec[] = [
@@ -28,9 +24,6 @@ const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'file_count', visible: true, sort_direction: 'none', position: 2 },
   { name: 'folder_count', visible: true, sort_direction: 'none', position: 3 },
   { name: 'total_size', visible: true, sort_direction: 'none', position: 4 },
-  { name: 'add_count', visible: true, sort_direction: 'none', position: 5 },
-  { name: 'modify_count', visible: true, sort_direction: 'none', position: 6 },
-  { name: 'delete_count', visible: true, sort_direction: 'none', position: 7 },
 ]
 
 export function ScanSummaryBar({ scanId }: ScanSummaryBarProps) {
@@ -59,9 +52,6 @@ export function ScanSummaryBar({ scanId }: ScanSummaryBarProps) {
           file_count: parseInt(row[2]) || 0,
           folder_count: parseInt(row[3]) || 0,
           total_size: row[4] && row[4] !== '-' ? parseInt(row[4]) : null,
-          add_count: parseInt(row[5]) || 0,
-          modify_count: parseInt(row[6]) || 0,
-          delete_count: parseInt(row[7]) || 0,
         })
       } catch {
         if (currentId !== fetchIdRef.current) return
@@ -72,8 +62,6 @@ export function ScanSummaryBar({ scanId }: ScanSummaryBarProps) {
   }, [scanId])
 
   if (!summary) return null
-
-  const hasChanges = summary.add_count > 0 || summary.modify_count > 0 || summary.delete_count > 0
 
   return (
     <>
@@ -102,14 +90,6 @@ export function ScanSummaryBar({ scanId }: ScanSummaryBarProps) {
             {formatFileSizeCompact(summary.total_size)}
           </span>
         )}
-
-        <span className="text-sm">
-          {hasChanges ? (
-            <ChangeIcons add={summary.add_count} modify={summary.modify_count} del={summary.delete_count} />
-          ) : (
-            <span className="text-muted-foreground">no changes</span>
-          )}
-        </span>
 
         <span className="ml-auto">
           <Info className="h-4 w-4 text-muted-foreground" />

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Per-row Review button**: Renamed from "Review All" to "Review" to distinguish from the new bulk "Review All" action
+- **Thousands separators**: Format all displayed counts with locale-appropriate separators
+- **Browse ChangeDots respect filter**: Folder descendant grid suppresses colors for change types hidden by the filter
+- **Scan summary bar**: Remove change counts (redundant with calendar picker)
+- **ItemDetail header icons**: Use neutral colors instead of blue folders and red tombstone icons
 
 ### Fixed
 - **Review timestamp guards**: Existing per-item review now guards against overwriting previously set review timestamps

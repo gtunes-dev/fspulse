@@ -16,6 +16,7 @@ import { DeleteRootDialog } from './DeleteRootDialog'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { ScanDetailSheet } from '@/components/shared/ScanDetailSheet'
 import { formatDateRelative } from '@/lib/dateUtils'
+import { formatCount } from '@/lib/formatUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import type { RootWithScan } from '@/lib/types'
 
@@ -314,7 +315,7 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
                           {scheduleCount === 0 ? (
                             <span className="text-muted-foreground">None</span>
                           ) : (
-                            <span>{scheduleCount} {scheduleCount === 1 ? 'schedule' : 'schedules'}</span>
+                            <span>{formatCount(scheduleCount)} {scheduleCount === 1 ? 'schedule' : 'schedules'}</span>
                           )}
                         </Link>
                       </TableCell>

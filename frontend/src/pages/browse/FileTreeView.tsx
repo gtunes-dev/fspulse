@@ -200,6 +200,7 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
                     isLoading={isNodeLoading(item.item_id)}
                     onItemSelect={onItemSelect}
                     isSelected={selectedItemId === item.item_id}
+                    hiddenKinds={hiddenKinds}
                   />
                 </div>
               )

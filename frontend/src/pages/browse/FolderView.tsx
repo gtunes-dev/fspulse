@@ -299,6 +299,7 @@ export function FolderView({
                         modifyCount={item.modify_count}
                         deleteCount={item.delete_count}
                         unchangedCount={item.unchanged_count}
+                        hiddenKinds={hiddenKinds}
                       />
                       <span className="truncate">{item.item_name}</span>
                       <IntegrityIcons hashState={item.hash_state} valState={item.val_state} />

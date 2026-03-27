@@ -206,6 +206,7 @@ export function SearchResultsList({
                     showPathTooltip={true}
                     onItemSelect={onItemSelect}
                     isSelected={selectedItemId === item.item_id}
+                    hiddenKinds={hiddenKinds}
                   />
                   <span className="text-xs text-muted-foreground pl-14 -mt-1 truncate">
                     {getParentPath(item.item_path)}

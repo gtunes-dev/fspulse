@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { formatCount } from '@/lib/formatUtils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -153,15 +154,15 @@ export function RecentActivityCard() {
                         className="inline-flex items-center gap-2.5 text-sm hover:underline"
                       >
                         {task.new_hash_suspect_count ? (
-                          <span className="inline-flex items-center gap-1 text-amber-500">
+                          <span className="inline-flex items-center gap-1 tabular-nums text-amber-500">
                             <Hash className="h-3.5 w-3.5" />
-                            {task.new_hash_suspect_count}
+                            {formatCount(task.new_hash_suspect_count)}
                           </span>
                         ) : null}
                         {task.new_val_invalid_count ? (
-                          <span className="inline-flex items-center gap-1 text-rose-500">
+                          <span className="inline-flex items-center gap-1 tabular-nums text-rose-500">
                             <CircleX className="h-3.5 w-3.5" />
-                            {task.new_val_invalid_count}
+                            {formatCount(task.new_val_invalid_count)}
                           </span>
                         ) : null}
                       </Link>
