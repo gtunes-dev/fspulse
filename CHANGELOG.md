@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.5.4] - 2026-03-27
+
 ### Added
 - **Validation settings**: Add per-validator-group settings to enable or disable file validation for Images (JPG, JPEG, PNG, GIF, TIFF, BMP), PDF, and Audio (FLAC). Settings appear in a new "Validation" section on the Settings page and take effect on the next scan. PDF validation defaults to off due to high false positive rates
 - **Scan filtering for disabled validators**: File Analysis phase skips validation for file types whose validator group is disabled in settings, both in item counts and batch fetching
