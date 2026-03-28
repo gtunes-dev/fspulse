@@ -6,12 +6,13 @@ fsPulse provides a flexible, SQL-like query language for exploring scan results.
 
 ## Query Structure
 
-Each query begins with one of the four supported domains:
+Each query begins with one of the five supported domains:
 
 - `roots`
 - `scans`
 - `items`
 - `versions`
+- `hashes`
 
 You can then add any of the following optional clauses:
 
@@ -44,7 +45,7 @@ Each domain has a set of available columns. Columns marked as **default** are sh
 | `started_at`    | Date            | Yes     | Timestamp when scan started                    |
 | `ended_at`      | Date            | Yes     | Timestamp when scan ended (null if incomplete) |
 | `was_restarted` | Boolean         | Yes     | True if scan was resumed after restart         |
-| `scan_state`    | Scan State Enum | No      | State of the scan                              |
+| `scan_state`    | Scan State Enum | Yes     | State of the scan                              |
 | `is_hash`       | Boolean         | Yes     | Hash new or changed files                      |
 | `hash_all`      | Boolean         | No      | Hash all items including unchanged             |
 | `is_val`        | Boolean         | Yes     | Validate new or changed files                  |
@@ -69,55 +70,65 @@ Each domain has a set of available columns. Columns marked as **default** are sh
 
 ### `items` Domain
 
-The `items` domain queries each item's **latest version** — the most recent known state. Identity columns come from the `items` table; state columns come from the item's current version.
+The `items` domain queries item identity — the permanent properties of each tracked file or directory.
 
-| Column          | Type              | Default | Description                              |
-|-----------------|-------------------|---------|------------------------------------------|
-| `item_id`       | Integer           | Yes     | Unique item identifier                   |
-| `root_id`       | Integer           | Yes     | Root directory identifier                |
-| `item_path`     | Path              | Yes     | Full path of the item                    |
-| `item_name`     | Path              | No      | Filename or directory name (last segment)|
-| `item_type`     | Item Type Enum    | Yes     | File, Directory, Symlink, or Unknown     |
-| `item_version`  | Integer           | No      | Current version number                   |
-| `first_scan_id` | Integer           | No      | Scan where current version first appeared|
-| `last_scan_id`  | Integer           | Yes     | Last scan confirming current state       |
-| `is_deleted`    | Boolean           | Yes     | True if item is currently deleted        |
-| `access`        | Access Status     | No      | Access state (NoError, MetaError, ReadError) |
-| `mod_date`      | Date              | Yes     | Last modification date                   |
-| `size`          | Integer           | No      | File size in bytes                       |
-| `val_state`     | Validation Status | No      | Validation state (files only; null for folders) |
-| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
-| `file_hash`     | String            | No      | SHA-256 content hash from latest hash version (files only; null for folders) |
-| `hash_state`    | Hash State        | No      | Hash integrity state from latest hash version (files only; null for folders) |
+| Column            | Type              | Default | Description                              |
+|-------------------|-------------------|---------|------------------------------------------|
+| `item_id`         | Integer           | Yes     | Unique item identifier                   |
+| `root_id`         | Integer           | Yes     | Root directory identifier                |
+| `item_path`       | Path              | Yes     | Full path of the item                    |
+| `item_name`       | Path              | Yes     | Filename or directory name (last segment)|
+| `file_extension`  | String            | Yes     | Lowercase file extension (null for folders/extensionless) |
+| `item_type`       | Item Type Enum    | Yes     | File, Directory, Symlink, or Unknown     |
+| `has_validator`   | Boolean           | No      | True if a structural validator exists for this file type |
+| `do_not_validate` | Boolean           | No      | True if user has opted this item out of validation |
 
 ---
 
 ### `versions` Domain
 
-The `versions` domain queries individual item version rows — each representing a distinct state of an item over a temporal range. Use this domain to explore item history and state changes.
+The `versions` domain queries individual item version rows — each representing a distinct state of an item over a temporal range. Filter with `is_current:(T)` to query only the latest version of each item.
 
-| Column          | Type              | Default | Description                              |
-|-----------------|-------------------|---------|------------------------------------------|
-| `item_version`  | Integer           | Yes     | Version number (per-item sequence)       |
-| `item_id`       | Integer           | Yes     | Item this version belongs to             |
-| `root_id`       | Integer           | Yes     | Root directory identifier                |
-| `item_path`     | Path              | No      | Full path of the item                    |
-| `item_name`     | Path              | No      | Filename or directory name (last segment)|
-| `item_type`     | Item Type Enum    | Yes     | File, Directory, Symlink, or Unknown     |
-| `first_scan_id` | Integer           | Yes     | Scan where this version was first observed |
-| `last_scan_id`  | Integer           | Yes     | Last scan confirming this version's state|
-| `is_deleted`    | Boolean           | Yes     | True if item was deleted in this version |
-| `access`        | Access Status     | No      | Access state                             |
-| `mod_date`      | Date              | No      | Last modification date                   |
-| `size`          | Integer           | No      | File size in bytes                       |
-| `add_count`     | Integer           | No      | Descendant items added (folders only; null for files) |
-| `modify_count`  | Integer           | No      | Descendant items modified (folders only; null for files) |
-| `delete_count`  | Integer           | No      | Descendant items deleted (folders only; null for files) |
-| `unchanged_count` | Integer         | No      | Descendant items unchanged (folders only; null for files) |
-| `val_state`     | Validation Status | No      | Validation state (files only; null for folders) |
-| `val_error`     | String            | No      | Validation error message (files only; null for folders) |
-| `file_hash`     | String            | No      | SHA-256 content hash from latest hash version (files only; null for folders) |
-| `hash_state`    | Hash State        | No      | Hash integrity state from latest hash version (files only; null for folders) |
+| Column            | Type              | Default | Description                              |
+|-------------------|-------------------|---------|------------------------------------------|
+| `item_version`    | Integer           | Yes     | Version number (per-item sequence)       |
+| `item_id`         | Integer           | Yes     | Item this version belongs to             |
+| `root_id`         | Integer           | Yes     | Root directory identifier                |
+| `item_path`       | Path              | Yes     | Full path of the item                    |
+| `item_name`       | Path              | No      | Filename or directory name (last segment)|
+| `file_extension`  | String            | No      | Lowercase file extension (null for folders/extensionless) |
+| `item_type`       | Item Type Enum    | Yes     | File, Directory, Symlink, or Unknown     |
+| `first_scan_id`   | Integer           | Yes     | Scan where this version was first observed |
+| `last_scan_id`    | Integer           | Yes     | Last scan confirming this version's state|
+| `is_added`        | Boolean           | No      | True if item was added in this version   |
+| `is_deleted`      | Boolean           | Yes     | True if item was deleted in this version |
+| `is_current`      | Boolean           | No      | True if this is the latest version of the item |
+| `access`          | Access Status     | No      | Access state                             |
+| `mod_date`        | Date              | Yes     | Last modification date                   |
+| `size`            | Integer           | Yes     | File size in bytes                       |
+| `add_count`       | Integer           | No      | Descendant items added (folders only; null for files) |
+| `modify_count`    | Integer           | No      | Descendant items modified (folders only; null for files) |
+| `delete_count`    | Integer           | No      | Descendant items deleted (folders only; null for files) |
+| `unchanged_count` | Integer           | No      | Descendant items unchanged (folders only; null for files) |
+| `val_state`       | Validation Status | No      | Validation state (files only; null for folders) |
+| `val_error`       | String            | No      | Validation error message (files only; null for folders) |
+
+---
+
+### `hashes` Domain
+
+The `hashes` domain queries hash observation records — each representing a SHA-256 hash computed for an item version during a scan.
+
+| Column            | Type              | Default | Description                              |
+|-------------------|-------------------|---------|------------------------------------------|
+| `item_id`         | Integer           | Yes     | Item this hash belongs to                |
+| `item_version`    | Integer           | Yes     | Version this hash was observed on        |
+| `item_path`       | Path              | Yes     | Full path of the item                    |
+| `item_name`       | Path              | No      | Filename or directory name (last segment)|
+| `first_scan_id`   | Integer           | Yes     | Scan where this hash was first observed  |
+| `last_scan_id`    | Integer           | Yes     | Last scan confirming this hash           |
+| `file_hash`       | Hash              | Yes     | SHA-256 content hash (hex)               |
+| `hash_state`      | Hash State        | Yes     | Baseline or Suspect                      |
 
 ---
 
@@ -219,20 +230,26 @@ items limit 50 offset 100
 # Items whose path contains 'reports'
 items where item_path:('reports')
 
-# Large files sorted by size
-items where item_type:(F), size:(> 1048576) show default, size order by size desc
+# All PDF items
+items where file_extension:('pdf')
+
+# Current state of large files, sorted by size
+versions where is_current:(T), item_type:(F), size:(> 1048576) show item_path, size order by size desc
 
 # Version history for a specific item
 versions where item_id:(42) order by first_scan_id
 
-# Deleted items across all roots
-items where is_deleted:(true)
+# Deleted versions across all roots
+versions where is_deleted:(true) show item_path, item_type, first_scan_id, last_scan_id
 
 # Versions with validation failures
 versions where val_state:(I) show default, val_error order by first_scan_id desc
 
-# Items with suspect hash state
-items where hash_state:(S) show default, hash_state, file_hash order by item_path
+# Suspect hash observations
+hashes where hash_state:(S) show item_path, item_version, file_hash
+
+# All hash observations for a specific item
+hashes where item_id:(42) order by first_scan_id
 
 # Scans with timestamps for programmatic processing
 scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10

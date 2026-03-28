@@ -4,7 +4,7 @@ use rusqlite::{Row, Statement, ToSql};
 
 use super::{
     columns::{
-        ColSet, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS,
+        ColSet, HASHES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS,
         VERSIONS_QUERY_COLS,
     },
     filter::{BoolFilter, EnumFilter, IntFilter},
@@ -282,6 +282,12 @@ fn make_query(query_type: &str, count_only: bool) -> Box<dyn Query> {
                 ColSet::new(&VERSIONS_QUERY_COLS),
             ),
         }),
+        ("hashes", _) => Box::new(HashesQuery {
+            imp: QueryImpl::new(
+                QueryImpl::HASHES_SQL_QUERY,
+                ColSet::new(&HASHES_QUERY_COLS),
+            ),
+        }),
         _ => unreachable!(),
     }
 }
@@ -387,21 +393,10 @@ impl ItemsQuery {
                 "root_id" => Format::format_i64(item.root_id),
                 "item_path" => Format::format_path(&item.item_path, col.format)?,
                 "item_name" => Format::format_path(&item.item_name, col.format)?,
+                "file_extension" => Format::format_opt_string(&item.file_extension),
                 "item_type" => Format::format_item_type(item.item_type, col.format)?,
-                "item_version" => Format::format_i64(item.item_version),
-                "first_scan_id" => Format::format_i64(item.first_scan_id),
-                "last_scan_id" => Format::format_i64(item.last_scan_id),
-                "is_deleted" => Format::format_bool(item.is_deleted, col.format)?,
-                "access" => Format::format_access(item.access, col.format)?,
-                "mod_date" => Format::format_opt_date(item.mod_date, col.format)?,
-                "size" => Format::format_opt_i64(item.size),
-                "val_state" => match item.val_state {
-                    Some(v) => Format::format_val_state(ValidationState::from_i64(v), col.format)?,
-                    None => String::new(),
-                },
-                "val_error" => Format::format_opt_string(&item.val_error),
-                "file_hash" => Format::format_opt_string(&item.file_hash),
-                "hash_state" => Format::format_hash_state(item.hash_state, col.format)?,
+                "has_validator" => Format::format_bool(item.has_validator, col.format)?,
+                "do_not_validate" => Format::format_bool(item.do_not_validate, col.format)?,
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -542,10 +537,13 @@ impl VersionsQuery {
                 "root_id" => Format::format_i64(version.root_id),
                 "item_path" => Format::format_path(&version.item_path, col.format)?,
                 "item_name" => Format::format_path(&version.item_name, col.format)?,
+                "file_extension" => Format::format_opt_string(&version.file_extension),
                 "item_type" => Format::format_item_type(version.item_type, col.format)?,
                 "first_scan_id" => Format::format_i64(version.first_scan_id),
                 "last_scan_id" => Format::format_i64(version.last_scan_id),
+                "is_added" => Format::format_bool(version.is_added, col.format)?,
                 "is_deleted" => Format::format_bool(version.is_deleted, col.format)?,
+                "is_current" => Format::format_bool(version.is_current, col.format)?,
                 "access" => Format::format_access(version.access, col.format)?,
                 "mod_date" => Format::format_opt_date(version.mod_date, col.format)?,
                 "size" => Format::format_opt_i64(version.size),
@@ -558,8 +556,6 @@ impl VersionsQuery {
                     None => String::new(),
                 },
                 "val_error" => Format::format_opt_string(&version.val_error),
-                "file_hash" => Format::format_opt_string(&version.file_hash),
-                "hash_state" => Format::format_hash_state(version.hash_state, col.format)?,
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -571,6 +567,95 @@ impl VersionsQuery {
         query_result.add_row(row);
 
         Ok(())
+    }
+}
+
+impl Query for HashesQuery {
+    fn query_impl(&self) -> &QueryImpl {
+        &self.imp
+    }
+    fn query_impl_mut(&mut self) -> &mut QueryImpl {
+        &mut self.imp
+    }
+
+    fn build_query_result(
+        &mut self,
+        sql_statement: &mut Statement,
+        sql_params: &[&dyn ToSql],
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let rows = sql_statement.query_map(sql_params, HashesQueryRow::from_row)?;
+
+        query_result.prepare(&mut self.query_impl_mut().show);
+
+        for row in rows {
+            let hashes_query_row: HashesQueryRow = row?;
+            self.append_hashes_row(&hashes_query_row, query_result)?;
+        }
+
+        Ok(())
+    }
+}
+
+struct HashesQuery {
+    imp: QueryImpl,
+}
+
+impl HashesQuery {
+    pub fn append_hashes_row(
+        &self,
+        hash: &HashesQueryRow,
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let mut row: Vec<String> = Vec::new();
+
+        for col in &self.show().display_cols {
+            let col_string = match col.display_col {
+                "item_id" => Format::format_i64(hash.item_id),
+                "item_version" => Format::format_i64(hash.item_version),
+                "item_path" => Format::format_path(&hash.item_path, col.format)?,
+                "item_name" => Format::format_path(&hash.item_name, col.format)?,
+                "first_scan_id" => Format::format_i64(hash.first_scan_id),
+                "last_scan_id" => Format::format_i64(hash.last_scan_id),
+                "file_hash" => Format::format_opt_string(&hash.file_hash),
+                "hash_state" => Format::format_hash_state(hash.hash_state, col.format)?,
+                _ => {
+                    return Err(FsPulseError::Error("Invalid column".into()));
+                }
+            };
+
+            row.push(col_string);
+        }
+
+        query_result.add_row(row);
+
+        Ok(())
+    }
+}
+
+struct HashesQueryRow {
+    item_id: i64,
+    item_version: i64,
+    item_path: String,
+    item_name: String,
+    first_scan_id: i64,
+    last_scan_id: i64,
+    file_hash: Option<String>,
+    hash_state: Option<i64>,
+}
+
+impl HashesQueryRow {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(HashesQueryRow {
+            item_id: row.get(0)?,
+            item_version: row.get(1)?,
+            item_path: row.get(2)?,
+            item_name: row.get(3)?,
+            first_scan_id: row.get(4)?,
+            last_scan_id: row.get(5)?,
+            file_hash: Hash::opt_blob_to_hex(row.get(6)?),
+            hash_state: row.get(7)?,
+        })
     }
 }
 
@@ -612,16 +697,6 @@ impl QueryImpl {
 
     const ITEMS_SQL_QUERY: &str = "SELECT {select_list}
         FROM items i
-        JOIN item_versions iv ON iv.item_id = i.item_id
-            AND iv.first_scan_id = (
-                SELECT MAX(first_scan_id) FROM item_versions WHERE item_id = i.item_id
-            )
-        LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-            AND hv.item_version = iv.item_version
-            AND hv.first_scan_id = (
-                SELECT MAX(first_scan_id) FROM hash_versions
-                WHERE item_id = i.item_id AND item_version = iv.item_version
-            )
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -630,12 +705,15 @@ impl QueryImpl {
     const VERSIONS_SQL_QUERY: &str = "SELECT {select_list}
         FROM item_versions iv
         JOIN items i ON i.item_id = iv.item_id
-        LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-            AND hv.item_version = iv.item_version
-            AND hv.first_scan_id = (
-                SELECT MAX(first_scan_id) FROM hash_versions
-                WHERE item_id = i.item_id AND item_version = iv.item_version
-            )
+        {where_clause}
+        {order_clause}
+        {limit_clause}
+        {offset_clause}";
+
+    const HASHES_SQL_QUERY: &str = "SELECT {select_list}
+        FROM hash_versions hv
+        JOIN item_versions iv ON iv.item_id = hv.item_id AND iv.item_version = hv.item_version
+        JOIN items i ON i.item_id = hv.item_id
         {where_clause}
         {order_clause}
         {limit_clause}
@@ -674,18 +752,10 @@ struct ItemsQueryRow {
     root_id: i64,
     item_path: String,
     item_name: String,
+    file_extension: Option<String>,
     item_type: ItemType,
-    item_version: i64,
-    first_scan_id: i64,
-    last_scan_id: i64,
-    is_deleted: bool,
-    access: Access,
-    mod_date: Option<i64>,
-    size: Option<i64>,
-    val_state: Option<i64>,
-    val_error: Option<String>,
-    file_hash: Option<String>,
-    hash_state: Option<i64>,
+    has_validator: bool,
+    do_not_validate: bool,
 }
 
 impl ItemsQueryRow {
@@ -695,18 +765,10 @@ impl ItemsQueryRow {
             root_id: row.get(1)?,
             item_path: row.get(2)?,
             item_name: row.get(3)?,
-            item_type: ItemType::from_i64(row.get(4)?),
-            item_version: row.get(5)?,
-            first_scan_id: row.get(6)?,
-            last_scan_id: row.get(7)?,
-            is_deleted: row.get(8)?,
-            access: Access::from_i64(row.get(9)?),
-            mod_date: row.get(10)?,
-            size: row.get(11)?,
-            val_state: row.get(12)?,
-            val_error: row.get(13)?,
-            file_hash: Hash::opt_blob_to_hex(row.get(14)?),
-            hash_state: row.get(15)?,
+            file_extension: row.get(4)?,
+            item_type: ItemType::from_i64(row.get(5)?),
+            has_validator: row.get(6)?,
+            do_not_validate: row.get(7)?,
         })
     }
 }
@@ -717,10 +779,13 @@ struct VersionsQueryRow {
     root_id: i64,
     item_path: String,
     item_name: String,
+    file_extension: Option<String>,
     item_type: ItemType,
     first_scan_id: i64,
     last_scan_id: i64,
+    is_added: bool,
     is_deleted: bool,
+    is_current: bool,
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
@@ -730,8 +795,6 @@ struct VersionsQueryRow {
     unchanged_count: Option<i64>,
     val_state: Option<i64>,
     val_error: Option<String>,
-    file_hash: Option<String>,
-    hash_state: Option<i64>,
 }
 
 impl VersionsQueryRow {
@@ -742,21 +805,22 @@ impl VersionsQueryRow {
             root_id: row.get(2)?,
             item_path: row.get(3)?,
             item_name: row.get(4)?,
-            item_type: ItemType::from_i64(row.get(5)?),
-            first_scan_id: row.get(6)?,
-            last_scan_id: row.get(7)?,
-            is_deleted: row.get(8)?,
-            access: Access::from_i64(row.get(9)?),
-            mod_date: row.get(10)?,
-            size: row.get(11)?,
-            add_count: row.get(12)?,
-            modify_count: row.get(13)?,
-            delete_count: row.get(14)?,
-            unchanged_count: row.get(15)?,
-            val_state: row.get(16)?,
-            val_error: row.get(17)?,
-            file_hash: Hash::opt_blob_to_hex(row.get(18)?),
-            hash_state: row.get(19)?,
+            file_extension: row.get(5)?,
+            item_type: ItemType::from_i64(row.get(6)?),
+            first_scan_id: row.get(7)?,
+            last_scan_id: row.get(8)?,
+            is_added: row.get(9)?,
+            is_deleted: row.get(10)?,
+            is_current: row.get(11)?,
+            access: Access::from_i64(row.get(12)?),
+            mod_date: row.get(13)?,
+            size: row.get(14)?,
+            add_count: row.get(15)?,
+            modify_count: row.get(16)?,
+            delete_count: row.get(17)?,
+            unchanged_count: row.get(18)?,
+            val_state: row.get(19)?,
+            val_error: row.get(20)?,
         })
     }
 }

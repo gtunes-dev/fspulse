@@ -6,7 +6,7 @@ The Data Explorer provides both visual query building and free-form query capabi
 
 Data Explorer offers two ways to query your data:
 
-- **Structured tabs** (Roots, Scans, Items, Versions) — Visual query builder with column selection, sorting, and filtering
+- **Structured tabs** (Roots, Scans, Items, Versions, Hashes) — Visual query builder with column selection, sorting, and filtering
 - **Query tab** — Free-form query entry using fsPulse's query language
 
 <!-- Screenshot: Data Explorer showing the structured Items tab with column selector and results -->
@@ -14,7 +14,7 @@ Data Explorer offers two ways to query your data:
 
 ## Structured Query Tabs
 
-The **Roots**, **Scans**, **Items**, and **Versions** tabs provide a visual interface for building queries without writing query syntax.
+The **Roots**, **Scans**, **Items**, **Versions**, and **Hashes** tabs provide a visual interface for building queries without writing query syntax.
 
 ### Layout
 
@@ -71,22 +71,23 @@ The Query tab includes sample queries you can click to populate the input:
 
 ```text
 items limit 10
-items where item_type:(F) show item_path, size limit 25
-items where item_type:(F), size:(>1000000) show item_path, size order by size desc limit 20
-versions where item_id:(42) order by first_scan_id
-versions where val_state:(I) show default, val_error order by first_scan_id desc
+versions where is_current:(T) show item_path, size, mod_date limit 20
+versions where is_current:(T), item_type:(F), size:(>1000000) show item_path, size order by size desc limit 20
+versions where is_deleted:(T) show item_path, item_type, first_scan_id, last_scan_id order by last_scan_id desc limit 20
+hashes where hash_state:(S) show item_path, item_version, file_hash limit 20
 ```
 
 ## Query Domains
 
-Both interfaces support querying four data domains:
+Both interfaces support querying five data domains:
 
 | Domain | Description |
 |--------|-------------|
 | **roots** | Configured scan roots |
 | **scans** | Scan metadata and statistics |
-| **items** | Files and folders with their latest version state |
-| **versions** | Item version history — one row per distinct state |
+| **items** | Item identity — permanent properties of tracked files and directories |
+| **versions** | Item version history — one row per distinct state over time |
+| **hashes** | Hash observations — SHA-256 integrity records for item versions |
 
 ## When to Use Each Interface
 

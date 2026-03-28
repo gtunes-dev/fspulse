@@ -5,7 +5,7 @@
 
 query = { SOI ~ WS* ~ query_type ~ where_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ offset_clause? ~ WS* ~ EOI }
 
-query_type = { "roots" | "scans" | "items" | "versions" }
+query_type = { "roots" | "scans" | "items" | "versions" | "hashes" }
 
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
@@ -75,7 +75,7 @@ date_range         =  { date ~ WS* ~ DOTDOT ~ date }
 date               =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
-bool_col = { "is_deleted" | "is_hash" | "hash_all" | "is_val" | "was_restarted" }
+bool_col = { "is_deleted" | "is_added" | "is_current" | "is_hash" | "hash_all" | "is_val" | "was_restarted" | "has_validator" | "do_not_validate" }
 
 bool_show             =  { bool_col ~ bool_display_modifier? }
 bool_display_modifier = _{ WS* ~ "@" ~ WS* ~ bool_display_mode }
@@ -88,7 +88,7 @@ bool               = _{ null | not_null | bool_true | bool_false }
 bool_true          =  { "TRUE" | "true" | "True" | ^"T" }
 bool_false         =  { "FALSE" | "false" | "False" | ^"F" }
 
-string_col = { "error" | "val_error" }
+string_col = { "error" | "val_error" | "file_extension" }
 
 string_show = { string_col }
 

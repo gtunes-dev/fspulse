@@ -21,20 +21,24 @@ const ITEMS_PER_PAGE = 25
 
 const SAMPLE_QUERIES = [
   {
-    label: 'Basic',
+    label: 'Items',
     query: 'items limit 10',
   },
   {
-    label: 'Filter files',
-    query: 'items where item_type:(F) show item_path, size limit 25',
+    label: 'Current versions',
+    query: 'versions where is_current:(T) show item_path, size, mod_date limit 20',
   },
   {
     label: 'Large files',
-    query: 'items where item_type:(F), size:(>1000000) show item_path, size order by size desc limit 20',
+    query: 'versions where is_current:(T), item_type:(F), size:(>1000000) show item_path, size order by size desc limit 20',
   },
   {
     label: 'Deleted versions',
     query: 'versions where is_deleted:(T) show item_path, item_type, first_scan_id, last_scan_id order by last_scan_id desc limit 20',
+  },
+  {
+    label: 'Suspect hashes',
+    query: 'hashes where hash_state:(S) show item_path, item_version, file_hash limit 20',
   },
 ]
 

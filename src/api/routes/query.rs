@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::FsPulseError;
 use crate::query::columns::{
-    ColMap, ColSpec, ColType, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS,
+    ColMap, ColSpec, ColType, HASHES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS,
     SCANS_QUERY_COLS, VERSIONS_QUERY_COLS,
 };
 use crate::query::{ColAlign, QueryProcessor};
@@ -114,6 +114,7 @@ pub async fn get_metadata(
     let col_map = match domain.as_str() {
         "items" => &ITEMS_QUERY_COLS,
         "versions" => &VERSIONS_QUERY_COLS,
+        "hashes" => &HASHES_QUERY_COLS,
         "scans" => &SCANS_QUERY_COLS,
         "roots" => &ROOTS_QUERY_COLS,
         _ => return Err(StatusCode::NOT_FOUND),
@@ -267,6 +268,7 @@ pub async fn validate_filter(
     let col_map = match req.domain.as_str() {
         "items" => &ITEMS_QUERY_COLS,
         "versions" => &VERSIONS_QUERY_COLS,
+        "hashes" => &HASHES_QUERY_COLS,
         "scans" => &SCANS_QUERY_COLS,
         "roots" => &ROOTS_QUERY_COLS,
         _ => return Err(StatusCode::NOT_FOUND),
@@ -317,6 +319,7 @@ fn get_col_map(domain: &str) -> Option<&'static ColMap> {
     match domain {
         "items" => Some(&ITEMS_QUERY_COLS),
         "versions" => Some(&VERSIONS_QUERY_COLS),
+        "hashes" => Some(&HASHES_QUERY_COLS),
         "scans" => Some(&SCANS_QUERY_COLS),
         "roots" => Some(&ROOTS_QUERY_COLS),
         _ => None,

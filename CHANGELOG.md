@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Query model cleanup**: Restructured query domains to match the actual data hierarchy (items → versions → hashes). The `items` domain now exposes only item identity columns (path, name, extension, type, validator flags). Version-state columns (size, mod_date, access, val_state, etc.) and hash columns have been removed from `items`. The `versions` domain no longer includes hash columns. A new `hashes` domain provides direct access to hash observation records. New columns added: `is_added`, `is_current`, and `file_extension` on `versions`; `has_validator` and `do_not_validate` on `items`. The `scan_state` column on `scans` is now shown by default.
+- **Data Explorer**: Added Hashes tab. Updated sample queries to reflect the new domain model.
+
 ## [v0.5.4] - 2026-03-27
 
 ### Added
