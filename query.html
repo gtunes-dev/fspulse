@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1f590892.js";
+            window.path_to_searchindex_js = "searchindex-ac2fac39.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-db91e64e.js"></script>
@@ -178,12 +178,13 @@
 <p>fsPulse provides a flexible, SQL-like query language for exploring scan results. This language supports filtering, custom column selection, ordering, and limiting the number of results.</p>
 <hr>
 <h2 id="query-structure"><a class="header" href="#query-structure">Query Structure</a></h2>
-<p>Each query begins with one of the four supported domains:</p>
+<p>Each query begins with one of the five supported domains:</p>
 <ul>
 <li><code>roots</code></li>
 <li><code>scans</code></li>
 <li><code>items</code></li>
 <li><code>versions</code></li>
+<li><code>hashes</code></li>
 </ul>
 <p>You can then add any of the following optional clauses:</p>
 <pre><code class="language-text">DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
@@ -217,7 +218,7 @@
 <tr><td><code>started_at</code></td><td>Date</td><td>Yes</td><td>Timestamp when scan started</td></tr>
 <tr><td><code>ended_at</code></td><td>Date</td><td>Yes</td><td>Timestamp when scan ended (null if incomplete)</td></tr>
 <tr><td><code>was_restarted</code></td><td>Boolean</td><td>Yes</td><td>True if scan was resumed after restart</td></tr>
-<tr><td><code>scan_state</code></td><td>Scan State Enum</td><td>No</td><td>State of the scan</td></tr>
+<tr><td><code>scan_state</code></td><td>Scan State Enum</td><td>Yes</td><td>State of the scan</td></tr>
 <tr><td><code>is_hash</code></td><td>Boolean</td><td>Yes</td><td>Hash new or changed files</td></tr>
 <tr><td><code>hash_all</code></td><td>Boolean</td><td>No</td><td>Hash all items including unchanged</td></tr>
 <tr><td><code>is_val</code></td><td>Boolean</td><td>Yes</td><td>Validate new or changed files</td></tr>
@@ -242,7 +243,7 @@
 </div>
 <hr>
 <h3 id="items-domain"><a class="header" href="#items-domain"><code>items</code> Domain</a></h3>
-<p>The <code>items</code> domain queries each item’s <strong>latest version</strong> — the most recent known state. Identity columns come from the <code>items</code> table; state columns come from the item’s current version.</p>
+<p>The <code>items</code> domain queries item identity — the permanent properties of each tracked file or directory.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -252,25 +253,17 @@
 <tr><td><code>item_id</code></td><td>Integer</td><td>Yes</td><td>Unique item identifier</td></tr>
 <tr><td><code>root_id</code></td><td>Integer</td><td>Yes</td><td>Root directory identifier</td></tr>
 <tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Full path of the item</td></tr>
-<tr><td><code>item_name</code></td><td>Path</td><td>No</td><td>Filename or directory name (last segment)</td></tr>
+<tr><td><code>item_name</code></td><td>Path</td><td>Yes</td><td>Filename or directory name (last segment)</td></tr>
+<tr><td><code>file_extension</code></td><td>String</td><td>Yes</td><td>Lowercase file extension (null for folders/extensionless)</td></tr>
 <tr><td><code>item_type</code></td><td>Item Type Enum</td><td>Yes</td><td>File, Directory, Symlink, or Unknown</td></tr>
-<tr><td><code>item_version</code></td><td>Integer</td><td>No</td><td>Current version number</td></tr>
-<tr><td><code>first_scan_id</code></td><td>Integer</td><td>No</td><td>Scan where current version first appeared</td></tr>
-<tr><td><code>last_scan_id</code></td><td>Integer</td><td>Yes</td><td>Last scan confirming current state</td></tr>
-<tr><td><code>is_deleted</code></td><td>Boolean</td><td>Yes</td><td>True if item is currently deleted</td></tr>
-<tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state (NoError, MetaError, ReadError)</td></tr>
-<tr><td><code>mod_date</code></td><td>Date</td><td>Yes</td><td>Last modification date</td></tr>
-<tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
-<tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
-<tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash from latest hash version (files only; null for folders)</td></tr>
-<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state from latest hash version (files only; null for folders)</td></tr>
+<tr><td><code>has_validator</code></td><td>Boolean</td><td>No</td><td>True if a structural validator exists for this file type</td></tr>
+<tr><td><code>do_not_validate</code></td><td>Boolean</td><td>No</td><td>True if user has opted this item out of validation</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
 <h3 id="versions-domain"><a class="header" href="#versions-domain"><code>versions</code> Domain</a></h3>
-<p>The <code>versions</code> domain queries individual item version rows — each representing a distinct state of an item over a temporal range. Use this domain to explore item history and state changes.</p>
+<p>The <code>versions</code> domain queries individual item version rows — each representing a distinct state of an item over a temporal range. Filter with <code>is_current:(T)</code> to query only the latest version of each item.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -280,23 +273,44 @@
 <tr><td><code>item_version</code></td><td>Integer</td><td>Yes</td><td>Version number (per-item sequence)</td></tr>
 <tr><td><code>item_id</code></td><td>Integer</td><td>Yes</td><td>Item this version belongs to</td></tr>
 <tr><td><code>root_id</code></td><td>Integer</td><td>Yes</td><td>Root directory identifier</td></tr>
-<tr><td><code>item_path</code></td><td>Path</td><td>No</td><td>Full path of the item</td></tr>
+<tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Full path of the item</td></tr>
 <tr><td><code>item_name</code></td><td>Path</td><td>No</td><td>Filename or directory name (last segment)</td></tr>
+<tr><td><code>file_extension</code></td><td>String</td><td>No</td><td>Lowercase file extension (null for folders/extensionless)</td></tr>
 <tr><td><code>item_type</code></td><td>Item Type Enum</td><td>Yes</td><td>File, Directory, Symlink, or Unknown</td></tr>
 <tr><td><code>first_scan_id</code></td><td>Integer</td><td>Yes</td><td>Scan where this version was first observed</td></tr>
 <tr><td><code>last_scan_id</code></td><td>Integer</td><td>Yes</td><td>Last scan confirming this version’s state</td></tr>
+<tr><td><code>is_added</code></td><td>Boolean</td><td>No</td><td>True if item was added in this version</td></tr>
 <tr><td><code>is_deleted</code></td><td>Boolean</td><td>Yes</td><td>True if item was deleted in this version</td></tr>
+<tr><td><code>is_current</code></td><td>Boolean</td><td>No</td><td>True if this is the latest version of the item</td></tr>
 <tr><td><code>access</code></td><td>Access Status</td><td>No</td><td>Access state</td></tr>
-<tr><td><code>mod_date</code></td><td>Date</td><td>No</td><td>Last modification date</td></tr>
-<tr><td><code>size</code></td><td>Integer</td><td>No</td><td>File size in bytes</td></tr>
+<tr><td><code>mod_date</code></td><td>Date</td><td>Yes</td><td>Last modification date</td></tr>
+<tr><td><code>size</code></td><td>Integer</td><td>Yes</td><td>File size in bytes</td></tr>
 <tr><td><code>add_count</code></td><td>Integer</td><td>No</td><td>Descendant items added (folders only; null for files)</td></tr>
 <tr><td><code>modify_count</code></td><td>Integer</td><td>No</td><td>Descendant items modified (folders only; null for files)</td></tr>
 <tr><td><code>delete_count</code></td><td>Integer</td><td>No</td><td>Descendant items deleted (folders only; null for files)</td></tr>
 <tr><td><code>unchanged_count</code></td><td>Integer</td><td>No</td><td>Descendant items unchanged (folders only; null for files)</td></tr>
 <tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
 <tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
-<tr><td><code>file_hash</code></td><td>String</td><td>No</td><td>SHA-256 content hash from latest hash version (files only; null for folders)</td></tr>
-<tr><td><code>hash_state</code></td><td>Hash State</td><td>No</td><td>Hash integrity state from latest hash version (files only; null for folders)</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h3 id="hashes-domain"><a class="header" href="#hashes-domain"><code>hashes</code> Domain</a></h3>
+<p>The <code>hashes</code> domain queries hash observation records — each representing a SHA-256 hash computed for an item version during a scan.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Column</th><th>Type</th><th>Default</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>item_id</code></td><td>Integer</td><td>Yes</td><td>Item this hash belongs to</td></tr>
+<tr><td><code>item_version</code></td><td>Integer</td><td>Yes</td><td>Version this hash was observed on</td></tr>
+<tr><td><code>item_path</code></td><td>Path</td><td>Yes</td><td>Full path of the item</td></tr>
+<tr><td><code>item_name</code></td><td>Path</td><td>No</td><td>Filename or directory name (last segment)</td></tr>
+<tr><td><code>first_scan_id</code></td><td>Integer</td><td>Yes</td><td>Scan where this hash was first observed</td></tr>
+<tr><td><code>last_scan_id</code></td><td>Integer</td><td>Yes</td><td>Last scan confirming this hash</td></tr>
+<tr><td><code>file_hash</code></td><td>Hash</td><td>Yes</td><td>SHA-256 content hash (hex)</td></tr>
+<tr><td><code>hash_state</code></td><td>Hash State</td><td>Yes</td><td>Baseline or Suspect</td></tr>
 </tbody>
 </table>
 </div>
@@ -379,20 +393,26 @@
 <pre><code class="language-text"># Items whose path contains 'reports'
 items where item_path:('reports')
 
-# Large files sorted by size
-items where item_type:(F), size:(&gt; 1048576) show default, size order by size desc
+# All PDF items
+items where file_extension:('pdf')
+
+# Current state of large files, sorted by size
+versions where is_current:(T), item_type:(F), size:(&gt; 1048576) show item_path, size order by size desc
 
 # Version history for a specific item
 versions where item_id:(42) order by first_scan_id
 
-# Deleted items across all roots
-items where is_deleted:(true)
+# Deleted versions across all roots
+versions where is_deleted:(true) show item_path, item_type, first_scan_id, last_scan_id
 
 # Versions with validation failures
 versions where val_state:(I) show default, val_error order by first_scan_id desc
 
-# Items with suspect hash state
-items where hash_state:(S) show default, hash_state, file_hash order by item_path
+# Suspect hash observations
+hashes where hash_state:(S) show item_path, item_version, file_hash
+
+# All hash observations for a specific item
+hashes where item_id:(42) order by first_scan_id
 
 # Scans with timestamps for programmatic processing
 scans show scan_id, started_at@timestamp, file_count order by started_at desc limit 10

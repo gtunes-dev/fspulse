@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1f590892.js";
+            window.path_to_searchindex_js = "../searchindex-ac2fac39.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-db91e64e.js"></script>
@@ -179,13 +179,13 @@
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p>Data Explorer offers two ways to query your data:</p>
 <ul>
-<li><strong>Structured tabs</strong> (Roots, Scans, Items, Versions) — Visual query builder with column selection, sorting, and filtering</li>
+<li><strong>Structured tabs</strong> (Roots, Scans, Items, Versions, Hashes) — Visual query builder with column selection, sorting, and filtering</li>
 <li><strong>Query tab</strong> — Free-form query entry using fsPulse’s query language</li>
 </ul>
 <!-- Screenshot: Data Explorer showing the structured Items tab with column selector and results -->
 <!-- ![Data Explorer - Structured Query](screenshot-placeholder-data-explorer-structured.png) -->
 <h2 id="structured-query-tabs"><a class="header" href="#structured-query-tabs">Structured Query Tabs</a></h2>
-<p>The <strong>Roots</strong>, <strong>Scans</strong>, <strong>Items</strong>, and <strong>Versions</strong> tabs provide a visual interface for building queries without writing query syntax.</p>
+<p>The <strong>Roots</strong>, <strong>Scans</strong>, <strong>Items</strong>, <strong>Versions</strong>, and <strong>Hashes</strong> tabs provide a visual interface for building queries without writing query syntax.</p>
 <h3 id="layout"><a class="header" href="#layout">Layout</a></h3>
 <p>Each structured tab displays:</p>
 <ul>
@@ -233,13 +233,13 @@ Click the reset button in the column header to restore all columns to their defa
 <h3 id="example-queries"><a class="header" href="#example-queries">Example Queries</a></h3>
 <p>The Query tab includes sample queries you can click to populate the input:</p>
 <pre><code class="language-text">items limit 10
-items where item_type:(F) show item_path, size limit 25
-items where item_type:(F), size:(&gt;1000000) show item_path, size order by size desc limit 20
-versions where item_id:(42) order by first_scan_id
-versions where val_state:(I) show default, val_error order by first_scan_id desc
+versions where is_current:(T) show item_path, size, mod_date limit 20
+versions where is_current:(T), item_type:(F), size:(&gt;1000000) show item_path, size order by size desc limit 20
+versions where is_deleted:(T) show item_path, item_type, first_scan_id, last_scan_id order by last_scan_id desc limit 20
+hashes where hash_state:(S) show item_path, item_version, file_hash limit 20
 </code></pre>
 <h2 id="query-domains"><a class="header" href="#query-domains">Query Domains</a></h2>
-<p>Both interfaces support querying four data domains:</p>
+<p>Both interfaces support querying five data domains:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -248,8 +248,9 @@ versions where val_state:(I) show default, val_error order by first_scan_id desc
 <tbody>
 <tr><td><strong>roots</strong></td><td>Configured scan roots</td></tr>
 <tr><td><strong>scans</strong></td><td>Scan metadata and statistics</td></tr>
-<tr><td><strong>items</strong></td><td>Files and folders with their latest version state</td></tr>
-<tr><td><strong>versions</strong></td><td>Item version history — one row per distinct state</td></tr>
+<tr><td><strong>items</strong></td><td>Item identity — permanent properties of tracked files and directories</td></tr>
+<tr><td><strong>versions</strong></td><td>Item version history — one row per distinct state over time</td></tr>
+<tr><td><strong>hashes</strong></td><td>Hash observations — SHA-256 integrity records for item versions</td></tr>
 </tbody>
 </table>
 </div>
