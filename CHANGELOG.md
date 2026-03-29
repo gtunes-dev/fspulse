@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Boolean filter binding**: Boolean filter values are now bound as integers instead of strings, fixing `is_current` and other virtual boolean column filters that returned empty results due to SQLite type mismatch.
+- **Remove false-positive suspect hashes** (schema v30→v31): Prior to v0.5.2, insufficient guards between the filesystem walk and hash computation could cause legitimate file changes to be misidentified as suspicious hash changes. The guards were fixed in v0.5.2, but existing databases may still contain suspect hash records created before the fix. This migration treats all existing suspect hashes as false positives and removes them: deletes all suspect hash_version rows, clears associated review timestamps, and adjusts scan-level hash counts accordingly. Future scans will reestablish hash baselines under the corrected logic.
 
 ## [v0.5.4] - 2026-03-27
 
