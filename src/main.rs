@@ -8,6 +8,7 @@ mod integrity;
 mod item_identity;
 mod item_version;
 mod items;
+mod mcp;
 mod query;
 mod roots;
 mod task_manager;

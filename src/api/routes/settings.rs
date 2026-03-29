@@ -26,6 +26,7 @@ pub struct SettingsResponse {
     pub server_host: ConfigSetting<String>,
     pub server_port: ConfigSetting<u16>,
     pub database_dir: ConfigSetting<String>,
+    pub mcp_enabled: ConfigSetting<bool>,
     pub validation_images: ConfigSetting<bool>,
     pub validation_pdf: ConfigSetting<bool>,
     pub validation_audio: ConfigSetting<bool>,
@@ -40,6 +41,7 @@ pub struct SettingsUpdateRequest {
     pub logging_fspulse: Option<String>,
     pub logging_lopdf: Option<String>,
     pub database_dir: Option<String>,
+    pub mcp_enabled: Option<bool>,
     pub validation_images: Option<bool>,
     pub validation_pdf: Option<bool>,
     pub validation_audio: Option<bool>,
@@ -126,6 +128,18 @@ pub async fn get_settings() -> Result<Json<SettingsResponse>, (StatusCode, Strin
         editable: dir_value.env_value.is_none(),
     };
 
+    // MCP Enabled
+    let mcp_value = config::Config::get_mcp_enabled_value();
+    let mcp_setting = ConfigSetting {
+        env_value: mcp_value.env_value,
+        file_value: mcp_value.file_value,
+        file_value_original: mcp_value.file_value_original,
+        default_value: mcp_value.default_value,
+        env_var: "FSPULSE_MCP_ENABLED".to_string(),
+        requires_restart: mcp_value.requires_restart,
+        editable: mcp_value.env_value.is_none(),
+    };
+
     // Validation Images
     let val_images_value = config::Config::get_validation_images_value();
     let val_images_setting = ConfigSetting {
@@ -169,6 +183,7 @@ pub async fn get_settings() -> Result<Json<SettingsResponse>, (StatusCode, Strin
         server_host: host_setting,
         server_port: port_setting,
         database_dir: dir_setting,
+        mcp_enabled: mcp_setting,
         validation_images: val_images_setting,
         validation_pdf: val_pdf_setting,
         validation_audio: val_audio_setting,
@@ -243,6 +258,13 @@ pub async fn update_settings(
         updated = true;
     }
 
+    // Update MCP enabled if provided
+    if let Some(val) = request.mcp_enabled {
+        config::Config::set_mcp_enabled(val, &project_dirs)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        updated = true;
+    }
+
     // Update validation images if provided
     if let Some(val) = request.validation_images {
         config::Config::set_validation_images(val, &project_dirs)
@@ -312,6 +334,10 @@ pub async fn delete_settings(
         }
         "database_dir" => {
             config::Config::delete_database_dir(&project_dirs)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        }
+        "mcp_enabled" => {
+            config::Config::delete_mcp_enabled(&project_dirs)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         }
         "validation_images" => {

@@ -12,7 +12,6 @@ use phf_macros::{phf_map, phf_ordered_map};
 use rusqlite::ToSql;
 use std::fmt::Debug;
 
-type OrderedStrMap = phf::OrderedMap<&'static str, &'static str>;
 
 use super::{process::Query, Rule};
 
@@ -481,7 +480,7 @@ pub struct BoolFilter {
     bool_col_db: &'static str,
     match_null: bool,
     match_not_null: bool,
-    bool_vals: Vec<String>,
+    bool_vals: Vec<i64>,
 }
 
 impl Filter for BoolFilter {
@@ -522,7 +521,7 @@ impl Filter for BoolFilter {
             }
 
             pred_str.push_str(&format!("({} = ?)", &self.bool_col_db));
-            pred_vec.push(Box::new(bool_val.to_owned()));
+            pred_vec.push(Box::new(*bool_val));
         }
 
         if pred_count > 1 {
@@ -568,7 +567,7 @@ impl BoolFilter {
                     let rule_str = format!("{rule:?}");
                     let val_opt = Self::BOOL_VALUES.get(&rule_str).copied();
                     match val_opt {
-                        Some(val) => bool_filter.bool_vals.push(val.to_owned()),
+                        Some(val) => bool_filter.bool_vals.push(val),
                         None => {
                             return Err(FsPulseError::CustomParsingError(format!(
                                 "Invalid filter value: '{}'",
@@ -587,9 +586,9 @@ impl BoolFilter {
 
     // Map boolean rule names to database values (1 for true, 0 for false)
     // Null and Not Null are handled directly in code
-    const BOOL_VALUES: OrderedStrMap = phf_ordered_map! {
-        "bool_true" => "1",
-        "bool_false" => "0",
+    const BOOL_VALUES: phf::OrderedMap<&'static str, i64> = phf_ordered_map! {
+        "bool_true" => 1i64,
+        "bool_false" => 0i64,
     };
 }
 

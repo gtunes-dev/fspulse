@@ -28,7 +28,14 @@ use crate::api;
 use crate::db::{self, Database};
 use crate::db::migration::{maintenance, MigrationProgress, ReadyFlag};
 use crate::error::FsPulseError;
+use crate::mcp::FsPulseMcp;
 use crate::task_manager::TaskManager;
+
+use rmcp::transport::streamable_http_server::{
+    StreamableHttpService, StreamableHttpServerConfig,
+    session::local::LocalSessionManager,
+};
+use tokio_util::sync::CancellationToken;
 
 // Embed static files in release builds
 #[cfg(not(debug_assertions))]
@@ -63,13 +70,17 @@ impl WebServer {
         // Create shutdown notify for API-initiated shutdown
         let shutdown_notify = Arc::new(Notify::new());
 
+        // Create MCP cancellation token for clean shutdown
+        let mcp_ct = CancellationToken::new();
+        let mcp_ct_for_shutdown = mcp_ct.clone();
+
         // Build the appropriate router
         let (app, ready_flag) = if migration_needed {
             let ready_flag = ReadyFlag::new(false);
-            let app = self.create_maintenance_router(ready_flag.clone(), shutdown_notify.clone())?;
+            let app = self.create_maintenance_router(ready_flag.clone(), shutdown_notify.clone(), mcp_ct)?;
             (app, Some(ready_flag))
         } else {
-            let app = self.create_router(shutdown_notify.clone())?;
+            let app = self.create_router(shutdown_notify.clone(), mcp_ct)?;
             (app, None)
         };
 
@@ -160,6 +171,9 @@ impl WebServer {
                 log::info!("Shutdown signal received, stopping background tasks...");
                 println!("\nShutdown signal received - stopping server gracefully...");
 
+                // Cancel MCP sessions so connections close
+                mcp_ct_for_shutdown.cancel();
+
                 // Signal background tasks to stop
                 let _ = shutdown_tx.send(());
 
@@ -177,9 +191,9 @@ impl WebServer {
 
     /// Build a router wrapped with maintenance middleware for migration mode.
     /// Includes the SSE endpoint and intercepts all requests until ready.
-    fn create_maintenance_router(&self, ready_flag: ReadyFlag, shutdown_notify: Arc<Notify>) -> Result<Router, FsPulseError> {
+    fn create_maintenance_router(&self, ready_flag: ReadyFlag, shutdown_notify: Arc<Notify>, mcp_ct: CancellationToken) -> Result<Router, FsPulseError> {
         let app = self
-            .create_router(shutdown_notify)?
+            .create_router(shutdown_notify, mcp_ct)?
             .route(
                 "/maintenance/events",
                 get(maintenance::migration_events_handler),
@@ -192,7 +206,7 @@ impl WebServer {
         Ok(app)
     }
 
-    fn create_router(&self, shutdown_notify: Arc<Notify>) -> Result<Router, FsPulseError> {
+    fn create_router(&self, shutdown_notify: Arc<Notify>, mcp_ct: CancellationToken) -> Result<Router, FsPulseError> {
         let app_state = api::state::AppState::new(shutdown_notify);
 
         let app = Router::new()
@@ -325,6 +339,22 @@ impl WebServer {
             .route("/ws/tasks/progress", get(api::scans::scan_progress_ws))
             // Add state for handlers
             .with_state(app_state);
+
+        // MCP server endpoint (conditionally enabled)
+        let app = if crate::config::Config::get_mcp_enabled() {
+            let mut mcp_config = StreamableHttpServerConfig::default();
+            mcp_config.cancellation_token = mcp_ct;
+            let mcp_service = StreamableHttpService::new(
+                || Ok(FsPulseMcp::new()),
+                LocalSessionManager::default().into(),
+                mcp_config,
+            );
+            println!("   MCP server enabled at /mcp");
+            app.nest_service("/mcp", mcp_service)
+        } else {
+            println!("   MCP server disabled");
+            app
+        };
 
         // Serve static files differently based on build type
         #[cfg(debug_assertions)]

@@ -2,7 +2,7 @@ use pest::iterators::Pair;
 
 use crate::error::FsPulseError;
 
-use super::{columns::ColSet, Rule};
+use super::{columns::ColSet, show::AggFunc, Rule};
 
 #[derive(Debug)]
 struct OrderSpec {
@@ -59,6 +59,35 @@ impl Order {
         Ok(())
     }
 
+    pub fn add_aggregate_order_spec(
+        &mut self,
+        agg_func: &AggFunc,
+        col_name: &str,
+        direction: Option<String>,
+    ) -> Result<(), FsPulseError> {
+        let sql_expr = if col_name == "*" {
+            format!("{}(*)", agg_func.sql_name())
+        } else {
+            let col_spec = self
+                .col_set
+                .col_set()
+                .get(col_name)
+                .ok_or_else(|| {
+                    FsPulseError::CustomParsingError(format!(
+                        "Invalid column '{col_name}' in aggregate order"
+                    ))
+                })?;
+            format!("{}({})", agg_func.sql_name(), col_spec.name_db)
+        };
+
+        self.order_specs.push(OrderSpec {
+            column: sql_expr,
+            direction,
+            collation: None,
+        });
+        Ok(())
+    }
+
     pub fn from_pest_pair(order_list: Pair<Rule>, col_set: ColSet) -> Result<Self, FsPulseError> {
         let mut order = Self::new(col_set);
 
@@ -66,10 +95,31 @@ impl Order {
             match element.as_rule() {
                 Rule::order_spec => {
                     let mut order_parts = element.into_inner();
-                    let column_display_name = order_parts.next().unwrap().as_str();
+                    let order_col = order_parts.next().unwrap();
+
+                    // Check if this is an aggregate order or a plain column
+                    let inner = order_col.into_inner().next().unwrap();
                     let direction = order_parts.next().map(|r| r.as_str().to_uppercase());
 
-                    order.add_order_spec(column_display_name, direction)?;
+                    if inner.as_rule() == Rule::agg_order {
+                        let mut agg_parts = inner.into_inner();
+                        let func_str = agg_parts.next().unwrap().as_str();
+                        let agg_func = AggFunc::from_str(func_str);
+                        let arg_pair = agg_parts.next().unwrap();
+                        let arg_str = arg_pair.as_str();
+
+                        let col_name = if arg_str == "*" {
+                            "*"
+                        } else {
+                            arg_pair.into_inner().next().unwrap().as_str()
+                        };
+
+                        order.add_aggregate_order_spec(&agg_func, col_name, direction)?;
+                    } else {
+                        // Plain column — inner is the column rule (e.g., id_col, date_col)
+                        let column_display_name = inner.as_str();
+                        order.add_order_spec(column_display_name, direction)?;
+                    }
                 }
                 _ => unreachable!(),
             }

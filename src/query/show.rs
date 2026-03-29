@@ -198,11 +198,54 @@ mod tests {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum AggFunc {
+    Count,
+    Sum,
+    Avg,
+    Min,
+    Max,
+}
+
+impl AggFunc {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "count" => AggFunc::Count,
+            "sum" => AggFunc::Sum,
+            "avg" => AggFunc::Avg,
+            "min" => AggFunc::Min,
+            "max" => AggFunc::Max,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            AggFunc::Count => "count",
+            AggFunc::Sum => "sum",
+            AggFunc::Avg => "avg",
+            AggFunc::Min => "min",
+            AggFunc::Max => "max",
+        }
+    }
+
+    pub fn sql_name(&self) -> &'static str {
+        match self {
+            AggFunc::Count => "COUNT",
+            AggFunc::Sum => "SUM",
+            AggFunc::Avg => "AVG",
+            AggFunc::Min => "MIN",
+            AggFunc::Max => "MAX",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct DisplayCol {
     pub display_col: &'static str,
     pub alignment: ColAlign,
     pub format: Format,
+    pub agg: Option<AggFunc>,
 }
 
 #[derive(Debug)]
@@ -226,8 +269,15 @@ impl Show {
         }
     }
 
-    pub fn get_column_headers(&self) -> Vec<&'static str> {
-        self.display_cols.iter().map(|dc| dc.display_col).collect()
+    pub fn get_column_headers(&self) -> Vec<String> {
+        self.display_cols
+            .iter()
+            .map(|dc| match &dc.agg {
+                Some(func) if dc.display_col == "*" => format!("{}(*)", func.name()),
+                Some(func) => format!("{}({})", func.name(), dc.display_col),
+                None => dc.display_col.to_string(),
+            })
+            .collect()
     }
 
     pub fn get_column_alignments(&self) -> Vec<ColAlign> {
@@ -240,6 +290,7 @@ impl Show {
                 display_col: col,
                 alignment: col_spec.col_align,
                 format: Format::None,
+                agg: None,
             });
         }
     }
@@ -251,6 +302,7 @@ impl Show {
                     display_col: col,
                     alignment: col_spec.col_align,
                     format: Format::None,
+                    agg: None,
                 });
             }
         }
@@ -286,6 +338,7 @@ impl Show {
                                 display_col: key,
                                 alignment: display_col.col_align,
                                 format,
+                                agg: None,
                             })
                         }
                         None => {
@@ -295,10 +348,47 @@ impl Show {
                         }
                     }
                 }
+                Rule::agg_show => {
+                    let mut parts = element.into_inner();
+                    let func_str = parts.next().unwrap().as_str();
+                    let agg_func = AggFunc::from_str(func_str);
+
+                    let arg_pair = parts.next().unwrap();
+                    let arg_str = arg_pair.as_str();
+
+                    if arg_str == "*" {
+                        // count(*) — no column lookup needed
+                        self.display_cols.push(DisplayCol {
+                            display_col: "*",
+                            alignment: ColAlign::Right,
+                            format: Format::None,
+                            agg: Some(agg_func),
+                        });
+                    } else {
+                        // Aggregate on a named column — get the inner col rule's text
+                        let col_name = arg_pair.into_inner().next().unwrap().as_str();
+                        match self.col_set.col_set().get_entry(col_name) {
+                            Some((key, col_spec)) => {
+                                self.display_cols.push(DisplayCol {
+                                    display_col: key,
+                                    alignment: col_spec.col_align,
+                                    format: Format::None,
+                                    agg: Some(agg_func),
+                                });
+                            }
+                            None => {
+                                return Err(FsPulseError::CustomParsingError(format!(
+                                    "Invalid column in aggregate: '{col_name}'"
+                                )));
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
 
         Ok(())
     }
+
 }

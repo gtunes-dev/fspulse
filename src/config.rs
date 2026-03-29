@@ -254,6 +254,7 @@ pub struct Config {
     pub logging_fspulse: ConfigValue<String>,
     pub logging_lopdf: ConfigValue<String>,
     pub database_dir: ConfigValue<String>,
+    pub mcp_enabled: ConfigValue<bool>,
     pub validation_images: ConfigValue<bool>,
     pub validation_pdf: ConfigValue<bool>,
     pub validation_audio: ConfigValue<bool>,
@@ -593,6 +594,7 @@ impl Default for Config {
                 true,
                 validate_database_dir,
             ),
+            mcp_enabled: ConfigValue::new(false, ("mcp", "enabled"), true, validate_bool),
             validation_images: ConfigValue::new(true, ("validation", "images"), false, validate_bool),
             validation_pdf: ConfigValue::new(false, ("validation", "pdf"), false, validate_bool),
             validation_audio: ConfigValue::new(true, ("validation", "audio"), false, validate_bool),
@@ -678,6 +680,7 @@ impl Config {
         config.logging_fspulse.take(&mut toml_map, &mut env_map)?;
         config.logging_lopdf.take(&mut toml_map, &mut env_map)?;
         config.database_dir.take(&mut toml_map, &mut env_map)?;
+        config.mcp_enabled.take(&mut toml_map, &mut env_map)?;
         config.validation_images.take(&mut toml_map, &mut env_map)?;
         config.validation_pdf.take(&mut toml_map, &mut env_map)?;
         config.validation_audio.take(&mut toml_map, &mut env_map)?;
@@ -852,6 +855,26 @@ impl Config {
     pub fn delete_database_dir(project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
         let config_path = get_config_path(project_dirs);
         Self::with_config_write(|config| config.database_dir.delete_file_value(&config_path))
+    }
+
+    // MCP Enabled
+
+    pub fn get_mcp_enabled() -> bool {
+        Self::with_config_read(|config| *config.mcp_enabled.get())
+    }
+
+    pub fn get_mcp_enabled_value() -> ConfigValue<bool> {
+        Self::with_config_read(|config| config.mcp_enabled.clone())
+    }
+
+    pub fn set_mcp_enabled(val: bool, project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
+        let config_path = get_config_path(project_dirs);
+        Self::with_config_write(|config| config.mcp_enabled.set_file_value(val, &config_path))
+    }
+
+    pub fn delete_mcp_enabled(project_dirs: &ProjectDirs) -> Result<(), FsPulseError> {
+        let config_path = get_config_path(project_dirs);
+        Self::with_config_write(|config| config.mcp_enabled.delete_file_value(&config_path))
     }
 
     // Validation Images

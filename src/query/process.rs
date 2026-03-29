@@ -51,11 +51,7 @@ impl QueryResult for QueryResultVector {
     }
     fn finalize(&mut self, show: &mut Show) {
         // Extract column headers and alignments from Show after columns are finalized
-        self.column_headers = show
-            .get_column_headers()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect();
+        self.column_headers = show.get_column_headers();
         self.column_alignments = show.get_column_alignments();
     }
 }
@@ -112,6 +108,32 @@ pub trait Query {
         select_list
     }
 
+    /// Build SELECT list from the SHOW clause, with aggregate function wrappers.
+    /// Used for GROUP BY queries where the select list is driven by SHOW, not the full ColMap.
+    fn show_as_select_list(&self) -> String {
+        self.show()
+            .display_cols
+            .iter()
+            .map(|dc| {
+                let col_db = if dc.display_col == "*" {
+                    "*"
+                } else {
+                    self.col_set()
+                        .col_set()
+                        .get(dc.display_col)
+                        .map(|s| s.name_db)
+                        .unwrap_or(dc.display_col)
+                };
+
+                match &dc.agg {
+                    Some(func) => format!("{}({})", func.sql_name(), col_db),
+                    None => col_db.to_string(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     fn build_query_result(
         &mut self,
         sql_statement: &mut Statement,
@@ -142,8 +164,11 @@ pub trait Query {
         offset_add: Option<i64>,
     ) -> (String, Vec<Box<dyn ToSql>>) {
         // Build SELECT clause
+        let is_aggregate = !self.query_impl().group_by.is_empty();
         let select_list = if count_only {
             "COUNT(*)".to_string()
+        } else if is_aggregate {
+            self.show_as_select_list()
         } else {
             self.cols_as_select_list()
         };
@@ -202,6 +227,13 @@ pub trait Query {
             .map(|o| format!("\nOFFSET {o}"))
             .unwrap_or_default();
 
+        // Build GROUP BY clause
+        let group_clause = if self.query_impl().group_by.is_empty() {
+            String::new()
+        } else {
+            format!("\nGROUP BY {}", self.query_impl().group_by.join(", "))
+        };
+
         // Assemble final SQL
         let sql = if count_only {
             // For count queries, use subquery to correctly count with limit/offset
@@ -210,6 +242,7 @@ pub trait Query {
                 .sql_template
                 .replace("{select_list}", "1")
                 .replace("{where_clause}", &where_clause)
+                .replace("{group_clause}", &group_clause)
                 .replace("{order_clause}", "")
                 .replace("{limit_clause}", &limit_clause)
                 .replace("{offset_clause}", &offset_clause);
@@ -220,12 +253,17 @@ pub trait Query {
                 .sql_template
                 .replace("{select_list}", &select_list)
                 .replace("{where_clause}", &where_clause)
+                .replace("{group_clause}", &group_clause)
                 .replace("{order_clause}", &order_clause)
                 .replace("{limit_clause}", &limit_clause)
                 .replace("{offset_clause}", &offset_clause)
         };
 
         (sql, params_vec)
+    }
+
+    fn is_aggregate(&self) -> bool {
+        !self.query_impl().group_by.is_empty()
     }
 
     fn prepare_and_execute(
@@ -237,7 +275,11 @@ pub trait Query {
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
         let mut sql_statement = conn.prepare(&sql)?;
 
-        self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
+        if self.is_aggregate() {
+            self.build_aggregate_result(&mut sql_statement, &sql_params, query_result)?;
+        } else {
+            self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
+        }
 
         Ok(())
     }
@@ -253,7 +295,43 @@ pub trait Query {
         let sql_params: Vec<&dyn ToSql> = params_vec.iter().map(|b| &**b).collect();
         let mut sql_statement = conn.prepare(&sql)?;
 
-        self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
+        if self.is_aggregate() {
+            self.build_aggregate_result(&mut sql_statement, &sql_params, query_result)?;
+        } else {
+            self.build_query_result(&mut sql_statement, &sql_params, query_result)?;
+        }
+
+        Ok(())
+    }
+
+    /// Generic row reader for aggregate queries. Reads all columns as rusqlite::Value
+    /// and converts to strings, bypassing the domain-specific row structs.
+    fn build_aggregate_result(
+        &mut self,
+        sql_statement: &mut Statement,
+        sql_params: &[&dyn ToSql],
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let col_count = self.show().display_cols.len();
+
+        query_result.prepare(&mut self.query_impl_mut().show);
+
+        let mut rows = sql_statement.query(sql_params)?;
+        while let Some(row) = rows.next()? {
+            let mut values = Vec::with_capacity(col_count);
+            for i in 0..col_count {
+                let val: rusqlite::types::Value = row.get(i)?;
+                let s = match val {
+                    rusqlite::types::Value::Null => "-".to_string(),
+                    rusqlite::types::Value::Integer(n) => n.to_string(),
+                    rusqlite::types::Value::Real(f) => format!("{:.2}", f),
+                    rusqlite::types::Value::Text(s) => s,
+                    rusqlite::types::Value::Blob(b) => hex::encode(b),
+                };
+                values.push(s);
+            }
+            query_result.add_row(values);
+        }
 
         Ok(())
     }
@@ -667,6 +745,7 @@ pub struct QueryImpl {
     col_set: ColSet,
 
     filters: Vec<Box<dyn Filter>>,
+    group_by: Vec<&'static str>,
     show: Show,
     order: Option<Order>,
     limit: Option<i64>,
@@ -677,6 +756,7 @@ impl QueryImpl {
     const ROOTS_SQL_QUERY: &str = "SELECT {select_list}
         FROM roots
         {where_clause}
+        {group_clause}
         {order_clause}
         {limit_clause}
         {offset_clause}";
@@ -684,6 +764,7 @@ impl QueryImpl {
     const SCANS_SQL_QUERY: &str = "SELECT {select_list}
         FROM scans
         {where_clause}
+        {group_clause}
         {order_clause}
         {limit_clause}
         {offset_clause}";
@@ -691,6 +772,7 @@ impl QueryImpl {
     const SCANS_SQL_QUERY_COUNT: &str = "SELECT {select_list}
         FROM scans
         {where_clause}
+        {group_clause}
         {order_clause}
         {limit_clause}
         {offset_clause}";
@@ -698,6 +780,7 @@ impl QueryImpl {
     const ITEMS_SQL_QUERY: &str = "SELECT {select_list}
         FROM items i
         {where_clause}
+        {group_clause}
         {order_clause}
         {limit_clause}
         {offset_clause}";
@@ -706,6 +789,7 @@ impl QueryImpl {
         FROM item_versions iv
         JOIN items i ON i.item_id = iv.item_id
         {where_clause}
+        {group_clause}
         {order_clause}
         {limit_clause}
         {offset_clause}";
@@ -715,6 +799,7 @@ impl QueryImpl {
         JOIN item_versions iv ON iv.item_id = hv.item_id AND iv.item_version = hv.item_version
         JOIN items i ON i.item_id = hv.item_id
         {where_clause}
+        {group_clause}
         {order_clause}
         {limit_clause}
         {offset_clause}";
@@ -725,6 +810,7 @@ impl QueryImpl {
             col_set,
 
             filters: Vec::new(),
+            group_by: Vec::new(),
             show: Show::new(col_set),
             order: None,
             limit: None,
@@ -1030,6 +1116,16 @@ impl QueryProcessor {
                 Rule::int_filter => {
                     IntFilter::add_int_filter_to_query(token, query)?;
                 }
+                Rule::group_list => {
+                    for group_col_pair in token.into_inner() {
+                        let col_name = group_col_pair.into_inner().next().unwrap().as_str();
+                        let name_db = query.col_set().col_name_to_db(col_name)
+                            .ok_or_else(|| FsPulseError::CustomParsingError(format!(
+                                "Invalid column in GROUP BY: '{col_name}'"
+                            )))?;
+                        query.query_impl_mut().group_by.push(name_db);
+                    }
+                }
                 Rule::show_list => {
                     query.show_mut().build_from_pest_pair(token)?;
                 }
@@ -1044,6 +1140,66 @@ impl QueryProcessor {
                     query.query_impl_mut().offset = Some(token.as_str().parse().unwrap());
                 }
                 _ => {}
+            }
+        }
+
+        // Validate aggregate query constraints
+        if !query.query_impl().group_by.is_empty() {
+            // GROUP BY requires an explicit SHOW clause
+            if query.show().display_cols.is_empty() {
+                return Err(FsPulseError::CustomParsingError(
+                    "GROUP BY requires a SHOW clause".to_string(),
+                ));
+            }
+
+            // Every non-aggregate column in SHOW must appear in GROUP BY
+            for dc in &query.show().display_cols {
+                if dc.agg.is_none() {
+                    let col_db = query.col_set().col_set().get(dc.display_col)
+                        .map(|s| s.name_db)
+                        .unwrap_or(dc.display_col);
+
+                    if !query.query_impl().group_by.contains(&col_db) {
+                        return Err(FsPulseError::CustomParsingError(format!(
+                            "Column '{}' in SHOW must appear in GROUP BY or use an aggregate function",
+                            dc.display_col
+                        )));
+                    }
+                }
+            }
+
+            // Type checking for aggregate functions
+            use super::show::AggFunc;
+            use super::columns::ColType;
+
+            for dc in &query.show().display_cols {
+                if let Some(func) = &dc.agg {
+                    if dc.display_col == "*" {
+                        // count(*) is always valid
+                        continue;
+                    }
+                    if let Some(col_spec) = query.col_set().col_set().get(dc.display_col) {
+                        match func {
+                            AggFunc::Sum | AggFunc::Avg => {
+                                if !matches!(col_spec.col_type, ColType::Int) {
+                                    return Err(FsPulseError::CustomParsingError(format!(
+                                        "{}() requires an integer column, but '{}' is {}",
+                                        func.name(), dc.display_col, col_spec.col_type.info().type_name
+                                    )));
+                                }
+                            }
+                            AggFunc::Min | AggFunc::Max => {
+                                if !matches!(col_spec.col_type, ColType::Int | ColType::Date | ColType::Id) {
+                                    return Err(FsPulseError::CustomParsingError(format!(
+                                        "{}() requires an integer, date, or id column, but '{}' is {}",
+                                        func.name(), dc.display_col, col_spec.col_type.info().type_name
+                                    )));
+                                }
+                            }
+                            AggFunc::Count => {} // count(col) is valid for any type
+                        }
+                    }
+                }
             }
         }
 

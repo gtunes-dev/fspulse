@@ -3,7 +3,7 @@
 
 // Top-level query: one of the domain-specific queries
 
-query = { SOI ~ WS* ~ query_type ~ where_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ offset_clause? ~ WS* ~ EOI }
+query = { SOI ~ WS* ~ query_type ~ where_clause? ~ group_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ offset_clause? ~ WS* ~ EOI }
 
 query_type = { "roots" | "scans" | "items" | "versions" | "hashes" }
 
@@ -12,16 +12,27 @@ where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
 filter_list  = _{ filter ~ (WS* ~ COMMA ~ WS* ~ filter)* }
 filter       = _{ id_filter | date_filter | bool_filter | string_filter | hash_filter | path_filter | val_state_filter | hash_state_filter | item_type_filter | scan_state_filter | access_filter | int_filter }
 
+// Optional GROUP BY clause
+group_clause = _{ WS+ ~ ("GROUP" | "group") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ group_list }
+group_list   =  { group_col ~ (WS* ~ COMMA ~ WS* ~ group_col)* }
+group_col    =  { id_col | date_col | bool_col | string_col | hash_col | path_col | val_state_col | hash_state_col | item_type_col | scan_state_col | access_col | int_col }
+
 // Optional SHOW clause
 show_clause = _{ WS+ ~ ("SHOW" | "show") ~ WS+ ~ show_list }
 show_list   =  { show_spec ~ (WS* ~ COMMA ~ WS* ~ show_spec)* }
-show_spec   = _{ default | all | id_show | date_show | bool_show | string_show | hash_show | path_show | val_state_show | hash_state_show | item_type_show | scan_state_show | access_show | int_show }
+show_spec   = _{ default | all | agg_show | id_show | date_show | bool_show | string_show | hash_show | path_show | val_state_show | hash_state_show | item_type_show | scan_state_show | access_show | int_show }
+
+// Aggregate expressions in SHOW and ORDER BY
+agg_show  =  { agg_func ~ WS* ~ LPAREN ~ WS* ~ agg_arg ~ WS* ~ RPAREN }
+agg_func  =  { ^"count" | ^"sum" | ^"avg" | ^"min" | ^"max" }
+agg_arg   =  { "*" | id_col | date_col | bool_col | string_col | hash_col | path_col | val_state_col | hash_state_col | item_type_col | scan_state_col | access_col | int_col }
 
 // Optional ORDER clause
 order_clause = _{ WS+ ~ ("ORDER" | "order") ~ WS+ ~ ("BY" | "by") ~ WS+ ~ order_list }
 order_list   =  { order_spec ~ (WS* ~ COMMA ~ WS* ~ order_spec)* }
 order_spec   =  { order_column ~ (WS+ ~ order_dir)? }
-order_column =  { id_col | date_col | bool_col | string_col | hash_col | path_col | val_state_col | hash_state_col | item_type_col | scan_state_col | access_col | int_col }
+order_column =  { agg_order | id_col | date_col | bool_col | string_col | hash_col | path_col | val_state_col | hash_state_col | item_type_col | scan_state_col | access_col | int_col }
+agg_order    =  { agg_func ~ WS* ~ LPAREN ~ WS* ~ agg_arg ~ WS* ~ RPAREN }
 order_dir    =  { "ASCENDING" | "ascending" | "ASC" | "asc" | "DESCENDING" | "descending" | "DESC" | "desc" }
 
 // Optional LIMIT clause

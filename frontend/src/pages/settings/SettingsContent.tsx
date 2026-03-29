@@ -38,6 +38,7 @@ interface SettingsResponse {
   server_host: ConfigSetting<string>
   server_port: ConfigSetting<number>
   database_dir: ConfigSetting<string>
+  mcp_enabled: ConfigSetting<boolean>
   validation_images: ConfigSetting<boolean>
   validation_pdf: ConfigSetting<boolean>
   validation_audio: ConfigSetting<boolean>
@@ -208,6 +209,8 @@ export function SettingsContent() {
         requestBody = { logging_lopdf: editValue }
       } else if (editingSetting === 'database_dir') {
         requestBody = { database_dir: editValue }
+      } else if (editingSetting === 'mcp_enabled') {
+        requestBody = { mcp_enabled: editValue === 'true' }
       } else if (editingSetting === 'validation_images') {
         requestBody = { validation_images: editValue === 'true' }
       } else if (editingSetting === 'validation_pdf') {
@@ -379,7 +382,7 @@ export function SettingsContent() {
                 )}
                 <Button
                   size="sm"
-                  onClick={() => handleEditSetting(settingKey, setting.file_value ?? '')}
+                  onClick={() => handleEditSetting(settingKey, setting.file_value ?? defaultValue)}
                   className="h-7 px-2 text-xs"
                 >
                   Edit
@@ -399,7 +402,7 @@ export function SettingsContent() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => handleEditSetting(settingKey, setting.file_value ?? '')}
+                    onClick={() => handleEditSetting(settingKey, setting.file_value ?? defaultValue)}
                     className="h-7 px-2 text-xs"
                   >
                     Edit
@@ -526,7 +529,19 @@ export function SettingsContent() {
                       settingKey="database_dir"
                     />
                     <tr>
-                      <td colSpan={4} className="px-4 py-2 bg-muted/30 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-border">
+                      <td colSpan={4} className="px-4 py-2 bg-muted/30 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-b border-border">
+                        MCP Server
+                      </td>
+                    </tr>
+                    <SettingRow
+                      name="Enable MCP Server"
+                      description="Serve the MCP endpoint at /mcp for AI agent access"
+                      setting={settings.mcp_enabled}
+                      defaultValue={false}
+                      settingKey="mcp_enabled"
+                    />
+                    <tr>
+                      <td colSpan={4} className="px-4 py-2 bg-muted/30 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-b border-border">
                         Validation
                       </td>
                     </tr>
@@ -621,6 +636,14 @@ export function SettingsContent() {
                     setting: settings.database_dir,
                     defaultValue: '',
                     inputType: 'text',
+                  },
+                  'mcp_enabled': {
+                    title: 'Enable MCP Server',
+                    description: 'Enable or disable the MCP (Model Context Protocol) server endpoint. When enabled, AI agents can connect to /mcp to query scan data.',
+                    setting: settings.mcp_enabled,
+                    defaultValue: false,
+                    inputType: 'select',
+                    options: ['true', 'false'],
                   },
                   'validation_images': {
                     title: 'Validate Images',

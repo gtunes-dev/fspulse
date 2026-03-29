@@ -40,6 +40,14 @@ const SAMPLE_QUERIES = [
     label: 'Suspect hashes',
     query: 'hashes where hash_state:(S) show item_path, item_version, file_hash limit 20',
   },
+  {
+    label: 'Files by extension',
+    query: 'versions where is_current:(T), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc limit 20',
+  },
+  {
+    label: 'Scans per root',
+    query: 'scans group by root_id show root_id, count(*), max(file_count), max(total_size) order by count(*) desc',
+  },
 ]
 
 const getAlignmentClass = (alignment: Alignment): string => {

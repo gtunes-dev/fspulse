@@ -17,7 +17,7 @@ Each query begins with one of the five supported domains:
 You can then add any of the following optional clauses:
 
 ```text
-DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
+DOMAIN [WHERE ...] [GROUP BY ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
 ```
 
 ---
@@ -202,12 +202,39 @@ The `timestamp` format modifier converts dates to UTC timestamps (seconds since 
 
 ---
 
+## The `GROUP BY` Clause
+
+Groups rows by one or more columns and enables aggregate functions in the `SHOW` clause. When `GROUP BY` is used, a `SHOW` clause is required.
+
+```text
+versions where is_current:(T), root_id:(1) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
+```
+
+### Aggregate Functions
+
+| Function | Applies To | Description |
+|----------|-----------|-------------|
+| `count(*)` | Any | Count all rows in the group |
+| `count(col)` | Any column | Count non-null values |
+| `sum(col)` | Integer columns | Sum of values |
+| `avg(col)` | Integer columns | Average of values |
+| `min(col)` | Integer, Date, Id columns | Minimum value |
+| `max(col)` | Integer, Date, Id columns | Maximum value |
+
+### Rules
+
+- Every non-aggregate column in `SHOW` must also appear in `GROUP BY`
+- Aggregate functions can be used in `ORDER BY` (e.g., `order by count(*) desc`)
+
+---
+
 ## The `ORDER BY` Clause
 
-Specifies sort order for the results:
+Specifies sort order for the results. Supports both column names and aggregate expressions.
 
 ```text
 items order by mod_date desc, item_path asc
+scans group by root_id show root_id, count(*) order by count(*) desc
 ```
 
 If direction is omitted, `ASC` is assumed.
@@ -256,6 +283,18 @@ scans show scan_id, started_at@timestamp, file_count order by started_at desc li
 
 # Scans with change and integrity counts
 scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, new_hash_suspect_count, new_val_invalid_count order by started_at desc
+
+# File count and total size by extension
+versions where is_current:(T), root_id:(1), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
+
+# Scan count per root
+scans group by root_id show root_id, count(*), max(total_size), max(file_count) order by count(*) desc
+
+# Hash state distribution
+hashes group by hash_state show hash_state, count(*)
+
+# Validation failures by root
+versions where val_state:(I) group by root_id show root_id, count(*)
 ```
 
 ---
