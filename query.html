@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ac2fac39.js";
+            window.path_to_searchindex_js = "searchindex-ace26b1e.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-db91e64e.js"></script>
+        <script src="toc-f0e7c611.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,7 +187,7 @@
 <li><code>hashes</code></li>
 </ul>
 <p>You can then add any of the following optional clauses:</p>
-<pre><code class="language-text">DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
+<pre><code class="language-text">DOMAIN [WHERE ...] [GROUP BY ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
 </code></pre>
 <hr>
 <h2 id="column-availability"><a class="header" href="#column-availability">Column Availability</a></h2>
@@ -378,9 +378,36 @@
 </div>
 <p>The <code>timestamp</code> format modifier converts dates to UTC timestamps (seconds since Unix epoch), which is useful for programmatic processing or web applications that need to format dates in the user’s local timezone.</p>
 <hr>
+<h2 id="the-group-by-clause"><a class="header" href="#the-group-by-clause">The <code>GROUP BY</code> Clause</a></h2>
+<p>Groups rows by one or more columns and enables aggregate functions in the <code>SHOW</code> clause. When <code>GROUP BY</code> is used, a <code>SHOW</code> clause is required.</p>
+<pre><code class="language-text">versions where is_current:(T), root_id:(1) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
+</code></pre>
+<h3 id="aggregate-functions"><a class="header" href="#aggregate-functions">Aggregate Functions</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Applies To</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>count(*)</code></td><td>Any</td><td>Count all rows in the group</td></tr>
+<tr><td><code>count(col)</code></td><td>Any column</td><td>Count non-null values</td></tr>
+<tr><td><code>sum(col)</code></td><td>Integer columns</td><td>Sum of values</td></tr>
+<tr><td><code>avg(col)</code></td><td>Integer columns</td><td>Average of values</td></tr>
+<tr><td><code>min(col)</code></td><td>Integer, Date, Id columns</td><td>Minimum value</td></tr>
+<tr><td><code>max(col)</code></td><td>Integer, Date, Id columns</td><td>Maximum value</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
+<ul>
+<li>Every non-aggregate column in <code>SHOW</code> must also appear in <code>GROUP BY</code></li>
+<li>Aggregate functions can be used in <code>ORDER BY</code> (e.g., <code>order by count(*) desc</code>)</li>
+</ul>
+<hr>
 <h2 id="the-order-by-clause"><a class="header" href="#the-order-by-clause">The <code>ORDER BY</code> Clause</a></h2>
-<p>Specifies sort order for the results:</p>
+<p>Specifies sort order for the results. Supports both column names and aggregate expressions.</p>
 <pre><code class="language-text">items order by mod_date desc, item_path asc
+scans group by root_id show root_id, count(*) order by count(*) desc
 </code></pre>
 <p>If direction is omitted, <code>ASC</code> is assumed.</p>
 <hr>
@@ -419,6 +446,18 @@ scans show scan_id, started_at@timestamp, file_count order by started_at desc li
 
 # Scans with change and integrity counts
 scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, new_hash_suspect_count, new_val_invalid_count order by started_at desc
+
+# File count and total size by extension
+versions where is_current:(T), root_id:(1), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
+
+# Scan count per root
+scans group by root_id show root_id, count(*), max(total_size), max(file_count) order by count(*) desc
+
+# Hash state distribution
+hashes group by hash_state show hash_state, count(*)
+
+# Validation failures by root
+versions where val_state:(I) group by root_id show root_id, count(*)
 </code></pre>
 <hr>
 <p>See also: <a href="web_ui/data_explorer.html">Data Explorer</a> · <a href="validators.html">Validators</a> · <a href="configuration.html">Configuration</a></p>

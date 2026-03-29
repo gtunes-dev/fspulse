@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ac2fac39.js";
+            window.path_to_searchindex_js = "searchindex-ace26b1e.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-db91e64e.js"></script>
+        <script src="toc-f0e7c611.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -882,6 +882,141 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <li>Understand the <a href="#query-syntax-1">Query Syntax</a> for advanced analysis</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="mcp-server"><a class="header" href="#mcp-server">MCP Server</a></h1>
+<p>fsPulse includes a built-in <a href="https://modelcontextprotocol.io/">Model Context Protocol</a> (MCP) server that allows AI agents to query scan data, analyze integrity issues, and explore filesystem history.</p>
+<p>The MCP endpoint is served at <code>/mcp</code> on the same port as the web UI. It uses the Streamable HTTP transport, compatible with Claude Desktop (via mcp-remote), Claude Code, and other MCP clients.</p>
+<ul>
+<li><a href="#setup">Setup</a> — Enable MCP and configure Claude Desktop or Claude Code</li>
+<li><a href="#sample-prompts">Sample Prompts</a> — Example prompts to try once connected</li>
+<li><a href="#tools">Tools</a> — The 10 tools available to AI agents</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="setup"><a class="header" href="#setup">Setup</a></h1>
+<h2 id="enable-the-mcp-server"><a class="header" href="#enable-the-mcp-server">Enable the MCP Server</a></h2>
+<p>The MCP server is disabled by default. Enable it in the fsPulse Settings page under <strong>MCP Server</strong>, or add the following to your <code>config.toml</code>:</p>
+<pre><code class="language-toml">[mcp]
+enabled = true
+</code></pre>
+<p>Restart fsPulse after changing this setting. You should see <code>MCP server enabled at /mcp</code> in the startup output.</p>
+<h2 id="claude-desktop"><a class="header" href="#claude-desktop">Claude Desktop</a></h2>
+<p>Claude Desktop does not connect to HTTP-based MCP servers directly. Use <a href="https://www.npmjs.com/package/mcp-remote">mcp-remote</a> as a bridge.</p>
+<p>Open Claude Desktop’s configuration file by going to <strong>Settings → Developer</strong> (under “Desktop app”) and clicking <strong>Edit Config</strong>. Add an entry under <code>mcpServers</code>:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "fspulse": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://localhost:8080/mcp"
+      ]
+    }
+  }
+}
+</code></pre>
+<p>Restart Claude Desktop. fsPulse should appear as an available MCP server.</p>
+<p>To connect to a remote fsPulse instance, replace <code>localhost:8080</code> with the appropriate host and port.</p>
+<h2 id="claude-code"><a class="header" href="#claude-code">Claude Code</a></h2>
+<p>Claude Code supports HTTP MCP servers natively. Add to your <code>.mcp.json</code>:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "fspulse": {
+      "type": "streamable-http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+</code></pre>
+<h2 id="multiple-instances"><a class="header" href="#multiple-instances">Multiple Instances</a></h2>
+<p>You can connect to multiple fsPulse instances by giving each a unique name:</p>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "fspulse-local": {
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:8080/mcp"]
+    },
+    "fspulse-remote": {
+      "command": "npx",
+      "args": ["mcp-remote", "http://my-server:8080/mcp"]
+    }
+  }
+}
+</code></pre>
+<p>Reference a specific instance by name in your prompts:</p>
+<blockquote>
+<p>Show me the integrity report on fspulse-remote</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="sample-prompts"><a class="header" href="#sample-prompts">Sample Prompts</a></h1>
+<p>Once connected, try prompts like these:</p>
+<h2 id="overview-and-health"><a class="header" href="#overview-and-health">Overview and Health</a></h2>
+<blockquote>
+<p>Give me an overview of what fsPulse is monitoring</p>
+</blockquote>
+<blockquote>
+<p>Are there any integrity issues? Show me the details</p>
+</blockquote>
+<h2 id="file-analysis"><a class="header" href="#file-analysis">File Analysis</a></h2>
+<blockquote>
+<p>What are the largest files being tracked?</p>
+</blockquote>
+<blockquote>
+<p>Break down the files by extension with counts and total sizes</p>
+</blockquote>
+<blockquote>
+<p>How many files of each type are there? Which types take the most space?</p>
+</blockquote>
+<h2 id="integrity-investigation"><a class="header" href="#integrity-investigation">Integrity Investigation</a></h2>
+<blockquote>
+<p>Show me all suspect hash observations</p>
+</blockquote>
+<blockquote>
+<p>Show me validation failures for PDF files</p>
+</blockquote>
+<h2 id="scan-history"><a class="header" href="#scan-history">Scan History</a></h2>
+<blockquote>
+<p>Show me recent scan activity for /home/user/Documents</p>
+</blockquote>
+<blockquote>
+<p>What changed in the last scan?</p>
+</blockquote>
+<h2 id="browsing-and-searching"><a class="header" href="#browsing-and-searching">Browsing and Searching</a></h2>
+<blockquote>
+<p>List the contents of /Users/greg/Documents</p>
+</blockquote>
+<blockquote>
+<p>Search for files named “report”</p>
+</blockquote>
+<h2 id="aggregation"><a class="header" href="#aggregation">Aggregation</a></h2>
+<blockquote>
+<p>Count files by extension for root 3, sorted by total size</p>
+</blockquote>
+<blockquote>
+<p>How many scans has each root had?</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tools"><a class="header" href="#tools">Tools</a></h1>
+<p>The MCP server provides 10 tools. The AI agent selects which tools to call based on your prompt.</p>
+<h2 id="system_overview"><a class="header" href="#system_overview">system_overview</a></h2>
+<p>High-level summary of all monitored roots, their latest scan status, unreviewed integrity issue counts, and database size.</p>
+<h2 id="query_data"><a class="header" href="#query_data">query_data</a></h2>
+<p>Execute a query using the fsPulse <a href="#query-syntax-1">query DSL</a>. Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Returns results as a formatted table.</p>
+<h2 id="query_count"><a class="header" href="#query_count">query_count</a></h2>
+<p>Count rows matching a query without returning the data.</p>
+<h2 id="query_help"><a class="header" href="#query_help">query_help</a></h2>
+<p>Returns documentation for the query DSL, including available columns and filter syntax for each domain. The agent uses this to learn valid column names before constructing queries.</p>
+<h2 id="integrity_report"><a class="header" href="#integrity_report">integrity_report</a></h2>
+<p>Report of items with integrity issues (validation failures, suspect hashes) for a specific root. Supports filtering by issue type, review status, file extension, and path.</p>
+<h2 id="scan_history"><a class="header" href="#scan_history">scan_history</a></h2>
+<p>Scan history for a root showing file counts, sizes, change rates, and integrity findings over time.</p>
+<h2 id="browse_filesystem"><a class="header" href="#browse_filesystem">browse_filesystem</a></h2>
+<p>Browse the filesystem tree at a specific point in time. Lists immediate children of a directory within a root at a given scan.</p>
+<h2 id="search_files"><a class="header" href="#search_files">search_files</a></h2>
+<p>Search for files and directories by name within a root at a specific point in time.</p>
+<h2 id="item_detail"><a class="header" href="#item_detail">item_detail</a></h2>
+<p>Detailed information about a specific item including its version history, size changes, and integrity state.</p>
+<h2 id="scan_changes"><a class="header" href="#scan_changes">scan_changes</a></h2>
+<p>Show what files were added, modified, or deleted in a specific scan. Can filter by change type.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="scanning"><a class="header" href="#scanning">Scanning</a></h1>
 <p>fsPulse scans are at the core of how it tracks changes to the filesystem over time. A scan creates a snapshot of a root directory and detects changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
 <hr>
@@ -1691,7 +1826,7 @@ fspulse --version
 <li><code>hashes</code></li>
 </ul>
 <p>You can then add any of the following optional clauses:</p>
-<pre><code class="language-text">DOMAIN [WHERE ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
+<pre><code class="language-text">DOMAIN [WHERE ...] [GROUP BY ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
 </code></pre>
 <hr>
 <h2 id="column-availability"><a class="header" href="#column-availability">Column Availability</a></h2>
@@ -1882,9 +2017,36 @@ fspulse --version
 </div>
 <p>The <code>timestamp</code> format modifier converts dates to UTC timestamps (seconds since Unix epoch), which is useful for programmatic processing or web applications that need to format dates in the user’s local timezone.</p>
 <hr>
+<h2 id="the-group-by-clause"><a class="header" href="#the-group-by-clause">The <code>GROUP BY</code> Clause</a></h2>
+<p>Groups rows by one or more columns and enables aggregate functions in the <code>SHOW</code> clause. When <code>GROUP BY</code> is used, a <code>SHOW</code> clause is required.</p>
+<pre><code class="language-text">versions where is_current:(T), root_id:(1) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
+</code></pre>
+<h3 id="aggregate-functions"><a class="header" href="#aggregate-functions">Aggregate Functions</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Applies To</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>count(*)</code></td><td>Any</td><td>Count all rows in the group</td></tr>
+<tr><td><code>count(col)</code></td><td>Any column</td><td>Count non-null values</td></tr>
+<tr><td><code>sum(col)</code></td><td>Integer columns</td><td>Sum of values</td></tr>
+<tr><td><code>avg(col)</code></td><td>Integer columns</td><td>Average of values</td></tr>
+<tr><td><code>min(col)</code></td><td>Integer, Date, Id columns</td><td>Minimum value</td></tr>
+<tr><td><code>max(col)</code></td><td>Integer, Date, Id columns</td><td>Maximum value</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
+<ul>
+<li>Every non-aggregate column in <code>SHOW</code> must also appear in <code>GROUP BY</code></li>
+<li>Aggregate functions can be used in <code>ORDER BY</code> (e.g., <code>order by count(*) desc</code>)</li>
+</ul>
+<hr>
 <h2 id="the-order-by-clause"><a class="header" href="#the-order-by-clause">The <code>ORDER BY</code> Clause</a></h2>
-<p>Specifies sort order for the results:</p>
+<p>Specifies sort order for the results. Supports both column names and aggregate expressions.</p>
 <pre><code class="language-text">items order by mod_date desc, item_path asc
+scans group by root_id show root_id, count(*) order by count(*) desc
 </code></pre>
 <p>If direction is omitted, <code>ASC</code> is assumed.</p>
 <hr>
@@ -1923,6 +2085,18 @@ scans show scan_id, started_at@timestamp, file_count order by started_at desc li
 
 # Scans with change and integrity counts
 scans show scan_id, file_count, total_size, add_count, modify_count, delete_count, new_hash_suspect_count, new_val_invalid_count order by started_at desc
+
+# File count and total size by extension
+versions where is_current:(T), root_id:(1), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
+
+# Scan count per root
+scans group by root_id show root_id, count(*), max(total_size), max(file_count) order by count(*) desc
+
+# Hash state distribution
+hashes group by hash_state show hash_state, count(*)
+
+# Validation failures by root
+versions where val_state:(I) group by root_id show root_id, count(*)
 </code></pre>
 <hr>
 <p>See also: <a href="#data-explorer">Data Explorer</a> · <a href="#validators">Validators</a> · <a href="#configuration-4">Configuration</a></p>
