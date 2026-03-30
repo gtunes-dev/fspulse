@@ -153,7 +153,7 @@ jobs:
 
       - name: Upload build artifact (dev builds)
         if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: fspulse-${{ matrix.target }}
           path: dist/
