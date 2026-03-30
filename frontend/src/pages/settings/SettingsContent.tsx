@@ -530,12 +530,12 @@ export function SettingsContent() {
                     />
                     <tr>
                       <td colSpan={4} className="px-4 py-2 bg-muted/30 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-b border-border">
-                        MCP Server
+                        MCP Server (Experimental)
                       </td>
                     </tr>
                     <SettingRow
-                      name="Enable MCP Server"
-                      description="Serve the MCP endpoint at /mcp for AI agent access"
+                      name="Enable MCP Server (Experimental)"
+                      description="Serve the MCP endpoint at /mcp for AI agent access. This feature is experimental and you may experience connectivity issues."
                       setting={settings.mcp_enabled}
                       defaultValue={false}
                       settingKey="mcp_enabled"
@@ -638,8 +638,8 @@ export function SettingsContent() {
                     inputType: 'text',
                   },
                   'mcp_enabled': {
-                    title: 'Enable MCP Server',
-                    description: 'Enable or disable the MCP (Model Context Protocol) server endpoint. When enabled, AI agents can connect to /mcp to query scan data.',
+                    title: 'Enable MCP Server (Experimental)',
+                    description: 'Enable or disable the MCP (Model Context Protocol) server endpoint. When enabled, AI agents can connect to /mcp to query scan data. This feature is experimental and you may experience connectivity issues.',
                     setting: settings.mcp_enabled,
                     defaultValue: false,
                     inputType: 'select',

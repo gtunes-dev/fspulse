@@ -343,6 +343,8 @@ impl WebServer {
         // MCP server endpoint (conditionally enabled)
         let app = if crate::config::Config::get_mcp_enabled() {
             let mut mcp_config = StreamableHttpServerConfig::default();
+            mcp_config.stateful_mode = false;
+            mcp_config.json_response = true;
             mcp_config.cancellation_token = mcp_ct;
             let mcp_service = StreamableHttpService::new(
                 || Ok(FsPulseMcp::new()),

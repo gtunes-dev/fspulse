@@ -6,7 +6,7 @@
   - [Building from Source](getting_started/building.md)
   - [Docker Deployment](docker.md)
   - [First Steps](getting_started/first_steps.md)
-- [MCP Server](mcp.md)
+- [MCP Server (Experimental)](mcp.md)
   - [Setup](mcp/setup.md)
   - [Sample Prompts](mcp/prompts.md)
   - [Tools](mcp/tools.md)
