@@ -1,6 +1,6 @@
 use rmcp::{
     ServerHandler,
-    model::{CallToolResult, Content, ServerInfo, Implementation},
+    model::{CallToolResult, Content, ServerInfo, ServerCapabilities, ToolsCapability, Implementation},
     tool, tool_router, tool_handler,
 };
 use rmcp::handler::server::wrapper::Parameters;
@@ -684,7 +684,10 @@ impl ServerHandler for FsPulseMcp {
         let mut server_info = Implementation::from_build_env();
         server_info.name = "fspulse".to_string();
 
-        ServerInfo::default()
+        let mut capabilities = ServerCapabilities::default();
+        capabilities.tools = Some(ToolsCapability::default());
+
+        ServerInfo::new(capabilities)
             .with_server_info(server_info)
             .with_instructions(
                 "fsPulse filesystem scanner and integrity tracker. \

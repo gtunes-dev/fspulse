@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP enable/disable setting**: New "Enable MCP Server" toggle in Settings under MCP Server section. Disabled by default; requires restart to take effect.
 - **MCP documentation**: New top-level documentation section covering setup (Claude Desktop, Claude Code, multiple instances), sample prompts, and tool reference.
 - **Linux ARM64 release builds**: CI now produces `aarch64-unknown-linux-gnu` binaries for Raspberry Pi (3/4/5 with 64-bit OS), ARM servers, and other Linux ARM64 devices.
+- **MCP OAuth 2.1 support**: Added minimal OAuth 2.1 flow for Claude Desktop Custom Connector support. Includes auto-approve authorization endpoint, PKCE S256 validation, and Bearer token exchange — all scoped under `/mcp`. Unauthenticated clients (Developer Config, Claude Code) continue to connect without OAuth. Client credentials: `fspulse` / `fspulse`.
 
 ### Changed
 - **MCP server: stateless mode**: Switched MCP transport from stateful sessions to stateless mode with JSON responses. Eliminates session tracking and SSE stream complexity, preventing potential resource leaks from zombie sessions when clients disconnect without cleanup. Each tool call is now an independent HTTP request/response.
