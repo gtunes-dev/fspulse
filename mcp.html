@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>MCP Server - fsPulse</title>
+        <title>MCP Server (Experimental) - fsPulse</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ace26b1e.js";
+            window.path_to_searchindex_js = "searchindex-01eeff74.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f0e7c611.js"></script>
+        <script src="toc-435155bc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -174,11 +174,14 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="mcp-server"><a class="header" href="#mcp-server">MCP Server</a></h1>
+                        <h1 id="mcp-server-experimental"><a class="header" href="#mcp-server-experimental">MCP Server (Experimental)</a></h1>
 <p>fsPulse includes a built-in <a href="https://modelcontextprotocol.io/">Model Context Protocol</a> (MCP) server that allows AI agents to query scan data, analyze integrity issues, and explore filesystem history.</p>
-<p>The MCP endpoint is served at <code>/mcp</code> on the same port as the web UI. It uses the Streamable HTTP transport, compatible with Claude Desktop (via mcp-remote), Claude Code, and other MCP clients.</p>
+<blockquote>
+<p><strong>Experimental:</strong> MCP support in fsPulse is experimental. You may experience connectivity issues depending on your client and connection method. See <a href="mcp/setup.html">Setup</a> for details on known limitations.</p>
+</blockquote>
+<p>The MCP endpoint is served at <code>/mcp</code> on the same port as the web UI. It uses the Streamable HTTP transport, compatible with Claude Desktop, Claude Code, and other MCP clients.</p>
 <ul>
-<li><a href="mcp/setup.html">Setup</a> — Enable MCP and configure Claude Desktop or Claude Code</li>
+<li><a href="mcp/setup.html">Setup</a> — Enable MCP and configure your client (three connection methods)</li>
 <li><a href="mcp/prompts.html">Sample Prompts</a> — Example prompts to try once connected</li>
 <li><a href="mcp/tools.html">Tools</a> — The 10 tools available to AI agents</li>
 </ul>
