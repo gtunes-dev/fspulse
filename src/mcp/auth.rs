@@ -82,7 +82,7 @@ impl OAuthState {
 
     fn validate_token(&self, token: &str) -> bool {
         let tokens = self.tokens.lock().unwrap();
-        tokens.get(token).map_or(false, |created| created.elapsed() < TOKEN_EXPIRY)
+        tokens.get(token).is_some_and(|created| created.elapsed() < TOKEN_EXPIRY)
     }
 }
 
@@ -261,7 +261,7 @@ async fn mcp_handler(
             .to_str()
             .ok()
             .and_then(|v| v.strip_prefix("Bearer "))
-            .map_or(false, |token| state.oauth.validate_token(token));
+            .is_some_and(|token| state.oauth.validate_token(token));
 
         if !valid {
             let www_auth = format!(
@@ -273,8 +273,7 @@ async fn mcp_handler(
                 [(header::WWW_AUTHENTICATE, www_auth)],
                 "Unauthorized",
             )
-                .into_response()
-                .into();
+                .into_response();
         }
     }
 
