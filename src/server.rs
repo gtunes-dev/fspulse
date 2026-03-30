@@ -353,8 +353,7 @@ impl WebServer {
             );
 
             let oauth_state = std::sync::Arc::new(crate::mcp::auth::OAuthState::new());
-            let base_url = format!("http://{}:{}", self.host, self.port);
-            let mcp_router = crate::mcp::auth::mcp_router(mcp_service, oauth_state, base_url);
+            let mcp_router = crate::mcp::auth::mcp_router(mcp_service, oauth_state);
 
             log::info!("MCP server enabled at /mcp (stateless mode, OAuth 2.1)");
             println!("   MCP server enabled at /mcp");

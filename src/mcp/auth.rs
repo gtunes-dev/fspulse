@@ -94,7 +94,6 @@ type McpService = StreamableHttpService<FsPulseMcp, LocalSessionManager>;
 pub struct McpAuthState {
     oauth: std::sync::Arc<OAuthState>,
     mcp_service: McpService,
-    base_url: String,
 }
 
 // ─── Router constructor ────────────────────────────────────────────
@@ -102,12 +101,10 @@ pub struct McpAuthState {
 pub fn mcp_router(
     mcp_service: McpService,
     oauth_state: std::sync::Arc<OAuthState>,
-    base_url: String,
 ) -> Router {
     let state = McpAuthState {
         oauth: oauth_state,
         mcp_service,
-        base_url,
     };
 
     Router::new()
@@ -125,26 +122,57 @@ pub fn mcp_router(
         .with_state(state)
 }
 
+// ─── Helpers: base URL from request ────────────────────────────────
+
+/// Extract the public-facing host from the request headers.
+/// Checks X-Forwarded-Host first (set by reverse proxies), then falls back to Host.
+fn extract_host(headers: &axum::http::HeaderMap) -> String {
+    headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get(header::HOST))
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost")
+        .to_string()
+}
+
+/// Derive the scheme from X-Forwarded-Proto if available, otherwise infer from host.
+fn base_url_from_headers(headers: &axum::http::HeaderMap) -> String {
+    let host = extract_host(headers);
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_else(|| {
+            if host.starts_with("localhost") || host.starts_with("127.") {
+                "http"
+            } else {
+                "https"
+            }
+        });
+    format!("{}://{}", scheme, host)
+}
+
 // ─── Well-known metadata endpoints ─────────────────────────────────
 
 async fn protected_resource_metadata(
-    State(state): State<McpAuthState>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
+    let base = base_url_from_headers(&headers);
     let body = serde_json::json!({
-        "resource": format!("{}/mcp", state.base_url),
-        "authorization_servers": [format!("{}/mcp", state.base_url)],
+        "resource": format!("{}/mcp", base),
+        "authorization_servers": [format!("{}/mcp", base)],
         "bearer_methods_supported": ["header"]
     });
     (StatusCode::OK, [(header::CONTENT_TYPE, "application/json")], body.to_string())
 }
 
 async fn authorization_server_metadata(
-    State(state): State<McpAuthState>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
+    let base = base_url_from_headers(&headers);
     let body = serde_json::json!({
-        "issuer": format!("{}/mcp", state.base_url),
-        "authorization_endpoint": format!("{}/mcp/authorize", state.base_url),
-        "token_endpoint": format!("{}/mcp/token", state.base_url),
+        "issuer": format!("{}/mcp", base),
+        "authorization_endpoint": format!("{}/mcp/authorize", base),
+        "token_endpoint": format!("{}/mcp/token", base),
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code"],
         "code_challenge_methods_supported": ["S256"],
@@ -264,9 +292,10 @@ async fn mcp_handler(
             .is_some_and(|token| state.oauth.validate_token(token));
 
         if !valid {
+            let base = base_url_from_headers(request.headers());
             let www_auth = format!(
                 r#"Bearer resource_metadata="{}/mcp/.well-known/oauth-protected-resource""#,
-                state.base_url
+                base
             );
             return (
                 StatusCode::UNAUTHORIZED,
