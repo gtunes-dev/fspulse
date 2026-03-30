@@ -876,7 +876,6 @@ name = "fspulse"
 version = "0.5.4"
 dependencies = [
  "axum",
- "base64",
  "chrono",
  "clap",
  "claxon",
@@ -901,7 +900,6 @@ dependencies = [
  "proptest",
  "r2d2",
  "r2d2_sqlite",
- "rand 0.9.2",
  "rmcp",
  "rusqlite",
  "rust-embed",

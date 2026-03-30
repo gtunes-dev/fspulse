@@ -352,12 +352,9 @@ impl WebServer {
                 mcp_config,
             );
 
-            let oauth_state = std::sync::Arc::new(crate::mcp::auth::OAuthState::new());
-            let mcp_router = crate::mcp::auth::mcp_router(mcp_service, oauth_state);
-
-            log::info!("MCP server enabled at /mcp (stateless mode, OAuth 2.1)");
+            log::info!("MCP server enabled at /mcp (stateless mode)");
             println!("   MCP server enabled at /mcp");
-            app.merge(mcp_router)
+            app.nest_service("/mcp", mcp_service)
         } else {
             log::info!("MCP server disabled");
             println!("   MCP server disabled");

@@ -1,4 +1,3 @@
-pub mod auth;
 mod formatting;
 mod tools;
 
