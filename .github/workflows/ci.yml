@@ -49,6 +49,11 @@ jobs:
             target: x86_64-unknown-linux-gnu
             ext: tar.gz
 
+          # Linux ARM64 (Raspberry Pi, ARM servers)
+          - os: ubuntu-latest-arm64
+            target: aarch64-unknown-linux-gnu
+            ext: tar.gz
+
           # macOS Apple Silicon
           - os: macos-latest
             target: aarch64-apple-darwin

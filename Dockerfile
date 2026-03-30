@@ -22,28 +22,30 @@ ENV GITHUB_REF_NAME=${GITHUB_REF_NAME}
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs
 
-# Copy manifests
+# Copy manifests and build infrastructure
 COPY Cargo.toml Cargo.lock ./
 COPY .cargo ./.cargo
-
-# Copy build script
 COPY build.rs ./
 
-# Copy frontend source
-COPY frontend ./frontend
+# Pre-build dependencies with a dummy source file.
+# This layer is cached until Cargo.toml or Cargo.lock change,
+# so dependency compilation (~90% of build time) is skipped on
+# source-only changes.
+RUN mkdir -p src frontend/dist && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src
 
-# Build frontend first (creates frontend/dist/ for rust-embed)
+# Copy frontend source and build it
+COPY frontend ./frontend
 RUN cd frontend && \
     npm ci && \
     npm run build && \
     echo "Frontend built successfully:" && \
     ls -lh dist/
 
-# Copy Rust source
+# Copy real Rust source and rebuild (only fspulse crate recompiles)
 COPY src ./src
-
-# Build for release (native architecture - arm64 on Apple Silicon, amd64 on Intel)
-# This will embed the frontend/dist/ files into the binary
 RUN cargo build --release
 
 # Strip binary to reduce size
