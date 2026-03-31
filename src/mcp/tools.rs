@@ -129,7 +129,7 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Execute a fspulse query using the built-in DSL. Supports five domains: roots, scans, items, versions, hashes. Date columns default to date-only display; use @full modifier for second-precision timestamps (e.g. mod_date@full). Use LIMIT and OFFSET in the query string to paginate (max 200 rows per call). Use query_count to get total row counts. Use query_help for syntax details. Returns results as a markdown table.")]
+    #[tool(description = "Execute a fspulse query using the built-in DSL. Supports five domains: roots, scans, items, versions, hashes. Date display: @short (default, date only), @full (date + time), @timestamp (Unix epoch). Date filters accept all three forms: 2025-01-01, 2025-01-01 14:30:00, or 1735689600 — any output format can be used directly as filter input. Use LIMIT and OFFSET in the query string to paginate (max 200 rows per call). Use query_count to get total row counts. Use query_help for syntax details. Returns results as a markdown table.")]
     async fn query_data(
         &self,
         Parameters(params): Parameters<QueryDataParams>,

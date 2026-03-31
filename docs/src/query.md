@@ -145,7 +145,7 @@ Values must match the column's type. You can use individual values, ranges (when
 | Type                | Examples                                              | Notes                                                                 |
 |---------------------|-------------------------------------------------------|-----------------------------------------------------------------------|
 | Integer             | `5`, `1..5`, `3, 5, 7..9`, `> 1024`, `< 10`, `null`, `not null` | Supports ranges, comparators, and nullability. Ranges are inclusive. |
-| Date                | `2024-01-01`, `2024-01-01..2024-06-30`, `null`, `not null` | Use `YYYY-MM-DD`. Ranges are inclusive.                                |
+| Date                | `2024-01-01`, `2024-01-01 14:30:00`, `1711929600`, `null`, `not null` | Three input forms (see below). Ranges are inclusive.          |
 | Boolean             | `true`, `false`, `T`, `F`, `null`, `not null`         | Unquoted.                                                             |
 | String              | `'example'`, `'error: missing EOF'`, `null`, `not null` | Quoted strings.                                                     |
 | Path                | `'photos/reports'`, `'file.txt'`                      | Must be quoted. **Null values are not supported.**                    |
@@ -154,6 +154,33 @@ Values must match the column's type. You can use individual values, ranges (when
 | Item Type Enum      | `F`, `D`, `S`, `U`                                    | File, Directory, Symlink, Unknown. Unquoted.                          |
 | Scan State Enum     | `S`, `W`, `AF`, `AS`, `C`, `P`, `E`                   | Scanning, Sweeping, Analyzing Files, Analyzing Scan, Completed, Stopped, Error. `A` is shorthand for `AF`. Unquoted. |
 | Access Status       | `N`, `M`, `R`                                         | No Error, Meta Error, Read Error. Unquoted.                           |
+
+### Date Filter Formats
+
+Date columns accept three input forms, matching the three display formats available via `@short`, `@full`, and `@timestamp`. Any value produced by a query can be used directly as filter input.
+
+| Form | Example | Behavior |
+|------|---------|----------|
+| Date only | `2025-01-15` | Matches the **entire day** (00:00:00 through 23:59:59 local time) |
+| Date and time | `2025-01-15 14:30:00` | Matches that **exact second** |
+| Unix epoch | `1737936000` | Matches that **exact second** (10+ digits, UTC) |
+
+These forms can be mixed freely within a filter or range:
+
+```text
+# Date-only range
+started_at:(2025-01-01..2025-01-31)
+
+# Exact time range
+started_at:(2025-01-15 08:00:00..2025-01-15 17:00:00)
+
+# Mixed forms in a range
+started_at:(2025-01-15..2025-01-16 14:30:00)
+mod_date:(1737936000..2025-02-01)
+
+# Multiple values (OR'd)
+started_at:(2025-01-15, 2025-02-01 09:00:00, 1737936000)
+```
 
 ---
 
@@ -198,7 +225,7 @@ item_path@name, mod_date@short
 | Validation / Hash State / Enum / Boolean  | `full`, `short`                          |
 | Integer / String             | *(no formatting options)*                         |
 
-The `timestamp` format modifier converts dates to UTC timestamps (seconds since Unix epoch), which is useful for programmatic processing or web applications that need to format dates in the user's local timezone.
+All three date display formats (`@short`, `@full`, `@timestamp`) produce values that can be used directly as date filter input — see [Date Filter Formats](#date-filter-formats) above.
 
 ---
 

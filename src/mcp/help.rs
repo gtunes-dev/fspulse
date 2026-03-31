@@ -39,7 +39,7 @@ Filters use the syntax: `column_name:(value1, value2, ...)`
 | Type | Examples |
 |------|----------|
 | Integer | `5`, `1..5`, `> 1024`, `null`, `not null` |
-| Date | `2024-01-01`, `2024-01-01..2024-06-30` |
+| Date | `2024-01-01`, `2024-01-01 14:30:00`, `1711929600` |
 | Boolean | `T`, `F`, `true`, `false` |
 | String | `'example'`, `null`, `not null` |
 | Path | `'/photos'`, `'report.pdf'` |
@@ -68,11 +68,19 @@ Controls displayed columns. Use `default` for defaults, `all` for everything.
 - **Date columns** (`mod_date`, `started_at`, `ended_at`, `created_at`, `updated_at`):
   - `@short` (default) — date only: `2026-03-30`
   - `@full` — date and time with second precision: `2026-03-30 18:44:11`
-  - `@timestamp` — raw Unix epoch (seconds, UTC)
+  - `@timestamp` — raw Unix epoch (seconds, UTC): `1743364800`
 - **Path columns** (`item_path`):
   - `@name` — file/folder name only (no directory path)
 
 Examples: `mod_date@full`, `started_at@timestamp`, `item_path@name`
+
+**Date filter formats** — all three display formats above can be used as filter input, so output from a query can be fed directly back into a filter:
+
+- Date only: `started_at:(2026-03-30)` — matches the entire day
+- Date and time: `started_at:(2026-03-30 18:44:11)` — matches that exact second
+- Unix epoch: `started_at:(1743364800)` — matches that exact second
+
+These forms can be mixed freely in ranges: `started_at:(2026-03-30..2026-03-31 12:00:00)`, `mod_date:(1743364800..2026-04-01)`
 
 ### Pagination
 

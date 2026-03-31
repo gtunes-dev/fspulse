@@ -82,8 +82,11 @@ date_filter        =  { date_col ~ date_filter_body }
 date_filter_body   = _{ WS* ~ COLON ~ WS* ~ LPAREN ~ WS* ~ date_filter_values ~ WS* ~ RPAREN }
 date_filter_values = _{ date_spec ~ (WS* ~ COMMA ~ date_spec)* }
 date_spec          = _{ null | not_null | date_range | date }
-date_range         =  { date ~ WS* ~ DOTDOT ~ date }
-date               =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
+date_range         =  { date ~ WS* ~ DOTDOT ~ WS* ~ date }
+date               = _{ date_timestamp | date_long | date_short }
+date_timestamp     =  { WS* ~ ASCII_DIGIT{10,} }
+date_long          =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} ~ " " ~ ASCII_DIGIT{2} ~ ":" ~ ASCII_DIGIT{2} ~ ":" ~ ASCII_DIGIT{2} }
+date_short         =  { WS* ~ ASCII_DIGIT{4} ~ "-" ~ ASCII_DIGIT{2} ~ "-" ~ ASCII_DIGIT{2} }
 
 // Bool Columns
 bool_col = { "is_deleted" | "is_added" | "is_current" | "is_hash" | "hash_all" | "is_val" | "was_restarted" | "has_validator" | "do_not_validate" }

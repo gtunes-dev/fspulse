@@ -62,7 +62,7 @@ impl ColType {
             ColType::Date => ColTypeInfo::new(
                 Rule::date_filter_EOI,
                 "Date",
-                "ISO dates or ranges e.g. 2025-01-01, 2025-02-01..2025-02-14\n(null and not null also ok)",
+                "Dates, datetimes, or epochs e.g. 2025-01-01, 2025-01-01 14:30:00, 1735689600\nRanges e.g. 2025-01-01..2025-01-31, forms can be mixed\n(null and not null also ok)",
             ),
             ColType::Bool => ColTypeInfo::new(
                 Rule::bool_filter_EOI,

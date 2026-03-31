@@ -198,20 +198,47 @@ impl DateFilter {
         }
     }
 
+    /// Resolve a parsed date value to a UTC epoch for use as a range start.
+    /// - date_short: start of day (00:00:00 local)
+    /// - date_long:  exact second
+    /// - timestamp:  literal value
+    fn resolve_start(pair: &Pair<Rule>) -> Result<i64, FsPulseError> {
+        match pair.as_rule() {
+            Rule::date_short => Utils::date_start_of_day(pair.as_str()),
+            Rule::date_long => Utils::datetime_to_epoch(pair.as_str()),
+            Rule::date_timestamp => Utils::parse_timestamp(pair.as_str()),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Resolve a parsed date value to a UTC epoch for use as a range end.
+    /// - date_short: end of day (23:59:59 local)
+    /// - date_long:  exact second
+    /// - timestamp:  literal value
+    fn resolve_end(pair: &Pair<Rule>) -> Result<i64, FsPulseError> {
+        match pair.as_rule() {
+            Rule::date_short => Utils::date_end_of_day(pair.as_str()),
+            Rule::date_long => Utils::datetime_to_epoch(pair.as_str()),
+            Rule::date_timestamp => Utils::parse_timestamp(pair.as_str()),
+            _ => unreachable!(),
+        }
+    }
+
     pub fn validate_values(pair: &mut Pairs<Rule>) -> Result<(), FsPulseError> {
         let inner_pairs = pair.next().unwrap().into_inner();
 
         for date_spec in inner_pairs {
             match date_spec.as_rule() {
-                Rule::date => {
-                    let date_start_str = date_spec.as_str();
-                    Utils::single_date_bounds(date_start_str)?;
+                Rule::date_short | Rule::date_long | Rule::date_timestamp => {
+                    Self::resolve_start(&date_spec)?;
                 }
                 Rule::date_range => {
                     let mut range_inner = date_spec.into_inner();
-                    let date_start_str = range_inner.next().unwrap().as_str();
-                    let date_end_str = range_inner.next().unwrap().as_str();
-                    Utils::range_date_bounds(date_start_str, date_end_str)?;
+                    let start_pair = range_inner.next().unwrap();
+                    let end_pair = range_inner.next().unwrap();
+                    let start = Self::resolve_start(&start_pair)?;
+                    let end = Self::resolve_end(&end_pair)?;
+                    Utils::validate_range(start, end)?;
                 }
                 Rule::null => {}
                 Rule::not_null => {}
@@ -243,9 +270,9 @@ impl DateFilter {
 
         for date_spec in iter {
             match date_spec.as_rule() {
-                Rule::date => {
-                    let date_start_str = date_spec.as_str();
-                    let (date_start, date_end) = Utils::single_date_bounds(date_start_str)?;
+                Rule::date_short | Rule::date_long | Rule::date_timestamp => {
+                    let date_start = Self::resolve_start(&date_spec)?;
+                    let date_end = Self::resolve_end(&date_spec)?;
                     date_filter.date_specs.push(DateSpec::DateRange {
                         date_start,
                         date_end,
@@ -253,10 +280,11 @@ impl DateFilter {
                 }
                 Rule::date_range => {
                     let mut range_inner = date_spec.into_inner();
-                    let date_start_str = range_inner.next().unwrap().as_str();
-                    let date_end_str = range_inner.next().unwrap().as_str();
-                    let (date_start, date_end) =
-                        Utils::range_date_bounds(date_start_str, date_end_str)?;
+                    let start_pair = range_inner.next().unwrap();
+                    let end_pair = range_inner.next().unwrap();
+                    let date_start = Self::resolve_start(&start_pair)?;
+                    let date_end = Self::resolve_end(&end_pair)?;
+                    Utils::validate_range(date_start, date_end)?;
                     date_filter.date_specs.push(DateSpec::DateRange {
                         date_start,
                         date_end,
@@ -1037,6 +1065,205 @@ mod tests {
     fn test_date_filter_invalid_format() {
         let result = QueryParser::parse(Rule::date_filter_EOI, "01/15/2025");
         assert!(result.is_err(), "Should reject non-ISO date format");
+    }
+
+    #[test]
+    fn test_date_filter_single_datetime() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15 14:30:00");
+        assert!(
+            result.is_ok(),
+            "Failed to parse single datetime: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_datetime_range() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15 08:00:00..2025-01-15 17:00:00");
+        assert!(
+            result.is_ok(),
+            "Failed to parse datetime range: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_mixed_date_and_datetime() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15, 2025-01-16 14:30:00");
+        assert!(
+            result.is_ok(),
+            "Failed to parse mixed date and datetime: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_mixed_range_short_to_long() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15..2025-01-16 14:30:00");
+        assert!(
+            result.is_ok(),
+            "Failed to parse short..long range: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_mixed_range_long_to_short() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15 08:00:00..2025-01-16");
+        assert!(
+            result.is_ok(),
+            "Failed to parse long..short range: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_datetime_invalid_missing_seconds() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15 14:30");
+        assert!(result.is_err(), "Should reject datetime without seconds");
+    }
+
+    #[test]
+    fn test_date_filter_single_timestamp() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "1737936000");
+        assert!(
+            result.is_ok(),
+            "Failed to parse single timestamp: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_timestamp_range() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "1737936000..1738022400");
+        assert!(
+            result.is_ok(),
+            "Failed to parse timestamp range: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_mixed_string_and_timestamp() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15, 1737936000");
+        assert!(
+            result.is_ok(),
+            "Failed to parse mixed string and timestamp: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_mixed_range_string_to_timestamp() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15..1738022400");
+        assert!(
+            result.is_ok(),
+            "Failed to parse string..timestamp range: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_mixed_range_timestamp_to_string() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "1737936000..2025-01-31");
+        assert!(
+            result.is_ok(),
+            "Failed to parse timestamp..string range: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_mixed_range_long_to_timestamp() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "2025-01-15 08:00:00..1738022400");
+        assert!(
+            result.is_ok(),
+            "Failed to parse long..timestamp range: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_mixed_range_timestamp_to_long() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "1737936000..2025-01-31 17:00:00");
+        assert!(
+            result.is_ok(),
+            "Failed to parse timestamp..long range: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_date_filter_timestamp_too_short() {
+        let result = QueryParser::parse(Rule::date_filter_EOI, "123456789");
+        assert!(result.is_err(), "Should reject timestamp shorter than 10 digits");
+    }
+
+    // ── resolve_start / resolve_end value tests ──────────────────────────
+
+    /// Parse a single date value through date_filter_EOI and return the inner
+    /// date_short / date_long / date_timestamp pair.
+    fn parse_single_date(input: &str) -> Pair<'_, Rule> {
+        let pairs = QueryParser::parse(Rule::date_filter_EOI, input)
+            .unwrap_or_else(|e| panic!("Failed to parse '{input}': {e}"));
+        // date_filter_EOI is silent, so we get the inner date_spec children directly.
+        // For a single value, the first non-EOI pair is the date pair we want.
+        pairs
+            .flatten()
+            .find(|p| matches!(p.as_rule(), Rule::date_short | Rule::date_long | Rule::date_timestamp))
+            .unwrap_or_else(|| panic!("No date pair found in '{input}'"))
+    }
+
+    #[test]
+    fn test_resolve_date_short_expands_to_full_day() {
+        let pair = parse_single_date("2025-06-15");
+        let start = DateFilter::resolve_start(&pair).unwrap();
+        let end = DateFilter::resolve_end(&pair).unwrap();
+        assert!(start < end, "date_short should expand: start={start}, end={end}");
+        // Full day is 86399 seconds (23:59:59 - 00:00:00), possibly ±3600 for DST
+        let span = end - start;
+        assert!(span >= 82800 && span <= 90000, "unexpected day span: {span}");
+    }
+
+    #[test]
+    fn test_resolve_date_long_is_exact_second() {
+        let pair = parse_single_date("2025-06-15 14:30:00");
+        let start = DateFilter::resolve_start(&pair).unwrap();
+        let end = DateFilter::resolve_end(&pair).unwrap();
+        assert_eq!(start, end, "date_long should resolve to exact second");
+    }
+
+    #[test]
+    fn test_resolve_timestamp_is_literal_value() {
+        let pair = parse_single_date("1750000000");
+        let start = DateFilter::resolve_start(&pair).unwrap();
+        let end = DateFilter::resolve_end(&pair).unwrap();
+        assert_eq!(start, 1750000000);
+        assert_eq!(end, 1750000000);
+    }
+
+    #[test]
+    fn test_resolve_date_short_start_is_before_midday() {
+        // If date_short is the start of a range, it should resolve to start-of-day,
+        // which is earlier than a date_long at midday on the same day.
+        let short_pair = parse_single_date("2025-06-15");
+        let long_pair = parse_single_date("2025-06-15 12:00:00");
+        let short_start = DateFilter::resolve_start(&short_pair).unwrap();
+        let long_start = DateFilter::resolve_start(&long_pair).unwrap();
+        assert!(short_start < long_start,
+            "date_short start-of-day ({short_start}) should be before midday ({long_start})");
+    }
+
+    #[test]
+    fn test_resolve_date_short_end_is_after_midday() {
+        // If date_short is the end of a range, it should resolve to end-of-day,
+        // which is later than a date_long at midday on the same day.
+        let short_pair = parse_single_date("2025-06-15");
+        let long_pair = parse_single_date("2025-06-15 12:00:00");
+        let short_end = DateFilter::resolve_end(&short_pair).unwrap();
+        let long_end = DateFilter::resolve_end(&long_pair).unwrap();
+        assert!(short_end > long_end,
+            "date_short end-of-day ({short_end}) should be after midday ({long_end})");
     }
 
     // ==================================================================================

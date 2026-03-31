@@ -14,7 +14,7 @@ High-level summary of all monitored roots with latest scan stats (file/folder co
 
 ## query_data
 
-Execute a query using the fsPulse [query DSL](../query.md). Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Results are capped at 200 rows; use `LIMIT` and `OFFSET` in the query string to paginate. Returns results as a formatted table.
+Execute a query using the fsPulse [query DSL](../query.md). Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Date columns can be displayed as date-only (`@short`), date+time (`@full`), or Unix epoch (`@timestamp`), and all three formats can be used as filter input. Results are capped at 200 rows; use `LIMIT` and `OFFSET` in the query string to paginate. Returns results as a formatted table.
 
 ## query_count
 

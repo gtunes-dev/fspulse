@@ -21,97 +21,110 @@ impl Utils {
             .unwrap_or_else(|| path.to_owned())
     }
 
-    /// Parses a single date string (yyyy-mm-dd) and returns the NaiveDateTime values for:
-    /// - start of day (00:00:00)
-    /// - end of day (23:59:59)
-    fn parse_date_bounds(date_str: &str) -> Result<(NaiveDateTime, NaiveDateTime), FsPulseError> {
-        let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-            .map_err(|_| FsPulseError::CustomParsingError(format!("Invalid date: '{date_str}'")))?;
+    // ── Date parsing primitives ──────────────────────────────────────────
 
-        let start_dt = date.and_hms_opt(0, 0, 0).ok_or_else(|| {
-            FsPulseError::CustomParsingError(format!(
-                "Unable to create start time for '{date_str}'"
-            ))
-        })?;
-
-        let end_dt = date.and_hms_opt(23, 59, 59).ok_or_else(|| {
-            FsPulseError::CustomParsingError(format!("Unable to create end time for '{date_str}'"))
-        })?;
-        Ok((start_dt, end_dt))
+    fn parse_date(date_str: &str) -> Result<NaiveDate, FsPulseError> {
+        NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            .map_err(|_| FsPulseError::CustomParsingError(format!("Invalid date: '{date_str}'")))
     }
 
-    /// For a single date input (assumed to be in local time), returns (start_timestamp, end_timestamp)
-    /// as UTC timestamps, choosing the earliest possible time for the start (expanding the lower bound)
-    /// and the latest possible time for the end.
+    fn parse_datetime(datetime_str: &str) -> Result<NaiveDateTime, FsPulseError> {
+        NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S")
+            .map_err(|_| FsPulseError::CustomParsingError(format!("Invalid datetime: '{datetime_str}'")))
+    }
+
+    pub fn parse_timestamp(ts_str: &str) -> Result<i64, FsPulseError> {
+        ts_str.trim().parse().map_err(|_| {
+            FsPulseError::CustomParsingError(format!("Invalid timestamp: '{ts_str}'"))
+        })
+    }
+
+    // ── Local-to-UTC conversion ──────────────────────────────────────────
+
+    /// Converts a local NaiveDateTime to UTC epoch, choosing the earliest
+    /// valid time when DST makes the local time ambiguous.
+    fn local_to_utc_earliest(naive: &NaiveDateTime, label: &str) -> Result<i64, FsPulseError> {
+        match Local.from_local_datetime(naive) {
+            LocalResult::Single(dt) => Ok(dt.with_timezone(&Utc).timestamp()),
+            LocalResult::Ambiguous(earliest, _) => Ok(earliest.with_timezone(&Utc).timestamp()),
+            LocalResult::None => Err(FsPulseError::CustomParsingError(format!(
+                "Invalid local time '{label}'"
+            ))),
+        }
+    }
+
+    /// Converts a local NaiveDateTime to UTC epoch, choosing the latest
+    /// valid time when DST makes the local time ambiguous.
+    fn local_to_utc_latest(naive: &NaiveDateTime, label: &str) -> Result<i64, FsPulseError> {
+        match Local.from_local_datetime(naive) {
+            LocalResult::Single(dt) => Ok(dt.with_timezone(&Utc).timestamp()),
+            LocalResult::Ambiguous(_, latest) => Ok(latest.with_timezone(&Utc).timestamp()),
+            LocalResult::None => Err(FsPulseError::CustomParsingError(format!(
+                "Invalid local time '{label}'"
+            ))),
+        }
+    }
+
+    // ── Start/end resolution ─────────────────────────────────────────────
+    //
+    // These are the core building blocks for date filters. Each date form
+    // resolves differently depending on whether it appears as the start or
+    // end of a range:
+    //
+    //   date_short ("2025-01-15")     → start of day / end of day
+    //   date_long  ("2025-01-15 08:00:00") → exact second
+    //   timestamp  ("1737936000")     → exact value
+
+    /// Resolve a date-only string to UTC epoch for use as a range start (00:00:00 local).
+    pub fn date_start_of_day(date_str: &str) -> Result<i64, FsPulseError> {
+        let date = Self::parse_date(date_str)?;
+        let dt = date.and_hms_opt(0, 0, 0).expect("00:00:00 is always valid");
+        Self::local_to_utc_earliest(&dt, date_str)
+    }
+
+    /// Resolve a date-only string to UTC epoch for use as a range end (23:59:59 local).
+    pub fn date_end_of_day(date_str: &str) -> Result<i64, FsPulseError> {
+        let date = Self::parse_date(date_str)?;
+        let dt = date.and_hms_opt(23, 59, 59).expect("23:59:59 is always valid");
+        Self::local_to_utc_latest(&dt, date_str)
+    }
+
+    /// Resolve a datetime string to a UTC epoch (exact second).
+    pub fn datetime_to_epoch(datetime_str: &str) -> Result<i64, FsPulseError> {
+        let dt = Self::parse_datetime(datetime_str)?;
+        Self::local_to_utc_earliest(&dt, datetime_str)
+    }
+
+    // ── Range validation ─────────────────────────────────────────────────
+
+    /// Validates that start <= end.
+    pub fn validate_range(start: i64, end: i64) -> Result<(i64, i64), FsPulseError> {
+        if start > end {
+            return Err(FsPulseError::CustomParsingError(format!(
+                "Range start ({}) is after range end ({})",
+                start, end
+            )));
+        }
+        Ok((start, end))
+    }
+
+    // ── Convenience methods for callers outside the query engine ──────────
+
+    /// For a single date-only string: returns full-day bounds as UTC epochs.
     pub fn single_date_bounds(date_str: &str) -> Result<(i64, i64), FsPulseError> {
-        let (naive_start, naive_end) = Self::parse_date_bounds(date_str)?;
-
-        // For start time, try to use the earliest valid time.
-        let local_start = match Local.from_local_datetime(&naive_start) {
-            LocalResult::Single(dt) => dt,
-            LocalResult::Ambiguous(earliest, _latest) => earliest,
-            LocalResult::None => {
-                // For missing times, you might decide to move forward a minute until a valid time is found.
-                // Here we simply return an error, but you could adjust to your needs.
-                return Err(FsPulseError::CustomParsingError(format!(
-                    "Invalid time '{date_str}')"
-                )));
-            }
-        };
-
-        // For end time, use the latest valid time.
-        let local_end = match Local.from_local_datetime(&naive_end) {
-            LocalResult::Single(dt) => dt,
-            LocalResult::Ambiguous(_earliest, latest) => latest,
-            LocalResult::None => {
-                return Err(FsPulseError::CustomParsingError(format!(
-                    "Invalid time '{date_str}')"
-                )));
-            }
-        };
-
-        let start_ts = local_start.with_timezone(&Utc).timestamp();
-        let end_ts = local_end.with_timezone(&Utc).timestamp();
-        Ok((start_ts, end_ts))
+        let start = Self::date_start_of_day(date_str)?;
+        let end = Self::date_end_of_day(date_str)?;
+        Ok((start, end))
     }
 
-    /// Similar modifications would be applied for a date range.
+    /// For a range of date-only strings: returns (start-of-first-day, end-of-last-day) as UTC epochs.
     pub fn range_date_bounds(
         start_date_str: &str,
         end_date_str: &str,
     ) -> Result<(i64, i64), FsPulseError> {
-        let (naive_start, _) = Self::parse_date_bounds(start_date_str)?;
-        let (_, naive_end) = Self::parse_date_bounds(end_date_str)?;
-
-        let local_start = match Local.from_local_datetime(&naive_start) {
-            LocalResult::Single(dt) => dt,
-            LocalResult::Ambiguous(earliest, _) => earliest,
-            LocalResult::None => {
-                return Err(FsPulseError::CustomParsingError(format!(
-                    "Invalid start time '{start_date_str}')"
-                )));
-            }
-        };
-
-        let local_end = match Local.from_local_datetime(&naive_end) {
-            LocalResult::Single(dt) => dt,
-            LocalResult::Ambiguous(_, latest) => latest,
-            LocalResult::None => {
-                return Err(FsPulseError::CustomParsingError(format!(
-                    "Invalid end time '{end_date_str}')"
-                )));
-            }
-        };
-
-        if local_start > local_end {
-            return Err(FsPulseError::CustomParsingError(format!(
-                "Start date '{start_date_str}' is after end date '{end_date_str}'"
-            )));
-        }
-
-        let start_ts = local_start.with_timezone(&Utc).timestamp();
-        let end_ts = local_end.with_timezone(&Utc).timestamp();
-        Ok((start_ts, end_ts))
+        let start = Self::date_start_of_day(start_date_str)?;
+        let end = Self::date_end_of_day(end_date_str)?;
+        Self::validate_range(start, end)
     }
 
     /// Format a duration as a human-readable elapsed time string.
@@ -143,13 +156,106 @@ impl Utils {
 mod tests {
     use super::*;
 
+    // ── date_start_of_day / date_end_of_day ──────────────────────────────
+
     #[test]
-    fn test_single_date_bounds_valid() {
-        let result = Utils::single_date_bounds("2023-12-25");
+    fn test_date_start_of_day_valid() {
+        let result = Utils::date_start_of_day("2023-12-25");
         assert!(result.is_ok());
-        let (start, end) = result.unwrap();
+    }
+
+    #[test]
+    fn test_date_end_of_day_valid() {
+        let result = Utils::date_end_of_day("2023-12-25");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_date_day_bounds_span_full_day() {
+        let start = Utils::date_start_of_day("2023-12-25").unwrap();
+        let end = Utils::date_end_of_day("2023-12-25").unwrap();
+        assert!(start < end);
+        assert!(end - start <= 86400);
+    }
+
+    #[test]
+    fn test_date_start_of_day_invalid() {
+        assert!(Utils::date_start_of_day("invalid-date").is_err());
+        assert!(Utils::date_start_of_day("2023-13-25").is_err());
+        assert!(Utils::date_start_of_day("").is_err());
+    }
+
+    #[test]
+    fn test_date_end_of_day_invalid() {
+        assert!(Utils::date_end_of_day("invalid-date").is_err());
+        assert!(Utils::date_end_of_day("2023-13-25").is_err());
+        assert!(Utils::date_end_of_day("").is_err());
+    }
+
+    // ── datetime_to_epoch ────────────────────────────────────────────────
+
+    #[test]
+    fn test_datetime_to_epoch_valid() {
+        let result = Utils::datetime_to_epoch("2023-12-25 14:30:00");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_datetime_to_epoch_invalid() {
+        assert!(Utils::datetime_to_epoch("2023-12-25").is_err());
+        assert!(Utils::datetime_to_epoch("not-a-datetime").is_err());
+    }
+
+    // ── parse_timestamp ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_timestamp_valid() {
+        let result = Utils::parse_timestamp("1703500200");
+        assert_eq!(result.unwrap(), 1703500200);
+    }
+
+    #[test]
+    fn test_parse_timestamp_invalid() {
+        assert!(Utils::parse_timestamp("not_a_number").is_err());
+    }
+
+    // ── validate_range ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_validate_range_valid() {
+        let result = Utils::validate_range(100, 400);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), (100, 400));
+    }
+
+    #[test]
+    fn test_validate_range_equal() {
+        let result = Utils::validate_range(100, 100);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_reversed() {
+        assert!(Utils::validate_range(400, 100).is_err());
+    }
+
+    #[test]
+    fn test_datetime_to_epoch_within_day_bounds() {
+        // A datetime at midday should fall between start-of-day and end-of-day
+        let start = Utils::date_start_of_day("2023-12-25").unwrap();
+        let end = Utils::date_end_of_day("2023-12-25").unwrap();
+        let mid = Utils::datetime_to_epoch("2023-12-25 12:00:00").unwrap();
+        assert!(mid > start, "midday ({mid}) should be after start-of-day ({start})");
+        assert!(mid < end, "midday ({mid}) should be before end-of-day ({end})");
+    }
+
+    // ── Convenience methods (single_date_bounds, range_date_bounds) ──────
+
+    #[test]
+    fn test_single_date_bounds() {
+        let (start, end) = Utils::single_date_bounds("2023-12-25").unwrap();
         assert!(start <= end);
-        assert!(end - start <= 86400); // Should be within 24 hours
+        assert!(end - start <= 86400);
     }
 
     #[test]
@@ -161,16 +267,13 @@ mod tests {
 
     #[test]
     fn test_range_date_bounds_valid() {
-        let result = Utils::range_date_bounds("2023-12-24", "2023-12-25");
-        assert!(result.is_ok());
-        let (start, end) = result.unwrap();
+        let (start, end) = Utils::range_date_bounds("2023-12-24", "2023-12-25").unwrap();
         assert!(start <= end);
     }
 
     #[test]
     fn test_range_date_bounds_reversed() {
-        let result = Utils::range_date_bounds("2023-12-25", "2023-12-24");
-        assert!(result.is_err());
+        assert!(Utils::range_date_bounds("2023-12-25", "2023-12-24").is_err());
     }
 
     #[test]
