@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2e36ea7.js";
+            window.path_to_searchindex_js = "../searchindex-25c08cfd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-435155bc.js"></script>
@@ -182,7 +182,7 @@
 <h2 id="system_overview"><a class="header" href="#system_overview">system_overview</a></h2>
 <p>High-level summary of all monitored roots with latest scan stats (file/folder counts, total monitored size), unreviewed integrity issue counts, and database path/size.</p>
 <h2 id="query_data"><a class="header" href="#query_data">query_data</a></h2>
-<p>Execute a query using the fsPulse <a href="../query.html">query DSL</a>. Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Results are capped at 200 rows; use <code>LIMIT</code> and <code>OFFSET</code> in the query string to paginate. Returns results as a formatted table.</p>
+<p>Execute a query using the fsPulse <a href="../query.html">query DSL</a>. Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Date columns can be displayed as date-only (<code>@short</code>), date+time (<code>@full</code>), or Unix epoch (<code>@timestamp</code>), and all three formats can be used as filter input. Results are capped at 200 rows; use <code>LIMIT</code> and <code>OFFSET</code> in the query string to paginate. Returns results as a formatted table.</p>
 <h2 id="query_count"><a class="header" href="#query_count">query_count</a></h2>
 <p>Count rows matching a query without returning the data. Useful for understanding data volumes before paginating with <code>query_data</code>.</p>
 <h2 id="query_help"><a class="header" href="#query_help">query_help</a></h2>

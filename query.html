@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e2e36ea7.js";
+            window.path_to_searchindex_js = "searchindex-25c08cfd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-435155bc.js"></script>
@@ -327,7 +327,7 @@
 </thead>
 <tbody>
 <tr><td>Integer</td><td><code>5</code>, <code>1..5</code>, <code>3, 5, 7..9</code>, <code>&gt; 1024</code>, <code>&lt; 10</code>, <code>null</code>, <code>not null</code></td><td>Supports ranges, comparators, and nullability. Ranges are inclusive.</td></tr>
-<tr><td>Date</td><td><code>2024-01-01</code>, <code>2024-01-01..2024-06-30</code>, <code>null</code>, <code>not null</code></td><td>Use <code>YYYY-MM-DD</code>. Ranges are inclusive.</td></tr>
+<tr><td>Date</td><td><code>2024-01-01</code>, <code>2024-01-01 14:30:00</code>, <code>1711929600</code>, <code>null</code>, <code>not null</code></td><td>Three input forms (see below). Ranges are inclusive.</td></tr>
 <tr><td>Boolean</td><td><code>true</code>, <code>false</code>, <code>T</code>, <code>F</code>, <code>null</code>, <code>not null</code></td><td>Unquoted.</td></tr>
 <tr><td>String</td><td><code>'example'</code>, <code>'error: missing EOF'</code>, <code>null</code>, <code>not null</code></td><td>Quoted strings.</td></tr>
 <tr><td>Path</td><td><code>'photos/reports'</code>, <code>'file.txt'</code></td><td>Must be quoted. <strong>Null values are not supported.</strong></td></tr>
@@ -339,6 +339,34 @@
 </tbody>
 </table>
 </div>
+<h3 id="date-filter-formats"><a class="header" href="#date-filter-formats">Date Filter Formats</a></h3>
+<p>Date columns accept three input forms, matching the three display formats available via <code>@short</code>, <code>@full</code>, and <code>@timestamp</code>. Any value produced by a query can be used directly as filter input.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Form</th><th>Example</th><th>Behavior</th></tr>
+</thead>
+<tbody>
+<tr><td>Date only</td><td><code>2025-01-15</code></td><td>Matches the <strong>entire day</strong> (00:00:00 through 23:59:59 local time)</td></tr>
+<tr><td>Date and time</td><td><code>2025-01-15 14:30:00</code></td><td>Matches that <strong>exact second</strong></td></tr>
+<tr><td>Unix epoch</td><td><code>1737936000</code></td><td>Matches that <strong>exact second</strong> (10+ digits, UTC)</td></tr>
+</tbody>
+</table>
+</div>
+<p>These forms can be mixed freely within a filter or range:</p>
+<pre><code class="language-text"># Date-only range
+started_at:(2025-01-01..2025-01-31)
+
+# Exact time range
+started_at:(2025-01-15 08:00:00..2025-01-15 17:00:00)
+
+# Mixed forms in a range
+started_at:(2025-01-15..2025-01-16 14:30:00)
+mod_date:(1737936000..2025-02-01)
+
+# Multiple values (OR'd)
+started_at:(2025-01-15, 2025-02-01 09:00:00, 1737936000)
+</code></pre>
 <hr>
 <h2 id="combining-filters"><a class="header" href="#combining-filters">Combining Filters</a></h2>
 <p>When specifying multiple values within a single filter, the match is logically <strong>OR</strong>. When specifying multiple filters across different columns, the match is logically <strong>AND</strong>.</p>
@@ -376,7 +404,7 @@
 </tbody>
 </table>
 </div>
-<p>The <code>timestamp</code> format modifier converts dates to UTC timestamps (seconds since Unix epoch), which is useful for programmatic processing or web applications that need to format dates in the user’s local timezone.</p>
+<p>All three date display formats (<code>@short</code>, <code>@full</code>, <code>@timestamp</code>) produce values that can be used directly as date filter input — see <a href="#date-filter-formats">Date Filter Formats</a> above.</p>
 <hr>
 <h2 id="the-group-by-clause"><a class="header" href="#the-group-by-clause">The <code>GROUP BY</code> Clause</a></h2>
 <p>Groups rows by one or more columns and enables aggregate functions in the <code>SHOW</code> clause. When <code>GROUP BY</code> is used, a <code>SHOW</code> clause is required.</p>
