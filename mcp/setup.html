@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-01eeff74.js";
+            window.path_to_searchindex_js = "../searchindex-ef0bbc12.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-435155bc.js"></script>
@@ -185,45 +185,27 @@ enabled = true
 </code></pre>
 <p>Restart fsPulse after changing this setting. You should see <code>MCP server enabled at /mcp</code> in the startup output.</p>
 <h2 id="choosing-a-connection-method"><a class="header" href="#choosing-a-connection-method">Choosing a Connection Method</a></h2>
-<p>There are three ways to connect an AI client to fsPulse’s MCP server. Each has different tradeoffs and known issues:</p>
+<p>There are two ways to connect an AI client to fsPulse’s MCP server:</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Method</th><th>Client</th><th>Requires Proxy</th><th>Multi-Chat</th><th>Setup Effort</th></tr>
 </thead>
 <tbody>
-<tr><td><a href="#claude-desktop-custom-connector">Custom Connector</a></td><td>Claude Desktop</td><td>Yes (HTTPS)</td><td>Yes</td><td>Medium</td></tr>
-<tr><td><a href="#claude-desktop-developer-config">Developer Config</a></td><td>Claude Desktop</td><td>No</td><td>No</td><td>Low</td></tr>
+<tr><td><a href="#claude-desktop">Claude Desktop</a></td><td>Claude Desktop</td><td>No</td><td>No</td><td>Low</td></tr>
 <tr><td><a href="#claude-code">Claude Code</a></td><td>Claude Code</td><td>No</td><td>Yes</td><td>Low</td></tr>
 </tbody>
 </table>
 </div>
 <p><strong>Multi-Chat</strong> means multiple chat sessions can use the MCP server at the same time.</p>
-<h2 id="claude-desktop-custom-connector"><a class="header" href="#claude-desktop-custom-connector">Claude Desktop (Custom Connector)</a></h2>
-<p>This is the recommended approach for Claude Desktop. It uses Claude’s native Custom Connector feature to connect directly to fsPulse over HTTPS, allowing every chat session to communicate with the MCP server independently.</p>
-<p><strong>Requirement:</strong> Custom Connectors require an HTTPS URL. Since fsPulse serves HTTP, you need a reverse proxy that terminates TLS in front of fsPulse. Any reverse proxy that supports TLS will work, including <a href="https://caddyserver.com/">Caddy</a>, <a href="https://nginx.org/">nginx</a>, or <a href="https://traefik.io/">Traefik</a>.</p>
-<h3 id="setting-up-a-reverse-proxy-caddy-example"><a class="header" href="#setting-up-a-reverse-proxy-caddy-example">Setting up a reverse proxy (Caddy example)</a></h3>
-<p><a href="https://caddyserver.com/">Caddy</a> is the simplest option because it automatically provisions locally-trusted TLS certificates. After <a href="https://caddyserver.com/docs/install">installing Caddy</a>, create a <code>Caddyfile</code>:</p>
-<pre><code>https://localhost:8443 {
-    reverse_proxy localhost:8080
-}
-</code></pre>
-<p>Run <code>caddy run</code> (or <code>caddy start</code> to run in the background). Caddy will generate a certificate trusted by your system, so Claude Desktop will accept the connection without errors.</p>
-<blockquote>
-<p><strong>Note:</strong> Replace <code>8080</code> with your fsPulse port if you changed it, and <code>8443</code> with whatever HTTPS port you prefer.</p>
-</blockquote>
-<h3 id="adding-the-connector-in-claude-desktop"><a class="header" href="#adding-the-connector-in-claude-desktop">Adding the connector in Claude Desktop</a></h3>
-<ol>
-<li>Open Claude Desktop and go to <strong>Settings &gt; Connectors</strong> (not Developer settings).</li>
-<li>Scroll to the bottom and click <strong>Add custom connector</strong>.</li>
-<li>Enter the HTTPS URL of your reverse proxy (e.g., <code>https://localhost:8443/mcp</code>).</li>
-<li>Leave the OAuth fields blank (fsPulse does not require authentication).</li>
-<li>Click <strong>Add</strong>.</li>
-</ol>
-<p><img src="../images/claude-connector.png" alt="Adding a custom connector in Claude Desktop"></p>
-<p>fsPulse should now appear as an available connector in all of your Claude Desktop chat sessions.</p>
-<h2 id="claude-desktop-developer-config"><a class="header" href="#claude-desktop-developer-config">Claude Desktop (Developer Config)</a></h2>
-<p>This approach uses the Developer settings JSON config with <a href="https://www.npmjs.com/package/mcp-remote">mcp-remote</a> as a stdio-to-HTTP bridge. It requires no reverse proxy but has a significant limitation: <strong>only one chat session at a time can use the MCP server</strong>. Starting a new chat will not have access to fsPulse’s tools until you restart Claude Desktop.</p>
+<h2 id="claude-desktop"><a class="header" href="#claude-desktop">Claude Desktop</a></h2>
+<p>Claude Desktop connects to fsPulse using the Developer settings JSON config with <a href="https://www.npmjs.com/package/mcp-remote">mcp-remote</a> as a stdio-to-HTTP bridge. This requires Node.js (for <code>npx</code>) and no reverse proxy, but has a limitation: <strong>only one chat session at a time can use the MCP server</strong>. Starting a new chat will not have access to fsPulse’s tools until you restart Claude Desktop.</p>
+<h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
+<ul>
+<li><a href="https://nodejs.org/">Node.js</a> must be installed (provides <code>npx</code>)</li>
+<li>On macOS, Node.js must have <strong>Local Network</strong> access (check <strong>System Settings &gt; Privacy &amp; Security &gt; Local Network</strong> if connecting to a fsPulse instance on another machine on your network)</li>
+</ul>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
 <p>Open Claude Desktop’s configuration file by going to <strong>Settings &gt; Developer</strong> (under “Desktop app”) and clicking <strong>Edit Config</strong>. Add an entry under <code>mcpServers</code>:</p>
 <pre><code class="language-json">{
   "mcpServers": {
@@ -237,6 +219,7 @@ enabled = true
   }
 }
 </code></pre>
+<p>Replace <code>localhost:8080</code> with the hostname and port of your fsPulse instance if it is running on a different machine.</p>
 <p>Restart Claude Desktop. fsPulse should appear as an available MCP server in the first chat session you open.</p>
 <blockquote>
 <p><strong>Why the single-chat limitation?</strong> The Developer config only supports stdio-based MCP servers. The <code>mcp-remote</code> bridge runs as a single subprocess that holds one HTTP session with fsPulse. Only the chat session that first initializes this connection can use it.</p>
@@ -253,7 +236,8 @@ enabled = true
 }
 </code></pre>
 <h2 id="multiple-instances"><a class="header" href="#multiple-instances">Multiple Instances</a></h2>
-<p>You can connect to multiple fsPulse instances by giving each a unique name. This example uses the Developer Config approach, but the same idea applies to Custom Connectors and Claude Code:</p>
+<p>You can connect to multiple fsPulse instances by giving each a unique name:</p>
+<h3 id="claude-desktop-1"><a class="header" href="#claude-desktop-1">Claude Desktop</a></h3>
 <pre><code class="language-json">{
   "mcpServers": {
     "fspulse-local": {
@@ -263,6 +247,20 @@ enabled = true
     "fspulse-remote": {
       "command": "npx",
       "args": ["mcp-remote", "http://my-server:8080/mcp"]
+    }
+  }
+}
+</code></pre>
+<h3 id="claude-code-1"><a class="header" href="#claude-code-1">Claude Code</a></h3>
+<pre><code class="language-json">{
+  "mcpServers": {
+    "fspulse-local": {
+      "type": "streamable-http",
+      "url": "http://localhost:8080/mcp"
+    },
+    "fspulse-remote": {
+      "type": "streamable-http",
+      "url": "http://my-server:8080/mcp"
     }
   }
 }
