@@ -5,10 +5,30 @@ use rmcp::{
 };
 use rmcp::handler::server::wrapper::Parameters;
 
+use chrono::{DateTime, Local, Utc};
+
 use crate::db::Database;
 use crate::query::QueryProcessor;
 
 use super::formatting::format_table;
+
+/// Format a Unix epoch timestamp as a local datetime string.
+fn fmt_ts(epoch: i64) -> String {
+    DateTime::<Utc>::from_timestamp(epoch, 0)
+        .map(|dt| {
+            let local: DateTime<Local> = dt.with_timezone(&Local);
+            local.format("%Y-%m-%d %H:%M:%S").to_string()
+        })
+        .unwrap_or_else(|| epoch.to_string())
+}
+
+/// Format an optional Unix epoch timestamp.
+fn fmt_opt_ts(epoch: Option<i64>) -> String {
+    match epoch {
+        Some(ts) => fmt_ts(ts),
+        None => "-".to_string(),
+    }
+}
 
 // ─── Parameter structs ──────────────────────────────────────────────
 
@@ -212,7 +232,7 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Execute a fspulse query using the built-in DSL. Supports five domains: roots, scans, items, versions, hashes. Use query_help for syntax details. Returns results as a markdown table.")]
+    #[tool(description = "Execute a fspulse query using the built-in DSL. Supports five domains: roots, scans, items, versions, hashes. Date columns default to date-only display; use @full modifier for second-precision timestamps (e.g. mod_date@full). Use query_help for syntax details. Returns results as a markdown table.")]
     async fn query_data(
         &self,
         Parameters(params): Parameters<QueryDataParams>,
@@ -391,7 +411,7 @@ impl FsPulseMcp {
                 out.push_str(&format!(
                     "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
                     scan_id,
-                    started_at,
+                    fmt_ts(started_at),
                     files.unwrap_or(0),
                     folders.unwrap_or(0),
                     size.unwrap_or(0),
@@ -476,7 +496,7 @@ impl FsPulseMcp {
                     child.item_name,
                     type_str,
                     child.size.unwrap_or(0),
-                    child.mod_date.unwrap_or(0),
+                    fmt_opt_ts(child.mod_date),
                     status,
                 ));
             }
@@ -545,7 +565,7 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Get detailed information about a specific item including its version history, size changes, and integrity state.")]
+    #[tool(description = "Get detailed information about a specific item including its version history, size changes, integrity state, and hash observations.")]
     async fn item_detail(
         &self,
         Parameters(params): Parameters<ItemDetailParams>,
@@ -598,7 +618,7 @@ impl FsPulseMcp {
                         v.first_scan_id,
                         v.last_scan_id,
                         v.size.unwrap_or(0),
-                        v.mod_date.unwrap_or(0),
+                        fmt_opt_ts(v.mod_date),
                         v.is_added,
                         v.is_deleted,
                         val,
@@ -746,7 +766,17 @@ Aggregate functions: `count(*)`, `count(col)`, `sum(col)`, `avg(col)`, `min(col)
 ### SHOW Clause
 
 Controls displayed columns. Use `default` for defaults, `all` for everything.
-Format modifiers: `item_path@name`, `mod_date@short`, `started_at@timestamp`
+
+**Format modifiers** — append `@mode` to a column name to control display format:
+
+- **Date columns** (`mod_date`, `started_at`, `ended_at`, `created_at`, `updated_at`):
+  - `@short` (default) — date only: `2026-03-30`
+  - `@full` — date and time with second precision: `2026-03-30 18:44:11`
+  - `@timestamp` — raw Unix epoch (seconds, UTC)
+- **Path columns** (`item_path`):
+  - `@name` — file/folder name only (no directory path)
+
+Examples: `mod_date@full`, `started_at@timestamp`, `item_path@name`
 
 ### Examples
 
