@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.6.1] - 2026-03-31
+
 ### Added
 - **Date/time precision in query filters**: Date filters now accept three input forms — date only (`2025-01-15`), date and time (`2025-01-15 14:30:00`), and Unix epoch (`1737936000`). Date-only values match the entire day; date+time and epoch values match an exact second. All three forms can be mixed freely within a filter or range (e.g. `started_at:(2025-01-15..2025-01-16 14:30:00)`).
 - **Date format round-tripping**: Any date value produced by a query (via `@short`, `@full`, or `@timestamp` display modifiers) can be used directly as filter input, enabling agents and users to copy output values into subsequent queries without conversion.
