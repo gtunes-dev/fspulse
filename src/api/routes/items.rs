@@ -176,7 +176,7 @@ pub struct ItemResponse {
 pub async fn get_immediate_children(
     Query(params): Query<ImmediateChildrenParams>,
 ) -> Result<Json<Vec<ItemResponse>>, (StatusCode, String)> {
-    match items::get_temporal_immediate_children(params.root_id, &params.parent_path, params.scan_id)
+    match items::get_temporal_immediate_children(params.root_id, &params.parent_path, params.scan_id, None, None)
     {
         Ok(items) => {
             let response: Vec<ItemResponse> = items
@@ -228,7 +228,7 @@ pub struct SearchParams {
 pub async fn search_items(
     Query(params): Query<SearchParams>,
 ) -> Result<Json<Vec<ItemResponse>>, (StatusCode, String)> {
-    match items::search_temporal_items(params.root_id, params.scan_id, &params.query) {
+    match items::get_temporal_search_items(params.root_id, params.scan_id, &params.query, None, None) {
         Ok(items) => {
             let response: Vec<ItemResponse> = items
                 .iter()

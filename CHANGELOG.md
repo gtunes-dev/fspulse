@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **MCP pagination**: All tools now support consistent pagination with `limit` (default 50, max 200) and `offset` parameters. Total counts and next-offset hints included in responses.
+- **MCP query_data**: Removed `max_rows` parameter; 200-row cap applied internally. Pagination controlled via LIMIT/OFFSET in the query string.
+- **MCP query_help**: Added data model overview with domain descriptions and entity relationships to help agents understand the data structure before querying.
+- **MCP tool descriptions**: Updated all tool descriptions to document pagination support.
+- **MCP documentation**: Expanded sample prompts with multi-step investigation workflows. Updated tools reference with pagination details.
+
 ## [v0.6.0] - 2026-03-31
 
 ### Added

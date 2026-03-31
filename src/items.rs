@@ -115,13 +115,8 @@ pub struct TemporalTreeItem {
 /// Get immediate children at a point in time using items + item_versions.
 /// Returns the effective version of each immediate child of `parent_path`
 /// as of `scan_id`.
-pub fn get_temporal_immediate_children(
-    root_id: i64,
-    parent_path: &str,
-    scan_id: i64,
-) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
-    let conn = Database::get_connection()?;
-
+/// Common WHERE clause fragment for temporal immediate children queries.
+fn temporal_children_where(parent_path: &str) -> (String, String, String) {
     let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
         parent_path.to_string()
     } else {
@@ -136,6 +131,77 @@ pub fn get_temporal_immediate_children(
         char::from(std::path::MAIN_SEPARATOR as u8 + 1)
     );
 
+    let where_fragment = format!(
+        "WHERE i.root_id = ?1
+           AND iv.first_scan_id = (
+               SELECT MAX(first_scan_id)
+               FROM item_versions
+               WHERE item_id = i.item_id
+                 AND first_scan_id <= ?2
+           )
+           AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
+           AND i.item_path >= ?3
+           AND i.item_path < ?4
+           AND i.item_path != ?5
+           AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'",
+        MAIN_SEPARATOR_STR
+    );
+
+    (path_prefix, path_upper, where_fragment)
+}
+
+/// Count immediate children of a directory at a point in time.
+pub fn count_temporal_immediate_children(
+    root_id: i64,
+    parent_path: &str,
+    scan_id: i64,
+) -> Result<i64, FsPulseError> {
+    let conn = Database::get_connection()?;
+    let (path_prefix, path_upper, where_fragment) = temporal_children_where(parent_path);
+
+    let sql = format!(
+        "SELECT COUNT(*)
+         FROM items i
+         JOIN item_versions iv ON iv.item_id = i.item_id
+         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+             AND hv.item_version = iv.item_version
+             AND hv.first_scan_id = (
+                 SELECT MAX(first_scan_id) FROM hash_versions
+                 WHERE item_id = i.item_id AND item_version = iv.item_version
+             )
+         {}",
+        where_fragment
+    );
+
+    let count: i64 = conn
+        .prepare(&sql)?
+        .query_row(
+            params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
+            |row| row.get(0),
+        )?;
+
+    Ok(count)
+}
+
+pub fn get_temporal_immediate_children(
+    root_id: i64,
+    parent_path: &str,
+    scan_id: i64,
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
+    let conn = Database::get_connection()?;
+    let (path_prefix, path_upper, where_fragment) = temporal_children_where(parent_path);
+
+    let limit_clause = match limit {
+        Some(l) => format!("\n         LIMIT {}", l),
+        None => String::new(),
+    };
+    let offset_clause = match offset {
+        Some(o) if o > 0 => format!("\n         OFFSET {}", o),
+        _ => String::new(),
+    };
+
     let sql = format!(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
@@ -149,20 +215,9 @@ pub fn get_temporal_immediate_children(
                  SELECT MAX(first_scan_id) FROM hash_versions
                  WHERE item_id = i.item_id AND item_version = iv.item_version
              )
-         WHERE i.root_id = ?1
-           AND iv.first_scan_id = (
-               SELECT MAX(first_scan_id)
-               FROM item_versions
-               WHERE item_id = i.item_id
-                 AND first_scan_id <= ?2
-           )
-           AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
-           AND i.item_path >= ?3
-           AND i.item_path < ?4
-           AND i.item_path != ?5
-           AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'
-         ORDER BY i.item_path COLLATE natural_path ASC",
-        MAIN_SEPARATOR_STR
+         {}
+         ORDER BY i.item_path COLLATE natural_path ASC{}{}",
+        where_fragment, limit_clause, offset_clause
     );
 
     let mut stmt = conn.prepare(&sql)?;
@@ -196,42 +251,79 @@ pub fn get_temporal_immediate_children(
     Ok(items)
 }
 
-/// Search for items by name at a point in time using items + item_versions.
-/// Matches against the item name (last path segment) rather than the full path.
-/// Returns items whose name contains the search query, ordered by path.
-pub fn search_temporal_items(
+/// Common WHERE fragment for temporal search queries.
+const TEMPORAL_SEARCH_WHERE: &str =
+    "WHERE i.root_id = ?1
+       AND iv.first_scan_id = (
+           SELECT MAX(first_scan_id)
+           FROM item_versions
+           WHERE item_id = i.item_id
+             AND first_scan_id <= ?2
+       )
+       AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
+       AND i.item_name LIKE '%' || ?3 || '%'";
+
+const TEMPORAL_SEARCH_FROM: &str =
+    "FROM items i
+     JOIN item_versions iv ON iv.item_id = i.item_id
+     LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
+         AND hv.item_version = iv.item_version
+         AND hv.first_scan_id = (
+             SELECT MAX(first_scan_id) FROM hash_versions
+             WHERE item_id = i.item_id AND item_version = iv.item_version
+         )";
+
+/// Count items matching a name search at a point in time.
+pub fn count_temporal_search_items(
     root_id: i64,
     scan_id: i64,
     query: &str,
+) -> Result<i64, FsPulseError> {
+    let conn = Database::get_connection()?;
+
+    let sql = format!(
+        "SELECT COUNT(*) {} {}",
+        TEMPORAL_SEARCH_FROM, TEMPORAL_SEARCH_WHERE
+    );
+
+    let count: i64 = conn
+        .prepare(&sql)?
+        .query_row(params![root_id, scan_id, query], |row| row.get(0))?;
+
+    Ok(count)
+}
+
+/// Search for items by name at a point in time using items + item_versions.
+/// Matches against the item name (last path segment) rather than the full path.
+/// Returns items whose name contains the search query, ordered by path.
+pub fn get_temporal_search_items(
+    root_id: i64,
+    scan_id: i64,
+    query: &str,
+    limit: Option<i64>,
+    offset: Option<i64>,
 ) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
     let conn = Database::get_connection()?;
 
-    let sql =
+    let limit_clause = match limit {
+        Some(l) => format!("\n         LIMIT {}", l),
+        None => String::new(),
+    };
+    let offset_clause = match offset {
+        Some(o) if o > 0 => format!("\n         OFFSET {}", o),
+        _ => String::new(),
+    };
+
+    let sql = format!(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
                 iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
                 iv.val_state, hv.hash_state
-         FROM items i
-         JOIN item_versions iv ON iv.item_id = i.item_id
-         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-             AND hv.item_version = iv.item_version
-             AND hv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM hash_versions
-                 WHERE item_id = i.item_id AND item_version = iv.item_version
-             )
-         WHERE i.root_id = ?1
-           AND iv.first_scan_id = (
-               SELECT MAX(first_scan_id)
-               FROM item_versions
-               WHERE item_id = i.item_id
-                 AND first_scan_id <= ?2
-           )
-           AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
-           AND i.item_name LIKE '%' || ?3 || '%'
-         ORDER BY i.item_path COLLATE natural_path ASC
-         LIMIT 200";
+         {} {} ORDER BY i.item_path COLLATE natural_path ASC{}{}",
+        TEMPORAL_SEARCH_FROM, TEMPORAL_SEARCH_WHERE, limit_clause, offset_clause
+    );
 
-    let mut stmt = conn.prepare_cached(sql)?;
+    let mut stmt = conn.prepare(&sql)?;
 
     let rows = stmt.query_map(
         params![root_id, scan_id, query],

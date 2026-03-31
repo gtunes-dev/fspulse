@@ -8,7 +8,7 @@ mod show;
 
 pub use columns::ColAlign;
 pub use filter::QueryEnum;
-pub use process::QueryProcessor;
+pub use process::{QueryProcessor, QueryResultData};
 
 #[derive(Parser)]
 #[grammar = "query/query.pest"]

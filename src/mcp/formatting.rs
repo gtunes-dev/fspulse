@@ -1,4 +1,34 @@
+use chrono::{DateTime, Local, Utc};
+
 use crate::query::columns::ColAlign;
+
+/// Hard cap on rows returned by any single MCP tool call.
+pub(super) const MAX_RESULT_ROWS: i64 = 200;
+/// Default number of rows when the caller omits a limit.
+const DEFAULT_RESULT_ROWS: i64 = 50;
+
+/// Apply the standard default and cap to a caller-supplied limit.
+pub(super) fn effective_limit(limit: Option<i64>) -> i64 {
+    limit.unwrap_or(DEFAULT_RESULT_ROWS).clamp(1, MAX_RESULT_ROWS)
+}
+
+/// Format a Unix epoch timestamp as a local datetime string.
+pub(super) fn fmt_ts(epoch: i64) -> String {
+    DateTime::<Utc>::from_timestamp(epoch, 0)
+        .map(|dt| {
+            let local: DateTime<Local> = dt.with_timezone(&Local);
+            local.format("%Y-%m-%d %H:%M:%S").to_string()
+        })
+        .unwrap_or_else(|| epoch.to_string())
+}
+
+/// Format an optional Unix epoch timestamp.
+pub(super) fn fmt_opt_ts(epoch: Option<i64>) -> String {
+    match epoch {
+        Some(ts) => fmt_ts(ts),
+        None => "-".to_string(),
+    }
+}
 
 /// Format query result data as a markdown table.
 /// Returns the table string, or a message if no rows were returned.

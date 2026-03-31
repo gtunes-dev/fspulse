@@ -5,115 +5,12 @@ use rmcp::{
 };
 use rmcp::handler::server::wrapper::Parameters;
 
-use chrono::{DateTime, Local, Utc};
-
 use crate::db::Database;
-use crate::query::QueryProcessor;
+use crate::query::{QueryProcessor, QueryResultData};
 
-use super::formatting::format_table;
-
-/// Format a Unix epoch timestamp as a local datetime string.
-fn fmt_ts(epoch: i64) -> String {
-    DateTime::<Utc>::from_timestamp(epoch, 0)
-        .map(|dt| {
-            let local: DateTime<Local> = dt.with_timezone(&Local);
-            local.format("%Y-%m-%d %H:%M:%S").to_string()
-        })
-        .unwrap_or_else(|| epoch.to_string())
-}
-
-/// Format an optional Unix epoch timestamp.
-fn fmt_opt_ts(epoch: Option<i64>) -> String {
-    match epoch {
-        Some(ts) => fmt_ts(ts),
-        None => "-".to_string(),
-    }
-}
-
-// ─── Parameter structs ──────────────────────────────────────────────
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct QueryDataParams {
-    /// The fspulse query string. Domains: roots, scans, items, versions, hashes.
-    /// Example: "versions where is_current:(T), root_id:(1) show item_path, size limit 20"
-    pub query: String,
-    /// Maximum rows to return (default 50, max 500)
-    pub max_rows: Option<i64>,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct QueryCountParams {
-    /// The fspulse query string
-    pub query: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct QueryHelpParams {
-    /// Optional domain: "roots", "scans", "items", "versions", or "hashes"
-    pub domain: Option<String>,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct IntegrityReportParams {
-    /// Root ID to check
-    pub root_id: i64,
-    /// Filter by issue type: "val", "hash", or "all" (default: "all")
-    pub issue_type: Option<String>,
-    /// Filter by review status: "unreviewed", "reviewed", or "all" (default: "unreviewed")
-    pub status: Option<String>,
-    /// Filter by file extensions, comma-separated (e.g., "pdf,jpg")
-    pub extensions: Option<String>,
-    /// Search substring in file paths
-    pub path_search: Option<String>,
-    /// Maximum items to return (default 30, max 100)
-    pub limit: Option<i64>,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct ScanHistoryParams {
-    /// Root ID
-    pub root_id: i64,
-    /// Maximum scans to return (default 20, max 100)
-    pub limit: Option<i64>,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct BrowseFilesystemParams {
-    /// Root ID
-    pub root_id: i64,
-    /// Parent directory path to list children of. Omit for root directory.
-    pub parent_path: Option<String>,
-    /// Scan ID for temporal view. Omit for latest scan.
-    pub scan_id: Option<i64>,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct SearchFilesParams {
-    /// Root ID
-    pub root_id: i64,
-    /// Search term (matches against file/directory name)
-    pub query: String,
-    /// Scan ID for temporal view. Omit for latest scan.
-    pub scan_id: Option<i64>,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct ItemDetailParams {
-    /// Item ID
-    pub item_id: i64,
-    /// Maximum versions to show (default 10)
-    pub max_versions: Option<i64>,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct ScanChangesParams {
-    /// Scan ID
-    pub scan_id: i64,
-    /// Filter by change type: "added", "modified", "deleted", or "all" (default: "all")
-    pub change_type: Option<String>,
-    /// Maximum items to return (default 50, max 200)
-    pub limit: Option<i64>,
-}
+use super::formatting::{format_table, effective_limit, fmt_ts, fmt_opt_ts, MAX_RESULT_ROWS};
+use super::help::{general_help, domain_help};
+use super::params::*;
 
 // ─── Tool router ────────────────────────────────────────────────────
 
@@ -130,7 +27,7 @@ impl FsPulseMcp {
         }
     }
 
-    #[tool(description = "Get a high-level overview of the fspulse system: monitored roots, latest scan status, integrity issue counts, and database size.")]
+    #[tool(description = "Get a high-level overview of the fspulse system: monitored roots with latest scan stats (file/folder counts, total monitored size), unreviewed integrity issue counts, and database path/size.")]
     async fn system_overview(&self) -> Result<CallToolResult, rmcp::ErrorData> {
         let result = tokio::task::spawn_blocking(|| -> Result<String, String> {
             let conn = Database::get_connection().map_err(|e| e.to_string())?;
@@ -232,16 +129,15 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Execute a fspulse query using the built-in DSL. Supports five domains: roots, scans, items, versions, hashes. Date columns default to date-only display; use @full modifier for second-precision timestamps (e.g. mod_date@full). Use query_help for syntax details. Returns results as a markdown table.")]
+    #[tool(description = "Execute a fspulse query using the built-in DSL. Supports five domains: roots, scans, items, versions, hashes. Date columns default to date-only display; use @full modifier for second-precision timestamps (e.g. mod_date@full). Use LIMIT and OFFSET in the query string to paginate (max 200 rows per call). Use query_count to get total row counts. Use query_help for syntax details. Returns results as a markdown table.")]
     async fn query_data(
         &self,
         Parameters(params): Parameters<QueryDataParams>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let query = params.query;
-        let max_rows = params.max_rows.unwrap_or(50).clamp(1, 500);
 
         let result = tokio::task::spawn_blocking(move || {
-            QueryProcessor::execute_query_override(&query, max_rows, 0)
+            QueryProcessor::execute_query_override(&query, MAX_RESULT_ROWS, 0)
         })
         .await
         .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
@@ -302,7 +198,7 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(description = "Get a report of integrity issues (validation failures, suspect hashes) for a monitored root.")]
+    #[tool(description = "Get a report of integrity issues (validation failures, suspect hashes) for a monitored root. Supports pagination via limit/offset parameters. Returns total count in response.")]
     async fn integrity_report(
         &self,
         Parameters(params): Parameters<IntegrityReportParams>,
@@ -324,9 +220,10 @@ impl FsPulseMcp {
                 show_deleted: false,
             };
 
-            let limit = params.limit.unwrap_or(30).clamp(1, 100);
+            let limit = effective_limit(params.limit);
+            let offset = params.offset.unwrap_or(0).max(0);
             let count = integrity_api::count_items(&filter).map_err(|e| e.to_string())?;
-            let items = integrity_api::query_items(&filter, 0, limit).map_err(|e| e.to_string())?;
+            let items = integrity_api::query_items(&filter, offset, limit).map_err(|e| e.to_string())?;
 
             let mut out = format!("Found {} item(s) with integrity issues.\n\n", count);
 
@@ -351,8 +248,13 @@ impl FsPulseMcp {
                 ));
             }
 
-            if count > limit {
-                out.push_str(&format!("\n(Showing {} of {} items)\n", items.len(), count));
+            if count > items.len() as i64 + offset {
+                out.push_str(&format!(
+                    "\n(Showing items {}-{} of {}. Use offset to paginate.)\n",
+                    offset + 1,
+                    offset + items.len() as i64,
+                    count
+                ));
             }
 
             Ok(out)
@@ -364,14 +266,28 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Get scan history for a root, showing how file counts, sizes, and change rates evolved over time.")]
+    #[tool(description = "Get scan history for a root, showing how file counts, sizes, and change rates evolved over time. Supports pagination via limit/offset parameters. Returns total count in response.")]
     async fn scan_history(
         &self,
         Parameters(params): Parameters<ScanHistoryParams>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
             let conn = Database::get_connection().map_err(|e| e.to_string())?;
-            let limit = params.limit.unwrap_or(20).clamp(1, 100);
+            let limit = effective_limit(params.limit);
+            let offset = params.offset.unwrap_or(0).max(0);
+
+            // Get total count
+            let total: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM scans WHERE root_id = ? AND state = 4",
+                    [params.root_id],
+                    |row| row.get(0),
+                )
+                .map_err(|e| e.to_string())?;
+
+            if total == 0 {
+                return Ok("No completed scans found for this root.".to_string());
+            }
 
             let mut stmt = conn
                 .prepare(
@@ -382,16 +298,16 @@ impl FsPulseMcp {
                      FROM scans
                      WHERE root_id = ? AND state = 4
                      ORDER BY started_at DESC
-                     LIMIT ?",
+                     LIMIT ? OFFSET ?",
                 )
                 .map_err(|e| e.to_string())?;
 
             let mut rows = stmt
-                .query(rusqlite::params![params.root_id, limit])
+                .query(rusqlite::params![params.root_id, limit, offset])
                 .map_err(|e| e.to_string())?;
 
             let mut out = String::new();
-            let mut count = 0;
+            let mut row_count: i64 = 0;
 
             out.push_str("| Scan | Started | Files | Folders | Total Size | Adds | Mods | Dels | Hash Suspect | Val Invalid |\n");
             out.push_str("|------|---------|-------|---------|------------|------|------|------|-------------|-------------|\n");
@@ -421,14 +337,21 @@ impl FsPulseMcp {
                     hash_s.unwrap_or(0),
                     val_i.unwrap_or(0),
                 ));
-                count += 1;
+                row_count += 1;
             }
 
-            if count == 0 {
-                return Ok("No completed scans found for this root.".to_string());
+            let mut summary = format!("{} total scan(s). Showing {}-{}.\n\n",
+                total, offset + 1, offset + row_count);
+            summary.push_str(&out);
+
+            if total > offset + row_count {
+                summary.push_str(&format!(
+                    "\n(More results available. Use offset: {} to see next page.)\n",
+                    offset + row_count
+                ));
             }
 
-            Ok(format!("{} scan(s) returned.\n\n{}", count, out))
+            Ok(summary)
         })
         .await
         .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?
@@ -437,7 +360,7 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Browse the monitored filesystem tree at a specific point in time. Shows immediate children of a directory path within a root at a given scan.")]
+    #[tool(description = "Browse the monitored filesystem tree at a specific point in time. Shows immediate children of a directory path within a root at a given scan. Supports pagination via limit/offset parameters. Returns total count in response.")]
     async fn browse_filesystem(
         &self,
         Parameters(params): Parameters<BrowseFilesystemParams>,
@@ -469,14 +392,25 @@ impl FsPulseMcp {
                 }
             };
 
-            let children = items::get_temporal_immediate_children(params.root_id, &parent_path, scan_id)
+            let limit = effective_limit(params.limit);
+            let offset = params.offset.unwrap_or(0).max(0);
+
+            let total = items::count_temporal_immediate_children(params.root_id, &parent_path, scan_id)
                 .map_err(|e| e.to_string())?;
 
-            if children.is_empty() {
+            if total == 0 {
                 return Ok(format!("No children found under '{}' at scan {}.", parent_path, scan_id));
             }
 
-            let mut out = format!("{} item(s) under '{}' at scan {}.\n\n", children.len(), parent_path, scan_id);
+            let children = items::get_temporal_immediate_children(
+                params.root_id, &parent_path, scan_id, Some(limit), Some(offset),
+            ).map_err(|e| e.to_string())?;
+
+            let row_count = children.len() as i64;
+            let mut out = format!(
+                "{} total item(s) under '{}' at scan {}. Showing {}-{}.\n\n",
+                total, parent_path, scan_id, offset + 1, offset + row_count
+            );
             out.push_str("| Name | Type | Size | Mod Date | Status |\n");
             out.push_str("|------|------|------|----------|--------|\n");
 
@@ -501,6 +435,13 @@ impl FsPulseMcp {
                 ));
             }
 
+            if total > offset + row_count {
+                out.push_str(&format!(
+                    "\n(More results available. Use offset: {} to see next page.)\n",
+                    offset + row_count
+                ));
+            }
+
             Ok(out)
         })
         .await
@@ -510,7 +451,7 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Search for files and directories by name substring within a monitored root at a specific point in time.")]
+    #[tool(description = "Search for files and directories by name substring within a monitored root at a specific point in time. Supports pagination via limit/offset parameters. Returns total count in response.")]
     async fn search_files(
         &self,
         Parameters(params): Parameters<SearchFilesParams>,
@@ -529,14 +470,25 @@ impl FsPulseMcp {
                 }
             };
 
-            let results = items::search_temporal_items(params.root_id, scan_id, &params.query)
+            let limit = effective_limit(params.limit);
+            let offset = params.offset.unwrap_or(0).max(0);
+
+            let total = items::count_temporal_search_items(params.root_id, scan_id, &params.query)
                 .map_err(|e| e.to_string())?;
 
-            if results.is_empty() {
+            if total == 0 {
                 return Ok(format!("No items matching '{}' found.", params.query));
             }
 
-            let mut out = format!("{} item(s) matching '{}'.\n\n", results.len(), params.query);
+            let results = items::get_temporal_search_items(
+                params.root_id, scan_id, &params.query, Some(limit), Some(offset),
+            ).map_err(|e| e.to_string())?;
+
+            let row_count = results.len() as i64;
+            let mut out = format!(
+                "{} total item(s) matching '{}'. Showing {}-{}.\n\n",
+                total, params.query, offset + 1, offset + row_count
+            );
             out.push_str("| Name | Type | Path | Size |\n");
             out.push_str("|------|------|------|------|\n");
 
@@ -556,6 +508,13 @@ impl FsPulseMcp {
                 ));
             }
 
+            if total > offset + row_count {
+                out.push_str(&format!(
+                    "\n(More results available. Use offset: {} to see next page.)\n",
+                    offset + row_count
+                ));
+            }
+
             Ok(out)
         })
         .await
@@ -565,7 +524,7 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Get detailed information about a specific item including its version history, size changes, integrity state, and hash observations.")]
+    #[tool(description = "Get detailed information about a specific item including its version history, size changes, integrity state, and hash observations. Version list supports pagination via limit/offset parameters.")]
     async fn item_detail(
         &self,
         Parameters(params): Parameters<ItemDetailParams>,
@@ -596,8 +555,9 @@ impl FsPulseMcp {
 
             // Version count and history
             let version_count = items::count_versions(params.item_id).map_err(|e| e.to_string())?;
-            let max_versions = params.max_versions.unwrap_or(10).clamp(1, 50);
-            let versions = items::get_versions(params.item_id, 0, max_versions, "desc")
+            let limit = effective_limit(params.limit);
+            let offset = params.offset.unwrap_or(0).max(0);
+            let versions = items::get_versions(params.item_id, offset, limit, "desc")
                 .map_err(|e| e.to_string())?;
 
             out.push_str(&format!("\n## Version History ({} total)\n\n", version_count));
@@ -625,8 +585,12 @@ impl FsPulseMcp {
                     ));
                 }
 
-                if version_count > max_versions {
-                    out.push_str(&format!("\n(Showing {} of {} versions)\n", versions.len(), version_count));
+                let shown = versions.len() as i64;
+                if version_count > offset + shown {
+                    out.push_str(&format!(
+                        "\n(Showing versions {}-{} of {}. Use offset: {} to see next page.)\n",
+                        offset + 1, offset + shown, version_count, offset + shown
+                    ));
                 }
             }
 
@@ -639,32 +603,51 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Show what files were added, modified, or deleted in a specific scan.")]
+    #[tool(description = "Show what files were added, modified, or deleted in a specific scan. Supports pagination via limit/offset parameters. Returns total count in response.")]
     async fn scan_changes(
         &self,
         Parameters(params): Parameters<ScanChangesParams>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
         let scan_id = params.scan_id;
         let change_type = params.change_type.unwrap_or_else(|| "all".to_string());
-        let limit = params.limit.unwrap_or(50).clamp(1, 200);
+        let limit = effective_limit(params.limit);
+        let offset = params.offset.unwrap_or(0).max(0);
 
-        // Build a query DSL string dynamically based on change_type
-        let filter = match change_type.as_str() {
-            "added" => format!("versions where first_scan_id:({}), is_added:(T) show item_path, item_type, size order by item_path limit {}", scan_id, limit),
-            "deleted" => format!("versions where first_scan_id:({}), is_deleted:(T) show item_path, item_type, size order by item_path limit {}", scan_id, limit),
-            "modified" => format!("versions where first_scan_id:({}), is_added:(F), is_deleted:(F) show item_path, item_type, size order by item_path limit {}", scan_id, limit),
-            _ => format!("versions where first_scan_id:({}) show item_path, item_type, is_added, is_deleted, size order by item_path limit {}", scan_id, limit),
+        // Build the WHERE clause based on change_type
+        let where_clause = match change_type.as_str() {
+            "added" => format!("first_scan_id:({}), is_added:(T)", scan_id),
+            "deleted" => format!("first_scan_id:({}), is_deleted:(T)", scan_id),
+            "modified" => format!("first_scan_id:({}), is_added:(F), is_deleted:(F)", scan_id),
+            _ => format!("first_scan_id:({})", scan_id),
         };
 
-        let result = tokio::task::spawn_blocking(move || {
-            QueryProcessor::execute_query(&filter)
+        let show_clause = match change_type.as_str() {
+            "added" | "deleted" | "modified" => "show item_path, item_type, size",
+            _ => "show item_path, item_type, is_added, is_deleted, size",
+        };
+
+        // Build count and data queries
+        let count_query = format!("versions where {} {}", where_clause, show_clause);
+        let data_query = format!(
+            "versions where {} {} order by item_path limit {} offset {}",
+            where_clause, show_clause, limit, offset
+        );
+
+        let count_q = count_query.clone();
+        let result = tokio::task::spawn_blocking(move || -> Result<(i64, QueryResultData), String> {
+            let total = QueryProcessor::execute_query_count(&count_q)
+                .map_err(|e| e.to_string())?;
+            let data = QueryProcessor::execute_query(&data_query)
+                .map_err(|e| e.to_string())?;
+            Ok((total, data))
         })
         .await
         .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
 
         match result {
-            Ok((rows, headers, alignments)) => {
+            Ok((total, (rows, headers, alignments))) => {
                 // Get scan summary
+                let row_count = rows.len() as i64;
                 let summary = tokio::task::spawn_blocking(move || -> Result<String, String> {
                     let conn = Database::get_connection().map_err(|e| e.to_string())?;
                     let (adds, mods, dels): (Option<i64>, Option<i64>, Option<i64>) = conn
@@ -688,11 +671,22 @@ impl FsPulseMcp {
                 .map_err(|e| rmcp::ErrorData::internal_error(e, None))?;
 
                 let table = format_table(&headers, &rows, &alignments);
-                let out = format!("{}{} row(s) returned.\n\n{}", summary, rows.len(), table);
+                let mut out = format!(
+                    "{}{} total matching row(s). Showing {}-{}.\n\n{}",
+                    summary, total, offset + 1, offset + row_count, table
+                );
+
+                if total > offset + row_count {
+                    out.push_str(&format!(
+                        "\n(More results available. Use offset: {} to see next page.)\n",
+                        offset + row_count
+                    ));
+                }
+
                 Ok(CallToolResult::success(vec![Content::text(out)]))
             }
             Err(e) => {
-                Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+                Ok(CallToolResult::error(vec![Content::text(e)]))
             }
         }
     }
@@ -712,118 +706,11 @@ impl ServerHandler for FsPulseMcp {
             .with_instructions(
                 "fsPulse filesystem scanner and integrity tracker. \
                  IMPORTANT: Always call query_help before using query_data \
-                 to learn available column names. Do not guess column names."
+                 to learn available column names. Do not guess column names. \
+                 All tools return at most 200 rows per call. Use limit/offset \
+                 parameters (or LIMIT/OFFSET in query strings) to paginate. \
+                 Use query_count to get total counts for query_data queries."
             )
     }
 }
 
-// ─── Query help content ─────────────────────────────────────────────
-
-fn general_help() -> String {
-    r#"## fspulse Query DSL
-
-### Structure
-
-```
-DOMAIN [WHERE ...] [GROUP BY ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET ...]
-```
-
-### Domains
-
-- **items** — Item identity (path, name, extension, type)
-- **versions** — Item versions over time (size, mod_date, val_state, etc.). Filter with `is_current:(T)` for latest state.
-- **hashes** — Hash observations on item versions (file_hash, hash_state)
-- **scans** — Scan sessions (timestamps, counts, integrity findings)
-- **roots** — Monitored root directories
-
-### WHERE Clause
-
-Filters use the syntax: `column_name:(value1, value2, ...)`
-
-| Type | Examples |
-|------|----------|
-| Integer | `5`, `1..5`, `> 1024`, `null`, `not null` |
-| Date | `2024-01-01`, `2024-01-01..2024-06-30` |
-| Boolean | `T`, `F`, `true`, `false` |
-| String | `'example'`, `null`, `not null` |
-| Path | `'/photos'`, `'report.pdf'` |
-| Val State | `V`, `I`, `N`, `U` (Valid, Invalid, No Validator, Unknown) |
-| Hash State | `V`, `S`, `U` (Valid, Suspect, Unknown) |
-| Item Type | `F`, `D`, `S`, `U` (File, Directory, Symlink, Unknown) |
-
-Multiple values within a filter are OR'd. Multiple filters are AND'd.
-
-### GROUP BY and Aggregates
-
-Group rows by one or more columns and apply aggregate functions. GROUP BY requires a SHOW clause.
-
-Aggregate functions: `count(*)`, `count(col)`, `sum(col)`, `avg(col)`, `min(col)`, `max(col)`
-- `sum` and `avg` work on integer columns only
-- `min` and `max` work on integer, date, and id columns
-- Every non-aggregate column in SHOW must appear in GROUP BY
-- Aggregates can be used in ORDER BY
-
-### SHOW Clause
-
-Controls displayed columns. Use `default` for defaults, `all` for everything.
-
-**Format modifiers** — append `@mode` to a column name to control display format:
-
-- **Date columns** (`mod_date`, `started_at`, `ended_at`, `created_at`, `updated_at`):
-  - `@short` (default) — date only: `2026-03-30`
-  - `@full` — date and time with second precision: `2026-03-30 18:44:11`
-  - `@timestamp` — raw Unix epoch (seconds, UTC)
-- **Path columns** (`item_path`):
-  - `@name` — file/folder name only (no directory path)
-
-Examples: `mod_date@full`, `started_at@timestamp`, `item_path@name`
-
-### Examples
-
-```
-versions where is_current:(T), root_id:(1) show item_path, size limit 20
-hashes where hash_state:(S) show item_path, file_hash
-scans where root_id:(1) order by started_at desc limit 10
-items where file_extension:('pdf') show item_path, item_name
-versions where is_current:(T), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
-scans group by root_id show root_id, count(*), max(total_size) order by count(*) desc
-hashes group by hash_state show hash_state, count(*)
-```
-
-Use `query_help` with a domain parameter for column details."#
-        .to_string()
-}
-
-fn domain_help(domain: &str) -> Result<String, rmcp::ErrorData> {
-    use crate::query::columns::*;
-
-    let col_map: &ColMap = match domain {
-        "items" => &ITEMS_QUERY_COLS,
-        "versions" => &VERSIONS_QUERY_COLS,
-        "hashes" => &HASHES_QUERY_COLS,
-        "scans" => &SCANS_QUERY_COLS,
-        "roots" => &ROOTS_QUERY_COLS,
-        _ => {
-            return Err(rmcp::ErrorData::invalid_params(
-                format!("Unknown domain '{}'. Valid domains: items, versions, hashes, scans, roots", domain),
-                None,
-            ));
-        }
-    };
-
-    let mut out = format!("## `{}` Domain Columns\n\n", domain);
-    out.push_str("| Column | Type | Filter Syntax |\n");
-    out.push_str("|--------|------|---------------|\n");
-
-    for (name, spec) in col_map.entries() {
-        let type_info = spec.col_type.info();
-        out.push_str(&format!(
-            "| `{}` | {} | {} |\n",
-            name,
-            type_info.type_name,
-            type_info.tip.replace('\n', " "),
-        ));
-    }
-
-    Ok(out)
-}
