@@ -7,17 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.6.0] - 2026-03-31
+
 ### Added
-- **MCP server**: Integrated MCP (Model Context Protocol) server via rmcp with Streamable HTTP transport at `/mcp`. Provides 10 tools for AI agents: `system_overview`, `query_data`, `query_count`, `query_help`, `integrity_report`, `scan_history`, `browse_filesystem`, `search_files`, `item_detail`, `scan_changes`. Compatible with Claude Desktop (via mcp-remote), Claude Code, and other MCP clients.
+- **MCP server (experimental) **: Integrated MCP (Model Context Protocol) server via rmcp with Streamable HTTP transport at `/mcp`. Provides 10 tools for AI agents: `system_overview`, `query_data`, `query_count`, `query_help`, `integrity_report`, `scan_history`, `browse_filesystem`, `search_files`, `item_detail`, `scan_changes`. Compatible with Claude Desktop (via mcp-remote), Claude Code, and other MCP clients.
 - **GROUP BY and aggregate functions**: Query DSL now supports `GROUP BY` with aggregate functions `count`, `sum`, `avg`, `min`, `max`. GROUP BY requires an explicit SHOW clause. Aggregates can be used in ORDER BY.
 - **MCP enable/disable setting**: New "Enable MCP Server" toggle in Settings under MCP Server section. Disabled by default; requires restart to take effect.
 - **MCP documentation**: New top-level documentation section covering setup (Claude Desktop, Claude Code, multiple instances), sample prompts, and tool reference.
 - **Linux ARM64 release builds**: CI now produces `aarch64-unknown-linux-gnu` binaries for Raspberry Pi (3/4/5 with 64-bit OS), ARM servers, and other Linux ARM64 devices.
 
 ### Changed
-- **MCP server: stateless mode**: Switched MCP transport from stateful sessions to stateless mode with JSON responses. Eliminates session tracking and SSE stream complexity, preventing potential resource leaks from zombie sessions when clients disconnect without cleanup. Each tool call is now an independent HTTP request/response.
-- **MCP server: marked experimental**: MCP functionality is now labeled as experimental in the docs, Settings page, and sidebar. Documentation updated with connection methods for Claude Desktop (via mcp-remote) and Claude Code.
-- **MCP tool help**: Improved query_help documentation for date format modifiers (@short, @full, @timestamp). Formatted raw epoch timestamps in scan_history, browse_filesystem, and item_detail as human-readable local datetimes.
 - **Query model cleanup**: Restructured query domains to match the actual data hierarchy (items → versions → hashes). The `items` domain now exposes only item identity columns (path, name, extension, type, validator flags). Version-state columns (size, mod_date, access, val_state, etc.) and hash columns have been removed from `items`. The `versions` domain no longer includes hash columns. A new `hashes` domain provides direct access to hash observation records. New columns added: `is_added`, `is_current`, and `file_extension` on `versions`; `has_validator` and `do_not_validate` on `items`. The `scan_state` column on `scans` is now shown by default.
 - **Data Explorer**: Added Hashes tab. Updated sample queries including aggregate examples.
 
