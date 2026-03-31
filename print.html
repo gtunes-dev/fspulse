@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ef0bbc12.js";
+            window.path_to_searchindex_js = "searchindex-e2e36ea7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-435155bc.js"></script>
@@ -888,9 +888,21 @@ docker run -d --name fspulse -v fspulse-data:/data ... gtunesdev/fspulse:1.2.3
 <p><strong>Experimental:</strong> MCP support in fsPulse is experimental. You may experience connectivity issues depending on your client and connection method. See <a href="#setup-experimental">Setup</a> for details on known limitations.</p>
 </blockquote>
 <p>The MCP endpoint is served at <code>/mcp</code> on the same port as the web UI. It uses the Streamable HTTP transport, compatible with Claude Desktop, Claude Code, and other MCP clients.</p>
+<h2 id="what-can-an-agent-do"><a class="header" href="#what-can-an-agent-do">What Can an Agent Do?</a></h2>
+<p>The agent has access to fsPulse’s full data model — roots, scans, items, versions, and hashes — through 10 tools. It can:</p>
+<ul>
+<li><strong>Explore</strong> — browse directory trees and search for files at any point in time</li>
+<li><strong>Query</strong> — run structured queries with filtering, aggregation, and ordering across all domains</li>
+<li><strong>Analyze</strong> — investigate integrity issues, track storage growth, and identify high-churn files</li>
+<li><strong>Report</strong> — summarize activity over time periods, compare scans, and generate trend data</li>
+</ul>
+<p>The most effective use is iterative: start with a broad question (“what changed this week?”), then drill into specific folders, files, or time ranges based on what the agent finds. See <a href="#sample-prompts">Sample Prompts</a> for examples.</p>
+<h2 id="pagination"><a class="header" href="#pagination">Pagination</a></h2>
+<p>All tools return at most 200 rows per call. The agent handles pagination automatically — if results are truncated, it can request the next page. You don’t need to think about pagination in your prompts; the agent manages it as needed.</p>
+<h2 id="contents"><a class="header" href="#contents">Contents</a></h2>
 <ul>
 <li><a href="#setup-experimental">Setup</a> — Enable MCP and configure your client</li>
-<li><a href="#sample-prompts">Sample Prompts</a> — Example prompts to try once connected</li>
+<li><a href="#sample-prompts">Sample Prompts</a> — Example prompts and multi-step investigation workflows</li>
 <li><a href="#tools">Tools</a> — The 10 tools available to AI agents</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -991,8 +1003,8 @@ enabled = true
 </blockquote>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="sample-prompts"><a class="header" href="#sample-prompts">Sample Prompts</a></h1>
-<p>Once connected, try prompts like these:</p>
-<h2 id="overview-and-health"><a class="header" href="#overview-and-health">Overview and Health</a></h2>
+<p>Once connected, try prompts like these. The agent will choose which tools to call based on your request.</p>
+<h2 id="getting-started-1"><a class="header" href="#getting-started-1">Getting Started</a></h2>
 <blockquote>
 <p>Give me an overview of what fsPulse is monitoring</p>
 </blockquote>
@@ -1037,29 +1049,76 @@ enabled = true
 <blockquote>
 <p>How many scans has each root had?</p>
 </blockquote>
+<h2 id="multi-step-investigations"><a class="header" href="#multi-step-investigations">Multi-Step Investigations</a></h2>
+<p>The most powerful use of fsPulse with an AI agent is iterative investigation — start with a high-level question and drill down based on what you find. These are examples of conversations, not single prompts.</p>
+<h3 id="activity-report-for-a-time-period"><a class="header" href="#activity-report-for-a-time-period">Activity Report for a Time Period</a></h3>
+<p>Start broad, then focus:</p>
+<blockquote>
+<p>What changed in root 1 between March 1 and March 15?</p>
+</blockquote>
+<p>From the results, you might follow up with:</p>
+<blockquote>
+<p>Drill into the /photos/2026 folder — what was added there?</p>
+</blockquote>
+<blockquote>
+<p>Which files were modified more than once during that period?</p>
+</blockquote>
+<h3 id="storage-growth-analysis"><a class="header" href="#storage-growth-analysis">Storage Growth Analysis</a></h3>
+<blockquote>
+<p>Show me how the total size of root 2 has changed over the last 20 scans</p>
+</blockquote>
+<blockquote>
+<p>Graph the file count and total size trends</p>
+</blockquote>
+<blockquote>
+<p>Which folders are growing the fastest? Break down size by top-level directory</p>
+</blockquote>
+<h3 id="investigating-churn"><a class="header" href="#investigating-churn">Investigating Churn</a></h3>
+<blockquote>
+<p>Which files in root 1 have been modified the most times?</p>
+</blockquote>
+<blockquote>
+<p>Show me the version history for that file — how has its size changed over time?</p>
+</blockquote>
+<blockquote>
+<p>Graph the size of that file over its version history</p>
+</blockquote>
+<h3 id="integrity-triage"><a class="header" href="#integrity-triage">Integrity Triage</a></h3>
+<blockquote>
+<p>Show me all unreviewed integrity issues for root 3</p>
+</blockquote>
+<blockquote>
+<p>Focus on the PDF validation failures — are they concentrated in a specific folder?</p>
+</blockquote>
+<blockquote>
+<p>Show me the version history for the files with suspect hashes — when did the hash first change?</p>
+</blockquote>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="tools"><a class="header" href="#tools">Tools</a></h1>
 <p>The MCP server provides 10 tools. The AI agent selects which tools to call based on your prompt.</p>
+<h2 id="pagination-1"><a class="header" href="#pagination-1">Pagination</a></h2>
+<p>All tools return at most 200 rows per call. Most tools accept <code>limit</code> (default 50, max 200) and <code>offset</code> (default 0) parameters for pagination. Total counts are included in responses, with next-offset hints when more results are available.</p>
+<p>For <code>query_data</code>, pagination is controlled via <code>LIMIT</code> and <code>OFFSET</code> in the query string itself. Use <code>query_count</code> to get total row counts before paginating.</p>
 <h2 id="system_overview"><a class="header" href="#system_overview">system_overview</a></h2>
-<p>High-level summary of all monitored roots, their latest scan status, unreviewed integrity issue counts, and database size.</p>
+<p>High-level summary of all monitored roots with latest scan stats (file/folder counts, total monitored size), unreviewed integrity issue counts, and database path/size.</p>
 <h2 id="query_data"><a class="header" href="#query_data">query_data</a></h2>
-<p>Execute a query using the fsPulse <a href="#query-syntax-1">query DSL</a>. Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Returns results as a formatted table.</p>
+<p>Execute a query using the fsPulse <a href="#query-syntax-1">query DSL</a>. Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Results are capped at 200 rows; use <code>LIMIT</code> and <code>OFFSET</code> in the query string to paginate. Returns results as a formatted table.</p>
 <h2 id="query_count"><a class="header" href="#query_count">query_count</a></h2>
-<p>Count rows matching a query without returning the data.</p>
+<p>Count rows matching a query without returning the data. Useful for understanding data volumes before paginating with <code>query_data</code>.</p>
 <h2 id="query_help"><a class="header" href="#query_help">query_help</a></h2>
 <p>Returns documentation for the query DSL, including available columns and filter syntax for each domain. The agent uses this to learn valid column names before constructing queries.</p>
 <h2 id="integrity_report"><a class="header" href="#integrity_report">integrity_report</a></h2>
-<p>Report of items with integrity issues (validation failures, suspect hashes) for a specific root. Supports filtering by issue type, review status, file extension, and path.</p>
+<p>Report of items with integrity issues (validation failures, suspect hashes) for a specific root. Supports filtering by issue type, review status, file extension, and path. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <h2 id="scan_history"><a class="header" href="#scan_history">scan_history</a></h2>
-<p>Scan history for a root showing file counts, sizes, change rates, and integrity findings over time.</p>
+<p>Scan history for a root showing file counts, sizes, change rates, and integrity findings over time. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <h2 id="browse_filesystem"><a class="header" href="#browse_filesystem">browse_filesystem</a></h2>
-<p>Browse the filesystem tree at a specific point in time. Lists immediate children of a directory within a root at a given scan.</p>
+<p>Browse the filesystem tree at a specific point in time. Lists immediate children of a directory within a root at a given scan. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <h2 id="search_files"><a class="header" href="#search_files">search_files</a></h2>
-<p>Search for files and directories by name within a root at a specific point in time.</p>
+<p>Search for files and directories by name within a root at a specific point in time. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <h2 id="item_detail"><a class="header" href="#item_detail">item_detail</a></h2>
-<p>Detailed information about a specific item including its version history, size changes, and integrity state.</p>
+<p>Detailed information about a specific item including its version history, size changes, and integrity state. Version list supports pagination via <code>limit</code>/<code>offset</code>.</p>
 <h2 id="scan_changes"><a class="header" href="#scan_changes">scan_changes</a></h2>
-<p>Show what files were added, modified, or deleted in a specific scan. Can filter by change type.</p>
+<p>Show what files were added, modified, or deleted in a specific scan. Can filter by change type. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="scanning"><a class="header" href="#scanning">Scanning</a></h1>
 <p>fsPulse scans are at the core of how it tracks changes to the filesystem over time. A scan creates a snapshot of a root directory and detects changes compared to previous scans. This page explains how to initiate scans, how incomplete scans are handled, and the phases involved in each scan.</p>
@@ -2470,7 +2529,7 @@ fspulse serve
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="advanced-topics-1"><a class="header" href="#advanced-topics-1">Advanced Topics</a></h1>
 <p>This section covers advanced concepts and technical details about fsPulse’s internal operation.</p>
-<h2 id="contents"><a class="header" href="#contents">Contents</a></h2>
+<h2 id="contents-1"><a class="header" href="#contents-1">Contents</a></h2>
 <ul>
 <li><strong><a href="#concepts">Concepts</a></strong> — Core concepts and terminology</li>
 <li><strong><a href="#database-1">Database Schema</a></strong> — SQLite schema structure and migrations</li>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ef0bbc12.js";
+            window.path_to_searchindex_js = "../searchindex-e2e36ea7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-435155bc.js"></script>
@@ -176,26 +176,29 @@
                     <main>
                         <h1 id="tools"><a class="header" href="#tools">Tools</a></h1>
 <p>The MCP server provides 10 tools. The AI agent selects which tools to call based on your prompt.</p>
+<h2 id="pagination"><a class="header" href="#pagination">Pagination</a></h2>
+<p>All tools return at most 200 rows per call. Most tools accept <code>limit</code> (default 50, max 200) and <code>offset</code> (default 0) parameters for pagination. Total counts are included in responses, with next-offset hints when more results are available.</p>
+<p>For <code>query_data</code>, pagination is controlled via <code>LIMIT</code> and <code>OFFSET</code> in the query string itself. Use <code>query_count</code> to get total row counts before paginating.</p>
 <h2 id="system_overview"><a class="header" href="#system_overview">system_overview</a></h2>
-<p>High-level summary of all monitored roots, their latest scan status, unreviewed integrity issue counts, and database size.</p>
+<p>High-level summary of all monitored roots with latest scan stats (file/folder counts, total monitored size), unreviewed integrity issue counts, and database path/size.</p>
 <h2 id="query_data"><a class="header" href="#query_data">query_data</a></h2>
-<p>Execute a query using the fsPulse <a href="../query.html">query DSL</a>. Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Returns results as a formatted table.</p>
+<p>Execute a query using the fsPulse <a href="../query.html">query DSL</a>. Supports all five domains (items, versions, hashes, scans, roots), filtering, aggregation with GROUP BY, and ordering. Results are capped at 200 rows; use <code>LIMIT</code> and <code>OFFSET</code> in the query string to paginate. Returns results as a formatted table.</p>
 <h2 id="query_count"><a class="header" href="#query_count">query_count</a></h2>
-<p>Count rows matching a query without returning the data.</p>
+<p>Count rows matching a query without returning the data. Useful for understanding data volumes before paginating with <code>query_data</code>.</p>
 <h2 id="query_help"><a class="header" href="#query_help">query_help</a></h2>
 <p>Returns documentation for the query DSL, including available columns and filter syntax for each domain. The agent uses this to learn valid column names before constructing queries.</p>
 <h2 id="integrity_report"><a class="header" href="#integrity_report">integrity_report</a></h2>
-<p>Report of items with integrity issues (validation failures, suspect hashes) for a specific root. Supports filtering by issue type, review status, file extension, and path.</p>
+<p>Report of items with integrity issues (validation failures, suspect hashes) for a specific root. Supports filtering by issue type, review status, file extension, and path. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <h2 id="scan_history"><a class="header" href="#scan_history">scan_history</a></h2>
-<p>Scan history for a root showing file counts, sizes, change rates, and integrity findings over time.</p>
+<p>Scan history for a root showing file counts, sizes, change rates, and integrity findings over time. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <h2 id="browse_filesystem"><a class="header" href="#browse_filesystem">browse_filesystem</a></h2>
-<p>Browse the filesystem tree at a specific point in time. Lists immediate children of a directory within a root at a given scan.</p>
+<p>Browse the filesystem tree at a specific point in time. Lists immediate children of a directory within a root at a given scan. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <h2 id="search_files"><a class="header" href="#search_files">search_files</a></h2>
-<p>Search for files and directories by name within a root at a specific point in time.</p>
+<p>Search for files and directories by name within a root at a specific point in time. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 <h2 id="item_detail"><a class="header" href="#item_detail">item_detail</a></h2>
-<p>Detailed information about a specific item including its version history, size changes, and integrity state.</p>
+<p>Detailed information about a specific item including its version history, size changes, and integrity state. Version list supports pagination via <code>limit</code>/<code>offset</code>.</p>
 <h2 id="scan_changes"><a class="header" href="#scan_changes">scan_changes</a></h2>
-<p>Show what files were added, modified, or deleted in a specific scan. Can filter by change type.</p>
+<p>Show what files were added, modified, or deleted in a specific scan. Can filter by change type. Supports pagination via <code>limit</code>/<code>offset</code>. Returns total count.</p>
 
                     </main>
 

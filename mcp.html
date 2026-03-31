@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ef0bbc12.js";
+            window.path_to_searchindex_js = "searchindex-e2e36ea7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-435155bc.js"></script>
@@ -180,9 +180,21 @@
 <p><strong>Experimental:</strong> MCP support in fsPulse is experimental. You may experience connectivity issues depending on your client and connection method. See <a href="mcp/setup.html">Setup</a> for details on known limitations.</p>
 </blockquote>
 <p>The MCP endpoint is served at <code>/mcp</code> on the same port as the web UI. It uses the Streamable HTTP transport, compatible with Claude Desktop, Claude Code, and other MCP clients.</p>
+<h2 id="what-can-an-agent-do"><a class="header" href="#what-can-an-agent-do">What Can an Agent Do?</a></h2>
+<p>The agent has access to fsPulse’s full data model — roots, scans, items, versions, and hashes — through 10 tools. It can:</p>
+<ul>
+<li><strong>Explore</strong> — browse directory trees and search for files at any point in time</li>
+<li><strong>Query</strong> — run structured queries with filtering, aggregation, and ordering across all domains</li>
+<li><strong>Analyze</strong> — investigate integrity issues, track storage growth, and identify high-churn files</li>
+<li><strong>Report</strong> — summarize activity over time periods, compare scans, and generate trend data</li>
+</ul>
+<p>The most effective use is iterative: start with a broad question (“what changed this week?”), then drill into specific folders, files, or time ranges based on what the agent finds. See <a href="mcp/prompts.html">Sample Prompts</a> for examples.</p>
+<h2 id="pagination"><a class="header" href="#pagination">Pagination</a></h2>
+<p>All tools return at most 200 rows per call. The agent handles pagination automatically — if results are truncated, it can request the next page. You don’t need to think about pagination in your prompts; the agent manages it as needed.</p>
+<h2 id="contents"><a class="header" href="#contents">Contents</a></h2>
 <ul>
 <li><a href="mcp/setup.html">Setup</a> — Enable MCP and configure your client</li>
-<li><a href="mcp/prompts.html">Sample Prompts</a> — Example prompts to try once connected</li>
+<li><a href="mcp/prompts.html">Sample Prompts</a> — Example prompts and multi-step investigation workflows</li>
 <li><a href="mcp/tools.html">Tools</a> — The 10 tools available to AI agents</li>
 </ul>
 

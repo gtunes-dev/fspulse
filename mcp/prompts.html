@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ef0bbc12.js";
+            window.path_to_searchindex_js = "../searchindex-e2e36ea7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-435155bc.js"></script>
@@ -175,8 +175,8 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="sample-prompts"><a class="header" href="#sample-prompts">Sample Prompts</a></h1>
-<p>Once connected, try prompts like these:</p>
-<h2 id="overview-and-health"><a class="header" href="#overview-and-health">Overview and Health</a></h2>
+<p>Once connected, try prompts like these. The agent will choose which tools to call based on your request.</p>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
 <blockquote>
 <p>Give me an overview of what fsPulse is monitoring</p>
 </blockquote>
@@ -220,6 +220,50 @@
 </blockquote>
 <blockquote>
 <p>How many scans has each root had?</p>
+</blockquote>
+<h2 id="multi-step-investigations"><a class="header" href="#multi-step-investigations">Multi-Step Investigations</a></h2>
+<p>The most powerful use of fsPulse with an AI agent is iterative investigation — start with a high-level question and drill down based on what you find. These are examples of conversations, not single prompts.</p>
+<h3 id="activity-report-for-a-time-period"><a class="header" href="#activity-report-for-a-time-period">Activity Report for a Time Period</a></h3>
+<p>Start broad, then focus:</p>
+<blockquote>
+<p>What changed in root 1 between March 1 and March 15?</p>
+</blockquote>
+<p>From the results, you might follow up with:</p>
+<blockquote>
+<p>Drill into the /photos/2026 folder — what was added there?</p>
+</blockquote>
+<blockquote>
+<p>Which files were modified more than once during that period?</p>
+</blockquote>
+<h3 id="storage-growth-analysis"><a class="header" href="#storage-growth-analysis">Storage Growth Analysis</a></h3>
+<blockquote>
+<p>Show me how the total size of root 2 has changed over the last 20 scans</p>
+</blockquote>
+<blockquote>
+<p>Graph the file count and total size trends</p>
+</blockquote>
+<blockquote>
+<p>Which folders are growing the fastest? Break down size by top-level directory</p>
+</blockquote>
+<h3 id="investigating-churn"><a class="header" href="#investigating-churn">Investigating Churn</a></h3>
+<blockquote>
+<p>Which files in root 1 have been modified the most times?</p>
+</blockquote>
+<blockquote>
+<p>Show me the version history for that file — how has its size changed over time?</p>
+</blockquote>
+<blockquote>
+<p>Graph the size of that file over its version history</p>
+</blockquote>
+<h3 id="integrity-triage"><a class="header" href="#integrity-triage">Integrity Triage</a></h3>
+<blockquote>
+<p>Show me all unreviewed integrity issues for root 3</p>
+</blockquote>
+<blockquote>
+<p>Focus on the PDF validation failures — are they concentrated in a specific folder?</p>
+</blockquote>
+<blockquote>
+<p>Show me the version history for the files with suspect hashes — when did the hash first change?</p>
 </blockquote>
 
                     </main>
