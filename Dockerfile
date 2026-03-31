@@ -6,18 +6,6 @@ FROM rust:bookworm AS builder
 
 WORKDIR /build
 
-# Accept build arguments for version info
-ARG GIT_COMMIT=unknown
-ARG GIT_BRANCH=unknown
-ARG GITHUB_SHA
-ARG GITHUB_REF_NAME
-
-# Set environment variables for build.rs to use
-ENV GIT_COMMIT=${GIT_COMMIT}
-ENV GIT_BRANCH=${GIT_BRANCH}
-ENV GITHUB_SHA=${GITHUB_SHA}
-ENV GITHUB_REF_NAME=${GITHUB_REF_NAME}
-
 # Install Node.js for frontend build
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs
@@ -43,6 +31,19 @@ RUN cd frontend && \
     npm run build && \
     echo "Frontend built successfully:" && \
     ls -lh dist/
+
+# Accept build arguments for version info AFTER dependency cache layers,
+# so that changing commit SHAs don't invalidate the dependency cache.
+ARG GIT_COMMIT=unknown
+ARG GIT_BRANCH=unknown
+ARG GITHUB_SHA
+ARG GITHUB_REF_NAME
+
+# Set environment variables for build.rs to use
+ENV GIT_COMMIT=${GIT_COMMIT}
+ENV GIT_BRANCH=${GIT_BRANCH}
+ENV GITHUB_SHA=${GITHUB_SHA}
+ENV GITHUB_REF_NAME=${GITHUB_REF_NAME}
 
 # Copy real Rust source and rebuild (only fspulse crate recompiles)
 COPY src ./src
