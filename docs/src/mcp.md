@@ -6,6 +6,6 @@ fsPulse includes a built-in [Model Context Protocol](https://modelcontextprotoco
 
 The MCP endpoint is served at `/mcp` on the same port as the web UI. It uses the Streamable HTTP transport, compatible with Claude Desktop, Claude Code, and other MCP clients.
 
-- [Setup](mcp/setup.md) — Enable MCP and configure your client (three connection methods)
+- [Setup](mcp/setup.md) — Enable MCP and configure your client
 - [Sample Prompts](mcp/prompts.md) — Example prompts to try once connected
 - [Tools](mcp/tools.md) — The 10 tools available to AI agents

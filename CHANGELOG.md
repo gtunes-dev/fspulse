@@ -13,11 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP enable/disable setting**: New "Enable MCP Server" toggle in Settings under MCP Server section. Disabled by default; requires restart to take effect.
 - **MCP documentation**: New top-level documentation section covering setup (Claude Desktop, Claude Code, multiple instances), sample prompts, and tool reference.
 - **Linux ARM64 release builds**: CI now produces `aarch64-unknown-linux-gnu` binaries for Raspberry Pi (3/4/5 with 64-bit OS), ARM servers, and other Linux ARM64 devices.
-- **MCP OAuth 2.1 support**: Added minimal OAuth 2.1 flow for Claude Desktop Custom Connector support. Includes auto-approve authorization endpoint, PKCE S256 validation, and Bearer token exchange — all scoped under `/mcp`. Unauthenticated clients (Developer Config, Claude Code) continue to connect without OAuth. Client credentials: `fspulse` / `fspulse`.
 
 ### Changed
 - **MCP server: stateless mode**: Switched MCP transport from stateful sessions to stateless mode with JSON responses. Eliminates session tracking and SSE stream complexity, preventing potential resource leaks from zombie sessions when clients disconnect without cleanup. Each tool call is now an independent HTTP request/response.
-- **MCP server: marked experimental**: MCP functionality is now labeled as experimental in the docs, Settings page, and sidebar. Documentation updated with three connection methods (Custom Connector, Developer Config, Claude Code) with known limitations for each.
+- **MCP server: marked experimental**: MCP functionality is now labeled as experimental in the docs, Settings page, and sidebar. Documentation updated with connection methods for Claude Desktop (via mcp-remote) and Claude Code.
 - **Query model cleanup**: Restructured query domains to match the actual data hierarchy (items → versions → hashes). The `items` domain now exposes only item identity columns (path, name, extension, type, validator flags). Version-state columns (size, mod_date, access, val_state, etc.) and hash columns have been removed from `items`. The `versions` domain no longer includes hash columns. A new `hashes` domain provides direct access to hash observation records. New columns added: `is_added`, `is_current`, and `file_extension` on `versions`; `has_validator` and `do_not_validate` on `items`. The `scan_state` column on `scans` is now shown by default.
 - **Data Explorer**: Added Hashes tab. Updated sample queries including aggregate examples.
 
