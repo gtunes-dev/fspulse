@@ -1222,7 +1222,7 @@ mod tests {
         assert!(start < end, "date_short should expand: start={start}, end={end}");
         // Full day is 86399 seconds (23:59:59 - 00:00:00), possibly ±3600 for DST
         let span = end - start;
-        assert!(span >= 82800 && span <= 90000, "unexpected day span: {span}");
+        assert!((82800..=90000).contains(&span), "unexpected day span: {span}");
     }
 
     #[test]
