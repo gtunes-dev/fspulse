@@ -60,7 +60,7 @@ export function CreateScheduleDialog({
       setTimeOfDay('09:00')
       setSelectedDays(['Mon', 'Wed', 'Fri'])
       setDayOfMonth(1)
-      setIntervalValue(2)
+      setIntervalValue('2')
       setIntervalUnit('Hours')
       setHashMode('New or Changed')
       setIsVal(true)
