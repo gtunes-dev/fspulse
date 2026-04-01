@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ecc08dc0.js";
+            window.path_to_searchindex_js = "searchindex-1945b716.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-435155bc.js"></script>
@@ -944,13 +944,17 @@ enabled = true
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://localhost:8080/mcp"
+        "http://localhost:8080/mcp",
+        "--allow-http"
       ]
     }
   }
 }
 </code></pre>
 <p>Replace <code>localhost:8080</code> with the hostname and port of your fsPulse instance if it is running on a different machine.</p>
+<blockquote>
+<p><strong>Note:</strong> The <code>--allow-http</code> flag is required by <code>mcp-remote</code> when connecting over HTTP. If your fsPulse instance is served over HTTPS, you can omit this flag.</p>
+</blockquote>
 <p>Restart Claude Desktop. fsPulse should appear as an available MCP server.</p>
 <h2 id="claude-code"><a class="header" href="#claude-code">Claude Code</a></h2>
 <p>Claude Code supports Streamable HTTP natively, with no bridge required. Add to your <code>.mcp.json</code>:</p>
@@ -970,11 +974,11 @@ enabled = true
   "mcpServers": {
     "fspulse-local": {
       "command": "npx",
-      "args": ["mcp-remote", "http://localhost:8080/mcp"]
+      "args": ["mcp-remote", "http://localhost:8080/mcp", "--allow-http"]
     },
     "fspulse-remote": {
       "command": "npx",
-      "args": ["mcp-remote", "http://my-server:8080/mcp"]
+      "args": ["mcp-remote", "http://my-server:8080/mcp", "--allow-http"]
     }
   }
 }
