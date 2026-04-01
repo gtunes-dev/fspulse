@@ -170,6 +170,7 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
                     <TableHead className="uppercase text-xs tracking-wide">Name</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
+                    <TableHead className="uppercase text-xs tracking-wide text-center">Integrity</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide">Next Scan</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide text-center">Status</TableHead>
                   </TableRow>
@@ -267,6 +268,19 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
                       <TableCell>
                         <span className="text-sm">
                           {formatScheduleDescription(schedule)}
+                        </span>
+                      </TableCell>
+
+                      {/* Integrity Column */}
+                      <TableCell className="text-center">
+                        <span className="text-sm">
+                          {(() => {
+                            const parts: string[] = []
+                            if (schedule.hash_mode === 'All') parts.push('Hash All')
+                            else if (schedule.hash_mode === 'New') parts.push('Hash Changed')
+                            if (schedule.is_val) parts.push('Validate')
+                            return parts.length > 0 ? parts.join(', ') : '-'
+                          })()}
                         </span>
                       </TableCell>
 
