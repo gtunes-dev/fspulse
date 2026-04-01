@@ -42,7 +42,7 @@ export function CreateScheduleDialog({
   const [timeOfDay, setTimeOfDay] = useState<string>('09:00')
   const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Wed', 'Fri'])
   const [dayOfMonth, setDayOfMonth] = useState<number>(1)
-  const [intervalValue, setIntervalValue] = useState<number>(2)
+  const [intervalValue, setIntervalValue] = useState<string>('2')
   const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('Hours')
   const [hashMode, setHashMode] = useState<string>('New or Changed')
   const [isVal, setIsVal] = useState<boolean>(true)
@@ -133,7 +133,8 @@ export function CreateScheduleDialog({
       return
     }
 
-    if (scheduleType === 'Interval' && intervalValue < 1) {
+    const intervalNum = parseInt(intervalValue) || 0
+    if (scheduleType === 'Interval' && intervalNum < 1) {
       setError('Interval value must be at least 1')
       return
     }
@@ -167,7 +168,7 @@ export function CreateScheduleDialog({
         requestBody.time_of_day = timeOfDay
         requestBody.day_of_month = dayOfMonth
       } else if (scheduleType === 'Interval') {
-        requestBody.interval_value = intervalValue
+        requestBody.interval_value = intervalNum
         requestBody.interval_unit = intervalUnit
       }
 
@@ -328,7 +329,7 @@ export function CreateScheduleDialog({
                     type="number"
                     min="1"
                     value={intervalValue}
-                    onChange={(e) => setIntervalValue(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setIntervalValue(e.target.value)}
                     className="w-24"
                   />
                   <select

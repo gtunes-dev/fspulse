@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Browse page ItemDetail version selection**: ItemDetail now selects the item version active at the currently viewed scan instead of always showing the most recent version. Adds `version-at-scan` API endpoint to resolve the correct version for a given scan context.
+- **Schedule dialog interval input**: Interval value field no longer snaps to 1 while typing, allowing users to clear and retype values. Invalid values are caught on submit with a validation message.
 
 ## [v0.6.1] - 2026-03-31
 
