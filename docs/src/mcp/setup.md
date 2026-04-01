@@ -17,16 +17,14 @@ Restart fsPulse after changing this setting. You should see `MCP server enabled 
 
 There are two ways to connect an AI client to fsPulse's MCP server:
 
-| Method | Client | Requires Proxy | Multi-Chat | Setup Effort |
-|--------|--------|---------------|------------|--------------|
-| [Claude Desktop](#claude-desktop) | Claude Desktop | No | No | Low |
-| [Claude Code](#claude-code) | Claude Code | No | Yes | Low |
-
-**Multi-Chat** means multiple chat sessions can use the MCP server at the same time.
+| Method | Client | Setup Effort |
+|--------|--------|--------------|
+| [Claude Desktop](#claude-desktop) | Claude Desktop | Low |
+| [Claude Code](#claude-code) | Claude Code | Low |
 
 ## Claude Desktop
 
-Claude Desktop connects to fsPulse using the Developer settings JSON config with [mcp-remote](https://www.npmjs.com/package/mcp-remote) as a stdio-to-HTTP bridge. This requires Node.js (for `npx`) and no reverse proxy, but has a limitation: **only one chat session at a time can use the MCP server**. Starting a new chat will not have access to fsPulse's tools until you restart Claude Desktop.
+Claude Desktop connects to fsPulse using the Developer settings JSON config with [mcp-remote](https://www.npmjs.com/package/mcp-remote) as a stdio-to-HTTP bridge. This requires Node.js (for `npx`).
 
 ### Prerequisites
 
@@ -53,13 +51,11 @@ Open Claude Desktop's configuration file by going to **Settings > Developer** (u
 
 Replace `localhost:8080` with the hostname and port of your fsPulse instance if it is running on a different machine.
 
-Restart Claude Desktop. fsPulse should appear as an available MCP server in the first chat session you open.
-
-> **Why the single-chat limitation?** The Developer config only supports stdio-based MCP servers. The `mcp-remote` bridge runs as a single subprocess that holds one HTTP session with fsPulse. Only the chat session that first initializes this connection can use it.
+Restart Claude Desktop. fsPulse should appear as an available MCP server.
 
 ## Claude Code
 
-Claude Code supports Streamable HTTP natively, with no bridge or proxy required. Each conversation gets its own independent session. Add to your `.mcp.json`:
+Claude Code supports Streamable HTTP natively, with no bridge required. Add to your `.mcp.json`:
 
 ```json
 {
