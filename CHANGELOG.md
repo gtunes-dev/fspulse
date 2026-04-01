@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Scan date display**: `started_at` and `ended_at` columns in scan queries were returning raw epoch timestamps instead of formatted dates. Display modifiers (`@short`, `@full`, `@timestamp`) and the default format now work correctly, matching the existing behavior of `mod_date` in version queries.
+
 ## [v0.6.2] - 2026-03-31
 
 ### Added
