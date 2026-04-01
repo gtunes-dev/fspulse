@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Browse page ItemDetail version selection**: ItemDetail now selects the item version active at the currently viewed scan instead of always showing the most recent version. Adds `version-at-scan` API endpoint to resolve the correct version for a given scan context.
+
 ## [v0.6.1] - 2026-03-31
 
 ### Added

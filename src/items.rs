@@ -487,6 +487,22 @@ pub fn get_versions(
     Ok(versions)
 }
 
+/// Find the item_version that was active at a given scan_id.
+/// Returns the version where first_scan_id <= scan_id <= last_scan_id.
+pub fn get_version_at_scan(item_id: i64, scan_id: i64) -> Result<Option<i64>, FsPulseError> {
+    let conn = Database::get_connection()?;
+    let version: Option<i64> = conn
+        .query_row(
+            "SELECT item_version FROM item_versions \
+             WHERE item_id = ? AND first_scan_id <= ? AND last_scan_id >= ? \
+             LIMIT 1",
+            params![item_id, scan_id, scan_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(version)
+}
+
 /// Get counts of children (files and directories) for a directory item using temporal model.
 /// Counts non-deleted items at the given scan_id.
 pub fn get_children_counts(

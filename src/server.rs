@@ -298,6 +298,10 @@ impl WebServer {
                 get(api::items::get_item_size_history),
             )
             .route(
+                "/api/items/{item_id}/version-at-scan",
+                get(api::items::get_version_at_scan),
+            )
+            .route(
                 "/api/items/{item_id}/version-count",
                 get(api::items::get_version_count),
             )

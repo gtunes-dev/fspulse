@@ -265,6 +265,27 @@ pub async fn search_items(
     }
 }
 
+/// GET /api/items/:item_id/version-at-scan?scan_id=123
+/// Returns the item_version that was active at the given scan.
+pub async fn get_version_at_scan(
+    Path(item_id): Path<i64>,
+    Query(params): Query<VersionAtScanParams>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    match items::get_version_at_scan(item_id, params.scan_id) {
+        Ok(Some(version)) => Ok(Json(serde_json::json!({ "item_version": version }))),
+        Ok(None) => Err((StatusCode::NOT_FOUND, "No version found at this scan".to_string())),
+        Err(e) => {
+            error!("Failed to get version at scan for item {}: {}", item_id, e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed: {}", e)))
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VersionAtScanParams {
+    pub scan_id: i64,
+}
+
 /// GET /api/items/:item_id/version-count
 pub async fn get_version_count(
     Path(item_id): Path<i64>,
@@ -292,7 +313,7 @@ pub async fn get_versions(
     Query(params): Query<VersionsParams>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let offset = params.offset.unwrap_or(0).max(0);
-    let limit = params.limit.unwrap_or(10).clamp(1, 100);
+    let limit = params.limit.unwrap_or(10).clamp(1, 200);
     let order = params.order.as_deref().unwrap_or("desc");
 
     match items::get_versions(item_id, offset, limit, order) {

@@ -430,13 +430,48 @@ export function ItemDetail({
     }
   }, [shouldLoad, itemId])
 
-  // Initial load — show loading only on first load; autoSelect first version
+  // Initial load — resolve the correct version page based on scanId context.
+  // When scanId is present, find which item_version was active at that scan,
+  // compute the page containing it, and select it. Otherwise, show page 0 desc.
   useEffect(() => {
     if (!shouldLoad) return
     setLoadingVersions(true)
-    loadVersionPage(0, versionOrder, undefined, true).finally(() => setLoadingVersions(false))
+
+    async function initialLoad() {
+      if (scanId !== null) {
+        try {
+          // Fetch version-at-scan and version count in parallel
+          const [atScanRes, countRes] = await Promise.all([
+            fetch(`/api/items/${itemId}/version-at-scan?scan_id=${scanId}`),
+            fetch(`/api/items/${itemId}/version-count`),
+          ])
+
+          if (atScanRes.ok && countRes.ok) {
+            const { item_version: targetVersion } = await atScanRes.json()
+            const { total } = await countRes.json()
+            setTotalVersionCount(total)
+
+            // Compute page containing the target version in current sort order
+            const position = versionOrder === 'asc'
+              ? targetVersion - 1
+              : total - targetVersion
+            const page = Math.floor(position / VERSIONS_PER_PAGE)
+
+            await loadVersionPage(page, versionOrder, targetVersion)
+            return
+          }
+        } catch (error) {
+          console.error('Error resolving version at scan:', error)
+        }
+      }
+
+      // Fallback: no scanId or resolution failed — show latest (page 0 desc)
+      await loadVersionPage(0, versionOrder, undefined, true)
+    }
+
+    initialLoad().finally(() => setLoadingVersions(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldLoad, itemId]) // intentionally not including versionOrder or loadVersionPage
+  }, [shouldLoad, itemId, scanId]) // intentionally not including versionOrder or loadVersionPage
 
   // When sort order changes, compute the page that contains the selected version
   const handleOrderChange = (newOrder: 'asc' | 'desc') => {
