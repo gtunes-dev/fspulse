@@ -42,7 +42,8 @@ Open Claude Desktop's configuration file by going to **Settings > Developer** (u
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://localhost:8080/mcp"
+        "http://localhost:8080/mcp",
+        "--allow-http"
       ]
     }
   }
@@ -50,6 +51,8 @@ Open Claude Desktop's configuration file by going to **Settings > Developer** (u
 ```
 
 Replace `localhost:8080` with the hostname and port of your fsPulse instance if it is running on a different machine.
+
+> **Note:** The `--allow-http` flag is required by `mcp-remote` when connecting over HTTP. If your fsPulse instance is served over HTTPS, you can omit this flag.
 
 Restart Claude Desktop. fsPulse should appear as an available MCP server.
 
@@ -79,11 +82,11 @@ You can connect to multiple fsPulse instances by giving each a unique name:
   "mcpServers": {
     "fspulse-local": {
       "command": "npx",
-      "args": ["mcp-remote", "http://localhost:8080/mcp"]
+      "args": ["mcp-remote", "http://localhost:8080/mcp", "--allow-http"]
     },
     "fspulse-remote": {
       "command": "npx",
-      "args": ["mcp-remote", "http://my-server:8080/mcp"]
+      "args": ["mcp-remote", "http://my-server:8080/mcp", "--allow-http"]
     }
   }
 }
