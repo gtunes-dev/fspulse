@@ -82,7 +82,7 @@ impl ColType {
             ColType::Path => ColTypeInfo::new(
                 Rule::path_filter_EOI,
                 "Path",
-                "Single-quoted substring(s) e.g. '/var/log', 'docs/report.pdf'",
+                "Single-quoted substring(s) e.g. '/var/log', 'docs/report.pdf'\nUse trailing slash for folder prefix: '/photos/' not '/photos' (avoids matching '/photos-backup/')",
             ),
             ColType::ValState => ColTypeInfo::new(
                 Rule::val_state_filter_EOI,

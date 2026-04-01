@@ -8,7 +8,7 @@ fsPulse tracks filesystem state over time using temporal versioning:
 - **roots** — Monitored directory paths. Each root is scanned independently.
 - **scans** — A scan is a point-in-time snapshot of a root. Records file/folder counts, sizes, and change/integrity stats.
 - **items** — Stable identity of a file or directory (path, name, type). Mutable state lives in versions, not here.
-- **versions** — Each version captures the full state of an item at a point in time (size, mod_date, val_state, etc.). A new version is created only when state changes. Filter with `is_current:(T)` for latest state.
+- **versions** — Each version captures the full state of an item at a point in time (size, mod_date, val_state, etc.). A new version is created only when state changes. Filter with `is_current:(T)` for latest state. **IMPORTANT**: `is_current:(T)` returns the latest version of *every* item, including items whose latest version is a deletion record (`is_deleted:(T)`). To analyze only live (non-deleted) items, always combine both filters: `is_current:(T), is_deleted:(F)`.
 - **hashes** — SHA-256 hash observations on file versions. Hash state is Baseline (expected) or Suspect (hash changed without metadata change).
 
 Relationships:
@@ -27,7 +27,7 @@ DOMAIN [WHERE ...] [GROUP BY ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET 
 ### Domains
 
 - **items** — Item identity (path, name, extension, type)
-- **versions** — Item versions over time (size, mod_date, val_state, etc.). Filter with `is_current:(T)` for latest state.
+- **versions** — Item versions over time (size, mod_date, val_state, etc.). Filter with `is_current:(T), is_deleted:(F)` for latest state of live items. Using `is_current:(T)` alone includes deleted items.
 - **hashes** — Hash observations on item versions (file_hash, hash_state)
 - **scans** — Scan sessions (timestamps, counts, integrity findings)
 - **roots** — Monitored root directories
@@ -42,12 +42,14 @@ Filters use the syntax: `column_name:(value1, value2, ...)`
 | Date | `2024-01-01`, `2024-01-01 14:30:00`, `1711929600` |
 | Boolean | `T`, `F`, `true`, `false` |
 | String | `'example'`, `null`, `not null` |
-| Path | `'/photos'`, `'report.pdf'` |
+| Path | `'/photos'`, `'report.pdf'` — **see path matching note below** |
 | Val State | `V`, `I`, `N`, `U` (Valid, Invalid, No Validator, Unknown) |
 | Hash State | `V`, `S`, `U` (Valid, Suspect, Unknown) |
 | Item Type | `F`, `D`, `S`, `U` (File, Directory, Symlink, Unknown) |
 
 Multiple values within a filter are OR'd. Multiple filters are AND'd.
+
+**Path matching note**: Path filters use substring matching. When filtering for items under a specific folder, always include the trailing path separator to avoid matching sibling folders with similar name prefixes. For example, `item_path:('/data/photos/')` matches only items under the `photos` folder, while `item_path:('/data/photos')` would also match items under `photos-old`, `photos-backup`, etc.
 
 ### GROUP BY and Aggregates
 
@@ -99,11 +101,11 @@ For other tools (`integrity_report`, `scan_history`, `scan_changes`, `item_detai
 ### Examples
 
 ```
-versions where is_current:(T), root_id:(1) show item_path, size limit 20
+versions where is_current:(T), is_deleted:(F), root_id:(1) show item_path, size limit 20
 hashes where hash_state:(S) show item_path, file_hash
 scans where root_id:(1) order by started_at desc limit 10
 items where file_extension:('pdf') show item_path, item_name
-versions where is_current:(T), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
+versions where is_current:(T), is_deleted:(F), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
 scans group by root_id show root_id, count(*), max(total_size) order by count(*) desc
 hashes group by hash_state show hash_state, count(*)
 ```

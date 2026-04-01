@@ -709,7 +709,14 @@ impl ServerHandler for FsPulseMcp {
                  to learn available column names. Do not guess column names. \
                  All tools return at most 200 rows per call. Use limit/offset \
                  parameters (or LIMIT/OFFSET in query strings) to paginate. \
-                 Use query_count to get total counts for query_data queries."
+                 Use query_count to get total counts for query_data queries. \
+                 IMPORTANT: When querying versions with is_current:(T), always \
+                 also filter is_deleted:(F) to exclude deleted items — otherwise \
+                 counts and aggregates will include items that no longer exist. \
+                 IMPORTANT: Path filters use substring matching. When filtering \
+                 by folder path, always include the trailing slash (e.g. \
+                 item_path:('/data/photos/')) to avoid matching sibling folders \
+                 with similar prefixes (e.g. '/data/photos-backup/')."
             )
     }
 }

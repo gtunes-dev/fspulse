@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Improved
+- **MCP agent guidance for deleted items**: Help text, examples, and server instructions now explicitly warn that `is_current:(T)` includes deleted items. Agents are guided to use `is_current:(T), is_deleted:(F)` when analyzing live items.
+- **MCP agent guidance for path prefix matching**: Help text, column tips, and server instructions now warn that path filters use substring matching and that a trailing slash is needed when filtering by folder path to avoid matching sibling folders with similar prefixes.
+
 ## [v0.6.3] - 2026-04-01
 
 ### Fixed
