@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-25c08cfd.js";
+            window.path_to_searchindex_js = "../searchindex-ecc08dc0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-435155bc.js"></script>
@@ -189,17 +189,16 @@ enabled = true
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Method</th><th>Client</th><th>Requires Proxy</th><th>Multi-Chat</th><th>Setup Effort</th></tr>
+<tr><th>Method</th><th>Client</th><th>Setup Effort</th></tr>
 </thead>
 <tbody>
-<tr><td><a href="#claude-desktop">Claude Desktop</a></td><td>Claude Desktop</td><td>No</td><td>No</td><td>Low</td></tr>
-<tr><td><a href="#claude-code">Claude Code</a></td><td>Claude Code</td><td>No</td><td>Yes</td><td>Low</td></tr>
+<tr><td><a href="#claude-desktop">Claude Desktop</a></td><td>Claude Desktop</td><td>Low</td></tr>
+<tr><td><a href="#claude-code">Claude Code</a></td><td>Claude Code</td><td>Low</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Multi-Chat</strong> means multiple chat sessions can use the MCP server at the same time.</p>
 <h2 id="claude-desktop"><a class="header" href="#claude-desktop">Claude Desktop</a></h2>
-<p>Claude Desktop connects to fsPulse using the Developer settings JSON config with <a href="https://www.npmjs.com/package/mcp-remote">mcp-remote</a> as a stdio-to-HTTP bridge. This requires Node.js (for <code>npx</code>) and no reverse proxy, but has a limitation: <strong>only one chat session at a time can use the MCP server</strong>. Starting a new chat will not have access to fsPulse’s tools until you restart Claude Desktop.</p>
+<p>Claude Desktop connects to fsPulse using the Developer settings JSON config with <a href="https://www.npmjs.com/package/mcp-remote">mcp-remote</a> as a stdio-to-HTTP bridge. This requires Node.js (for <code>npx</code>).</p>
 <h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
 <ul>
 <li><a href="https://nodejs.org/">Node.js</a> must be installed (provides <code>npx</code>)</li>
@@ -220,12 +219,9 @@ enabled = true
 }
 </code></pre>
 <p>Replace <code>localhost:8080</code> with the hostname and port of your fsPulse instance if it is running on a different machine.</p>
-<p>Restart Claude Desktop. fsPulse should appear as an available MCP server in the first chat session you open.</p>
-<blockquote>
-<p><strong>Why the single-chat limitation?</strong> The Developer config only supports stdio-based MCP servers. The <code>mcp-remote</code> bridge runs as a single subprocess that holds one HTTP session with fsPulse. Only the chat session that first initializes this connection can use it.</p>
-</blockquote>
+<p>Restart Claude Desktop. fsPulse should appear as an available MCP server.</p>
 <h2 id="claude-code"><a class="header" href="#claude-code">Claude Code</a></h2>
-<p>Claude Code supports Streamable HTTP natively, with no bridge or proxy required. Each conversation gets its own independent session. Add to your <code>.mcp.json</code>:</p>
+<p>Claude Code supports Streamable HTTP natively, with no bridge required. Add to your <code>.mcp.json</code>:</p>
 <pre><code class="language-json">{
   "mcpServers": {
     "fspulse": {
