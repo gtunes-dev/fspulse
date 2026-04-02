@@ -22,6 +22,12 @@
 
 ---
 
+> **New: MCP Support (Experimental)**
+> fsPulse now includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server, allowing AI assistants like Claude Desktop and Claude Code to query your filesystem data, explore scan history, and investigate integrity issues through natural conversation.
+> [Set up MCP &rarr;](https://gtunes-dev.github.io/fspulse/mcp/setup.html)
+
+---
+
 > **⚠️ Early Development Notice**
 > fsPulse is under active development and is not yet feature-complete. Core functionality is stable, but expect continued evolution and occasional breaking changes. Feedback and issue reports are welcome as we work toward a 1.0 release.
 
