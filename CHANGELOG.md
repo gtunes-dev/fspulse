@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.6.5] - 2026-04-02
+
 ### Added
 - **Query DSL columns**: Exposed `val_scan_id`, `val_reviewed_at`, and `hash_reviewed_at` in the versions domain, enabling agents and users to query validation scan timing and integrity review status.
 - **Column descriptions**: All columns across all query domains now include a description, shown in `query_help` domain output.
