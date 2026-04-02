@@ -89,6 +89,18 @@ Examples: `mod_date@full`, `started_at@timestamp`, `item_path@name`
 
 These forms can be mixed freely in ranges: `started_at:(2026-03-30..2026-03-31 12:00:00)`, `mod_date:(1743364800..2026-04-01)`
 
+### ORDER BY Clause
+
+Sort results by one or more columns or aggregate expressions, separated by commas. Direction is `asc` (default) or `desc`.
+
+```
+items where root_id:(1) order by mod_date desc, item_path asc
+scans group by root_id show root_id, count(*) order by count(*) desc
+```
+
+- Columns do not need to appear in the SHOW clause to be used in ORDER BY
+- Duplicate columns in ORDER BY are not allowed
+
 ### Pagination
 
 All tools return at most 200 rows per call. Most tools accept `limit` and `offset` parameters to control pagination.
