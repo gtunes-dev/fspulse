@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1945b716.js";
+            window.path_to_searchindex_js = "searchindex-d0011f77.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-435155bc.js"></script>
@@ -2031,8 +2031,11 @@ fspulse --version
 <tr><td><code>modify_count</code></td><td>Integer</td><td>No</td><td>Descendant items modified (folders only; null for files)</td></tr>
 <tr><td><code>delete_count</code></td><td>Integer</td><td>No</td><td>Descendant items deleted (folders only; null for files)</td></tr>
 <tr><td><code>unchanged_count</code></td><td>Integer</td><td>No</td><td>Descendant items unchanged (folders only; null for files)</td></tr>
+<tr><td><code>val_scan_id</code></td><td>Id</td><td>No</td><td>Scan in which this version was validated (NULL if not yet validated; may differ from <code>first_scan_id</code>)</td></tr>
 <tr><td><code>val_state</code></td><td>Validation Status</td><td>No</td><td>Validation state (files only; null for folders)</td></tr>
 <tr><td><code>val_error</code></td><td>String</td><td>No</td><td>Validation error message (files only; null for folders)</td></tr>
+<tr><td><code>val_reviewed_at</code></td><td>Date</td><td>No</td><td>Timestamp when user marked a validation issue as reviewed (NULL until reviewed)</td></tr>
+<tr><td><code>hash_reviewed_at</code></td><td>Date</td><td>No</td><td>Timestamp when user marked a hash integrity issue as reviewed (NULL until reviewed)</td></tr>
 </tbody>
 </table>
 </div>
