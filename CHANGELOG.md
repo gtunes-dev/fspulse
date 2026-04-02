@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Improved
-- **MCP agent guidance**: Improved query help documentation, filter syntax examples, timestamp usage guidance, pagination percentage display, partial-result warnings, and ORDER BY clause documentation.
+- **MCP agent guidance**: Improved query help documentation, filter syntax examples, timestamp usage guidance, pagination percentage display, partial-result warnings, ORDER BY clause documentation, and format modifier restrictions.
 
 ## [v0.6.4] - 2026-04-01
 

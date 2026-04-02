@@ -100,6 +100,7 @@ scans group by root_id show root_id, count(*) order by count(*) desc
 
 - Columns do not need to appear in the SHOW clause to be used in ORDER BY
 - Duplicate columns in ORDER BY are not allowed
+- Do not use format modifiers (`@short`, `@full`, `@timestamp`, `@name`) in ORDER BY — use bare column names only. Modifiers are a SHOW feature. Sorting always uses the full underlying value regardless of display format.
 
 ### Pagination
 
