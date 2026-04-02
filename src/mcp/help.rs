@@ -47,7 +47,12 @@ Filters use the syntax: `column_name:(value1, value2, ...)`
 | Hash State | `V`, `S`, `U` (Valid, Suspect, Unknown) |
 | Item Type | `F`, `D`, `S`, `U` (File, Directory, Symlink, Unknown) |
 
-Multiple values within a filter are OR'd. Multiple filters are AND'd.
+**Filter logic:** Values within a single filter's parentheses are OR'd; separate filters are AND'd and **must be comma-separated**.
+
+```
+versions where root_id:(1, 2), item_type:(F)
+```
+This means "root 1 OR root 2, AND files only." Multiple filters without commas will cause a parse error.
 
 **Path matching note**: Path filters use substring matching. When filtering for items under a specific folder, always include the trailing path separator to avoid matching sibling folders with similar name prefixes. For example, `item_path:('/data/photos/')` matches only items under the `photos` folder, while `item_path:('/data/photos')` would also match items under `photos-old`, `photos-backup`, etc.
 
@@ -98,10 +103,19 @@ For other tools (`integrity_report`, `scan_history`, `scan_changes`, `item_detai
 - Total counts are included in the response
 - When more results are available, the response indicates the next offset to use
 
+### Timestamps: Event Time vs. Detection Time
+
+When answering "when did this change?", choose the right timestamp:
+
+- **`mod_date`** (on versions) is the filesystem's own timestamp — the actual time the file was created or last modified. Prefer this for adds and modifications when building timelines.
+- **`started_at`** (on scans) is when fspulse detected the change, which may lag the actual event by up to a full scan interval. Use scan time only as a fallback.
+- **Deletes** are the exception: the file is gone, so there is no `mod_date`. The detecting scan's `started_at` is the only available time anchor — treat it as an upper bound, not the exact deletion time.
+
 ### Examples
 
 ```
 versions where is_current:(T), is_deleted:(F), root_id:(1) show item_path, size limit 20
+versions where is_current:(T), is_deleted:(F), root_id:(1, 2), item_type:(F) show item_path, size
 hashes where hash_state:(S) show item_path, file_hash
 scans where root_id:(1) order by started_at desc limit 10
 items where file_extension:('pdf') show item_path, item_name

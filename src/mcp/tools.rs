@@ -12,6 +12,16 @@ use super::formatting::{format_table, effective_limit, fmt_ts, fmt_opt_ts, MAX_R
 use super::help::{general_help, domain_help};
 use super::params::*;
 
+/// Format a pagination summary like "Showing 1-50 of 1392 (4%)"
+fn pagination_summary(offset: i64, row_count: i64, total: i64) -> String {
+    let pct = if total > 0 {
+        ((row_count as f64 / total as f64) * 100.0).round() as i64
+    } else {
+        100
+    };
+    format!("Showing {}-{} of {} ({}%)", offset + 1, offset + row_count, total, pct)
+}
+
 // ─── Tool router ────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -250,10 +260,8 @@ impl FsPulseMcp {
 
             if count > items.len() as i64 + offset {
                 out.push_str(&format!(
-                    "\n(Showing items {}-{} of {}. Use offset to paginate.)\n",
-                    offset + 1,
-                    offset + items.len() as i64,
-                    count
+                    "\n({}. Use offset to paginate.)\n",
+                    pagination_summary(offset, items.len() as i64, count)
                 ));
             }
 
@@ -340,8 +348,8 @@ impl FsPulseMcp {
                 row_count += 1;
             }
 
-            let mut summary = format!("{} total scan(s). Showing {}-{}.\n\n",
-                total, offset + 1, offset + row_count);
+            let mut summary = format!("{} total scan(s). {}.\n\n",
+                total, pagination_summary(offset, row_count, total));
             summary.push_str(&out);
 
             if total > offset + row_count {
@@ -408,8 +416,8 @@ impl FsPulseMcp {
 
             let row_count = children.len() as i64;
             let mut out = format!(
-                "{} total item(s) under '{}' at scan {}. Showing {}-{}.\n\n",
-                total, parent_path, scan_id, offset + 1, offset + row_count
+                "{} total item(s) under '{}' at scan {}. {}.\n\n",
+                total, parent_path, scan_id, pagination_summary(offset, row_count, total)
             );
             out.push_str("| Name | Type | Size | Mod Date | Status |\n");
             out.push_str("|------|------|------|----------|--------|\n");
@@ -486,8 +494,8 @@ impl FsPulseMcp {
 
             let row_count = results.len() as i64;
             let mut out = format!(
-                "{} total item(s) matching '{}'. Showing {}-{}.\n\n",
-                total, params.query, offset + 1, offset + row_count
+                "{} total item(s) matching '{}'. {}.\n\n",
+                total, params.query, pagination_summary(offset, row_count, total)
             );
             out.push_str("| Name | Type | Path | Size |\n");
             out.push_str("|------|------|------|------|\n");
@@ -588,8 +596,8 @@ impl FsPulseMcp {
                 let shown = versions.len() as i64;
                 if version_count > offset + shown {
                     out.push_str(&format!(
-                        "\n(Showing versions {}-{} of {}. Use offset: {} to see next page.)\n",
-                        offset + 1, offset + shown, version_count, offset + shown
+                        "\n({}. Use offset: {} to see next page.)\n",
+                        pagination_summary(offset, shown, version_count), offset + shown
                     ));
                 }
             }
@@ -603,7 +611,7 @@ impl FsPulseMcp {
         Ok(CallToolResult::success(vec![Content::text(result)]))
     }
 
-    #[tool(description = "Show what files were added, modified, or deleted in a specific scan. Supports pagination via limit/offset parameters. Returns total count in response.")]
+    #[tool(description = "Show what files were added, modified, or deleted in a specific scan. Returns all changes without path filtering. If you need changes for a specific directory or file pattern, use query_data on the versions domain with an item_path filter instead — it is more efficient for targeted questions. Supports pagination via limit/offset parameters. Returns total count in response.")]
     async fn scan_changes(
         &self,
         Parameters(params): Parameters<ScanChangesParams>,
@@ -672,8 +680,8 @@ impl FsPulseMcp {
 
                 let table = format_table(&headers, &rows, &alignments);
                 let mut out = format!(
-                    "{}{} total matching row(s). Showing {}-{}.\n\n{}",
-                    summary, total, offset + 1, offset + row_count, table
+                    "{}{} total matching row(s). {}.\n\n{}",
+                    summary, total, pagination_summary(offset, row_count, total), table
                 );
 
                 if total > offset + row_count {
@@ -705,8 +713,9 @@ impl ServerHandler for FsPulseMcp {
             .with_server_info(server_info)
             .with_instructions(
                 "fsPulse filesystem scanner and integrity tracker. \
-                 IMPORTANT: Always call query_help before using query_data \
-                 to learn available column names. Do not guess column names. \
+                 IMPORTANT: Before constructing any query, call query_help for \
+                 the relevant domain and verify your filter syntax against the \
+                 column table. Do not guess column names or filter syntax. \
                  All tools return at most 200 rows per call. Use limit/offset \
                  parameters (or LIMIT/OFFSET in query strings) to paginate. \
                  Use query_count to get total counts for query_data queries. \
@@ -716,7 +725,12 @@ impl ServerHandler for FsPulseMcp {
                  IMPORTANT: Path filters use substring matching. When filtering \
                  by folder path, always include the trailing slash (e.g. \
                  item_path:('/data/photos/')) to avoid matching sibling folders \
-                 with similar prefixes (e.g. '/data/photos-backup/')."
+                 with similar prefixes (e.g. '/data/photos-backup/'). \
+                 IMPORTANT: Before drawing conclusions from any paginated result, \
+                 check the total count and percentage shown. If you have not seen \
+                 all rows, either paginate to completion or use aggregation \
+                 (GROUP BY with count/sum), or explicitly state that your \
+                 conclusion is based on a partial result."
             )
     }
 }
