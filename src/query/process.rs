@@ -629,11 +629,14 @@ impl VersionsQuery {
                 "modify_count" => Format::format_opt_i64(version.modify_count),
                 "delete_count" => Format::format_opt_i64(version.delete_count),
                 "unchanged_count" => Format::format_opt_i64(version.unchanged_count),
+                "val_scan_id" => Format::format_opt_i64(version.val_scan_id),
                 "val_state" => match version.val_state {
                     Some(v) => Format::format_val_state(ValidationState::from_i64(v), col.format)?,
                     None => String::new(),
                 },
                 "val_error" => Format::format_opt_string(&version.val_error),
+                "val_reviewed_at" => Format::format_opt_date(version.val_reviewed_at, col.format)?,
+                "hash_reviewed_at" => Format::format_opt_date(version.hash_reviewed_at, col.format)?,
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -879,8 +882,11 @@ struct VersionsQueryRow {
     modify_count: Option<i64>,
     delete_count: Option<i64>,
     unchanged_count: Option<i64>,
+    val_scan_id: Option<i64>,
     val_state: Option<i64>,
     val_error: Option<String>,
+    val_reviewed_at: Option<i64>,
+    hash_reviewed_at: Option<i64>,
 }
 
 impl VersionsQueryRow {
@@ -905,8 +911,11 @@ impl VersionsQueryRow {
             modify_count: row.get(16)?,
             delete_count: row.get(17)?,
             unchanged_count: row.get(18)?,
-            val_state: row.get(19)?,
-            val_error: row.get(20)?,
+            val_scan_id: row.get(19)?,
+            val_state: row.get(20)?,
+            val_error: row.get(21)?,
+            val_reviewed_at: row.get(22)?,
+            hash_reviewed_at: row.get(23)?,
         })
     }
 }

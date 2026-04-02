@@ -110,8 +110,11 @@ The `versions` domain queries individual item version rows — each representing
 | `modify_count`    | Integer           | No      | Descendant items modified (folders only; null for files) |
 | `delete_count`    | Integer           | No      | Descendant items deleted (folders only; null for files) |
 | `unchanged_count` | Integer           | No      | Descendant items unchanged (folders only; null for files) |
+| `val_scan_id`     | Id                | No      | Scan in which this version was validated (NULL if not yet validated; may differ from `first_scan_id`) |
 | `val_state`       | Validation Status | No      | Validation state (files only; null for folders) |
 | `val_error`       | String            | No      | Validation error message (files only; null for folders) |
+| `val_reviewed_at` | Date              | No      | Timestamp when user marked a validation issue as reviewed (NULL until reviewed) |
+| `hash_reviewed_at`| Date              | No      | Timestamp when user marked a hash integrity issue as reviewed (NULL until reviewed) |
 
 ---
 

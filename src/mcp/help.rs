@@ -16,6 +16,16 @@ Relationships:
 - An item always has at least one version (created on first scan).
 - A version has zero or more hash observations (0 = file never hashed, 1 = baseline hash, >1 = hash changed between scans — later observations may be suspect).
 
+Scan modes and integrity:
+- Every scan walks the filesystem and detects adds, modifications, and deletes. This always happens regardless of settings.
+- Integrity actions are optional per scan, controlled by two settings:
+  - **Hashing** (`is_hash`, `hash_all` on scans): Three modes — None (no hashing), New/Changed (`is_hash:(T), hash_all:(F)` — hashes only versions that have never been hashed), or All (`is_hash:(T), hash_all:(T)` — recomputes hashes for every file). Only "All" scans can detect suspect hashes, because only they recompute and compare hashes for previously hashed versions.
+  - **Validation** (`is_val` on scans): On or off. Validating scans check the structural integrity of files that have a validator and have not yet been validated for this version. Validation is never repeated on an already-validated version.
+- If a version has no hash observations or `val_state` is Unknown, it means no scan with the appropriate integrity setting has run since that version was created — it is not an error.
+
+Integrity review:
+- Users can mark integrity issues (validation failures, suspect hashes) as reviewed. `val_reviewed_at` and `hash_reviewed_at` on versions record when this happened (NULL = not yet reviewed). Filter for unreviewed issues with `val_reviewed_at:(null)` or `hash_reviewed_at:(null)`.
+
 ## fspulse Query DSL
 
 ### Structure
@@ -72,7 +82,7 @@ Controls displayed columns. Use `default` for defaults, `all` for everything.
 
 **Format modifiers** — append `@mode` to a column name to control display format:
 
-- **Date columns** (`mod_date`, `started_at`, `ended_at`, `created_at`, `updated_at`):
+- **Date columns** (`mod_date`, `started_at`, `ended_at`, `created_at`, `updated_at`, `val_reviewed_at`, `hash_reviewed_at`):
   - `@short` (default) — date only: `2026-03-30`
   - `@full` — date and time with second precision: `2026-03-30 18:44:11`
   - `@timestamp` — raw Unix epoch (seconds, UTC): `1743364800`
@@ -163,15 +173,16 @@ pub(super) fn domain_help(domain: &str) -> Result<String, rmcp::ErrorData> {
     };
 
     let mut out = format!("## `{}` Domain Columns\n\n", domain);
-    out.push_str("| Column | Type | Filter Syntax |\n");
-    out.push_str("|--------|------|---------------|\n");
+    out.push_str("| Column | Type | Description | Filter Syntax |\n");
+    out.push_str("|--------|------|-------------|---------------|\n");
 
     for (name, spec) in col_map.entries() {
         let type_info = spec.col_type.info();
         out.push_str(&format!(
-            "| `{}` | {} | {} |\n",
+            "| `{}` | {} | {} | {} |\n",
             name,
             type_info.type_name,
+            spec.description,
             type_info.tip.replace('\n', " "),
         ));
     }

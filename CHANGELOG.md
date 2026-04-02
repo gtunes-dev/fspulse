@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Query DSL columns**: Exposed `val_scan_id`, `val_reviewed_at`, and `hash_reviewed_at` in the versions domain, enabling agents and users to query validation scan timing and integrity review status.
+- **Column descriptions**: All columns across all query domains now include a description, shown in `query_help` domain output.
+- **Scan modes and integrity documentation**: MCP general help now explains hashing modes (None, New/Changed, All), validation behavior, and why missing hash or validation data is expected.
+
 ### Improved
 - **MCP agent guidance**: Improved query help documentation, filter syntax examples, timestamp usage guidance, pagination percentage display, partial-result warnings, ORDER BY clause documentation, and format modifier restrictions.
 
