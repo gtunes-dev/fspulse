@@ -12,6 +12,7 @@ pub enum TaskType {
     Scan = 0,
     #[serde(rename = "compact_database")]
     CompactDatabase = 1,
+    Checkpoint = 2,
 }
 
 impl TaskType {
@@ -23,6 +24,7 @@ impl TaskType {
         match value {
             0 => TaskType::Scan,
             1 => TaskType::CompactDatabase,
+            2 => TaskType::Checkpoint,
             _ => {
                 warn!(
                     "Invalid TaskType value in database: {}, defaulting to Scan",
@@ -38,6 +40,7 @@ impl TaskType {
         match self {
             TaskType::Scan => "S",
             TaskType::CompactDatabase => "CD",
+            TaskType::Checkpoint => "CP",
         }
     }
 
@@ -45,6 +48,7 @@ impl TaskType {
         match self {
             TaskType::Scan => "Scan",
             TaskType::CompactDatabase => "Compact Database",
+            TaskType::Checkpoint => "Checkpoint",
         }
     }
 
@@ -53,9 +57,11 @@ impl TaskType {
             // Full names
             "SCAN" => Some(TaskType::Scan),
             "COMPACT DATABASE" | "COMPACTDATABASE" => Some(TaskType::CompactDatabase),
+            "CHECKPOINT" => Some(TaskType::Checkpoint),
             // Short names
             "S" => Some(TaskType::Scan),
             "CD" => Some(TaskType::CompactDatabase),
+            "CP" => Some(TaskType::Checkpoint),
             _ => None,
         }
     }
@@ -81,12 +87,14 @@ mod tests {
     fn test_task_type_integer_values() {
         assert_eq!(TaskType::Scan.as_i64(), 0);
         assert_eq!(TaskType::CompactDatabase.as_i64(), 1);
+        assert_eq!(TaskType::Checkpoint.as_i64(), 2);
     }
 
     #[test]
     fn test_task_type_from_i64() {
         assert_eq!(TaskType::from_i64(0), TaskType::Scan);
         assert_eq!(TaskType::from_i64(1), TaskType::CompactDatabase);
+        assert_eq!(TaskType::from_i64(2), TaskType::Checkpoint);
         // Invalid values should default to Scan
         assert_eq!(TaskType::from_i64(999), TaskType::Scan);
         assert_eq!(TaskType::from_i64(-1), TaskType::Scan);
@@ -96,12 +104,14 @@ mod tests {
     fn test_task_type_short_name() {
         assert_eq!(TaskType::Scan.short_name(), "S");
         assert_eq!(TaskType::CompactDatabase.short_name(), "CD");
+        assert_eq!(TaskType::Checkpoint.short_name(), "CP");
     }
 
     #[test]
     fn test_task_type_full_name() {
         assert_eq!(TaskType::Scan.full_name(), "Scan");
         assert_eq!(TaskType::CompactDatabase.full_name(), "Compact Database");
+        assert_eq!(TaskType::Checkpoint.full_name(), "Checkpoint");
     }
 
     #[test]
@@ -131,6 +141,10 @@ mod tests {
             TaskType::from_string("cd"),
             Some(TaskType::CompactDatabase)
         );
+        assert_eq!(TaskType::from_string("checkpoint"), Some(TaskType::Checkpoint));
+        assert_eq!(TaskType::from_string("CHECKPOINT"), Some(TaskType::Checkpoint));
+        assert_eq!(TaskType::from_string("CP"), Some(TaskType::Checkpoint));
+        assert_eq!(TaskType::from_string("cp"), Some(TaskType::Checkpoint));
         assert_eq!(TaskType::from_string("invalid"), None);
     }
 
@@ -138,6 +152,7 @@ mod tests {
     fn test_task_type_display() {
         assert_eq!(format!("{}", TaskType::Scan), "Scan");
         assert_eq!(format!("{}", TaskType::CompactDatabase), "Compact Database");
+        assert_eq!(format!("{}", TaskType::Checkpoint), "Checkpoint");
     }
 
     #[test]

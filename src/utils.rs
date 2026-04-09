@@ -127,6 +127,16 @@ impl Utils {
         Self::validate_range(start, end)
     }
 
+    /// Current time as a Unix epoch in seconds. Returns 0 if the
+    /// system clock is before the epoch (which shouldn't happen on
+    /// any sane system).
+    pub fn now_secs() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+
     /// Format a duration as a human-readable elapsed time string.
     /// Examples: "0s", "5s", "1m 30s", "61m 1s"
     pub fn format_elapsed(duration: Duration) -> String {

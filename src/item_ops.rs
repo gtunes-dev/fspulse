@@ -8,8 +8,9 @@
 //! collect a batch of events (no lock held), then call
 //! `apply_observed_events`, which acquires the SQLite write lock and
 //! processes the batch under one shared `now` allocated inside the
-//! locked section. The lock-allocated-timestamp invariant requires
-//! callers to NOT pre-allocate timestamps. See the spec for details.
+//! locked section. Callers must NOT pre-allocate timestamps — the
+//! lock-allocated-timestamp invariant only holds if `now()` is read
+//! while the lock is held.
 //!
 //! There is no `ItemOp` enum, no `OpResult::Skipped`, no assess/execute
 //! split, and no optimistic `WHERE EXISTS` guards. The lock makes all
@@ -24,6 +25,7 @@ use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::hierarchy::HierarchyId;
 use crate::item_identity::{Access, ItemType};
+use crate::utils::Utils;
 use crate::validate::validator;
 
 // ============================================================================
@@ -255,7 +257,7 @@ fn apply_observed_events_locked(
     conn: &Connection,
     events: &[ObservedEvent],
 ) -> Result<BatchStats, FsPulseError> {
-    let now = now_secs();
+    let now = Utils::now_secs();
     let mut root_paths: HashMap<i64, Option<String>> = HashMap::new();
     let mut stats = BatchStats::default();
 
@@ -780,13 +782,6 @@ fn metadata_changed(current: &CurrentItem, observed: &ObservedItem) -> bool {
             || current.size != observed.size
             || current.access != observed.access
     }
-}
-
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 /// Split a full path into its parent path and file name components.

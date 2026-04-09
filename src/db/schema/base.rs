@@ -74,7 +74,16 @@ INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '32');
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
     root_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_path TEXT NOT NULL UNIQUE
+    root_path TEXT NOT NULL UNIQUE,
+    -- Set under the SQLite write lock at the start of a checkpoint and
+    -- cleared under the lock at the end of a successful checkpoint.
+    -- Survives an interrupted checkpoint as a debugging aid (next run
+    -- overwrites it on entry).
+    last_checkpoint_started_at INTEGER,
+    -- Set under the lock at the end of a successful checkpoint. NULL
+    -- means no checkpoint has ever completed for this root, OR the
+    -- most recent checkpoint was interrupted before completion.
+    last_checkpoint_completed_at INTEGER
 );
 
 -- Indexes to optimize queries

@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::scans::HashMode;
-use crate::task::{CompactDatabaseSettings, CompactDatabaseTask, ScanSettings, ScanTask, Task, TaskStatus, TaskType};
+use crate::task::{CheckpointTask, CompactDatabaseSettings, CompactDatabaseTask, ScanSettings, ScanTask, Task, TaskStatus, TaskType};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -1166,6 +1166,21 @@ impl TaskEntry {
                 }
                 TaskType::CompactDatabase => {
                     Box::new(CompactDatabaseTask::new(row.task_id))
+                }
+                TaskType::Checkpoint => {
+                    let root_id = row.root_id.ok_or_else(|| {
+                        FsPulseError::Error(format!(
+                            "Checkpoint task {} has NULL root_id",
+                            row.task_id
+                        ))
+                    })?;
+                    let root_path = row.root_path.ok_or_else(|| {
+                        FsPulseError::Error(format!(
+                            "Checkpoint task {} has NULL root_path",
+                            row.task_id
+                        ))
+                    })?;
+                    Box::new(CheckpointTask::new(row.task_id, root_id, root_path))
                 }
             };
 

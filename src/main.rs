@@ -14,7 +14,6 @@ mod mcp;
 mod query;
 mod roots;
 mod task_manager;
-mod checkpoint;
 mod scanner;
 mod scans;
 mod watcher;

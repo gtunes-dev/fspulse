@@ -86,6 +86,20 @@ pub fn migrate_v31_to_v32(conn: &Connection) -> Result<(), FsPulseError> {
         // Drop the undo log — no longer needed
         conn.execute_batch("DROP TABLE IF EXISTS scan_undo_log;")?;
 
+        // Add checkpoint timestamp columns to roots. Both default NULL
+        // for existing rows, which is the correct "no checkpoint has
+        // run yet" state.
+        if !column_exists(conn, "roots", "last_checkpoint_started_at")? {
+            conn.execute_batch(
+                "ALTER TABLE roots ADD COLUMN last_checkpoint_started_at INTEGER;",
+            )?;
+        }
+        if !column_exists(conn, "roots", "last_checkpoint_completed_at")? {
+            conn.execute_batch(
+                "ALTER TABLE roots ADD COLUMN last_checkpoint_completed_at INTEGER;",
+            )?;
+        }
+
         // Bump schema version
         conn.execute_batch(
             "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '32');",
