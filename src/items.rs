@@ -202,11 +202,13 @@ pub fn get_temporal_immediate_children(
         _ => String::new(),
     };
 
+    // Query now includes hierarchy_id from items for descendant count computation
     let sql = format!(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
                 iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
                 iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
-                iv.val_state, hv.hash_state
+                iv.val_state, hv.hash_state,
+                i.hierarchy_id
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
@@ -225,30 +227,121 @@ pub fn get_temporal_immediate_children(
     let rows = stmt.query_map(
         params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
         |row| {
-            Ok(TemporalTreeItem {
-                item_id: row.get(0)?,
-                item_path: row.get(1)?,
-                item_name: row.get(2)?,
-                item_type: ItemType::from_i64(row.get(3)?),
-                has_validator: row.get::<_, i64>(4)? != 0,
-                first_scan_id: row.get(5)?,
-                is_added: row.get(6)?,
-                is_deleted: row.get(7)?,
-                mod_date: row.get(8)?,
-                size: row.get(9)?,
-                add_count: row.get(10)?,
-                modify_count: row.get(11)?,
-                delete_count: row.get(12)?,
-                unchanged_count: row.get(13)?,
-                val_state: row.get(14)?,
-                hash_state: row.get(15)?,
-            })
+            Ok((
+                TemporalTreeItem {
+                    item_id: row.get(0)?,
+                    item_path: row.get(1)?,
+                    item_name: row.get(2)?,
+                    item_type: ItemType::from_i64(row.get(3)?),
+                    has_validator: row.get::<_, i64>(4)? != 0,
+                    first_scan_id: row.get(5)?,
+                    is_added: row.get(6)?,
+                    is_deleted: row.get(7)?,
+                    mod_date: row.get(8)?,
+                    size: row.get(9)?,
+                    add_count: row.get(10)?,
+                    modify_count: row.get(11)?,
+                    delete_count: row.get(12)?,
+                    unchanged_count: row.get(13)?,
+                    val_state: row.get(14)?,
+                    hash_state: row.get(15)?,
+                },
+                row.get::<_, Option<Vec<u8>>>(16)?, // hierarchy_id
+            ))
         },
     )?;
 
-    let items: Vec<TemporalTreeItem> = rows.collect::<Result<Vec<_>, _>>()?;
+    let items_with_hid: Vec<(TemporalTreeItem, Option<Vec<u8>>)> =
+        rows.collect::<Result<Vec<_>, _>>()?;
+    drop(stmt);
 
-    Ok(items)
+    // Compute descendant change counts for directory children using hierarchy_id ranges.
+    // For each folder, the subtree range is (folder_hid, next_sibling_hid).
+    // Items are already sorted by path (= hierarchy_id order), so the next
+    // item's hierarchy_id is the upper bound.
+    compute_descendant_counts(&conn, root_id, scan_id, items_with_hid)
+}
+
+/// Compute descendant change counts for directory children using hierarchy_id
+/// range queries on item_versions. Replaces the precomputed folder counts.
+fn compute_descendant_counts(
+    conn: &rusqlite::Connection,
+    root_id: i64,
+    scan_id: i64,
+    items_with_hid: Vec<(TemporalTreeItem, Option<Vec<u8>>)>,
+) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
+    if items_with_hid.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Build hierarchy_id list in order, so we can compute (hid, next_hid) ranges.
+    // Clone so we don't borrow items_with_hid (which we consume below).
+    let hids: Vec<Option<Vec<u8>>> = items_with_hid
+        .iter()
+        .map(|(_, hid)| hid.clone())
+        .collect();
+
+    // Prepared statement for descendant counts within a hierarchy range.
+    // Uses idx_iv_root_firstscan_hid: (root_id, first_scan_id, hierarchy_id)
+    let mut count_stmt_bounded = conn.prepare_cached(
+        "SELECT
+            COALESCE(SUM(CASE WHEN is_added = 1 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_added = 0 AND is_deleted = 0 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_deleted = 1 THEN 1 ELSE 0 END), 0)
+         FROM item_versions
+         WHERE root_id = ?1
+           AND first_scan_id = ?2
+           AND hierarchy_id > ?3
+           AND hierarchy_id < ?4",
+    )?;
+
+    // For the last child, there's no upper bound from a next sibling.
+    let mut count_stmt_unbounded = conn.prepare_cached(
+        "SELECT
+            COALESCE(SUM(CASE WHEN is_added = 1 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_added = 0 AND is_deleted = 0 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_deleted = 1 THEN 1 ELSE 0 END), 0)
+         FROM item_versions
+         WHERE root_id = ?1
+           AND first_scan_id = ?2
+           AND hierarchy_id > ?3",
+    )?;
+
+    let mut results = Vec::with_capacity(items_with_hid.len());
+
+    for (idx, (mut item, hid)) in items_with_hid.into_iter().enumerate() {
+        if item.item_type == ItemType::Directory && !item.is_deleted {
+            if let Some(ref my_hid) = hid {
+                // Find next sibling's hierarchy_id (next item in the sorted list)
+                let next_hid = hids.get(idx + 1).and_then(|h| h.as_deref());
+
+                let (adds, mods, dels): (i64, i64, i64) = if let Some(next) = next_hid {
+                    count_stmt_bounded.query_row(
+                        params![root_id, scan_id, my_hid, next],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )?
+                } else {
+                    count_stmt_unbounded.query_row(
+                        params![root_id, scan_id, my_hid],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )?
+                };
+
+                item.add_count = Some(adds);
+                item.modify_count = Some(mods);
+                item.delete_count = Some(dels);
+                // unchanged_count: use 1 as a sentinel to indicate the folder
+                // has content, so the tree renders it as expandable. The exact
+                // count isn't needed for the tree view — only that it's non-zero
+                // when the folder is alive.
+                item.unchanged_count = Some(1);
+            }
+        }
+
+        results.push(item);
+    }
+
+    Ok(results)
 }
 
 /// Common WHERE fragment for temporal search queries.

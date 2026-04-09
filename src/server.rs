@@ -421,6 +421,27 @@ fn start_app_services(shutdown_tx: broadcast::Sender<()>) -> Result<(), FsPulseE
         }
     });
 
+    // Start filesystem watcher
+    let mut shutdown_rx = shutdown_tx.subscribe();
+    let watcher_interrupt = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let watcher_interrupt_clone = watcher_interrupt.clone();
+
+    // Spawn the blocking watcher on a dedicated thread
+    let watcher_handle = tokio::task::spawn_blocking(move || {
+        if let Err(e) = crate::watcher::watch_roots(watcher_interrupt_clone) {
+            log::error!("Watcher error: {}", e);
+        }
+    });
+
+    // Spawn a task to relay the shutdown signal to the watcher's interrupt flag
+    tokio::spawn(async move {
+        let _ = shutdown_rx.recv().await;
+        watcher_interrupt.store(true, std::sync::atomic::Ordering::Relaxed);
+        // Wait for the watcher thread to finish
+        let _ = watcher_handle.await;
+        println!("   Filesystem watcher stopped");
+    });
+
     Ok(())
 }
 

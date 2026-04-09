@@ -6,45 +6,59 @@
 // effectively and avoid full table scans on large tables (item_versions
 // and hash_versions can have millions of rows).
 //
-// Pattern 1: "Alive versions for a root at a scan"
-//   Used by: analysis batch fetch, analysis counts, scan completion counts.
-//   Drive from item_versions using idx_versions_root_lastscan:
-//     FROM item_versions cv
-//     JOIN items i ON i.item_id = cv.item_id
-//     WHERE cv.root_id = ? AND cv.last_scan_id = ?
+// Pattern 1: "Alive versions at a point in time"
+//   Used by: browse view, analysis, MCP queries.
+//   For each item, the current version at time T has:
+//     first_seen_at <= T AND last_seen_at >= T
+//   Use MAX(item_version) with first_seen_at constraint:
+//     WHERE item_id = ? AND first_seen_at <= T
+//     ORDER BY item_version DESC LIMIT 1
 //
-// Pattern 2: "Versions created in a scan" / "Versions validated in a scan"
-//   Used by: change counts (add/modify/delete) and new_val_invalid_count at scan completion.
-//   Drive from item_versions using idx_versions_first_scan or idx_versions_val_scan:
-//     FROM item_versions iv WHERE iv.first_scan_id = ?
-//     FROM item_versions iv WHERE iv.val_scan_id = ? AND iv.val_state = ?
-//   scan_id already uniquely identifies a root; no root_id predicate needed.
+// Pattern 2: "Changed versions in a time range"
+//   Used by: browse descendant counts, change summaries, scan completion.
+//   Drive from item_versions using idx_versions_root_firstseen_hid:
+//     FROM item_versions iv
+//     WHERE iv.root_id = ? AND iv.first_seen_at BETWEEN ? AND ?
 //
-// Pattern 3: "Latest hash for a version"
-//   Used by: analysis queries, scan completion hash state counts.
-//   Use hash_versions PK prefix (item_id, item_version):
-//     LEFT JOIN hash_versions hv ON hv.item_id = cv.item_id
-//       AND hv.item_version = cv.item_version
-//       AND hv.first_scan_id = (
-//         SELECT MAX(first_scan_id) FROM hash_versions
-//         WHERE item_id = cv.item_id AND item_version = cv.item_version)
+// Pattern 3: "Descendant changes in a subtree"
+//   Used by: browse folder decoration, folder change counts.
+//   Use hierarchy_id range on item_versions (no join to items needed):
+//     FROM item_versions iv
+//     WHERE iv.root_id = ?
+//       AND iv.first_seen_at BETWEEN ? AND ?
+//       AND iv.hierarchy_id > ? AND iv.hierarchy_id < ?
+//   Index: idx_versions_root_firstseen_hid (root_id, first_seen_at, hierarchy_id)
 //
-// Pattern 4: "Version history for an item"
+// Pattern 4: "Direct children of a folder"
+//   Used by: browse folder view, child counts.
+//   Drive from item_versions using parent_item_id:
+//     FROM item_versions iv WHERE iv.parent_item_id = ?
+//   Index: idx_versions_parent_firstseen (parent_item_id, first_seen_at)
+//
+// Pattern 5: "Version history for an item"
 //   Used by: item detail views, get_current().
 //   Drive from item_versions using PK (item_id, item_version):
 //     FROM item_versions WHERE item_id = ? ORDER BY item_version DESC
-//   No root_id filter needed — item_id is globally unique.
 //
-// Pattern 5: "Scans for a root"
+// Pattern 6: "Latest hash for a version"
+//   Used by: analysis queries, integrity state.
+//   Use hash_versions PK prefix (item_id, item_version):
+//     LEFT JOIN hash_versions hv ON hv.item_id = iv.item_id
+//       AND hv.item_version = iv.item_version
+//       AND hv.first_seen_at = (
+//         SELECT MAX(first_seen_at) FROM hash_versions
+//         WHERE item_id = iv.item_id AND item_version = iv.item_version)
+//
+// Pattern 7: "Scans for a root"
 //   Used by: trends, browse, scan picker.
 //   Drive from scans using idx_scans_root:
 //     FROM scans WHERE root_id = ?
 //
-// Anti-pattern: Scanning all items then probing item_versions per item.
-//   BAD:  FROM items i JOIN item_versions cv ON cv.item_id = i.item_id
-//           AND cv.last_scan_id = ?
-//   GOOD: FROM item_versions cv JOIN items i ON i.item_id = cv.item_id
-//           WHERE cv.root_id = ? AND cv.last_scan_id = ?
+// Pattern 8: "Sweep for deletions"
+//   Used by: scan sweep phase.
+//   Items not seen since before the scan started are candidates for deletion:
+//     FROM item_versions iv
+//     WHERE iv.root_id = ? AND iv.last_seen_at < ? AND iv.is_deleted = 0
 // ============================================================================
 
 pub const CREATE_SCHEMA_SQL: &str = r#"
@@ -55,7 +69,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '31');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '32');
 
 -- Roots table stores unique root directories that have been scanned
 CREATE TABLE IF NOT EXISTS roots (
@@ -107,75 +121,74 @@ CREATE INDEX IF NOT EXISTS idx_scans_root ON scans (root_id);
 CREATE TABLE IF NOT EXISTS items (
     item_id         INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id         INTEGER NOT NULL,
+    parent_item_id  INTEGER,
     item_path       TEXT NOT NULL,
     item_name       TEXT NOT NULL,
-    file_extension  TEXT,                          -- lowercase extension (e.g. 'pdf', 'jpg'), NULL for folders/extensionless
+    hierarchy_id    BLOB,
     item_type       INTEGER NOT NULL,
+    file_extension  TEXT,                          -- lowercase extension (e.g. 'pdf', 'jpg'), NULL for folders/extensionless
     has_validator   INTEGER NOT NULL DEFAULT 0,   -- 1 if a structural validator exists for this file type
     do_not_validate INTEGER NOT NULL DEFAULT 0,   -- 1 if user has opted this item out of validation
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
+    FOREIGN KEY (parent_item_id) REFERENCES items(item_id),
     UNIQUE (root_id, item_path, item_type)
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLLATE natural_path, item_type);
 CREATE INDEX IF NOT EXISTS idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
 CREATE INDEX IF NOT EXISTS idx_items_root_ext ON items (root_id, file_extension);
+CREATE INDEX IF NOT EXISTS idx_items_root_hid ON items (root_id, hierarchy_id);
 
 -- ========================================
 -- Temporal item versions table
 -- ========================================
 -- One row per distinct state of an item. Identity (path, type, root) lives in items.
 -- item_version is a per-item sequence number (1, 2, 3, …, n) assigned chronologically.
+--
+-- Temporal range: first_seen_at..last_seen_at (epoch seconds).
+-- Versions are created by checkpoints (scans) or file watchers.
+-- first_seen_at: when this state was first observed.
+-- last_seen_at:  when this state was last confirmed current.
+--
+-- Folder versions are created only for structural events (add, delete).
+-- Folder mtime/size are not tracked. Descendant counts are computed on demand
+-- using hierarchy_id range queries — no precomputed counts stored.
 CREATE TABLE IF NOT EXISTS item_versions (
     item_id         INTEGER NOT NULL,
     item_version    INTEGER NOT NULL,
     root_id         INTEGER NOT NULL,
-    first_scan_id   INTEGER NOT NULL,
-    last_scan_id    INTEGER NOT NULL,
+    parent_item_id  INTEGER,
+    hierarchy_id    BLOB,
+    first_seen_at   INTEGER NOT NULL,
+    last_seen_at    INTEGER NOT NULL,
 
-    -- Shared fields (all item types)
+    -- State
     is_added        BOOLEAN NOT NULL DEFAULT 0,
     is_deleted      BOOLEAN NOT NULL DEFAULT 0,
     access          INTEGER NOT NULL DEFAULT 0,
+
+    -- File-specific fields (NULL for folders)
     mod_date        INTEGER,
     size            INTEGER,
 
-    -- Folder-specific descendant change counts (NULL for files).
-    -- Each count reflects the scan that created this version:
-    --   add_count       — descendants that were added (new or restored)
-    --   modify_count    — descendants that were modified (alive before and after)
-    --   delete_count    — descendants that were deleted (alive → not alive)
-    --   unchanged_count — descendants that were alive but didn't change
-    -- Total alive descendants = add_count + modify_count + unchanged_count.
-    -- For an unchanged folder whose temporal version is from scan M,
-    -- the real unchanged count at scan N is: adds_M + mods_M + unchanged_M.
-    add_count       INTEGER,
-    modify_count    INTEGER,
-    delete_count    INTEGER,
-    unchanged_count INTEGER,
-
-    -- Validation state (files only, NULL for folders and unvalidated files).
-    -- Tightly coupled to this version: validated once when version is created.
+    -- Validation state (files only, NULL for folders and unvalidated files)
     val_scan_id     INTEGER,            -- scan in which this version was validated
     val_state       INTEGER,            -- 1=Valid, 2=Invalid
     val_error       TEXT,               -- error details when val_state=Invalid
 
-    -- User review of integrity issues on this version.
-    -- val_reviewed_at: set when user marks this version's validation issue as reviewed.
-    -- hash_reviewed_at: set when user marks this version's hash integrity issue as reviewed.
-    -- Both are user-initiated only: NULL until set by user action, never auto-cleared.
+    -- User review of integrity issues
     val_reviewed_at  INTEGER DEFAULT NULL,
     hash_reviewed_at INTEGER DEFAULT NULL,
 
     PRIMARY KEY (item_id, item_version),
     FOREIGN KEY (item_id) REFERENCES items(item_id),
-    FOREIGN KEY (root_id) REFERENCES roots(root_id),
-    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+    FOREIGN KEY (root_id) REFERENCES roots(root_id)
 ) WITHOUT ROWID;
 
-CREATE INDEX IF NOT EXISTS idx_versions_first_scan ON item_versions (first_scan_id);
-CREATE INDEX IF NOT EXISTS idx_versions_root_lastscan ON item_versions (root_id, last_scan_id);
+CREATE INDEX IF NOT EXISTS idx_versions_first_seen ON item_versions (root_id, first_seen_at);
+CREATE INDEX IF NOT EXISTS idx_versions_last_seen ON item_versions (root_id, last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_versions_root_firstseen_hid ON item_versions (root_id, first_seen_at, hierarchy_id);
+CREATE INDEX IF NOT EXISTS idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
 CREATE INDEX IF NOT EXISTS idx_versions_val_scan ON item_versions (val_scan_id, val_state);
 
 -- ========================================
@@ -187,32 +200,15 @@ CREATE INDEX IF NOT EXISTS idx_versions_val_scan ON item_versions (val_scan_id, 
 CREATE TABLE IF NOT EXISTS hash_versions (
     item_id          INTEGER NOT NULL,     -- leading key for item-level queries
     item_version     INTEGER NOT NULL,     -- which item_version this hash observes
-    first_scan_id    INTEGER NOT NULL,
-    last_scan_id     INTEGER NOT NULL,
+    first_seen_at    INTEGER NOT NULL,     -- epoch: when this hash was first computed
+    last_seen_at     INTEGER NOT NULL,     -- epoch: when this hash was last confirmed
     file_hash        BLOB NOT NULL,
     hash_state       INTEGER NOT NULL,     -- 1=Baseline, 2=Suspect
-    PRIMARY KEY (item_id, item_version, first_scan_id),
-    FOREIGN KEY (item_id, item_version) REFERENCES item_versions(item_id, item_version),
-    FOREIGN KEY (first_scan_id) REFERENCES scans(scan_id),
-    FOREIGN KEY (last_scan_id) REFERENCES scans(scan_id)
+    PRIMARY KEY (item_id, item_version, first_seen_at),
+    FOREIGN KEY (item_id, item_version) REFERENCES item_versions(item_id, item_version)
 ) WITHOUT ROWID;
 
-CREATE INDEX IF NOT EXISTS idx_hash_versions_first_scan ON hash_versions (first_scan_id, hash_state);
-
--- ========================================
--- Scan undo log (transient, for rollback support)
--- ========================================
--- log_type: 0=item_version, 1=hash_version
--- For type 0: ref_id1=item_id, ref_id2=item_version, ref_id3=0
--- For type 1: ref_id1=item_id, ref_id2=item_version, ref_id3=first_scan_id
-CREATE TABLE IF NOT EXISTS scan_undo_log (
-    log_type            INTEGER NOT NULL,
-    ref_id1             INTEGER NOT NULL,
-    ref_id2             INTEGER NOT NULL,
-    ref_id3             INTEGER NOT NULL DEFAULT 0,
-    old_last_scan_id    INTEGER NOT NULL,
-    PRIMARY KEY (log_type, ref_id1, ref_id2, ref_id3)
-) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_hash_versions_first_seen ON hash_versions (first_seen_at, hash_state);
 
 -- Scan schedules table stores recurring scan configurations
 CREATE TABLE IF NOT EXISTS scan_schedules (
