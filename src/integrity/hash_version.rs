@@ -31,8 +31,8 @@ impl HashState {
 /// A single hash observation for a file version. Maps to the `hash_versions` table.
 ///
 /// Each row represents a period where a particular hash was observed for an
-/// item_version. `first_scan_id` is when this hash was first computed;
-/// `last_scan_id` is extended each time the hash is re-confirmed unchanged.
+/// item_version. `first_seen_at` is when this hash was first computed;
+/// `last_seen_at` is extended each time the hash is re-confirmed unchanged.
 ///
 /// A version can have zero or more hash observations (a log of hash checks).
 /// Multiple rows for the same version track hash changes over time (e.g., bit rot).
@@ -40,8 +40,8 @@ impl HashState {
 pub struct HashVersion {
     item_id: i64,
     item_version: i64,
-    first_scan_id: i64,
-    last_scan_id: i64,
+    first_seen_at: i64,
+    last_seen_at: i64,
     file_hash: String,
     hash_state: HashState,
 }
@@ -56,12 +56,12 @@ impl HashVersion {
         self.item_version
     }
 
-    pub fn first_scan_id(&self) -> i64 {
-        self.first_scan_id
+    pub fn first_seen_at(&self) -> i64 {
+        self.first_seen_at
     }
 
-    pub fn last_scan_id(&self) -> i64 {
-        self.last_scan_id
+    pub fn last_seen_at(&self) -> i64 {
+        self.last_seen_at
     }
 
     pub fn file_hash(&self) -> &str {
@@ -79,10 +79,10 @@ impl HashVersion {
         item_version: i64,
     ) -> Result<Option<Self>, FsPulseError> {
         conn.query_row(
-            "SELECT item_id, item_version, first_scan_id, last_scan_id, file_hash, hash_state
+            "SELECT item_id, item_version, first_seen_at, last_seen_at, file_hash, hash_state
              FROM hash_versions
              WHERE item_id = ? AND item_version = ?
-             ORDER BY first_scan_id DESC
+             ORDER BY first_seen_at DESC
              LIMIT 1",
             params![item_id, item_version],
             Self::from_row,
@@ -96,31 +96,31 @@ impl HashVersion {
         conn: &Connection,
         item_id: i64,
         item_version: i64,
-        scan_id: i64,
+        now: i64,
         file_hash: &str,
         hash_state: HashState,
     ) -> Result<(), FsPulseError> {
         let hash_blob = Hash::hex_to_blob(file_hash);
         conn.execute(
-            "INSERT INTO hash_versions (item_id, item_version, first_scan_id, last_scan_id, file_hash, hash_state)
+            "INSERT INTO hash_versions (item_id, item_version, first_seen_at, last_seen_at, file_hash, hash_state)
              VALUES (?, ?, ?, ?, ?, ?)",
-            params![item_id, item_version, scan_id, scan_id, hash_blob, hash_state.as_i64()],
+            params![item_id, item_version, now, now, hash_blob, hash_state.as_i64()],
         )?;
         Ok(())
     }
 
-    /// Extend the last_scan_id on an existing hash_version (hash re-confirmed unchanged).
-    pub fn extend_last_scan(
+    /// Extend the last_seen_at on an existing hash_version (hash re-confirmed unchanged).
+    pub fn extend_last_seen_at(
         conn: &Connection,
         item_id: i64,
         item_version: i64,
-        first_scan_id: i64,
-        new_last_scan_id: i64,
+        first_seen_at: i64,
+        new_last_seen_at: i64,
     ) -> Result<(), FsPulseError> {
         conn.execute(
-            "UPDATE hash_versions SET last_scan_id = ?
-             WHERE item_id = ? AND item_version = ? AND first_scan_id = ?",
-            params![new_last_scan_id, item_id, item_version, first_scan_id],
+            "UPDATE hash_versions SET last_seen_at = ?
+             WHERE item_id = ? AND item_version = ? AND first_seen_at = ?",
+            params![new_last_seen_at, item_id, item_version, first_seen_at],
         )?;
         Ok(())
     }
@@ -129,8 +129,8 @@ impl HashVersion {
         Ok(HashVersion {
             item_id: row.get(0)?,
             item_version: row.get(1)?,
-            first_scan_id: row.get(2)?,
-            last_scan_id: row.get(3)?,
+            first_seen_at: row.get(2)?,
+            last_seen_at: row.get(3)?,
             file_hash: Hash::blob_to_hex(row.get(4)?),
             hash_state: HashState::from_i64(row.get(5)?),
         })

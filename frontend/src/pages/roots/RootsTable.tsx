@@ -85,11 +85,6 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
     return '(> 1 year)'
   }
 
-  // Helper to format file/folder counts
-  const formatCounts = (fileCount: number | null | undefined, folderCount: number | null | undefined): string => {
-    if (fileCount == null || folderCount == null) return ''
-    return `${fileCount.toLocaleString()} files, ${folderCount.toLocaleString()} folders`
-  }
 
   if (loading) {
     return (
@@ -154,20 +149,15 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
 
                     if (scanInfo.state === 'Completed') {
                       lastScanContent = (
-                        <div className="flex flex-col gap-0.5">
-                          <button
-                            className="text-left hover:underline"
-                            onClick={() => {
-                              setSelectedScanId(scanInfo.scan_id)
-                              setScanSheetOpen(true)
-                            }}
-                          >
-                            <span>{dateWithStaleness}</span>
-                          </button>
-                          <span className="text-sm text-muted-foreground">
-                            {formatCounts(scanInfo.file_count, scanInfo.folder_count)}
-                          </span>
-                        </div>
+                        <button
+                          className="text-left hover:underline"
+                          onClick={() => {
+                            setSelectedScanId(scanInfo.scan_id)
+                            setScanSheetOpen(true)
+                          }}
+                        >
+                          <span>{dateWithStaleness}</span>
+                        </button>
                       )
                     } else if (scanInfo.state === 'Error') {
                       lastScanContent = (
@@ -203,15 +193,10 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
                           </button>
                           <div className="flex items-center gap-2">
                             <Badge variant="warning">Stopped</Badge>
-                            {scanInfo.file_count != null && (
-                              <span className="text-sm text-muted-foreground">
-                                {scanInfo.file_count.toLocaleString()} files scanned
-                              </span>
-                            )}
                           </div>
                         </div>
                       )
-                    } else if (['Pending', 'Scanning', 'Sweeping', 'Analyzing Files', 'Analyzing Scan'].includes(scanInfo.state)) {
+                    } else if (['Pending', 'Scanning'].includes(scanInfo.state)) {
                       // Check if this is the currently active scan
                       const isActiveScan = activeRootId === root.root_id
 

@@ -1656,19 +1656,8 @@ mod tests {
             result.err()
         );
 
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "AF");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'AF' (Analyzing Files): {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "AS");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'AS' (Analyzing Scan): {:?}",
-            result.err()
-        );
+        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "E");
+        assert!(result.is_ok(), "Failed to parse 'E' (Error): {:?}", result.err());
     }
 
     #[test]
@@ -1735,85 +1724,19 @@ mod tests {
 
     #[test]
     fn test_scan_state_filter_all_states() {
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Scanning");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Scanning': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Sweeping");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Sweeping': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Analyzing Files");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Analyzing Files': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Analyzing");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Analyzing' (backward compat): {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Analyzing Scan");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Analyzing Scan': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Completed");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Completed': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Stopped");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Stopped': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "Error");
-        assert!(
-            result.is_ok(),
-            "Failed to parse 'Error': {:?}",
-            result.err()
-        );
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "S");
-        assert!(result.is_ok(), "Failed to parse 'S': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "W");
-        assert!(result.is_ok(), "Failed to parse 'W': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "AF");
-        assert!(result.is_ok(), "Failed to parse 'AF': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "A");
-        assert!(result.is_ok(), "Failed to parse 'A': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "AS");
-        assert!(result.is_ok(), "Failed to parse 'AS': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "C");
-        assert!(result.is_ok(), "Failed to parse 'C': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "P");
-        assert!(result.is_ok(), "Failed to parse 'P': {:?}", result.err());
-
-        let result = QueryParser::parse(Rule::scan_state_filter_EOI, "E");
-        assert!(result.is_ok(), "Failed to parse 'E': {:?}", result.err());
+        for (input, label) in [
+            ("Scanning", "full: Scanning"),
+            ("Completed", "full: Completed"),
+            ("Stopped", "full: Stopped"),
+            ("Error", "full: Error"),
+            ("S", "short: S"),
+            ("C", "short: C"),
+            ("P", "short: P"),
+            ("E", "short: E"),
+        ] {
+            let result = QueryParser::parse(Rule::scan_state_filter_EOI, input);
+            assert!(result.is_ok(), "Failed to parse '{input}' ({label}): {:?}", result.err());
+        }
     }
 
     #[test]

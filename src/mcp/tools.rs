@@ -46,8 +46,7 @@ impl FsPulseMcp {
             let mut stmt = conn
                 .prepare(
                     "SELECT r.root_id, r.root_path,
-                            s.scan_id, s.started_at, s.state,
-                            s.file_count, s.folder_count, s.total_size
+                            s.scan_id, s.started_at, s.state
                      FROM roots r
                      LEFT JOIN scans s ON s.root_id = r.root_id
                         AND s.scan_id = (SELECT MAX(scan_id) FROM scans WHERE root_id = r.root_id)
@@ -60,18 +59,9 @@ impl FsPulseMcp {
                     let root_id: i64 = row.get(0)?;
                     let root_path: String = row.get(1)?;
                     let scan_id: Option<i64> = row.get(2)?;
-                    let file_count: Option<i64> = row.get(5)?;
-                    let folder_count: Option<i64> = row.get(6)?;
-                    let total_size: Option<i64> = row.get(7)?;
 
                     let scan_info = match scan_id {
-                        Some(sid) => format!(
-                            "last scan #{}, {} files, {} folders, {} bytes",
-                            sid,
-                            file_count.unwrap_or(0),
-                            folder_count.unwrap_or(0),
-                            total_size.unwrap_or(0)
-                        ),
+                        Some(sid) => format!("last scan #{}", sid),
                         None => "no scans yet".to_string(),
                     };
 
@@ -287,7 +277,7 @@ impl FsPulseMcp {
             // Get total count
             let total: i64 = conn
                 .query_row(
-                    "SELECT COUNT(*) FROM scans WHERE root_id = ? AND state = 4",
+                    "SELECT COUNT(*) FROM scans WHERE root_id = ? AND state = 2",
                     [params.root_id],
                     |row| row.get(0),
                 )
@@ -300,48 +290,34 @@ impl FsPulseMcp {
             let mut stmt = conn
                 .prepare(
                     "SELECT scan_id, started_at, ended_at, state,
-                            file_count, folder_count, total_size,
-                            add_count, modify_count, delete_count,
                             new_hash_suspect_count, new_val_invalid_count
                      FROM scans
-                     WHERE root_id = ? AND state = 4
+                     WHERE root_id = ? AND state = ?
                      ORDER BY started_at DESC
                      LIMIT ? OFFSET ?",
                 )
                 .map_err(|e| e.to_string())?;
 
             let mut rows = stmt
-                .query(rusqlite::params![params.root_id, limit, offset])
+                .query(rusqlite::params![params.root_id, crate::scans::ScanState::Completed.as_i64(), limit, offset])
                 .map_err(|e| e.to_string())?;
 
             let mut out = String::new();
             let mut row_count: i64 = 0;
 
-            out.push_str("| Scan | Started | Files | Folders | Total Size | Adds | Mods | Dels | Hash Suspect | Val Invalid |\n");
-            out.push_str("|------|---------|-------|---------|------------|------|------|------|-------------|-------------|\n");
+            out.push_str("| Scan | Started | Hash Suspect | Val Invalid |\n");
+            out.push_str("|------|---------|-------------|-------------|\n");
 
             while let Some(row) = rows.next().map_err(|e| e.to_string())? {
                 let scan_id: i64 = row.get(0).map_err(|e| e.to_string())?;
                 let started_at: i64 = row.get(1).map_err(|e| e.to_string())?;
-                let files: Option<i64> = row.get(4).map_err(|e| e.to_string())?;
-                let folders: Option<i64> = row.get(5).map_err(|e| e.to_string())?;
-                let size: Option<i64> = row.get(6).map_err(|e| e.to_string())?;
-                let adds: Option<i64> = row.get(7).map_err(|e| e.to_string())?;
-                let mods: Option<i64> = row.get(8).map_err(|e| e.to_string())?;
-                let dels: Option<i64> = row.get(9).map_err(|e| e.to_string())?;
-                let hash_s: Option<i64> = row.get(10).map_err(|e| e.to_string())?;
-                let val_i: Option<i64> = row.get(11).map_err(|e| e.to_string())?;
+                let hash_s: Option<i64> = row.get(4).map_err(|e| e.to_string())?;
+                let val_i: Option<i64> = row.get(5).map_err(|e| e.to_string())?;
 
                 out.push_str(&format!(
-                    "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
+                    "| {} | {} | {} | {} |\n",
                     scan_id,
                     fmt_ts(started_at),
-                    files.unwrap_or(0),
-                    folders.unwrap_or(0),
-                    size.unwrap_or(0),
-                    adds.unwrap_or(0),
-                    mods.unwrap_or(0),
-                    dels.unwrap_or(0),
                     hash_s.unwrap_or(0),
                     val_i.unwrap_or(0),
                 ));
@@ -571,8 +547,8 @@ impl FsPulseMcp {
             out.push_str(&format!("\n## Version History ({} total)\n\n", version_count));
 
             if !versions.is_empty() {
-                out.push_str("| Version | Scans | Size | Mod Date | Added | Deleted | Val State |\n");
-                out.push_str("|---------|-------|------|----------|-------|---------|----------|\n");
+                out.push_str("| Version | First Seen | Last Seen | Size | Mod Date | Added | Deleted | Val State |\n");
+                out.push_str("|---------|------------|-----------|------|----------|-------|---------|----------|\n");
 
                 for v in &versions {
                     let val = match v.val_state {
@@ -581,10 +557,10 @@ impl FsPulseMcp {
                         _ => "",
                     };
                     out.push_str(&format!(
-                        "| {} | {}..{} | {} | {} | {} | {} | {} |\n",
+                        "| {} | {} | {} | {} | {} | {} | {} | {} |\n",
                         v.item_version,
-                        v.first_scan_id,
-                        v.last_scan_id,
+                        fmt_ts(v.first_seen_at),
+                        fmt_ts(v.last_seen_at),
                         v.size.unwrap_or(0),
                         fmt_opt_ts(v.mod_date),
                         v.is_added,
@@ -623,10 +599,10 @@ impl FsPulseMcp {
 
         // Build the WHERE clause based on change_type
         let where_clause = match change_type.as_str() {
-            "added" => format!("first_scan_id:({}), is_added:(T)", scan_id),
-            "deleted" => format!("first_scan_id:({}), is_deleted:(T)", scan_id),
-            "modified" => format!("first_scan_id:({}), is_added:(F), is_deleted:(F)", scan_id),
-            _ => format!("first_scan_id:({})", scan_id),
+            "added" => format!("first_seen_at:({}), is_added:(T)", scan_id),
+            "deleted" => format!("first_seen_at:({}), is_deleted:(T)", scan_id),
+            "modified" => format!("first_seen_at:({}), is_added:(F), is_deleted:(F)", scan_id),
+            _ => format!("first_seen_at:({})", scan_id),
         };
 
         let show_clause = match change_type.as_str() {
@@ -654,34 +630,12 @@ impl FsPulseMcp {
 
         match result {
             Ok((total, (rows, headers, alignments))) => {
-                // Get scan summary
                 let row_count = rows.len() as i64;
-                let summary = tokio::task::spawn_blocking(move || -> Result<String, String> {
-                    let conn = Database::get_connection().map_err(|e| e.to_string())?;
-                    let (adds, mods, dels): (Option<i64>, Option<i64>, Option<i64>) = conn
-                        .query_row(
-                            "SELECT add_count, modify_count, delete_count FROM scans WHERE scan_id = ?",
-                            [scan_id],
-                            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-                        )
-                        .map_err(|e| format!("Scan {} not found: {}", scan_id, e))?;
-
-                    Ok(format!(
-                        "Scan {} — {} added, {} modified, {} deleted\n\n",
-                        scan_id,
-                        adds.unwrap_or(0),
-                        mods.unwrap_or(0),
-                        dels.unwrap_or(0),
-                    ))
-                })
-                .await
-                .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?
-                .map_err(|e| rmcp::ErrorData::internal_error(e, None))?;
 
                 let table = format_table(&headers, &rows, &alignments);
                 let mut out = format!(
-                    "{}{} total matching row(s). {}.\n\n{}",
-                    summary, total, pagination_summary(offset, row_count, total), table
+                    "Scan {} — {} total matching row(s). {}.\n\n{}",
+                    scan_id, total, pagination_summary(offset, row_count, total), table
                 );
 
                 if total > offset + row_count {

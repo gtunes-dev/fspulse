@@ -36,7 +36,6 @@ import {
   Legend,
 } from 'recharts'
 import { cn } from '@/lib/utils'
-import { ScanDetailSheet } from '@/components/shared/ScanDetailSheet'
 import { fetchQuery } from '@/lib/api'
 import { useTaskContext } from '@/contexts/TaskContext'
 import type { ColumnSpec } from '@/lib/types'
@@ -46,9 +45,8 @@ interface Root {
   root_path: string
 }
 
-interface ScanData {
-  scan_id: number
-  started_at: number // Unix timestamp
+interface SnapshotData {
+  taken_at: number // Unix timestamp
   file_count: number
   folder_count: number
   total_size: number
@@ -66,7 +64,6 @@ type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 export function TrendsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { lastTaskCompletedAt } = useTaskContext()
-  const [detailScanId, setDetailScanId] = useState<number | null>(null)
 
   // Support deep-linking via URL params (e.g., from Dashboard root health card)
   const initialRootId = searchParams.get('root_id') || ''
@@ -105,10 +102,10 @@ export function TrendsPage() {
   const [toDate, setToDate] = useState<Date | undefined>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [scanData, setScanData] = useState<ScanData[]>([])
+  const [snapshotData, setSnapshotData] = useState<SnapshotData[]>([])
   const [hasAutoSelected, setHasAutoSelected] = useState(false)
-  const [firstScanId, setFirstScanId] = useState<number | null>(null)
-  const [excludeFirstScan, setExcludeFirstScan] = useState(false)
+  const [firstSnapshotTakenAt, setFirstSnapshotTakenAt] = useState<number | null>(null)
+  const [excludeFirstSnapshot, setExcludeFirstSnapshot] = useState(false)
   const [hideEmptyChangeScans, setHideEmptyChangeScans] = useState(true)
   const [fromPickerOpen, setFromPickerOpen] = useState(false)
   const [toPickerOpen, setToPickerOpen] = useState(false)
@@ -139,13 +136,10 @@ export function TrendsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleChartClick = (...args: any[]) => {
     for (const arg of args) {
-      // Chart-level onClick: { activePayload: [{ payload: { scan_id } }] }
-      const fromActivePayload = arg?.activePayload?.[0]?.payload?.scan_id
-      // activeDot onClick: (event, payload) where scan_id is in payload.payload
-      // Bar onClick: (data) where scan_id is in data.payload or data directly
-      const scanId = fromActivePayload ?? arg?.payload?.scan_id ?? arg?.scan_id
-      if (scanId) {
-        setDetailScanId(scanId)
+      const takenAt = arg?.activePayload?.[0]?.payload?.taken_at ?? arg?.payload?.taken_at ?? arg?.taken_at
+      if (takenAt) {
+        // TODO: Navigate to snapshot detail view
+        alert(`Snapshot at ${format(new Date(takenAt * 1000), 'PPpp')}`)
         return
       }
     }
@@ -228,55 +222,54 @@ export function TrendsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasAutoSelected])
 
-  // Load the very first scan ID for this root
+  // Load the very first snapshot taken_at for this root
   useEffect(() => {
-    async function loadFirstScan() {
+    async function loadFirstSnapshot() {
       if (!selectedRootId) {
-        setFirstScanId(null)
+        setFirstSnapshotTakenAt(null)
         return
       }
 
       try {
-        // Query for the first completed scan for this root
+        // Query for the first snapshot for this root
         const columns: ColumnSpec[] = [
-          { name: 'scan_id', visible: true, sort_direction: 'asc', position: 0 },
+          { name: 'taken_at', visible: true, sort_direction: 'asc', position: 0 },
         ]
 
-        const response = await fetchQuery('scans', {
+        const response = await fetchQuery('snapshots', {
           columns,
           filters: [
             { column: 'root_id', value: selectedRootId },
-            { column: 'scan_state', value: 'C' },
           ],
           limit: 1,
           offset: 0,
         })
 
         if (response.rows.length > 0) {
-          setFirstScanId(parseInt(response.rows[0][0]))
+          setFirstSnapshotTakenAt(parseInt(response.rows[0][0]))
         } else {
-          setFirstScanId(null)
+          setFirstSnapshotTakenAt(null)
         }
       } catch (err) {
-        console.error('Error loading first scan:', err)
-        setFirstScanId(null)
+        console.error('Error loading first snapshot:', err)
+        setFirstSnapshotTakenAt(null)
       }
     }
-    loadFirstScan()
+    loadFirstSnapshot()
   }, [selectedRootId])
 
-  // Load scan data when root or date range changes
-  const loadScanData = useCallback(async () => {
+  // Load snapshot data when root or date range changes
+  const loadSnapshotData = useCallback(async () => {
     if (!selectedRootId) {
       hasDataRef.current = false
-      setScanData([])
+      setSnapshotData([])
       return
     }
 
     // Guard: if both dates are set but from > to, just show empty
     if (fromDate && toDate && fromDate > toDate) {
       hasDataRef.current = false
-      setScanData([])
+      setSnapshotData([])
       return
     }
 
@@ -291,65 +284,60 @@ export function TrendsPage() {
       }
       setError(null)
 
-      // Build filters: root_id and only completed scans
+      // Build filters: root_id
       const filters: Array<{ column: string; value: string }> = [
         { column: 'root_id', value: selectedRootId },
-        { column: 'scan_state', value: 'C' },  // Completed scans only
       ]
 
       // Add date range filter - DON'T include parentheses, backend adds them
       if (fromDate || toDate) {
         const fromStr = fromDate ? format(fromDate, 'yyyy-MM-dd') : '1970-01-01'
         const toStr = toDate ? format(toDate, 'yyyy-MM-dd') : '2099-12-31'
-        filters.push({ column: 'started_at', value: `${fromStr}..${toStr}` })
+        filters.push({ column: 'taken_at', value: `${fromStr}..${toStr}` })
       }
 
-      // Query for scan data with all the fields we need
-      // Start simple - just scan_id and started_at to test
       const columns: ColumnSpec[] = [
-        { name: 'scan_id', visible: true, sort_direction: 'none', position: 0 },
-        { name: 'started_at', visible: true, sort_direction: 'asc', position: 1 },
-        { name: 'file_count', visible: true, sort_direction: 'none', position: 2 },
-        { name: 'folder_count', visible: true, sort_direction: 'none', position: 3 },
-        { name: 'total_size', visible: true, sort_direction: 'none', position: 4 },
-        { name: 'modify_count', visible: true, sort_direction: 'none', position: 5 },
-        { name: 'add_count', visible: true, sort_direction: 'none', position: 6 },
-        { name: 'delete_count', visible: true, sort_direction: 'none', position: 7 },
-        { name: 'new_val_invalid_count', visible: true, sort_direction: 'none', position: 8 },
-        { name: 'val_invalid_count', visible: true, sort_direction: 'none', position: 9 },
-        { name: 'new_hash_suspect_count', visible: true, sort_direction: 'none', position: 10 },
-        { name: 'hash_suspect_count', visible: true, sort_direction: 'none', position: 11 },
+        { name: 'taken_at', visible: true, sort_direction: 'asc', position: 0 },
+        { name: 'file_count', visible: true, sort_direction: 'none', position: 1 },
+        { name: 'folder_count', visible: true, sort_direction: 'none', position: 2 },
+        { name: 'total_size', visible: true, sort_direction: 'none', position: 3 },
+        { name: 'modify_count', visible: true, sort_direction: 'none', position: 4 },
+        { name: 'add_count', visible: true, sort_direction: 'none', position: 5 },
+        { name: 'delete_count', visible: true, sort_direction: 'none', position: 6 },
+        { name: 'new_val_invalid_count', visible: true, sort_direction: 'none', position: 7 },
+        { name: 'val_invalid_count', visible: true, sort_direction: 'none', position: 8 },
+        { name: 'new_hash_suspect_count', visible: true, sort_direction: 'none', position: 9 },
+        { name: 'hash_suspect_count', visible: true, sort_direction: 'none', position: 10 },
       ]
 
-      const response = await fetchQuery('scans', {
+      const response = await fetchQuery('snapshots', {
         columns,
         filters,
-        limit: 1000, // Get many scans for trend visualization
+        limit: 1000, // Get many snapshots for trend visualization
         offset: 0,
       })
 
-      const data: ScanData[] = response.rows.map((row) => ({
-        scan_id: parseInt(row[0]),
-        started_at: parseInt(row[1]), // Position 1 now (scan_id is position 0)
-        file_count: parseInt(row[2]) || 0,
-        folder_count: parseInt(row[3]) || 0,
-        total_size: parseInt(row[4]) || 0,
-        modify_count: parseInt(row[5]) || 0,
-        add_count: parseInt(row[6]) || 0,
-        delete_count: parseInt(row[7]) || 0,
-        new_val_invalid_count: parseInt(row[8]) || 0,
-        val_invalid_count: parseInt(row[9]) || 0,
-        new_hash_suspect_count: parseInt(row[10]) || 0,
-        hash_suspect_count: parseInt(row[11]) || 0,
+      const data: SnapshotData[] = response.rows.map((row) => ({
+        taken_at: parseInt(row[0]),
+        file_count: parseInt(row[1]) || 0,
+        folder_count: parseInt(row[2]) || 0,
+        total_size: parseInt(row[3]) || 0,
+        modify_count: parseInt(row[4]) || 0,
+        add_count: parseInt(row[5]) || 0,
+        delete_count: parseInt(row[6]) || 0,
+        new_val_invalid_count: parseInt(row[7]) || 0,
+        val_invalid_count: parseInt(row[8]) || 0,
+        new_hash_suspect_count: parseInt(row[9]) || 0,
+        hash_suspect_count: parseInt(row[10]) || 0,
       }))
 
       hasDataRef.current = data.length > 0
-      setScanData(data)
+      setSnapshotData(data)
     } catch (err) {
-      console.error('Error loading scan data:', err)
+      console.error('Error loading snapshot data:', err)
       // Treat API errors as empty results rather than showing an error message
       hasDataRef.current = false
-      setScanData([])
+      setSnapshotData([])
     } finally {
       setLoading(false)
     }
@@ -358,8 +346,8 @@ export function TrendsPage() {
 
   // Load data when filters change
   useEffect(() => {
-    loadScanData()
-  }, [loadScanData])
+    loadSnapshotData()
+  }, [loadSnapshotData])
 
   const handleTimeWindowChange = (value: TimeWindowPreset) => {
     setTimeWindow(value)
@@ -367,13 +355,13 @@ export function TrendsPage() {
     // Otherwise, dates will be updated by the useEffect
   }
 
-  // Check if first scan is in current data
-  const firstScanInView = firstScanId !== null && scanData.some(d => d.scan_id === firstScanId)
+  // Check if first snapshot is in current data
+  const firstSnapshotInView = firstSnapshotTakenAt !== null && snapshotData.some(d => d.taken_at === firstSnapshotTakenAt)
 
 
   // Filter data for change count chart
-  const changeCountData = scanData.filter(d => {
-    if (excludeFirstScan && firstScanId !== null && d.scan_id === firstScanId) return false
+  const changeCountData = snapshotData.filter(d => {
+    if (excludeFirstSnapshot && firstSnapshotTakenAt !== null && d.taken_at === firstSnapshotTakenAt) return false
     if (hideEmptyChangeScans) {
       const visibleKeys = ['add_count', 'modify_count', 'delete_count', 'unchanged_count'] as const
       const hasVisibleData = visibleKeys.some(key =>
@@ -386,7 +374,7 @@ export function TrendsPage() {
     return true
   })
 
-  const valData = scanData.filter(d => {
+  const valData = snapshotData.filter(d => {
     if (!hideEmptyValScans) return true
     const hasVisible =
       (!hiddenValSeries.has('new_val_invalid_count') && d.new_val_invalid_count > 0) ||
@@ -394,7 +382,7 @@ export function TrendsPage() {
     return hasVisible
   })
 
-  const hashData = scanData.filter(d => {
+  const hashData = snapshotData.filter(d => {
     if (!hideEmptyHashScans) return true
     const hasVisible =
       (!hiddenHashSeries.has('new_hash_suspect_count') && d.new_hash_suspect_count > 0) ||
@@ -486,19 +474,19 @@ export function TrendsPage() {
         {/* Chart Area */}
         {!selectedRootId ? (
           <div className="flex items-center justify-center h-64 text-muted-foreground">
-            Select a root to view scan trends
+            Select a root to view trends
           </div>
         ) : loading ? (
           <div className="flex items-center justify-center h-64 text-muted-foreground">
-            Loading scan data...
+            Loading snapshot data...
           </div>
         ) : error ? (
           <div className="flex items-center justify-center h-64 text-red-600">
             {error}
           </div>
-        ) : scanData.length === 0 ? (
+        ) : snapshotData.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-muted-foreground">
-            No scans for &lsquo;{roots.find(r => r.root_id.toString() === selectedRootId)?.root_path ?? 'Unknown'}&rsquo;{fromDate && toDate ? ` between ${format(fromDate, 'd MMM yyyy')} and ${format(toDate, 'd MMM yyyy')}` : ''}
+            No snapshots for &lsquo;{roots.find(r => r.root_id.toString() === selectedRootId)?.root_path ?? 'Unknown'}&rsquo;{fromDate && toDate ? ` between ${format(fromDate, 'd MMM yyyy')} and ${format(toDate, 'd MMM yyyy')}` : ''}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6">
@@ -518,10 +506,10 @@ export function TrendsPage() {
                   className="aspect-auto h-[300px]"
                 >
                   <LineChart
-                    data={scanData.map((d) => ({
-                      date: format(new Date(d.started_at * 1000), 'MMM dd'),
+                    data={snapshotData.map((d) => ({
+                      date: format(new Date(d.taken_at * 1000), 'MMM dd'),
                       total_size: d.total_size,
-                      scan_id: d.scan_id,
+                      taken_at: d.taken_at,
                     }))}
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -594,11 +582,11 @@ export function TrendsPage() {
                     className="aspect-auto h-[300px]"
                   >
                     <AreaChart
-                      data={scanData.map((d) => ({
-                        date: format(new Date(d.started_at * 1000), 'MMM dd'),
+                      data={snapshotData.map((d) => ({
+                        date: format(new Date(d.taken_at * 1000), 'MMM dd'),
                         file_count: d.file_count,
                         folder_count: d.folder_count,
-                        scan_id: d.scan_id,
+                        taken_at: d.taken_at,
                       }))}
                     >
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -616,15 +604,15 @@ export function TrendsPage() {
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle>Changes</CardTitle>
                   <div className="flex items-center gap-4">
-                    {firstScanInView && (
+                    {firstSnapshotInView && (
                       <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={excludeFirstScan}
-                          onChange={(e) => setExcludeFirstScan(e.target.checked)}
+                          checked={excludeFirstSnapshot}
+                          onChange={(e) => setExcludeFirstSnapshot(e.target.checked)}
                           className="cursor-pointer"
                         />
-                        <span className="text-muted-foreground">Hide first scan</span>
+                        <span className="text-muted-foreground">Hide first snapshot</span>
                       </label>
                     )}
                     <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
@@ -641,7 +629,7 @@ export function TrendsPage() {
                 <CardContent>
                   {changeCountData.length === 0 ? (
                     <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                      No scans to display
+                      No snapshots to display
                     </div>
                   ) : (
                   <div ref={changesChartRef}>
@@ -668,12 +656,12 @@ export function TrendsPage() {
                   >
                     <BarChart
                       data={changeCountData.map((d) => ({
-                        date: format(new Date(d.started_at * 1000), 'MMM dd'),
+                        date: format(new Date(d.taken_at * 1000), 'MMM dd'),
                         add_count: d.add_count,
                         modify_count: d.modify_count,
                         delete_count: d.delete_count,
                         unchanged_count: (d.file_count + d.folder_count) - d.add_count - d.modify_count,
-                        scan_id: d.scan_id,
+                        taken_at: d.taken_at,
                       }))}
                       onClick={handleChartClick}
                       onMouseMove={handleBarChartMouseMove(changesChartRef)}
@@ -762,66 +750,66 @@ export function TrendsPage() {
                 </CardHeader>
                 <CardContent>
                   {hashData.length === 0 ? (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No scans to display</div>
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No snapshots to display</div>
                   ) : (
                     <div ref={hashChartRef}>
-                      <ChartContainer
-                        config={{
-                          new_hash_suspect_count: { label: 'New Suspicious', color: 'hsl(38 92% 50%)' },
-                          hash_suspect_count: { label: 'Total Suspicious', color: 'hsl(38 92% 70%)' },
-                        }}
-                        className="aspect-auto h-[300px]"
+                    <ChartContainer
+                      config={{
+                        new_hash_suspect_count: { label: 'New Suspicious', color: 'hsl(38 92% 50%)' },
+                        hash_suspect_count: { label: 'Total Suspicious', color: 'hsl(38 92% 70%)' },
+                      }}
+                      className="aspect-auto h-[300px]"
+                    >
+                      <BarChart
+                        data={hashData.map((d) => ({
+                          date: format(new Date(d.taken_at * 1000), 'MMM dd'),
+                          new_hash_suspect_count: d.new_hash_suspect_count,
+                          hash_suspect_count: d.hash_suspect_count,
+                          taken_at: d.taken_at,
+                        }))}
+                        onClick={handleChartClick}
+                        onMouseMove={handleBarChartMouseMove(hashChartRef)}
+                        onMouseLeave={handleBarChartMouseLeave(hashChartRef)}
                       >
-                        <BarChart
-                          data={hashData.map((d) => ({
-                            date: format(new Date(d.started_at * 1000), 'MMM dd'),
-                            new_hash_suspect_count: d.new_hash_suspect_count,
-                            hash_suspect_count: d.hash_suspect_count,
-                            scan_id: d.scan_id,
-                          }))}
-                          onClick={handleChartClick}
-                          onMouseMove={handleBarChartMouseMove(hashChartRef)}
-                          onMouseLeave={handleBarChartMouseLeave(hashChartRef)}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                          <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                          <YAxis allowDecimals={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                          <Legend content={() => (
-                            <div className="flex items-center justify-center gap-1 pt-1">
-                              {([
-                                { key: 'new_hash_suspect_count', label: 'New Suspicious', color: 'bg-amber-500', ring: 'ring-amber-500/40' },
-                                { key: 'hash_suspect_count', label: 'Total Suspicious', color: 'bg-amber-300', ring: 'ring-amber-300/40' },
-                              ]).map(({ key, label, color, ring }) => {
-                                const visible = !hiddenHashSeries.has(key)
-                                return (
-                                  <button
-                                    key={key}
-                                    className={cn(
-                                      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors text-left',
-                                      visible ? 'text-foreground hover:bg-accent' : 'text-muted-foreground/40 hover:bg-accent/50'
-                                    )}
-                                    onClick={(e) => { e.stopPropagation(); setHiddenHashSeries(prev => {
-                                      const next = new Set(prev)
-                                      if (next.has(key)) next.delete(key); else next.add(key)
-                                      return next
-                                    })}}
-                                  >
-                                    <span className={cn('inline-block w-3 h-3 rounded-full transition-all flex-shrink-0', visible ? `${color} ring-2 ${ring}` : 'bg-transparent ring-1 ring-muted-foreground/25')} />
-                                    {label}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )} />
-                          {!hiddenHashSeries.has('new_hash_suspect_count') && (
-                            <Bar dataKey="new_hash_suspect_count" fill="var(--color-new_hash_suspect_count)" name="New Suspicious" />
-                          )}
-                          {!hiddenHashSeries.has('hash_suspect_count') && (
-                            <Bar dataKey="hash_suspect_count" fill="var(--color-hash_suspect_count)" name="Total Suspicious" />
-                          )}
-                        </BarChart>
-                      </ChartContainer>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                        <YAxis allowDecimals={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Legend content={() => (
+                          <div className="flex items-center justify-center gap-1 pt-1">
+                            {([
+                              { key: 'new_hash_suspect_count', label: 'New Suspicious', color: 'bg-amber-500', ring: 'ring-amber-500/40' },
+                              { key: 'hash_suspect_count', label: 'Total Suspicious', color: 'bg-amber-300', ring: 'ring-amber-300/40' },
+                            ]).map(({ key, label, color, ring }) => {
+                              const visible = !hiddenHashSeries.has(key)
+                              return (
+                                <button
+                                  key={key}
+                                  className={cn(
+                                    'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors text-left',
+                                    visible ? 'text-foreground hover:bg-accent' : 'text-muted-foreground/40 hover:bg-accent/50'
+                                  )}
+                                  onClick={(e) => { e.stopPropagation(); setHiddenHashSeries(prev => {
+                                    const next = new Set(prev)
+                                    if (next.has(key)) next.delete(key); else next.add(key)
+                                    return next
+                                  })}}
+                                >
+                                  <span className={cn('inline-block w-3 h-3 rounded-full transition-all flex-shrink-0', visible ? `${color} ring-2 ${ring}` : 'bg-transparent ring-1 ring-muted-foreground/25')} />
+                                  {label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )} />
+                        {!hiddenHashSeries.has('new_hash_suspect_count') && (
+                          <Bar dataKey="new_hash_suspect_count" fill="var(--color-new_hash_suspect_count)" name="New Suspicious" />
+                        )}
+                        {!hiddenHashSeries.has('hash_suspect_count') && (
+                          <Bar dataKey="hash_suspect_count" fill="var(--color-hash_suspect_count)" name="Total Suspicious" />
+                        )}
+                      </BarChart>
+                    </ChartContainer>
                     </div>
                   )}
                 </CardContent>
@@ -838,66 +826,66 @@ export function TrendsPage() {
                 </CardHeader>
                 <CardContent>
                   {valData.length === 0 ? (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No scans to display</div>
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No snapshots to display</div>
                   ) : (
                     <div ref={valChartRef}>
-                      <ChartContainer
-                        config={{
-                          new_val_invalid_count: { label: 'New Errors', color: 'hsl(347 77% 50%)' },
-                          val_invalid_count: { label: 'Total Errors', color: 'hsl(347 77% 70%)' },
-                        }}
-                        className="aspect-auto h-[300px]"
+                    <ChartContainer
+                      config={{
+                        new_val_invalid_count: { label: 'New Errors', color: 'hsl(347 77% 50%)' },
+                        val_invalid_count: { label: 'Total Errors', color: 'hsl(347 77% 70%)' },
+                      }}
+                      className="aspect-auto h-[300px]"
+                    >
+                      <BarChart
+                        data={valData.map((d) => ({
+                          date: format(new Date(d.taken_at * 1000), 'MMM dd'),
+                          new_val_invalid_count: d.new_val_invalid_count,
+                          val_invalid_count: d.val_invalid_count,
+                          taken_at: d.taken_at,
+                        }))}
+                        onClick={handleChartClick}
+                        onMouseMove={handleBarChartMouseMove(valChartRef)}
+                        onMouseLeave={handleBarChartMouseLeave(valChartRef)}
                       >
-                        <BarChart
-                          data={valData.map((d) => ({
-                            date: format(new Date(d.started_at * 1000), 'MMM dd'),
-                            new_val_invalid_count: d.new_val_invalid_count,
-                            val_invalid_count: d.val_invalid_count,
-                            scan_id: d.scan_id,
-                          }))}
-                          onClick={handleChartClick}
-                          onMouseMove={handleBarChartMouseMove(valChartRef)}
-                          onMouseLeave={handleBarChartMouseLeave(valChartRef)}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                          <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                          <YAxis allowDecimals={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                          <Legend content={() => (
-                            <div className="flex items-center justify-center gap-1 pt-1">
-                              {([
-                                { key: 'new_val_invalid_count', label: 'New Errors', color: 'bg-rose-500', ring: 'ring-rose-500/40' },
-                                { key: 'val_invalid_count', label: 'Total Errors', color: 'bg-rose-300', ring: 'ring-rose-300/40' },
-                              ]).map(({ key, label, color, ring }) => {
-                                const visible = !hiddenValSeries.has(key)
-                                return (
-                                  <button
-                                    key={key}
-                                    className={cn(
-                                      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors text-left',
-                                      visible ? 'text-foreground hover:bg-accent' : 'text-muted-foreground/40 hover:bg-accent/50'
-                                    )}
-                                    onClick={(e) => { e.stopPropagation(); setHiddenValSeries(prev => {
-                                      const next = new Set(prev)
-                                      if (next.has(key)) next.delete(key); else next.add(key)
-                                      return next
-                                    })}}
-                                  >
-                                    <span className={cn('inline-block w-3 h-3 rounded-full transition-all flex-shrink-0', visible ? `${color} ring-2 ${ring}` : 'bg-transparent ring-1 ring-muted-foreground/25')} />
-                                    {label}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )} />
-                          {!hiddenValSeries.has('new_val_invalid_count') && (
-                            <Bar dataKey="new_val_invalid_count" fill="var(--color-new_val_invalid_count)" name="New Errors" />
-                          )}
-                          {!hiddenValSeries.has('val_invalid_count') && (
-                            <Bar dataKey="val_invalid_count" fill="var(--color-val_invalid_count)" name="Total Errors" />
-                          )}
-                        </BarChart>
-                      </ChartContainer>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                        <YAxis allowDecimals={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Legend content={() => (
+                          <div className="flex items-center justify-center gap-1 pt-1">
+                            {([
+                              { key: 'new_val_invalid_count', label: 'New Errors', color: 'bg-rose-500', ring: 'ring-rose-500/40' },
+                              { key: 'val_invalid_count', label: 'Total Errors', color: 'bg-rose-300', ring: 'ring-rose-300/40' },
+                            ]).map(({ key, label, color, ring }) => {
+                              const visible = !hiddenValSeries.has(key)
+                              return (
+                                <button
+                                  key={key}
+                                  className={cn(
+                                    'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors text-left',
+                                    visible ? 'text-foreground hover:bg-accent' : 'text-muted-foreground/40 hover:bg-accent/50'
+                                  )}
+                                  onClick={(e) => { e.stopPropagation(); setHiddenValSeries(prev => {
+                                    const next = new Set(prev)
+                                    if (next.has(key)) next.delete(key); else next.add(key)
+                                    return next
+                                  })}}
+                                >
+                                  <span className={cn('inline-block w-3 h-3 rounded-full transition-all flex-shrink-0', visible ? `${color} ring-2 ${ring}` : 'bg-transparent ring-1 ring-muted-foreground/25')} />
+                                  {label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )} />
+                        {!hiddenValSeries.has('new_val_invalid_count') && (
+                          <Bar dataKey="new_val_invalid_count" fill="var(--color-new_val_invalid_count)" name="New Errors" />
+                        )}
+                        {!hiddenValSeries.has('val_invalid_count') && (
+                          <Bar dataKey="val_invalid_count" fill="var(--color-val_invalid_count)" name="Total Errors" />
+                        )}
+                      </BarChart>
+                    </ChartContainer>
                     </div>
                   )}
                 </CardContent>
@@ -906,14 +894,6 @@ export function TrendsPage() {
           </div>
         )}
       </RootCard>
-
-      {detailScanId !== null && (
-        <ScanDetailSheet
-          scanId={detailScanId}
-          open={true}
-          onOpenChange={(open) => { if (!open) setDetailScanId(null) }}
-        />
-      )}
     </div>
   )
 }

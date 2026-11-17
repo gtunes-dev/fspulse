@@ -34,7 +34,7 @@ const SAMPLE_QUERIES = [
   },
   {
     label: 'Deleted versions',
-    query: 'versions where is_deleted:(T) show item_path, item_type, first_scan_id, last_scan_id order by last_scan_id desc limit 20',
+    query: 'versions where is_deleted:(T) show item_path, item_type, first_seen_at, last_seen_at order by last_seen_at desc limit 20',
   },
   {
     label: 'Suspect hashes',
@@ -46,7 +46,7 @@ const SAMPLE_QUERIES = [
   },
   {
     label: 'Scans per root',
-    query: 'scans group by root_id show root_id, count(*), max(file_count), max(total_size) order by count(*) desc',
+    query: 'scans group by root_id show root_id, count(*) order by count(*) desc',
   },
 ]
 

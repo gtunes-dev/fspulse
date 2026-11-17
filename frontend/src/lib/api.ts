@@ -117,14 +117,13 @@ export interface IntegrityItemSummary {
   hash_reviewed: number
   val_unreviewed: number
   val_reviewed: number
-  latest_scan_id: number
+  latest_seen_at: number
 }
 
 /** Version detail from GET /api/integrity/items/:id/versions. */
 export interface IntegrityVersion {
   item_version: number
-  scan_id: number
-  scan_started_at: number
+  first_seen_at: number
   hash_version_count: number
   hash_suspicious_count: number
   val_state: number | null

@@ -4,7 +4,7 @@ use rusqlite::{Row, Statement, ToSql};
 
 use super::{
     columns::{
-        ColSet, HASHES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS,
+        ColSet, HASHES_QUERY_COLS, ITEMS_QUERY_COLS, ROOTS_QUERY_COLS, SCANS_QUERY_COLS, SNAPSHOTS_QUERY_COLS,
         VERSIONS_QUERY_COLS,
     },
     filter::{BoolFilter, EnumFilter, IntFilter},
@@ -351,6 +351,9 @@ fn make_query(query_type: &str, count_only: bool) -> Box<dyn Query> {
                 ColSet::new(&SCANS_QUERY_COLS),
             ),
         }),
+        ("snapshots", _) => Box::new(SnapshotsQuery {
+            imp: QueryImpl::new(QueryImpl::SNAPSHOTS_SQL_QUERY, ColSet::new(&SNAPSHOTS_QUERY_COLS)),
+        }),
         ("items", _) => Box::new(ItemsQuery {
             imp: QueryImpl::new(QueryImpl::ITEMS_SQL_QUERY, ColSet::new(&ITEMS_QUERY_COLS)),
         }),
@@ -539,21 +542,8 @@ impl ScansQuery {
                 "is_hash" => Format::format_bool(scan.is_hash, col.format)?,
                 "hash_all" => Format::format_bool(scan.hash_all, col.format)?,
                 "is_val" => Format::format_bool(scan.is_val, col.format)?,
-                "file_count" => Format::format_opt_i64(scan.file_count),
-                "folder_count" => Format::format_opt_i64(scan.folder_count),
-                "total_size" => Format::format_opt_i64(scan.total_size),
                 "new_hash_suspect_count" => Format::format_opt_i64(scan.new_hash_suspect_count),
                 "new_val_invalid_count" => Format::format_opt_i64(scan.new_val_invalid_count),
-                "add_count" => Format::format_opt_i64(scan.add_count),
-                "modify_count" => Format::format_opt_i64(scan.modify_count),
-                "delete_count" => Format::format_opt_i64(scan.delete_count),
-                "val_unknown_count" => Format::format_opt_i64(scan.val_unknown_count),
-                "val_valid_count" => Format::format_opt_i64(scan.val_valid_count),
-                "val_invalid_count" => Format::format_opt_i64(scan.val_invalid_count),
-                "val_no_validator_count" => Format::format_opt_i64(scan.val_no_validator_count),
-                "hash_unknown_count" => Format::format_opt_i64(scan.hash_unknown_count),
-                "hash_baseline_count" => Format::format_opt_i64(scan.hash_baseline_count),
-                "hash_suspect_count" => Format::format_opt_i64(scan.hash_suspect_count),
                 "error" => Format::format_opt_string(&scan.error),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
@@ -564,6 +554,77 @@ impl ScansQuery {
         }
 
         query_result.add_row(row);
+
+        Ok(())
+    }
+}
+
+struct SnapshotsQuery {
+    imp: QueryImpl,
+}
+
+impl SnapshotsQuery {
+    pub fn append_row(
+        &self,
+        snap: &SnapshotsQueryRow,
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let mut row: Vec<String> = Vec::new();
+
+        for col in &self.show().display_cols {
+            let col_string = match col.display_col {
+                "root_id" => Format::format_i64(snap.root_id),
+                "taken_at" => Format::format_date(snap.taken_at, col.format)?,
+                "file_count" => Format::format_opt_i64(snap.file_count),
+                "folder_count" => Format::format_opt_i64(snap.folder_count),
+                "total_size" => Format::format_opt_i64(snap.total_size),
+                "add_count" => Format::format_opt_i64(snap.add_count),
+                "modify_count" => Format::format_opt_i64(snap.modify_count),
+                "delete_count" => Format::format_opt_i64(snap.delete_count),
+                "val_unknown_count" => Format::format_opt_i64(snap.val_unknown_count),
+                "val_valid_count" => Format::format_opt_i64(snap.val_valid_count),
+                "val_invalid_count" => Format::format_opt_i64(snap.val_invalid_count),
+                "val_no_validator_count" => Format::format_opt_i64(snap.val_no_validator_count),
+                "hash_unknown_count" => Format::format_opt_i64(snap.hash_unknown_count),
+                "hash_baseline_count" => Format::format_opt_i64(snap.hash_baseline_count),
+                "hash_suspect_count" => Format::format_opt_i64(snap.hash_suspect_count),
+                "schedule_id" => Format::format_opt_i64(snap.schedule_id),
+                _ => {
+                    return Err(FsPulseError::Error("Invalid column".into()));
+                }
+            };
+
+            row.push(col_string);
+        }
+
+        query_result.add_row(row);
+
+        Ok(())
+    }
+}
+
+impl Query for SnapshotsQuery {
+    fn query_impl(&self) -> &QueryImpl {
+        &self.imp
+    }
+    fn query_impl_mut(&mut self) -> &mut QueryImpl {
+        &mut self.imp
+    }
+
+    fn build_query_result(
+        &mut self,
+        sql_statment: &mut Statement,
+        sql_params: &[&dyn ToSql],
+        query_result: &mut dyn QueryResult,
+    ) -> Result<(), FsPulseError> {
+        let rows = sql_statment.query_map(sql_params, SnapshotsQueryRow::from_row)?;
+
+        query_result.prepare(&mut self.query_impl_mut().show);
+
+        for row in rows {
+            let snap = row?;
+            self.append_row(&snap, query_result)?;
+        }
 
         Ok(())
     }
@@ -617,19 +678,15 @@ impl VersionsQuery {
                 "item_name" => Format::format_path(&version.item_name, col.format)?,
                 "file_extension" => Format::format_opt_string(&version.file_extension),
                 "item_type" => Format::format_item_type(version.item_type, col.format)?,
-                "first_scan_id" => Format::format_i64(version.first_scan_id),
-                "last_scan_id" => Format::format_i64(version.last_scan_id),
+                "first_seen_at" => Format::format_date(version.first_seen_at, col.format)?,
+                "last_seen_at" => Format::format_date(version.last_seen_at, col.format)?,
                 "is_added" => Format::format_bool(version.is_added, col.format)?,
                 "is_deleted" => Format::format_bool(version.is_deleted, col.format)?,
                 "is_current" => Format::format_bool(version.is_current, col.format)?,
                 "access" => Format::format_access(version.access, col.format)?,
                 "mod_date" => Format::format_opt_date(version.mod_date, col.format)?,
                 "size" => Format::format_opt_i64(version.size),
-                "add_count" => Format::format_opt_i64(version.add_count),
-                "modify_count" => Format::format_opt_i64(version.modify_count),
-                "delete_count" => Format::format_opt_i64(version.delete_count),
-                "unchanged_count" => Format::format_opt_i64(version.unchanged_count),
-                "val_scan_id" => Format::format_opt_i64(version.val_scan_id),
+                "val_at" => Format::format_opt_date(version.val_at, col.format)?,
                 "val_state" => match version.val_state {
                     Some(v) => Format::format_val_state(ValidationState::from_i64(v), col.format)?,
                     None => String::new(),
@@ -696,8 +753,8 @@ impl HashesQuery {
                 "item_version" => Format::format_i64(hash.item_version),
                 "item_path" => Format::format_path(&hash.item_path, col.format)?,
                 "item_name" => Format::format_path(&hash.item_name, col.format)?,
-                "first_scan_id" => Format::format_i64(hash.first_scan_id),
-                "last_scan_id" => Format::format_i64(hash.last_scan_id),
+                "first_seen_at" => Format::format_date(hash.first_seen_at, col.format)?,
+                "last_seen_at" => Format::format_date(hash.last_seen_at, col.format)?,
                 "file_hash" => Format::format_opt_string(&hash.file_hash),
                 "hash_state" => Format::format_hash_state(hash.hash_state, col.format)?,
                 _ => {
@@ -719,8 +776,8 @@ struct HashesQueryRow {
     item_version: i64,
     item_path: String,
     item_name: String,
-    first_scan_id: i64,
-    last_scan_id: i64,
+    first_seen_at: i64,
+    last_seen_at: i64,
     file_hash: Option<String>,
     hash_state: Option<i64>,
 }
@@ -732,8 +789,8 @@ impl HashesQueryRow {
             item_version: row.get(1)?,
             item_path: row.get(2)?,
             item_name: row.get(3)?,
-            first_scan_id: row.get(4)?,
-            last_scan_id: row.get(5)?,
+            first_seen_at: row.get(4)?,
+            last_seen_at: row.get(5)?,
             file_hash: Hash::opt_blob_to_hex(row.get(6)?),
             hash_state: row.get(7)?,
         })
@@ -774,6 +831,14 @@ impl QueryImpl {
 
     const SCANS_SQL_QUERY_COUNT: &str = "SELECT {select_list}
         FROM scans
+        {where_clause}
+        {group_clause}
+        {order_clause}
+        {limit_clause}
+        {offset_clause}";
+
+    const SNAPSHOTS_SQL_QUERY: &str = "SELECT {select_list}
+        FROM snapshots
         {where_clause}
         {group_clause}
         {order_clause}
@@ -870,19 +935,15 @@ struct VersionsQueryRow {
     item_name: String,
     file_extension: Option<String>,
     item_type: ItemType,
-    first_scan_id: i64,
-    last_scan_id: i64,
+    first_seen_at: i64,
+    last_seen_at: i64,
     is_added: bool,
     is_deleted: bool,
     is_current: bool,
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
-    add_count: Option<i64>,
-    modify_count: Option<i64>,
-    delete_count: Option<i64>,
-    unchanged_count: Option<i64>,
-    val_scan_id: Option<i64>,
+    val_at: Option<i64>,
     val_state: Option<i64>,
     val_error: Option<String>,
     val_reviewed_at: Option<i64>,
@@ -899,23 +960,19 @@ impl VersionsQueryRow {
             item_name: row.get(4)?,
             file_extension: row.get(5)?,
             item_type: ItemType::from_i64(row.get(6)?),
-            first_scan_id: row.get(7)?,
-            last_scan_id: row.get(8)?,
+            first_seen_at: row.get(7)?,
+            last_seen_at: row.get(8)?,
             is_added: row.get(9)?,
             is_deleted: row.get(10)?,
             is_current: row.get(11)?,
             access: Access::from_i64(row.get(12)?),
             mod_date: row.get(13)?,
             size: row.get(14)?,
-            add_count: row.get(15)?,
-            modify_count: row.get(16)?,
-            delete_count: row.get(17)?,
-            unchanged_count: row.get(18)?,
-            val_scan_id: row.get(19)?,
-            val_state: row.get(20)?,
-            val_error: row.get(21)?,
-            val_reviewed_at: row.get(22)?,
-            hash_reviewed_at: row.get(23)?,
+            val_at: row.get(15)?,
+            val_state: row.get(16)?,
+            val_error: row.get(17)?,
+            val_reviewed_at: row.get(18)?,
+            hash_reviewed_at: row.get(19)?,
         })
     }
 }
@@ -931,21 +988,8 @@ pub struct ScansQueryRow {
     is_hash: bool,
     hash_all: bool,
     is_val: bool,
-    file_count: Option<i64>,
-    folder_count: Option<i64>,
-    total_size: Option<i64>,
     new_hash_suspect_count: Option<i64>,
     new_val_invalid_count: Option<i64>,
-    add_count: Option<i64>,
-    modify_count: Option<i64>,
-    delete_count: Option<i64>,
-    val_unknown_count: Option<i64>,
-    val_valid_count: Option<i64>,
-    val_invalid_count: Option<i64>,
-    val_no_validator_count: Option<i64>,
-    hash_unknown_count: Option<i64>,
-    hash_baseline_count: Option<i64>,
-    hash_suspect_count: Option<i64>,
     error: Option<String>,
 }
 
@@ -963,22 +1007,51 @@ impl ScansQueryRow {
             is_hash: row.get(7)?,
             hash_all: row.get(8)?,
             is_val: row.get(9)?,
-            file_count: row.get(10)?,
-            folder_count: row.get(11)?,
-            total_size: row.get(12)?,
-            new_hash_suspect_count: row.get(13)?,
-            new_val_invalid_count: row.get(14)?,
-            add_count: row.get(15)?,
-            modify_count: row.get(16)?,
-            delete_count: row.get(17)?,
-            val_unknown_count: row.get(18)?,
-            val_valid_count: row.get(19)?,
-            val_invalid_count: row.get(20)?,
-            val_no_validator_count: row.get(21)?,
-            hash_unknown_count: row.get(22)?,
-            hash_baseline_count: row.get(23)?,
-            hash_suspect_count: row.get(24)?,
-            error: row.get(25)?,
+            new_hash_suspect_count: row.get(10)?,
+            new_val_invalid_count: row.get(11)?,
+            error: row.get(12)?,
+        })
+    }
+}
+
+struct SnapshotsQueryRow {
+    root_id: i64,
+    taken_at: i64,
+    file_count: Option<i64>,
+    folder_count: Option<i64>,
+    total_size: Option<i64>,
+    add_count: Option<i64>,
+    modify_count: Option<i64>,
+    delete_count: Option<i64>,
+    val_unknown_count: Option<i64>,
+    val_valid_count: Option<i64>,
+    val_invalid_count: Option<i64>,
+    val_no_validator_count: Option<i64>,
+    hash_unknown_count: Option<i64>,
+    hash_baseline_count: Option<i64>,
+    hash_suspect_count: Option<i64>,
+    schedule_id: Option<i64>,
+}
+
+impl SnapshotsQueryRow {
+    fn from_row(row: &Row) -> rusqlite::Result<Self> {
+        Ok(SnapshotsQueryRow {
+            root_id: row.get(0)?,
+            taken_at: row.get(1)?,
+            file_count: row.get(2)?,
+            folder_count: row.get(3)?,
+            total_size: row.get(4)?,
+            add_count: row.get(5)?,
+            modify_count: row.get(6)?,
+            delete_count: row.get(7)?,
+            val_unknown_count: row.get(8)?,
+            val_valid_count: row.get(9)?,
+            val_invalid_count: row.get(10)?,
+            val_no_validator_count: row.get(11)?,
+            hash_unknown_count: row.get(12)?,
+            hash_baseline_count: row.get(13)?,
+            hash_suspect_count: row.get(14)?,
+            schedule_id: row.get(15)?,
         })
     }
 }

@@ -5,7 +5,7 @@
 
 query = { SOI ~ WS* ~ query_type ~ where_clause? ~ group_clause? ~ show_clause? ~ order_clause? ~ limit_clause? ~ offset_clause? ~ WS* ~ EOI }
 
-query_type = { "roots" | "scans" | "items" | "versions" | "hashes" }
+query_type = { "roots" | "scans" | "snapshots" | "items" | "versions" | "hashes" }
 
 // Optional WHERE clause
 where_clause = _{ WS+ ~ ("WHERE" | "where") ~ WS+ ~ filter_list }
@@ -60,7 +60,7 @@ access_filter_EOI       = { WS* ~ access_filter_values ~ WS* ~ EOI }
 int_filter_EOI          = { WS* ~ int_comparator ~ WS* ~ EOI }
 
 // Identity Columns
-id_col = { "root_id" | "scan_id" | "item_id" | "item_version" | "first_scan_id" | "last_scan_id" | "val_scan_id" | "last_hash_scan" | "last_val_scan" | "prev_hash_scan" | "schedule_id" }
+id_col = { "root_id" | "scan_id" | "item_id" | "item_version" | "schedule_id" }
 
 id_show = { id_col }
 
@@ -241,24 +241,6 @@ scan_state               =  {
     "SCANNING"
   | "scanning"
   | "Scanning"
-  | "SWEEPING"
-  | "sweeping"
-  | "Sweeping"
-  | "ANALYZING FILES"
-  | "analyzing files"
-  | "Analyzing Files"
-  | "ANALYZINGFILES"
-  | "analyzingfiles"
-  | "AnalyzingFiles"
-  | "ANALYZING SCAN"
-  | "analyzing scan"
-  | "Analyzing Scan"
-  | "ANALYZINGSCAN"
-  | "analyzingscan"
-  | "AnalyzingScan"
-  | "ANALYZING"
-  | "analyzing"
-  | "Analyzing"
   | "COMPLETED"
   | "completed"
   | "Completed"
@@ -268,11 +250,7 @@ scan_state               =  {
   | "ERROR"
   | "error"
   | "Error"
-  | ^"AF"
-  | ^"AS"
-  | ^"A"
   | ^"S"
-  | ^"W"
   | ^"C"
   | ^"P"
   | ^"E"
@@ -314,7 +292,7 @@ access               =  {
 }
 
 // Integer columns
-int_col  = { "size" | "file_count" | "folder_count" | "total_size" | "new_hash_suspect_count" | "new_val_invalid_count" | "add_count" | "modify_count" | "delete_count" | "unchanged_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_baseline_count" | "hash_suspect_count" }
+int_col  = { "size" | "new_hash_suspect_count" | "new_val_invalid_count" | "file_count" | "folder_count" | "total_size" | "add_count" | "modify_count" | "delete_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_baseline_count" | "hash_suspect_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

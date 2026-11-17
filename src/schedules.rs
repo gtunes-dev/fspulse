@@ -1383,9 +1383,6 @@ impl TaskEntry {
                 t.started_at,
                 t.completed_at,
                 sc.scan_id,
-                sc.add_count,
-                sc.modify_count,
-                sc.delete_count,
                 sc.was_restarted,
                 sc.new_val_invalid_count,
                 sc.new_hash_suspect_count
@@ -1427,12 +1424,9 @@ impl TaskEntry {
                     started_at: row.get(7)?,
                     completed_at: row.get(8)?,
                     scan_id: row.get(9)?,
-                    add_count: row.get(10)?,
-                    modify_count: row.get(11)?,
-                    delete_count: row.get(12)?,
-                    was_restarted: row.get(13)?,
-                    new_val_invalid_count: row.get(14)?,
-                    new_hash_suspect_count: row.get(15)?,
+                    was_restarted: row.get(10)?,
+                    new_val_invalid_count: row.get(11)?,
+                    new_hash_suspect_count: row.get(12)?,
                 })
             })
             .map_err(FsPulseError::DatabaseError)?
@@ -1513,9 +1507,6 @@ pub struct TaskHistoryRow {
     /// Scan ID (from scans table JOIN for scan tasks; None for other task types)
     pub scan_id: Option<i64>,
     /// Scan-specific fields (from scans table JOIN; None for non-scan tasks)
-    pub add_count: Option<i64>,
-    pub modify_count: Option<i64>,
-    pub delete_count: Option<i64>,
     pub was_restarted: Option<bool>,
     pub new_val_invalid_count: Option<i64>,
     pub new_hash_suspect_count: Option<i64>,

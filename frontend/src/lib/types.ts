@@ -151,10 +151,8 @@ export interface TaskData {
 // Root with Scan Info (for Scan page)
 export interface LastScanInfo {
   scan_id: number
-  state: string // 'Pending' | 'Scanning' | 'Sweeping' | 'Analyzing Files' | 'Analyzing Scan' | 'Completed' | 'Stopped' | 'Error'
+  state: string // 'Pending' | 'Scanning' | 'Completed' | 'Stopped' | 'Error'
   started_at: number  // Unix timestamp (seconds) for client-side formatting
-  file_count?: number
-  folder_count?: number
   error?: string
 }
 

@@ -135,7 +135,7 @@ pub struct IntegrityItemSummary {
     pub item_name: String,
     pub file_extension: Option<String>,
     pub do_not_validate: bool,
-    pub latest_scan_id: i64,
+    pub latest_seen_at: i64,
     pub hash_unreviewed: i64,
     pub hash_reviewed: i64,
     pub val_unreviewed: i64,
@@ -188,7 +188,7 @@ pub fn query_items(
              {hash_rev_expr} AS hash_reviewed,
              {val_unrev_expr} AS val_unreviewed,
              {val_rev_expr} AS val_reviewed,
-             MAX(iv.last_scan_id) AS latest_scan_id
+             MAX(iv.last_seen_at) AS latest_seen_at
          FROM item_versions iv
          JOIN items i ON i.item_id = iv.item_id
          WHERE {where_clause}
@@ -211,7 +211,7 @@ pub fn query_items(
                 hash_reviewed: row.get(6)?,
                 val_unreviewed: row.get(7)?,
                 val_reviewed: row.get(8)?,
-                latest_scan_id: row.get(9)?,
+                latest_seen_at: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -225,8 +225,7 @@ pub fn query_items(
 
 pub struct IntegrityVersion {
     pub item_version: i64,
-    pub scan_id: i64,
-    pub scan_started_at: i64,
+    pub first_seen_at: i64,
     pub hash_version_count: i64,
     pub hash_suspicious_count: i64,
     pub val_state: Option<i64>,
@@ -269,8 +268,7 @@ pub fn query_versions(
     let fetch_sql = format!(
         "SELECT
              iv.item_version,
-             iv.first_scan_id,
-             s.started_at,
+             iv.first_seen_at,
              (SELECT COUNT(*) FROM hash_versions hv
               WHERE hv.item_id = iv.item_id
                 AND hv.item_version = iv.item_version
@@ -285,7 +283,6 @@ pub fn query_versions(
              iv.val_reviewed_at,
              iv.hash_reviewed_at
          FROM item_versions iv
-         JOIN scans s ON s.scan_id = iv.first_scan_id
          WHERE {where_clause}
          ORDER BY iv.item_version DESC
          LIMIT ?"
@@ -298,14 +295,13 @@ pub fn query_versions(
         .query_map(fetch_refs.as_slice(), |row| {
             Ok(IntegrityVersion {
                 item_version: row.get(0)?,
-                scan_id: row.get(1)?,
-                scan_started_at: row.get(2)?,
-                hash_version_count: row.get(3)?,
-                hash_suspicious_count: row.get(4)?,
-                val_state: row.get(5)?,
-                val_error: row.get(6)?,
-                val_reviewed_at: row.get(7)?,
-                hash_reviewed_at: row.get(8)?,
+                first_seen_at: row.get(1)?,
+                hash_version_count: row.get(2)?,
+                hash_suspicious_count: row.get(3)?,
+                val_state: row.get(4)?,
+                val_error: row.get(5)?,
+                val_reviewed_at: row.get(6)?,
+                hash_reviewed_at: row.get(7)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

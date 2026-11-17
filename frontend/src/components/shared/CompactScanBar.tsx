@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { formatScanDate, formatTime } from '@/lib/dateUtils'
-import { ChangeIcons } from '@/components/shared/ChangeIcons'
 
 interface CompactScanBarProps {
   rootId: number
@@ -22,9 +21,6 @@ interface CompactScanBarProps {
 interface ScanSummary {
   scan_id: number
   started_at: number
-  add_count: number | null
-  modify_count: number | null
-  delete_count: number | null
 }
 
 export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan }: CompactScanBarProps) {
@@ -396,12 +392,6 @@ export function CompactScanBar({ rootId, initialScanId, onScanResolved, onNoScan
                               <span className="text-xs text-muted-foreground">
                                 {formatTime(scan.started_at)}
                               </span>
-                            </div>
-                            <div className="text-xs">
-                              <ChangeIcons add={scan.add_count} modify={scan.modify_count} del={scan.delete_count} />
-                              {!scan.add_count && !scan.modify_count && !scan.delete_count && (
-                                <span className="text-muted-foreground">no changes</span>
-                              )}
                             </div>
                           </div>
                         </button>

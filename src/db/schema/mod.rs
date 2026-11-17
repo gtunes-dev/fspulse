@@ -60,7 +60,7 @@ use v27_to_v28::migrate_v27_to_v28;
 use v28_to_v29::{migrate_v28_to_v29, UPGRADE_28_TO_29_PRE_SQL};
 use v29_to_v30::{migrate_v29_to_v30, UPGRADE_29_TO_30_PRE_SQL};
 use v30_to_v31::{migrate_v30_to_v31, UPGRADE_30_TO_31_PRE_SQL};
-use v31_to_v32::migrate_v31_to_v32;
+use v31_to_v32::{migrate_v31_to_v32, UPGRADE_31_TO_32_PRE_SQL, UPGRADE_31_TO_32_POST_SQL};
 use v2_to_v3::UPGRADE_2_TO_3_SQL;
 use v3_to_v4::UPGRADE_3_TO_4_SQL;
 use v4_to_v5::UPGRADE_4_TO_5_SQL;
@@ -184,4 +184,8 @@ pub const MIGRATION_30_TO_31: Migration = Migration::Transacted {
     code_fn: Some(migrate_v30_to_v31),
     post_sql: None,
 };
-pub const MIGRATION_31_TO_32: Migration = Migration::standalone(migrate_v31_to_v32);
+pub const MIGRATION_31_TO_32: Migration = Migration::Transacted {
+    pre_sql: Some(UPGRADE_31_TO_32_PRE_SQL),
+    code_fn: Some(migrate_v31_to_v32),
+    post_sql: Some(UPGRADE_31_TO_32_POST_SQL),
+};

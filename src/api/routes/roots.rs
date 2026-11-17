@@ -42,8 +42,6 @@ pub struct ScanInfo {
     pub scan_id: i64,
     pub state: String,
     pub started_at: i64, // Raw Unix timestamp for client-side formatting
-    pub file_count: Option<i64>,
-    pub folder_count: Option<i64>,
     pub error: Option<String>,
 }
 
@@ -206,9 +204,7 @@ pub async fn get_roots_with_scans(
             Ok(Some(scan)) => Some(ScanInfo {
                 scan_id: scan.scan_id(),
                 state: scan.state().to_string(),
-                started_at: scan.started_at(), // Return raw Unix timestamp
-                file_count: scan.file_count(),
-                folder_count: scan.folder_count(),
+                started_at: scan.started_at(),
                 error: scan.error().map(|s| s.to_string()),
             }),
             Ok(None) => None,

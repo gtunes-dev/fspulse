@@ -71,7 +71,10 @@ CREATE TABLE IF NOT EXISTS meta (
 
 INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '32');
 
--- Roots table stores unique root directories that have been scanned
+-- ========================================
+-- Roots
+-- ========================================
+-- Monitored filesystem root directories.
 CREATE TABLE IF NOT EXISTS roots (
     root_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_path TEXT NOT NULL UNIQUE,
@@ -89,34 +92,29 @@ CREATE TABLE IF NOT EXISTS roots (
 -- Indexes to optimize queries
 CREATE INDEX IF NOT EXISTS idx_roots_path ON roots (root_path COLLATE natural_path);
 
--- Scans table tracks individual scan sessions
+-- ========================================
+-- Scans
+-- ========================================
+-- Integrity scan sessions (hash and/or validation).
 CREATE TABLE IF NOT EXISTS scans (
     scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    root_id INTEGER NOT NULL,          -- Links scan to a root path
-    schedule_id INTEGER DEFAULT NULL,  -- Links scan to schedule (NULL for manual scans)
-    started_at INTEGER NOT NULL,       -- Timestamp when scan started (UTC)
-    ended_at INTEGER DEFAULT NULL,     -- Timestamp when scan completed (UTC, NULL if in progress or incomplete)
-    was_restarted BOOLEAN NOT NULL DEFAULT 0,  -- True if scan was interrupted and resumed
-    state INTEGER NOT NULL,            -- The state of the scan (1 = Scanning, 2 = Sweeping, 3 = Analyzing Files, 7 = Analyzing Scan, 4 = Completed, 5 = Stopped, 6 = Error)
-    is_hash BOOLEAN NOT NULL,          -- Hash new or changed files
-    hash_all BOOLEAN NOT NULL,         -- Hash all items including unchanged and previously hashed
-    is_val BOOLEAN NOT NULL,           -- Validate the contents of files
-    file_count INTEGER DEFAULT NULL,   -- Count of files found in the scan
-    folder_count INTEGER DEFAULT NULL, -- Count of directories found in the scan
-    total_size INTEGER DEFAULT NULL,   -- Total size of all items (files and directories) seen in the scan
-    new_hash_suspect_count INTEGER DEFAULT NULL, -- Count of hash_versions with hash_state=2 first seen in this scan
-    new_val_invalid_count INTEGER DEFAULT NULL,  -- Count of item_versions with val_state=2 validated in this scan
-    add_count INTEGER DEFAULT NULL,    -- Count of items added in the scan
-    modify_count INTEGER DEFAULT NULL, -- Count of items modified in the scan
-    delete_count INTEGER DEFAULT NULL, -- Count of items deleted in the scan
-    val_unknown_count INTEGER DEFAULT NULL,       -- Count of files with unknown validation state
-    val_valid_count INTEGER DEFAULT NULL,         -- Count of files with valid validation state
-    val_invalid_count INTEGER DEFAULT NULL,       -- Count of files with invalid validation state
-    val_no_validator_count INTEGER DEFAULT NULL,   -- Count of files with no available validator
-    hash_unknown_count INTEGER DEFAULT NULL,       -- Count of files with unknown hash state
-    hash_baseline_count INTEGER DEFAULT NULL,       -- Count of files with baseline (unchanged) hash state
-    hash_suspect_count INTEGER DEFAULT NULL,    -- Count of files with suspicious (changed) hash state
-    error TEXT DEFAULT NULL,           -- Error message if scan failed
+    root_id INTEGER NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER DEFAULT NULL,
+    was_restarted BOOLEAN NOT NULL DEFAULT 0,
+    state INTEGER NOT NULL,            -- 1 = Scanning, 2 = Completed, 3 = Stopped, 4 = Error
+    is_hash BOOLEAN NOT NULL,
+    hash_all BOOLEAN NOT NULL,
+    is_val BOOLEAN NOT NULL,
+
+    -- What this scan discovered (deltas only)
+    new_hash_suspect_count INTEGER DEFAULT NULL,
+    new_val_invalid_count INTEGER DEFAULT NULL,
+
+    error TEXT DEFAULT NULL,
+
+    -- Schedule reference
+    schedule_id INTEGER DEFAULT NULL,
     FOREIGN KEY (root_id) REFERENCES roots(root_id),
     FOREIGN KEY (schedule_id) REFERENCES scan_schedules(schedule_id)
 );
@@ -124,9 +122,44 @@ CREATE TABLE IF NOT EXISTS scans (
 CREATE INDEX IF NOT EXISTS idx_scans_root ON scans (root_id);
 
 -- ========================================
--- Item identity table
+-- Snapshots
 -- ========================================
--- Lightweight stable identity for each item across all its versions.
+-- Periodic point-in-time observations of a root's filesystem state
+-- and integrity posture.
+CREATE TABLE IF NOT EXISTS snapshots (
+    root_id         INTEGER NOT NULL,
+    taken_at        INTEGER NOT NULL,
+
+    -- Filesystem state (alive items at snapshot time)
+    file_count      INTEGER,
+    folder_count    INTEGER,
+    total_size      INTEGER,
+
+    -- Change counts since previous snapshot for this root
+    add_count       INTEGER,
+    modify_count    INTEGER,
+    delete_count    INTEGER,
+
+    -- Integrity posture (alive files at snapshot time)
+    val_unknown_count       INTEGER,
+    val_valid_count         INTEGER,
+    val_invalid_count       INTEGER,
+    val_no_validator_count  INTEGER,
+    hash_unknown_count      INTEGER,
+    hash_baseline_count     INTEGER,
+    hash_suspect_count      INTEGER,
+
+    -- Schedule reference
+    schedule_id     INTEGER DEFAULT NULL,
+
+    PRIMARY KEY (root_id, taken_at),
+    FOREIGN KEY (root_id) REFERENCES roots(root_id)
+) WITHOUT ROWID;
+
+-- ========================================
+-- Items
+-- ========================================
+-- Stable identity for each filesystem item across all its versions.
 CREATE TABLE IF NOT EXISTS items (
     item_id         INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id         INTEGER NOT NULL,
@@ -149,7 +182,7 @@ CREATE INDEX IF NOT EXISTS idx_items_root_ext ON items (root_id, file_extension)
 CREATE INDEX IF NOT EXISTS idx_items_root_hid ON items (root_id, hierarchy_id);
 
 -- ========================================
--- Temporal item versions table
+-- Item versions
 -- ========================================
 -- One row per distinct state of an item. Identity (path, type, root) lives in items.
 -- item_version is a per-item sequence number (1, 2, 3, …, n) assigned chronologically.
@@ -181,7 +214,7 @@ CREATE TABLE IF NOT EXISTS item_versions (
     size            INTEGER,
 
     -- Validation state (files only, NULL for folders and unvalidated files)
-    val_scan_id     INTEGER,            -- scan in which this version was validated
+    val_at          INTEGER,            -- epoch: when this version was validated
     val_state       INTEGER,            -- 1=Valid, 2=Invalid
     val_error       TEXT,               -- error details when val_state=Invalid
 
@@ -198,10 +231,10 @@ CREATE INDEX IF NOT EXISTS idx_versions_first_seen ON item_versions (root_id, fi
 CREATE INDEX IF NOT EXISTS idx_versions_last_seen ON item_versions (root_id, last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_versions_root_firstseen_hid ON item_versions (root_id, first_seen_at, hierarchy_id);
 CREATE INDEX IF NOT EXISTS idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
-CREATE INDEX IF NOT EXISTS idx_versions_val_scan ON item_versions (val_scan_id, val_state);
+CREATE INDEX IF NOT EXISTS idx_versions_val_at ON item_versions (val_at, val_state);
 
 -- ========================================
--- Hash versions table (integrity observation log)
+-- Hash versions
 -- ========================================
 -- Zero or more hash observations per item_version. Forms a log of hash checks.
 -- Absence of any row for a version means it has never been hashed.
@@ -219,7 +252,10 @@ CREATE TABLE IF NOT EXISTS hash_versions (
 
 CREATE INDEX IF NOT EXISTS idx_hash_versions_first_seen ON hash_versions (first_seen_at, hash_state);
 
--- Scan schedules table stores recurring scan configurations
+-- ========================================
+-- Scan schedules
+-- ========================================
+-- Recurring scan configurations.
 CREATE TABLE IF NOT EXISTS scan_schedules (
     schedule_id INTEGER PRIMARY KEY AUTOINCREMENT,
     root_id INTEGER NOT NULL,
@@ -243,7 +279,10 @@ CREATE INDEX IF NOT EXISTS idx_scan_schedules_enabled ON scan_schedules(enabled)
 CREATE INDEX IF NOT EXISTS idx_scan_schedules_root ON scan_schedules(root_id);
 CREATE INDEX IF NOT EXISTS idx_scan_schedules_deleted ON scan_schedules(deleted_at);
 
--- Tasks table stores work items and their execution history
+-- ========================================
+-- Tasks
+-- ========================================
+-- Work items and their execution history.
 CREATE TABLE IF NOT EXISTS tasks (
     task_id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_type INTEGER NOT NULL DEFAULT 0,          -- TaskType enum: 0=Scan

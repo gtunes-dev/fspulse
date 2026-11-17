@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, Clock, Timer, CheckCircle, XCircle, AlertTriangle, Files, Folder, HardDrive, Hash, CircleX, FolderTree } from 'lucide-react'
+import { Activity, Clock, Timer, CheckCircle, XCircle, AlertTriangle, Hash, CircleX, FolderTree } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -13,8 +13,6 @@ import { Separator } from '@/components/ui/separator'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateTimeShort } from '@/lib/dateUtils'
-import { formatFileSize } from '@/lib/formatUtils'
-import { ChangeIcons } from '@/components/shared/ChangeIcons'
 
 interface ScanDetailSheetProps {
   scanId: number
@@ -34,12 +32,6 @@ interface ScanDetails {
   is_hash: boolean
   hash_all: boolean
   is_val: boolean
-  add_count: number
-  modify_count: number
-  delete_count: number
-  file_count: number
-  folder_count: number
-  total_size: number | null
   new_hash_suspect_count: number
   new_val_invalid_count: number
   val_unknown_count: number
@@ -62,22 +54,16 @@ const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'is_hash', visible: true, sort_direction: 'none', position: 6 },
   { name: 'hash_all', visible: true, sort_direction: 'none', position: 7 },
   { name: 'is_val', visible: true, sort_direction: 'none', position: 8 },
-  { name: 'add_count', visible: true, sort_direction: 'none', position: 9 },
-  { name: 'modify_count', visible: true, sort_direction: 'none', position: 10 },
-  { name: 'delete_count', visible: true, sort_direction: 'none', position: 11 },
-  { name: 'file_count', visible: true, sort_direction: 'none', position: 12 },
-  { name: 'folder_count', visible: true, sort_direction: 'none', position: 13 },
-  { name: 'total_size', visible: true, sort_direction: 'none', position: 14 },
-  { name: 'new_hash_suspect_count', visible: true, sort_direction: 'none', position: 15 },
-  { name: 'new_val_invalid_count', visible: true, sort_direction: 'none', position: 16 },
-  { name: 'val_unknown_count', visible: true, sort_direction: 'none', position: 17 },
-  { name: 'val_valid_count', visible: true, sort_direction: 'none', position: 18 },
-  { name: 'val_invalid_count', visible: true, sort_direction: 'none', position: 19 },
-  { name: 'val_no_validator_count', visible: true, sort_direction: 'none', position: 20 },
-  { name: 'hash_unknown_count', visible: true, sort_direction: 'none', position: 21 },
-  { name: 'hash_baseline_count', visible: true, sort_direction: 'none', position: 22 },
-  { name: 'hash_suspect_count', visible: true, sort_direction: 'none', position: 23 },
-  { name: 'error', visible: true, sort_direction: 'none', position: 24 },
+  { name: 'new_hash_suspect_count', visible: true, sort_direction: 'none', position: 9 },
+  { name: 'new_val_invalid_count', visible: true, sort_direction: 'none', position: 10 },
+  { name: 'val_unknown_count', visible: true, sort_direction: 'none', position: 11 },
+  { name: 'val_valid_count', visible: true, sort_direction: 'none', position: 12 },
+  { name: 'val_invalid_count', visible: true, sort_direction: 'none', position: 13 },
+  { name: 'val_no_validator_count', visible: true, sort_direction: 'none', position: 14 },
+  { name: 'hash_unknown_count', visible: true, sort_direction: 'none', position: 15 },
+  { name: 'hash_baseline_count', visible: true, sort_direction: 'none', position: 16 },
+  { name: 'hash_suspect_count', visible: true, sort_direction: 'none', position: 17 },
+  { name: 'error', visible: true, sort_direction: 'none', position: 18 },
 ]
 
 const ROOT_COLUMNS: ColumnSpec[] = [
@@ -186,22 +172,16 @@ export function ScanDetailSheet({
           is_hash: parseBool(row[6]),
           hash_all: parseBool(row[7]),
           is_val: parseBool(row[8]),
-          add_count: parseInt(row[9]) || 0,
-          modify_count: parseInt(row[10]) || 0,
-          delete_count: parseInt(row[11]) || 0,
-          file_count: parseInt(row[12]) || 0,
-          folder_count: parseInt(row[13]) || 0,
-          total_size: parseIntOrNull(row[14]),
-          new_hash_suspect_count: parseInt(row[15]) || 0,
-          new_val_invalid_count: parseInt(row[16]) || 0,
-          val_unknown_count: parseInt(row[17]) || 0,
-          val_valid_count: parseInt(row[18]) || 0,
-          val_invalid_count: parseInt(row[19]) || 0,
-          val_no_validator_count: parseInt(row[20]) || 0,
-          hash_unknown_count: parseInt(row[21]) || 0,
-          hash_baseline_count: parseInt(row[22]) || 0,
-          hash_suspect_count: parseInt(row[23]) || 0,
-          error: row[24] && row[24] !== '-' ? row[24] : null,
+          new_hash_suspect_count: parseInt(row[9]) || 0,
+          new_val_invalid_count: parseInt(row[10]) || 0,
+          val_unknown_count: parseInt(row[11]) || 0,
+          val_valid_count: parseInt(row[12]) || 0,
+          val_invalid_count: parseInt(row[13]) || 0,
+          val_no_validator_count: parseInt(row[14]) || 0,
+          hash_unknown_count: parseInt(row[15]) || 0,
+          hash_baseline_count: parseInt(row[16]) || 0,
+          hash_suspect_count: parseInt(row[17]) || 0,
+          error: row[18] && row[18] !== '-' ? row[18] : null,
         })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load scan details')
@@ -212,8 +192,6 @@ export function ScanDetailSheet({
 
     loadScanDetails()
   }, [open, scanId])
-
-  const hasChanges = details && (details.add_count > 0 || details.modify_count > 0 || details.delete_count > 0)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -279,45 +257,6 @@ export function ScanDetailSheet({
                   {details.error}
                 </div>
               )}
-            </CardContent>
-
-            <Separator />
-
-            {/* Items */}
-            <CardContent className="py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Contents</p>
-              <div className="flex items-center gap-5 text-sm">
-                <span className="inline-flex items-center gap-1.5">
-                  <Files className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{details.file_count.toLocaleString()}</span>
-                  <span className="text-muted-foreground">files</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Folder className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{details.folder_count.toLocaleString()}</span>
-                  <span className="text-muted-foreground">folders</span>
-                </span>
-                {details.total_size !== null && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <HardDrive className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{formatFileSize(details.total_size)}</span>
-                  </span>
-                )}
-              </div>
-            </CardContent>
-
-            <Separator />
-
-            {/* Changes */}
-            <CardContent className="py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Changes</p>
-              <div className="text-sm">
-                {hasChanges ? (
-                  <ChangeIcons add={details.add_count} modify={details.modify_count} del={details.delete_count} />
-                ) : (
-                  <span className="text-muted-foreground">No changes</span>
-                )}
-              </div>
             </CardContent>
 
             <Separator />

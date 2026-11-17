@@ -441,7 +441,9 @@ export function IntegrityPage() {
   const openDetail = (item: IntegrityItemSummary) => {
     setDetailItemId(item.item_id)
     setDetailItemPath(item.item_path)
-    setDetailScanId(item.latest_scan_id)
+    // No scan_id available in v32 — ItemDetail falls back to latest version.
+    // TODO: switch to a timestamp-based "as-of" view using item.latest_seen_at.
+    setDetailScanId(null)
     setDetailOpen(true)
   }
 
@@ -679,8 +681,7 @@ export function IntegrityPage() {
                                 <TableHeader className="bg-muted">
                                   <TableRow>
                                     <TableHead className="w-[70px] text-xs py-1.5 h-auto">Version</TableHead>
-                                    <TableHead className="w-[60px] text-xs py-1.5 h-auto">Scan</TableHead>
-                                    <TableHead className="w-[90px] text-xs py-1.5 h-auto">When</TableHead>
+                                    <TableHead className="w-[150px] text-xs py-1.5 h-auto">When</TableHead>
                                     <TableHead className="w-[220px] text-xs py-1.5 h-auto">Hashes</TableHead>
                                     <TableHead className="text-xs py-1.5 h-auto">Validation</TableHead>
                                   </TableRow>
@@ -765,8 +766,7 @@ export function IntegrityPage() {
                                     return (
                                       <TableRow key={ver.item_version}>
                                         <TableCell className="py-1.5 text-muted-foreground text-xs">v{ver.item_version}</TableCell>
-                                        <TableCell className="py-1.5 text-muted-foreground text-xs">{ver.scan_id}</TableCell>
-                                        <TableCell className="py-1.5 text-muted-foreground text-xs whitespace-nowrap">{formatTimeAgo(ver.scan_started_at)}</TableCell>
+                                        <TableCell className="py-1.5 text-muted-foreground text-xs whitespace-nowrap">{formatTimeAgo(ver.first_seen_at)}</TableCell>
                                         <TableCell className="py-1.5 text-xs">{hashContent}</TableCell>
                                         <TableCell className="py-1.5 text-xs">{valContent}</TableCell>
                                       </TableRow>

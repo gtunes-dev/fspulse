@@ -13,8 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import { fetchQuery, countQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
 import { formatDateFull } from '@/lib/dateUtils'
-import { formatCount, formatFileSize } from '@/lib/formatUtils'
-import { ChangeIcons } from '@/components/shared/ChangeIcons'
+import { formatCount } from '@/lib/formatUtils'
 
 interface RootDetailSheetProps {
   rootId: number
@@ -32,12 +31,6 @@ interface Scan {
   scan_id: number
   started_at: number
   scan_state: string // 'C' = Completed, 'P' = Stopped, 'E' = Error
-  add_count: number
-  modify_count: number
-  delete_count: number
-  file_count: number
-  folder_count: number
-  total_size: number | null
 }
 
 const SCANS_PER_PAGE = 20
@@ -47,12 +40,6 @@ const SCAN_COLUMNS: ColumnSpec[] = [
   { name: 'scan_id', visible: true, sort_direction: 'desc', position: 0 },
   { name: 'started_at', visible: true, sort_direction: 'none', position: 1 },
   { name: 'scan_state', visible: true, sort_direction: 'none', position: 2 },
-  { name: 'add_count', visible: true, sort_direction: 'none', position: 3 },
-  { name: 'modify_count', visible: true, sort_direction: 'none', position: 4 },
-  { name: 'delete_count', visible: true, sort_direction: 'none', position: 5 },
-  { name: 'file_count', visible: true, sort_direction: 'none', position: 6 },
-  { name: 'folder_count', visible: true, sort_direction: 'none', position: 7 },
-  { name: 'total_size', visible: true, sort_direction: 'none', position: 8 },
 ]
 
 // Row parsing helper
@@ -61,12 +48,6 @@ function parseScanRow(row: string[]): Scan {
     scan_id: parseInt(row[0]),
     started_at: parseInt(row[1]),
     scan_state: row[2],
-    add_count: parseInt(row[3]) || 0,
-    modify_count: parseInt(row[4]) || 0,
-    delete_count: parseInt(row[5]) || 0,
-    file_count: parseInt(row[6]) || 0,
-    folder_count: parseInt(row[7]) || 0,
-    total_size: row[8] && row[8] !== '-' ? parseInt(row[8]) : null,
   }
 }
 
@@ -275,24 +256,6 @@ export function RootDetailSheet({
                                   </p>
                                 </div>
 
-                                {/* Stats grid */}
-                                <div className="space-y-1 text-xs">
-                                  <div className="flex items-center justify-between">
-                                    <ChangeIcons add={scan.add_count} modify={scan.modify_count} del={scan.delete_count} />
-                                    {scan.total_size !== null && (
-                                      <div>
-                                        <span className="text-muted-foreground">Size: </span>
-                                        <span className="font-medium">{formatFileSize(scan.total_size)}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <span className="text-muted-foreground">Items: </span>
-                                      <span className="font-medium">{scan.file_count.toLocaleString()} files, {scan.folder_count.toLocaleString()} folders</span>
-                                    </div>
-                                  </div>
-                                </div>
                               </div>
                             </div>
                             {idx < scans.length - 1 && <Separator />}

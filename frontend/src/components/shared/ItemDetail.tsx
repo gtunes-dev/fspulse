@@ -3,7 +3,7 @@ import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
 import {
   File, Folder, Calendar as CalendarIcon,
   HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
-  ShieldCheck, ShieldOff, Plus, Triangle, Minus,
+  ShieldCheck, ShieldOff, Plus, Triangle,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { ReviewToggle } from '@/components/shared/ReviewToggle'
@@ -87,8 +87,8 @@ interface ItemDetailProps {
 
 interface VersionEntry {
   item_version: number
-  first_scan_id: number
-  last_scan_id: number
+  first_seen_at: number
+  last_seen_at: number
   first_scan_date: number
   last_scan_date: number
   is_added: boolean
@@ -96,10 +96,6 @@ interface VersionEntry {
   access: number
   mod_date: number | null
   size: number | null
-  add_count: number | null
-  modify_count: number | null
-  delete_count: number | null
-  unchanged_count: number | null
   hash_state: number | null
   file_hash: string | null
   val_state: number | null
@@ -186,30 +182,11 @@ function classifyChange(v: VersionEntry, prev: VersionEntry | null): ChangeKind 
   return 'modified'
 }
 
-function hasNonZeroFolderCounts(v: VersionEntry): boolean {
-  return (
-    (v.add_count ?? 0) > 0 ||
-    (v.modify_count ?? 0) > 0 ||
-    (v.delete_count ?? 0) > 0 ||
-    (v.unchanged_count ?? 0) > 0
-  )
-}
-
-function hasFolderCountChanges(v: VersionEntry, prev: VersionEntry): boolean {
-  return (
-    v.add_count !== prev.add_count ||
-    v.modify_count !== prev.modify_count ||
-    v.delete_count !== prev.delete_count ||
-    v.unchanged_count !== prev.unchanged_count
-  )
-}
-
 function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
   return (
     v.mod_date !== prev.mod_date ||
     v.size !== prev.size ||
-    v.access !== prev.access ||
-    hasFolderCountChanges(v, prev)
+    v.access !== prev.access
   )
 }
 
@@ -705,10 +682,10 @@ export function ItemDetail({
   )
 
   const scanRangeLabel = (v: VersionEntry) => {
-    if (v.first_scan_id === v.last_scan_id) return scanRef(v.first_scan_id, v.first_scan_date)
+    if (v.first_seen_at === v.last_seen_at) return scanRef(v.first_seen_at, v.first_scan_date)
     return (
       <>
-        #{v.first_scan_id} ({formatScanDate(v.first_scan_date)}) &ndash; #{v.last_scan_id} ({formatScanDate(v.last_scan_date)})
+        #{v.first_seen_at} ({formatScanDate(v.first_scan_date)}) &ndash; #{v.last_seen_at} ({formatScanDate(v.last_scan_date)})
       </>
     )
   }
@@ -1005,32 +982,6 @@ export function ItemDetail({
                     <span className="font-medium">{childrenCounts.file_count.toLocaleString()}</span>
                   </span>
                 </div>
-                {v && (
-                  <div className={`mt-3 text-xs`}>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                      <span className="flex items-center gap-1.5">
-                        <Plus className={`${sp.icon} text-green-500 flex-shrink-0`} />
-                        <span className="text-muted-foreground">Added :</span>
-                        <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <X className={`${sp.icon} text-red-500 flex-shrink-0`} />
-                        <span className="text-muted-foreground">Deleted :</span>
-                        <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Triangle className={`${sp.icon} text-blue-500 flex-shrink-0`} fill="currentColor" />
-                        <span className="text-muted-foreground">Modified :</span>
-                        <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Minus className={`${sp.icon} text-foreground flex-shrink-0`} />
-                        <span className="text-muted-foreground">Unchanged :</span>
-                        <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
-                      </span>
-                    </div>
-                  </div>
-                )}
               </>
             ) : (
               <p className="text-sm text-muted-foreground text-center">Empty directory</p>
@@ -1288,8 +1239,7 @@ export function ItemDetail({
                 const setIsOpen = (val: boolean) => setOpenVersions(prev => ({ ...prev, [v.item_version]: val }))
                 const hasIntegrity = v.hash_state != null || v.val_state != null
                 const hasMetadataChanges = kind === 'modified' && prev && hasFieldChanges(v, prev)
-                const hasInitialFolderCounts = kind === 'initial' && hasNonZeroFolderCounts(v)
-                const isExpandable = hasMetadataChanges || hasInitialFolderCounts || hasIntegrity
+                const isExpandable = hasMetadataChanges || hasIntegrity
 
                 const headerContent = (
                   <>
@@ -1379,86 +1329,6 @@ export function ItemDetail({
                                 </div>
                               )}
 
-                              {/* Folder count diffs */}
-                              {prev && hasFolderCountChanges(v, prev) && (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium">Folder Counts</p>
-                                  <div className="mt-1 space-y-0.5">
-                                    {v.add_count !== prev.add_count && (
-                                      <div className="flex items-center gap-1.5">
-                                        <Plus className={`${sp.icon} text-green-500 flex-shrink-0`} />
-                                        <span className="text-muted-foreground">Added:</span>
-                                        <span className="text-muted-foreground">{(prev.add_count ?? 0).toLocaleString()}</span>
-                                        <span>&rarr;</span>
-                                        <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {v.delete_count !== prev.delete_count && (
-                                      <div className="flex items-center gap-1.5">
-                                        <X className={`${sp.icon} text-red-500 flex-shrink-0`} />
-                                        <span className="text-muted-foreground">Deleted:</span>
-                                        <span className="text-muted-foreground">{(prev.delete_count ?? 0).toLocaleString()}</span>
-                                        <span>&rarr;</span>
-                                        <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {v.modify_count !== prev.modify_count && (
-                                      <div className="flex items-center gap-1.5">
-                                        <Triangle className={`${sp.icon} text-blue-500 flex-shrink-0`} fill="currentColor" />
-                                        <span className="text-muted-foreground">Modified:</span>
-                                        <span className="text-muted-foreground">{(prev.modify_count ?? 0).toLocaleString()}</span>
-                                        <span>&rarr;</span>
-                                        <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {v.unchanged_count !== prev.unchanged_count && (
-                                      <div className="flex items-center gap-1.5">
-                                        <Minus className={`${sp.icon} text-foreground flex-shrink-0`} />
-                                        <span className="text-muted-foreground">Unchanged:</span>
-                                        <span className="text-muted-foreground">{(prev.unchanged_count ?? 0).toLocaleString()}</span>
-                                        <span>&rarr;</span>
-                                        <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                              {/* Initial folder counts (no predecessor) */}
-                              {!prev && hasNonZeroFolderCounts(v) && (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium">Folder Counts</p>
-                                  <div className="mt-1 space-y-0.5">
-                                    {(v.add_count ?? 0) > 0 && (
-                                      <div className="flex items-center gap-1.5">
-                                        <Plus className={`${sp.icon} text-green-500 flex-shrink-0`} />
-                                        <span className="text-muted-foreground">Added:</span>
-                                        <span className="font-medium">{(v.add_count ?? 0).toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {(v.delete_count ?? 0) > 0 && (
-                                      <div className="flex items-center gap-1.5">
-                                        <X className={`${sp.icon} text-red-500 flex-shrink-0`} />
-                                        <span className="text-muted-foreground">Deleted:</span>
-                                        <span className="font-medium">{(v.delete_count ?? 0).toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {(v.modify_count ?? 0) > 0 && (
-                                      <div className="flex items-center gap-1.5">
-                                        <Triangle className={`${sp.icon} text-blue-500 flex-shrink-0`} fill="currentColor" />
-                                        <span className="text-muted-foreground">Modified:</span>
-                                        <span className="font-medium">{(v.modify_count ?? 0).toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                    {(v.unchanged_count ?? 0) > 0 && (
-                                      <div className="flex items-center gap-1.5">
-                                        <Minus className={`${sp.icon} text-foreground flex-shrink-0`} />
-                                        <span className="text-muted-foreground">Unchanged:</span>
-                                        <span className="font-medium">{(v.unchanged_count ?? 0).toLocaleString()}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           </CollapsibleContent>
                         </Collapsible>

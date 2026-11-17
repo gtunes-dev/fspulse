@@ -6,9 +6,10 @@ import { ScansView } from './ScansView'
 import { ItemsView } from './ItemsView'
 import { VersionsView } from './VersionsView'
 import { HashesView } from './HashesView'
+import { SnapshotsView } from './SnapshotsView'
 import { QueryView } from './QueryView'
 
-const VALID_TABS = ['roots', 'scans', 'items', 'versions', 'hashes', 'query'] as const
+const VALID_TABS = ['roots', 'scans', 'snapshots', 'items', 'versions', 'hashes', 'query'] as const
 type TabValue = typeof VALID_TABS[number]
 
 export function ExplorePage() {
@@ -44,6 +45,7 @@ export function ExplorePage() {
         <TabsList>
           <TabsTrigger value="roots">Roots</TabsTrigger>
           <TabsTrigger value="scans">Scans</TabsTrigger>
+          <TabsTrigger value="snapshots">Snapshots</TabsTrigger>
           <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="versions">Versions</TabsTrigger>
           <TabsTrigger value="hashes">Hashes</TabsTrigger>
@@ -56,6 +58,9 @@ export function ExplorePage() {
         </div>
         <div className={`mt-2 ${currentTab === 'scans' ? '' : 'hidden'}`}>
           <ScansView />
+        </div>
+        <div className={`mt-2 ${currentTab === 'snapshots' ? '' : 'hidden'}`}>
+          <SnapshotsView />
         </div>
         <div className={`mt-2 ${currentTab === 'items' ? '' : 'hidden'}`}>
           <ItemsView />

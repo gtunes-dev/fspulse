@@ -143,7 +143,7 @@ hashes where hash_state:(S) show item_path, file_hash
 scans where root_id:(1) order by started_at desc limit 10
 items where file_extension:('pdf') show item_path, item_name
 versions where is_current:(T), is_deleted:(F), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
-scans group by root_id show root_id, count(*), max(total_size) order by count(*) desc
+scans group by root_id show root_id, count(*) order by count(*) desc
 hashes group by hash_state show hash_state, count(*)
 ```
 

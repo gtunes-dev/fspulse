@@ -45,13 +45,12 @@ pub fn get_size_history(
     let (from_timestamp, _) = Utils::range_date_bounds(from_date_str, from_date_str)?;
 
     let sql = r#"
-        SELECT iv.first_scan_id, s.started_at, iv.size
+        SELECT iv.first_seen_at, iv.size
         FROM item_versions iv
-        JOIN scans s ON iv.first_scan_id = s.scan_id
         WHERE iv.item_id = ?
           AND iv.size IS NOT NULL
-          AND s.started_at BETWEEN ? AND ?
-        ORDER BY s.started_at ASC"#;
+          AND iv.first_seen_at BETWEEN ? AND ?
+        ORDER BY iv.first_seen_at ASC"#;
 
     let mut stmt = conn.prepare_cached(sql)?;
     let rows = stmt.query_map(
@@ -69,17 +68,15 @@ pub fn get_size_history(
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SizeHistoryPoint {
-    pub scan_id: i64,
-    pub started_at: i64,
+    pub first_seen_at: i64,
     pub size: i64,
 }
 
 impl SizeHistoryPoint {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(SizeHistoryPoint {
-            scan_id: row.get(0)?,
-            started_at: row.get(1)?,
-            size: row.get(2)?,
+            first_seen_at: row.get(0)?,
+            size: row.get(1)?,
         })
     }
 }
@@ -98,11 +95,13 @@ pub struct TemporalTreeItem {
     pub item_name: String,
     pub item_type: ItemType,
     pub has_validator: bool,
-    pub first_scan_id: i64,
+    pub first_seen_at: i64,
     pub is_added: bool,
     pub is_deleted: bool,
     pub mod_date: Option<i64>,
     pub size: Option<i64>,
+    // Descendant change counts (folders only, computed at query time
+    // via hierarchy_id range queries in compute_descendant_counts)
     pub add_count: Option<i64>,
     pub modify_count: Option<i64>,
     pub delete_count: Option<i64>,
@@ -133,13 +132,13 @@ fn temporal_children_where(parent_path: &str) -> (String, String, String) {
 
     let where_fragment = format!(
         "WHERE i.root_id = ?1
-           AND iv.first_scan_id = (
-               SELECT MAX(first_scan_id)
+           AND iv.first_seen_at = (
+               SELECT MAX(first_seen_at)
                FROM item_versions
                WHERE item_id = i.item_id
-                 AND first_scan_id <= ?2
+                 AND first_seen_at <= ?2
            )
-           AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
+           AND (iv.is_deleted = 0 OR iv.first_seen_at = ?2)
            AND i.item_path >= ?3
            AND i.item_path < ?4
            AND i.item_path != ?5
@@ -165,8 +164,8 @@ pub fn count_temporal_immediate_children(
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
              AND hv.item_version = iv.item_version
-             AND hv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM hash_versions
+             AND hv.first_seen_at = (
+                 SELECT MAX(first_seen_at) FROM hash_versions
                  WHERE item_id = i.item_id AND item_version = iv.item_version
              )
          {}",
@@ -202,19 +201,18 @@ pub fn get_temporal_immediate_children(
         _ => String::new(),
     };
 
-    // Query now includes hierarchy_id from items for descendant count computation
+    // Query includes hierarchy_id from items for descendant count computation
     let sql = format!(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
-                iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
-                iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
+                iv.first_seen_at, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
                 iv.val_state, hv.hash_state,
                 i.hierarchy_id
          FROM items i
          JOIN item_versions iv ON iv.item_id = i.item_id
          LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
              AND hv.item_version = iv.item_version
-             AND hv.first_scan_id = (
-                 SELECT MAX(first_scan_id) FROM hash_versions
+             AND hv.first_seen_at = (
+                 SELECT MAX(first_seen_at) FROM hash_versions
                  WHERE item_id = i.item_id AND item_version = iv.item_version
              )
          {}
@@ -234,19 +232,19 @@ pub fn get_temporal_immediate_children(
                     item_name: row.get(2)?,
                     item_type: ItemType::from_i64(row.get(3)?),
                     has_validator: row.get::<_, i64>(4)? != 0,
-                    first_scan_id: row.get(5)?,
+                    first_seen_at: row.get(5)?,
                     is_added: row.get(6)?,
                     is_deleted: row.get(7)?,
                     mod_date: row.get(8)?,
                     size: row.get(9)?,
-                    add_count: row.get(10)?,
-                    modify_count: row.get(11)?,
-                    delete_count: row.get(12)?,
-                    unchanged_count: row.get(13)?,
-                    val_state: row.get(14)?,
-                    hash_state: row.get(15)?,
+                    add_count: None,
+                    modify_count: None,
+                    delete_count: None,
+                    unchanged_count: None,
+                    val_state: row.get(10)?,
+                    hash_state: row.get(11)?,
                 },
-                row.get::<_, Option<Vec<u8>>>(16)?, // hierarchy_id
+                row.get::<_, Option<Vec<u8>>>(12)?, // hierarchy_id
             ))
         },
     )?;
@@ -255,15 +253,14 @@ pub fn get_temporal_immediate_children(
         rows.collect::<Result<Vec<_>, _>>()?;
     drop(stmt);
 
-    // Compute descendant change counts for directory children using hierarchy_id ranges.
-    // For each folder, the subtree range is (folder_hid, next_sibling_hid).
-    // Items are already sorted by path (= hierarchy_id order), so the next
-    // item's hierarchy_id is the upper bound.
+    // Compute descendant change counts for directory children using
+    // hierarchy_id ranges. Each folder's subtree range is
+    // (folder_hid, next_sibling_hid).
     compute_descendant_counts(&conn, root_id, scan_id, items_with_hid)
 }
 
-/// Compute descendant change counts for directory children using hierarchy_id
-/// range queries on item_versions. Replaces the precomputed folder counts.
+/// Compute descendant change counts for directory children using
+/// hierarchy_id range queries on item_versions.
 fn compute_descendant_counts(
     conn: &rusqlite::Connection,
     root_id: i64,
@@ -274,15 +271,12 @@ fn compute_descendant_counts(
         return Ok(Vec::new());
     }
 
-    // Build hierarchy_id list in order, so we can compute (hid, next_hid) ranges.
-    // Clone so we don't borrow items_with_hid (which we consume below).
     let hids: Vec<Option<Vec<u8>>> = items_with_hid
         .iter()
         .map(|(_, hid)| hid.clone())
         .collect();
 
-    // Prepared statement for descendant counts within a hierarchy range.
-    // Uses idx_iv_root_firstscan_hid: (root_id, first_scan_id, hierarchy_id)
+    // Uses idx_versions_root_firstseen_hid: (root_id, first_seen_at, hierarchy_id)
     let mut count_stmt_bounded = conn.prepare_cached(
         "SELECT
             COALESCE(SUM(CASE WHEN is_added = 1 THEN 1 ELSE 0 END), 0),
@@ -290,12 +284,11 @@ fn compute_descendant_counts(
             COALESCE(SUM(CASE WHEN is_deleted = 1 THEN 1 ELSE 0 END), 0)
          FROM item_versions
          WHERE root_id = ?1
-           AND first_scan_id = ?2
+           AND first_seen_at = ?2
            AND hierarchy_id > ?3
            AND hierarchy_id < ?4",
     )?;
 
-    // For the last child, there's no upper bound from a next sibling.
     let mut count_stmt_unbounded = conn.prepare_cached(
         "SELECT
             COALESCE(SUM(CASE WHEN is_added = 1 THEN 1 ELSE 0 END), 0),
@@ -303,7 +296,7 @@ fn compute_descendant_counts(
             COALESCE(SUM(CASE WHEN is_deleted = 1 THEN 1 ELSE 0 END), 0)
          FROM item_versions
          WHERE root_id = ?1
-           AND first_scan_id = ?2
+           AND first_seen_at = ?2
            AND hierarchy_id > ?3",
     )?;
 
@@ -312,7 +305,6 @@ fn compute_descendant_counts(
     for (idx, (mut item, hid)) in items_with_hid.into_iter().enumerate() {
         if item.item_type == ItemType::Directory && !item.is_deleted {
             if let Some(ref my_hid) = hid {
-                // Find next sibling's hierarchy_id (next item in the sorted list)
                 let next_hid = hids.get(idx + 1).and_then(|h| h.as_deref());
 
                 let (adds, mods, dels): (i64, i64, i64) = if let Some(next) = next_hid {
@@ -330,10 +322,8 @@ fn compute_descendant_counts(
                 item.add_count = Some(adds);
                 item.modify_count = Some(mods);
                 item.delete_count = Some(dels);
-                // unchanged_count: use 1 as a sentinel to indicate the folder
-                // has content, so the tree renders it as expandable. The exact
-                // count isn't needed for the tree view — only that it's non-zero
-                // when the folder is alive.
+                // Sentinel: non-zero unchanged_count signals the folder
+                // has content and should be rendered as expandable.
                 item.unchanged_count = Some(1);
             }
         }
@@ -347,13 +337,13 @@ fn compute_descendant_counts(
 /// Common WHERE fragment for temporal search queries.
 const TEMPORAL_SEARCH_WHERE: &str =
     "WHERE i.root_id = ?1
-       AND iv.first_scan_id = (
-           SELECT MAX(first_scan_id)
+       AND iv.first_seen_at = (
+           SELECT MAX(first_seen_at)
            FROM item_versions
            WHERE item_id = i.item_id
-             AND first_scan_id <= ?2
+             AND first_seen_at <= ?2
        )
-       AND (iv.is_deleted = 0 OR iv.first_scan_id = ?2)
+       AND (iv.is_deleted = 0 OR iv.first_seen_at = ?2)
        AND i.item_name LIKE '%' || ?3 || '%'";
 
 const TEMPORAL_SEARCH_FROM: &str =
@@ -361,8 +351,8 @@ const TEMPORAL_SEARCH_FROM: &str =
      JOIN item_versions iv ON iv.item_id = i.item_id
      LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
          AND hv.item_version = iv.item_version
-         AND hv.first_scan_id = (
-             SELECT MAX(first_scan_id) FROM hash_versions
+         AND hv.first_seen_at = (
+             SELECT MAX(first_seen_at) FROM hash_versions
              WHERE item_id = i.item_id AND item_version = iv.item_version
          )";
 
@@ -409,8 +399,7 @@ pub fn get_temporal_search_items(
 
     let sql = format!(
         "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
-                iv.first_scan_id, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
-                iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
+                iv.first_seen_at, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
                 iv.val_state, hv.hash_state
          {} {} ORDER BY i.item_path COLLATE natural_path ASC{}{}",
         TEMPORAL_SEARCH_FROM, TEMPORAL_SEARCH_WHERE, limit_clause, offset_clause
@@ -427,17 +416,17 @@ pub fn get_temporal_search_items(
                 item_name: row.get(2)?,
                 item_type: ItemType::from_i64(row.get(3)?),
                 has_validator: row.get::<_, i64>(4)? != 0,
-                first_scan_id: row.get(5)?,
+                first_seen_at: row.get(5)?,
                 is_added: row.get(6)?,
                 is_deleted: row.get(7)?,
                 mod_date: row.get(8)?,
                 size: row.get(9)?,
-                add_count: row.get(10)?,
-                modify_count: row.get(11)?,
-                delete_count: row.get(12)?,
-                unchanged_count: row.get(13)?,
-                val_state: row.get(14)?,
-                hash_state: row.get(15)?,
+                add_count: None,
+                modify_count: None,
+                delete_count: None,
+                unchanged_count: None,
+                val_state: row.get(10)?,
+                hash_state: row.get(11)?,
             })
         },
     )?;
@@ -470,20 +459,13 @@ fn serialize_hash<S: Serializer>(
 #[derive(Clone, Debug, Serialize)]
 pub struct VersionHistoryEntry {
     pub item_version: i64,
-    pub first_scan_id: i64,
-    pub last_scan_id: i64,
-    pub first_scan_date: i64,
-    pub last_scan_date: i64,
+    pub first_seen_at: i64,
+    pub last_seen_at: i64,
     pub is_added: bool,
     pub is_deleted: bool,
     pub access: i64,
     pub mod_date: Option<i64>,
     pub size: Option<i64>,
-    // Folder counts (NULL for files)
-    pub add_count: Option<i64>,
-    pub modify_count: Option<i64>,
-    pub delete_count: Option<i64>,
-    pub unchanged_count: Option<i64>,
     // Integrity fields (NULL for non-files or when no record exists)
     pub hash_state: Option<i64>,
     #[serde(serialize_with = "serialize_optional_hash")]
@@ -499,42 +481,32 @@ impl VersionHistoryEntry {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(VersionHistoryEntry {
             item_version: row.get(0)?,
-            first_scan_id: row.get(1)?,
-            last_scan_id: row.get(2)?,
-            first_scan_date: row.get(3)?,
-            last_scan_date: row.get(4)?,
-            is_added: row.get(5)?,
-            is_deleted: row.get(6)?,
-            access: row.get(7)?,
-            mod_date: row.get(8)?,
-            size: row.get(9)?,
-            add_count: row.get(10)?,
-            modify_count: row.get(11)?,
-            delete_count: row.get(12)?,
-            unchanged_count: row.get(13)?,
-            hash_state: row.get(14)?,
-            file_hash: row.get(15)?,
-            val_state: row.get(16)?,
-            val_error: row.get(17)?,
-            val_reviewed_at: row.get(18)?,
-            hash_reviewed_at: row.get(19)?,
+            first_seen_at: row.get(1)?,
+            last_seen_at: row.get(2)?,
+            is_added: row.get(3)?,
+            is_deleted: row.get(4)?,
+            access: row.get(5)?,
+            mod_date: row.get(6)?,
+            size: row.get(7)?,
+            hash_state: row.get(8)?,
+            file_hash: row.get(9)?,
+            val_state: row.get(10)?,
+            val_error: row.get(11)?,
+            val_reviewed_at: row.get(12)?,
+            hash_reviewed_at: row.get(13)?,
         })
     }
 }
 
 const VERSION_HISTORY_COLUMNS: &str =
-    "v.item_version, v.first_scan_id, v.last_scan_id, \
-     s1.started_at, s2.started_at, \
+    "v.item_version, v.first_seen_at, v.last_seen_at, \
      v.is_added, v.is_deleted, v.access, \
      v.mod_date, v.size, \
-     v.add_count, v.modify_count, v.delete_count, v.unchanged_count, \
      hv.hash_state, hv.file_hash, v.val_state, v.val_error, \
      v.val_reviewed_at, v.hash_reviewed_at";
 
 const VERSION_HISTORY_JOINS: &str =
-    "JOIN scans s1 ON s1.scan_id = v.first_scan_id \
-     JOIN scans s2 ON s2.scan_id = v.last_scan_id \
-     LEFT JOIN hash_versions hv ON hv.item_id = v.item_id \
+    "LEFT JOIN hash_versions hv ON hv.item_id = v.item_id \
        AND hv.item_version = v.item_version \
        AND hv.first_scan_id = ( \
            SELECT MAX(hv2.first_scan_id) FROM hash_versions hv2 \
@@ -581,13 +553,13 @@ pub fn get_versions(
 }
 
 /// Find the item_version that was active at a given scan_id.
-/// Returns the version where first_scan_id <= scan_id <= last_scan_id.
+/// Returns the version where first_seen_at <= scan_id <= last_seen_at.
 pub fn get_version_at_scan(item_id: i64, scan_id: i64) -> Result<Option<i64>, FsPulseError> {
     let conn = Database::get_connection()?;
     let version: Option<i64> = conn
         .query_row(
             "SELECT item_version FROM item_versions \
-             WHERE item_id = ? AND first_scan_id <= ? AND last_scan_id >= ? \
+             WHERE item_id = ? AND first_seen_at <= ? AND last_seen_at >= ? \
              LIMIT 1",
             params![item_id, scan_id, scan_id],
             |row| row.get(0),
@@ -635,9 +607,9 @@ pub fn get_children_counts(
         FROM items i
         JOIN item_versions iv ON iv.item_id = i.item_id
         WHERE i.root_id = ?1
-          AND iv.first_scan_id = (
-              SELECT MAX(first_scan_id) FROM item_versions
-              WHERE item_id = i.item_id AND first_scan_id <= ?2
+          AND iv.first_seen_at = (
+              SELECT MAX(first_seen_at) FROM item_versions
+              WHERE item_id = i.item_id AND first_seen_at <= ?2
           )
           AND iv.is_deleted = 0
           AND i.item_path >= ?3
@@ -761,9 +733,9 @@ pub fn get_integrity_state(
         .query_row(
             "SELECT item_version, val_state, val_error FROM item_versions \
              WHERE item_id = ?1 \
-               AND first_scan_id = ( \
-                   SELECT MAX(first_scan_id) FROM item_versions \
-                   WHERE item_id = ?1 AND first_scan_id <= ?2 \
+               AND first_seen_at = ( \
+                   SELECT MAX(first_seen_at) FROM item_versions \
+                   WHERE item_id = ?1 AND first_seen_at <= ?2 \
                )",
             params![item_id, scan_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),

@@ -1,7 +1,6 @@
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
-use crate::undo_log::UndoLog;
 
 use chrono::{Local, NaiveDate, TimeZone, Utc};
 use log::info;
@@ -11,12 +10,12 @@ use serde::Serialize;
 use std::fmt;
 
 const SQL_SCAN_ID_OR_LATEST: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, file_count, folder_count, total_size, new_hash_suspect_count, new_val_invalid_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_baseline_count, hash_suspect_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, new_hash_suspect_count, new_val_invalid_count, error
         FROM scans
         WHERE scan_id = IFNULL(?1, (SELECT MAX(scan_id) FROM scans))";
 
 const SQL_LATEST_FOR_ROOT: &str =
-    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, file_count, folder_count, total_size, new_hash_suspect_count, new_val_invalid_count, add_count, modify_count, delete_count, val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count, hash_unknown_count, hash_baseline_count, hash_suspect_count, error
+    "SELECT scan_id, root_id, schedule_id, started_at, ended_at, was_restarted, state, is_hash, hash_all, is_val, new_hash_suspect_count, new_val_invalid_count, error
         FROM scans
         WHERE root_id = ?
         ORDER BY scan_id DESC LIMIT 1";
@@ -85,21 +84,8 @@ pub struct Scan {
     was_restarted: bool,
     state: ScanState,
     analysis_spec: AnalysisSpec,
-    file_count: Option<i64>,
-    folder_count: Option<i64>,
-    total_size: Option<i64>,
     new_hash_suspect_count: Option<i64>,
     new_val_invalid_count: Option<i64>,
-    add_count: Option<i64>,
-    modify_count: Option<i64>,
-    delete_count: Option<i64>,
-    val_unknown_count: Option<i64>,
-    val_valid_count: Option<i64>,
-    val_invalid_count: Option<i64>,
-    val_no_validator_count: Option<i64>,
-    hash_unknown_count: Option<i64>,
-    hash_baseline_count: Option<i64>,
-    hash_suspect_count: Option<i64>,
     error: Option<String>,
 }
 
@@ -107,24 +93,18 @@ pub struct Scan {
 #[repr(i64)]
 pub enum ScanState {
     Scanning = 1,
-    Sweeping = 2,
-    AnalyzingFiles = 3,
-    AnalyzingScan = 7,
-    Completed = 4,
-    Stopped = 5,
-    Error = 6,
+    Completed = 2,
+    Stopped = 3,
+    Error = 4,
 }
 
 impl ScanState {
     pub fn from_i64(value: i64) -> Self {
         match value {
             1 => ScanState::Scanning,
-            2 => ScanState::Sweeping,
-            3 => ScanState::AnalyzingFiles,
-            7 => ScanState::AnalyzingScan,
-            4 => ScanState::Completed,
-            5 => ScanState::Stopped,
-            6 => ScanState::Error,
+            2 => ScanState::Completed,
+            3 => ScanState::Stopped,
+            4 => ScanState::Error,
             _ => panic!("Invalid ScanState value: {}", value),
         }
     }
@@ -136,9 +116,6 @@ impl ScanState {
     pub fn short_name(&self) -> &'static str {
         match self {
             ScanState::Scanning => "S",
-            ScanState::Sweeping => "W",
-            ScanState::AnalyzingFiles => "AF",
-            ScanState::AnalyzingScan => "AS",
             ScanState::Completed => "C",
             ScanState::Stopped => "P",
             ScanState::Error => "E",
@@ -148,9 +125,6 @@ impl ScanState {
     pub fn full_name(&self) -> &'static str {
         match self {
             ScanState::Scanning => "Scanning",
-            ScanState::Sweeping => "Sweeping",
-            ScanState::AnalyzingFiles => "Analyzing Files",
-            ScanState::AnalyzingScan => "Analyzing Scan",
             ScanState::Completed => "Completed",
             ScanState::Stopped => "Stopped",
             ScanState::Error => "Error",
@@ -158,21 +132,12 @@ impl ScanState {
     }
 
     pub fn from_string(s: &str) -> Option<Self> {
-        // Try to match against full name or short name (case-insensitive)
         match s.to_ascii_uppercase().as_str() {
-            // Full names
             "SCANNING" => Some(ScanState::Scanning),
-            "SWEEPING" => Some(ScanState::Sweeping),
-            "ANALYZING FILES" | "ANALYZINGFILES" | "ANALYZING" => Some(ScanState::AnalyzingFiles),
-            "ANALYZING SCAN" | "ANALYZINGSCAN" => Some(ScanState::AnalyzingScan),
             "COMPLETED" => Some(ScanState::Completed),
             "STOPPED" => Some(ScanState::Stopped),
             "ERROR" => Some(ScanState::Error),
-            // Short names
             "S" => Some(ScanState::Scanning),
-            "W" => Some(ScanState::Sweeping),
-            "AF" | "A" => Some(ScanState::AnalyzingFiles),
-            "AS" => Some(ScanState::AnalyzingScan),
             "C" => Some(ScanState::Completed),
             "P" => Some(ScanState::Stopped),
             "E" => Some(ScanState::Error),
@@ -213,21 +178,8 @@ impl Scan {
             was_restarted: false,
             state: ScanState::from_i64(state),
             analysis_spec,
-            file_count: None,
-            folder_count: None,
-            total_size: None,
             new_hash_suspect_count: None,
             new_val_invalid_count: None,
-            add_count: None,
-            modify_count: None,
-            delete_count: None,
-            val_unknown_count: None,
-            val_valid_count: None,
-            val_invalid_count: None,
-            val_no_validator_count: None,
-            hash_unknown_count: None,
-            hash_baseline_count: None,
-            hash_suspect_count: None,
             error: None,
         }
     }
@@ -306,22 +258,9 @@ impl Scan {
                         hash_mode,
                         is_val,
                     },
-                    file_count: row.get(10)?,
-                    folder_count: row.get(11)?,
-                    total_size: row.get(12)?,
-                    new_hash_suspect_count: row.get(13)?,
-                    new_val_invalid_count: row.get(14)?,
-                    add_count: row.get(15)?,
-                    modify_count: row.get(16)?,
-                    delete_count: row.get(17)?,
-                    val_unknown_count: row.get(18)?,
-                    val_valid_count: row.get(19)?,
-                    val_invalid_count: row.get(20)?,
-                    val_no_validator_count: row.get(21)?,
-                    hash_unknown_count: row.get(22)?,
-                    hash_baseline_count: row.get(23)?,
-                    hash_suspect_count: row.get(24)?,
-                    error: row.get(25)?,
+                    new_hash_suspect_count: row.get(10)?,
+                    new_val_invalid_count: row.get(11)?,
+                    error: row.get(12)?,
                 })
             })
             .optional()?;
@@ -357,15 +296,6 @@ impl Scan {
         self.error.as_deref()
     }
 
-    pub fn file_count(&self) -> Option<i64> {
-        self.file_count
-    }
-
-    pub fn folder_count(&self) -> Option<i64> {
-        self.folder_count
-    }
-
-
     /// Resolve a date to the most recent completed scan for a root at or before that date.
     /// If `date_str` is None, returns the most recent completed scan for the root.
     /// Returns (scan_id, started_at) or None if no matching scan exists.
@@ -383,7 +313,7 @@ impl Scan {
                 let result: Option<(i64, i64)> = conn
                     .query_row(
                         "SELECT scan_id, started_at FROM scans
-                         WHERE root_id = ? AND state = 4 AND started_at <= ?
+                         WHERE root_id = ? AND state = 2 AND started_at <= ?
                          ORDER BY started_at DESC LIMIT 1",
                         params![root_id, end_ts],
                         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -396,7 +326,7 @@ impl Scan {
                 let result: Option<(i64, i64)> = conn
                     .query_row(
                         "SELECT scan_id, started_at FROM scans
-                         WHERE root_id = ? AND state = 4
+                         WHERE root_id = ? AND state = 2
                          ORDER BY scan_id DESC LIMIT 1",
                         params![root_id],
                         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -408,221 +338,61 @@ impl Scan {
         }
     }
 
-    pub fn set_total_size(
-        &mut self,
-        conn: &Connection,
-        total_size: i64,
-    ) -> Result<(), FsPulseError> {
-        let rows_updated = conn.execute(
-            "UPDATE scans SET total_size = ? WHERE scan_id = ?",
-            [total_size, self.scan_id],
-        )?;
-
-        if rows_updated == 0 {
-            return Err(FsPulseError::Error(format!(
-                "Could not update the total_size of Scan Id {} to {}",
-                self.scan_id, total_size
-            )));
-        }
-
-        self.total_size = Some(total_size);
-
-        Ok(())
-    }
-
-    pub fn set_state_sweeping(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
-        match self.state() {
-            ScanState::Scanning => self.set_state(conn, ScanState::Sweeping),
-            _ => Err(FsPulseError::Error(format!(
-                "Can't set Scan Id {} to state sweeping from state {}",
-                self.scan_id(),
-                self.state().as_i64()
-            ))),
-        }
-    }
-
-    pub fn set_state_analyzing_files(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
-        match self.state() {
-            ScanState::Sweeping => self.set_state(conn, ScanState::AnalyzingFiles),
-            _ => Err(FsPulseError::Error(format!(
-                "Can't set Scan Id {} to state analyzing_files from state {}",
-                self.scan_id(),
-                self.state().as_i64()
-            ))),
-        }
-    }
-
-    pub fn set_state_analyzing_scan(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
-        match self.state() {
-            ScanState::AnalyzingFiles => self.set_state(conn, ScanState::AnalyzingScan),
-            _ => Err(FsPulseError::Error(format!(
-                "Can't set Scan Id {} to state analyzing_scan from state {}",
-                self.scan_id(),
-                self.state().as_i64()
-            ))),
-        }
-    }
-
     pub fn set_state_completed(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::AnalyzingScan => {
-                // Use IMMEDIATE transaction for read-then-write pattern
+            ScanState::Scanning => {
                 let result =
                     Database::immediate_transaction(conn, |c| {
-                        // Compute file_count and folder_count from current versions (exclude deleted)
-                        let (file_count, folder_count): (i64, i64) = c
-                            .query_row(
-                                "SELECT
-                                    COALESCE(SUM(CASE WHEN i.item_type = 0 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN i.item_type = 1 THEN 1 ELSE 0 END), 0)
-                                 FROM items i
-                                 JOIN item_versions iv ON iv.item_id = i.item_id
-                                 WHERE i.root_id = ? AND iv.last_scan_id = ? AND iv.is_deleted = 0",
-                                params![self.root_id, self.scan_id],
-                                |row| Ok((row.get(0)?, row.get(1)?)),
-                            )
-                            .unwrap_or((0, 0));
-
-                        // Compute new_hash_suspect_count: hash_versions with hash_state=2
-                        // first detected in this scan (new integrity evidence).
+                        // New hash suspects: hash_versions with hash_state=2
+                        // first seen during this scan (first_seen_at >= scan.started_at).
                         let new_hash_suspect_count: i64 = c
                             .query_row(
-                                "SELECT COUNT(*) FROM hash_versions WHERE first_scan_id = ? AND hash_state = 2",
+                                "SELECT COUNT(*) FROM hash_versions
+                                 WHERE first_seen_at >= (
+                                     SELECT started_at FROM scans WHERE scan_id = ?
+                                 ) AND hash_state = 2",
                                 [self.scan_id],
                                 |row| row.get(0),
                             )
                             .unwrap_or(0);
 
-                        // Compute new_val_invalid_count: item_versions with val_state=2
-                        // validated in this scan (new validation failures).
+                        // New validation failures: val_state=2 validated
+                        // during this scan (val_at >= scan.started_at).
                         let new_val_invalid_count: i64 = c
                             .query_row(
-                                "SELECT COUNT(*) FROM item_versions WHERE val_scan_id = ? AND val_state = 2",
-                                [self.scan_id],
+                                "SELECT COUNT(*) FROM item_versions
+                                 WHERE root_id = ?
+                                   AND val_state = 2
+                                   AND val_at >= (
+                                       SELECT started_at FROM scans WHERE scan_id = ?
+                                   )",
+                                params![self.root_id, self.scan_id],
                                 |row| row.get(0),
                             )
                             .unwrap_or(0);
 
-                        // Compute add_count, modify_count, delete_count from versions created this scan
-                        let (add_count, modify_count, delete_count): (i64, i64, i64) = c
-                            .query_row(
-                                "SELECT
-                                    COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 0
-                                        AND (pv.item_id IS NULL OR pv.is_deleted = 1)), 0),
-                                    COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 0
-                                        AND pv.item_id IS NOT NULL AND pv.is_deleted = 0), 0),
-                                    COALESCE(COUNT(*) FILTER (WHERE iv.is_deleted = 1
-                                        AND pv.item_id IS NOT NULL AND pv.is_deleted = 0), 0)
-                                 FROM item_versions iv
-                                 LEFT JOIN item_versions pv ON pv.item_id = iv.item_id
-                                     AND pv.first_scan_id = (
-                                         SELECT MAX(first_scan_id) FROM item_versions
-                                         WHERE item_id = iv.item_id AND first_scan_id < iv.first_scan_id
-                                     )
-                                 WHERE iv.root_id = ? AND iv.first_scan_id = ?",
-                                params![self.root_id, self.scan_id],
-                                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-                            )
-                            .unwrap_or((0, 0, 0));
-
-                        // Compute val/hash state counts for alive files at this scan.
-                        //
-                        // Hash state from hash_versions keyed on item_version_id.
-                        // A version never hashed has no row → hv.hash_state IS NULL → "unknown".
-                        //
-                        // Validation state from item_versions columns and items.has_validator:
-                        //   - "No Validator": i.has_validator = 0
-                        //   - "Unknown":      i.has_validator = 1 AND iv.val_state IS NULL
-                        //   - "Valid":         iv.val_state = 1
-                        //   - "Invalid":       iv.val_state = 2
-                        let (vu, vv, vi, vn, hu, hv, hs): (i64, i64, i64, i64, i64, i64, i64) = c
-                            .query_row(
-                                "SELECT
-                                    COALESCE(SUM(CASE WHEN i.has_validator = 1 AND iv.val_state IS NULL THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.val_state = 1 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN iv.val_state = 2 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN i.has_validator = 0 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN hv.hash_state IS NULL THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN hv.hash_state = 1 THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN hv.hash_state = 2 THEN 1 ELSE 0 END), 0)
-                                 FROM item_versions iv
-                                 JOIN items i ON i.item_id = iv.item_id
-                                 LEFT JOIN hash_versions hv ON hv.item_id = iv.item_id
-                                     AND hv.item_version = iv.item_version
-                                     AND hv.first_scan_id = (
-                                         SELECT MAX(first_scan_id) FROM hash_versions
-                                         WHERE item_id = iv.item_id AND item_version = iv.item_version
-                                     )
-                                 WHERE iv.root_id = ? AND i.item_type = 0
-                                   AND iv.last_scan_id = ? AND iv.is_deleted = 0",
-                                params![self.root_id, self.scan_id],
-                                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?,
-                                          row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
-                            )
-                            .unwrap_or((0, 0, 0, 0, 0, 0, 0));
-
-                        // Update the scan with all counts and set state to Completed in one operation
                         c.execute(
                             "UPDATE scans SET
-                                file_count = ?,
-                                folder_count = ?,
                                 new_hash_suspect_count = ?,
                                 new_val_invalid_count = ?,
-                                add_count = ?,
-                                modify_count = ?,
-                                delete_count = ?,
-                                val_unknown_count = ?,
-                                val_valid_count = ?,
-                                val_invalid_count = ?,
-                                val_no_validator_count = ?,
-                                hash_unknown_count = ?,
-                                hash_baseline_count = ?,
-                                hash_suspect_count = ?,
                                 state = ?,
                                 ended_at = strftime('%s', 'now', 'utc')
                             WHERE scan_id = ?",
                             params![
-                                file_count, folder_count,
                                 new_hash_suspect_count, new_val_invalid_count,
-                                add_count, modify_count, delete_count,
-                                vu, vv, vi, vn, hu, hv, hs,
                                 ScanState::Completed.as_i64(),
                                 self.scan_id,
                             ],
                         )?;
 
-                        // Clear the undo log atomically with the state transition.
-                        // Must be in this transaction so a crash can't leave a completed
-                        // scan with a stale undo log.
-                        UndoLog::clear(c)?;
-
-                        Ok((file_count, folder_count,
-                            new_hash_suspect_count, new_val_invalid_count,
-                            add_count, modify_count, delete_count,
-                            vu, vv, vi, vn, hu, hv, hs))
+                        Ok((new_hash_suspect_count, new_val_invalid_count))
                     })?;
 
-                let (file_count, folder_count,
-                     new_hash_suspect_count, new_val_invalid_count,
-                     add_count, modify_count, delete_count,
-                     vu, vv, vi, vn, hu, hv, hs) = result;
+                let (new_hash_suspect_count, new_val_invalid_count) = result;
 
-                // Update in-memory struct
                 self.state = ScanState::Completed;
-                self.file_count = Some(file_count);
-                self.folder_count = Some(folder_count);
                 self.new_hash_suspect_count = Some(new_hash_suspect_count);
                 self.new_val_invalid_count = Some(new_val_invalid_count);
-                self.add_count = Some(add_count);
-                self.modify_count = Some(modify_count);
-                self.delete_count = Some(delete_count);
-                self.val_unknown_count = Some(vu);
-                self.val_valid_count = Some(vv);
-                self.val_invalid_count = Some(vi);
-                self.val_no_validator_count = Some(vn);
-                self.hash_unknown_count = Some(hu);
-                self.hash_baseline_count = Some(hv);
-                self.hash_suspect_count = Some(hs);
 
                 Ok(())
             }
@@ -636,7 +406,7 @@ impl Scan {
 
     pub fn set_state_stopped(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
-            ScanState::Scanning | ScanState::Sweeping | ScanState::AnalyzingFiles | ScanState::AnalyzingScan => {
+            ScanState::Scanning => {
                 Scan::stop_scan(conn, self, None)?;
                 self.state = ScanState::Stopped;
                 Ok(())
@@ -676,16 +446,15 @@ impl Scan {
         info!("Stopping scan {} (reason: {})...", scan.scan_id(), action);
 
         Database::immediate_transaction(conn, |c| {
-            // Roll back item_versions, orphaned identities, and undo log
-            UndoLog::rollback(c, scan.scan_id())?;
-
-            // Mark the scan as stopped (state=5) or error (state=6)
-            // Null the total_size that may have been set at the end of the scanning phase
-            let final_state = if error_message.is_some() { 6 } else { 5 };
+            let final_state = if error_message.is_some() {
+                ScanState::Error
+            } else {
+                ScanState::Stopped
+            };
 
             c.execute(
-                "UPDATE scans SET state = ?, total_size = NULL, error = ? WHERE scan_id = ?",
-                params![final_state, error_message, scan.scan_id()],
+                "UPDATE scans SET state = ?, error = ? WHERE scan_id = ?",
+                params![final_state.as_i64(), error_message, scan.scan_id()],
             )?;
 
             Ok(())
@@ -700,9 +469,6 @@ impl Scan {
 pub struct ScanSummary {
     pub scan_id: i64,
     pub started_at: i64,
-    pub add_count: Option<i64>,
-    pub modify_count: Option<i64>,
-    pub delete_count: Option<i64>,
 }
 
 /// Get the distinct local-date strings (YYYY-MM-DD) that have completed scans
@@ -733,7 +499,7 @@ pub fn get_scan_dates_for_month(
 
     let mut stmt = conn.prepare_cached(
         "SELECT started_at FROM scans
-         WHERE root_id = ? AND state = 4 AND started_at >= ? AND started_at <= ?
+         WHERE root_id = ? AND state = 2 AND started_at >= ? AND started_at <= ?
          ORDER BY started_at",
     )?;
 
@@ -773,9 +539,9 @@ pub fn get_scans_for_date(
     let (start_ts, end_ts) = crate::utils::Utils::single_date_bounds(date_str)?;
 
     let mut stmt = conn.prepare_cached(
-        "SELECT scan_id, started_at, add_count, modify_count, delete_count
+        "SELECT scan_id, started_at
          FROM scans
-         WHERE root_id = ? AND state = 4 AND started_at >= ? AND started_at <= ?
+         WHERE root_id = ? AND state = 2 AND started_at >= ? AND started_at <= ?
          ORDER BY started_at DESC",
     )?;
 
@@ -783,9 +549,6 @@ pub fn get_scans_for_date(
         Ok(ScanSummary {
             scan_id: row.get(0)?,
             started_at: row.get(1)?,
-            add_count: row.get(2)?,
-            modify_count: row.get(3)?,
-            delete_count: row.get(4)?,
         })
     })?;
 
@@ -803,32 +566,23 @@ mod tests {
     #[test]
     fn test_scan_state_as_i64() {
         assert_eq!(ScanState::Scanning.as_i64(), 1);
-        assert_eq!(ScanState::Sweeping.as_i64(), 2);
-        assert_eq!(ScanState::AnalyzingFiles.as_i64(), 3);
-        assert_eq!(ScanState::AnalyzingScan.as_i64(), 7);
-        assert_eq!(ScanState::Completed.as_i64(), 4);
-        assert_eq!(ScanState::Stopped.as_i64(), 5);
-        assert_eq!(ScanState::Error.as_i64(), 6);
+        assert_eq!(ScanState::Completed.as_i64(), 2);
+        assert_eq!(ScanState::Stopped.as_i64(), 3);
+        assert_eq!(ScanState::Error.as_i64(), 4);
     }
 
     #[test]
     fn test_scan_state_from_i64() {
         assert_eq!(ScanState::from_i64(1), ScanState::Scanning);
-        assert_eq!(ScanState::from_i64(2), ScanState::Sweeping);
-        assert_eq!(ScanState::from_i64(3), ScanState::AnalyzingFiles);
-        assert_eq!(ScanState::from_i64(7), ScanState::AnalyzingScan);
-        assert_eq!(ScanState::from_i64(4), ScanState::Completed);
-        assert_eq!(ScanState::from_i64(5), ScanState::Stopped);
-        assert_eq!(ScanState::from_i64(6), ScanState::Error);
+        assert_eq!(ScanState::from_i64(2), ScanState::Completed);
+        assert_eq!(ScanState::from_i64(3), ScanState::Stopped);
+        assert_eq!(ScanState::from_i64(4), ScanState::Error);
     }
 
     #[test]
     fn test_scan_state_round_trip() {
         let states = [
             ScanState::Scanning,
-            ScanState::Sweeping,
-            ScanState::AnalyzingFiles,
-            ScanState::AnalyzingScan,
             ScanState::Completed,
             ScanState::Stopped,
             ScanState::Error,
@@ -844,9 +598,6 @@ mod tests {
     #[test]
     fn test_scan_state_display() {
         assert_eq!(ScanState::Scanning.to_string(), "Scanning");
-        assert_eq!(ScanState::Sweeping.to_string(), "Sweeping");
-        assert_eq!(ScanState::AnalyzingFiles.to_string(), "Analyzing Files");
-        assert_eq!(ScanState::AnalyzingScan.to_string(), "Analyzing Scan");
         assert_eq!(ScanState::Completed.to_string(), "Completed");
         assert_eq!(ScanState::Stopped.to_string(), "Stopped");
         assert_eq!(ScanState::Error.to_string(), "Error");
