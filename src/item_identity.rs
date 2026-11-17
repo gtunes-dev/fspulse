@@ -1,8 +1,5 @@
 use log::warn;
-use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-
-use crate::{error::FsPulseError, item_version::ItemVersion, utils::Utils};
 
 #[repr(i64)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -137,78 +134,5 @@ impl Access {
 impl std::fmt::Display for Access {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.full_name())
-    }
-}
-
-/// Stable identity for an item in the new temporal model.
-///
-/// Maps to the `items` table. Identity columns (root_id, item_path, item_type) live
-/// only here — `item_versions` references items via `item_id`.
-pub struct ItemIdentity;
-
-impl ItemIdentity {
-    /// Insert a new item identity. Computes `item_name` from `path`.
-    /// Returns the new item_id.
-    pub fn insert(
-        conn: &Connection,
-        root_id: i64,
-        path: &str,
-        item_type: ItemType,
-        has_validator: bool,
-        file_extension: Option<&str>,
-    ) -> Result<i64, FsPulseError> {
-        let item_name = Utils::display_path_name(path);
-
-        conn.execute(
-            "INSERT INTO items (root_id, item_path, item_name, item_type, has_validator, file_extension)
-             VALUES (?, ?, ?, ?, ?, ?)",
-            params![root_id, path, item_name, item_type.as_i64(), has_validator as i64, file_extension],
-        )?;
-
-        let item_id: i64 = conn.query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
-        Ok(item_id)
-    }
-}
-
-/// An existing item's identity combined with its current version.
-///
-/// Used by the walk phase to look up an item by (root_id, path, type) and get
-/// both the item_id and the current version state in a single JOIN query,
-/// eliminating the redundant `ItemVersion::get_current` calls.
-pub struct ExistingItem {
-    pub item_id: i64,
-    pub version: ItemVersion,
-}
-
-impl ExistingItem {
-    /// Look up an existing item by (root_id, path, type) and return its identity
-    /// plus current version. Returns None if the item doesn't exist.
-    pub fn get_by_root_path_type(
-        conn: &Connection,
-        root_id: i64,
-        path: &str,
-        item_type: ItemType,
-    ) -> Result<Option<Self>, FsPulseError> {
-        conn.query_row(
-            "SELECT iv.item_id, iv.item_version, iv.first_scan_id, iv.last_scan_id,
-                    iv.is_added, iv.is_deleted, iv.access,
-                    iv.mod_date, iv.size,
-                    iv.add_count, iv.modify_count, iv.delete_count, iv.unchanged_count,
-                    i.item_id
-             FROM items i
-             JOIN item_versions iv ON iv.item_id = i.item_id
-               AND iv.item_version = (
-                   SELECT MAX(item_version) FROM item_versions WHERE item_id = i.item_id
-               )
-             WHERE i.root_id = ? AND i.item_path = ? AND i.item_type = ?",
-            params![root_id, path, item_type.as_i64()],
-            |row| {
-                let version = ItemVersion::from_row(row)?;
-                let item_id: i64 = row.get(13)?;
-                Ok(ExistingItem { item_id, version })
-            },
-        )
-        .optional()
-        .map_err(FsPulseError::DatabaseError)
     }
 }

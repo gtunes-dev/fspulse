@@ -105,9 +105,8 @@ interface VersionEntry {
 }
 
 interface HashEntry {
-  first_scan_id: number
-  last_scan_id: number
-  scan_started_at: number
+  first_seen_at: number
+  last_seen_at: number
   file_hash: string
   hash_state: number
 }
@@ -858,7 +857,7 @@ export function ItemDetail({
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-muted">
-                            <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">Scan</th>
+                            <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">First seen</th>
                             <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">State</th>
                             <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">Hash</th>
                           </tr>
@@ -868,9 +867,9 @@ export function ItemDetail({
                             const globalIdx = hashPageStart + idx
                             const isExpanded = expandedHashes[globalIdx] || false
                             return (
-                              <tr key={h.first_scan_id} className={h.hash_state === 2 ? 'bg-amber-500/5' : ''}>
+                              <tr key={h.first_seen_at} className={h.hash_state === 2 ? 'bg-amber-500/5' : ''}>
                                 <td className="px-2 py-1 whitespace-nowrap text-muted-foreground">
-                                  #{h.first_scan_id} ({formatScanDate(h.scan_started_at)})
+                                  {formatScanDate(h.first_seen_at)}
                                 </td>
                                 <td className="px-2 py-1 whitespace-nowrap">
                                   <span className="flex items-center gap-1">

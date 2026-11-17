@@ -72,7 +72,7 @@ id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
 id               =  { WS* ~ ASCII_DIGIT+ }
 
 // Date Columns
-date_col = { "started_at" | "ended_at" | "mod_date" | "created_at" | "updated_at" | "val_reviewed_at" | "hash_reviewed_at" }
+date_col = { "started_at" | "ended_at" | "mod_date" | "created_at" | "updated_at" | "val_reviewed_at" | "hash_reviewed_at" | "first_seen_at" | "last_seen_at" | "val_at" | "taken_at" }
 
 date_show             =  { date_col ~ date_display_modifier? }
 date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }

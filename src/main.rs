@@ -8,7 +8,6 @@ mod hierarchy;
 mod integrity;
 mod item_identity;
 mod item_ops;
-mod item_version;
 mod items;
 mod mcp;
 mod query;
@@ -21,7 +20,6 @@ mod schedules;
 mod server;
 mod sort;
 mod task;
-mod undo_log;
 mod utils;
 mod validate;
 

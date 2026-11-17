@@ -229,8 +229,8 @@ pub const HASHES_QUERY_COLS: ColMap = phf_ordered_map! {
     "item_version" => ColSpec::new("hv.item_version", "Version", true, ColType::Id, ColAlign::Right, "Item version this hash was computed for"),
     "item_path" => ColSpec::new("i.item_path", "Item Path", true, ColType::Path, ColAlign::Left, "Full filesystem path of the item"),
     "item_name" => ColSpec::new("i.item_name", "Item Name", false, ColType::Path, ColAlign::Left, "File name only"),
-    "first_scan_id" => ColSpec::new("hv.first_scan_id", "First Scan", true, ColType::Id, ColAlign::Right, "Scan that first computed this hash"),
-    "last_scan_id" => ColSpec::new("hv.last_scan_id", "Last Scan", true, ColType::Id, ColAlign::Right, "Last scan where this hash was still current"),
+    "first_seen_at" => ColSpec::new("hv.first_seen_at", "First Seen", true, ColType::Date, ColAlign::Center, "When this hash was first computed"),
+    "last_seen_at" => ColSpec::new("hv.last_seen_at", "Last Seen", true, ColType::Date, ColAlign::Center, "When this hash was last confirmed unchanged"),
     "file_hash" => ColSpec::new("hv.file_hash", "File Hash", true, ColType::Hash, ColAlign::Left, "SHA-256 hash of file contents"),
     "hash_state" => ColSpec::new("hv.hash_state", "Hash State", true, ColType::HashState, ColAlign::Center, "Baseline (first/expected hash) or Suspect (hash changed without metadata change)"),
 };

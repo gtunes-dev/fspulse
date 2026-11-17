@@ -508,8 +508,8 @@ const VERSION_HISTORY_COLUMNS: &str =
 const VERSION_HISTORY_JOINS: &str =
     "LEFT JOIN hash_versions hv ON hv.item_id = v.item_id \
        AND hv.item_version = v.item_version \
-       AND hv.first_scan_id = ( \
-           SELECT MAX(hv2.first_scan_id) FROM hash_versions hv2 \
+       AND hv.first_seen_at = ( \
+           SELECT MAX(hv2.first_seen_at) FROM hash_versions hv2 \
            WHERE hv2.item_id = v.item_id AND hv2.item_version = v.item_version \
        )";
 
@@ -648,9 +648,8 @@ pub fn get_children_counts(
 /// A single hash version entry for the hash history of an item version
 #[derive(Clone, Debug, Serialize)]
 pub struct HashHistoryEntry {
-    pub first_scan_id: i64,
-    pub last_scan_id: i64,
-    pub scan_started_at: i64,
+    pub first_seen_at: i64,
+    pub last_seen_at: i64,
     #[serde(serialize_with = "serialize_hash")]
     pub file_hash: Vec<u8>,
     pub hash_state: i64,
@@ -659,11 +658,10 @@ pub struct HashHistoryEntry {
 impl HashHistoryEntry {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         Ok(HashHistoryEntry {
-            first_scan_id: row.get(0)?,
-            last_scan_id: row.get(1)?,
-            scan_started_at: row.get(2)?,
-            file_hash: row.get(3)?,
-            hash_state: row.get(4)?,
+            first_seen_at: row.get(0)?,
+            last_seen_at: row.get(1)?,
+            file_hash: row.get(2)?,
+            hash_state: row.get(3)?,
         })
     }
 }
@@ -676,11 +674,10 @@ pub fn get_hash_history(
     let conn = Database::get_connection()?;
 
     let sql = r#"
-        SELECT hv.first_scan_id, hv.last_scan_id, s.started_at, hv.file_hash, hv.hash_state
+        SELECT hv.first_seen_at, hv.last_seen_at, hv.file_hash, hv.hash_state
         FROM hash_versions hv
-        JOIN scans s ON s.scan_id = hv.first_scan_id
         WHERE hv.item_id = ? AND hv.item_version = ?
-        ORDER BY hv.first_scan_id ASC"#;
+        ORDER BY hv.first_seen_at ASC"#;
 
     let mut stmt = conn.prepare_cached(sql)?;
     let rows = stmt.query_map(
@@ -758,8 +755,8 @@ pub fn get_integrity_state(
         .query_row(
             "SELECT hash_state, file_hash FROM hash_versions \
              WHERE item_id = ?1 AND item_version = ?2 \
-               AND first_scan_id = ( \
-                   SELECT MAX(first_scan_id) FROM hash_versions \
+               AND first_seen_at = ( \
+                   SELECT MAX(first_seen_at) FROM hash_versions \
                    WHERE item_id = ?1 AND item_version = ?2 \
                )",
             params![item_id, item_version],
