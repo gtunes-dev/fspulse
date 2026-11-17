@@ -34,7 +34,7 @@ const SAMPLE_QUERIES = [
   },
   {
     label: 'Deleted versions',
-    query: 'versions where is_deleted:(T) show item_path, item_type, first_seen_at, last_seen_at order by last_seen_at desc limit 20',
+    query: 'versions where is_deleted:(T) show item_path, item_type, first_seen_at order by first_seen_at desc limit 20',
   },
   {
     label: 'Suspect hashes',

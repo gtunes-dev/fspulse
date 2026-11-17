@@ -8,8 +8,8 @@
 //
 // Pattern 1: "Alive versions at a point in time"
 //   Used by: browse view, analysis, MCP queries.
-//   For each item, the current version at time T has:
-//     first_seen_at <= T AND last_seen_at >= T
+//   A version is in effect from its first_seen_at until the next version
+//   of the same item begins. There is no per-version end timestamp.
 //   Use MAX(item_version) with first_seen_at constraint:
 //     WHERE item_id = ? AND first_seen_at <= T
 //     ORDER BY item_version DESC LIMIT 1
@@ -54,11 +54,11 @@
 //   Drive from scans using idx_scans_root:
 //     FROM scans WHERE root_id = ?
 //
-// Pattern 8: "Sweep for deletions"
-//   Used by: scan sweep phase.
-//   Items not seen since before the scan started are candidates for deletion:
-//     FROM item_versions iv
-//     WHERE iv.root_id = ? AND iv.last_seen_at < ? AND iv.is_deleted = 0
+// Pattern 8: "Siblings of a folder"
+//   Used by: hierarchy_id assignment on insert, reconcile directory diff.
+//   Drive from items using idx_items_parent_name:
+//     FROM items WHERE root_id = ? AND parent_item_id IS ?
+//       AND item_name COLLATE natural_path < ?
 // ============================================================================
 
 pub const CREATE_SCHEMA_SQL: &str = r#"
@@ -86,7 +86,20 @@ CREATE TABLE IF NOT EXISTS roots (
     -- Set under the lock at the end of a successful checkpoint. NULL
     -- means no checkpoint has ever completed for this root, OR the
     -- most recent checkpoint was interrupted before completion.
-    last_checkpoint_completed_at INTEGER
+    -- This is the root-level "everything confirmed as of" timestamp;
+    -- item_versions carries no per-row confirmation time.
+    last_checkpoint_completed_at INTEGER,
+    -- User setting: 1 = watch this root for realtime changes when the
+    -- platform supports it, 0 = reconcile walks only. Watcher health
+    -- (watching / degraded / unsupported) is runtime state, not stored.
+    watch_enabled   INTEGER NOT NULL DEFAULT 1,
+    -- st_dev of the root directory when it was last confirmed present.
+    -- A different value means the volume is unmounted or replaced, and
+    -- reconcile must not tombstone the root's contents.
+    device_id       INTEGER,
+    -- JSON array of glob patterns excluded from watching and reconcile.
+    -- NULL means no exclusions.
+    ignore_patterns TEXT
 );
 
 -- Indexes to optimize queries
@@ -124,8 +137,11 @@ CREATE INDEX IF NOT EXISTS idx_scans_root ON scans (root_id);
 -- ========================================
 -- Snapshots
 -- ========================================
--- Periodic point-in-time observations of a root's filesystem state
--- and integrity posture.
+-- Per-root rollups of filesystem state and integrity posture.
+-- For rows written by this schema version onward, taken_at is the start
+-- of an hour bucket and the row describes the state at the end of that
+-- bucket; hours with no activity have no row. Rows migrated from old
+-- scans keep the scan's start time.
 CREATE TABLE IF NOT EXISTS snapshots (
     root_id         INTEGER NOT NULL,
     taken_at        INTEGER NOT NULL,
@@ -180,6 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_items_root_path ON items (root_id, item_path COLL
 CREATE INDEX IF NOT EXISTS idx_items_root_name ON items (root_id, item_name COLLATE natural_path);
 CREATE INDEX IF NOT EXISTS idx_items_root_ext ON items (root_id, file_extension);
 CREATE INDEX IF NOT EXISTS idx_items_root_hid ON items (root_id, hierarchy_id);
+CREATE INDEX IF NOT EXISTS idx_items_parent_name ON items (root_id, parent_item_id, item_name COLLATE natural_path);
 
 -- ========================================
 -- Item versions
@@ -187,10 +204,21 @@ CREATE INDEX IF NOT EXISTS idx_items_root_hid ON items (root_id, hierarchy_id);
 -- One row per distinct state of an item. Identity (path, type, root) lives in items.
 -- item_version is a per-item sequence number (1, 2, 3, …, n) assigned chronologically.
 --
--- Temporal range: first_seen_at..last_seen_at (epoch seconds).
--- Versions are created by checkpoints (scans) or file watchers.
--- first_seen_at: when this state was first observed.
--- last_seen_at:  when this state was last confirmed current.
+-- A version is in effect from first_seen_at (epoch seconds) until the
+-- next version of the same item begins. Unchanged items are never
+-- rewritten; "confirmed as of" lives on roots.last_checkpoint_completed_at.
+--
+-- Hourly coalescing: an alive item gets at most one version per hour
+-- bucket (first_seen_at / 3600). Further changes inside that bucket
+-- update the row in place (mod_date, size, access, last_changed_at) and
+-- increment change_count. A version is never modified after its bucket
+-- ends. Alive<->deleted transitions always create a new version.
+--
+-- first_seen_at:   when this version began.
+-- last_changed_at: when its state was last updated (= first_seen_at
+--                  unless coalesced).
+-- change_count:    distinct observed states folded into this version.
+-- source:          1=Reconcile walk, 2=Watcher, 3=Integrity check.
 --
 -- Folder versions are created only for structural events (add, delete).
 -- Folder mtime/size are not tracked. Descendant counts are computed on demand
@@ -202,7 +230,9 @@ CREATE TABLE IF NOT EXISTS item_versions (
     parent_item_id  INTEGER,
     hierarchy_id    BLOB,
     first_seen_at   INTEGER NOT NULL,
-    last_seen_at    INTEGER NOT NULL,
+    last_changed_at INTEGER NOT NULL,
+    change_count    INTEGER NOT NULL DEFAULT 1,
+    source          INTEGER NOT NULL DEFAULT 1,
 
     -- State
     is_added        BOOLEAN NOT NULL DEFAULT 0,
@@ -227,8 +257,6 @@ CREATE TABLE IF NOT EXISTS item_versions (
     FOREIGN KEY (root_id) REFERENCES roots(root_id)
 ) WITHOUT ROWID;
 
-CREATE INDEX IF NOT EXISTS idx_versions_first_seen ON item_versions (root_id, first_seen_at);
-CREATE INDEX IF NOT EXISTS idx_versions_last_seen ON item_versions (root_id, last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_versions_root_firstseen_hid ON item_versions (root_id, first_seen_at, hierarchy_id);
 CREATE INDEX IF NOT EXISTS idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
 CREATE INDEX IF NOT EXISTS idx_versions_val_at ON item_versions (val_at, val_state);

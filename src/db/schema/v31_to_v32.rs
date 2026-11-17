@@ -2,7 +2,10 @@
 // Schema Upgrade: Version 31 → 32
 //
 // Major changes:
-//   - item_versions: first_scan_id/last_scan_id → first_seen_at/last_seen_at
+//   - item_versions: first_scan_id → first_seen_at; last_scan_id dropped
+//     (a version is in effect until the next version begins)
+//   - item_versions: add last_changed_at, change_count, source (hourly
+//     coalescing and provenance)
 //   - item_versions: add hierarchy_id and parent_item_id (denormalized from items)
 //   - item_versions: drop folder counts, val_scan_id → val_at
 //   - item_versions: mod_date and size NULL for folders
@@ -12,7 +15,7 @@
 //   - Scans slimmed to integrity-only (walk/posture columns dropped)
 //   - ScanState renumbered
 //   - scan_undo_log dropped
-//   - Checkpoint timestamp columns added to roots
+//   - roots: checkpoint timestamps, watch_enabled, device_id, ignore_patterns
 //
 // This is a Transacted migration (pre_sql + code_fn + post_sql).
 // The code_fn handles: undo-log rollback of in-progress scans, scan state
@@ -21,12 +24,17 @@
 // ============================================================================
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use rusqlite::{params, Connection};
 
 use crate::db::migration_info;
 use crate::error::FsPulseError;
 use crate::hierarchy::HierarchyId;
+use crate::sort::compare_paths;
+
+/// `items.item_type` value for directories (ItemType::Directory).
+const ITEM_TYPE_DIRECTORY: i64 = 1;
 
 // ============================================================================
 // Pre-SQL: add columns needed by code_fn
@@ -88,8 +96,9 @@ pub fn migrate_v31_to_v32(conn: &Connection) -> Result<(), FsPulseError> {
 // ============================================================================
 
 pub const UPGRADE_31_TO_32_POST_SQL: &str = "
-    -- Index for hierarchy queries
+    -- Indexes for hierarchy queries and sibling lookups
     CREATE INDEX IF NOT EXISTS idx_items_root_hid ON items (root_id, hierarchy_id);
+    CREATE INDEX IF NOT EXISTS idx_items_parent_name ON items (root_id, parent_item_id, item_name COLLATE natural_path);
 
     -- ── Rebuild item_versions ──────────────────────────────────────────
     ALTER TABLE item_versions RENAME TO item_versions_old;
@@ -101,7 +110,9 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
         parent_item_id  INTEGER,
         hierarchy_id    BLOB,
         first_seen_at   INTEGER NOT NULL,
-        last_seen_at    INTEGER NOT NULL,
+        last_changed_at INTEGER NOT NULL,
+        change_count    INTEGER NOT NULL DEFAULT 1,
+        source          INTEGER NOT NULL DEFAULT 1,
         is_added        BOOLEAN NOT NULL DEFAULT 0,
         is_deleted      BOOLEAN NOT NULL DEFAULT 0,
         access          INTEGER NOT NULL DEFAULT 0,
@@ -120,16 +131,18 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
     INSERT INTO item_versions (
         item_id, item_version, root_id,
         parent_item_id, hierarchy_id,
-        first_seen_at, last_seen_at,
+        first_seen_at, last_changed_at, change_count, source,
         is_added, is_deleted, access,
         mod_date, size,
         val_at, val_state, val_error,
         val_reviewed_at, hash_reviewed_at
     )
+    -- Every historical version was found by a scan's walk: one observed
+    -- state (change_count 1), source 1 = Reconcile walk.
     SELECT
         ivo.item_id, ivo.item_version, ivo.root_id,
         i.parent_item_id, i.hierarchy_id,
-        s1.started_at, s2.started_at,
+        s1.started_at, s1.started_at, 1, 1,
         ivo.is_added, ivo.is_deleted, ivo.access,
         CASE WHEN i.item_type = 1 THEN NULL ELSE ivo.mod_date END,
         CASE WHEN i.item_type = 1 THEN NULL ELSE ivo.size END,
@@ -138,11 +151,8 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
         ivo.val_reviewed_at, ivo.hash_reviewed_at
     FROM item_versions_old ivo
     JOIN scans s1 ON s1.scan_id = ivo.first_scan_id
-    JOIN scans s2 ON s2.scan_id = ivo.last_scan_id
     JOIN items i ON i.item_id = ivo.item_id;
 
-    CREATE INDEX idx_versions_first_seen ON item_versions (root_id, first_seen_at);
-    CREATE INDEX idx_versions_last_seen ON item_versions (root_id, last_seen_at);
     CREATE INDEX idx_versions_root_firstseen_hid ON item_versions (root_id, first_seen_at, hierarchy_id);
     CREATE INDEX idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
     CREATE INDEX idx_versions_val_at ON item_versions (val_at, val_state);
@@ -221,6 +231,21 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
     FROM scans
     WHERE state = 2;
 
+    -- ── Roots: checkpoint timestamps and watch settings ────────────────
+    ALTER TABLE roots ADD COLUMN last_checkpoint_started_at INTEGER;
+    ALTER TABLE roots ADD COLUMN last_checkpoint_completed_at INTEGER;
+    ALTER TABLE roots ADD COLUMN watch_enabled INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE roots ADD COLUMN device_id INTEGER;
+    ALTER TABLE roots ADD COLUMN ignore_patterns TEXT;
+
+    -- Every completed historical scan walked the whole root, so the
+    -- latest one is when the root's contents were last confirmed. Must
+    -- run before walk-only scan rows are pruned below.
+    UPDATE roots SET last_checkpoint_completed_at = (
+        SELECT MAX(s.started_at) FROM scans s
+        WHERE s.root_id = roots.root_id AND s.state = 2
+    );
+
     -- Prune walk-only scan rows (counts now in snapshots)
     DELETE FROM scans WHERE is_hash = 0 AND is_val = 0;
 
@@ -241,9 +266,6 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
 
     -- ── Cleanup ────────────────────────────────────────────────────────
     DROP TABLE IF EXISTS scan_undo_log;
-
-    ALTER TABLE roots ADD COLUMN last_checkpoint_started_at INTEGER;
-    ALTER TABLE roots ADD COLUMN last_checkpoint_completed_at INTEGER;
 
     INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '32');
 ";
@@ -341,6 +363,13 @@ fn rollback_in_progress_scans(conn: &Connection) -> Result<(), FsPulseError> {
 // ── Hierarchy computation ───────────────────────────────────────────────────
 
 /// Compute hierarchy_id and parent_item_id for all items in a single root.
+///
+/// Each item's parent is the Directory item at its parent path (items
+/// directly under the root have no parent). Siblings are ordered by
+/// `item_name` using the same comparator as the `natural_path` collation,
+/// which is the order `item_ops` maintains for items inserted later.
+/// Positions are assigned top-down so every child's hierarchy_id extends
+/// its parent's.
 fn compute_hierarchy_for_root(conn: &Connection, root_id: i64) -> Result<(), FsPulseError> {
     let root_path: String = conn.query_row(
         "SELECT root_path FROM roots WHERE root_id = ?",
@@ -348,33 +377,29 @@ fn compute_hierarchy_for_root(conn: &Connection, root_id: i64) -> Result<(), FsP
         |row| row.get(0),
     )?;
 
-    let mut stmt = conn.prepare(
-        "SELECT item_id, item_path, item_name, item_type
-         FROM items
-         WHERE root_id = ?
-         ORDER BY item_path COLLATE natural_path",
-    )?;
-
     struct ItemRow {
         item_id: i64,
         item_path: String,
-        #[allow(dead_code)]
         item_name: String,
-        #[allow(dead_code)]
-        item_type: i64,
+        is_dir: bool,
     }
 
-    let items: Vec<ItemRow> = stmt
-        .query_map([root_id], |row| {
-            Ok(ItemRow {
-                item_id: row.get(0)?,
-                item_path: row.get(1)?,
-                item_name: row.get(2)?,
-                item_type: row.get(3)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    drop(stmt);
+    let items: Vec<ItemRow> = {
+        let mut stmt = conn.prepare(
+            "SELECT item_id, item_path, item_name, item_type FROM items WHERE root_id = ?",
+        )?;
+        let rows = stmt
+            .query_map([root_id], |row| {
+                Ok(ItemRow {
+                    item_id: row.get(0)?,
+                    item_path: row.get(1)?,
+                    item_name: row.get(2)?,
+                    is_dir: row.get::<_, i64>(3)? == ITEM_TYPE_DIRECTORY,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
 
     if items.is_empty() {
         return Ok(());
@@ -387,94 +412,72 @@ fn compute_hierarchy_for_root(conn: &Connection, root_id: i64) -> Result<(), FsP
         items.len()
     ));
 
-    // Build parent map: item_path → item_id for folders
-    let mut path_to_id: HashMap<&str, i64> = HashMap::new();
-    for item in &items {
-        path_to_id.insert(&item.item_path, item.item_id);
+    // Directory path → index into `items`. Only directories can be parents;
+    // a path may also exist as a (tombstoned) file item of the same name.
+    let mut dir_by_path: HashMap<&str, usize> = HashMap::new();
+    for (idx, item) in items.iter().enumerate() {
+        if item.is_dir {
+            dir_by_path.insert(item.item_path.as_str(), idx);
+        }
     }
 
-    // Track last child hierarchy_id per parent for sequential assignment
-    let mut last_child_hid: HashMap<Option<i64>, HierarchyId> = HashMap::new();
+    // Group children under their parent (None = directly under the root).
+    let root = Path::new(&root_path);
+    let mut children: HashMap<Option<usize>, Vec<usize>> = HashMap::new();
+    let mut orphans = 0usize;
+    for (idx, item) in items.iter().enumerate() {
+        let parent = match Path::new(&item.item_path).parent() {
+            Some(p) if p == root => None,
+            Some(p) => match p.to_str().and_then(|s| dir_by_path.get(s)) {
+                Some(&parent_idx) => Some(parent_idx),
+                None => {
+                    orphans += 1;
+                    None
+                }
+            },
+            None => {
+                orphans += 1;
+                None
+            }
+        };
+        children.entry(parent).or_default().push(idx);
+    }
+    if orphans > 0 {
+        log::warn!(
+            "Migration: root {} has {} items whose parent folder is not in the database; \
+             placing them directly under the root",
+            root_id,
+            orphans
+        );
+    }
+
+    for siblings in children.values_mut() {
+        siblings.sort_by(|&a, &b| {
+            compare_paths(&items[a].item_name, &items[b].item_name)
+                .then(items[a].item_id.cmp(&items[b].item_id))
+        });
+    }
 
     let mut update_stmt = conn.prepare(
         "UPDATE items SET hierarchy_id = ?, parent_item_id = ? WHERE item_id = ?",
     )?;
 
-    let sep = std::path::MAIN_SEPARATOR_STR;
-
-    for item in &items {
-        // Find parent_item_id by walking up the path
-        let parent_item_id = if item.item_path.starts_with(&root_path) {
-            let relative = &item.item_path[root_path.len()..];
-            let relative = relative.strip_prefix(sep).unwrap_or(relative);
-
-            if !relative.contains(sep) {
-                // Direct child of root
-                None
-            } else {
-                // Find parent path
-                let parent_path = &item.item_path[..item.item_path.rfind(sep).unwrap()];
-                path_to_id.get(parent_path).copied()
+    // Depth-first assignment with an explicit stack (trees can be deep).
+    let mut stack: Vec<(Option<usize>, HierarchyId)> = vec![(None, HierarchyId::get_root())];
+    while let Some((parent_idx, parent_hid)) = stack.pop() {
+        let Some(siblings) = children.get(&parent_idx) else {
+            continue;
+        };
+        let parent_item_id = parent_idx.map(|idx| items[idx].item_id);
+        let mut prev: Option<HierarchyId> = None;
+        for &idx in siblings {
+            let hid = parent_hid.get_descendant(prev.as_ref(), None);
+            update_stmt.execute(params![hid.to_vec(), parent_item_id, items[idx].item_id])?;
+            if items[idx].is_dir && children.contains_key(&Some(idx)) {
+                stack.push((Some(idx), hid.clone()));
             }
-        } else {
-            None
-        };
-
-        // Compute hierarchy_id using get_descendant with only a left bound
-        // (last assigned child under this parent). Odd ordinals (1, 3, 5, …)
-        // leave room for future insertions.
-        let parent_hid = match parent_item_id {
-            Some(_) => last_child_hid
-                .get(&parent_item_id)
-                .cloned()
-                .unwrap_or_else(|| {
-                    // First child — start from parent's hierarchy_id
-                    HierarchyId::get_root()
-                }),
-            None => last_child_hid
-                .get(&None)
-                .cloned()
-                .unwrap_or_else(HierarchyId::get_root),
-        };
-
-        let parent_for_descendant = match parent_item_id {
-            Some(pid) => {
-                // Look up parent's actual hierarchy_id from what we've assigned so far
-                // For simplicity, use the stack-based approach: parent's hid is derived
-                // from the path structure
-                last_child_hid
-                    .get(&Some(pid))
-                    .map(|_| parent_hid.clone())
-                    .unwrap_or_else(HierarchyId::get_root)
-            }
-            None => HierarchyId::get_root(),
-        };
-
-        let _ = parent_for_descendant; // suppress unused warning
-
-        // Simple sequential assignment: each item gets get_descendant(Some(last), None)
-        let left = last_child_hid.get(&parent_item_id);
-        let new_hid = match parent_item_id {
-            Some(pid) => {
-                // Need the parent's own hierarchy_id as the base
-                // We stored it when we processed the parent
-                let base = last_child_hid
-                    .get(&Some(pid))
-                    .cloned()
-                    .unwrap_or_else(HierarchyId::get_root);
-                let _ = base;
-                HierarchyId::get_root().get_descendant(left, None)
-            }
-            None => HierarchyId::get_root().get_descendant(left, None),
-        };
-
-        update_stmt.execute(params![new_hid.to_vec(), parent_item_id, item.item_id])?;
-
-        // Record this as the last child under this parent
-        last_child_hid.insert(parent_item_id, new_hid.clone());
-
-        // Also record this item's own hierarchy_id for when its children need it
-        last_child_hid.insert(Some(item.item_id), new_hid);
+            prev = Some(hid);
+        }
     }
 
     Ok(())

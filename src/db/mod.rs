@@ -877,4 +877,144 @@ mod tests {
             Database::get_meta_value_locked(&conn, "test_meta").expect("Should get meta value");
         assert_eq!(value, None);
     }
+
+    /// Runs the v31 -> v32 migration against a real database and checks the
+    /// result. Ignored by default; it needs a disposable COPY of a v31
+    /// database because the migration rewrites the file in place:
+    ///
+    ///   cp fspulse.v31.db /tmp/copy.db
+    ///   FSPULSE_MIGRATION_TEST_DB=/tmp/copy.db \
+    ///     cargo test migrate_real_v31_database -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn migrate_real_v31_database() {
+        use crate::hierarchy::HierarchyId;
+        use std::collections::HashMap;
+
+        let path = env::var("FSPULSE_MIGRATION_TEST_DB")
+            .expect("set FSPULSE_MIGRATION_TEST_DB to a disposable copy of a v31 database");
+        let conn = Connection::open(&path).expect("open database copy");
+        conn.create_collation("natural_path", compare_paths).unwrap();
+        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+        conn.pragma_update(None, "synchronous", "NORMAL").unwrap();
+        conn.pragma_update(None, "cache_size", -32000).unwrap();
+
+        let count = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+        let version = |c: &Connection| -> String {
+            c.query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0))
+                .unwrap()
+        };
+        assert_eq!(version(&conn), "31", "database copy must be at schema v31");
+
+        // In-progress scans are rolled back by the migration, which deletes
+        // their versions; only compare counts when there are none.
+        let in_progress = count("SELECT COUNT(*) FROM scans WHERE state IN (1, 2, 3, 7)");
+        let items_before = count("SELECT COUNT(*) FROM items");
+        let versions_before = count("SELECT COUNT(*) FROM item_versions");
+        let hashes_before = count("SELECT COUNT(*) FROM hash_versions");
+        let completed_scans = count("SELECT COUNT(*) FROM scans WHERE state = 4");
+
+        let started = std::time::Instant::now();
+        run_migrations(&conn, 31, 1).expect("migration should succeed");
+        eprintln!("migration took {:.1?}", started.elapsed());
+
+        assert_eq!(version(&conn), "32");
+        if in_progress == 0 {
+            assert_eq!(count("SELECT COUNT(*) FROM items"), items_before);
+            assert_eq!(count("SELECT COUNT(*) FROM item_versions"), versions_before);
+            assert_eq!(count("SELECT COUNT(*) FROM hash_versions"), hashes_before);
+        }
+        assert_eq!(count("SELECT COUNT(*) FROM snapshots"), completed_scans);
+
+        // item_versions has the new shape.
+        let cols: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('item_versions')")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(!cols.iter().any(|c| c == "last_seen_at"));
+        for col in ["last_changed_at", "change_count", "source"] {
+            assert!(cols.iter().any(|c| c == col), "missing column {col}");
+        }
+        assert_eq!(
+            count(
+                "SELECT COUNT(*) FROM item_versions
+                 WHERE last_changed_at <> first_seen_at OR change_count <> 1 OR source <> 1"
+            ),
+            0
+        );
+
+        // Roots with a completed scan have a confirmation time.
+        assert_eq!(
+            count(
+                "SELECT COUNT(*) FROM roots r
+                 WHERE r.last_checkpoint_completed_at IS NULL
+                   AND EXISTS (SELECT 1 FROM snapshots s WHERE s.root_id = r.root_id)"
+            ),
+            0
+        );
+
+        // Hierarchy: every item has an id, ids are unique within a root,
+        // every child sits under its parent, and siblings are in name order.
+        assert_eq!(count("SELECT COUNT(*) FROM items WHERE hierarchy_id IS NULL"), 0);
+        assert_eq!(
+            count(
+                "SELECT COUNT(*) FROM (
+                     SELECT 1 FROM items GROUP BY root_id, hierarchy_id HAVING COUNT(*) > 1)"
+            ),
+            0
+        );
+
+        let mut hid_by_id: HashMap<i64, Vec<u8>> = HashMap::new();
+        {
+            let mut stmt = conn.prepare("SELECT item_id, hierarchy_id FROM items").unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                hid_by_id.insert(row.get(0).unwrap(), row.get(1).unwrap());
+            }
+        }
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT root_id, parent_item_id, item_id, item_name, hierarchy_id
+                 FROM items ORDER BY root_id, parent_item_id, hierarchy_id",
+            )
+            .unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        let mut prev: Option<(i64, Option<i64>, String)> = None;
+        let (mut checked, mut top_level) = (0u64, 0u64);
+        while let Some(row) = rows.next().unwrap() {
+            let root_id: i64 = row.get(0).unwrap();
+            let parent_id: Option<i64> = row.get(1).unwrap();
+            let item_id: i64 = row.get(2).unwrap();
+            let name: String = row.get(3).unwrap();
+            let hid = HierarchyId::from_bytes(&row.get::<_, Vec<u8>>(4).unwrap());
+
+            match parent_id {
+                Some(pid) => {
+                    let parent_hid = HierarchyId::from_bytes(&hid_by_id[&pid]);
+                    assert!(
+                        hid.is_descendant_of(&parent_hid),
+                        "item {item_id} is not under its parent {pid}"
+                    );
+                }
+                None => top_level += 1,
+            }
+
+            if let Some((p_root, p_parent, p_name)) = &prev {
+                if *p_root == root_id && *p_parent == parent_id {
+                    assert_ne!(
+                        compare_paths(p_name, &name),
+                        std::cmp::Ordering::Greater,
+                        "siblings out of name order under parent {parent_id:?}: {p_name:?} then {name:?}"
+                    );
+                }
+            }
+            prev = Some((root_id, parent_id, name));
+            checked += 1;
+        }
+        eprintln!("hierarchy verified for {checked} items ({top_level} directly under a root)");
+    }
 }

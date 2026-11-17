@@ -11,7 +11,7 @@ use std::{cmp, io::ErrorKind};
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::hash::Hash;
-use crate::item_identity::Access;
+use crate::item_identity::{Access, VersionSource};
 use crate::scans::{AnalysisSpec, Scan};
 use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
 use crate::utils::Utils;
@@ -455,7 +455,7 @@ fn persist_analysis(
             c.execute(
                 "INSERT INTO item_versions (
                     item_id, item_version, root_id, parent_item_id, hierarchy_id,
-                    first_seen_at, last_seen_at,
+                    first_seen_at, last_changed_at, change_count, source,
                     is_added, is_deleted, access, mod_date, size
                  )
                  SELECT
@@ -464,7 +464,7 @@ fn persist_analysis(
                     i.root_id,
                     i.parent_item_id,
                     i.hierarchy_id,
-                    ?2, ?2,
+                    ?2, ?2, 1, ?6,
                     0, 0, ?3,
                     iv.mod_date, iv.size
                  FROM items i
@@ -477,6 +477,7 @@ fn persist_analysis(
                     new_access_value.as_i64(),
                     analysis_item.item_version(),
                     analysis_item.item_id(),
+                    VersionSource::Integrity.as_i64(),
                 ],
             )?;
         }

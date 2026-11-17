@@ -188,7 +188,7 @@ pub fn query_items(
              {hash_rev_expr} AS hash_reviewed,
              {val_unrev_expr} AS val_unreviewed,
              {val_rev_expr} AS val_reviewed,
-             MAX(iv.last_seen_at) AS latest_seen_at
+             MAX(iv.last_changed_at) AS latest_seen_at
          FROM item_versions iv
          JOIN items i ON i.item_id = iv.item_id
          WHERE {where_clause}

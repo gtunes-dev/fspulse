@@ -72,7 +72,7 @@ id_range         =  { id ~ WS* ~ DOTDOT ~ WS* ~ id }
 id               =  { WS* ~ ASCII_DIGIT+ }
 
 // Date Columns
-date_col = { "started_at" | "ended_at" | "mod_date" | "created_at" | "updated_at" | "val_reviewed_at" | "hash_reviewed_at" | "first_seen_at" | "last_seen_at" | "val_at" | "taken_at" }
+date_col = { "started_at" | "ended_at" | "mod_date" | "created_at" | "updated_at" | "val_reviewed_at" | "hash_reviewed_at" | "first_seen_at" | "last_seen_at" | "last_changed_at" | "val_at" | "taken_at" }
 
 date_show             =  { date_col ~ date_display_modifier? }
 date_display_modifier = _{ WS* ~ "@" ~ date_display_mode }
@@ -292,7 +292,7 @@ access               =  {
 }
 
 // Integer columns
-int_col  = { "size" | "new_hash_suspect_count" | "new_val_invalid_count" | "file_count" | "folder_count" | "total_size" | "add_count" | "modify_count" | "delete_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_baseline_count" | "hash_suspect_count" }
+int_col  = { "size" | "change_count" | "new_hash_suspect_count" | "new_val_invalid_count" | "file_count" | "folder_count" | "total_size" | "add_count" | "modify_count" | "delete_count" | "val_unknown_count" | "val_valid_count" | "val_invalid_count" | "val_no_validator_count" | "hash_unknown_count" | "hash_baseline_count" | "hash_suspect_count" }
 int_show = { int_col }
 
 int_filter      =  { int_col ~ int_filter_body }

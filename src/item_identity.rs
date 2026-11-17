@@ -136,3 +136,22 @@ impl std::fmt::Display for Access {
         write!(f, "{}", self.full_name())
     }
 }
+
+/// What produced an item version. Stored in `item_versions.source`.
+///
+/// Lets the UI distinguish a change seen as it happened (`Watch`) from
+/// one found after the fact by a walk (`Reconcile`), whose `first_seen_at`
+/// is only an upper bound on when the change occurred.
+#[repr(i64)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum VersionSource {
+    Reconcile = 1,
+    Watch = 2,
+    Integrity = 3,
+}
+
+impl VersionSource {
+    pub fn as_i64(&self) -> i64 {
+        *self as i64
+    }
+}

@@ -460,7 +460,9 @@ fn serialize_hash<S: Serializer>(
 pub struct VersionHistoryEntry {
     pub item_version: i64,
     pub first_seen_at: i64,
-    pub last_seen_at: i64,
+    pub last_changed_at: i64,
+    pub change_count: i64,
+    pub source: i64,
     pub is_added: bool,
     pub is_deleted: bool,
     pub access: i64,
@@ -482,24 +484,26 @@ impl VersionHistoryEntry {
         Ok(VersionHistoryEntry {
             item_version: row.get(0)?,
             first_seen_at: row.get(1)?,
-            last_seen_at: row.get(2)?,
-            is_added: row.get(3)?,
-            is_deleted: row.get(4)?,
-            access: row.get(5)?,
-            mod_date: row.get(6)?,
-            size: row.get(7)?,
-            hash_state: row.get(8)?,
-            file_hash: row.get(9)?,
-            val_state: row.get(10)?,
-            val_error: row.get(11)?,
-            val_reviewed_at: row.get(12)?,
-            hash_reviewed_at: row.get(13)?,
+            last_changed_at: row.get(2)?,
+            change_count: row.get(3)?,
+            source: row.get(4)?,
+            is_added: row.get(5)?,
+            is_deleted: row.get(6)?,
+            access: row.get(7)?,
+            mod_date: row.get(8)?,
+            size: row.get(9)?,
+            hash_state: row.get(10)?,
+            file_hash: row.get(11)?,
+            val_state: row.get(12)?,
+            val_error: row.get(13)?,
+            val_reviewed_at: row.get(14)?,
+            hash_reviewed_at: row.get(15)?,
         })
     }
 }
 
 const VERSION_HISTORY_COLUMNS: &str =
-    "v.item_version, v.first_seen_at, v.last_seen_at, \
+    "v.item_version, v.first_seen_at, v.last_changed_at, v.change_count, v.source, \
      v.is_added, v.is_deleted, v.access, \
      v.mod_date, v.size, \
      hv.hash_state, hv.file_hash, v.val_state, v.val_error, \
@@ -552,16 +556,20 @@ pub fn get_versions(
     Ok(versions)
 }
 
-/// Find the item_version that was active at a given scan_id.
-/// Returns the version where first_seen_at <= scan_id <= last_seen_at.
+/// Find the item_version in effect at a point in time: the latest
+/// version that began at or before it.
+///
+/// The parameter is an epoch timestamp. The name and the `scan_id`
+/// route parameter are leftovers that the time API phase replaces.
 pub fn get_version_at_scan(item_id: i64, scan_id: i64) -> Result<Option<i64>, FsPulseError> {
     let conn = Database::get_connection()?;
     let version: Option<i64> = conn
         .query_row(
             "SELECT item_version FROM item_versions \
-             WHERE item_id = ? AND first_seen_at <= ? AND last_seen_at >= ? \
+             WHERE item_id = ? AND first_seen_at <= ? \
+             ORDER BY item_version DESC \
              LIMIT 1",
-            params![item_id, scan_id, scan_id],
+            params![item_id, scan_id],
             |row| row.get(0),
         )
         .optional()?;

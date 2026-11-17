@@ -24,7 +24,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::hierarchy::HierarchyId;
-use crate::item_identity::{Access, ItemType};
+use crate::item_identity::{Access, ItemType, VersionSource};
 use crate::utils::Utils;
 use crate::validate::validator;
 
@@ -49,6 +49,7 @@ pub struct ObservedItem {
     pub(crate) size: Option<i64>,
     pub(crate) file_extension: Option<String>,
     pub(crate) has_validator: bool,
+    pub(crate) source: VersionSource,
 }
 
 impl ObservedItem {
@@ -61,7 +62,7 @@ impl ObservedItem {
         metadata: Option<&std::fs::Metadata>,
         access: Access,
     ) -> Result<ObservedItem, FsPulseError> {
-        Self::build(full_path, metadata, access)
+        Self::build(full_path, metadata, access, VersionSource::Reconcile)
     }
 
     /// Build an ObservedItem from a watcher event. The watcher must
@@ -71,7 +72,7 @@ impl ObservedItem {
         full_path: &Path,
         metadata: &std::fs::Metadata,
     ) -> Result<ObservedItem, FsPulseError> {
-        Self::build(full_path, Some(metadata), Access::Ok)
+        Self::build(full_path, Some(metadata), Access::Ok, VersionSource::Watch)
     }
 
     /// Build a synthetic ObservedItem for a folder we know must exist
@@ -80,7 +81,11 @@ impl ObservedItem {
     /// mod_date or size, so the only "synthesized" field is access,
     /// which is asserted as Ok. The next checkpoint walk over the
     /// affected subtree will refresh access if needed.
-    pub(crate) fn synthetic_folder(parent_path: String, item_name: String) -> ObservedItem {
+    pub(crate) fn synthetic_folder(
+        parent_path: String,
+        item_name: String,
+        source: VersionSource,
+    ) -> ObservedItem {
         ObservedItem {
             parent_path,
             item_name,
@@ -90,6 +95,7 @@ impl ObservedItem {
             size: None,
             file_extension: None,
             has_validator: false,
+            source,
         }
     }
 
@@ -97,6 +103,7 @@ impl ObservedItem {
         full_path: &Path,
         metadata: Option<&std::fs::Metadata>,
         access: Access,
+        source: VersionSource,
     ) -> Result<ObservedItem, FsPulseError> {
         let item_type = match metadata {
             Some(m) if m.is_dir() => ItemType::Directory,
@@ -140,6 +147,7 @@ impl ObservedItem {
             size,
             file_extension,
             has_validator,
+            source,
         })
     }
 }
@@ -328,7 +336,7 @@ fn resolve_root_path_locked<'a>(
 ///    - No row → create
 ///    - Tombstoned → insert rehydration version
 ///    - Alive, changed → insert modified version
-///    - Alive, unchanged → extend last_seen_at
+///    - Alive, unchanged → no write
 fn apply_one_observed_locked(
     conn: &Connection,
     root_id: i64,
@@ -343,7 +351,14 @@ fn apply_one_observed_locked(
         return Ok(EventOutcome::Skipped(SkipReason::OutsideRoot));
     }
 
-    let parent = resolve_parent_locked(conn, root_id, root_path, &observed.parent_path, now)?;
+    let parent = resolve_parent_locked(
+        conn,
+        root_id,
+        root_path,
+        &observed.parent_path,
+        observed.source,
+        now,
+    )?;
     let path = join_full_path(&observed.parent_path, &observed.item_name);
     let current = lookup_current_item_locked(conn, root_id, &path, observed.item_type)?;
 
@@ -357,8 +372,10 @@ fn apply_one_observed_locked(
         Some(state) if metadata_changed(&state, observed) => {
             write_observed_version_locked(conn, root_id, &state, observed, false, now)?;
         }
-        Some(state) => {
-            write_extend_last_seen_locked(conn, state.item_id, state.item_version, now)?;
+        Some(_) => {
+            // Unchanged. Nothing is written: a version stays in effect
+            // until the next one begins, and "confirmed as of" is
+            // recorded once per root when a reconcile completes.
         }
     }
 
@@ -394,6 +411,7 @@ fn resolve_parent_locked(
     root_id: i64,
     root_path: &str,
     parent_path: &str,
+    source: VersionSource,
     now: i64,
 ) -> Result<Option<ResolvedParent>, FsPulseError> {
     if parent_path == root_path {
@@ -415,8 +433,8 @@ fn resolve_parent_locked(
             // row's parent_item_id and hierarchy_id, which are
             // immutable item-level fields.
             let (gp_path, parent_name) = split_full_path(Path::new(parent_path))?;
-            resolve_parent_locked(conn, root_id, root_path, &gp_path, now)?;
-            let synthetic = ObservedItem::synthetic_folder(gp_path, parent_name);
+            resolve_parent_locked(conn, root_id, root_path, &gp_path, source, now)?;
+            let synthetic = ObservedItem::synthetic_folder(gp_path, parent_name, source);
             write_observed_version_locked(conn, root_id, &state, &synthetic, true, now)?;
             Ok(Some(ResolvedParent {
                 item_id: state.item_id,
@@ -427,8 +445,9 @@ fn resolve_parent_locked(
             // Missing: resolve grandparent first (recursing as needed),
             // then create a fresh items row + initial version.
             let (gp_path, parent_name) = split_full_path(Path::new(parent_path))?;
-            let grandparent = resolve_parent_locked(conn, root_id, root_path, &gp_path, now)?;
-            let synthetic = ObservedItem::synthetic_folder(gp_path, parent_name);
+            let grandparent =
+                resolve_parent_locked(conn, root_id, root_path, &gp_path, source, now)?;
+            let synthetic = ObservedItem::synthetic_folder(gp_path, parent_name, source);
             let (item_id, hierarchy_id) = write_new_item_locked(
                 conn,
                 root_id,
@@ -466,7 +485,9 @@ fn apply_one_deleted_locked(
     match current {
         None => {}                                  // Item never existed.
         Some(state) if state.is_deleted => {}       // Already deleted.
-        Some(state) => write_tombstone_version_locked(conn, root_id, &state, now)?,
+        Some(state) => {
+            write_tombstone_version_locked(conn, root_id, &state, VersionSource::Watch, now)?
+        }
     }
     Ok(EventOutcome::Applied)
 }
@@ -578,6 +599,7 @@ fn write_new_item_locked(
         parent_item_id,
         &new_hierarchy_id,
         now,
+        observed.source,
         true,
         false,
         observed.access,
@@ -586,22 +608,6 @@ fn write_new_item_locked(
     )?;
 
     Ok((item_id, new_hierarchy_id))
-}
-
-/// Extend last_seen_at on the current version of an unchanged item.
-fn write_extend_last_seen_locked(
-    conn: &Connection,
-    item_id: i64,
-    item_version: i64,
-    now: i64,
-) -> Result<(), FsPulseError> {
-    conn.execute(
-        "UPDATE item_versions
-         SET last_seen_at = ?1
-         WHERE item_id = ?2 AND item_version = ?3",
-        params![now, item_id, item_version],
-    )?;
-    Ok(())
 }
 
 /// Insert a new item_versions row reflecting an observation against an
@@ -625,6 +631,7 @@ fn write_observed_version_locked(
         current.parent_item_id,
         &current.hierarchy_id,
         now,
+        observed.source,
         is_added,
         false,
         observed.access,
@@ -641,6 +648,7 @@ fn write_tombstone_version_locked(
     conn: &Connection,
     root_id: i64,
     current: &CurrentItem,
+    source: VersionSource,
     now: i64,
 ) -> Result<(), FsPulseError> {
     insert_item_version_locked(
@@ -651,6 +659,7 @@ fn write_tombstone_version_locked(
         current.parent_item_id,
         &current.hierarchy_id,
         now,
+        source,
         false,
         true,
         current.access,
@@ -660,7 +669,8 @@ fn write_tombstone_version_locked(
 }
 
 /// The single item_versions INSERT used by every write helper. All
-/// new versions stamp `first_seen_at = last_seen_at = now`.
+/// new versions stamp `first_seen_at = last_changed_at = now` with
+/// `change_count = 1`.
 #[allow(clippy::too_many_arguments)]
 fn insert_item_version_locked(
     conn: &Connection,
@@ -670,6 +680,7 @@ fn insert_item_version_locked(
     parent_item_id: Option<i64>,
     hierarchy_id: &[u8],
     now: i64,
+    source: VersionSource,
     is_added: bool,
     is_deleted: bool,
     access: Access,
@@ -679,9 +690,9 @@ fn insert_item_version_locked(
     conn.execute(
         "INSERT INTO item_versions (
             item_id, item_version, root_id, parent_item_id, hierarchy_id,
-            first_seen_at, last_seen_at,
+            first_seen_at, last_changed_at, change_count, source,
             is_added, is_deleted, access, mod_date, size
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8, ?9, ?10, ?11)",
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             item_id,
             item_version,
@@ -689,6 +700,7 @@ fn insert_item_version_locked(
             parent_item_id,
             hierarchy_id,
             now,
+            source.as_i64(),
             is_added as i64,
             is_deleted as i64,
             access.as_i64(),

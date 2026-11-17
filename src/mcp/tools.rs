@@ -547,8 +547,8 @@ impl FsPulseMcp {
             out.push_str(&format!("\n## Version History ({} total)\n\n", version_count));
 
             if !versions.is_empty() {
-                out.push_str("| Version | First Seen | Last Seen | Size | Mod Date | Added | Deleted | Val State |\n");
-                out.push_str("|---------|------------|-----------|------|----------|-------|---------|----------|\n");
+                out.push_str("| Version | First Seen | Last Changed | Changes | Size | Mod Date | Added | Deleted | Val State |\n");
+                out.push_str("|---------|------------|--------------|---------|------|----------|-------|---------|----------|\n");
 
                 for v in &versions {
                     let val = match v.val_state {
@@ -557,10 +557,11 @@ impl FsPulseMcp {
                         _ => "",
                     };
                     out.push_str(&format!(
-                        "| {} | {} | {} | {} | {} | {} | {} | {} |\n",
+                        "| {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
                         v.item_version,
                         fmt_ts(v.first_seen_at),
-                        fmt_ts(v.last_seen_at),
+                        fmt_ts(v.last_changed_at),
+                        v.change_count,
                         v.size.unwrap_or(0),
                         fmt_opt_ts(v.mod_date),
                         v.is_added,

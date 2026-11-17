@@ -88,9 +88,9 @@ interface ItemDetailProps {
 interface VersionEntry {
   item_version: number
   first_seen_at: number
-  last_seen_at: number
-  first_scan_date: number
-  last_scan_date: number
+  last_changed_at: number
+  change_count: number
+  source: number
   is_added: boolean
   is_deleted: boolean
   access: number
@@ -676,15 +676,12 @@ export function ItemDetail({
     )
   }
 
-  const scanRef = (id: number, date: number) => (
-    <>Scan <span className="font-mono font-semibold">#{id}</span> ({formatScanDate(date)})</>
-  )
-
-  const scanRangeLabel = (v: VersionEntry) => {
-    if (v.first_seen_at === v.last_seen_at) return scanRef(v.first_seen_at, v.first_scan_date)
+  // When a version began, plus how many changes were coalesced into it.
+  const versionTimeLabel = (v: VersionEntry) => {
+    if (v.change_count <= 1) return <>{formatScanDate(v.first_seen_at)}</>
     return (
       <>
-        #{v.first_seen_at} ({formatScanDate(v.first_scan_date)}) &ndash; #{v.last_seen_at} ({formatScanDate(v.last_scan_date)})
+        {formatScanDate(v.first_seen_at)} &ndash; changed {v.change_count}&times;, last at {formatScanDate(v.last_changed_at)}
       </>
     )
   }
@@ -790,7 +787,7 @@ export function ItemDetail({
       <>
         {/* Metadata fields — inline label: value */}
         <div className={`text-sm ${isPanel ? 'space-y-1' : 'space-y-1.5'}`}>
-          <p><span className="text-muted-foreground">Scans:</span> {scanRangeLabel(v)}</p>
+          <p><span className="text-muted-foreground">Since:</span> {versionTimeLabel(v)}</p>
           <p><span className="text-muted-foreground">Modified:</span> {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
           {v.size !== null && (
             <p><span className="text-muted-foreground">Size:</span> {formatFileSize(v.size)}</p>
@@ -1247,7 +1244,7 @@ export function ItemDetail({
                     {v.hash_state === 2 && <AlertTriangle className={`${sp.iconLg} text-amber-500 flex-shrink-0`} />}
                     {v.val_state === 2 && <CircleX className={`${sp.iconLg} text-rose-500 flex-shrink-0`} />}
                     <p className="text-xs text-muted-foreground truncate flex-1">
-                      {scanRangeLabel(v)}
+                      {versionTimeLabel(v)}
                     </p>
                     {isSelected && <Eye className={`${sp.iconLg} text-primary flex-shrink-0`} />}
                   </>

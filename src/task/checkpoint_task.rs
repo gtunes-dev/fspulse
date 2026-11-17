@@ -1,21 +1,21 @@
 //! Checkpoint task — fast filesystem reconciliation pass for one root.
 //!
-//! A checkpoint walks a root's filesystem, applies what it observes to
-//! the items / item_versions tables via `item_ops::apply_observed_events`,
-//! and sweeps anything not seen. It does NOT hash files, run validators,
-//! or write to the `scans` table — those are the integrity scanner's job.
+//! A checkpoint walks a root's filesystem and applies what it observes
+//! to the items / item_versions tables via
+//! `item_ops::apply_observed_events`. It does NOT hash files, run
+//! validators, or write to the `scans` table — those are the integrity
+//! scanner's job.
 //!
-//! Two phases:
+//! **Walk.** Recursive `read_dir` + `symlink_metadata`. The walk holds
+//! no lock and allocates no timestamps. ObservedItems accumulate in a
+//! Vec; when the Vec reaches `CHECKPOINT_BATCH_SIZE`, it's flushed via
+//! `apply_observed_events`, which acquires the write lock and allocates
+//! a single `now` for the whole batch.
 //!
-//! 1. **Walk.** Recursive `read_dir` + `symlink_metadata`. The walk
-//!    holds no lock and allocates no timestamps. ObservedItems
-//!    accumulate in a Vec; when the Vec reaches `CHECKPOINT_BATCH_SIZE`,
-//!    it's flushed via `apply_observed_events`, which acquires the
-//!    write lock and allocates a single `now` for the whole batch.
-//!
-//! 2. **Sweep.** Under one `immediate_transaction`, a single bulk
-//!    INSERT inserts a tombstone version for every alive item under
-//!    this root with `last_seen_at < started_at`.
+//! **Deletions are not detected in this interim state.** The old sweep
+//! relied on a per-version `last_seen_at` that the v32 schema no longer
+//! has. Deletion detection returns when the walk becomes a
+//! per-directory diff against the database (design doc, phase 3).
 //!
 //! Checkpoint coexists with the watcher via the SQLite write lock and
 //! the lock-allocated-timestamp invariant — the watcher is NOT paused
@@ -23,7 +23,7 @@
 //!
 //! Checkpoints are not resumable. An interrupted checkpoint is dropped
 //! and the next run starts from scratch — partial progress is fine
-//! because items already touched retain their newer `last_seen_at`.
+//! because every version already written is a valid observation.
 
 use std::fs;
 use std::io::ErrorKind;
@@ -83,14 +83,13 @@ impl CheckpointSettings {
 // ============================================================================
 
 /// A checkpoint task — performs a fast filesystem reconciliation pass
-/// over a single root: walks the tree, applies observed events to the
-/// items / item_versions tables via `item_ops`, and sweeps deleted
-/// items at the end.
+/// over a single root: walks the tree and applies observed events to
+/// the items / item_versions tables via `item_ops`.
 ///
 /// Checkpoints are not resumable. An interrupted checkpoint is dropped
 /// and the next scheduled or manual run starts from scratch — partial
-/// progress is fine because items already touched retain their newer
-/// `last_seen_at`. The task therefore stores no `task_state` and
+/// progress is fine because every version already written is a valid
+/// observation. The task therefore stores no `task_state` and
 /// ignores any state JSON it might be reconstructed with.
 pub struct CheckpointTask {
     task_id: i64,
@@ -117,8 +116,7 @@ impl CheckpointTask {
     /// Allocate `started_at` under the write lock and stamp it on the
     /// root row. Also clears `last_checkpoint_completed_at`, so during
     /// the run the row reflects "checkpoint in progress, no completion
-    /// yet." Returns the `started_at` value, which sweep uses as its
-    /// staleness threshold.
+    /// yet." Returns the `started_at` value.
     fn begin(root_id: i64) -> Result<i64, FsPulseError> {
         let conn = Database::get_connection()?;
         Database::immediate_transaction(&conn, |c| {
@@ -269,58 +267,6 @@ impl CheckpointTask {
     }
 
     // ========================================================================
-    // Phase 2: sweep
-    // ========================================================================
-
-    /// Insert a tombstone item_versions row for every items row whose
-    /// latest version is still alive but whose `last_seen_at` is older
-    /// than this checkpoint's `started_at`. Returns the number of
-    /// tombstones written.
-    ///
-    /// Files and folders are handled by the same statement. When a
-    /// subtree disappears between checkpoints, every row inside it
-    /// keeps its old `last_seen_at` and matches the filter — there is
-    /// no need to delete folders before or after their descendants.
-    /// Tombstoning leaves the items row, the parent_item_id link, and
-    /// the hierarchy_id intact, so a tombstoned folder with not-yet-
-    /// tombstoned children (or vice versa) is a valid intermediate
-    /// state and never appears in the committed result anyway.
-    fn sweep(root_id: i64, started_at: i64) -> Result<usize, FsPulseError> {
-        let conn = Database::get_connection()?;
-        Database::immediate_transaction(&conn, |c| {
-            let now = Utils::now_secs();
-            let changes = c.execute(
-                "INSERT INTO item_versions (
-                    item_id, item_version, root_id, parent_item_id, hierarchy_id,
-                    first_seen_at, last_seen_at,
-                    is_added, is_deleted, access, mod_date, size
-                 )
-                 SELECT
-                    i.item_id,
-                    iv.item_version + 1,
-                    i.root_id,
-                    i.parent_item_id,
-                    i.hierarchy_id,
-                    ?1, ?1,
-                    0, 1,
-                    iv.access,
-                    NULL, NULL
-                 FROM items i
-                 JOIN item_versions iv ON iv.item_id = i.item_id
-                 WHERE i.root_id = ?2
-                   AND iv.item_version = (
-                       SELECT MAX(iv2.item_version) FROM item_versions iv2
-                       WHERE iv2.item_id = i.item_id
-                   )
-                   AND iv.is_deleted = 0
-                   AND iv.last_seen_at < ?3",
-                params![now, root_id, started_at],
-            )?;
-            Ok(changes)
-        })
-    }
-
-    // ========================================================================
     // Finalize
     // ========================================================================
 
@@ -366,10 +312,10 @@ impl Task for CheckpointTask {
         interrupt_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         // Phase 0 — set started_at, clear completed_at, all under the lock.
-        let started_at = Self::begin(self.root_id)?;
+        Self::begin(self.root_id)?;
 
-        // Phase 1 — walk
-        progress.set_phase("Phase 1 of 2: Walking");
+        // Walk
+        progress.set_phase("Walking");
         let mut state = WalkState::new(self.root_id, &progress, &interrupt_token);
         Self::check_interrupt(&interrupt_token)?;
         Self::walk_root(&mut state, Path::new(&self.root_path))?;
@@ -379,14 +325,6 @@ impl Task for CheckpointTask {
             "Walked {} files in {} directories ({} applied, {} skipped)",
             state.files_walked, state.dirs_walked, state.applied, state.skipped,
         ));
-
-        // Phase 2 — sweep
-        progress.set_phase("Phase 2 of 2: Sweeping");
-        progress.set_indeterminate_progress("Tombstoning deleted items…");
-        Self::check_interrupt(&interrupt_token)?;
-        let tombstoned = Self::sweep(self.root_id, started_at)?;
-        Self::check_interrupt(&interrupt_token)?;
-        progress.add_breadcrumb(&format!("Tombstoned {tombstoned} items"));
 
         // Finalize — write completed_at. started_at is left in place
         // so the UI can show "last checkpoint ran from X to Y."
