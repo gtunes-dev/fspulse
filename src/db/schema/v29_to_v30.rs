@@ -119,7 +119,7 @@ pub fn migrate_v29_to_v30(conn: &Connection) -> Result<(), FsPulseError> {
         // Upper bound: same prefix but with next char after '/'
         let path_upper = format!(
             "{}{}",
-            &folder_path,
+            folder_path,
             char::from(b'/' + 1) // '0' — first char after '/'
         );
 

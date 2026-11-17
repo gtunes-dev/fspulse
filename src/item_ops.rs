@@ -302,7 +302,7 @@ fn resolve_root_path_locked<'a>(
     root_id: i64,
     cache: &'a mut HashMap<i64, Option<String>>,
 ) -> Result<Option<&'a str>, FsPulseError> {
-    if !cache.contains_key(&root_id) {
+    if let std::collections::hash_map::Entry::Vacant(e) = cache.entry(root_id) {
         let path = conn
             .query_row(
                 "SELECT root_path FROM roots WHERE root_id = ?",
@@ -311,7 +311,7 @@ fn resolve_root_path_locked<'a>(
             )
             .optional()
             .map_err(FsPulseError::DatabaseError)?;
-        cache.insert(root_id, path);
+        e.insert(path);
     }
     Ok(cache.get(&root_id).unwrap().as_deref())
 }

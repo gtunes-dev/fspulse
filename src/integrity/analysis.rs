@@ -220,7 +220,7 @@ fn analyze_item(
             {
                 error!(
                     "Cannot read file for hashing '{}': Permission denied",
-                    &display_path
+                    display_path
                 );
                 read_permission_denied = true;
             }
@@ -229,12 +229,12 @@ fn analyze_item(
             {
                 log::warn!(
                     "File not found during hashing '{}': skipping analysis",
-                    &display_path
+                    display_path
                 );
                 file_not_found = true;
             }
             Err(error) => {
-                error!("Error hashing '{}': {}", &display_path, error);
+                error!("Error hashing '{}': {}", display_path, error);
             }
         };
     }
@@ -260,23 +260,23 @@ fn analyze_item(
                 read_attempted = true;
                 error!(
                     "Cannot read file for validation '{}': Permission denied",
-                    &display_path
+                    display_path
                 );
                 read_permission_denied = true;
             }
             Err(ValAnalysisError::NotFound) => {
                 log::warn!(
                     "File not found during validation '{}': skipping analysis",
-                    &display_path
+                    display_path
                 );
                 file_not_found = true;
             }
             Err(ValAnalysisError::NoValidator) => {
-                log::warn!("NoValidator error for item that passed needs_val check: {:?}", &display_path);
+                log::warn!("NoValidator error for item that passed needs_val check: {:?}", display_path);
             }
             Err(ValAnalysisError::ValidationError(e_str)) => {
                 read_attempted = true;
-                error!("Error validating '{}': {}", &display_path, e_str);
+                error!("Error validating '{}': {}", display_path, e_str);
                 new_val = ValidationState::Invalid;
                 new_val_error = Some(e_str);
             }
@@ -315,7 +315,7 @@ fn analyze_item(
                 if outcome != PersistOutcome::Applied {
                     info!(
                         "Analysis write skipped for '{}': {:?}",
-                        &display_path, outcome
+                        display_path, outcome
                     );
                 }
                 outcome == PersistOutcome::Applied
@@ -323,7 +323,7 @@ fn analyze_item(
             Err(error) => {
                 error!(
                     "Error updating item analysis '{}': {}",
-                    &display_path, error
+                    display_path, error
                 );
                 false
             }
@@ -368,7 +368,7 @@ enum PersistOutcome {
 ///    version and confirms it hasn't been bumped or tombstoned.
 #[allow(clippy::too_many_arguments)]
 fn persist_analysis(
-    scan: &Scan,
+    _scan: &Scan,
     analysis_item: &AnalysisItem,
     new_hash: Option<String>,
     new_val: ValidationState,

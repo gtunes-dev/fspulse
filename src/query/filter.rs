@@ -59,16 +59,16 @@ impl Filter for IdFilter {
 
             match id_spec {
                 IdSpec::Id(id) => {
-                    pred_str.push_str(&format!("({} = ?)", &self.id_col_db));
+                    pred_str.push_str(&format!("({} = ?)", self.id_col_db));
                     pred_vec.push(Box::new(*id));
                 }
                 IdSpec::IdRange { id_start, id_end } => {
-                    pred_str.push_str(&format!("({0} >= ? AND {0} <= ?)", &self.id_col_db));
+                    pred_str.push_str(&format!("({0} >= ? AND {0} <= ?)", self.id_col_db));
                     pred_vec.push(Box::new(*id_start));
                     pred_vec.push(Box::new(*id_end));
                 }
-                IdSpec::Null => pred_str.push_str(&format!("({} IS NULL)", &self.id_col_db)),
-                IdSpec::NotNull => pred_str.push_str(&format!("({} IS NOT NULL)", &self.id_col_db)),
+                IdSpec::Null => pred_str.push_str(&format!("({} IS NULL)", self.id_col_db)),
+                IdSpec::NotNull => pred_str.push_str(&format!("({} IS NOT NULL)", self.id_col_db)),
             }
         }
 
@@ -171,13 +171,13 @@ impl Filter for DateFilter {
                     date_start,
                     date_end,
                 } => {
-                    pred_str.push_str(&format!("({} BETWEEN ? AND ?)", &self.date_col_db));
+                    pred_str.push_str(&format!("({} BETWEEN ? AND ?)", self.date_col_db));
                     pred_vec.push(Box::new(*date_start));
                     pred_vec.push(Box::new(*date_end));
                 }
-                DateSpec::Null => pred_str.push_str(&format!("({} IS NULL)", &self.date_col_db)),
+                DateSpec::Null => pred_str.push_str(&format!("({} IS NULL)", self.date_col_db)),
                 DateSpec::NotNull => {
-                    pred_str.push_str(&format!("({} IS NOT NULL)", &self.date_col_db))
+                    pred_str.push_str(&format!("({} IS NOT NULL)", self.date_col_db))
                 }
             }
         }
@@ -329,7 +329,7 @@ impl Filter for StringFilter {
         }
         if self.match_null {
             first = false;
-            pred_str.push_str(&format!("({} IS NULL)", &self.str_col_db));
+            pred_str.push_str(&format!("({} IS NULL)", self.str_col_db));
         }
 
         if self.match_not_null {
@@ -337,7 +337,7 @@ impl Filter for StringFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            pred_str.push_str(&format!("({} IS NOT NULL)", &self.str_col_db));
+            pred_str.push_str(&format!("({} IS NOT NULL)", self.str_col_db));
         }
 
         for str_val in &self.str_values {
@@ -346,7 +346,7 @@ impl Filter for StringFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            pred_str.push_str(&format!("({} LIKE ?)", &self.str_col_db));
+            pred_str.push_str(&format!("({} LIKE ?)", self.str_col_db));
             let like_param = format!("%{str_val}%");
             pred_vec.push(Box::new(like_param));
         }
@@ -429,7 +429,7 @@ impl Filter for HashFilter {
         }
         if self.match_null {
             first = false;
-            pred_str.push_str(&format!("({} IS NULL)", &self.hash_col_db));
+            pred_str.push_str(&format!("({} IS NULL)", self.hash_col_db));
         }
 
         if self.match_not_null {
@@ -437,7 +437,7 @@ impl Filter for HashFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            pred_str.push_str(&format!("({} IS NOT NULL)", &self.hash_col_db));
+            pred_str.push_str(&format!("({} IS NOT NULL)", self.hash_col_db));
         }
 
         for hash_val in &self.hash_values {
@@ -446,7 +446,7 @@ impl Filter for HashFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            pred_str.push_str(&format!("(HEX({}) LIKE ?)", &self.hash_col_db));
+            pred_str.push_str(&format!("(HEX({}) LIKE ?)", self.hash_col_db));
             let like_param = format!("%{}%", hash_val.to_uppercase());
             pred_vec.push(Box::new(like_param));
         }
@@ -531,7 +531,7 @@ impl Filter for BoolFilter {
 
         if self.match_null {
             first = false;
-            pred_str.push_str(&format!("({} IS NULL)", &self.bool_col_db));
+            pred_str.push_str(&format!("({} IS NULL)", self.bool_col_db));
         }
 
         if self.match_not_null {
@@ -539,7 +539,7 @@ impl Filter for BoolFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            pred_str.push_str(&format!("({} IS NOT NULL)", &self.bool_col_db));
+            pred_str.push_str(&format!("({} IS NOT NULL)", self.bool_col_db));
         }
 
         for bool_val in &self.bool_vals {
@@ -548,7 +548,7 @@ impl Filter for BoolFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            pred_str.push_str(&format!("({} = ?)", &self.bool_col_db));
+            pred_str.push_str(&format!("({} = ?)", self.bool_col_db));
             pred_vec.push(Box::new(*bool_val));
         }
 
@@ -684,7 +684,7 @@ impl Filter for EnumFilter {
         // if match_null is true, it will always be first
         if self.match_null {
             first = false;
-            pred_str.push_str(&format!("({} IS NULL)", &self.enum_col_db));
+            pred_str.push_str(&format!("({} IS NULL)", self.enum_col_db));
         }
 
         if self.match_not_null {
@@ -692,7 +692,7 @@ impl Filter for EnumFilter {
                 true => first = false,
                 false => pred_str.push_str(" OR "),
             }
-            pred_str.push_str(&format!("({} IS NOT NULL)", &self.enum_col_db));
+            pred_str.push_str(&format!("({} IS NOT NULL)", self.enum_col_db));
         }
 
         // Special val_state predicates
@@ -718,7 +718,7 @@ impl Filter for EnumFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            pred_str.push_str(&format!("({} = ?)", &self.enum_col_db));
+            pred_str.push_str(&format!("({} = ?)", self.enum_col_db));
             pred_vec.push(Box::new(*enum_val));
         }
 
@@ -806,7 +806,7 @@ impl Filter for PathFilter {
                 false => pred_str.push_str(" OR "),
             }
 
-            pred_str.push_str(&format!("({} LIKE ?)", &self.path_col_db));
+            pred_str.push_str(&format!("({} LIKE ?)", self.path_col_db));
 
             let like_str = format!("%{path_str}%");
             pred_vec.push(Box::new(like_str));

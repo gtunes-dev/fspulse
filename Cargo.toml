@@ -6,7 +6,6 @@ authors = ["The fsPulse Developers"]
 description = "fsPulse is a fast, cross-platform filesystem scanner and change tracker."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/gtunes-dev/fspulse"
-homepage = "https://github.com/gtunes-dev/fspulse"
 keywords = ["filesystem", "scanner", "tracking", "integrity"]
 categories = ["command-line-utilities"]
 readme = "README.md"
