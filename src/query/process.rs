@@ -588,6 +588,8 @@ impl SnapshotsQuery {
                 "hash_unknown_count" => Format::format_opt_i64(snap.hash_unknown_count),
                 "hash_baseline_count" => Format::format_opt_i64(snap.hash_baseline_count),
                 "hash_suspect_count" => Format::format_opt_i64(snap.hash_suspect_count),
+                "new_val_invalid_count" => Format::format_opt_i64(snap.new_val_invalid_count),
+                "new_hash_suspect_count" => Format::format_opt_i64(snap.new_hash_suspect_count),
                 "schedule_id" => Format::format_opt_i64(snap.schedule_id),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
@@ -1033,6 +1035,8 @@ struct SnapshotsQueryRow {
     hash_unknown_count: Option<i64>,
     hash_baseline_count: Option<i64>,
     hash_suspect_count: Option<i64>,
+    new_val_invalid_count: Option<i64>,
+    new_hash_suspect_count: Option<i64>,
     schedule_id: Option<i64>,
 }
 
@@ -1054,7 +1058,9 @@ impl SnapshotsQueryRow {
             hash_unknown_count: row.get(12)?,
             hash_baseline_count: row.get(13)?,
             hash_suspect_count: row.get(14)?,
-            schedule_id: row.get(15)?,
+            new_val_invalid_count: row.get(15)?,
+            new_hash_suspect_count: row.get(16)?,
+            schedule_id: row.get(17)?,
         })
     }
 }

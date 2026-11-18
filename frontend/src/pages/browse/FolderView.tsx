@@ -12,7 +12,8 @@ import { IntegrityIcons } from '@/components/shared/IntegrityIcons'
 
 interface FolderViewProps {
   rootPath: string
-  scanId: number
+  /** Identity of the root, time selection and refresh being shown. */
+  viewKey: string
   cache: BrowseCache
   currentPath: string
   onNavigate: (path: string) => void
@@ -74,7 +75,7 @@ function getItemIcon(type: string, deleted: boolean, changeKind?: string) {
 
 export function FolderView({
   rootPath,
-  scanId,
+  viewKey,
   cache,
   currentPath,
   onNavigate,
@@ -97,7 +98,7 @@ export function FolderView({
   useEffect(() => {
     if (!isActive) return
 
-    const fetchKey = `${currentPath}:${scanId}`
+    const fetchKey = `${currentPath}:${viewKey}`
     if (lastFetchKeyRef.current === fetchKey) return
     lastFetchKeyRef.current = fetchKey
 
@@ -115,7 +116,7 @@ export function FolderView({
         setLoading(false)
         console.error('FolderView load error:', err)
       })
-  }, [isActive, currentPath, scanId, cache])
+  }, [isActive, currentPath, viewKey, cache])
 
   // Filter and sort — folders visible if they have descendant changes matching any visible kind
   const visibleItems = items.filter((i) => isItemVisible(i, hiddenKinds))

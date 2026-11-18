@@ -220,7 +220,7 @@ export function RootDetailSheet({
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Recent Scans</CardTitle>
+                  <CardTitle>Recent Integrity Checks</CardTitle>
                   {totalScans > SCANS_PER_PAGE && (
                     <p className="text-sm text-muted-foreground">
                       Showing {formatCount(scans.length)} of {formatCount(totalScans)} scan{totalScans !== 1 ? 's' : ''}
@@ -248,7 +248,7 @@ export function RootDetailSheet({
                                   <div className="flex items-center gap-2">
                                     {getStatusBadge(scan.scan_state)}
                                     <p className="text-xs text-muted-foreground">
-                                      Scan <span className="font-mono font-semibold">#{scan.scan_id}</span>
+                                      Integrity check <span className="font-mono font-semibold">#{scan.scan_id}</span>
                                     </p>
                                   </div>
                                   <p className="text-xs text-muted-foreground">

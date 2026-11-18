@@ -7,12 +7,22 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::items::{self, HashHistoryEntry, SizeHistoryPoint};
+use crate::timeline::TimeRange;
+use crate::utils::Utils;
 
 /// Query parameters for size history (temporal model)
 #[derive(Debug, Deserialize)]
 pub struct SizeHistoryParams {
-    pub from_date: String,
-    pub to_scan_id: i64,
+    /// Unix seconds. Leave out for all history.
+    pub from: Option<i64>,
+    /// Unix seconds. Leave out for now.
+    pub to: Option<i64>,
+}
+
+/// The last second that counts as "at" the requested time, for the
+/// `items` functions, which take an inclusive time.
+fn as_of(at: Option<i64>) -> i64 {
+    TimeRange::resolve(None, at, Utils::now_secs()).last_second()
 }
 
 /// Response structure for size history
@@ -31,13 +41,19 @@ pub struct ChildrenCountsResponse {
 /// Query parameters for children counts
 #[derive(Debug, Deserialize)]
 pub struct ChildrenCountsParams {
-    pub scan_id: i64,
+    /// Unix seconds. Leave out for now. A time in the past is moved back
+    /// to the hour (see `crate::timeline`). `scan_id` is accepted as an
+    /// old name for the same value.
+    #[serde(alias = "scan_id")]
+    pub at: Option<i64>,
 }
 
 /// Query parameters for integrity state
 #[derive(Debug, Deserialize)]
 pub struct IntegrityStateParams {
-    pub scan_id: i64,
+    /// See `ChildrenCountsParams::at`.
+    #[serde(alias = "scan_id")]
+    pub at: Option<i64>,
 }
 
 /// Response structure for integrity state
@@ -51,13 +67,13 @@ pub struct IntegrityStateResponse {
     pub val_error: Option<String>,
 }
 
-/// GET /api/items/:item_id/integrity-state?scan_id=42
+/// GET /api/items/:item_id/integrity-state?at=1700000000
 /// Returns the current hash and validation state for an item at a specific scan point
 pub async fn get_integrity_state(
     Path(item_id): Path<i64>,
     Query(params): Query<IntegrityStateParams>,
 ) -> Result<Json<IntegrityStateResponse>, (StatusCode, String)> {
-    match items::get_integrity_state(item_id, params.scan_id) {
+    match items::get_integrity_state(item_id, as_of(params.at)) {
         Ok(state) => Ok(Json(IntegrityStateResponse {
             has_validator: state.has_validator,
             do_not_validate: state.do_not_validate,
@@ -76,13 +92,13 @@ pub async fn get_integrity_state(
     }
 }
 
-/// GET /api/items/:item_id/size-history?from_date=YYYY-MM-DD&to_scan_id=42
+/// GET /api/items/:item_id/size-history?from=1700000000&to=1700090000
 /// Returns size history for an item from a date up to a specific scan
 pub async fn get_item_size_history(
     Path(item_id): Path<i64>,
     Query(params): Query<SizeHistoryParams>,
 ) -> Result<Json<SizeHistoryResponse>, (StatusCode, String)> {
-    match items::get_size_history(item_id, &params.from_date, params.to_scan_id) {
+    match items::get_size_history(item_id, params.from.unwrap_or(0), as_of(params.to)) {
         Ok(history) => Ok(Json(SizeHistoryResponse { history })),
         Err(e) => {
             error!("Failed to get size history for item {}: {}", item_id, e);
@@ -94,14 +110,14 @@ pub async fn get_item_size_history(
     }
 }
 
-/// GET /api/items/:item_id/children-counts?scan_id=42
+/// GET /api/items/:item_id/children-counts?at=1700000000
 /// Returns counts of files and directories that are children of the given directory
 /// at the specified scan point in time
 pub async fn get_children_counts(
     Path(item_id): Path<i64>,
     Query(params): Query<ChildrenCountsParams>,
 ) -> Result<Json<ChildrenCountsResponse>, (StatusCode, String)> {
-    match items::get_children_counts(item_id, params.scan_id) {
+    match items::get_children_counts(item_id, as_of(params.at)) {
         Ok(counts) => Ok(Json(ChildrenCountsResponse {
             file_count: counts.file_count,
             directory_count: counts.directory_count,
@@ -265,13 +281,14 @@ pub async fn search_items(
     }
 }
 
-/// GET /api/items/:item_id/version-at-scan?scan_id=123
-/// Returns the item_version that was active at the given scan.
+/// GET /api/items/:item_id/version-at?at=1700000000
+/// Returns the item_version in effect at the given time. Also served at
+/// the old path `version-at-scan`.
 pub async fn get_version_at_scan(
     Path(item_id): Path<i64>,
     Query(params): Query<VersionAtScanParams>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    match items::get_version_at_scan(item_id, params.scan_id) {
+    match items::get_version_at_scan(item_id, as_of(params.at)) {
         Ok(Some(version)) => Ok(Json(serde_json::json!({ "item_version": version }))),
         Ok(None) => Err((StatusCode::NOT_FOUND, "No version found at this scan".to_string())),
         Err(e) => {
@@ -283,7 +300,9 @@ pub async fn get_version_at_scan(
 
 #[derive(Debug, Deserialize)]
 pub struct VersionAtScanParams {
-    pub scan_id: i64,
+    /// See `ChildrenCountsParams::at`.
+    #[serde(alias = "scan_id")]
+    pub at: Option<i64>,
 }
 
 /// GET /api/items/:item_id/version-count

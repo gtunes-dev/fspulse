@@ -191,7 +191,7 @@ impl Task for CheckpointTask {
         // Set started_at, clear completed_at, all under the lock.
         Self::begin(self.root_id)?;
 
-        progress.set_phase("Reconciling");
+        progress.set_phase("Comparing with what is recorded");
         let root_id = self.root_id;
         let confirmed = self.settings.allow_mass_delete;
         let conn = Database::get_connection()?;
@@ -225,7 +225,7 @@ impl Task for CheckpointTask {
             },
             &mut |stats| {
                 progress.set_indeterminate_progress(&format!(
-                    "{} items in {} directories, {} differences",
+                    "{} items in {} folders, {} differences",
                     stats.entries, stats.dirs, stats.hints
                 ));
             },
@@ -278,12 +278,12 @@ impl Task for CheckpointTask {
         }
 
         progress.add_breadcrumb(&format!(
-            "Walked {} items in {} directories",
+            "Compared {} items in {} folders",
             walk.entries, walk.dirs
         ));
         if walk.incomplete_dirs > 0 {
             progress.add_breadcrumb(&format!(
-                "{} directories could not be fully read; deletions in them were not checked",
+                "{} folders could not be fully read; deletions in them were not checked",
                 walk.incomplete_dirs
             ));
         }
@@ -314,7 +314,7 @@ impl Task for CheckpointTask {
     }
 
     fn action(&self) -> &str {
-        "Checkpointing"
+        "Checking for changes"
     }
 
     fn display_target(&self) -> String {
@@ -393,7 +393,7 @@ mod tests {
         assert_eq!(task.task_type(), TaskType::Checkpoint);
         assert_eq!(task.task_id(), 7);
         assert_eq!(task.active_root_id(), Some(42));
-        assert_eq!(task.action(), "Checkpointing");
+        assert_eq!(task.action(), "Checking for changes");
         assert_eq!(task.display_target(), "/some/root");
         assert!(!task.is_exclusive());
         assert!(task.is_stoppable());

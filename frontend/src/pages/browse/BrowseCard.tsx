@@ -7,12 +7,17 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RootPicker } from '@/components/shared/RootPicker'
-import { CompactScanBar } from '@/components/shared/CompactScanBar'
-import { ScanSummaryBar } from '@/components/shared/ScanSummaryBar'
+import { TimeRangeBar } from '@/components/shared/TimeRangeBar'
 import { SearchFilter } from '@/components/shared/SearchFilter'
 import { ItemDetail } from '@/components/shared/ItemDetail'
 import { useBrowseCache } from '@/hooks/useBrowseCache'
 import { getParentPath, type ChangeKind } from '@/lib/pathUtils'
+import {
+  DEFAULT_PRESET,
+  presetSelection,
+  rangeKey,
+  type TimeRangeSelection,
+} from '@/lib/timeRange'
 import { FileTreeView } from './FileTreeView'
 import type { FileTreeViewHandle } from './FileTreeView'
 import { FolderView } from './FolderView'
@@ -36,12 +41,13 @@ interface SelectedItem {
 interface BrowseCardProps {
   roots: Root[]
   defaultRootId?: string
-  defaultScanId?: number
+  /** A time selection to open with (from a link); otherwise the default preset. */
+  defaultSelection?: TimeRangeSelection | null
   isActive?: boolean
   isPrimary?: boolean
 }
 
-export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: pageActive = true, isPrimary = false }: BrowseCardProps) {
+export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: pageActive = true, isPrimary = false }: BrowseCardProps) {
   const [, setSearchParams] = useSearchParams()
   const [selectedRootId, setSelectedRootIdRaw] = useState<string>(defaultRootId ?? '')
 
@@ -56,8 +62,13 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
       }, { replace: true })
     }
   }, [isPrimary, setSearchParams])
-  const [resolvedScanId, setResolvedScanId] = useState<number | null>(null)
-  const [scanStatus, setScanStatus] = useState<'resolving' | 'resolved' | 'no-scan'>('resolving')
+  // What time or range is shown. `refreshToken` changes when the same
+  // selection should be read again (new changes may have arrived).
+  const [selection, setSelection] = useState<TimeRangeSelection>(
+    () => defaultSelection ?? presetSelection(DEFAULT_PRESET)
+  )
+  const [refreshToken, setRefreshToken] = useState(0)
+  const handleRefresh = useCallback(() => setRefreshToken((token) => token + 1), [])
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hiddenKinds, setHiddenKinds] = useState<Set<ChangeKind>>(new Set())
   const [searchFilter, setSearchFilter] = useState('')
@@ -87,7 +98,32 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
 
   // Shared data cache for Tree and Folder views
   const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
-  const cache = useBrowseCache(selectedRoot?.root_id ?? 0, resolvedScanId ?? 0)
+  const cache = useBrowseCache(selectedRoot?.root_id ?? 0, selection, refreshToken)
+  const viewKey = `${rangeKey(selection)}:${refreshToken}`
+
+  // Keep the URL in step with the primary card's selection, so the view can be linked to.
+  const handleSelectionChange = useCallback((next: TimeRangeSelection) => {
+    setSelection(next)
+    if (isPrimary) {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev)
+        if (next.from !== null) params.set('from', next.from.toString())
+        else params.delete('from')
+        if (next.to !== null) params.set('to', next.to.toString())
+        else params.delete('to')
+        return params
+      }, { replace: true })
+    }
+  }, [isPrimary, setSearchParams])
+
+  // Follow a time selection that arrives by link while the page is open.
+  const defaultSelectionKey = defaultSelection ? rangeKey(defaultSelection) : null
+  useEffect(() => {
+    if (defaultSelection && defaultSelectionKey !== rangeKey(selection)) {
+      setSelection(defaultSelection)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSelectionKey])
 
   // Sync with URL param changes (e.g., deep-linking from Dashboard)
   useEffect(() => {
@@ -104,10 +140,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
     }
   }, [roots, selectedRootId, setSelectedRootId])
 
-  // Reset resolved scan, all selections, and folder path when root changes
+  // Reset item selections when the root changes
   useEffect(() => {
-    setResolvedScanId(null)
-    setScanStatus('resolving')
     setSelectedItems({ tree: null, folder: null, search: null })
   }, [selectedRootId])
 
@@ -117,16 +151,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
       setFolderCurrentPath(selectedRoot.root_path)
     }
   }, [selectedRoot])
-
-  const handleScanResolved = useCallback((scanId: number) => {
-    setResolvedScanId(scanId)
-    setScanStatus('resolved')
-  }, [])
-
-  const handleNoScan = useCallback(() => {
-    setResolvedScanId(null)
-    setScanStatus('no-scan')
-  }, [])
 
   // Debounce search input
   useEffect(() => {
@@ -214,14 +238,14 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
   const activeSelection = selectedItems[viewMode]
 
   // Build the content view — all views always mounted, toggled via CSS
-  const contentView = selectedRoot && resolvedScanId ? (
+  const contentView = selectedRoot ? (
     <>
       {/* Tree View — always rendered */}
       <div className={viewMode === 'tree' ? '' : 'hidden'}>
         <FileTreeView
           ref={treeRef}
           rootPath={selectedRoot.root_path}
-          scanId={resolvedScanId}
+          viewKey={viewKey}
           cache={cache}
           hiddenKinds={hiddenKinds}
           isActive={pageActive && viewMode === 'tree'}
@@ -234,7 +258,7 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
       <div className={viewMode === 'folder' ? '' : 'hidden'}>
         <FolderView
           rootPath={selectedRoot.root_path}
-          scanId={resolvedScanId}
+          viewKey={viewKey}
           cache={cache}
           currentPath={folderCurrentPath}
           onNavigate={setFolderCurrentPath}
@@ -250,7 +274,8 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
         <SearchResultsList
           rootId={selectedRoot.root_id}
           rootPath={selectedRoot.root_path}
-          scanId={resolvedScanId}
+          selection={selection}
+          refreshToken={refreshToken}
           searchQuery={debouncedSearch}
           hiddenKinds={hiddenKinds}
           isActive={pageActive && viewMode === 'search' && hasSearchQuery}
@@ -268,16 +293,12 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
     </>
   ) : (
     <div className="flex items-center justify-center h-full text-muted-foreground">
-      {!selectedRoot
-        ? 'Select a root'
-        : scanStatus === 'no-scan'
-          ? 'No scan data available'
-          : 'Resolving scan...'}
+      Select a root
     </div>
   )
 
-  // Detail panel — always visible when scan is resolved, with empty state placeholder
-  const detailPanel = selectedRoot && resolvedScanId ? (
+  // Detail panel — always visible, with empty state placeholder
+  const detailPanel = selectedRoot ? (
     <div className={cn(
       "w-[420px] flex-shrink-0",
       detailOnRight ? 'border-l border-border' : 'border-r border-border'
@@ -290,7 +311,10 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
             itemPath={activeSelection.itemPath}
             itemType={activeSelection.itemType}
             isTombstone={activeSelection.isTombstone}
-            scanId={resolvedScanId}
+            // As of the end of the selection. Null means now; a concrete
+            // "now" must not be sent, or the server would read it as the
+            // past and move it back to the hour.
+            at={selection.to}
             onClose={handleDetailClose}
           />
         </ScrollArea>
@@ -313,13 +337,15 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
         />
       </CardHeader>
       <CardContent className="flex-1 min-h-0 flex flex-col gap-3">
-        {/* Compact scan bar */}
+        {/* What time or range is shown, and the control to change it */}
         {selectedRoot && (
-          <CompactScanBar
+          <TimeRangeBar
             rootId={selectedRoot.root_id}
-            initialScanId={defaultScanId}
-            onScanResolved={handleScanResolved}
-            onNoScan={handleNoScan}
+            selection={selection}
+            onSelectionChange={handleSelectionChange}
+            initialPreset={defaultSelection ? undefined : DEFAULT_PRESET}
+            refreshToken={refreshToken}
+            onRefresh={handleRefresh}
           />
         )}
 
@@ -421,9 +447,6 @@ export function BrowseCard({ roots, defaultRootId, defaultScanId, isActive: page
 
         {/* Content area: title bar + content view + detail panel */}
         <div className="flex-1 min-h-0 flex flex-col border border-border rounded-lg overflow-hidden">
-          {resolvedScanId && (
-            <ScanSummaryBar scanId={resolvedScanId} />
-          )}
           <div className="flex-1 min-h-0 flex overflow-hidden">
             {!detailOnRight && detailPanel}
             <ScrollContext.Provider value={browseScrollElement}>

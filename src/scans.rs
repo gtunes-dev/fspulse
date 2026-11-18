@@ -1,6 +1,7 @@
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::roots::Root;
+use crate::utils::Utils;
 
 use chrono::{Local, NaiveDate, TimeZone, Utc};
 use log::info;
@@ -341,17 +342,23 @@ impl Scan {
     pub fn set_state_completed(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning => {
+                // Counted before taking the write lock: it reads every
+                // file of the root, and the applier must not wait on it.
+                let posture = crate::snapshots::count_integrity_posture(conn, self.root_id)?;
+
                 let result =
                     Database::immediate_transaction(conn, |c| {
                         // New hash suspects: hash_versions with hash_state=2
                         // first seen during this scan (first_seen_at >= scan.started_at).
                         let new_hash_suspect_count: i64 = c
                             .query_row(
-                                "SELECT COUNT(*) FROM hash_versions
-                                 WHERE first_seen_at >= (
-                                     SELECT started_at FROM scans WHERE scan_id = ?
-                                 ) AND hash_state = 2",
-                                [self.scan_id],
+                                "SELECT COUNT(*) FROM hash_versions hv
+                                 JOIN items i ON i.item_id = hv.item_id
+                                 WHERE hv.first_seen_at >= (
+                                     SELECT started_at FROM scans WHERE scan_id = ?2
+                                 ) AND hv.hash_state = 2
+                                   AND i.root_id = ?1",
+                                params![self.root_id, self.scan_id],
                                 |row| row.get(0),
                             )
                             .unwrap_or(0);
@@ -383,6 +390,17 @@ impl Scan {
                                 ScanState::Completed.as_i64(),
                                 self.scan_id,
                             ],
+                        )?;
+
+                        // The root's integrity posture goes into the
+                        // current hour's snapshot, where Trends reads it.
+                        crate::snapshots::record_integrity_locked(
+                            c,
+                            self.root_id,
+                            &posture,
+                            new_val_invalid_count,
+                            new_hash_suspect_count,
+                            Utils::now_secs(),
                         )?;
 
                         Ok((new_hash_suspect_count, new_val_invalid_count))

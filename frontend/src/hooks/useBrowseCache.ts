@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { hashStateFromInt, valStateFromInt, type ChangeKind, type HashState, type ValState } from '@/lib/pathUtils'
+import { rangeKey, rangeParams, type TimeRangeSelection } from '@/lib/timeRange'
 
 /**
  * Raw item data cached by parent path.
@@ -28,6 +29,23 @@ export interface BrowseCache {
   isPathLoading(parentPath: string): boolean
 }
 
+/** One child of a folder as `/api/timeline/children` returns it. */
+interface TimelineChild {
+  item_id: number
+  item_path: string
+  item_name: string
+  item_type: string
+  is_deleted: boolean
+  size: number | null
+  mod_date: number | null
+  val_state: number | null
+  hash_state: number | null
+  /** Absent for a point in time. */
+  change: 'added' | 'modified' | 'deleted' | 'unchanged' | 'transient' | null
+  /** Folders in a range: net changes beneath the folder. */
+  descendants: { added: number; modified: number; deleted: number; transient: number } | null
+}
+
 /**
  * Shared data cache for Browse page views.
  *
@@ -35,31 +53,35 @@ export interface BrowseCache {
  * The cache deduplicates concurrent requests and serves instant cache hits
  * when both views access the same paths.
  *
- * Resets automatically when rootId or scanId change.
+ * Resets automatically when the root, the time selection, or the refresh
+ * token change.
  */
-export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
+export function useBrowseCache(rootId: number, selection: TimeRangeSelection, refreshToken: number): BrowseCache {
   const cacheRef = useRef<Map<string, CachedItem[]>>(new Map())
   const inflightRef = useRef<Map<string, Promise<CachedItem[]>>>(new Map())
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set())
 
-  // Capture current rootId/scanId for stale-check inside async closures
-  const contextRef = useRef({ rootId, scanId })
-  contextRef.current = { rootId, scanId }
+  // Everything that decides what a folder's children are.
+  const contextKey = `${rootId}:${rangeKey(selection)}:${refreshToken}`
 
-  // Clear cache refs synchronously during render when root/scan changes.
+  // Capture the current context for stale-checks inside async closures
+  const contextRef = useRef(contextKey)
+  contextRef.current = contextKey
+
+  // Clear cache refs synchronously during render when the context changes.
   // This prevents a race where child effects call loadChildren() before
   // the cleanup useEffect has fired, returning stale cached data.
-  const prevContextRef = useRef({ rootId, scanId })
-  if (prevContextRef.current.rootId !== rootId || prevContextRef.current.scanId !== scanId) {
+  const prevContextRef = useRef(contextKey)
+  if (prevContextRef.current !== contextKey) {
     cacheRef.current.clear()
     inflightRef.current.clear()
-    prevContextRef.current = { rootId, scanId }
+    prevContextRef.current = contextKey
   }
 
   // Reset loading state after render (state updates can't happen during render)
   useEffect(() => {
     setLoadingPaths(new Set())
-  }, [rootId, scanId])
+  }, [contextKey])
 
   const getChildren = useCallback((parentPath: string): CachedItem[] | undefined => {
     return cacheRef.current.get(parentPath)
@@ -75,8 +97,7 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
     if (inflight) return inflight
 
     // New fetch
-    const capturedRootId = rootId
-    const capturedScanId = scanId
+    const capturedContext = contextKey
 
     const promise = (async () => {
       setLoadingPaths(prev => {
@@ -87,40 +108,20 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
 
       try {
         const params = new URLSearchParams({
-          root_id: capturedRootId.toString(),
+          root_id: rootId.toString(),
           parent_path: parentPath,
-          scan_id: capturedScanId.toString(),
+          ...rangeParams(selection),
         })
 
-        const response = await fetch(`/api/items/immediate-children?${params}`)
+        const response = await fetch(`/api/timeline/children?${params}`)
         if (!response.ok) {
           throw new Error(`Failed to fetch children: ${response.statusText}`)
         }
 
-        const data = await response.json() as Array<{
-          item_id: number
-          item_path: string
-          item_name: string
-          item_type: string
-          is_added: boolean
-          is_deleted: boolean
-          size: number | null
-          mod_date: number | null
-          first_seen_at: number
-          add_count: number | null
-          modify_count: number | null
-          delete_count: number | null
-          unchanged_count: number | null
-          val_state: number | null
-          hash_state: number | null
-        }>
+        const data = await response.json() as { items: TimelineChild[] }
 
-        const items: CachedItem[] = data.map(item => {
-          const change_kind: ChangeKind = item.is_deleted ? 'deleted'
-            : item.first_seen_at === capturedScanId && item.is_added ? 'added'
-            : item.first_seen_at === capturedScanId ? 'modified'
-            : 'unchanged'
-
+        const items: CachedItem[] = data.items.map(item => {
+          const isDir = item.item_type === 'D'
           return {
             item_id: item.item_id,
             item_path: item.item_path,
@@ -129,19 +130,26 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
             is_deleted: item.is_deleted,
             size: item.size,
             mod_date: item.mod_date,
-            change_kind,
-            add_count: item.add_count,
-            modify_count: item.modify_count,
-            delete_count: item.delete_count,
-            unchanged_count: item.unchanged_count,
+            // A point in time has no comparison: everything is as it was.
+            // Transient items are not requested, so they do not occur.
+            change_kind: (item.change === null || item.change === 'transient'
+              ? 'unchanged'
+              : item.change) as ChangeKind,
+            add_count: isDir ? item.descendants?.added ?? 0 : null,
+            modify_count: isDir ? item.descendants?.modified ?? 0 : null,
+            delete_count: isDir ? item.descendants?.deleted ?? 0 : null,
+            // Not counted by the server. A non-zero value marks a folder
+            // that exists at the end of the range as possibly holding
+            // unchanged items, which keeps it visible and expandable
+            // when "Unchanged" is shown.
+            unchanged_count: isDir ? (item.is_deleted ? 0 : 1) : null,
             hash_state: hashStateFromInt(item.hash_state),
             val_state: valStateFromInt(item.val_state),
           }
         })
 
-        // Guard against stale writes after root/scan change
-        if (contextRef.current.rootId === capturedRootId &&
-            contextRef.current.scanId === capturedScanId) {
+        // Guard against stale writes after the context changed
+        if (contextRef.current === capturedContext) {
           cacheRef.current.set(parentPath, items)
         }
 
@@ -158,7 +166,9 @@ export function useBrowseCache(rootId: number, scanId: number): BrowseCache {
 
     inflightRef.current.set(parentPath, promise)
     return promise
-  }, [rootId, scanId])
+    // contextKey stands in for rootId, selection and refreshToken.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextKey])
 
   const isPathLoading = useCallback((parentPath: string): boolean => {
     return loadingPaths.has(parentPath)

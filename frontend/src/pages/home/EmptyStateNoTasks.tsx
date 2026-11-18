@@ -57,7 +57,7 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Create a recurring scan schedule on the <strong>Schedules</strong> page, or use <strong>Scan Now</strong> on any root for an immediate scan
+                      Changes are tracked as they happen. To verify file contents, create a recurring integrity check on the <strong>Schedules</strong> page, or use <strong>Check Integrity</strong> on any root
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>
@@ -73,7 +73,7 @@ export function EmptyStateNoTasks({ rootCount }: EmptyStateNoTasksProps) {
                     className="text-base text-left hover:underline flex items-center gap-2 w-full group-hover:text-primary transition-colors"
                   >
                     <span>
-                      Use <strong>Trends</strong> to see historic scan trends and key information
+                      Use <strong>Trends</strong> to see how a root's size, changes and integrity develop over time
                     </span>
                     <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   </button>

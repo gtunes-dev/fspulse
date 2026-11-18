@@ -4,11 +4,13 @@ import { TreeNode } from './TreeNode'
 import type { FlatTreeItem, ChangeKind } from '@/lib/pathUtils'
 import { hashStateFromInt, valStateFromInt, isItemVisible } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
+import { rangeKey, rangeParams, type TimeRangeSelection } from '@/lib/timeRange'
 
 interface SearchResultsListProps {
   rootId: number
   rootPath: string
-  scanId: number
+  selection: TimeRangeSelection
+  refreshToken: number
   searchQuery: string
   hiddenKinds: Set<ChangeKind>
   isActive?: boolean
@@ -19,7 +21,8 @@ interface SearchResultsListProps {
 export function SearchResultsList({
   rootId,
   rootPath,
-  scanId,
+  selection,
+  refreshToken,
   searchQuery,
   hiddenKinds,
   isActive = true,
@@ -35,11 +38,12 @@ export function SearchResultsList({
   // Track last request to avoid stale responses
   const requestIdRef = useRef(0)
 
+  const selectionKey = rangeKey(selection)
   const lastFetchKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (!isActive) return
 
-    const fetchKey = `${rootId}:${scanId}:${searchQuery}`
+    const fetchKey = `${rootId}:${selectionKey}:${refreshToken}:${searchQuery}`
     if (lastFetchKeyRef.current === fetchKey) return
     lastFetchKeyRef.current = fetchKey
 
@@ -52,62 +56,57 @@ export function SearchResultsList({
       try {
         const params = new URLSearchParams({
           root_id: rootId.toString(),
-          scan_id: scanId.toString(),
           query: searchQuery,
+          limit: '2000',
+          ...rangeParams(selection),
         })
 
-        const response = await fetch(`/api/items/search?${params}`)
+        const response = await fetch(`/api/timeline/search?${params}`)
         if (currentRequestId !== requestIdRef.current) return
 
         if (!response.ok) {
           throw new Error(`Search failed: ${response.statusText}`)
         }
 
-        const items = (await response.json()) as Array<{
-          item_id: number
-          item_path: string
-          item_name: string
-          item_type: string
-          is_added: boolean
-          is_deleted: boolean
-          size: number | null
-          mod_date: number | null
-          first_seen_at: number
-          add_count: number | null
-          modify_count: number | null
-          delete_count: number | null
-          unchanged_count: number | null
-          val_state: number | null
-          hash_state: number | null
-        }>
+        const data = (await response.json()) as {
+          items: Array<{
+            item_id: number
+            item_path: string
+            item_name: string
+            item_type: string
+            is_deleted: boolean
+            size: number | null
+            mod_date: number | null
+            val_state: number | null
+            hash_state: number | null
+            change: 'added' | 'modified' | 'deleted' | 'unchanged' | 'transient' | null
+          }>
+        }
 
-        const flatItems: FlatTreeItem[] = items.map((item) => {
-          const change_kind = item.is_deleted ? 'deleted' as const
-            : item.first_seen_at === scanId && item.is_added ? 'added' as const
-            : item.first_seen_at === scanId ? 'modified' as const
-            : 'unchanged' as const
-
-          return {
-            item_id: item.item_id,
-            item_path: item.item_path,
-            item_name: item.item_name,
-            item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
-            is_deleted: item.is_deleted,
-            size: item.size,
-            mod_date: item.mod_date,
-            change_kind,
-            add_count: item.add_count,
-            modify_count: item.modify_count,
-            delete_count: item.delete_count,
-            unchanged_count: item.unchanged_count,
-            hash_state: hashStateFromInt(item.hash_state),
-            val_state: valStateFromInt(item.val_state),
-            depth: 0,
-            isExpanded: false,
-            childrenLoaded: false,
-            hasChildren: item.item_type === 'D',
-          }
-        })
+        const flatItems: FlatTreeItem[] = data.items.map((item) => ({
+          item_id: item.item_id,
+          item_path: item.item_path,
+          item_name: item.item_name,
+          item_type: item.item_type as 'F' | 'D' | 'S' | 'O',
+          is_deleted: item.is_deleted,
+          size: item.size,
+          mod_date: item.mod_date,
+          // A point in time has no comparison.
+          change_kind: (item.change === null || item.change === 'transient'
+            ? 'unchanged'
+            : item.change) as ChangeKind,
+          // Search results do not carry what is beneath a folder.
+          add_count: null,
+          modify_count: null,
+          delete_count: null,
+          unchanged_count: null,
+          hash_state: hashStateFromInt(item.hash_state),
+          val_state: valStateFromInt(item.val_state),
+          depth: 0,
+          isExpanded: false,
+          childrenLoaded: false,
+          hasChildren: item.item_type === 'D',
+        }))
 
         setResults(flatItems)
       } catch (err) {
@@ -123,7 +122,9 @@ export function SearchResultsList({
     }
 
     search()
-  }, [isActive, rootId, scanId, searchQuery])
+    // selectionKey stands in for `selection`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, rootId, selectionKey, refreshToken, searchQuery])
 
   // Filter items client-side based on change kind, hash state, and val state toggles
   const visibleResults = results.filter((item) => isItemVisible(item, hiddenKinds))

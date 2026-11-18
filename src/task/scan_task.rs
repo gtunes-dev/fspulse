@@ -380,7 +380,7 @@ impl Task for ScanTask {
     }
 
     fn action(&self) -> &str {
-        "Scanning"
+        "Checking integrity"
     }
 
     fn display_target(&self) -> String {

@@ -131,7 +131,6 @@ export function IntegrityPage() {
 
   const [detailItemId, setDetailItemId] = useState<number | null>(null)
   const [detailItemPath, setDetailItemPath] = useState<string>('')
-  const [detailScanId, setDetailScanId] = useState<number | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
   // Expanded items: item_id -> version data
@@ -441,9 +440,6 @@ export function IntegrityPage() {
   const openDetail = (item: IntegrityItemSummary) => {
     setDetailItemId(item.item_id)
     setDetailItemPath(item.item_path)
-    // No scan_id available in v32 — ItemDetail falls back to latest version.
-    // TODO: switch to a timestamp-based "as-of" view using item.latest_seen_at.
-    setDetailScanId(null)
     setDetailOpen(true)
   }
 
@@ -824,7 +820,7 @@ export function IntegrityPage() {
           itemPath={detailItemPath}
           itemType="F"
           isTombstone={false}
-          scanId={detailScanId}
+          at={null}
           open={detailOpen}
           onOpenChange={setDetailOpen}
           onItemChanged={refreshItemsList}

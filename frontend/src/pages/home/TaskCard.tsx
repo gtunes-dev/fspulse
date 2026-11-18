@@ -58,7 +58,7 @@ export function TaskCard() {
           <div className="flex items-center gap-3 mb-4">
             <Button size="lg" onClick={() => setShowManualScanDialog(true)} disabled={isExclusive}>
               <Play className="h-4 w-4 mr-2" />
-              Scan Now
+              Check Integrity
             </Button>
             <Button
               size="lg"

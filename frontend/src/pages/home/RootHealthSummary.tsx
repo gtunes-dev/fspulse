@@ -24,6 +24,9 @@ import { formatDateRelative } from '@/lib/dateUtils'
 import { shortenPath } from '@/lib/pathUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import type { RootWithScan } from '@/lib/types'
+import { Badge } from '@/components/ui/badge'
+import { formatTimeAgo } from '@/lib/dateUtils'
+import { describeLastCheck, describeTracking, fetchObservation, type RootObservation } from '@/lib/observation'
 
 const scanStateIcon = (state: string) => {
   switch (state) {
@@ -39,9 +42,29 @@ const scanStateIcon = (state: string) => {
 }
 
 export function RootHealthSummary() {
-  const { lastTaskCompletedAt, currentTaskId } = useTaskContext()
+  const { lastTaskCompletedAt, currentTaskId, activeRootId } = useTaskContext()
   const [roots, setRoots] = useState<RootWithScan[]>([])
   const [loading, setLoading] = useState(true)
+  const [observations, setObservations] = useState<Map<number, RootObservation>>(new Map())
+
+  // Change tracking status. Also on a timer: the watch state changes
+  // without any task starting or finishing.
+  useEffect(() => {
+    let cancelled = false
+    const load = () => {
+      fetchObservation()
+        .then((data) => {
+          if (!cancelled) setObservations(new Map(data.map((o) => [o.root_id, o])))
+        })
+        .catch((err) => console.error('Error loading change tracking status:', err))
+    }
+    load()
+    const timer = window.setInterval(load, 30_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [lastTaskCompletedAt, currentTaskId])
 
   useEffect(() => {
     async function loadHealthData() {
@@ -80,8 +103,9 @@ export function RootHealthSummary() {
             <TableHeader className="bg-muted">
               <TableRow>
                 <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
-                <TableHead className="uppercase text-xs tracking-wide">Last Scan</TableHead>
-                <TableHead className="text-right uppercase text-xs tracking-wide">Status</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide">Change Tracking</TableHead>
+                <TableHead className="uppercase text-xs tracking-wide">Last Integrity Check</TableHead>
+                <TableHead className="text-right uppercase text-xs tracking-wide">Result</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -124,6 +148,36 @@ export function RootHealthSummary() {
                       </div>
                     </div>
                   </TableCell>
+                  <TableCell className="text-sm">
+                    {(() => {
+                      const observation = observations.get(root.root_id)
+                      if (!observation) return <span className="text-muted-foreground">Loading...</span>
+                      const tracking = describeTracking(observation)
+                      return (
+                        <div className="flex flex-col gap-0.5" title={tracking.explanation ?? undefined}>
+                          <div className="flex items-center gap-2">
+                            {tracking.attention ? (
+                              <Badge variant={tracking.attention}>{tracking.label}</Badge>
+                            ) : (
+                              <span>{tracking.label}</span>
+                            )}
+                            {observation.walk_block && (
+                              <Link to="/roots" className="hover:underline">
+                                <Badge variant="warning">Deletions not recorded</Badge>
+                              </Link>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {describeLastCheck(
+                              observation,
+                              activeRootId === root.root_id && !observation.last_walk_completed_at,
+                              formatTimeAgo
+                            )}
+                          </span>
+                        </div>
+                      )
+                    })()}
+                  </TableCell>
                   <TableCell>
                     {root.last_scan ? (
                       <span className="flex items-center gap-1.5 text-sm">
@@ -131,7 +185,7 @@ export function RootHealthSummary() {
                         {formatDateRelative(root.last_scan.started_at)}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground text-sm">Never scanned</span>
+                      <span className="text-muted-foreground text-sm">Never checked</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

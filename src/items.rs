@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use std::path::MAIN_SEPARATOR_STR;
 
 use crate::{
-    db::Database, error::FsPulseError, utils::Utils,
+    db::Database, error::FsPulseError,
 };
 
 // Re-export types that were moved to item_identity.rs.
@@ -23,26 +23,14 @@ impl crate::query::QueryEnum for Access {
     }
 }
 
-/// Get size history for an item using item_versions.
-/// Returns size data points from versions filtered by scan date range.
-/// Uses `from_date` for the lower bound and `to_scan_id` to cap at a specific scan.
+/// Size of an item over time: one point per version that recorded a
+/// size and began between `from` and `to` (Unix seconds, inclusive).
 pub fn get_size_history(
     item_id: i64,
-    from_date_str: &str,
-    to_scan_id: i64,
+    from: i64,
+    to: i64,
 ) -> Result<Vec<SizeHistoryPoint>, FsPulseError> {
     let conn = Database::get_connection()?;
-
-    // Get the upper bound timestamp from the anchor scan
-    let to_timestamp: i64 = conn
-        .query_row(
-            "SELECT started_at FROM scans WHERE scan_id = ?",
-            params![to_scan_id],
-            |row| row.get(0),
-        )?;
-
-    // Get the lower bound timestamp from the date string
-    let (from_timestamp, _) = Utils::range_date_bounds(from_date_str, from_date_str)?;
 
     let sql = r#"
         SELECT iv.first_seen_at, iv.size
@@ -53,10 +41,7 @@ pub fn get_size_history(
         ORDER BY iv.first_seen_at ASC"#;
 
     let mut stmt = conn.prepare_cached(sql)?;
-    let rows = stmt.query_map(
-        params![item_id, from_timestamp, to_timestamp],
-        SizeHistoryPoint::from_row,
-    )?;
+    let rows = stmt.query_map(params![item_id, from, to], SizeHistoryPoint::from_row)?;
 
     let mut history = Vec::new();
     for row in rows {
@@ -276,7 +261,7 @@ fn compute_descendant_counts(
         .map(|(_, hid)| hid.clone())
         .collect();
 
-    // Uses idx_versions_root_firstseen_hid: (root_id, first_seen_at, hierarchy_id)
+    // Uses idx_versions_root_time_hid: (root_id, first_seen_at, hierarchy_id, ...)
     let mut count_stmt_bounded = conn.prepare_cached(
         "SELECT
             COALESCE(SUM(CASE WHEN is_added = 1 THEN 1 ELSE 0 END), 0),

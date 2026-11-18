@@ -28,7 +28,8 @@ interface UpcomingTask {
 
 const taskTypeDisplayName = (taskType: string): string => {
   switch (taskType) {
-    case 'scan': return 'Scan'
+    case 'scan': return 'Integrity check'
+    case 'checkpoint': return 'Change check'
     case 'compact_database': return 'Compact Database'
     default: return taskType
   }

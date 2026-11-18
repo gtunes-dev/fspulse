@@ -15,6 +15,7 @@ import { useTaskContext } from '@/contexts/TaskContext'
 import { shortenPath } from '@/lib/pathUtils'
 import { CheckCircle, XCircle, AlertTriangle, CircleX, ArrowRight, Hash } from 'lucide-react'
 import { ChangeIcons } from '@/components/shared/ChangeIcons'
+import { browseLinkForPeriod, taskTypeDisplayName } from '@/lib/taskNames'
 
 interface TaskHistoryRow {
   task_id: number
@@ -34,13 +35,6 @@ interface TaskHistoryRow {
 
 const RECENT_LIMIT = 5
 
-const taskTypeDisplayName = (taskType: string): string => {
-  switch (taskType) {
-    case 'scan': return 'Scan'
-    case 'compact_database': return 'Compact Database'
-    default: return taskType
-  }
-}
 
 export function RecentActivityCard() {
   const { lastTaskCompletedAt } = useTaskContext()
@@ -123,12 +117,13 @@ export function RecentActivityCard() {
                     {task.started_at ? formatTimeAgo(task.started_at) : '-'}
                   </TableCell>
                   <TableCell>
-                    {task.task_type === 'scan' && task.scan_id != null && task.root_id != null ? (
+                    {task.task_type === 'checkpoint' && task.root_id != null && task.started_at != null ? (
                       <Link
-                        to={`/browse?root_id=${task.root_id}&scan_id=${task.scan_id}`}
+                        to={browseLinkForPeriod(task.root_id, task.started_at, task.completed_at)}
                         className="hover:underline hover:text-primary"
+                        title="Browse what changed around this check"
                       >
-                        Scan #{task.scan_id}
+                        {taskTypeDisplayName(task.task_type)}
                       </Link>
                     ) : (
                       taskTypeDisplayName(task.task_type)

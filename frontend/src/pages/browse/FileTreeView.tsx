@@ -9,7 +9,8 @@ import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 
 interface FileTreeViewProps {
   rootPath: string
-  scanId: number
+  /** Identity of the root, time selection and refresh being shown. */
+  viewKey: string
   cache: BrowseCache
   hiddenKinds: Set<ChangeKind>
   isActive?: boolean
@@ -22,7 +23,7 @@ export interface FileTreeViewHandle {
 }
 
 export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
-  function FileTreeView({ rootPath, scanId, cache, hiddenKinds, isActive = true, selectedItemId, onItemSelect }, ref) {
+  function FileTreeView({ rootPath, viewKey, cache, hiddenKinds, isActive = true, selectedItemId, onItemSelect }, ref) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -89,8 +90,8 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
     useEffect(() => {
       if (!isActive) return
 
-      // Create a unique key for this root+scan combination
-      const loadKey = `${rootPath}:${scanId}`
+      // Create a unique key for this root and view
+      const loadKey = `${rootPath}:${viewKey}`
 
       // Skip if we've already started loading this combination
       if (loadedKeyRef.current === loadKey) {
@@ -153,7 +154,7 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
       }
 
       loadRootLevelItems()
-    }, [isActive, rootPath, scanId, cache, initializeTree, initializeTreeWithExpansions, getExpandedPaths])
+    }, [isActive, rootPath, viewKey, cache, initializeTree, initializeTreeWithExpansions, getExpandedPaths])
 
     return (
       <div

@@ -153,7 +153,8 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
     JOIN scans s1 ON s1.scan_id = ivo.first_scan_id
     JOIN items i ON i.item_id = ivo.item_id;
 
-    CREATE INDEX idx_versions_root_firstseen_hid ON item_versions (root_id, first_seen_at, hierarchy_id);
+    CREATE INDEX idx_versions_root_time_hid ON item_versions (root_id, first_seen_at, hierarchy_id, is_added, is_deleted);
+    CREATE INDEX idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted);
     CREATE INDEX idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
     CREATE INDEX idx_versions_val_at ON item_versions (val_at, val_state);
 

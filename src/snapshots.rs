@@ -16,8 +16,10 @@
 //! Counts are items, not events. A file changed many times in an hour
 //! is one version and counts as modified once.
 //!
-//! The integrity columns of rows written here are left NULL; they are
-//! the integrity check's to fill.
+//! The integrity columns are NULL on rows written by the applier. A
+//! completed integrity check counts the root's integrity posture and
+//! writes it to the current hour's row (`record_integrity_locked`); a
+//! reader carries the last posture forward, as with totals.
 
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -261,6 +263,114 @@ pub(crate) fn correct_totals_locked(
     Ok(true)
 }
 
+/// Integrity posture of a root's alive files, counted from each file's
+/// current version and that version's latest hash. Parameter: ?1 root_id.
+/// Columns: validation unknown, valid, invalid, no validator; hash
+/// unknown, baseline, suspect. Reads every item of the root.
+pub(crate) const INTEGRITY_POSTURE_SQL: &str = "
+    SELECT COALESCE(SUM(i.has_validator = 1 AND iv.val_state IS NULL), 0),
+           COALESCE(SUM(iv.val_state = 1), 0),
+           COALESCE(SUM(iv.val_state = 2), 0),
+           COALESCE(SUM(i.has_validator = 0), 0),
+           COALESCE(SUM(hv.hash_state IS NULL), 0),
+           COALESCE(SUM(hv.hash_state = 1), 0),
+           COALESCE(SUM(hv.hash_state = 2), 0)
+    FROM items i
+    JOIN item_versions iv ON iv.item_id = i.item_id
+       AND iv.item_version = (
+           SELECT MAX(iv2.item_version) FROM item_versions iv2
+           WHERE iv2.item_id = i.item_id
+       )
+    LEFT JOIN hash_versions hv ON hv.item_id = iv.item_id
+       AND hv.item_version = iv.item_version
+       AND hv.first_seen_at = (
+           SELECT MAX(hv2.first_seen_at) FROM hash_versions hv2
+           WHERE hv2.item_id = iv.item_id AND hv2.item_version = iv.item_version
+       )
+    WHERE i.root_id = ?1 AND i.item_type = 0 AND iv.is_deleted = 0";
+
+/// Count a root's integrity posture (see `INTEGRITY_POSTURE_SQL` for the
+/// order). Takes seconds on a root with millions of files, so call it
+/// outside the write lock.
+pub(crate) fn count_integrity_posture(
+    conn: &Connection,
+    root_id: i64,
+) -> Result<[i64; 7], FsPulseError> {
+    Ok(conn.query_row(INTEGRITY_POSTURE_SQL, [root_id], |row| {
+        Ok([
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+            row.get(5)?,
+            row.get(6)?,
+        ])
+    })?)
+}
+
+/// Record the outcome of a completed integrity check: the root's
+/// integrity posture as counted at its end, and how many problems the
+/// check newly found. Goes on the current hour's row, which is created
+/// (carrying the totals forward) if nothing else changed this hour. A
+/// second check in the same hour replaces the posture and adds to the
+/// new-problem counts. Must run under the write lock.
+pub(crate) fn record_integrity_locked(
+    conn: &Connection,
+    root_id: i64,
+    posture: &[i64; 7],
+    new_val_invalid: i64,
+    new_hash_suspect: i64,
+    now: i64,
+) -> Result<(), FsPulseError> {
+
+    let latest = latest_locked(conn, root_id)?;
+    let totals = match latest {
+        Some((_, Some(totals))) => totals,
+        _ => alive_totals_locked(conn, root_id)?,
+    };
+    let taken_at = target_row(now, latest.map(|(taken_at, _)| taken_at));
+
+    conn.execute(
+        "INSERT INTO snapshots (
+            root_id, taken_at, file_count, folder_count, total_size,
+            add_count, modify_count, delete_count,
+            val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
+            hash_unknown_count, hash_baseline_count, hash_suspect_count,
+            new_val_invalid_count, new_hash_suspect_count
+         ) VALUES (?1, ?2, ?3, ?4, ?5, 0, 0, 0, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+         ON CONFLICT (root_id, taken_at) DO UPDATE SET
+            val_unknown_count      = excluded.val_unknown_count,
+            val_valid_count        = excluded.val_valid_count,
+            val_invalid_count      = excluded.val_invalid_count,
+            val_no_validator_count = excluded.val_no_validator_count,
+            hash_unknown_count     = excluded.hash_unknown_count,
+            hash_baseline_count    = excluded.hash_baseline_count,
+            hash_suspect_count     = excluded.hash_suspect_count,
+            new_val_invalid_count  = COALESCE(new_val_invalid_count, 0)
+                                     + excluded.new_val_invalid_count,
+            new_hash_suspect_count = COALESCE(new_hash_suspect_count, 0)
+                                     + excluded.new_hash_suspect_count",
+        params![
+            root_id,
+            taken_at,
+            totals.files,
+            totals.folders,
+            totals.size,
+            posture[0],
+            posture[1],
+            posture[2],
+            posture[3],
+            posture[4],
+            posture[5],
+            posture[6],
+            new_val_invalid,
+            new_hash_suspect,
+        ],
+    )?;
+    Ok(())
+}
+
 /// Recount a root after a completed reconcile walk and correct its
 /// snapshot totals if they have drifted. Returns true if they had.
 pub fn correct_totals(root_id: i64) -> Result<bool, FsPulseError> {
@@ -484,5 +594,99 @@ mod tests {
         let fx = Fixture::new();
         assert!(!correct_totals_locked(&fx.conn, fx.root_id, HOUR).unwrap());
         assert!(fx.rows().is_empty());
+    }
+    #[test]
+    fn a_completed_integrity_check_records_posture_on_the_current_hours_row() {
+        let f = Fixture::new();
+        f.write("a.flac", "aaaa");
+        f.write("b.flac", "bb");
+        f.write("notes.txt", "n");
+        f.touch(&["a.flac", "b.flac", "notes.txt"], HOUR + 10);
+
+        // a.flac: validated and hashed. b.flac: invalid, hashed twice,
+        // the second time with a different result. notes.txt: nothing.
+        let id = |name: &str| -> i64 {
+            f.conn
+                .query_row("SELECT item_id FROM items WHERE item_name = ?1", [name], |r| r.get(0))
+                .unwrap()
+        };
+        let (a, b, notes) = (id("a.flac"), id("b.flac"), id("notes.txt"));
+        f.conn
+            .execute("UPDATE items SET has_validator = (item_id <> ?1)", [notes])
+            .unwrap();
+        f.conn
+            .execute("UPDATE item_versions SET val_state = 1 WHERE item_id = ?1", [a])
+            .unwrap();
+        f.conn
+            .execute("UPDATE item_versions SET val_state = 2 WHERE item_id = ?1", [b])
+            .unwrap();
+        for (item, at, state) in [(a, 20, 1), (b, 20, 1), (b, 30, 2)] {
+            f.conn
+                .execute(
+                    "INSERT INTO hash_versions
+                        (item_id, item_version, first_seen_at, last_seen_at, file_hash, hash_state)
+                     VALUES (?1, 1, ?2, ?2, x'00', ?3)",
+                    params![item, HOUR + at, state],
+                )
+                .unwrap();
+        }
+
+        let integrity = |conn: &Connection| -> Vec<(i64, Vec<Option<i64>>)> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT taken_at, file_count, add_count,
+                            val_unknown_count, val_valid_count, val_invalid_count,
+                            val_no_validator_count, hash_unknown_count,
+                            hash_baseline_count, hash_suspect_count,
+                            new_val_invalid_count, new_hash_suspect_count
+                       FROM snapshots ORDER BY taken_at",
+                )
+                .unwrap();
+            let rows = stmt
+                .query_map([], |row| {
+                    let taken_at: i64 = row.get(0)?;
+                    let values = (1..12).map(|i| row.get(i)).collect::<Result<_, _>>()?;
+                    Ok((taken_at - HOUR, values))
+                })
+                .unwrap();
+            rows.map(Result::unwrap).collect()
+        };
+        let some = |values: &[i64]| values.iter().map(|v| Some(*v)).collect::<Vec<_>>();
+
+        let posture = count_integrity_posture(&f.conn, f.root_id).unwrap();
+        assert_eq!(posture, [0, 1, 1, 1, 1, 1, 1]);
+
+        // In the hour the files arrived: posture lands on that hour's
+        // row beside its change counts.
+        record_integrity_locked(&f.conn, f.root_id, &posture, 1, 1, HOUR + 40).unwrap();
+        assert_eq!(
+            integrity(&f.conn),
+            vec![(0, some(&[3, 3, 0, 1, 1, 1, 1, 1, 1, 1, 1]))]
+        );
+
+        // A second check in the same hour replaces the posture and adds
+        // to what was newly found.
+        record_integrity_locked(&f.conn, f.root_id, &posture, 0, 2, HOUR + 50).unwrap();
+        assert_eq!(
+            integrity(&f.conn),
+            vec![(0, some(&[3, 3, 0, 1, 1, 1, 1, 1, 1, 1, 3]))]
+        );
+
+        // In a later hour with no changes: a new row carrying the
+        // totals forward, with no changes counted.
+        record_integrity_locked(&f.conn, f.root_id, &posture, 0, 0, HOUR + BUCKET_SECS + 5).unwrap();
+        let rows = integrity(&f.conn);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[1],
+            (BUCKET_SECS, some(&[3, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0]))
+        );
+
+        // The applier's rows leave the integrity columns alone.
+        f.write("c.flac", "c");
+        f.touch(&["c.flac"], HOUR + BUCKET_SECS + 60);
+        let rows = integrity(&f.conn);
+        assert_eq!(rows[1].1[0], Some(4));
+        assert_eq!(rows[1].1[4], Some(1));
     }
 }

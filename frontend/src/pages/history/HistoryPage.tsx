@@ -19,6 +19,7 @@ import { TaskTypeFilter } from '@/components/shared/TaskTypeFilter'
 import { fetchQuery } from '@/lib/api'
 import { shortenPath } from '@/lib/pathUtils'
 import type { ColumnSpec } from '@/lib/types'
+import { browseLinkForPeriod, taskTypeDisplayName } from '@/lib/taskNames'
 
 interface HistoryRow {
   task_id: number
@@ -46,13 +47,6 @@ interface Root {
 
 const ITEMS_PER_PAGE = 25
 
-const taskTypeDisplayName = (taskType: string): string => {
-  switch (taskType) {
-    case 'scan': return 'Scan'
-    case 'compact_database': return 'Compact Database'
-    default: return taskType
-  }
-}
 
 export function HistoryPage() {
   const { lastTaskCompletedAt } = useTaskContext()
@@ -278,12 +272,13 @@ export function HistoryPage() {
 
                       {/* Task */}
                       <TableCell>
-                        {isScan(task) && task.scan_id != null && task.root_id != null ? (
+                        {task.task_type === 'checkpoint' && task.root_id != null && task.started_at != null ? (
                           <Link
-                            to={`/browse?root_id=${task.root_id}&scan_id=${task.scan_id}`}
+                            to={browseLinkForPeriod(task.root_id, task.started_at, task.completed_at)}
                             className="hover:underline hover:text-primary"
+                            title="Browse what changed around this check"
                           >
-                            Scan #{task.scan_id}
+                            {taskTypeDisplayName(task.task_type)}
                           </Link>
                         ) : (
                           taskTypeDisplayName(task.task_type)
@@ -337,7 +332,9 @@ export function HistoryPage() {
 
                       {/* Changes */}
                       <TableCell className="text-center">
-                        {isScan(task) ? (
+                        {/* Only integrity checks from before change tracking
+                            was separated out carry change counts. */}
+                        {isScan(task) && (task.add_count || task.modify_count || task.delete_count) ? (
                           formatChanges(task.add_count, task.modify_count, task.delete_count)
                         ) : (
                           <span className="text-muted-foreground">&mdash;</span>

@@ -18,6 +18,7 @@ mod reconcile;
 mod root_status;
 mod roots;
 mod task_manager;
+mod timeline;
 mod scanner;
 mod scans;
 mod watcher;

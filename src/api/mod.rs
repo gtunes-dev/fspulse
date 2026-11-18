@@ -13,3 +13,4 @@ pub use routes::tasks;
 pub use routes::settings;
 pub use routes::state;
 pub use routes::server;
+pub use routes::timeline;

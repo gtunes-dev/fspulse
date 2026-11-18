@@ -30,7 +30,8 @@ export function TaskTypeFilter({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Types</SelectItem>
-          <SelectItem value="0">Scan</SelectItem>
+          <SelectItem value="2">Change check</SelectItem>
+          <SelectItem value="0">Integrity check</SelectItem>
           <SelectItem value="1">Compact Database</SelectItem>
         </SelectContent>
       </Select>

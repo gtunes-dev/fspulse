@@ -12,6 +12,19 @@ use super::ordpath::{DefaultEncoding, OrdPathBuf};
 /// operations are expressed via [`HierarchyId::get_descendant`], not by
 /// touching ordinals directly.
 ///
+/// # Ordinals, levels and carets
+///
+/// A position is a sequence of ordinals. Odd ordinals are levels of the
+/// tree; even ordinals are "carets" (ORDPATH, O'Neil et al., SIGMOD 2004
+/// §3.3) that make room between two siblings without adding a level. A
+/// node's step below its parent is therefore zero or more carets followed
+/// by one odd ordinal: `5`, `6.1`, `6.-1`, `6.2.3`. `3.6.1` is a child of
+/// `3`, a sibling between `3.5` and `3.7`.
+///
+/// Because every step ends in an odd ordinal and carets are even, no
+/// node's step is the beginning of a sibling's step. That is what makes
+/// "shares my prefix" mean exactly "is beneath me".
+///
 /// API shape mirrors SQL Server's `SqlHierarchyId` (`GetRoot`, `GetDescendant`,
 /// `GetAncestor`, `GetLevel`, `IsDescendantOf`).
 #[derive(Clone)]
@@ -30,8 +43,9 @@ impl HierarchyId {
     }
 
     /// Returns the level of this node (root = 0, top-level child = 1).
+    /// Carets are not levels.
     pub fn get_level(&self) -> i32 {
-        self.inner.ordinals().count() as i32
+        self.inner.ordinals().filter(|ord| is_odd(*ord)).count() as i32
     }
 
     /// Returns the ancestor `n` levels above this node, or `None` if `n`
@@ -41,13 +55,28 @@ impl HierarchyId {
         if n < 0 {
             return None;
         }
-        let ords = self.ordinals();
-        let n = n as usize;
-        if n > ords.len() {
-            None
-        } else {
-            Some(HierarchyId::from_ordinals(&ords[..ords.len() - n]))
+        let mut ords = self.ordinals();
+        for _ in 0..n {
+            // Drop this level's odd ordinal, then the carets that led to it.
+            ords.pop()?;
+            while ords.last().is_some_and(|ord| !is_odd(*ord)) {
+                ords.pop();
+            }
         }
+        Some(HierarchyId::from_ordinals(&ords))
+    }
+
+    /// The exclusive upper bound of this node's subtree in byte order:
+    /// every descendant sorts after the node and before this value, and
+    /// nothing else does. `None` for the root, whose subtree is
+    /// everything.
+    ///
+    /// The value is the node with its last ordinal raised by one. It is
+    /// not a position any node holds (it ends in a caret).
+    pub fn subtree_end(&self) -> Option<Vec<u8>> {
+        let mut ords = self.ordinals();
+        *ords.last_mut()? += 1;
+        Some(HierarchyId::from_ordinals(&ords).to_vec())
     }
 
     /// Returns a new descendant of `self` whose position sorts strictly
@@ -58,10 +87,8 @@ impl HierarchyId {
     /// - `(None, Some(r))` — sibling immediately before `r`.
     /// - `(Some(l), Some(r))` — sibling strictly between `l` and `r`.
     ///
-    /// When supplied, `child1` and `child2` must be descendants of `self`
-    /// (typically direct children, but caret-inserted positions can sit
-    /// deeper in the subtree and remain valid arguments here), and
-    /// `child1 < child2` must hold. Violations are caught by `debug_assert`
+    /// When supplied, `child1` and `child2` must be children of `self`
+    /// with nothing between them, and `child1 < child2` must hold. Violations are caught by `debug_assert`
     /// in debug builds; release builds trust the caller.
     pub fn get_descendant(
         &self,
@@ -84,12 +111,18 @@ impl HierarchyId {
             debug_assert!(l < r, "child1 must be less than child2");
         }
 
-        match (child1, child2) {
-            (None, None) => Self::child_of(self, 1),
-            (Some(l), None) => Self::insert_after(l),
-            (None, Some(r)) => Self::insert_before(r),
-            (Some(l), Some(r)) => Self::insert_between_impl(l, r),
-        }
+        // Work on each child's step below `self`: the ordinals after
+        // `self`'s own.
+        let mut ords = self.ordinals();
+        let depth = ords.len();
+        let left = child1.map(|c| c.ordinals());
+        let right = child2.map(|c| c.ordinals());
+        let step = step_between(
+            left.as_ref().map(|o| &o[depth..]),
+            right.as_ref().map(|o| &o[depth..]),
+        );
+        ords.extend(step);
+        HierarchyId::from_ordinals(&ords)
     }
 
     /// True if `self` is a descendant of `other` (i.e. `other` is one of
@@ -138,82 +171,76 @@ impl HierarchyId {
         self.inner.ordinals().collect()
     }
 
-    /// Sibling immediately after `left` (bumps the last ordinal by 2 to
-    /// stay on odd terminals).
-    fn insert_after(left: &HierarchyId) -> HierarchyId {
-        let mut ords = left.ordinals();
-        let last = ords.last_mut().expect("cannot insert after root");
-        *last += 2;
-        HierarchyId::from_ordinals(&ords)
+}
+
+fn is_odd(ordinal: i64) -> bool {
+    ordinal.rem_euclid(2) == 1
+}
+
+/// The smallest odd ordinal above `ordinal`.
+fn next_odd(ordinal: i64) -> i64 {
+    if is_odd(ordinal) {
+        ordinal + 2
+    } else {
+        ordinal + 1
     }
+}
 
-    /// Sibling immediately before `right` (decrements the last ordinal by 2;
-    /// negative ordinals are valid and sort before positive ones).
-    fn insert_before(right: &HierarchyId) -> HierarchyId {
-        let mut ords = right.ordinals();
-        let last = ords.last_mut().expect("cannot insert before root");
-        *last -= 2;
-        HierarchyId::from_ordinals(&ords)
+/// The largest odd ordinal below `ordinal`.
+fn previous_odd(ordinal: i64) -> i64 {
+    if is_odd(ordinal) {
+        ordinal - 2
+    } else {
+        ordinal - 1
     }
+}
 
-    /// Insert between two sibling positions, using the ORDPATH even-caret
-    /// mechanism (O'Neil et al., SIGMOD 2004 §3.3) when no odd ordinal fits
-    /// directly between the divergence point.
-    fn insert_between_impl(left: &HierarchyId, right: &HierarchyId) -> HierarchyId {
-        let l_ords = left.ordinals();
-        let r_ords = right.ordinals();
+/// A step (carets, then one odd ordinal) that sorts strictly between two
+/// adjacent siblings' steps. `None` on a side means there is no sibling
+/// there.
+///
+/// The result never begins with a whole sibling step, so the new node is
+/// never mistaken for something beneath its neighbor:
+///
+/// - With room for an odd ordinal between the two first ordinals, use it:
+///   between `3` and `7` is `5`.
+/// - With room only for an even one, open a caret: between `3` and `5` is
+///   `4.1`.
+/// - With no room (first ordinals `n` and `n + 1`), one of the two is a
+///   caret. Go inside it, next to the sibling that is already there:
+///   between `5` and `6.1` is `6.-1`; between `6.1` and `7` is `6.3`.
+/// - With the same caret on both sides, keep it and decide on what
+///   follows.
+fn step_between(left: Option<&[i64]>, right: Option<&[i64]>) -> Vec<i64> {
+    match (left, right) {
+        (None, None) => vec![1],
+        (Some(l), None) => vec![next_odd(l[0])],
+        (None, Some(r)) => vec![previous_odd(r[0])],
+        (Some(l), Some(r)) => {
+            let (l0, r0) = (l[0], r[0]);
+            debug_assert!(l0 <= r0, "left must be less than right");
 
-        let common = l_ords
-            .iter()
-            .zip(r_ords.iter())
-            .take_while(|(a, b)| a == b)
-            .count();
-
-        if common == l_ords.len() && common < r_ords.len() {
-            // Left is a strict prefix of right: e.g. left=[3], right=[3,4,1].
-            // Place an even caret < right's next ordinal, then odd 1.
-            let r_next = r_ords[common];
-            let caret = if r_next % 2 == 0 { r_next - 2 } else { r_next - 1 };
-            let mut result = l_ords.to_vec();
-            result.push(caret);
-            result.push(1);
-            HierarchyId::from_ordinals(&result)
-        } else if common == r_ords.len() && common <= l_ords.len() {
-            panic!("left must be less than right");
-        } else {
-            let l_val = l_ords[common];
-            let r_val = r_ords[common];
-            debug_assert!(l_val < r_val, "left must be less than right");
-            Self::insert_at_divergence(&l_ords[..common], &l_ords, l_val, r_val)
-        }
-    }
-
-    /// Resolve the divergence between two siblings: prefer an odd ordinal in
-    /// the gap; otherwise drop a caret and recurse with odd 1; otherwise
-    /// extend left's full path with caret 2 + odd 1.
-    fn insert_at_divergence(
-        prefix: &[i64],
-        l_ords: &[i64],
-        l_val: i64,
-        r_val: i64,
-    ) -> HierarchyId {
-        let next_odd = if l_val % 2 == 0 { l_val + 1 } else { l_val + 2 };
-
-        if next_odd < r_val {
-            let mut result = prefix.to_vec();
-            result.push(next_odd);
-            HierarchyId::from_ordinals(&result)
-        } else if r_val - l_val >= 2 {
-            let caret = l_val + 1;
-            let mut result = prefix.to_vec();
-            result.push(caret);
-            result.push(1);
-            HierarchyId::from_ordinals(&result)
-        } else {
-            let mut result = l_ords.to_vec();
-            result.push(2);
-            result.push(1);
-            HierarchyId::from_ordinals(&result)
+            if l0 == r0 {
+                // Both are inside the same caret.
+                let mut step = vec![l0];
+                step.extend(step_between(Some(&l[1..]), Some(&r[1..])));
+                step
+            } else if next_odd(l0) < r0 {
+                vec![next_odd(l0)]
+            } else if r0 - l0 >= 2 {
+                // Both odd and two apart: the even ordinal between them.
+                vec![l0 + 1, 1]
+            } else if is_odd(l0) {
+                // Right is inside caret `r0`; go in before it.
+                let mut step = vec![r0];
+                step.extend(step_between(None, Some(&r[1..])));
+                step
+            } else {
+                // Left is inside caret `l0`; go in after it.
+                let mut step = vec![l0];
+                step.extend(step_between(Some(&l[1..]), None));
+                step
+            }
         }
     }
 }
@@ -463,7 +490,155 @@ mod tests {
         let mid = root.get_descendant(Some(&a), Some(&b));
 
         for h in [&a, &b, &mid] {
-            assert_eq!(h.ordinals().last().unwrap() % 2, 1, "{:?}", h);
+            assert!(is_odd(*h.ordinals().last().unwrap()), "{:?}", h);
+        }
+    }
+
+    #[test]
+    fn a_new_sibling_is_never_placed_beneath_its_neighbor() {
+        let parent = HierarchyId::from_ordinals(&[3]);
+        let between = |l: &[i64], r: &[i64]| {
+            parent
+                .get_descendant(
+                    Some(&HierarchyId::from_ordinals(l)),
+                    Some(&HierarchyId::from_ordinals(r)),
+                )
+                .ordinals()
+        };
+
+        // Room for an odd ordinal, then only for a caret.
+        assert_eq!(between(&[3, 3], &[3, 7]), vec![3, 5]);
+        assert_eq!(between(&[3, 5], &[3, 7]), vec![3, 6, 1]);
+        // Next to a caret-inserted sibling: go inside the caret. The
+        // old answers here were 3.5.2.1 and 3.6.1.2.1, which read as
+        // children of 3.5 and of 3.6.1.
+        assert_eq!(between(&[3, 5], &[3, 6, 1]), vec![3, 6, -1]);
+        assert_eq!(between(&[3, 6, 1], &[3, 7]), vec![3, 6, 3]);
+        // Inside one caret.
+        assert_eq!(between(&[3, 6, 1], &[3, 6, 3]), vec![3, 6, 2, 1]);
+        assert_eq!(between(&[3, 6, 1], &[3, 6, 2, 1]), vec![3, 6, 2, -1]);
+        assert_eq!(between(&[3, 6, -1], &[3, 6, 1]), vec![3, 6, 0, 1]);
+    }
+
+    #[test]
+    fn levels_and_ancestors_skip_carets() {
+        let node = HierarchyId::from_ordinals(&[3, 6, 2, 1, 5]);
+        assert_eq!(node.get_level(), 3);
+        assert_eq!(node.get_ancestor(1).unwrap().ordinals(), vec![3, 6, 2, 1]);
+        assert_eq!(node.get_ancestor(2).unwrap().ordinals(), vec![3]);
+        assert_eq!(node.get_ancestor(3).unwrap(), HierarchyId::get_root());
+        assert!(node.get_ancestor(4).is_none());
+    }
+
+    /// Build a tree by inserting nodes at random places, as file creation
+    /// does, and check the three properties everything else relies on:
+    /// positions are unique, siblings sort in their intended order, and a
+    /// node's byte range holds exactly its descendants.
+    #[test]
+    fn random_insertions_keep_ids_unique_ordered_and_nested() {
+        struct Node {
+            id: HierarchyId,
+            parent: Option<usize>,
+            /// Child indexes in intended order.
+            children: Vec<usize>,
+        }
+
+        // Small deterministic generator; the test must not be flaky.
+        let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut random = move |bound: usize| -> usize {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((seed >> 33) as usize) % bound
+        };
+
+        let mut nodes: Vec<Node> = Vec::new();
+        let mut top_level: Vec<usize> = Vec::new();
+
+        for _ in 0..4000 {
+            // Pick a parent: the root, or an existing node. Favor a few
+            // parents so the same gaps are split again and again.
+            let parent = match random(4) {
+                0 => None,
+                _ if nodes.is_empty() => None,
+                1 => Some(random(nodes.len().min(5))),
+                _ => Some(random(nodes.len())),
+            };
+            let parent_id = match parent {
+                Some(p) => nodes[p].id.clone(),
+                None => HierarchyId::get_root(),
+            };
+            let siblings = match parent {
+                Some(p) => nodes[p].children.clone(),
+                None => top_level.clone(),
+            };
+
+            // Insert at a random place among the siblings, with a bias
+            // toward the front and toward one repeated spot.
+            let at = match random(3) {
+                0 => 0,
+                1 => siblings.len().min(1),
+                _ => random(siblings.len() + 1),
+            };
+            let left = at.checked_sub(1).map(|i| &nodes[siblings[i]].id);
+            let right = siblings.get(at).map(|i| &nodes[*i].id);
+            let id = parent_id.get_descendant(left, right);
+
+            let index = nodes.len();
+            nodes.push(Node {
+                id,
+                parent,
+                children: Vec::new(),
+            });
+            match parent {
+                Some(p) => nodes[p].children.insert(at, index),
+                None => top_level.insert(at, index),
+            }
+        }
+
+        // Unique.
+        let mut bytes: Vec<&[u8]> = nodes.iter().map(|n| n.id.as_bytes()).collect();
+        bytes.sort();
+        let before = bytes.len();
+        bytes.dedup();
+        assert_eq!(bytes.len(), before, "two nodes share a position");
+
+        // Siblings sort in their intended order.
+        let mut sibling_lists: Vec<&Vec<usize>> = nodes.iter().map(|n| &n.children).collect();
+        sibling_lists.push(&top_level);
+        for list in sibling_lists {
+            for pair in list.windows(2) {
+                assert!(nodes[pair[0]].id < nodes[pair[1]].id);
+            }
+        }
+
+        // A node's byte range holds exactly its descendants, and levels
+        // and parents can be recovered from the position alone.
+        let is_beneath = |mut node: usize, ancestor: usize| -> bool {
+            while let Some(parent) = nodes[node].parent {
+                if parent == ancestor {
+                    return true;
+                }
+                node = parent;
+            }
+            false
+        };
+        for (a, ancestor) in nodes.iter().enumerate().step_by(7) {
+            let lower = ancestor.id.as_bytes();
+            let upper = ancestor.id.subtree_end().unwrap();
+            for (n, node) in nodes.iter().enumerate() {
+                let in_range = node.id.as_bytes() > lower && node.id.as_bytes() < upper.as_slice();
+                assert_eq!(in_range, is_beneath(n, a), "{:?} vs {:?}", node.id, ancestor.id);
+                assert_eq!(node.id.is_descendant_of(&ancestor.id), is_beneath(n, a));
+            }
+        }
+        for node in &nodes {
+            let parent_id = match node.parent {
+                Some(p) => nodes[p].id.clone(),
+                None => HierarchyId::get_root(),
+            };
+            assert_eq!(node.id.get_ancestor(1).unwrap(), parent_id);
+            assert_eq!(node.id.get_level(), parent_id.get_level() + 1);
         }
     }
 }

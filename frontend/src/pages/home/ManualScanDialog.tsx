@@ -113,7 +113,7 @@ export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: Manu
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to schedule scan: ${response.statusText}`)
+        throw new Error(`Failed to start integrity check: ${response.statusText}`)
       }
 
       // Notify that a task was scheduled (triggers refresh in UpcomingTasksTable)
@@ -125,7 +125,7 @@ export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: Manu
       onOpenChange(false)
     } catch (err) {
       console.error('Error scheduling scan:', err)
-      setError(err instanceof Error ? err.message : 'Failed to schedule scan')
+      setError(err instanceof Error ? err.message : 'Failed to start integrity check')
     } finally {
       setSubmitting(false)
     }
@@ -135,7 +135,7 @@ export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: Manu
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Scan Now</DialogTitle>
+          <DialogTitle>Check Integrity</DialogTitle>
           <DialogDescription>
             Configure and start a manual scan of a root directory
           </DialogDescription>
@@ -165,7 +165,7 @@ export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: Manu
                   roots={roots}
                   value={selectedRootId}
                   onChange={setSelectedRootId}
-                  placeholder="Select a root to scan"
+                  placeholder="Select a root to check"
                 />
               )}
             </div>
@@ -214,7 +214,7 @@ export function ManualScanDialog({ open, onOpenChange, preselectedRootId }: Manu
                 Starting...
               </>
             ) : (
-              isPaused ? 'Queue Scan' : 'Start Scan'
+              isPaused ? 'Queue Check' : 'Start Check'
             )}
           </Button>
         </DialogFooter>

@@ -75,7 +75,8 @@ interface ItemDetailProps {
   itemPath: string
   itemType: 'F' | 'D' | 'S' | 'O'
   isTombstone: boolean
-  scanId: number | null
+  /** Show the item as of this time (Unix seconds); null for now. */
+  at: number | null
   // Panel mode
   onClose?: () => void
   // Sheet mode
@@ -116,8 +117,7 @@ interface VersionPageResponse {
 }
 
 interface SizeHistoryPoint {
-  scan_id: number
-  started_at: number
+  first_seen_at: number
   size: number
 }
 
@@ -240,7 +240,7 @@ export function ItemDetail({
   itemPath,
   itemType,
   isTombstone,
-  scanId,
+  at,
   onClose,
   open,
   onOpenChange,
@@ -406,19 +406,19 @@ export function ItemDetail({
     }
   }, [shouldLoad, itemId])
 
-  // Initial load — resolve the correct version page based on scanId context.
-  // When scanId is present, find which item_version was active at that scan,
+  // Initial load — resolve the correct version page based on the `at` time.
+  // When `at` is present, find which item_version was in effect then,
   // compute the page containing it, and select it. Otherwise, show page 0 desc.
   useEffect(() => {
     if (!shouldLoad) return
     setLoadingVersions(true)
 
     async function initialLoad() {
-      if (scanId !== null) {
+      if (at !== null) {
         try {
-          // Fetch version-at-scan and version count in parallel
+          // Fetch the version in effect and the version count in parallel
           const [atScanRes, countRes] = await Promise.all([
-            fetch(`/api/items/${itemId}/version-at-scan?scan_id=${scanId}`),
+            fetch(`/api/items/${itemId}/version-at?at=${at}`),
             fetch(`/api/items/${itemId}/version-count`),
           ])
 
@@ -437,17 +437,17 @@ export function ItemDetail({
             return
           }
         } catch (error) {
-          console.error('Error resolving version at scan:', error)
+          console.error('Error resolving version at time:', error)
         }
       }
 
-      // Fallback: no scanId or resolution failed — show latest (page 0 desc)
+      // Fallback: no time given or resolution failed — show latest (page 0 desc)
       await loadVersionPage(0, versionOrder, undefined, true)
     }
 
     initialLoad().finally(() => setLoadingVersions(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldLoad, itemId, scanId]) // intentionally not including versionOrder or loadVersionPage
+  }, [shouldLoad, itemId, at]) // intentionally not including versionOrder or loadVersionPage
 
   // When sort order changes, compute the page that contains the selected version
   const handleOrderChange = (newOrder: 'asc' | 'desc') => {
@@ -497,9 +497,9 @@ export function ItemDetail({
     if (!shouldLoad || !fromDate) return
     setLoadingSizeHistory(true)
     try {
-      const fromDateStr = format(fromDate, 'yyyy-MM-dd')
+      const from = Math.floor(fromDate.getTime() / 1000)
       const response = await fetch(
-        `/api/items/${itemId}/size-history?from_date=${fromDateStr}${scanId !== null ? `&to_scan_id=${scanId}` : ''}`
+        `/api/items/${itemId}/size-history?from=${from}${at !== null ? `&to=${at}` : ''}`
       )
       if (response.ok) {
         const data = await response.json()
@@ -513,7 +513,7 @@ export function ItemDetail({
     } finally {
       setLoadingSizeHistory(false)
     }
-  }, [itemId, fromDate, scanId, shouldLoad])
+  }, [itemId, fromDate, at, shouldLoad])
 
   useEffect(() => {
     loadSizeHistory()
@@ -529,7 +529,7 @@ export function ItemDetail({
       }
       setLoadingChildrenCounts(true)
       try {
-        const response = await fetch(`/api/items/${itemId}/children-counts${scanId !== null ? `?scan_id=${scanId}` : ''}`)
+        const response = await fetch(`/api/items/${itemId}/children-counts${at !== null ? `?at=${at}` : ''}`)
         if (response.ok) {
           setChildrenCounts(await response.json())
         } else {
@@ -542,7 +542,7 @@ export function ItemDetail({
       }
     }
     loadChildrenCounts()
-  }, [shouldLoad, itemId, itemType, isTombstone, scanId])
+  }, [shouldLoad, itemId, itemType, isTombstone, at])
 
   // ---- Integrity state (files only) ----
 
@@ -552,7 +552,7 @@ export function ItemDetail({
       return
     }
     try {
-      const response = await fetch(`/api/items/${itemId}/integrity-state${scanId !== null ? `?scan_id=${scanId}` : ''}`)
+      const response = await fetch(`/api/items/${itemId}/integrity-state${at !== null ? `?at=${at}` : ''}`)
       if (response.ok) {
         setIntegrityState(await response.json())
       } else {
@@ -561,7 +561,7 @@ export function ItemDetail({
     } catch {
       setIntegrityState(null)
     }
-  }, [shouldLoad, itemId, itemType, scanId])
+  }, [shouldLoad, itemId, itemType, at])
 
   useEffect(() => {
     loadIntegrity()
@@ -1192,7 +1192,7 @@ export function ItemDetail({
         config={{ size: { label: 'Size', color: 'hsl(271 81% 56%)' } }}
         className={`aspect-auto ${sp.chartHeight}`}
       >
-        <LineChart data={sizeHistory.map(p => ({ date: format(new Date(p.started_at * 1000), 'MMM dd'), size: p.size }))}>
+        <LineChart data={sizeHistory.map(p => ({ date: format(new Date(p.first_seen_at * 1000), 'MMM dd'), size: p.size }))}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isPanel ? 10 : undefined }} />
           <YAxis

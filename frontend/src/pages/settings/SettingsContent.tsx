@@ -639,7 +639,7 @@ export function SettingsContent() {
                   },
                   'mcp_enabled': {
                     title: 'Enable MCP Server (Experimental)',
-                    description: 'Enable or disable the MCP (Model Context Protocol) server endpoint. When enabled, AI agents can connect to /mcp to query scan data. This feature is experimental and you may experience connectivity issues.',
+                    description: 'Enable or disable the MCP (Model Context Protocol) server endpoint. When enabled, AI agents can connect to /mcp to query fsPulse data. This feature is experimental and you may experience connectivity issues.',
                     setting: settings.mcp_enabled,
                     defaultValue: false,
                     inputType: 'select',
@@ -697,7 +697,7 @@ export function SettingsContent() {
                               ) : (
                                 <>
                                   <strong>Will take effect:</strong>{' '}
-                                  {settingInfo.setting.requires_restart ? 'On restart.' : 'On next scan.'}
+                                  {settingInfo.setting.requires_restart ? 'On restart.' : 'On next integrity check.'}
                                 </>
                               )}
                             </p>

@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Columns2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { BrowseCard } from './BrowseCard'
 import { fetchQuery } from '@/lib/api'
 import type { ColumnSpec } from '@/lib/types'
+import { selectionFromSearch } from '@/lib/timeRange'
 
 interface Root {
   root_id: number
@@ -20,11 +19,10 @@ export function BrowsePage({ isActive = true }: BrowsePageProps) {
   const [roots, setRoots] = useState<Root[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showCompare, setShowCompare] = useState(false)
 
   const defaultRootId = searchParams.get('root_id') ?? undefined
-  const defaultScanId = searchParams.get('scan_id')
-  const defaultScanIdNum = defaultScanId ? parseInt(defaultScanId, 10) : undefined
+  // A link may carry a time or range: ?from=<unix seconds>&to=<unix seconds>
+  const defaultSelection = selectionFromSearch(searchParams)
 
   // Load roots on mount
   useEffect(() => {
@@ -91,15 +89,6 @@ export function BrowsePage({ isActive = true }: BrowsePageProps) {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Browse</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowCompare(!showCompare)}
-          className="gap-1.5"
-        >
-          <Columns2 className="h-4 w-4" />
-          {showCompare ? 'Hide Compare' : 'Show Compare'}
-        </Button>
       </div>
 
       {/* Card container */}
@@ -107,16 +96,10 @@ export function BrowsePage({ isActive = true }: BrowsePageProps) {
         <BrowseCard
           roots={roots}
           defaultRootId={defaultRootId}
-          defaultScanId={defaultScanIdNum}
+          defaultSelection={defaultSelection}
           isActive={isActive}
           isPrimary
         />
-        <div className={showCompare ? 'flex-1 min-w-0 flex' : 'hidden'}>
-          <BrowseCard
-            roots={roots}
-            isActive={isActive && showCompare}
-          />
-        </div>
       </div>
     </div>
   )

@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { IgnorePatternsEditor } from '@/components/shared/IgnorePatternsEditor'
+import { parsePatterns, updateObservation } from '@/lib/observation'
 
 interface AddRootDialogProps {
   open: boolean
@@ -17,6 +19,7 @@ interface AddRootDialogProps {
 
 export function AddRootDialog({ open, onOpenChange, onSuccess }: AddRootDialogProps) {
   const [path, setPath] = useState('')
+  const [ignorePatterns, setIgnorePatterns] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -44,6 +47,22 @@ export function AddRootDialog({ open, onOpenChange, onSuccess }: AddRootDialogPr
       const data = await response.json()
 
       if (response.ok) {
+        // Ignore patterns go in right behind the root, before its first
+        // full check starts.
+        const patterns = parsePatterns(ignorePatterns)
+        if (patterns.length > 0) {
+          try {
+            await updateObservation(data.root_id, { ignore_patterns: patterns })
+          } catch (err) {
+            setError(
+              `The root was added, but its ignore patterns could not be saved: ${
+                err instanceof Error ? err.message : 'unknown error'
+              }. Set them from the Roots page.`
+            )
+            onSuccess?.()
+            return
+          }
+        }
         setSuccess(`Root added successfully: ${data.root_path}`)
         // Notify parent of success
         onSuccess?.()
@@ -51,6 +70,7 @@ export function AddRootDialog({ open, onOpenChange, onSuccess }: AddRootDialogPr
         setTimeout(() => {
           onOpenChange(false)
           setPath('')
+          setIgnorePatterns('')
           setSuccess('')
         }, 1500)
       } else {
@@ -75,6 +95,7 @@ export function AddRootDialog({ open, onOpenChange, onSuccess }: AddRootDialogPr
     if (!newOpen) {
       // Reset form when closing
       setPath('')
+      setIgnorePatterns('')
       setError('')
       setSuccess('')
     }
@@ -83,7 +104,7 @@ export function AddRootDialog({ open, onOpenChange, onSuccess }: AddRootDialogPr
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Add New Root</DialogTitle>
           <DialogDescription>
@@ -106,6 +127,13 @@ export function AddRootDialog({ open, onOpenChange, onSuccess }: AddRootDialogPr
               className="font-mono"
               autoFocus
             />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="root-ignore" className="text-sm font-medium">
+              Ignore <span className="font-normal text-muted-foreground">(optional)</span>
+            </label>
+            <IgnorePatternsEditor id="root-ignore" value={ignorePatterns} onChange={setIgnorePatterns} />
           </div>
 
           {error && (

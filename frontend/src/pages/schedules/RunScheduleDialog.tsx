@@ -44,14 +44,14 @@ export function RunScheduleDialog({
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to start scan: ${response.statusText}`)
+        throw new Error(`Failed to start integrity check: ${response.statusText}`)
       }
 
       notifyTaskScheduled()
       handleOpenChange(false)
     } catch (err) {
       console.error('Error running scan:', err)
-      setError(err instanceof Error ? err.message : 'Failed to start scan')
+      setError(err instanceof Error ? err.message : 'Failed to start integrity check')
     } finally {
       setRunning(false)
     }
@@ -68,7 +68,7 @@ export function RunScheduleDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Run Scan Now</DialogTitle>
+          <DialogTitle>Run Integrity Check Now</DialogTitle>
           <DialogDescription>
             Start a scan using this schedule's settings?
           </DialogDescription>
@@ -121,7 +121,7 @@ export function RunScheduleDialog({
             onClick={handleRun}
             disabled={running}
           >
-            {running ? 'Starting...' : isPaused ? 'Queue Scan' : 'Run Scan'}
+            {running ? 'Starting...' : isPaused ? 'Queue Check' : 'Run Check'}
           </Button>
         </DialogFooter>
       </DialogContent>

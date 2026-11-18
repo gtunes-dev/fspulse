@@ -7,7 +7,7 @@ use schema::{
     Migration, CREATE_SCHEMA_SQL, MIGRATION_10_TO_11, MIGRATION_11_TO_12, MIGRATION_12_TO_13,
     MIGRATION_13_TO_14, MIGRATION_14_TO_15, MIGRATION_15_TO_16, MIGRATION_16_TO_17,
     MIGRATION_17_TO_18, MIGRATION_18_TO_19, MIGRATION_19_TO_20, MIGRATION_20_TO_21,
-    MIGRATION_21_TO_22, MIGRATION_22_TO_23, MIGRATION_23_TO_24, MIGRATION_24_TO_25, MIGRATION_25_TO_26, MIGRATION_26_TO_27, MIGRATION_27_TO_28, MIGRATION_28_TO_29, MIGRATION_29_TO_30, MIGRATION_30_TO_31, MIGRATION_31_TO_32, MIGRATION_2_TO_3, MIGRATION_3_TO_4, MIGRATION_4_TO_5,
+    MIGRATION_21_TO_22, MIGRATION_22_TO_23, MIGRATION_23_TO_24, MIGRATION_24_TO_25, MIGRATION_25_TO_26, MIGRATION_26_TO_27, MIGRATION_27_TO_28, MIGRATION_28_TO_29, MIGRATION_29_TO_30, MIGRATION_30_TO_31, MIGRATION_31_TO_32, MIGRATION_32_TO_33, MIGRATION_2_TO_3, MIGRATION_3_TO_4, MIGRATION_4_TO_5,
     MIGRATION_5_TO_6, MIGRATION_6_TO_7, MIGRATION_7_TO_8, MIGRATION_8_TO_9, MIGRATION_9_TO_10,
 };
 use log::{error, info};
@@ -23,7 +23,7 @@ use std::time::Duration;
 use std::env;
 
 const DB_FILENAME: &str = "fspulse.db";
-const CURRENT_SCHEMA_VERSION: u32 = 32;
+const CURRENT_SCHEMA_VERSION: u32 = 33;
 
 // Connection pool configuration
 const POOL_MAX_SIZE: u32 = 15;
@@ -547,6 +547,7 @@ fn run_migrations(conn: &Connection, from_version: u32, total_steps: u32) -> Res
             29 => upgrade_schema(conn, db_version, &MIGRATION_29_TO_30, step, total_steps)?,
             30 => upgrade_schema(conn, db_version, &MIGRATION_30_TO_31, step, total_steps)?,
             31 => upgrade_schema(conn, db_version, &MIGRATION_31_TO_32, step, total_steps)?,
+            32 => upgrade_schema(conn, db_version, &MIGRATION_32_TO_33, step, total_steps)?,
             _ => {
                 let msg = format!(
                     "No migration path from schema v{} to v{}",
@@ -915,10 +916,15 @@ mod tests {
         let completed_scans = count("SELECT COUNT(*) FROM scans WHERE state = 4");
 
         let started = std::time::Instant::now();
-        run_migrations(&conn, 31, 1).expect("migration should succeed");
+        run_migrations(&conn, 31, 2).expect("migration should succeed");
         eprintln!("migration took {:.1?}", started.elapsed());
 
-        assert_eq!(version(&conn), "32");
+        assert_eq!(version(&conn), "33");
+        // Snapshots migrated from scans carry the scan's new-problem counts.
+        assert_eq!(
+            count("SELECT COALESCE(SUM(new_val_invalid_count), 0) FROM snapshots"),
+            count("SELECT COALESCE(SUM(new_val_invalid_count), 0) FROM scans WHERE state = 2")
+        );
         if in_progress == 0 {
             assert_eq!(count("SELECT COUNT(*) FROM items"), items_before);
             assert_eq!(count("SELECT COUNT(*) FROM item_versions"), versions_before);

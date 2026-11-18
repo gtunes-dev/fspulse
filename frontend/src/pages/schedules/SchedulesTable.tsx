@@ -171,7 +171,7 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
                     <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide">Schedule</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide text-center">Integrity</TableHead>
-                    <TableHead className="uppercase text-xs tracking-wide">Next Scan</TableHead>
+                    <TableHead className="uppercase text-xs tracking-wide">Next Check</TableHead>
                     <TableHead className="uppercase text-xs tracking-wide text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -238,7 +238,7 @@ export const SchedulesTable = forwardRef<SchedulesTableRef, SchedulesTableProps>
                           disabled={isScanning}
                           onClick={() => handleRunNow(schedule)}
                           className="h-8 w-8 p-0 text-muted-foreground hover:text-green-600 hover:bg-green-100"
-                          title="Run scan now with this schedule's settings"
+                          title="Run an integrity check now with this schedule's settings"
                         >
                           <Play className="h-5 w-5" />
                         </Button>

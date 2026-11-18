@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactElement } from 'react'
 import { Link } from 'react-router-dom'
-import { Trash2, Calendar, Play } from 'lucide-react'
+import { Trash2, Calendar, Play, RefreshCw, Settings2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -13,9 +13,18 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DeleteRootDialog } from './DeleteRootDialog'
+import { TrackingSettingsDialog } from './TrackingSettingsDialog'
+import { ConfirmDeletionsDialog } from './ConfirmDeletionsDialog'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { ScanDetailSheet } from '@/components/shared/ScanDetailSheet'
-import { formatDateRelative } from '@/lib/dateUtils'
+import { formatDateRelative, formatTimeAgo } from '@/lib/dateUtils'
+import {
+  describeLastCheck,
+  describeTracking,
+  fetchObservation,
+  requestChangeCheck,
+  type RootObservation,
+} from '@/lib/observation'
 import { formatCount } from '@/lib/formatUtils'
 import { useTaskContext } from '@/contexts/TaskContext'
 import type { RootWithScan } from '@/lib/types'
@@ -42,6 +51,12 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
   const [internalReloadTrigger, setInternalReloadTrigger] = useState(0)
   const isInitialLoad = useRef(true)
 
+  // How each root is being kept up to date, by root_id.
+  const [observations, setObservations] = useState<Map<number, RootObservation>>(new Map())
+  const [settingsRootId, setSettingsRootId] = useState<number | null>(null)
+  const [confirmRootId, setConfirmRootId] = useState<number | null>(null)
+  const [checkError, setCheckError] = useState<string | null>(null)
+
   useEffect(() => {
     async function loadRoots() {
       try {
@@ -66,6 +81,35 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
 
     loadRoots()
   }, [activeRootId, currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt, internalReloadTrigger, externalReloadTrigger])
+
+  // Change tracking status. Reloaded with the roots, and on a timer:
+  // the watch state changes without any task starting or finishing.
+  useEffect(() => {
+    let cancelled = false
+    const load = () => {
+      fetchObservation()
+        .then((data) => {
+          if (!cancelled) setObservations(new Map(data.map((o) => [o.root_id, o])))
+        })
+        .catch((error) => console.error('Error loading change tracking status:', error))
+    }
+    load()
+    const timer = window.setInterval(load, 30_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [activeRootId, currentTaskId, lastTaskCompletedAt, lastTaskScheduledAt, internalReloadTrigger, externalReloadTrigger])
+
+  const startChangeCheck = async (rootId: number) => {
+    setCheckError(null)
+    try {
+      await requestChangeCheck(rootId)
+      setInternalReloadTrigger((prev) => prev + 1)
+    } catch (error) {
+      setCheckError(error instanceof Error ? error.message : 'Failed to start the check')
+    }
+  }
 
   // Pagination
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -110,6 +154,12 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
           </Button>
         </div>
 
+        {checkError && (
+          <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md p-3">
+            {checkError}
+          </div>
+        )}
+
         {paginatedRoots.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             No roots found. Click "Add Root" to get started.
@@ -123,9 +173,10 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
                 <TableRow>
                   <TableHead className="w-10"></TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Root</TableHead>
-                  <TableHead className="uppercase text-xs tracking-wide">Last Scan</TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide">Change Tracking</TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide">Last Integrity Check</TableHead>
                   <TableHead className="uppercase text-xs tracking-wide">Schedules</TableHead>
-                  <TableHead className="uppercase text-xs tracking-wide w-32"></TableHead>
+                  <TableHead className="uppercase text-xs tracking-wide w-40"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -136,11 +187,86 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
                   // Check if this root has the currently active scan
                   const hasActiveScan = activeRootId === root.root_id
 
-                  // Build Last Scan content
+                  // Change tracking: the watch state, when the whole root was
+                  // last compared, and anything being held back. Every row
+                  // shows the same three things.
+                  const observation = observations.get(root.root_id)
+                  let trackingContent: ReactElement
+                  if (!observation) {
+                    trackingContent = <span className="text-muted-foreground">Loading...</span>
+                  } else {
+                    const tracking = describeTracking(observation)
+                    trackingContent = (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2" title={tracking.explanation ?? undefined}>
+                          {tracking.attention ? (
+                            <Badge variant={tracking.attention}>{tracking.label}</Badge>
+                          ) : (
+                            <span>{tracking.label}</span>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-muted-foreground"
+                            title="Change tracking settings"
+                            aria-label="Change tracking settings"
+                            onClick={() => setSettingsRootId(root.root_id)}
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        {tracking.explanation && (
+                          <span className="text-xs text-muted-foreground max-w-xs">{tracking.explanation}</span>
+                        )}
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span>
+                            {describeLastCheck(
+                              observation,
+                              hasActiveScan && !observation.last_walk_completed_at,
+                              formatTimeAgo
+                            )}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 w-5 p-0"
+                            title="Check the whole root for changes now"
+                            aria-label="Check the whole root for changes now"
+                            disabled={hasActiveScan || observation.watch === 'offline'}
+                            onClick={() => startChangeCheck(root.root_id)}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        {observation.walk_block && (
+                          <div className="flex flex-col items-start gap-1">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="warning">Deletions not recorded</Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground max-w-xs">
+                              {observation.walk_block === 'empty_root'
+                                ? 'The folder is empty. If its drive is disconnected, reconnect it.'
+                                : 'Most of this root is missing.'}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-xs"
+                              onClick={() => setConfirmRootId(root.root_id)}
+                            >
+                              Review
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  // Build Last Integrity Check content
                   let lastScanContent: ReactElement
                   if (!scanInfo) {
                     lastScanContent = (
-                      <span className="text-muted-foreground">Never scanned</span>
+                      <span className="text-muted-foreground">Never checked</span>
                     )
                   } else {
                     const staleness = getStalenessIndicator(scanInfo.started_at)
@@ -284,7 +410,12 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
                         </button>
                       </TableCell>
 
-                      {/* Last Scan Column */}
+                      {/* Change Tracking Column */}
+                      <TableCell className="align-top">
+                        {trackingContent}
+                      </TableCell>
+
+                      {/* Last Integrity Check Column */}
                       <TableCell>
                         {lastScanContent}
                       </TableCell>
@@ -316,7 +447,7 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
                             className="text-xs"
                           >
                             <Play className="h-3.5 w-3.5 mr-1.5" />
-                            Scan Now
+                            Check Integrity
                           </Button>
                         )}
                       </TableCell>
@@ -368,6 +499,22 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
         setInternalReloadTrigger(prev => prev + 1)
         setSelectedRoot(null)
       }}
+    />
+
+    {/* Change tracking settings */}
+    <TrackingSettingsDialog
+      observation={settingsRootId !== null ? observations.get(settingsRootId) ?? null : null}
+      open={settingsRootId !== null}
+      onOpenChange={(open) => !open && setSettingsRootId(null)}
+      onSaved={() => setInternalReloadTrigger((prev) => prev + 1)}
+    />
+
+    {/* Confirm held-back deletions */}
+    <ConfirmDeletionsDialog
+      observation={confirmRootId !== null ? observations.get(confirmRootId) ?? null : null}
+      open={confirmRootId !== null}
+      onOpenChange={(open) => !open && setConfirmRootId(null)}
+      onConfirmed={() => setInternalReloadTrigger((prev) => prev + 1)}
     />
 
     {/* Root Detail Sheet */}

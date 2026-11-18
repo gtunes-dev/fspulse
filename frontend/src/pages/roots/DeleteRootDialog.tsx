@@ -83,7 +83,7 @@ export function DeleteRootDialog({
               All data associated with this root will be deleted. This includes:
             </div>
             <ul className="text-sm list-disc list-inside space-y-1">
-              <li>Scans</li>
+              <li>Integrity checks</li>
               <li>Items</li>
               <li>Changes</li>
             </ul>

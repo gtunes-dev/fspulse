@@ -1,3 +1,4 @@
+import { browseLinkForPeriod } from '@/lib/taskNames'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Activity, Clock, Timer, CheckCircle, XCircle, AlertTriangle, Hash, CircleX, FolderTree } from 'lucide-react'
@@ -146,7 +147,7 @@ export function ScanDetailSheet({
         })
 
         if (scanResponse.rows.length === 0) {
-          setError(`Scan #${scanId} not found`)
+          setError(`Integrity check #${scanId} not found`)
           return
         }
 
@@ -184,7 +185,7 @@ export function ScanDetailSheet({
           error: row[18] && row[18] !== '-' ? row[18] : null,
         })
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load scan details')
+        setError(err instanceof Error ? err.message : 'Failed to load integrity check details')
       } finally {
         setLoading(false)
       }
@@ -204,13 +205,13 @@ export function ScanDetailSheet({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <SheetTitle className="text-lg font-bold break-words">Scan #{scanId}</SheetTitle>
+                <SheetTitle className="text-lg font-bold break-words">Integrity check #{scanId}</SheetTitle>
                 {showBrowseLink && details && (
                   <Link
-                    to={`/browse?root_id=${details.root_id}&scan_id=${details.scan_id}`}
+                    to={browseLinkForPeriod(details.root_id, details.started_at, null)}
                     onClick={() => onOpenChange(false)}
                     className="text-muted-foreground hover:text-primary p-1 rounded hover:bg-accent transition-colors"
-                    title="Browse this scan"
+                    title="Browse the root as it was around this check"
                   >
                     <FolderTree className="h-4 w-4" />
                   </Link>

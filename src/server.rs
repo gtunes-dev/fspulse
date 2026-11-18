@@ -311,6 +311,10 @@ impl WebServer {
                 get(api::items::get_version_at_scan),
             )
             .route(
+                "/api/items/{item_id}/version-at",
+                get(api::items::get_version_at_scan),
+            )
+            .route(
                 "/api/items/{item_id}/version-count",
                 get(api::items::get_version_count),
             )
@@ -339,6 +343,24 @@ impl WebServer {
                 "/api/items/search",
                 get(api::items::search_items),
             )
+            // Time-based browsing
+            .route(
+                "/api/timeline/children",
+                get(api::timeline::get_children),
+            )
+            .route(
+                "/api/timeline/activity",
+                get(api::timeline::get_activity),
+            )
+            .route(
+                "/api/timeline/summary",
+                get(api::timeline::get_summary),
+            )
+            .route(
+                "/api/timeline/changes",
+                get(api::timeline::get_changes),
+            )
+            .route("/api/timeline/search", get(api::timeline::search))
             // Database endpoints
             .route(
                 "/api/database/stats",

@@ -187,6 +187,8 @@ pub const SNAPSHOTS_QUERY_COLS: ColMap = phf_ordered_map! {
     "hash_unknown_count" => ColSpec::new("hash_unknown_count", "Hash Unknown", false, ColType::Int, ColAlign::Right, "Files with unknown hash state"),
     "hash_baseline_count" => ColSpec::new("hash_baseline_count", "Hash Baseline", false, ColType::Int, ColAlign::Right, "Files with baseline (unchanged) hash"),
     "hash_suspect_count" => ColSpec::new("hash_suspect_count", "Hash Suspect", false, ColType::Int, ColAlign::Right, "Files with suspect (changed) hash"),
+    "new_val_invalid_count" => ColSpec::new("new_val_invalid_count", "New Val Invalid", false, ColType::Int, ColAlign::Right, "Validation failures first found by integrity checks completed in this snapshot's hour"),
+    "new_hash_suspect_count" => ColSpec::new("new_hash_suspect_count", "New Hash Suspect", false, ColType::Int, ColAlign::Right, "Suspect hashes first found by integrity checks completed in this snapshot's hour"),
     "schedule_id" => ColSpec::new("schedule_id", "Schedule Id", false, ColType::Id, ColAlign::Right, "Schedule that triggered this snapshot (NULL for manual)"),
 };
 

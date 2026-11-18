@@ -57,6 +57,8 @@ interface SnapshotData {
   val_invalid_count: number
   new_hash_suspect_count: number
   hash_suspect_count: number
+  /** An integrity check completed in this snapshot's hour (or it is a migrated scan). */
+  has_integrity: boolean
 }
 
 type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
@@ -304,10 +306,12 @@ export function TrendsPage() {
         { name: 'modify_count', visible: true, sort_direction: 'none', position: 4 },
         { name: 'add_count', visible: true, sort_direction: 'none', position: 5 },
         { name: 'delete_count', visible: true, sort_direction: 'none', position: 6 },
-        { name: 'new_val_invalid_count', visible: true, sort_direction: 'none', position: 7 },
-        { name: 'val_invalid_count', visible: true, sort_direction: 'none', position: 8 },
-        { name: 'new_hash_suspect_count', visible: true, sort_direction: 'none', position: 9 },
-        { name: 'hash_suspect_count', visible: true, sort_direction: 'none', position: 10 },
+        // Integrity columns are filled only on snapshots of hours in
+        // which an integrity check completed; empty on the rest.
+        { name: 'val_invalid_count', visible: true, sort_direction: 'none', position: 7 },
+        { name: 'hash_suspect_count', visible: true, sort_direction: 'none', position: 8 },
+        { name: 'new_val_invalid_count', visible: true, sort_direction: 'none', position: 9 },
+        { name: 'new_hash_suspect_count', visible: true, sort_direction: 'none', position: 10 },
       ]
 
       const response = await fetchQuery('snapshots', {
@@ -325,10 +329,11 @@ export function TrendsPage() {
         modify_count: parseInt(row[4]) || 0,
         add_count: parseInt(row[5]) || 0,
         delete_count: parseInt(row[6]) || 0,
-        new_val_invalid_count: parseInt(row[7]) || 0,
-        val_invalid_count: parseInt(row[8]) || 0,
-        new_hash_suspect_count: parseInt(row[9]) || 0,
-        hash_suspect_count: parseInt(row[10]) || 0,
+        new_val_invalid_count: parseInt(row[9]) || 0,
+        val_invalid_count: parseInt(row[7]) || 0,
+        new_hash_suspect_count: parseInt(row[10]) || 0,
+        hash_suspect_count: parseInt(row[8]) || 0,
+        has_integrity: !Number.isNaN(parseInt(row[7])) || !Number.isNaN(parseInt(row[8])),
       }))
 
       hasDataRef.current = data.length > 0
@@ -374,7 +379,12 @@ export function TrendsPage() {
     return true
   })
 
+  const hasIntegrityChecks = snapshotData.some(d => d.has_integrity)
+
+  // The integrity charts have one bar group per completed integrity
+  // check, not one per hour of file activity.
   const valData = snapshotData.filter(d => {
+    if (!d.has_integrity) return false
     if (!hideEmptyValScans) return true
     const hasVisible =
       (!hiddenValSeries.has('new_val_invalid_count') && d.new_val_invalid_count > 0) ||
@@ -383,6 +393,7 @@ export function TrendsPage() {
   })
 
   const hashData = snapshotData.filter(d => {
+    if (!d.has_integrity) return false
     if (!hideEmptyHashScans) return true
     const hasVisible =
       (!hiddenHashSeries.has('new_hash_suspect_count') && d.new_hash_suspect_count > 0) ||
@@ -750,7 +761,7 @@ export function TrendsPage() {
                 </CardHeader>
                 <CardContent>
                   {hashData.length === 0 ? (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No snapshots to display</div>
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">{hasIntegrityChecks ? 'No suspicious hashes in this period' : 'No integrity checks in this period'}</div>
                   ) : (
                     <div ref={hashChartRef}>
                     <ChartContainer
@@ -826,7 +837,7 @@ export function TrendsPage() {
                 </CardHeader>
                 <CardContent>
                   {valData.length === 0 ? (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">No snapshots to display</div>
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">{hasIntegrityChecks ? 'No validation errors in this period' : 'No integrity checks in this period'}</div>
                   ) : (
                     <div ref={valChartRef}>
                     <ChartContainer

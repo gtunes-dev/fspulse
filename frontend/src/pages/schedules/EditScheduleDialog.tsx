@@ -190,7 +190,7 @@ export function EditScheduleDialog({
             <Input
               value={scheduleName}
               onChange={(e) => setScheduleName(e.target.value)}
-              placeholder="e.g., Daily Backup Scan"
+              placeholder="e.g., Weekly Integrity Check"
               maxLength={100}
             />
           </div>

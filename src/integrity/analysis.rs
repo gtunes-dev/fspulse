@@ -4,10 +4,11 @@ use rusqlite::{params, Connection, OptionalExtension};
 use threadpool::ThreadPool;
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::{cmp, io::ErrorKind};
 
+use crate::applier::{Applier, Hint};
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::hash::Hash;
@@ -17,6 +18,7 @@ use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
 use crate::utils::Utils;
 use crate::validate::validator::ValidationState;
 
+use super::file_guard::{self, FileCheck};
 use super::hash_analysis;
 use super::val_analysis;
 
@@ -85,8 +87,12 @@ pub fn run_analysis_phase(
 
     task_progress.set_thread_count(num_threads);
 
+    // Files found changed on disk, left for the next check.
+    let skipped_changed = Arc::new(AtomicU64::new(0));
+
     for thread_index in 0..num_threads {
         let receiver = receiver.clone();
+        let skipped_changed = Arc::clone(&skipped_changed);
         let scan_copy = scan.clone();
         let task_progress_clone = Arc::clone(&task_progress);
         let interrupt_token_clone = Arc::clone(interrupt_token);
@@ -101,6 +107,7 @@ pub fn run_analysis_phase(
                     &task_progress_clone,
                     &interrupt_token_clone,
                     &tracker_clone,
+                    &skipped_changed,
                 );
             }
             task_progress_clone.set_thread_idle(thread_index);
@@ -174,7 +181,15 @@ pub fn run_analysis_phase(
     task_progress.set_progress_total(total_dispatched, total_dispatched, Some("files"));
 
     task_progress.clear_thread_states();
-    task_progress.add_breadcrumb("Analysis phase complete");
+    let skipped = skipped_changed.load(Ordering::Relaxed);
+    if skipped > 0 {
+        task_progress.add_breadcrumb(&format!(
+            "{skipped} {} changing while being checked and {} left for the next check",
+            if skipped == 1 { "file was" } else { "files were" },
+            if skipped == 1 { "was" } else { "were" },
+        ));
+    }
+    task_progress.add_breadcrumb("Integrity check complete");
 
     Ok(())
 }
@@ -189,6 +204,7 @@ fn analyze_item(
     task_progress: &Arc<TaskProgress>,
     interrupt_token: &Arc<AtomicBool>,
     tracker: &Arc<AnalysisTracker>,
+    skipped_changed: &Arc<AtomicU64>,
 ) {
     let path = PathBuf::from(analysis_item.item_path());
 
@@ -198,6 +214,26 @@ fn analyze_item(
         .file_name()
         .unwrap_or(path.as_os_str())
         .to_string_lossy();
+
+    // Read the file only if it is the file the version describes. A
+    // file written within the last moments gets a short wait first, so
+    // that files just copied in are checked in this run, not the next.
+    let mut check = check_against_record(&analysis_item);
+    if check == FileCheck::Settling {
+        task_progress.set_thread_state(thread_index, "Waiting", "info", Some(&display_path));
+        std::thread::sleep(std::time::Duration::from_secs(file_guard::SETTLE_SECS as u64));
+        check = check_against_record(&analysis_item);
+    }
+    if check != FileCheck::Unchanged {
+        info!("Analysis skipped for '{}': file is changing", display_path);
+        leave_for_next_check(scan, &analysis_item, check, skipped_changed);
+        task_progress.increment_progress();
+        task_progress.set_thread_idle(thread_index);
+        if let Err(e) = tracker.complete_item(analysis_item.item_id()) {
+            error!("Failed to complete item {}: {}", analysis_item.item_id(), e);
+        }
+        return;
+    }
 
     let mut new_hash = None;
     let mut read_attempted = false;
@@ -301,7 +337,10 @@ fn analyze_item(
         None
     };
 
-    let persisted = if !is_interrupted(interrupt_token) {
+    // An item is finished for this run when its results were written
+    // or deliberately not written (the item moved on underneath us).
+    // Only an error or an interruption leaves it to be redone.
+    let finished = if !is_interrupted(interrupt_token) {
         match persist_analysis(
             scan,
             &analysis_item,
@@ -318,7 +357,10 @@ fn analyze_item(
                         display_path, outcome
                     );
                 }
-                outcome == PersistOutcome::Applied
+                if outcome == PersistOutcome::SkippedFileChanged {
+                    leave_for_next_check(scan, &analysis_item, FileCheck::Changed, skipped_changed);
+                }
+                true
             }
             Err(error) => {
                 error!(
@@ -335,8 +377,7 @@ fn analyze_item(
     task_progress.increment_progress();
     task_progress.set_thread_idle(thread_index);
 
-    // Only advance the HWM if the item was successfully persisted.
-    if persisted {
+    if finished {
         let item_id = analysis_item.item_id();
         if let Err(e) = tracker.complete_item(item_id) {
             error!("Failed to complete item {}: {}", item_id, e);
@@ -344,6 +385,39 @@ fn analyze_item(
     }
 
     info!("Done analyzing: {path:?}");
+}
+
+fn check_against_record(analysis_item: &AnalysisItem) -> FileCheck {
+    file_guard::check_file(
+        std::path::Path::new(analysis_item.item_path()),
+        analysis_item.mod_date(),
+        analysis_item.size(),
+        Utils::now_secs(),
+    )
+}
+
+/// A file did not match its recorded version. Count it, and if it has
+/// changed, tell the observation pipeline so the change is recorded now
+/// instead of at the next walk. The file gets hashed by the next check,
+/// against the version that describes it.
+fn leave_for_next_check(
+    scan: &Scan,
+    analysis_item: &AnalysisItem,
+    check: FileCheck,
+    skipped_changed: &Arc<AtomicU64>,
+) {
+    skipped_changed.fetch_add(1, Ordering::Relaxed);
+    if check == FileCheck::Changed {
+        let hint = Hint {
+            root_id: scan.root_id(),
+            path: PathBuf::from(analysis_item.item_path()),
+            source: VersionSource::Integrity,
+            confirmed: false,
+        };
+        if let Err(e) = Applier::submit(hint) {
+            error!("Could not report changed file '{}': {}", analysis_item.item_path(), e);
+        }
+    }
 }
 
 /// Outcome of attempting to persist analysis results for one item.
@@ -355,7 +429,7 @@ enum PersistOutcome {
     SkippedVersionBumped,
     /// Item was tombstoned by the watcher between fetch and persist.
     SkippedDeleted,
-    /// File on disk changed between walk observation and analysis.
+    /// File on disk no longer matches the version that was read.
     SkippedFileChanged,
 }
 
@@ -363,7 +437,8 @@ enum PersistOutcome {
 ///
 /// Includes two guards against concurrent watcher changes:
 /// 1. **File guard** (pre-lock): checks that the file's mod_date and
-///    size on disk still match what was observed at fetch time.
+///    size on disk still match the version, now that it has been read.
+///    The same check ran before the read (see `analyze_item`).
 /// 2. **Version guard** (under lock): re-queries the item's current
 ///    version and confirms it hasn't been bumped or tombstoned.
 #[allow(clippy::too_many_arguments)]
@@ -393,12 +468,7 @@ fn persist_analysis(
 
     // Pre-lock file guard: check the file on disk hasn't changed
     if analysis_item.needs_hash() || analysis_item.needs_val() {
-        let path = std::path::Path::new(analysis_item.item_path());
-        if !super::file_guard::check_file_unchanged(
-            path,
-            analysis_item.mod_date(),
-            analysis_item.size(),
-        ) {
+        if check_against_record(analysis_item) == FileCheck::Changed {
             return Ok(PersistOutcome::SkippedFileChanged);
         }
     }

@@ -30,9 +30,10 @@ const ICON_SIZE = 'h-3.5 w-3.5'
  * Each cell is saturated when that change type is present, or faintly
  * tinted when absent — so the grid is always the same shape.
  *
- * Counts are always accurate: changed folders have per-scan counts;
- * unchanged folders have derived counts (0 adds/mods/dels, unchanged =
- * total alive) computed at the data mapping layer.
+ * Added, modified and deleted counts are net changes beneath the folder
+ * between the two ends of the selected time range. Unchanged items are
+ * not counted: a non-zero `unchangedCount` only says the folder exists at
+ * the end of the range and so may hold some.
  */
 export function ChangeDots({ changeKind, isDir, addCount, modifyCount, deleteCount, unchangedCount, hiddenKinds }: ChangeDotsProps) {
   // Files: icon for own state
@@ -65,7 +66,8 @@ export function ChangeDots({ changeKind, isDir, addCount, modifyCount, deleteCou
   if (hasAdd) parts.push(`${formatCount(addCount)} added`)
   if (hasMod) parts.push(`${formatCount(modifyCount)} modified`)
   if (hasDel) parts.push(`${formatCount(deleteCount)} deleted`)
-  if (hasUnch) parts.push(`${formatCount(unchangedCount)} unchanged`)
+  // Unchanged items are not counted, only known to be possible.
+  if (hasUnch) parts.push('unchanged items')
   const dirTooltip = parts.length > 0 ? parts.join(', ') : 'No descendants'
 
   return (

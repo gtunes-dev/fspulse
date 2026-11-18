@@ -208,8 +208,8 @@ export function CreateScheduleDialog({
           </DialogTitle>
           <DialogDescription>
             {preselectedRootId
-              ? 'Configure a recurring scan schedule for this root'
-              : 'Configure a recurring scan schedule for a root directory'}
+              ? 'Configure a recurring integrity check for this root'
+              : 'Configure a recurring integrity check for a root directory'}
           </DialogDescription>
         </DialogHeader>
 
@@ -231,7 +231,7 @@ export function CreateScheduleDialog({
               <Input
                 value={scheduleName}
                 onChange={(e) => setScheduleName(e.target.value)}
-                placeholder="e.g., Daily Backup Scan"
+                placeholder="e.g., Weekly Integrity Check"
                 maxLength={100}
               />
             </div>
@@ -250,7 +250,7 @@ export function CreateScheduleDialog({
                   roots={roots}
                   value={selectedRootId}
                   onChange={setSelectedRootId}
-                  placeholder="Select a root to scan"
+                  placeholder="Select a root to check"
                 />
               )}
             </div>

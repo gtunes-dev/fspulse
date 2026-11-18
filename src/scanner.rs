@@ -27,7 +27,7 @@ impl Scanner {
         interrupt_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         if scan.state() == ScanState::Scanning {
-            task_progress.set_phase("Scanning");
+            task_progress.set_phase("Checking files");
             crate::integrity::analysis::run_analysis_phase(
                 scan,
                 task_id,

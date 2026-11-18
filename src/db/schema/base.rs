@@ -14,20 +14,24 @@
 //     WHERE item_id = ? AND first_seen_at <= T
 //     ORDER BY item_version DESC LIMIT 1
 //
-// Pattern 2: "Changed versions in a time range"
-//   Used by: browse descendant counts, change summaries, scan completion.
-//   Drive from item_versions using idx_versions_root_firstseen_hid:
+// Pattern 2: "What changed in a root in a time range"
+//   Used by: the root-level folder listing for a range (timeline.rs).
+//   Drive from item_versions by time:
 //     FROM item_versions iv
-//     WHERE iv.root_id = ? AND iv.first_seen_at BETWEEN ? AND ?
+//     WHERE iv.root_id = ? AND iv.first_seen_at >= ? AND iv.first_seen_at < ?
+//   Index: idx_versions_root_time_hid
+//     (root_id, first_seen_at, hierarchy_id, is_added, is_deleted)
 //
-// Pattern 3: "Descendant changes in a subtree"
-//   Used by: browse folder decoration, folder change counts.
-//   Use hierarchy_id range on item_versions (no join to items needed):
+// Pattern 3: "What changed beneath a folder in a time range"
+//   Used by: folder listings below the root (timeline.rs).
+//   Drive from item_versions by position, then filter by time, so the
+//   cost follows the subtree's size, not the root's activity:
 //     FROM item_versions iv
 //     WHERE iv.root_id = ?
-//       AND iv.first_seen_at BETWEEN ? AND ?
 //       AND iv.hierarchy_id > ? AND iv.hierarchy_id < ?
-//   Index: idx_versions_root_firstseen_hid (root_id, first_seen_at, hierarchy_id)
+//       AND iv.first_seen_at >= ? AND iv.first_seen_at < ?
+//   Index: idx_versions_root_hid_time
+//     (root_id, hierarchy_id, first_seen_at, is_added, is_deleted)
 //
 // Pattern 4: "Direct children of a folder"
 //   Used by: browse folder view, child counts.
@@ -69,7 +73,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '32');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '33');
 
 -- ========================================
 -- Roots
@@ -160,6 +164,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
     hash_unknown_count      INTEGER,
     hash_baseline_count     INTEGER,
     hash_suspect_count      INTEGER,
+
+    -- Problems first found by integrity checks that completed in this
+    -- snapshot's hour (NULL if none completed)
+    new_val_invalid_count   INTEGER,
+    new_hash_suspect_count  INTEGER,
 
     -- Schedule reference
     schedule_id     INTEGER DEFAULT NULL,
@@ -253,7 +262,11 @@ CREATE TABLE IF NOT EXISTS item_versions (
     FOREIGN KEY (root_id) REFERENCES roots(root_id)
 ) WITHOUT ROWID;
 
-CREATE INDEX IF NOT EXISTS idx_versions_root_firstseen_hid ON item_versions (root_id, first_seen_at, hierarchy_id);
+-- The two indexes behind "what changed in this range": by time for a
+-- whole root, by position for one folder's subtree. Both carry
+-- is_added and is_deleted so those queries never touch the table.
+CREATE INDEX IF NOT EXISTS idx_versions_root_time_hid ON item_versions (root_id, first_seen_at, hierarchy_id, is_added, is_deleted);
+CREATE INDEX IF NOT EXISTS idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted);
 CREATE INDEX IF NOT EXISTS idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
 CREATE INDEX IF NOT EXISTS idx_versions_val_at ON item_versions (val_at, val_state);
 
