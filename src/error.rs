@@ -34,6 +34,16 @@ pub enum FsPulseError {
     #[error("Shutting down")]
     ShuttingDown,
 
+    /// A reconcile walk refused to run because the root directory is
+    /// empty while the database records items in it.
+    #[error("Root is empty: {0}")]
+    RootEmpty(String),
+
+    /// A reconcile walk refused to record deletions because most of the
+    /// root's items are missing.
+    #[error("Too much is missing: {0}")]
+    MassDelete(String),
+
     #[error("Directory unreadable: {0}")]
     DirectoryUnreadable(PathBuf),
 }

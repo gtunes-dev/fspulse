@@ -93,10 +93,6 @@ CREATE TABLE IF NOT EXISTS roots (
     -- platform supports it, 0 = reconcile walks only. Watcher health
     -- (watching / degraded / unsupported) is runtime state, not stored.
     watch_enabled   INTEGER NOT NULL DEFAULT 1,
-    -- st_dev of the root directory when it was last confirmed present.
-    -- A different value means the volume is unmounted or replaced, and
-    -- reconcile must not tombstone the root's contents.
-    device_id       INTEGER,
     -- JSON array of glob patterns excluded from watching and reconcile.
     -- NULL means no exclusions.
     ignore_patterns TEXT

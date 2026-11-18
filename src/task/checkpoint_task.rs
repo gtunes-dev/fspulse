@@ -1,68 +1,82 @@
-//! Checkpoint task — fast filesystem reconciliation pass for one root.
+//! Checkpoint task — reconciles one root's database state with the
+//! filesystem.
 //!
-//! A checkpoint walks a root's filesystem and applies what it observes
-//! to the items / item_versions tables via
-//! `item_ops::apply_observed_events`. It does NOT hash files, run
-//! validators, or write to the `scans` table — those are the integrity
-//! scanner's job.
+//! The task walks the root with `reconcile::find_differences`, which
+//! compares each directory on disk with the same directory in the
+//! database and reports only the paths that differ. Those paths go to
+//! the applier, which stats each one and writes the change through
+//! `item_ops`. A root that matches the database produces no writes.
 //!
-//! **Walk.** Recursive `read_dir` + `symlink_metadata`. The walk holds
-//! no lock and allocates no timestamps. ObservedItems accumulate in a
-//! Vec; when the Vec reaches `CHECKPOINT_BATCH_SIZE`, it's flushed via
-//! `apply_observed_events`, which acquires the write lock and allocates
-//! a single `now` for the whole batch.
+//! It does NOT hash files, run validators, or write to the `scans`
+//! table — those are the integrity scanner's job.
 //!
-//! **Deletions are not detected in this interim state.** The old sweep
-//! relied on a per-version `last_seen_at` that the v32 schema no longer
-//! has. Deletion detection returns when the walk becomes a
-//! per-directory diff against the database (design doc, phase 3).
-//!
-//! Checkpoint coexists with the watcher via the SQLite write lock and
-//! the lock-allocated-timestamp invariant — the watcher is NOT paused
+//! Checkpoint coexists with the watcher: both only submit hints, and the
+//! single applier thread orders the writes. The watcher is NOT paused
 //! at any point.
 //!
 //! Checkpoints are not resumable. An interrupted checkpoint is dropped
 //! and the next run starts from scratch — partial progress is fine
 //! because every version already written is a valid observation.
 
-use std::fs;
-use std::io::ErrorKind;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
+use crate::applier::{Applier, Hint};
 use crate::db::Database;
 use crate::error::FsPulseError;
-use crate::item_identity::Access;
-use crate::item_ops::{self, ObservedEvent, ObservedItem};
+use crate::item_identity::VersionSource;
+use crate::reconcile::{self, Difference};
+use crate::root_status::{self, WalkBlock};
+use crate::snapshots;
 use crate::utils::Utils;
 
 use super::progress::TaskProgress;
 use super::task_type::TaskType;
 use super::traits::Task;
 
-/// Number of observed items to accumulate before flushing a batch
-/// through `apply_observed_events`. Matches the prior scanner's batch
-/// size so the lock-hold-time profile is comparable.
-const CHECKPOINT_BATCH_SIZE: usize = 2000;
-
 // ============================================================================
 // CheckpointSettings - Checkpoint-specific task settings
 // ============================================================================
 
 /// Settings for a checkpoint task.
-///
-/// This task requires no configuration today, but each task type has
-/// its own settings struct for protocol consistency. Serializes to `{}`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CheckpointSettings {}
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct CheckpointSettings {
+    /// The user has confirmed that a large amount of missing content
+    /// really was deleted. Turns off the empty-root and mass-delete
+    /// refusals for this one walk.
+    #[serde(default)]
+    pub allow_mass_delete: bool,
+}
+
+/// A walk never refuses over fewer missing items than this, so everyday
+/// deletions cost no extra query.
+const MASS_DELETE_MIN_ITEMS: u64 = 1000;
+
+/// Items alive in a root. A full pass over the root's items; run only
+/// when a walk has found at least `MASS_DELETE_MIN_ITEMS` missing.
+const ALIVE_ITEMS_SQL: &str = "
+    SELECT COUNT(*)
+    FROM items i
+    JOIN item_versions iv ON iv.item_id = i.item_id
+       AND iv.item_version = (
+           SELECT MAX(iv2.item_version) FROM item_versions iv2
+           WHERE iv2.item_id = i.item_id
+       )
+    WHERE i.root_id = ?1 AND iv.is_deleted = 0";
+
+/// True when a walk should refuse to record its deletions: at least
+/// `MASS_DELETE_MIN_ITEMS` items are missing and they are more than
+/// half of everything alive in the root.
+fn is_mass_delete(missing_items: u64, alive_items: u64) -> bool {
+    missing_items >= MASS_DELETE_MIN_ITEMS && missing_items * 2 > alive_items
+}
 
 impl CheckpointSettings {
     /// Serialize to JSON string for storage in database
-    #[allow(dead_code)]
     pub fn to_json(&self) -> Result<String, FsPulseError> {
         serde_json::to_string(self).map_err(|e| {
             FsPulseError::Error(format!("Failed to serialize CheckpointSettings: {e}"))
@@ -70,7 +84,6 @@ impl CheckpointSettings {
     }
 
     /// Deserialize from JSON string retrieved from database
-    #[allow(dead_code)]
     pub fn from_json(json: &str) -> Result<Self, FsPulseError> {
         serde_json::from_str(json).map_err(|e| {
             FsPulseError::Error(format!("Failed to deserialize CheckpointSettings: {e}"))
@@ -82,9 +95,9 @@ impl CheckpointSettings {
 // CheckpointTask - Task trait implementation for checkpoint operations
 // ============================================================================
 
-/// A checkpoint task — performs a fast filesystem reconciliation pass
-/// over a single root: walks the tree and applies observed events to
-/// the items / item_versions tables via `item_ops`.
+/// A checkpoint task — reconciles a single root: walks the tree, finds
+/// the paths that differ from the database, and has the applier write
+/// them.
 ///
 /// Checkpoints are not resumable. An interrupted checkpoint is dropped
 /// and the next scheduled or manual run starts from scratch — partial
@@ -95,18 +108,23 @@ pub struct CheckpointTask {
     task_id: i64,
     root_id: i64,
     root_path: String,
+    settings: CheckpointSettings,
 }
 
 impl CheckpointTask {
-    /// Pure constructor — no I/O. Mirrors `ScanTask::new`'s shape so
-    /// the schedules.rs dispatch can construct it the same way.
-    #[allow(dead_code)] // wired into schedules.rs dispatch but no UI flow creates rows yet
-    pub fn new(task_id: i64, root_id: i64, root_path: String) -> Self {
-        Self {
+    /// Pure constructor, no I/O.
+    pub fn new(
+        task_id: i64,
+        root_id: i64,
+        root_path: String,
+        task_settings: &str,
+    ) -> Result<Self, FsPulseError> {
+        Ok(Self {
             task_id,
             root_id,
             root_path,
-        }
+            settings: CheckpointSettings::from_json(task_settings)?,
+        })
     }
 
     // ========================================================================
@@ -138,135 +156,6 @@ impl CheckpointTask {
     }
 
     // ========================================================================
-    // Phase 1: walk
-    // ========================================================================
-
-    fn walk_root(state: &mut WalkState, root_path: &Path) -> Result<(), FsPulseError> {
-        Self::check_interrupt(state.interrupt_token)?;
-
-        // The root directory itself is NOT stored as an item — only
-        // its descendants. Open the root and recurse into its entries.
-        let entries = match fs::read_dir(root_path) {
-            Ok(it) => it,
-            Err(e) if e.kind() == ErrorKind::PermissionDenied => {
-                return Err(FsPulseError::Error(format!(
-                    "Checkpoint: root '{}' is unreadable (permission denied)",
-                    root_path.display()
-                )));
-            }
-            Err(e) if e.kind() == ErrorKind::NotFound => {
-                return Err(FsPulseError::Error(format!(
-                    "Checkpoint: root '{}' not found",
-                    root_path.display()
-                )));
-            }
-            Err(e) => return Err(FsPulseError::from(e)),
-        };
-
-        state.dirs_walked += 1;
-        state.update_progress();
-        Self::walk_entries(state, entries)
-    }
-
-    /// Process the contents of one directory.
-    ///
-    /// For each entry:
-    ///   - stat it (`symlink_metadata`)
-    ///   - if it's a directory, attempt `read_dir` *up front* so the
-    ///     `Access` value emitted on the directory's ObservedItem
-    ///     reflects whether we'll be able to recurse into it
-    ///   - emit the ObservedItem (parent before children, so item_ops
-    ///     never has to fault in)
-    ///   - if it's a readable directory, recurse with the open
-    ///     ReadDir iterator
-    fn walk_entries(state: &mut WalkState, entries: fs::ReadDir) -> Result<(), FsPulseError> {
-        Self::check_interrupt(state.interrupt_token)?;
-
-        for entry in entries {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(_) => {
-                    // Per-entry iteration error: skip and keep going.
-                    // Matches prior scanner behavior.
-                    continue;
-                }
-            };
-            let entry_path = entry.path();
-
-            // Stat the entry.
-            let metadata = match fs::symlink_metadata(&entry_path) {
-                Ok(m) => Some(m),
-                Err(e) if e.kind() == ErrorKind::NotFound => continue,
-                Err(e) if e.kind() == ErrorKind::PermissionDenied => None,
-                Err(e) => return Err(FsPulseError::from(e)),
-            };
-
-            // For directories, try to open read_dir up front so we can
-            // emit the right Access on the parent ObservedItem before
-            // recursing. The iterator is held open and used by the
-            // recursive call below.
-            let dir_iter: Option<Result<fs::ReadDir, ()>> = match metadata.as_ref() {
-                Some(m) if m.is_dir() => match fs::read_dir(&entry_path) {
-                    Ok(it) => Some(Ok(it)),
-                    Err(e) if e.kind() == ErrorKind::PermissionDenied => Some(Err(())),
-                    Err(e) if e.kind() == ErrorKind::NotFound => continue,
-                    Err(e) => return Err(FsPulseError::from(e)),
-                },
-                _ => None,
-            };
-
-            let access = if metadata.is_none() {
-                Access::MetaError
-            } else if matches!(dir_iter, Some(Err(()))) {
-                Access::ReadError
-            } else {
-                Access::Ok
-            };
-
-            let observed =
-                ObservedItem::from_checkpoint(&entry_path, metadata.as_ref(), access)?;
-            state.batch.push(ObservedEvent::Upsert {
-                root_id: state.root_id,
-                item: observed,
-            });
-            state.files_walked += 1;
-            state.update_progress();
-
-            if state.batch.len() >= CHECKPOINT_BATCH_SIZE {
-                Self::flush_batch(state)?;
-            }
-
-            // Recurse into readable directories. The directory's own
-            // ObservedItem has already been emitted just above, so
-            // children are processed in parent-before-children order.
-            if let Some(Ok(child_entries)) = dir_iter {
-                state.dirs_walked += 1;
-                state.update_progress();
-                Self::walk_entries(state, child_entries)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Flush the accumulated batch to the database. The interrupt
-    /// token is checked immediately before and after the
-    /// `apply_observed_events` call — `apply_observed_events` itself
-    /// is treated as atomic and is NOT given the interrupt token.
-    fn flush_batch(state: &mut WalkState) -> Result<(), FsPulseError> {
-        if state.batch.is_empty() {
-            return Ok(());
-        }
-        Self::check_interrupt(state.interrupt_token)?;
-        let stats = item_ops::apply_observed_events(&state.batch)?;
-        Self::check_interrupt(state.interrupt_token)?;
-        state.applied += stats.applied;
-        state.skipped += stats.skipped;
-        state.batch.clear();
-        Ok(())
-    }
-
-    // ========================================================================
     // Finalize
     // ========================================================================
 
@@ -291,18 +180,6 @@ impl CheckpointTask {
             Ok(())
         })
     }
-
-    // ========================================================================
-    // Small utilities
-    // ========================================================================
-
-    fn check_interrupt(interrupt_token: &AtomicBool) -> Result<(), FsPulseError> {
-        if interrupt_token.load(Ordering::Acquire) {
-            Err(FsPulseError::TaskInterrupted)
-        } else {
-            Ok(())
-        }
-    }
 }
 
 impl Task for CheckpointTask {
@@ -311,23 +188,114 @@ impl Task for CheckpointTask {
         progress: Arc<TaskProgress>,
         interrupt_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
-        // Phase 0 — set started_at, clear completed_at, all under the lock.
+        // Set started_at, clear completed_at, all under the lock.
         Self::begin(self.root_id)?;
 
-        // Walk
-        progress.set_phase("Walking");
-        let mut state = WalkState::new(self.root_id, &progress, &interrupt_token);
-        Self::check_interrupt(&interrupt_token)?;
-        Self::walk_root(&mut state, Path::new(&self.root_path))?;
-        Self::flush_batch(&mut state)?;
-        Self::check_interrupt(&interrupt_token)?;
+        progress.set_phase("Reconciling");
+        let root_id = self.root_id;
+        let confirmed = self.settings.allow_mass_delete;
+        let conn = Database::get_connection()?;
+
+        // Clear the applier's counters so the totals below describe this
+        // walk (exact while the walk is the only producer of hints).
+        Applier::barrier()?;
+
+        // Paths that are new or changed go to the applier as they are
+        // found. Paths that are missing are held back until the walk is
+        // over, so the walk can refuse to record them if too much of
+        // the root has disappeared.
+        let mut missing: Vec<PathBuf> = Vec::new();
+        let walked = reconcile::find_differences(
+            &conn,
+            root_id,
+            Path::new(&self.root_path),
+            confirmed,
+            &interrupt_token,
+            &mut |path, difference| match difference {
+                Difference::Changed => Applier::submit(Hint {
+                    root_id,
+                    path,
+                    source: VersionSource::Reconcile,
+                    confirmed,
+                }),
+                Difference::Missing => {
+                    missing.push(path);
+                    Ok(())
+                }
+            },
+            &mut |stats| {
+                progress.set_indeterminate_progress(&format!(
+                    "{} items in {} directories, {} differences",
+                    stats.entries, stats.dirs, stats.hints
+                ));
+            },
+        );
+
+        let walk = match walked {
+            Ok(walk) => walk,
+            Err(FsPulseError::RootEmpty(detail)) => {
+                root_status::set_walk_block(root_id, WalkBlock::EmptyRoot, detail.clone());
+                return Err(FsPulseError::RootEmpty(detail));
+            }
+            Err(e) => return Err(e),
+        };
+
+        if !confirmed && walk.missing_items >= MASS_DELETE_MIN_ITEMS {
+            let alive_items: i64 =
+                conn.query_row(ALIVE_ITEMS_SQL, params![root_id], |row| row.get(0))?;
+            if is_mass_delete(walk.missing_items, alive_items as u64) {
+                // What was new or changed is still recorded.
+                Applier::barrier()?;
+                let detail = format!(
+                    "{} of {} items in '{}' are missing. Nothing was marked deleted. \
+                     If they really were deleted, run the walk again with confirmation.",
+                    walk.missing_items, alive_items, self.root_path
+                );
+                root_status::set_walk_block(root_id, WalkBlock::MassDelete, detail.clone());
+                return Err(FsPulseError::MassDelete(detail));
+            }
+        }
+
+        for path in missing {
+            Applier::submit(Hint {
+                root_id,
+                path,
+                source: VersionSource::Reconcile,
+                confirmed,
+            })?;
+        }
+
+        // Wait for every reported path to be written before declaring
+        // the root confirmed.
+        progress.set_indeterminate_progress("Applying changes…");
+        let applied = Applier::barrier()?;
+        root_status::clear_walk_block(root_id);
+
+        // The walk has just confirmed the whole root, so this is the
+        // moment to check the snapshot's running totals against a count.
+        if snapshots::correct_totals(root_id)? {
+            log::info!("Checkpoint: corrected snapshot totals for root {root_id}");
+        }
+
         progress.add_breadcrumb(&format!(
-            "Walked {} files in {} directories ({} applied, {} skipped)",
-            state.files_walked, state.dirs_walked, state.applied, state.skipped,
+            "Walked {} items in {} directories",
+            walk.entries, walk.dirs
+        ));
+        if walk.incomplete_dirs > 0 {
+            progress.add_breadcrumb(&format!(
+                "{} directories could not be fully read; deletions in them were not checked",
+                walk.incomplete_dirs
+            ));
+        }
+        progress.add_breadcrumb(&format!(
+            "{} added, {} modified, {} deleted",
+            applied.added,
+            applied.modified + applied.coalesced,
+            applied.deleted
         ));
 
-        // Finalize — write completed_at. started_at is left in place
-        // so the UI can show "last checkpoint ran from X to Y."
+        // Write completed_at. started_at is left in place so the UI can
+        // show "last checkpoint ran from X to Y."
         Self::finalize(self.root_id)?;
 
         Ok(())
@@ -388,63 +356,40 @@ impl Task for CheckpointTask {
     }
 }
 
-// ============================================================================
-// WalkState — accumulator carried through the recursive walk
-// ============================================================================
-
-struct WalkState<'a> {
-    root_id: i64,
-    progress: &'a TaskProgress,
-    interrupt_token: &'a AtomicBool,
-    batch: Vec<ObservedEvent>,
-    files_walked: u64,
-    dirs_walked: u64,
-    applied: usize,
-    skipped: usize,
-}
-
-impl<'a> WalkState<'a> {
-    fn new(
-        root_id: i64,
-        progress: &'a TaskProgress,
-        interrupt_token: &'a AtomicBool,
-    ) -> Self {
-        Self {
-            root_id,
-            progress,
-            interrupt_token,
-            batch: Vec::with_capacity(CHECKPOINT_BATCH_SIZE),
-            files_walked: 0,
-            dirs_walked: 0,
-            applied: 0,
-            skipped: 0,
-        }
-    }
-
-    fn update_progress(&self) {
-        self.progress.set_indeterminate_progress(&format!(
-            "{} files in {} directories",
-            self.files_walked, self.dirs_walked
-        ));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_checkpoint_settings_round_trip() {
-        let settings = CheckpointSettings {};
+        let settings = CheckpointSettings {
+            allow_mass_delete: true,
+        };
         let json = settings.to_json().unwrap();
-        assert_eq!(json, "{}");
-        let restored = CheckpointSettings::from_json(&json).unwrap();
-        assert_eq!(settings, restored);
+        assert_eq!(json, r#"{"allow_mass_delete":true}"#);
+        assert_eq!(CheckpointSettings::from_json(&json).unwrap(), settings);
+        // Rows written before the setting existed.
+        assert_eq!(
+            CheckpointSettings::from_json("{}").unwrap(),
+            CheckpointSettings::default()
+        );
+    }
+
+    #[test]
+    fn mass_delete_needs_both_a_large_count_and_most_of_the_root() {
+        // Small deletions never count, whatever the share.
+        assert!(!is_mass_delete(999, 999));
+        // Large, but not most of the root.
+        assert!(!is_mass_delete(1000, 2000));
+        assert!(!is_mass_delete(50_000, 3_400_000));
+        // Large and more than half.
+        assert!(is_mass_delete(1000, 1999));
+        assert!(is_mass_delete(3_400_000, 3_400_000));
     }
 
     #[test]
     fn test_checkpoint_task_metadata() {
-        let task = CheckpointTask::new(7, 42, "/some/root".to_string());
+        let task = CheckpointTask::new(7, 42, "/some/root".to_string(), "{}").unwrap();
         assert_eq!(task.task_type(), TaskType::Checkpoint);
         assert_eq!(task.task_id(), 7);
         assert_eq!(task.active_root_id(), Some(42));

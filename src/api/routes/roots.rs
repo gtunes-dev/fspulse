@@ -2,9 +2,15 @@ use axum::{extract::Path, http::StatusCode, Json};
 use log::error;
 use serde::{Deserialize, Serialize};
 
+use rusqlite::OptionalExtension;
+
 use crate::db::Database;
 use crate::error::FsPulseError;
+use crate::ignore::IgnoreSet;
+use crate::root_status::{self, RootStatus};
 use crate::roots::Root;
+use crate::task::CheckpointSettings;
+use crate::task_manager::TaskManager;
 use crate::scans::Scan;
 use crate::schedules;
 
@@ -297,4 +303,186 @@ fn extract_path_from_error(msg: &str) -> &str {
         }
     }
     "" // Return empty string if path not found in message
+}
+
+// ============================================================================
+// Observation: watching, ignore patterns, and reconcile walks
+// ============================================================================
+
+/// How one root is being observed: its settings, when it was last
+/// walked, and the watcher's current view of it.
+#[derive(Debug, Serialize)]
+pub struct RootObservation {
+    pub root_id: i64,
+    pub root_path: String,
+    /// Setting: watch this root for realtime changes.
+    pub watch_enabled: bool,
+    /// Setting: patterns excluded from watching and walks.
+    pub ignore_patterns: Vec<String>,
+    pub last_walk_started_at: Option<i64>,
+    /// `None` if no walk has completed, or the latest one did not.
+    pub last_walk_completed_at: Option<i64>,
+    /// Runtime state from the watcher and the last walk.
+    #[serde(flatten)]
+    pub status: RootStatus,
+}
+
+fn internal_error(context: &str, e: impl std::fmt::Display) -> (StatusCode, Json<ErrorResponse>) {
+    error!("{context}: {e}");
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: "An unexpected error occurred".to_string(),
+        }),
+    )
+}
+
+fn root_not_found(root_id: i64) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ErrorResponse {
+            error: format!("Root {root_id} not found"),
+        }),
+    )
+}
+
+/// GET /api/roots/observation
+/// Every root with its observation settings and current watch state.
+pub async fn get_observation(
+) -> Result<Json<Vec<RootObservation>>, (StatusCode, Json<ErrorResponse>)> {
+    let conn = Database::get_connection().map_err(|e| internal_error("Database connection", e))?;
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT root_id, root_path, watch_enabled, ignore_patterns,
+                    last_checkpoint_started_at, last_checkpoint_completed_at
+               FROM roots ORDER BY root_path COLLATE natural_path",
+        )
+        .map_err(|e| internal_error("Reading roots", e))?;
+
+    let roots = stmt
+        .query_map([], |row| {
+            let root_id: i64 = row.get(0)?;
+            let patterns: Option<String> = row.get(3)?;
+            Ok(RootObservation {
+                root_id,
+                root_path: row.get(1)?,
+                watch_enabled: row.get(2)?,
+                // Shown as stored; a value that cannot be parsed shows as
+                // no patterns, which is also how it is applied.
+                ignore_patterns: patterns
+                    .and_then(|json| serde_json::from_str(&json).ok())
+                    .unwrap_or_default(),
+                last_walk_started_at: row.get(4)?,
+                last_walk_completed_at: row.get(5)?,
+                status: root_status::get(root_id),
+            })
+        })
+        .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+        .map_err(|e| internal_error("Reading roots", e))?;
+
+    Ok(Json(roots))
+}
+
+/// Request to change a root's observation settings. A field that is
+/// left out is not changed.
+#[derive(Debug, Deserialize)]
+pub struct UpdateObservationRequest {
+    pub watch_enabled: Option<bool>,
+    pub ignore_patterns: Option<Vec<String>>,
+}
+
+/// PUT /api/roots/{root_id}/observation
+/// Changes whether a root is watched and what it ignores. The watcher
+/// picks the change up within half a minute. Items that match a new
+/// pattern are marked deleted by the next walk.
+pub async fn update_observation(
+    Path(root_id): Path<i64>,
+    Json(req): Json<UpdateObservationRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let patterns_json = match &req.ignore_patterns {
+        None => None,
+        Some(patterns) => Some(
+            IgnoreSet::to_stored_json(patterns)
+                .map_err(|e| internal_error("Encoding ignore patterns", e))?,
+        ),
+    };
+
+    let conn = Database::get_connection().map_err(|e| internal_error("Database connection", e))?;
+    let updated = Database::immediate_transaction(&conn, |c| {
+        let exists = c
+            .query_row("SELECT 1 FROM roots WHERE root_id = ?", [root_id], |_| Ok(()))
+            .optional()?
+            .is_some();
+        if !exists {
+            return Ok(false);
+        }
+        if let Some(watch_enabled) = req.watch_enabled {
+            c.execute(
+                "UPDATE roots SET watch_enabled = ?1 WHERE root_id = ?2",
+                rusqlite::params![watch_enabled, root_id],
+            )?;
+        }
+        if let Some(json) = &patterns_json {
+            c.execute(
+                "UPDATE roots SET ignore_patterns = ?1 WHERE root_id = ?2",
+                rusqlite::params![json, root_id],
+            )?;
+        }
+        Ok(true)
+    })
+    .map_err(|e| internal_error("Updating root observation settings", e))?;
+
+    if !updated {
+        return Err(root_not_found(root_id));
+    }
+    log::info!("Updated observation settings for root {root_id}");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Request to walk a root now.
+#[derive(Debug, Default, Deserialize)]
+pub struct WalkRequest {
+    /// Confirms that a large amount of missing content really was
+    /// deleted. Needed to get past a walk that refused because the root
+    /// was empty or most of its items were missing.
+    #[serde(default)]
+    pub confirm_deletions: bool,
+}
+
+/// POST /api/roots/{root_id}/checkpoint
+/// Queues a reconcile walk of a root. Returns 202; the walk runs through
+/// the task system.
+pub async fn request_checkpoint(
+    Path(root_id): Path<i64>,
+    body: Option<Json<WalkRequest>>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    let Json(req) = body.unwrap_or_default();
+    let settings = CheckpointSettings {
+        allow_mass_delete: req.confirm_deletions,
+    };
+
+    let conn = Database::get_connection().map_err(|e| internal_error("Database connection", e))?;
+    match TaskManager::request_checkpoint(&conn, root_id, &settings) {
+        Ok(()) => {
+            log::info!(
+                "Walk queued for root {root_id} (deletions confirmed: {})",
+                req.confirm_deletions
+            );
+            Ok(StatusCode::ACCEPTED)
+        }
+        Err(FsPulseError::Error(message)) if message.contains("not found") => {
+            Err(root_not_found(root_id))
+        }
+        Err(FsPulseError::Error(message)) => Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse { error: message }),
+        )),
+        Err(FsPulseError::ShuttingDown) => Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: "The server is shutting down".to_string(),
+            }),
+        )),
+        Err(e) => Err(internal_error("Queueing a walk", e)),
+    }
 }

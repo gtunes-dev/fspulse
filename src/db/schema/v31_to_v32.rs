@@ -15,7 +15,7 @@
 //   - Scans slimmed to integrity-only (walk/posture columns dropped)
 //   - ScanState renumbered
 //   - scan_undo_log dropped
-//   - roots: checkpoint timestamps, watch_enabled, device_id, ignore_patterns
+//   - roots: checkpoint timestamps, watch_enabled, ignore_patterns
 //
 // This is a Transacted migration (pre_sql + code_fn + post_sql).
 // The code_fn handles: undo-log rollback of in-progress scans, scan state
@@ -235,7 +235,6 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
     ALTER TABLE roots ADD COLUMN last_checkpoint_started_at INTEGER;
     ALTER TABLE roots ADD COLUMN last_checkpoint_completed_at INTEGER;
     ALTER TABLE roots ADD COLUMN watch_enabled INTEGER NOT NULL DEFAULT 1;
-    ALTER TABLE roots ADD COLUMN device_id INTEGER;
     ALTER TABLE roots ADD COLUMN ignore_patterns TEXT;
 
     -- Every completed historical scan walked the whole root, so the

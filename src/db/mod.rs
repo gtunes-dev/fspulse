@@ -1,5 +1,5 @@
 pub mod migration;
-mod schema;
+pub(crate) mod schema;
 
 use crate::{config::Config, error::FsPulseError, sort::compare_paths};
 use migration::MigrationProgress;

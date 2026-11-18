@@ -249,7 +249,16 @@ impl WebServer {
                 "/api/roots/with-scans",
                 get(api::roots::get_roots_with_scans),
             )
+            .route("/api/roots/observation", get(api::roots::get_observation))
             .route("/api/roots/{root_id}", delete(api::roots::delete_root))
+            .route(
+                "/api/roots/{root_id}/observation",
+                put(api::roots::update_observation),
+            )
+            .route(
+                "/api/roots/{root_id}/checkpoint",
+                post(api::roots::request_checkpoint),
+            )
             .route(
                 "/api/roots/{root_id}/schedule-count",
                 get(api::roots::get_schedule_count),
@@ -420,6 +429,16 @@ fn start_app_services(shutdown_tx: broadcast::Sender<()>) -> Result<(), FsPulseE
             }
         }
     });
+
+    // fsPulse's own files may sit inside a root. Observing them would
+    // turn every database write into a change to record.
+    match Database::get_path() {
+        Ok(database_file) => {
+            let log_dir = std::path::PathBuf::from(crate::config::Config::get_data_dir()).join("logs");
+            crate::ignore::set_own_files(&database_file, &log_dir);
+        }
+        Err(e) => log::error!("Could not determine the database path: {e}"),
+    }
 
     // Start filesystem watcher
     let mut shutdown_rx = shutdown_tx.subscribe();

@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::scans::HashMode;
-use crate::task::{CheckpointTask, CompactDatabaseSettings, CompactDatabaseTask, ScanSettings, ScanTask, Task, TaskStatus, TaskType};
+use crate::task::{CheckpointSettings, CheckpointTask, CompactDatabaseSettings, CompactDatabaseTask, ScanSettings, ScanTask, Task, TaskStatus, TaskType};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -989,6 +989,63 @@ impl TaskEntry {
         Ok(())
     }
 
+    /// Queue a checkpoint (reconcile walk) for a root, or no-op if one
+    /// with the same settings is already waiting to run. A checkpoint
+    /// that is already running does not count: it may have walked past
+    /// the directories that need another look.
+    /// Returns true if a task was created.
+    /// Must be called within a transaction for atomicity.
+    pub fn create_checkpoint(
+        conn: &rusqlite::Connection,
+        root_id: i64,
+        settings: &CheckpointSettings,
+    ) -> Result<bool, FsPulseError> {
+        let root_exists = conn
+            .query_row("SELECT 1 FROM roots WHERE root_id = ?", [root_id], |_| {
+                Ok(())
+            })
+            .optional()
+            .map_err(FsPulseError::DatabaseError)?;
+
+        if root_exists.is_none() {
+            return Err(FsPulseError::Error(format!("Root {} not found", root_id)));
+        }
+
+        let task_settings = settings.to_json()?;
+
+        let pending: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks
+                  WHERE task_type = ? AND status = 0 AND root_id = ? AND task_settings = ?",
+                rusqlite::params![TaskType::Checkpoint.as_i64(), root_id, task_settings],
+                |row| row.get(0),
+            )
+            .map_err(FsPulseError::DatabaseError)?;
+
+        if pending > 0 {
+            return Ok(false);
+        }
+
+        let now = chrono::Utc::now().timestamp();
+
+        conn.execute(
+            "INSERT INTO tasks (
+                task_type, status, root_id, run_at,
+                source, task_settings, created_at
+            ) VALUES (?, 0, ?, 0, ?, ?, ?)",
+            rusqlite::params![
+                TaskType::Checkpoint.as_i64(),
+                root_id,
+                SourceType::Manual.as_i32(),
+                task_settings,
+                now,
+            ],
+        )
+        .map_err(FsPulseError::DatabaseError)?;
+
+        Ok(true)
+    }
+
     /// Find the next task to process (generic across all task types)
     ///
     /// Priority order:
@@ -1180,7 +1237,12 @@ impl TaskEntry {
                             row.task_id
                         ))
                     })?;
-                    Box::new(CheckpointTask::new(row.task_id, root_id, root_path))
+                    Box::new(CheckpointTask::new(
+                        row.task_id,
+                        root_id,
+                        root_path,
+                        &row.task_settings,
+                    )?)
                 }
             };
 

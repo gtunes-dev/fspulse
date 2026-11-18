@@ -907,7 +907,6 @@ dependencies = [
  "lopdf",
  "mime_guess",
  "notify",
- "notify-debouncer-mini",
  "once_cell",
  "pest",
  "pest_derive",
@@ -1856,18 +1855,6 @@ dependencies = [
  "notify-types",
  "walkdir",
  "windows-sys 0.60.2",
-]
-
-[[package]]
-name = "notify-debouncer-mini"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a689eb4262184d9a1727f9087cd03883ea716682ab03ed24efec57d7716dccb8"
-dependencies = [
- "log",
- "notify",
- "notify-types",
- "tempfile",
 ]
 
 [[package]]

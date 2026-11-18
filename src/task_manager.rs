@@ -1,6 +1,6 @@
 use crate::db::Database;
 use crate::error::FsPulseError;
-use crate::task::{BroadcastMessage, TaskProgress, TaskStatus};
+use crate::task::{BroadcastMessage, CheckpointSettings, TaskProgress, TaskStatus};
 use crate::scans::HashMode;
 use crate::schedules::{TaskEntry, Schedule};
 use log::{error, info, Level};
@@ -105,6 +105,27 @@ impl TaskManager {
 
         Database::immediate_transaction(conn, |conn| {
             TaskEntry::create_manual(conn, root_id, hash_mode, is_val)
+        })?;
+
+        manager.try_start_next_task_locked(conn)?;
+
+        Ok(())
+    }
+
+    /// Queue a checkpoint (reconcile walk) for a root and try to start
+    /// it. No-op if one with the same settings is already waiting for
+    /// that root.
+    pub fn request_checkpoint(
+        conn: &Connection,
+        root_id: i64,
+        settings: &CheckpointSettings,
+    ) -> Result<(), FsPulseError> {
+        let mut manager = Self::instance().lock().unwrap();
+
+        manager.check_activity_allowed_locked()?;
+
+        Database::immediate_transaction(conn, |conn| {
+            TaskEntry::create_checkpoint(conn, root_id, settings)
         })?;
 
         manager.try_start_next_task_locked(conn)?;

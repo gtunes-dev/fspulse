@@ -2,7 +2,7 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 
 #[repr(i64)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ItemType {
     File = 0,
     Directory = 1,
