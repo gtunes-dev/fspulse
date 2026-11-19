@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CircleDashed, RefreshCw } from 'lucide-react'
 import { formatFileSize } from '@/lib/formatUtils'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext } from '@/contexts/useTaskContext'
 
 interface AppInfo {
   name: string

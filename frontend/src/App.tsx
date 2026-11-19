@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
-import { TaskProvider, useTaskContext } from './contexts/TaskContext'
+import { TaskProvider } from './contexts/TaskContext'
+import { useTaskContext } from './contexts/useTaskContext'
 import { ScrollContext } from './contexts/ScrollContext'
 import { AppSidebar } from './components/layout/Sidebar'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'

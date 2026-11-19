@@ -12,6 +12,7 @@ use crate::applier::{Applier, Hint};
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::hash::Hash;
+use crate::ignore::IgnoreSet;
 use crate::item_identity::{Access, VersionSource};
 use crate::scans::{AnalysisSpec, Scan};
 use crate::task::{AnalysisTracker, ScanTaskState, TaskProgress};
@@ -57,11 +58,21 @@ pub fn run_analysis_phase(
         return Ok(());
     }
 
+    let root_path: PathBuf = conn
+        .query_row(
+            "SELECT root_path FROM roots WHERE root_id = ?",
+            [scan.root_id()],
+            |row| row.get::<_, String>(0),
+        )?
+        .into();
+
     // Parse initial task state for restart resilience (HWM)
     let initial_state = ScanTaskState::from_task_state(initial_task_state.as_deref())?;
     let initial_hwm = initial_state.high_water_mark;
 
-    let (mut analyze_total, analyze_done) = AnalysisItem::get_analysis_counts(
+    // Files this run still has to handle: everything eligible past the
+    // resume point. A resumed check counts only what is left.
+    let mut analyze_total = AnalysisItem::count_remaining(
         &conn,
         scan.root_id(),
         scan.analysis_spec(),
@@ -70,7 +81,7 @@ pub fn run_analysis_phase(
     )?;
 
     // Set up counter-based progress tracking
-    task_progress.set_progress_total(analyze_total, analyze_done, Some("files"));
+    task_progress.set_progress_total(analyze_total, 0, Some("files"));
 
     // Create the analysis tracker for HWM management
     let tracker = Arc::new(AnalysisTracker::new(task_id, initial_state));
@@ -79,10 +90,10 @@ pub fn run_analysis_phase(
     let (sender, receiver) = bounded::<AnalysisItem>(FETCH_BATCH_SIZE);
 
     // Thread pool
-    let items_remaining = analyze_total.saturating_sub(analyze_done);
-    let items_remaining_usize = items_remaining.try_into().unwrap_or(usize::MAX);
-    let thread_count = crate::config::Config::get_analysis_threads();
-    let num_threads = cmp::min(items_remaining_usize, thread_count).max(1);
+    let num_threads = worker_count(
+        analyze_total,
+        crate::config::Config::get_analysis_threads(),
+    );
     let pool = ThreadPool::new(num_threads);
 
     task_progress.set_thread_count(num_threads);
@@ -115,7 +126,7 @@ pub fn run_analysis_phase(
     }
 
     let mut last_item_id = initial_hwm;
-    let mut total_dispatched: u64 = analyze_done;
+    let mut total_dispatched: u64 = 0;
 
     loop {
         if interrupt_token.load(Ordering::Acquire) {
@@ -137,10 +148,33 @@ pub fn run_analysis_phase(
             break;
         }
 
+        // Files that match the root's ignore patterns are not checked.
+        // They are still recorded as present only because no full
+        // check has relabelled them yet, so hint them: the applier
+        // stops tracking them now. Patterns are re-read for each batch.
+        let ignore = IgnoreSet::load(&conn, scan.root_id())?;
+        let (analysis_items, ignored_items): (Vec<_>, Vec<_>) =
+            analysis_items.into_iter().partition(|item| {
+                !ignore.is_ignored(&root_path, std::path::Path::new(item.item_path()))
+            });
+        for ignored_item in &ignored_items {
+            last_item_id = last_item_id.max(ignored_item.item_id());
+            task_progress.increment_progress();
+            let hint = Hint {
+                root_id: scan.root_id(),
+                path: PathBuf::from(ignored_item.item_path()),
+                source: VersionSource::Integrity,
+                confirmed: false,
+            };
+            if let Err(e) = Applier::submit(hint) {
+                error!("Could not report ignored file '{}': {}", ignored_item.item_path(), e);
+            }
+        }
+
         tracker.add_batch(analysis_items.iter().map(|item| item.item_id()));
 
         for analysis_item in analysis_items {
-            last_item_id = analysis_item.item_id();
+            last_item_id = last_item_id.max(analysis_item.item_id());
             sender
                 .send(analysis_item)
                 .expect("Failed to send task into the bounded channel");
@@ -152,14 +186,14 @@ pub fn run_analysis_phase(
         // watcher since we started), re-query to refresh the progress
         // bar denominator.
         if total_dispatched > analyze_total {
-            let (new_total, _) = AnalysisItem::get_analysis_counts(
+            analyze_total = AnalysisItem::count_remaining(
                 &conn,
                 scan.root_id(),
                 scan.analysis_spec(),
                 initial_hwm,
                 &disabled_exts,
-            )?;
-            analyze_total = new_total;
+            )?
+            .max(total_dispatched);
             task_progress.set_progress_total(analyze_total, total_dispatched, Some("files"));
         }
 
@@ -192,6 +226,20 @@ pub fn run_analysis_phase(
     task_progress.add_breadcrumb("Integrity check complete");
 
     Ok(())
+}
+
+/// How many worker threads a check starts. The pool cannot grow once
+/// started, and files can become eligible while the check runs, so any
+/// run with more than one batch of work gets every configured thread;
+/// idle workers cost nothing. Only a run known to be small is capped at
+/// one thread per file.
+fn worker_count(files_remaining: u64, configured_threads: usize) -> usize {
+    let configured = configured_threads.max(1);
+    if files_remaining > FETCH_BATCH_SIZE as u64 {
+        configured
+    } else {
+        cmp::min(files_remaining as usize, configured).max(1)
+    }
 }
 
 /// Process a single item: compute hash/validate, determine state, persist.
@@ -431,6 +479,9 @@ enum PersistOutcome {
     SkippedDeleted,
     /// File on disk no longer matches the version that was read.
     SkippedFileChanged,
+    /// The file's path matches the root's ignore patterns as of the
+    /// write. Nothing is recorded about an ignored file.
+    SkippedIgnored,
 }
 
 /// Persist hash and validation results to the database.
@@ -467,10 +518,10 @@ fn persist_analysis(
     check_interrupted(interrupt_token)?;
 
     // Pre-lock file guard: check the file on disk hasn't changed
-    if analysis_item.needs_hash() || analysis_item.needs_val() {
-        if check_against_record(analysis_item) == FileCheck::Changed {
-            return Ok(PersistOutcome::SkippedFileChanged);
-        }
+    if (analysis_item.needs_hash() || analysis_item.needs_val())
+        && check_against_record(analysis_item) == FileCheck::Changed
+    {
+        return Ok(PersistOutcome::SkippedFileChanged);
     }
 
     let conn = Database::get_connection()?;
@@ -502,6 +553,23 @@ fn persist_analysis(
                 return Ok(PersistOutcome::SkippedDeleted);
             }
             Some(_) => {} // Version matches, not deleted — proceed
+        }
+
+        // Ignore guard, under the same lock: a pattern saved since this
+        // item was fetched means nothing more is recorded about it,
+        // even if no full check has relabelled it yet.
+        let (root_path, patterns): (String, Option<String>) = c.query_row(
+            "SELECT r.root_path, r.ignore_patterns
+               FROM items i JOIN roots r ON r.root_id = i.root_id
+              WHERE i.item_id = ?1",
+            params![analysis_item.item_id()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if IgnoreSet::from_json_lenient(patterns.as_deref(), 0).is_ignored(
+            std::path::Path::new(&root_path),
+            std::path::Path::new(analysis_item.item_path()),
+        ) {
+            return Ok(PersistOutcome::SkippedIgnored);
         }
 
         // Hash persistence
@@ -671,16 +739,16 @@ impl AnalysisItem {
         }
     }
 
-    /// Count items eligible for analysis (total needing work, and how
-    /// many are already done). Used for progress bar initialization
-    /// and overflow re-query.
-    pub fn get_analysis_counts(
+    /// Count the items past `last_item_id` that need hashing or
+    /// validating. Used to size the thread pool and the progress bar,
+    /// and re-queried when more items turn up during the run.
+    pub fn count_remaining(
         conn: &Connection,
         root_id: i64,
         analysis_spec: &AnalysisSpec,
         last_item_id: i64,
         disabled_exts: &[&str],
-    ) -> Result<(u64, u64), FsPulseError> {
+    ) -> Result<u64, FsPulseError> {
         let ext_exclusion = Self::build_ext_exclusion_clause(disabled_exts);
 
         // Find the latest alive version per item for this root.
@@ -715,23 +783,13 @@ impl AnalysisItem {
                         WHEN i.do_not_validate = 1 THEN 0
                         {ext_exclusion}WHEN cv.val_state IS NULL THEN 1
                         ELSE 0
-                    END AS needs_val,
-                    cv.val_state
+                    END AS needs_val
                 FROM current_versions cv
                 JOIN items i ON i.item_id = cv.item_id
                 WHERE i.item_type = 0
                   AND cv.access <> 1
             )
-            SELECT
-                COALESCE(SUM(CASE WHEN needs_hash = 1 OR needs_val = 1 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE
-                    WHEN needs_hash = 0 AND needs_val = 0 THEN 0
-                    WHEN (needs_hash = 1 AND EXISTS (
-                        SELECT 1 FROM hash_versions hv2
-                        WHERE hv2.item_id = candidates.item_id
-                    ))
-                    OR (needs_val = 1 AND val_state IS NOT NULL)
-                    THEN 1 ELSE 0 END), 0)
+            SELECT COALESCE(SUM(needs_hash = 1 OR needs_val = 1), 0)
             FROM candidates"
         );
 
@@ -744,12 +802,9 @@ impl AnalysisItem {
             analysis_spec.is_val() as i64,
         ])?;
 
-        if let Some(row) = rows.next()? {
-            let total_needed = row.get::<_, i64>(0)? as u64;
-            let total_done = row.get::<_, i64>(1)? as u64;
-            Ok((total_needed, total_done))
-        } else {
-            Ok((0, 0))
+        match rows.next()? {
+            Some(row) => Ok(row.get::<_, i64>(0)? as u64),
+            None => Ok(0),
         }
     }
 
@@ -861,6 +916,20 @@ fn is_interrupted(interrupt_token: &Arc<AtomicBool>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_run_with_more_than_a_batch_of_work_gets_every_configured_thread() {
+        assert_eq!(worker_count(1_000_000, 16), 16);
+        assert_eq!(worker_count(FETCH_BATCH_SIZE as u64 + 1, 16), 16);
+    }
+
+    #[test]
+    fn a_small_run_gets_one_thread_per_file_and_never_none() {
+        assert_eq!(worker_count(3, 16), 3);
+        assert_eq!(worker_count(40, 16), 16);
+        assert_eq!(worker_count(0, 16), 1);
+        assert_eq!(worker_count(5, 0), 1);
+    }
 
     #[test]
     fn test_analysis_item_getters() {

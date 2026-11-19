@@ -4,6 +4,7 @@ import {
   File, Folder, Calendar as CalendarIcon,
   HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
   ShieldCheck, ShieldOff, Plus, Triangle,
+  Minus,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { ReviewToggle } from '@/components/shared/ReviewToggle'
@@ -94,6 +95,8 @@ interface VersionEntry {
   source: number
   is_added: boolean
   is_deleted: boolean
+  /** Written because of the ignore patterns: stopped (with is_deleted) or resumed (with is_added). */
+  is_ignored: boolean
   access: number
   mod_date: number | null
   size: number | null
@@ -135,7 +138,7 @@ interface IntegrityState {
   val_error: string | null
 }
 
-type ChangeKind = 'initial' | 'modified' | 'deleted' | 'restored'
+type ChangeKind = 'initial' | 'modified' | 'deleted' | 'restored' | 'ignored' | 'resumed'
 
 type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
 
@@ -174,6 +177,9 @@ function valStateLabel(val: number | null): string {
 }
 
 function classifyChange(v: VersionEntry, prev: VersionEntry | null): ChangeKind {
+  // Ignoring and resuming are not deletions or additions.
+  if (v.is_ignored && v.is_deleted) return 'ignored'
+  if (v.is_ignored && v.is_added) return 'resumed'
   if (v.is_added) return 'initial'
   if (v.is_deleted && prev && !prev.is_deleted) return 'deleted'
   if (v.is_deleted) return 'deleted'
@@ -662,11 +668,14 @@ export function ItemDetail({
       kind === 'initial' ? <Plus className={`${sp.icon} text-green-500`} /> :
       kind === 'modified' ? <Triangle className={`${sp.icon} text-blue-500`} fill="currentColor" /> :
       kind === 'deleted' ? <X className={`${sp.icon} text-red-500`} /> :
+      kind === 'ignored' || kind === 'resumed' ? <Minus className={`${sp.icon} text-muted-foreground`} /> :
       <Plus className={`${sp.icon} text-green-500`} /> // restored
     const label =
       kind === 'initial' ? 'Added' :
       kind === 'modified' ? 'Modified' :
       kind === 'deleted' ? 'Deleted' :
+      kind === 'ignored' ? 'Tracking stopped (ignored)' :
+      kind === 'resumed' ? 'Tracking resumed' :
       'Restored'
     return (
       <span className={`inline-flex items-center ${sp.gap} text-xs flex-shrink-0`}>

@@ -1,6 +1,5 @@
 use rusqlite::Error as RusqliteError;
 use std::io;
-use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::query::Rule;
@@ -43,9 +42,6 @@ pub enum FsPulseError {
     /// root's items are missing.
     #[error("Too much is missing: {0}")]
     MassDelete(String),
-
-    #[error("Directory unreadable: {0}")]
-    DirectoryUnreadable(PathBuf),
 }
 
 #[cfg(test)]

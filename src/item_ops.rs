@@ -23,6 +23,26 @@
 //!   for folders, every alive descendant.
 //! - An item observed with one type tombstones alive items of any other
 //!   type at the same path.
+//!
+//! Ignore patterns are enforced here and nowhere else. Each batch reads
+//! its roots' patterns inside the write transaction and tests every
+//! event's path against them before deciding what to write:
+//!
+//! - A path that matches is never written as present. If items are
+//!   recorded as present there, they get a "tracking stopped" version
+//!   (`is_deleted = 1, is_ignored = 1`), and so does everything present
+//!   beneath a folder. Nothing is recorded for a path that was never
+//!   tracked.
+//! - A path that does not match is never written as ignored. When it is
+//!   seen on disk after having been stopped, the new version is
+//!   "tracking resumed" (`is_added = 1, is_ignored = 1`), not an add.
+//!   When it is not on disk, it becomes deleted.
+//!
+//! Callers may test the patterns earlier to save work, but what they
+//! conclude is not trusted: the patterns can change between their test
+//! and this transaction. Because the pattern save and this batch are
+//! ordered by SQLite's write lock, a batch that commits after a save
+//! always decides with the saved patterns.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -32,6 +52,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::db::Database;
 use crate::error::FsPulseError;
 use crate::hierarchy::HierarchyId;
+use crate::ignore::IgnoreSet;
 use crate::item_identity::{Access, ItemType, VersionSource};
 use crate::snapshots::{self, SnapshotDelta, Totals};
 use crate::utils::Utils;
@@ -191,6 +212,17 @@ pub enum ObservedEvent {
         path: String,
         source: VersionSource,
     },
+    /// The caller did not look at this path because it matched the
+    /// root's ignore patterns when the caller tested them. If it still
+    /// matches under the write lock, items recorded as present there
+    /// stop being tracked. If it no longer matches, nothing is written:
+    /// there is no stat to record, and the path is put right the next
+    /// time it is hinted or walked.
+    Unobserved {
+        root_id: i64,
+        path: String,
+        source: VersionSource,
+    },
 }
 
 // ============================================================================
@@ -222,6 +254,9 @@ struct Delta {
     coalesced: usize,
     deleted: usize,
     unchanged: usize,
+    ignored: usize,
+    resumed: usize,
+    unobserved: usize,
 }
 
 /// The result of attempting to apply a single event.
@@ -237,6 +272,12 @@ enum EventOutcome {
 /// event's own item (and, for `deleted`, descendants and items of
 /// another type at the same path). `coalesced` counts in-place updates.
 /// Ancestors faulted in while resolving a parent are not counted.
+///
+/// `ignored` counts "tracking stopped" versions (the item and its
+/// descendants) and `resumed` counts "tracking resumed" versions;
+/// neither is in `added` or `deleted`. `unobserved` counts events whose
+/// path the caller skipped as ignored but which no longer matched under
+/// the lock, so nothing could be written for them.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct BatchStats {
     pub applied: usize,
@@ -246,6 +287,9 @@ pub struct BatchStats {
     pub coalesced: usize,
     pub deleted: usize,
     pub unchanged: usize,
+    pub ignored: usize,
+    pub resumed: usize,
+    pub unobserved: usize,
 }
 
 impl BatchStats {
@@ -258,76 +302,212 @@ impl BatchStats {
         self.coalesced += other.coalesced;
         self.deleted += other.deleted;
         self.unchanged += other.unchanged;
+        self.ignored += other.ignored;
+        self.resumed += other.resumed;
+        self.unobserved += other.unobserved;
     }
 }
 
+/// Most descendant versions one transaction writes when a folder is
+/// deleted or stops being tracked. A folder with more beneath it is
+/// finished over several transactions, so the write lock is never held
+/// for long: other writers give up after 5 seconds
+/// (`DB_BUSY_TIMEOUT_SECS`), and ending 1.2 million items in one
+/// statement held it for 12 (measured 2026-11-19).
+const END_CHUNK_ROWS: usize = 20_000;
+
 /// Apply a batch of observed events to the database. Acquires a
-/// connection from the pool and takes the SQLite write lock for the
-/// duration of the batch. The batch may contain events for multiple
-/// roots — each event carries its own `root_id`.
+/// connection from the pool and takes the SQLite write lock. The batch
+/// may contain events for multiple roots — each event carries its own
+/// `root_id`.
+///
+/// The batch is normally one transaction. It is split when a folder
+/// with a very large subtree is deleted or stops being tracked: the
+/// subtree is ended `END_CHUNK_ROWS` items at a time, the folder itself
+/// last, and each part is its own transaction with its own timestamp
+/// and its own reading of the ignore patterns. If the process stops
+/// part-way, the folder is still recorded as present and the next walk
+/// reports it again; what was already ended is skipped.
 ///
 /// Per-event data problems (event outside its root, root_id no longer
 /// exists) are reported as skips and counted in the returned
 /// `BatchStats`. Infrastructure problems (rusqlite errors, lock
-/// failures) propagate as `Err` and roll the batch back.
+/// failures) propagate as `Err` and roll the current transaction back.
 pub fn apply_observed_events(events: &[ObservedEvent]) -> Result<BatchStats, FsPulseError> {
     let conn = Database::get_connection()?;
-    Database::immediate_transaction(&conn, |tx| {
-        apply_observed_events_at(tx, events, Utils::now_secs())
-    })
+    let mut total = BatchStats::default();
+    let mut rest = events;
+    let mut resume = None;
+    while !rest.is_empty() {
+        let from = resume.take();
+        let step = Database::immediate_transaction(&conn, |tx| {
+            apply_some_locked(tx, rest, Utils::now_secs(), from, END_CHUNK_ROWS)
+        })?;
+        total.absorb(&step.stats);
+        rest = &rest[step.completed..];
+        resume = step.resume;
+    }
+    Ok(total)
 }
 
-/// Apply a batch with an explicit `now`. The caller must hold the write
-/// lock and must have read `now` while holding it. Split out from
-/// `apply_observed_events` so tests can drive time.
-///
-/// Caches `root_id → Option<root_path>` lookups so a cross-root batch
-/// only queries `roots` once per distinct root, *and* a known-bad
-/// root_id (cache value `None`) is remembered without re-querying for
-/// every event that references it.
+/// Apply a batch with an explicit `now`, on the caller's connection and
+/// inside whatever transaction the caller has open. For tests, which
+/// drive time.
+#[cfg(test)]
 pub(crate) fn apply_observed_events_at(
     conn: &Connection,
     events: &[ObservedEvent],
     now: i64,
 ) -> Result<BatchStats, FsPulseError> {
-    let mut root_paths: HashMap<i64, Option<String>> = HashMap::new();
+    apply_in_steps_at(conn, events, now, END_CHUNK_ROWS).map(|(stats, _)| stats)
+}
+
+/// As `apply_observed_events_at` with a chosen chunk size. Also returns
+/// how many steps (transactions, in production) the batch took.
+#[cfg(test)]
+pub(crate) fn apply_in_steps_at(
+    conn: &Connection,
+    events: &[ObservedEvent],
+    now: i64,
+    chunk_rows: usize,
+) -> Result<(BatchStats, usize), FsPulseError> {
+    let mut total = BatchStats::default();
+    let mut rest = events;
+    let mut resume = None;
+    let mut steps = 0;
+    while !rest.is_empty() {
+        let step = apply_some_locked(conn, rest, now, resume.take(), chunk_rows)?;
+        total.absorb(&step.stats);
+        rest = &rest[step.completed..];
+        resume = step.resume;
+        steps += 1;
+    }
+    Ok((total, steps))
+}
+
+/// What one transaction's worth of a batch did.
+struct Step {
+    stats: BatchStats,
+    /// Events finished, counted from the start of the slice given.
+    completed: usize,
+    /// Where to continue the first unfinished event, if it stopped
+    /// part-way through a large subtree.
+    resume: Option<Vec<u8>>,
+}
+
+/// Progress through the subtree of a folder being deleted or stopped.
+struct Ending {
+    /// Descendant versions this transaction may still write.
+    rows_left: usize,
+    /// hierarchy_id of the last descendant ended; the next chunk starts
+    /// after it.
+    cursor: Option<Vec<u8>>,
+    /// Set when the current event ran out of `rows_left` with
+    /// descendants remaining. The folder's own version is not written
+    /// until they are done.
+    incomplete: bool,
+}
+
+/// Apply events from the front of `events` until they are all done or a
+/// large subtree uses up `chunk_rows`. The caller must hold the write
+/// lock and must have read `now` while holding it.
+///
+/// Caches each root's path and ignore patterns so a cross-root batch
+/// only queries `roots` once per distinct root, *and* a known-bad
+/// root_id (cache value `None`) is remembered without re-querying for
+/// every event that references it. The patterns are read here, inside
+/// the caller's write transaction, which is what makes the ignore
+/// decision below safe against a concurrent pattern change.
+fn apply_some_locked(
+    conn: &Connection,
+    events: &[ObservedEvent],
+    now: i64,
+    resume: Option<Vec<u8>>,
+    chunk_rows: usize,
+) -> Result<Step, FsPulseError> {
+    let mut roots: HashMap<i64, Option<RootRules>> = HashMap::new();
     let mut stats = BatchStats::default();
     // What this batch changed in each root, for the root's snapshot.
     let mut snapshot_deltas: HashMap<i64, SnapshotDelta> = HashMap::new();
+    let mut ending = Ending {
+        rows_left: chunk_rows,
+        cursor: resume,
+        incomplete: false,
+    };
+    let mut completed = events.len();
+    let mut resume = None;
 
-    for event in events {
-        let root_id = match event {
-            ObservedEvent::Upsert { root_id, .. } | ObservedEvent::Gone { root_id, .. } => *root_id,
+    for (index, event) in events.iter().enumerate() {
+        if index > 0 {
+            ending.cursor = None;
+        }
+        let (root_id, path, source) = match event {
+            ObservedEvent::Upsert { root_id, item } => (
+                *root_id,
+                join_full_path(&item.parent_path, &item.item_name),
+                item.source,
+            ),
+            ObservedEvent::Gone { root_id, path, source }
+            | ObservedEvent::Unobserved { root_id, path, source } => {
+                (*root_id, path.clone(), *source)
+            }
         };
 
-        let outcome = match resolve_root_path_locked(conn, root_id, &mut root_paths)? {
+        let outcome = match resolve_root_rules_locked(conn, root_id, &mut roots)? {
             None => EventOutcome::Skipped(SkipReason::RootNotFound),
-            Some(root_path) => {
+            Some(root) => {
+                let root_path = root.path.as_str();
                 let snapshot = snapshot_deltas.entry(root_id).or_default();
-                match event {
-                    ObservedEvent::Upsert { item, .. } => {
-                        apply_one_observed_locked(conn, root_id, root_path, item, now, snapshot)?
+                // The ignore decision, made under the write lock with
+                // the patterns this transaction sees. It comes first and
+                // overrides whatever kind of event the caller sent.
+                if root.ignore.is_ignored(Path::new(root_path), Path::new(&path)) {
+                    apply_one_ignored_locked(
+                        conn, root_id, &path, source, now, snapshot, &mut ending,
+                    )?
+                } else {
+                    match event {
+                        ObservedEvent::Upsert { item, .. } => apply_one_observed_locked(
+                            conn, root_id, root_path, item, now, snapshot, &mut ending,
+                        )?,
+                        ObservedEvent::Gone { .. } => apply_one_gone_locked(
+                            conn, root_id, root_path, &path, source, now, snapshot, &mut ending,
+                        )?,
+                        ObservedEvent::Unobserved { .. } => EventOutcome::Applied(Delta {
+                            unobserved: 1,
+                            ..Delta::default()
+                        }),
                     }
-                    ObservedEvent::Gone { path, source, .. } => apply_one_gone_locked(
-                        conn, root_id, root_path, path, *source, now, snapshot,
-                    )?,
                 }
             }
         };
 
         match outcome {
             EventOutcome::Applied(delta) => {
-                stats.applied += 1;
+                if !ending.incomplete {
+                    stats.applied += 1;
+                }
                 stats.added += delta.added;
                 stats.modified += delta.modified;
                 stats.coalesced += delta.coalesced;
                 stats.deleted += delta.deleted;
                 stats.unchanged += delta.unchanged;
+                stats.ignored += delta.ignored;
+                stats.resumed += delta.resumed;
+                stats.unobserved += delta.unobserved;
             }
             EventOutcome::Skipped(reason) => {
                 stats.skipped += 1;
                 log::warn!("item_ops: skipped event ({reason:?}): {event:?}");
             }
+        }
+
+        if ending.incomplete {
+            // Out of room for this transaction. The event is taken up
+            // again, from the cursor, in the next one.
+            completed = index;
+            resume = ending.cursor.take();
+            break;
         }
     }
 
@@ -338,30 +518,44 @@ pub(crate) fn apply_observed_events_at(
         snapshots::apply_delta_locked(conn, *root_id, delta, now)?;
     }
 
-    Ok(stats)
+    Ok(Step {
+        stats,
+        completed,
+        resume,
+    })
 }
 
-/// Get the cached root_path for `root_id`. Returns `Some(path)` if the
-/// root exists, `None` if the `roots` table has no such row (which is
+/// A root's path and ignore patterns as the current transaction sees
+/// them.
+struct RootRules {
+    path: String,
+    ignore: IgnoreSet,
+}
+
+/// Get the cached rules for `root_id`. Returns `Some` if the root
+/// exists, `None` if the `roots` table has no such row (which is
 /// remembered in the cache so subsequent events for the same missing
 /// root_id don't re-query). Any other database error propagates.
-fn resolve_root_path_locked<'a>(
+fn resolve_root_rules_locked<'a>(
     conn: &Connection,
     root_id: i64,
-    cache: &'a mut HashMap<i64, Option<String>>,
-) -> Result<Option<&'a str>, FsPulseError> {
+    cache: &'a mut HashMap<i64, Option<RootRules>>,
+) -> Result<Option<&'a RootRules>, FsPulseError> {
     if let std::collections::hash_map::Entry::Vacant(e) = cache.entry(root_id) {
-        let path = conn
+        let row = conn
             .query_row(
-                "SELECT root_path FROM roots WHERE root_id = ?",
+                "SELECT root_path, ignore_patterns FROM roots WHERE root_id = ?",
                 params![root_id],
-                |row| row.get::<_, String>(0),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
             )
             .optional()
             .map_err(FsPulseError::DatabaseError)?;
-        e.insert(path);
+        e.insert(row.map(|(path, patterns)| RootRules {
+            path,
+            ignore: IgnoreSet::from_json_lenient(patterns.as_deref(), root_id),
+        }));
     }
-    Ok(cache.get(&root_id).unwrap().as_deref())
+    Ok(cache.get(&root_id).unwrap().as_ref())
 }
 
 // ============================================================================
@@ -370,10 +564,15 @@ fn resolve_root_path_locked<'a>(
 
 /// Apply a single observed item.
 ///
-/// 1. Tombstone alive items of any other type at the same path.
+/// The caller has established, under the lock, that the path does not
+/// match the root's ignore patterns.
+///
+/// 1. Tombstone items of any other type at the same path that are
+///    present or stopped.
 /// 2. Resolve the parent (faulting in missing/tombstoned ancestors).
 /// 3. Decide and write, based on the item of the observed type:
 ///    - No row → create
+///    - Stopped → insert "tracking resumed" version
 ///    - Tombstoned → insert rehydration version
 ///    - Alive, changed, current version can absorb it → update in place
 ///    - Alive, changed → insert modified version
@@ -385,6 +584,7 @@ fn apply_one_observed_locked(
     observed: &ObservedItem,
     now: i64,
     snapshot: &mut SnapshotDelta,
+    ending: &mut Ending,
 ) -> Result<EventOutcome, FsPulseError> {
     // Validate up front, before any writes or fault-in. Skipping after
     // partial fault-in would leave orphaned ancestor writes in the
@@ -400,17 +600,26 @@ fn apply_one_observed_locked(
     for item in lookup_items_at_path_locked(conn, root_id, &path)? {
         if item.item_type == observed.item_type {
             current = Some(item);
-        } else if !item.is_deleted {
+        } else if item.is_present() || item.is_stopped() {
             // The path now holds something of a different type (for
-            // example a file replaced by a folder).
-            delta.deleted += tombstone_with_descendants_locked(
+            // example a file replaced by a folder). An item that was
+            // stopped while the path was ignored is as gone as a
+            // present one.
+            delta.deleted += end_with_descendants_locked(
                 conn,
                 root_id,
                 &item,
                 observed.source,
+                false,
                 now,
                 snapshot,
+                ending,
             )?;
+            if ending.incomplete {
+                // The old item's subtree is not finished. Nothing is
+                // written for the new item until it is.
+                return Ok(EventOutcome::Applied(delta));
+            }
         }
     }
 
@@ -430,15 +639,24 @@ fn apply_one_observed_locked(
             delta.added += 1;
             snapshot.record_added(observed.item_type, observed.size);
         }
+        Some(state) if state.is_stopped() => {
+            write_observed_version_locked(
+                conn, root_id, &state, observed, Appeared::Resumed, now,
+            )?;
+            delta.resumed += 1;
+            snapshot.record_resumed(observed.item_type, observed.size);
+        }
         Some(state) if state.is_deleted => {
-            write_observed_version_locked(conn, root_id, &state, observed, true, now)?;
+            write_observed_version_locked(conn, root_id, &state, observed, Appeared::Added, now)?;
             delta.added += 1;
             snapshot.record_added(observed.item_type, observed.size);
         }
         Some(state) if observed.differs_from(state.access, state.mod_date, state.size) => {
             let new_version = !state.can_absorb_change(now);
             if new_version {
-                write_observed_version_locked(conn, root_id, &state, observed, false, now)?;
+                write_observed_version_locked(
+                    conn, root_id, &state, observed, Appeared::No, now,
+                )?;
                 delta.modified += 1;
             } else {
                 write_coalesced_change_locked(conn, &state, observed, now)?;
@@ -513,8 +731,19 @@ fn resolve_parent_locked(
             let (gp_path, parent_name) = split_full_path(Path::new(parent_path))?;
             resolve_parent_locked(conn, root_id, root_path, &gp_path, source, now, snapshot)?;
             let synthetic = ObservedItem::synthetic_folder(gp_path, parent_name, source);
-            write_observed_version_locked(conn, root_id, &state, &synthetic, true, now)?;
-            snapshot.record_added(ItemType::Directory, None);
+            if state.is_stopped() {
+                // The folder was ignored and something beneath it is
+                // being tracked again: the folder resumes with it.
+                write_observed_version_locked(
+                    conn, root_id, &state, &synthetic, Appeared::Resumed, now,
+                )?;
+                snapshot.record_resumed(ItemType::Directory, None);
+            } else {
+                write_observed_version_locked(
+                    conn, root_id, &state, &synthetic, Appeared::Added, now,
+                )?;
+                snapshot.record_added(ItemType::Directory, None);
+            }
             Ok(Some(ResolvedParent {
                 item_id: state.item_id,
                 hierarchy_id: state.hierarchy_id,
@@ -548,6 +777,7 @@ fn resolve_parent_locked(
 // apply_one_gone — tombstone everything at a path
 // ============================================================================
 
+#[allow(clippy::too_many_arguments)]
 fn apply_one_gone_locked(
     conn: &Connection,
     root_id: i64,
@@ -556,6 +786,7 @@ fn apply_one_gone_locked(
     source: VersionSource,
     now: i64,
     snapshot: &mut SnapshotDelta,
+    ending: &mut Ending,
 ) -> Result<EventOutcome, FsPulseError> {
     // The root itself is not an item, and a path outside it is not ours.
     let within = Path::new(path)
@@ -565,107 +796,229 @@ fn apply_one_gone_locked(
         return Ok(EventOutcome::Skipped(SkipReason::OutsideRoot));
     }
 
+    // A stopped item is covered too: its path is no longer ignored (the
+    // caller checked) and nothing is there, so it is deleted.
     let mut delta = Delta::default();
     for item in lookup_items_at_path_locked(conn, root_id, path)? {
-        if !item.is_deleted {
-            delta.deleted +=
-                tombstone_with_descendants_locked(conn, root_id, &item, source, now, snapshot)?;
+        if item.is_present() || item.is_stopped() {
+            delta.deleted += end_with_descendants_locked(
+                conn, root_id, &item, source, false, now, snapshot, ending,
+            )?;
+            if ending.incomplete {
+                break;
+            }
         }
     }
     Ok(EventOutcome::Applied(delta))
 }
 
-/// Tombstone every alive descendant of a folder.
-/// Parameters: ?1 root_id, ?2 the folder's item_id, ?3 now, ?4 source.
+// ============================================================================
+// apply_one_ignored — stop tracking everything at a path
+// ============================================================================
+
+/// The path matches the root's ignore patterns. Every item recorded as
+/// present at it stops being tracked, along with everything present
+/// beneath a folder. Items that are already stopped or deleted, and
+/// paths that were never tracked, are left alone, so this writes
+/// nothing when repeated.
+fn apply_one_ignored_locked(
+    conn: &Connection,
+    root_id: i64,
+    path: &str,
+    source: VersionSource,
+    now: i64,
+    snapshot: &mut SnapshotDelta,
+    ending: &mut Ending,
+) -> Result<EventOutcome, FsPulseError> {
+    let mut delta = Delta::default();
+    for item in lookup_items_at_path_locked(conn, root_id, path)? {
+        if item.is_present() {
+            delta.ignored += end_with_descendants_locked(
+                conn, root_id, &item, source, true, now, snapshot, ending,
+            )?;
+            if ending.incomplete {
+                break;
+            }
+        }
+    }
+    Ok(EventOutcome::Applied(delta))
+}
+
+/// The next descendants of a folder to end, in hierarchy order.
+/// Parameters: ?1 root_id, ?2 start after this hierarchy_id, ?3 the
+/// folder's subtree end (exclusive), ?4 is_ignored for the versions
+/// about to be written, ?5 how many.
 ///
-/// Descendants are found by walking parent_item_id links (index
-/// idx_items_parent_name). CROSS JOIN pins the join order to
-/// descendants → items → versions; left to itself the planner may scan
-/// all of item_versions and probe the descendant set instead.
-/// Tombstoning leaves each items row, its parent link and its
-/// hierarchy_id intact.
-pub(crate) const TOMBSTONE_DESCENDANTS_SQL: &str = "
-    WITH RECURSIVE sub(item_id) AS (
-        SELECT item_id FROM items
-         WHERE root_id = ?1 AND parent_item_id = ?2
-        UNION ALL
-        SELECT i.item_id FROM sub s
-         CROSS JOIN items i ON i.root_id = ?1 AND i.parent_item_id = s.item_id
-    )
-    INSERT INTO item_versions (
-        item_id, item_version, root_id, parent_item_id, hierarchy_id,
-        first_seen_at, last_changed_at, change_count, source,
-        is_added, is_deleted, access, mod_date, size
-    )
-    SELECT
-        i.item_id, iv.item_version + 1, i.root_id, i.parent_item_id, i.hierarchy_id,
-        ?3, ?3, 1, ?4,
-        0, 1, iv.access, NULL, NULL
-    FROM sub
-    CROSS JOIN items i ON i.item_id = sub.item_id
+/// With ?4 = 1 (the folder is now ignored) only present descendants are
+/// selected. With ?4 = 0 (the folder is gone) stopped ones are selected
+/// too: a folder that does not exist has nothing in it, ignored or not.
+///
+/// A folder's descendants are exactly the items whose hierarchy_id lies
+/// between the folder's own and its `subtree_end`. Reading them in that
+/// order lets a large subtree be ended in chunks, each continuing where
+/// the last one stopped. CROSS JOIN keeps the planner on the range scan
+/// of idx_items_root_hid.
+pub(crate) const DESCENDANTS_TO_END_SQL: &str = "
+    SELECT i.item_id, i.item_type, i.parent_item_id, i.hierarchy_id,
+           iv.item_version, iv.is_deleted, iv.access, iv.size
+    FROM items i INDEXED BY idx_items_root_hid
     CROSS JOIN item_versions iv ON iv.item_id = i.item_id
        AND iv.item_version = (
            SELECT MAX(iv2.item_version) FROM item_versions iv2
            WHERE iv2.item_id = i.item_id
        )
-    WHERE iv.is_deleted = 0";
+    WHERE i.root_id = ?1 AND i.hierarchy_id > ?2 AND i.hierarchy_id < ?3
+      AND (iv.is_deleted = 0 OR (?4 = 0 AND iv.is_ignored = 1))
+    ORDER BY i.hierarchy_id
+    LIMIT ?5";
 
-/// What is alive under a folder: files, folders, and bytes in files.
-/// Parameters: ?1 root_id, ?2 the folder's item_id.
-/// The same descendants `TOMBSTONE_DESCENDANTS_SQL` is about to mark
-/// deleted, read first so the root's snapshot totals can be reduced by
-/// what is removed.
-pub(crate) const DESCENDANT_TOTALS_SQL: &str = "
-    WITH RECURSIVE sub(item_id) AS (
-        SELECT item_id FROM items
-         WHERE root_id = ?1 AND parent_item_id = ?2
-        UNION ALL
-        SELECT i.item_id FROM sub s
-         CROSS JOIN items i ON i.root_id = ?1 AND i.parent_item_id = s.item_id
-    )
-    SELECT COALESCE(SUM(i.item_type = 0), 0),
-           COALESCE(SUM(i.item_type = 1), 0),
-           COALESCE(SUM(CASE WHEN i.item_type = 0 THEN iv.size END), 0)
-    FROM sub
-    CROSS JOIN items i ON i.item_id = sub.item_id
-    CROSS JOIN item_versions iv ON iv.item_id = i.item_id
-       AND iv.item_version = (
-           SELECT MAX(iv2.item_version) FROM item_versions iv2
-           WHERE iv2.item_id = i.item_id
-       )
-    WHERE iv.is_deleted = 0";
+/// End up to `ending.rows_left` descendants of `folder`: mark them
+/// stopped, or deleted. Returns how many versions were written and sets
+/// `ending.incomplete` if there may be more.
+#[allow(clippy::too_many_arguments)]
+fn end_descendants_locked(
+    conn: &Connection,
+    root_id: i64,
+    folder: &CurrentItem,
+    source: VersionSource,
+    stopped: bool,
+    now: i64,
+    snapshot: &mut SnapshotDelta,
+    ending: &mut Ending,
+) -> Result<usize, FsPulseError> {
+    let subtree_end = HierarchyId::from_bytes(&folder.hierarchy_id)
+        .subtree_end()
+        .ok_or_else(|| FsPulseError::Error("an item cannot have the root's hierarchy id".into()))?;
+    let after = ending
+        .cursor
+        .take()
+        .unwrap_or_else(|| folder.hierarchy_id.clone());
+    let limit = ending.rows_left;
 
-/// Tombstone an alive item and, if it is a folder, every alive
-/// descendant. Returns the number of tombstones written.
-fn tombstone_with_descendants_locked(
+    struct Descendant {
+        item_id: i64,
+        item_type: ItemType,
+        parent_item_id: Option<i64>,
+        hierarchy_id: Vec<u8>,
+        item_version: i64,
+        is_deleted: bool,
+        access: Access,
+        size: Option<i64>,
+    }
+    let descendants: Vec<Descendant> = conn
+        .prepare_cached(DESCENDANTS_TO_END_SQL)?
+        .query_map(
+            params![root_id, after, subtree_end, if stopped { 1 } else { 0 }, limit as i64],
+            |row| {
+                Ok(Descendant {
+                    item_id: row.get(0)?,
+                    item_type: ItemType::from_i64(row.get(1)?),
+                    parent_item_id: row.get(2)?,
+                    hierarchy_id: row.get(3)?,
+                    item_version: row.get(4)?,
+                    is_deleted: row.get(5)?,
+                    access: Access::from_i64(row.get(6)?),
+                    size: row.get(7)?,
+                })
+            },
+        )?
+        .collect::<Result<_, _>>()?;
+
+    // What leaves the root's totals: the descendants that were present.
+    // Stopped ones left when they were stopped.
+    let mut totals = Totals::default();
+    for descendant in &descendants {
+        insert_item_version_locked(
+            conn,
+            descendant.item_id,
+            descendant.item_version + 1,
+            root_id,
+            descendant.parent_item_id,
+            &descendant.hierarchy_id,
+            now,
+            source,
+            VersionFlags {
+                is_added: false,
+                is_deleted: true,
+                is_ignored: stopped,
+            },
+            descendant.access,
+            None,
+            None,
+        )?;
+        if !descendant.is_deleted {
+            match descendant.item_type {
+                ItemType::File => {
+                    totals.files += 1;
+                    totals.size += descendant.size.unwrap_or(0);
+                }
+                ItemType::Directory => totals.folders += 1,
+                _ => {}
+            }
+        }
+    }
+
+    let written = descendants.len();
+    if stopped {
+        snapshot.record_ignored_many(written as i64, totals);
+    } else {
+        snapshot.record_deleted_many(written as i64, totals);
+    }
+
+    ending.rows_left -= written;
+    if written == limit {
+        ending.incomplete = true;
+        ending.cursor = Some(match descendants.last() {
+            Some(last) => last.hierarchy_id.clone(),
+            None => after,
+        });
+    }
+    Ok(written)
+}
+
+/// End an item that is present or stopped and, if it is a folder,
+/// everything beneath it that is present (or, when deleting, stopped):
+/// with `stopped` they stop being tracked, otherwise they are
+/// tombstoned. Returns the number of versions written.
+///
+/// Descendants go first and the item itself last, so a folder whose
+/// subtree is ended over several transactions stays recorded as present
+/// until all of it is done. If `ending.incomplete` is set on return,
+/// the item's own version has not been written.
+///
+/// One gap is accepted: if something is created under a folder while
+/// its deletion is part-way, behind the cursor, it stays present under
+/// a folder that is then recorded deleted. Creating it also hints the
+/// folder, whose next observation brings the folder back.
+#[allow(clippy::too_many_arguments)]
+fn end_with_descendants_locked(
     conn: &Connection,
     root_id: i64,
     item: &CurrentItem,
     source: VersionSource,
+    stopped: bool,
     now: i64,
     snapshot: &mut SnapshotDelta,
+    ending: &mut Ending,
 ) -> Result<usize, FsPulseError> {
     let mut written = 0;
 
     if item.item_type == ItemType::Directory {
-        let totals = conn
-            .prepare_cached(DESCENDANT_TOTALS_SQL)?
-            .query_row(params![root_id, item.item_id], |row| {
-                Ok(Totals {
-                    files: row.get(0)?,
-                    folders: row.get(1)?,
-                    size: row.get(2)?,
-                })
-            })?;
-        written += conn.execute(
-            TOMBSTONE_DESCENDANTS_SQL,
-            params![root_id, item.item_id, now, source.as_i64()],
+        written += end_descendants_locked(
+            conn, root_id, item, source, stopped, now, snapshot, ending,
         )?;
-        snapshot.record_deleted_many(written as i64, totals);
+        if ending.incomplete {
+            return Ok(written);
+        }
     }
 
-    write_tombstone_version_locked(conn, root_id, item, source, now)?;
-    snapshot.record_deleted(item.item_type, item.size);
+    write_end_version_locked(conn, root_id, item, source, stopped, now)?;
+    match (stopped, item.is_present()) {
+        (true, _) => snapshot.record_ignored(item.item_type, item.size),
+        (false, true) => snapshot.record_deleted(item.item_type, item.size),
+        // A stopped item left the totals when it was stopped.
+        (false, false) => snapshot.record_deleted_many(1, Totals::default()),
+    }
     Ok(written + 1)
 }
 
@@ -689,6 +1042,9 @@ struct CurrentItem {
     hierarchy_id: Vec<u8>,
     first_seen_at: i64,
     is_deleted: bool,
+    /// The latest version was written because of the ignore patterns.
+    /// With `is_deleted` it means tracking has stopped.
+    is_ignored: bool,
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
@@ -699,6 +1055,17 @@ struct CurrentItem {
 }
 
 impl CurrentItem {
+    /// Recorded as on disk and tracked.
+    fn is_present(&self) -> bool {
+        !self.is_deleted
+    }
+
+    /// Tracking stopped because the path matched an ignore pattern.
+    /// Nothing is known about the item since then.
+    fn is_stopped(&self) -> bool {
+        self.is_deleted && self.is_ignored
+    }
+
     /// True if a change observed at `now` can be folded into this
     /// version instead of starting a new one: the version is alive,
     /// began in the same hour bucket, and has not been hashed or
@@ -718,7 +1085,7 @@ fn lookup_items_at_path_locked(
     let mut stmt = conn.prepare_cached(
         "SELECT i.item_id, i.item_type, i.parent_item_id, i.hierarchy_id,
                 iv.item_version, iv.first_seen_at, iv.is_deleted, iv.access,
-                iv.mod_date, iv.size,
+                iv.mod_date, iv.size, iv.is_ignored,
                 (iv.val_state IS NOT NULL OR EXISTS (
                     SELECT 1 FROM hash_versions hv
                      WHERE hv.item_id = iv.item_id AND hv.item_version = iv.item_version
@@ -744,7 +1111,8 @@ fn lookup_items_at_path_locked(
                 access: Access::from_i64(row.get(7)?),
                 mod_date: row.get(8)?,
                 size: row.get(9)?,
-                is_checked: row.get(10)?,
+                is_ignored: row.get(10)?,
+                is_checked: row.get(11)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -804,8 +1172,11 @@ fn write_new_item_locked(
         &new_hierarchy_id,
         now,
         observed.source,
-        true,
-        false,
+        VersionFlags {
+            is_added: true,
+            is_deleted: false,
+            is_ignored: false,
+        },
         observed.access,
         observed.mod_date,
         observed.size,
@@ -840,17 +1211,26 @@ fn write_coalesced_change_locked(
     Ok(())
 }
 
+/// How a new present version relates to the version before it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Appeared {
+    /// The item was present before: this is a modification.
+    No,
+    /// The item was deleted before: it came back.
+    Added,
+    /// The item was stopped before: tracking resumes. Not an add.
+    Resumed,
+}
+
 /// Insert a new item_versions row reflecting an observation against an
-/// existing items row. `is_added=true` is the rehydration case
-/// (previous version was tombstoned); `is_added=false` is the modified
-/// case (previous version was alive but metadata differs). Reuses the
-/// items row's immutable parent_item_id and hierarchy_id.
+/// existing items row. Reuses the items row's immutable parent_item_id
+/// and hierarchy_id.
 fn write_observed_version_locked(
     conn: &Connection,
     root_id: i64,
     current: &CurrentItem,
     observed: &ObservedItem,
-    is_added: bool,
+    appeared: Appeared,
     now: i64,
 ) -> Result<(), FsPulseError> {
     insert_item_version_locked(
@@ -862,23 +1242,27 @@ fn write_observed_version_locked(
         &current.hierarchy_id,
         now,
         observed.source,
-        is_added,
-        false,
+        VersionFlags {
+            is_added: appeared != Appeared::No,
+            is_deleted: false,
+            is_ignored: appeared == Appeared::Resumed,
+        },
         observed.access,
         observed.mod_date,
         observed.size,
     )
 }
 
-/// Insert a tombstone item_versions row. Reuses the alive version's
+/// Insert a version that ends an item's presence: a tombstone, or with
+/// `stopped` a "tracking stopped" entry. Reuses the previous version's
 /// access value (the last known state for this path) and writes NULL
-/// for mod_date and size since neither is meaningful for a deleted
-/// item.
-fn write_tombstone_version_locked(
+/// for mod_date and size since neither is known from here on.
+fn write_end_version_locked(
     conn: &Connection,
     root_id: i64,
     current: &CurrentItem,
     source: VersionSource,
+    stopped: bool,
     now: i64,
 ) -> Result<(), FsPulseError> {
     insert_item_version_locked(
@@ -890,12 +1274,24 @@ fn write_tombstone_version_locked(
         &current.hierarchy_id,
         now,
         source,
-        false,
-        true,
+        VersionFlags {
+            is_added: false,
+            is_deleted: true,
+            is_ignored: stopped,
+        },
         current.access,
         None,
         None,
     )
+}
+
+/// The three state flags of a version. See the schema comment on
+/// `item_versions` for what the combinations mean.
+#[derive(Clone, Copy)]
+struct VersionFlags {
+    is_added: bool,
+    is_deleted: bool,
+    is_ignored: bool,
 }
 
 /// The single per-row item_versions INSERT. All new versions stamp
@@ -910,19 +1306,19 @@ fn insert_item_version_locked(
     hierarchy_id: &[u8],
     now: i64,
     source: VersionSource,
-    is_added: bool,
-    is_deleted: bool,
+    flags: VersionFlags,
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
 ) -> Result<(), FsPulseError> {
-    conn.execute(
+    conn.prepare_cached(
         "INSERT INTO item_versions (
             item_id, item_version, root_id, parent_item_id, hierarchy_id,
             first_seen_at, last_changed_at, change_count, source,
-            is_added, is_deleted, access, mod_date, size
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1, ?7, ?8, ?9, ?10, ?11, ?12)",
-        params![
+            is_added, is_deleted, is_ignored, access, mod_date, size
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+    )?
+    .execute(params![
             item_id,
             item_version,
             root_id,
@@ -930,13 +1326,13 @@ fn insert_item_version_locked(
             hierarchy_id,
             now,
             source.as_i64(),
-            is_added as i64,
-            is_deleted as i64,
+            flags.is_added as i64,
+            flags.is_deleted as i64,
+            flags.is_ignored as i64,
             access.as_i64(),
             mod_date,
             size,
-        ],
-    )?;
+        ])?;
     Ok(())
 }
 
@@ -1374,6 +1770,549 @@ mod tests {
         assert_eq!(ordered, ["alpha", "file1", "file2", "file10", "zeta"]);
     }
 
+    // ------------------------------------------------------------------
+    // Ignore patterns: decided under the lock (design doc, section 9.3)
+    // ------------------------------------------------------------------
+
+    fn set_patterns(conn: &Connection, patterns: &[&str]) {
+        let json = IgnoreSet::to_stored_json(patterns).unwrap();
+        conn.execute("UPDATE roots SET ignore_patterns = ?1", [json]).unwrap();
+    }
+
+    fn unobserved(conn: &Connection, root_id: i64, path: &str, now: i64) -> BatchStats {
+        let event = ObservedEvent::Unobserved {
+            root_id,
+            path: path.to_string(),
+            source: VersionSource::Watch,
+        };
+        apply_observed_events_at(conn, &[event], now).unwrap()
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum State {
+        Present,
+        Resumed,
+        Deleted,
+        Stopped,
+    }
+
+    /// The state an item's latest version records.
+    fn state(conn: &Connection, path: &str, item_type: ItemType) -> State {
+        let (is_added, is_deleted, is_ignored): (bool, bool, bool) = conn
+            .query_row(
+                "SELECT iv.is_added, iv.is_deleted, iv.is_ignored
+                 FROM items i JOIN item_versions iv ON iv.item_id = i.item_id
+                 WHERE i.item_path = ?1 AND i.item_type = ?2
+                 ORDER BY iv.item_version DESC LIMIT 1",
+                params![path, item_type.as_i64()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        match (is_added, is_deleted, is_ignored) {
+            (_, true, true) => State::Stopped,
+            (_, true, false) => State::Deleted,
+            (true, false, true) => State::Resumed,
+            (_, false, false) => State::Present,
+            other => panic!("impossible flags {other:?}"),
+        }
+    }
+
+    /// (file_count, add_count, delete_count, ignored_count,
+    /// resumed_count), counts summed over the root's snapshot rows and
+    /// file_count from the latest.
+    fn snapshot_counts(conn: &Connection) -> (i64, i64, i64, i64, i64) {
+        let files = count(conn, "SELECT file_count FROM snapshots ORDER BY taken_at DESC LIMIT 1");
+        let sum = |column: &str| {
+            count(conn, &format!("SELECT COALESCE(SUM({column}), 0) FROM snapshots"))
+        };
+        (
+            files,
+            sum("add_count"),
+            sum("delete_count"),
+            sum("ignored_count"),
+            sum("resumed_count"),
+        )
+    }
+
+    #[test]
+    fn a_tracked_file_that_becomes_ignored_stops_and_is_not_deleted() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/a.log", 10, 100), T0);
+        upsert(&conn, root_id, file("/r/keep.txt", 10, 50), T0);
+
+        set_patterns(&conn, &["*.log"]);
+        let stats = unobserved(&conn, root_id, "/r/a.log", T0 + 60);
+
+        assert_eq!((stats.ignored, stats.deleted), (1, 0));
+        assert_eq!(state(&conn, "/r/a.log", ItemType::File), State::Stopped);
+        assert_eq!(state(&conn, "/r/keep.txt", ItemType::File), State::Present);
+        // One file left in the totals; no deletion counted.
+        assert_eq!(snapshot_counts(&conn), (1, 2, 0, 1, 0));
+    }
+
+    /// The race from the design discussion: the caller tested the
+    /// patterns, found the path not ignored and took a stat; the pattern
+    /// was saved; then the caller's write arrives. The decision made
+    /// under the lock wins, whatever the caller sent.
+    #[test]
+    fn a_stale_decision_never_writes_an_ignored_path_as_present_or_deleted() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/cache/blob", 10, 100), T0);
+
+        // Built before the save, applied after it.
+        let stale_upsert = file("/r/cache/blob", 20, 200);
+        set_patterns(&conn, &["cache"]);
+
+        let stats = upsert(&conn, root_id, stale_upsert, T0 + 60);
+        assert_eq!((stats.ignored, stats.coalesced, stats.modified), (1, 0, 0));
+        assert_eq!(state(&conn, "/r/cache/blob", ItemType::File), State::Stopped);
+
+        // A second stale write must not bring it back, and a stale
+        // "gone" must not turn it into a deletion.
+        let before = conn.total_changes();
+        upsert(&conn, root_id, file("/r/cache/blob", 30, 300), T0 + 120);
+        gone(&conn, root_id, "/r/cache/blob", T0 + 180);
+        assert_eq!(conn.total_changes(), before);
+        assert_eq!(state(&conn, "/r/cache/blob", ItemType::File), State::Stopped);
+    }
+
+    #[test]
+    fn an_ignored_path_that_was_never_tracked_gets_no_row() {
+        let (conn, root_id) = test_db();
+        set_patterns(&conn, &["node_modules", "*.tmp"]);
+
+        let before = conn.total_changes();
+        upsert(&conn, root_id, file("/r/node_modules/pkg/index.js", 10, 100), T0);
+        upsert(&conn, root_id, folder("/r/node_modules"), T0);
+        upsert(&conn, root_id, file("/r/src/scratch.tmp", 10, 100), T0);
+        unobserved(&conn, root_id, "/r/node_modules", T0);
+
+        assert_eq!(conn.total_changes(), before);
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items"), 0);
+    }
+
+    #[test]
+    fn ignoring_a_folder_stops_everything_present_beneath_it() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/a/b/one.txt", 10, 100), T0);
+        upsert(&conn, root_id, file("/r/a/b/two.txt", 10, 200), T0);
+        upsert(&conn, root_id, file("/r/a/b/old.txt", 10, 300), T0);
+        upsert(&conn, root_id, file("/r/a/keep.txt", 10, 50), T0);
+        gone(&conn, root_id, "/r/a/b/old.txt", T0 + 60);
+
+        set_patterns(&conn, &["a/b"]);
+        let stats = unobserved(&conn, root_id, "/r/a/b", T0 + 120);
+
+        // The folder and its two present files. The file deleted before
+        // the pattern stays deleted.
+        assert_eq!((stats.ignored, stats.deleted), (3, 0));
+        assert_eq!(state(&conn, "/r/a/b", ItemType::Directory), State::Stopped);
+        assert_eq!(state(&conn, "/r/a/b/one.txt", ItemType::File), State::Stopped);
+        assert_eq!(state(&conn, "/r/a/b/old.txt", ItemType::File), State::Deleted);
+        assert_eq!(state(&conn, "/r/a", ItemType::Directory), State::Present);
+        assert_eq!(snapshot_counts(&conn), (1, 6, 1, 3, 0));
+
+        // Repeating it writes nothing.
+        let before = conn.total_changes();
+        let again = unobserved(&conn, root_id, "/r/a/b", T0 + 180);
+        assert_eq!(again.ignored, 0);
+        assert_eq!(conn.total_changes(), before);
+    }
+
+    #[test]
+    fn a_stopped_item_seen_again_resumes_and_is_not_an_add() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/a.log", 10, 100), T0);
+        set_patterns(&conn, &["*.log"]);
+        unobserved(&conn, root_id, "/r/a.log", T0 + 60);
+
+        set_patterns(&conn, &[]);
+        let stats = upsert(&conn, root_id, file("/r/a.log", 10, 100), T0 + 120);
+
+        assert_eq!((stats.resumed, stats.added), (1, 0));
+        assert_eq!(state(&conn, "/r/a.log", ItemType::File), State::Resumed);
+        // Back in the totals; still one add (the original) and no delete.
+        assert_eq!(snapshot_counts(&conn), (1, 1, 0, 1, 1));
+
+        // A further change in the hour folds into the resumed version,
+        // which stays marked as a resume.
+        let stats = upsert(&conn, root_id, file("/r/a.log", 20, 150), T0 + 180);
+        assert_eq!(stats.coalesced, 1);
+        assert_eq!(state(&conn, "/r/a.log", ItemType::File), State::Resumed);
+    }
+
+    #[test]
+    fn stopping_and_resuming_within_one_hour_never_coalesce() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/a.log", 10, 100), T0);
+        for round in 0..2 {
+            set_patterns(&conn, &["*.log"]);
+            unobserved(&conn, root_id, "/r/a.log", T0 + 10 + round);
+            set_patterns(&conn, &[]);
+            upsert(&conn, root_id, file("/r/a.log", 10, 100), T0 + 20 + round);
+        }
+        // Present, then (stopped, resumed) twice.
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM item_versions"), 5);
+        assert_eq!(count(&conn, "SELECT MAX(change_count) FROM item_versions"), 1);
+    }
+
+    #[test]
+    fn something_seen_under_a_stopped_folder_resumes_the_folder_only() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/a/b/one.txt", 10, 100), T0);
+        upsert(&conn, root_id, file("/r/a/b/two.txt", 10, 200), T0);
+        set_patterns(&conn, &["a"]);
+        unobserved(&conn, root_id, "/r/a", T0 + 60);
+
+        // Pattern removed; the watcher reports one file before any
+        // full check has run.
+        set_patterns(&conn, &[]);
+        let stats = upsert(&conn, root_id, file("/r/a/b/one.txt", 10, 100), T0 + 120);
+
+        assert_eq!((stats.resumed, stats.added), (1, 0));
+        assert_eq!(state(&conn, "/r/a", ItemType::Directory), State::Resumed);
+        assert_eq!(state(&conn, "/r/a/b", ItemType::Directory), State::Resumed);
+        assert_eq!(state(&conn, "/r/a/b/one.txt", ItemType::File), State::Resumed);
+        // Not looked at yet, so still stopped.
+        assert_eq!(state(&conn, "/r/a/b/two.txt", ItemType::File), State::Stopped);
+        // No adds beyond the original four items.
+        assert_eq!(snapshot_counts(&conn), (1, 4, 0, 4, 3));
+    }
+
+    #[test]
+    fn a_stopped_item_that_is_gone_once_unignored_becomes_deleted() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/a.log", 10, 100), T0);
+        upsert(&conn, root_id, file("/r/keep.txt", 10, 50), T0);
+        set_patterns(&conn, &["*.log"]);
+        unobserved(&conn, root_id, "/r/a.log", T0 + 60);
+
+        set_patterns(&conn, &[]);
+        let stats = gone(&conn, root_id, "/r/a.log", T0 + 120);
+
+        assert_eq!(stats.deleted, 1);
+        assert_eq!(state(&conn, "/r/a.log", ItemType::File), State::Deleted);
+        // It left the totals when it stopped; deleting it does not
+        // remove it a second time.
+        assert_eq!(snapshot_counts(&conn), (1, 2, 1, 1, 0));
+    }
+
+    #[test]
+    fn a_folder_that_is_gone_takes_its_stopped_descendants_with_it() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/a/one.txt", 10, 100), T0);
+        upsert(&conn, root_id, file("/r/a/cache/blob", 10, 200), T0);
+        set_patterns(&conn, &["cache"]);
+        unobserved(&conn, root_id, "/r/a/cache", T0 + 60);
+
+        // /r/a is not ignored and no longer exists.
+        let stats = gone(&conn, root_id, "/r/a", T0 + 120);
+
+        assert_eq!(stats.deleted, 4);
+        assert_eq!(state(&conn, "/r/a/cache", ItemType::Directory), State::Deleted);
+        assert_eq!(state(&conn, "/r/a/cache/blob", ItemType::File), State::Deleted);
+        assert_eq!(snapshot_counts(&conn), (0, 4, 4, 2, 0));
+    }
+
+    #[test]
+    fn an_unobserved_path_that_is_no_longer_ignored_writes_nothing() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/a.log", 10, 100), T0);
+
+        // The caller skipped the stat because a pattern matched; the
+        // pattern was removed before the write.
+        let before = conn.total_changes();
+        let stats = unobserved(&conn, root_id, "/r/a.log", T0 + 60);
+
+        assert_eq!((stats.unobserved, stats.ignored), (1, 0));
+        assert_eq!(conn.total_changes(), before);
+        assert_eq!(state(&conn, "/r/a.log", ItemType::File), State::Present);
+    }
+
+    #[test]
+    fn a_stopped_file_replaced_by_a_folder_is_deleted_once_unignored() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/build", 10, 100), T0);
+        set_patterns(&conn, &["build"]);
+        unobserved(&conn, root_id, "/r/build", T0 + 60);
+
+        set_patterns(&conn, &[]);
+        let stats = upsert(&conn, root_id, folder("/r/build"), T0 + 120);
+
+        assert_eq!((stats.added, stats.deleted, stats.resumed), (1, 1, 0));
+        assert_eq!(state(&conn, "/r/build", ItemType::File), State::Deleted);
+        assert_eq!(state(&conn, "/r/build", ItemType::Directory), State::Present);
+    }
+
+    #[test]
+    fn a_file_under_an_ignored_folder_is_stopped_on_its_own_hint() {
+        let (conn, root_id) = test_db();
+        upsert(&conn, root_id, file("/r/node_modules/pkg/index.js", 10, 100), T0);
+        set_patterns(&conn, &["node_modules"]);
+
+        // A watcher that has not reloaded yet hints the file, not the
+        // folder. Fault-in must not run for an ignored path.
+        let stats = upsert(&conn, root_id, file("/r/node_modules/pkg/index.js", 20, 200), T0 + 60);
+
+        assert_eq!(stats.ignored, 1);
+        assert_eq!(
+            state(&conn, "/r/node_modules/pkg/index.js", ItemType::File),
+            State::Stopped
+        );
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM item_versions"), 4);
+    }
+
+    // ------------------------------------------------------------------
+    // Large subtrees are ended in chunks
+    // ------------------------------------------------------------------
+
+    /// Five files in two folders under /r/big, plus one file outside.
+    fn big_tree(conn: &Connection, root_id: i64) {
+        for (path, size) in [
+            ("/r/big/a/1.txt", 1),
+            ("/r/big/a/2.txt", 2),
+            ("/r/big/b/3.txt", 4),
+            ("/r/big/b/4.txt", 8),
+            ("/r/big/5.txt", 16),
+            ("/r/other.txt", 32),
+        ] {
+            upsert(conn, root_id, file(path, 10, size), T0);
+        }
+    }
+
+    fn total_size(conn: &Connection) -> i64 {
+        count(conn, "SELECT total_size FROM snapshots ORDER BY taken_at DESC LIMIT 1")
+    }
+
+    #[test]
+    fn a_large_folder_is_stopped_over_several_steps_with_the_folder_last() {
+        let (conn, root_id) = test_db();
+        big_tree(&conn, root_id);
+        set_patterns(&conn, &["big"]);
+        let events = [ObservedEvent::Unobserved {
+            root_id,
+            path: "/r/big".to_string(),
+            source: VersionSource::Watch,
+        }];
+
+        // First step alone: two descendants done, the folder untouched.
+        let step = apply_some_locked(&conn, &events, T0 + 60, None, 2).unwrap();
+        assert_eq!((step.completed, step.stats.ignored, step.stats.applied), (0, 2, 0));
+        assert!(step.resume.is_some());
+        assert_eq!(state(&conn, "/r/big", ItemType::Directory), State::Present);
+
+        // Run to the end from that cursor.
+        let mut resume = step.resume;
+        let mut steps = 1;
+        let mut ignored = step.stats.ignored;
+        loop {
+            let step = apply_some_locked(&conn, &events, T0 + 60, resume.take(), 2).unwrap();
+            ignored += step.stats.ignored;
+            steps += 1;
+            if step.completed == 1 {
+                assert_eq!(step.stats.applied, 1);
+                break;
+            }
+            resume = step.resume;
+        }
+
+        // 7 descendants (2 folders, 5 files) at 2 per step, then the
+        // folder itself.
+        assert_eq!((ignored, steps), (8, 4));
+        assert_eq!(state(&conn, "/r/big", ItemType::Directory), State::Stopped);
+        assert_eq!(
+            count(&conn, "SELECT COUNT(*) FROM item_versions WHERE is_deleted = 1 AND is_ignored = 1"),
+            8
+        );
+        assert_eq!(snapshot_counts(&conn), (1, 9, 0, 8, 0));
+        assert_eq!(total_size(&conn), 32);
+    }
+
+    #[test]
+    fn chunked_and_unchunked_runs_end_in_the_same_state() {
+        let digest = |chunk_rows: usize| {
+            let (conn, root_id) = test_db();
+            big_tree(&conn, root_id);
+            set_patterns(&conn, &["a"]);
+            unobserved(&conn, root_id, "/r/big/a", T0 + 30);
+            set_patterns(&conn, &[]);
+
+            // /r/big is gone: present and stopped descendants alike are
+            // deleted. A second event in the batch follows it.
+            let events = [
+                ObservedEvent::Gone {
+                    root_id,
+                    path: "/r/big".to_string(),
+                    source: VersionSource::Watch,
+                },
+                ObservedEvent::Upsert {
+                    root_id,
+                    item: file("/r/other.txt", 20, 64),
+                },
+            ];
+            let (stats, steps) = apply_in_steps_at(&conn, &events, T0 + 60, chunk_rows).unwrap();
+            let versions: Vec<(String, i64, bool, bool)> = conn
+                .prepare(
+                    "SELECT i.item_path, iv.item_version, iv.is_deleted, iv.is_ignored
+                     FROM items i JOIN item_versions iv ON iv.item_id = i.item_id
+                     ORDER BY i.item_path, i.item_type, iv.item_version",
+                )
+                .unwrap()
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            (stats, versions, snapshot_counts(&conn), total_size(&conn), steps)
+        };
+
+        let (stats, versions, counts, size, steps) = digest(1000);
+        assert_eq!(steps, 1);
+        assert_eq!((stats.deleted, stats.coalesced, stats.applied), (8, 1, 2));
+        assert_eq!(size, 64);
+
+        for chunk_rows in [1, 2, 3, 7] {
+            let (chunked_stats, chunked_versions, chunked_counts, chunked_size, chunked_steps) =
+                digest(chunk_rows);
+            assert!(chunked_steps > 1, "chunk size {chunk_rows} took one step");
+            assert_eq!(chunked_stats, stats, "chunk size {chunk_rows}");
+            assert_eq!(chunked_versions, versions, "chunk size {chunk_rows}");
+            assert_eq!(chunked_counts, counts, "chunk size {chunk_rows}");
+            assert_eq!(chunked_size, size, "chunk size {chunk_rows}");
+        }
+    }
+
+    #[test]
+    fn a_folder_replaced_by_a_file_waits_for_its_whole_subtree() {
+        let (conn, root_id) = test_db();
+        big_tree(&conn, root_id);
+        let events = [ObservedEvent::Upsert {
+            root_id,
+            item: file("/r/big", 10, 100),
+        }];
+
+        let step = apply_some_locked(&conn, &events, T0 + 60, None, 3).unwrap();
+        // The file is not recorded while the folder's subtree is
+        // unfinished.
+        assert_eq!((step.completed, step.stats.added, step.stats.deleted), (0, 0, 3));
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items WHERE item_path = '/r/big'"), 1);
+
+        let (stats, _) = apply_in_steps_at(&conn, &events, T0 + 60, 3).unwrap();
+        assert_eq!((stats.added, stats.deleted), (1, 5));
+        assert_eq!(state(&conn, "/r/big", ItemType::Directory), State::Deleted);
+        assert_eq!(state(&conn, "/r/big", ItemType::File), State::Present);
+    }
+
+    /// Times how long the write lock is held when a large tracked folder
+    /// becomes ignored, against a disposable COPY of a real database
+    /// (it is migrated to the current schema if it is one version
+    /// behind, and the timed writes are rolled back). Ignored by
+    /// default:
+    ///
+    ///   FSPULSE_STOP_TIMING_DB=/path/to/copy/fspulse.db \
+    ///     cargo test stopping_a_large_folder_timing -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn stopping_a_large_folder_timing() {
+        use crate::sort::compare_paths;
+        use std::time::Instant;
+
+        let path = std::env::var("FSPULSE_STOP_TIMING_DB").expect("set FSPULSE_STOP_TIMING_DB");
+        let conn = Connection::open(&path).unwrap();
+        conn.create_collation("natural_path", compare_paths).unwrap();
+        conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+        conn.pragma_update(None, "synchronous", "NORMAL").unwrap();
+        conn.pragma_update(None, "cache_size", -32000).unwrap();
+
+        let version: String = conn
+            .query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0))
+            .unwrap();
+        if version == "33" {
+            let started = Instant::now();
+            conn.execute_batch(&format!(
+                "BEGIN;{}COMMIT;",
+                crate::db::schema::UPGRADE_33_TO_34_SQL
+            ))
+            .unwrap();
+            eprintln!("migrated v33 -> v34 in {:?}", started.elapsed());
+        }
+
+        let (root_id, root_path): (i64, String) = conn
+            .query_row(
+                "SELECT r.root_id, r.root_path FROM roots r JOIN items i ON i.root_id = r.root_id
+                 GROUP BY r.root_id ORDER BY COUNT(*) DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        // The root's top-level folders, largest first.
+        let mut folders: Vec<(String, i64)> = conn
+            .prepare(
+                "SELECT i.item_path, i.item_id FROM items i
+                 WHERE i.root_id = ?1 AND i.parent_item_id IS NULL AND i.item_type = 1",
+            )
+            .unwrap()
+            .query_map([root_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        let mut sized: Vec<(i64, String)> = folders
+            .drain(..)
+            .map(|(path, item_id)| {
+                let present: i64 = conn
+                    .query_row(
+                        crate::reconcile::ALIVE_DESCENDANTS_SQL,
+                        params![root_id, item_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                (present, path)
+            })
+            .collect();
+        sized.sort_by_key(|entry| std::cmp::Reverse(entry.0));
+
+        eprintln!("root {root_id} ({root_path})");
+        for (present, path) in sized.iter().take(4) {
+            let name = Path::new(path).file_name().unwrap().to_string_lossy().into_owned();
+            conn.execute(
+                "UPDATE roots SET ignore_patterns = ?1 WHERE root_id = ?2",
+                params![IgnoreSet::to_stored_json(&[format!("/{name}")]).unwrap(), root_id],
+            )
+            .unwrap();
+            let events = [ObservedEvent::Unobserved {
+                root_id,
+                path: path.clone(),
+                source: VersionSource::Reconcile,
+            }];
+
+            // As apply_observed_events does it: one transaction per step.
+            let started = Instant::now();
+            let mut longest = std::time::Duration::ZERO;
+            let mut written = 0;
+            let mut steps = 0;
+            let mut rest = &events[..];
+            let mut resume = None;
+            while !rest.is_empty() {
+                let step_started = Instant::now();
+                conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+                let step =
+                    apply_some_locked(&conn, rest, Utils::now_secs(), resume.take(), END_CHUNK_ROWS)
+                        .unwrap();
+                conn.execute_batch("COMMIT").unwrap();
+                longest = longest.max(step_started.elapsed());
+                written += step.stats.ignored;
+                rest = &rest[step.completed..];
+                resume = step.resume;
+                steps += 1;
+            }
+            eprintln!(
+                "  stop '{name}': {present} present beneath it, {written} versions in {steps} \
+                 transactions, {:?} in all, longest lock hold {longest:?}",
+                started.elapsed()
+            );
+        }
+    }
+
     /// Prints and checks the query plans of the hot reconcile queries
     /// against a real database. Ignored by default:
     ///
@@ -1413,14 +2352,14 @@ mod tests {
         assert!(children.contains("idx_items_parent_name"));
         assert!(!children.contains("SCAN"));
 
-        let tombstone = plan(
-            "tombstone descendants",
-            TOMBSTONE_DESCENDANTS_SQL,
-            &[&1i64, &1i64, &0i64, &1i64],
+        let to_end = plan(
+            "descendants to end",
+            DESCENDANTS_TO_END_SQL,
+            &[&1i64, &vec![0u8], &vec![255u8], &0i64, &100i64],
         );
-        assert!(tombstone.contains("idx_items_parent_name"));
-        assert!(!tombstone.contains("SCAN iv"));
-        assert!(!tombstone.contains("SCAN i "));
+        assert!(to_end.contains("idx_items_root_hid"));
+        assert!(!to_end.contains("SCAN"));
+        assert!(!to_end.contains("TEMP B-TREE"));
 
         let alive_descendants = plan(
             "alive descendants",
@@ -1430,15 +2369,6 @@ mod tests {
         assert!(alive_descendants.contains("idx_items_parent_name"));
         assert!(!alive_descendants.contains("SCAN iv"));
         assert!(!alive_descendants.contains("SCAN i "));
-
-        let descendant_totals = plan(
-            "descendant totals",
-            DESCENDANT_TOTALS_SQL,
-            &[&1i64, &1i64],
-        );
-        assert!(descendant_totals.contains("idx_items_parent_name"));
-        assert!(!descendant_totals.contains("SCAN iv"));
-        assert!(!descendant_totals.contains("SCAN i "));
 
         // The whole-root count reads every item of the root by design.
         // Print its plan and how long it takes on the largest root.

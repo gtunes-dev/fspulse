@@ -501,6 +501,16 @@ impl WatchLoop {
     }
 }
 
+static REFRESH_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Ask the watcher to re-read the roots table now instead of at its
+/// next periodic refresh. Called when a root's settings are saved, so
+/// that a removed ignore pattern stops hiding events within a moment,
+/// not up to `ROOTS_REFRESH` later.
+pub fn request_refresh() {
+    REFRESH_REQUESTED.store(true, Ordering::Release);
+}
+
 /// Run the watcher. Blocks until the interrupt flag is set.
 pub fn watch_roots(interrupt: Arc<AtomicBool>) -> Result<(), FsPulseError> {
     let (tx, rx) = unbounded::<notify::Result<Event>>();
@@ -558,7 +568,9 @@ pub fn watch_roots(interrupt: Arc<AtomicBool>) -> Result<(), FsPulseError> {
             state.flush(now);
             last_flush = now;
         }
-        if now.duration_since(last_refresh) >= ROOTS_REFRESH {
+        if REFRESH_REQUESTED.swap(false, Ordering::AcqRel)
+            || now.duration_since(last_refresh) >= ROOTS_REFRESH
+        {
             state.refresh_roots(now);
             last_refresh = now;
         }

@@ -271,6 +271,8 @@ impl<E: Encoding, const N: usize> OrdPathBuf<E, N> {
     /// exceeds the maximum supported length.
     ///
     /// See also [`OrdPath::try_from_str`] which will return an [`Error`] rather than panicking.
+    // Part of the module's API; exercised by its tests, not yet called by the app.
+    #[allow(dead_code)]
     #[inline]
     pub fn from_str(s: &str, enc: E) -> Self {
         Self::try_from_str(s, enc).unwrap()
@@ -474,12 +476,16 @@ impl<E: Encoding, const N: usize> OrdPath<E, N> {
     }
 
     /// Produces an iterator over `OrdPath` ancestors.
+    // Part of the module's API; exercised by its tests, not yet called by the app.
+    #[allow(dead_code)]
     #[inline]
     pub fn ancestors(&self) -> Ancestors<'_, E, N> {
         Ancestors { path: Some(self) }
     }
 
     /// Returns the `OrdPath` without its final element, if there is one.
+    // Part of the module's API; exercised by its tests, not yet called by the app.
+    #[allow(dead_code)]
     pub fn parent(&self) -> Option<&OrdPath<E, N>> {
         self.ancestors().next()
     }
@@ -611,6 +617,8 @@ impl Bytes {
             }
     }
 
+    // Part of the module's API; exercised by its tests, not yet called by the app.
+    #[allow(dead_code)]
     #[inline]
     fn ancestor<E: Encoding>(&self, enc: &E, nth: usize) -> Option<&Self> {
         const FORWARD_BUF_LEN: usize = size_of::<usize>();
@@ -870,6 +878,8 @@ impl<R: Read, E: Encoding> Iterator for Ordinals<R, E> {
 impl<R: Read, E: Encoding> FusedIterator for Ordinals<R, E> {}
 
 /// An iterator over `OrdPath` ancestors.
+// Part of the module's API; exercised by its tests, not yet called by the app.
+#[allow(dead_code)]
 pub struct Ancestors<'a, E: Encoding, const N: usize> {
     path: Option<&'a OrdPath<E, N>>,
 }
@@ -908,6 +918,18 @@ fn high_bits_mask(bits: usize) -> u8 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn from_str_parses_what_try_from_str_parses() {
+        let parsed = <OrdPathBuf>::from_str("1.3.5", DefaultEncoding);
+        assert_eq!(Ok(parsed), <OrdPathBuf>::try_from_str("1.3.5", DefaultEncoding));
+    }
+
+    #[test]
+    fn an_error_reports_its_kind() {
+        let error = <OrdPathBuf>::try_from_str("1.a", DefaultEncoding).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::InvalidInput);
+    }
+
     use super::*;
 
     #[test]

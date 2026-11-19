@@ -44,6 +44,8 @@ impl HierarchyId {
 
     /// Returns the level of this node (root = 0, top-level child = 1).
     /// Carets are not levels.
+    // Part of the module's API; exercised by its tests, not yet called by the app.
+    #[allow(dead_code)]
     pub fn get_level(&self) -> i32 {
         self.inner.ordinals().filter(|ord| is_odd(*ord)).count() as i32
     }
@@ -51,6 +53,8 @@ impl HierarchyId {
     /// Returns the ancestor `n` levels above this node, or `None` if `n`
     /// exceeds this node's level. `get_ancestor(0)` returns a clone of self;
     /// `get_ancestor(1)` returns the immediate parent.
+    // Part of the module's API; exercised by its tests, not yet called by the app.
+    #[allow(dead_code)]
     pub fn get_ancestor(&self, n: i32) -> Option<HierarchyId> {
         if n < 0 {
             return None;
@@ -160,6 +164,8 @@ impl HierarchyId {
     }
 
     /// Append `ordinal` to `parent`'s ordinals to form a child position.
+    // Part of the module's API; exercised by its tests, not yet called by the app.
+    #[allow(dead_code)]
     pub(super) fn child_of(parent: &HierarchyId, ordinal: i64) -> HierarchyId {
         let mut ords = parent.ordinals();
         ords.push(ordinal);

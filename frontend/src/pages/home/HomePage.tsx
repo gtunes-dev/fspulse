@@ -10,7 +10,7 @@ import { EmptyStateNoTasks } from './EmptyStateNoTasks'
 import { PauseDialog } from './PauseDialog'
 import { Card, CardContent } from '@/components/ui/card'
 import { InfoBar } from '@/components/shared/InfoBar'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext } from '@/contexts/useTaskContext'
 import { countQuery } from '@/lib/api'
 
 /**

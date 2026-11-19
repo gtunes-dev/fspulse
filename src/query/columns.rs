@@ -179,7 +179,7 @@ pub const SNAPSHOTS_QUERY_COLS: ColMap = phf_ordered_map! {
     "total_size" => ColSpec::new("total_size", "Total Size", true, ColType::Int, ColAlign::Right, "Total size in bytes of alive files"),
     "add_count" => ColSpec::new("add_count", "Adds", true, ColType::Int, ColAlign::Right, "Items added since previous snapshot"),
     "modify_count" => ColSpec::new("modify_count", "Modifies", true, ColType::Int, ColAlign::Right, "Items modified since previous snapshot"),
-    "delete_count" => ColSpec::new("delete_count", "Deletes", true, ColType::Int, ColAlign::Right, "Items deleted since previous snapshot"),
+    "delete_count" => ColSpec::new("delete_count", "Deletes", true, ColType::Int, ColAlign::Right, "Items deleted since previous snapshot (items that were only ignored are in ignored_count)"),
     "val_unknown_count" => ColSpec::new("val_unknown_count", "Val Unknown", false, ColType::Int, ColAlign::Right, "Files with unknown validation state"),
     "val_valid_count" => ColSpec::new("val_valid_count", "Val Valid", false, ColType::Int, ColAlign::Right, "Files with valid validation state"),
     "val_invalid_count" => ColSpec::new("val_invalid_count", "Val Invalid", false, ColType::Int, ColAlign::Right, "Files with invalid validation state"),
@@ -190,6 +190,8 @@ pub const SNAPSHOTS_QUERY_COLS: ColMap = phf_ordered_map! {
     "new_val_invalid_count" => ColSpec::new("new_val_invalid_count", "New Val Invalid", false, ColType::Int, ColAlign::Right, "Validation failures first found by integrity checks completed in this snapshot's hour"),
     "new_hash_suspect_count" => ColSpec::new("new_hash_suspect_count", "New Hash Suspect", false, ColType::Int, ColAlign::Right, "Suspect hashes first found by integrity checks completed in this snapshot's hour"),
     "schedule_id" => ColSpec::new("schedule_id", "Schedule Id", false, ColType::Id, ColAlign::Right, "Schedule that triggered this snapshot (NULL for manual)"),
+    "ignored_count" => ColSpec::new("ignored_count", "Ignored", false, ColType::Int, ColAlign::Right, "Items that stopped being tracked because they came to match an ignore pattern (not deletions)"),
+    "resumed_count" => ColSpec::new("resumed_count", "Resumed", false, ColType::Int, ColAlign::Right, "Items tracked again after being ignored (not additions)"),
 };
 
 pub const ITEMS_QUERY_COLS: ColMap = phf_ordered_map! {
@@ -214,8 +216,8 @@ pub const VERSIONS_QUERY_COLS: ColMap = phf_ordered_map! {
     "first_seen_at" => ColSpec::new("iv.first_seen_at", "First Seen", true, ColType::Date, ColAlign::Center, "When this version began"),
     "last_changed_at" => ColSpec::new("iv.last_changed_at", "Last Changed", true, ColType::Date, ColAlign::Center, "When this version's state was last updated (same as first_seen_at unless changes were coalesced within the hour)"),
     "change_count" => ColSpec::new("iv.change_count", "Changes", false, ColType::Int, ColAlign::Right, "Number of distinct observed states folded into this version"),
-    "is_added" => ColSpec::new("iv.is_added", "Added", false, ColType::Bool, ColAlign::Center, "True if this version represents an add (new item or restoration of a deleted item)"),
-    "is_deleted" => ColSpec::new("iv.is_deleted", "Deleted", true, ColType::Bool, ColAlign::Center, "True if this version represents a deletion"),
+    "is_added" => ColSpec::new("iv.is_added", "Added", false, ColType::Bool, ColAlign::Center, "True if the item was not present before this version: a new item, a deleted item that came back, or (with is_ignored) an ignored item being tracked again"),
+    "is_deleted" => ColSpec::new("iv.is_deleted", "Deleted", true, ColType::Bool, ColAlign::Center, "True if the item is not present as of this version: it was deleted, or (with is_ignored) it stopped being tracked because it matches an ignore pattern. For real deletions only, add is_ignored:(F)"),
     "is_current" => ColSpec::new("(iv.item_version = (SELECT MAX(item_version) FROM item_versions WHERE item_id = iv.item_id))", "Current", false, ColType::Bool, ColAlign::Center, "True for the latest version of each item (includes deleted items — combine with is_deleted:(F) for live items)"),
     "access" => ColSpec::new("iv.access", "Access", false, ColType::Access, ColAlign::Center, "Filesystem access state: No Error, Meta Error, or Read Error"),
     "mod_date" => ColSpec::new("iv.mod_date", "Mod Date", true, ColType::Date, ColAlign::Center, "Filesystem modification timestamp"),
@@ -225,6 +227,7 @@ pub const VERSIONS_QUERY_COLS: ColMap = phf_ordered_map! {
     "val_error" => ColSpec::new("iv.val_error", "Val Error", false, ColType::String, ColAlign::Left, "Validation error details (NULL unless val_state is Invalid)"),
     "val_reviewed_at" => ColSpec::new("iv.val_reviewed_at", "Val Reviewed", false, ColType::Date, ColAlign::Center, "When user marked this validation issue as reviewed (NULL until reviewed)"),
     "hash_reviewed_at" => ColSpec::new("iv.hash_reviewed_at", "Hash Reviewed", false, ColType::Date, ColAlign::Center, "When user marked this hash integrity issue as reviewed (NULL until reviewed)"),
+    "is_ignored" => ColSpec::new("iv.is_ignored", "Ignored", false, ColType::Bool, ColAlign::Center, "True if this version was written because of the root's ignore patterns: with is_deleted, tracking stopped (not a deletion); with is_added, tracking resumed (not an addition)"),
 };
 
 pub const HASHES_QUERY_COLS: ColMap = phf_ordered_map! {

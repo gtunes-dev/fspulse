@@ -33,6 +33,8 @@ interface TimeRangeBarProps {
   /** Changes whenever the data should be read again. */
   refreshToken: number
   onRefresh: () => void
+  /** Turn on the listing of ignored items. When given, the "N ignored" count is a button for it. */
+  onShowIgnored?: () => void
 }
 
 interface ActivityPoint {
@@ -47,6 +49,10 @@ interface ChangeCounts {
   modified: number
   deleted: number
   transient: number
+  /** Stopped being tracked because of an ignore pattern. Not deletions. */
+  ignored: number
+  /** Tracked again after being ignored. Not additions. */
+  resumed: number
 }
 
 /** Which stretch of time the histogram covers, and so how wide a bar is. */
@@ -144,7 +150,7 @@ function resolvePoint(selection: TimeRangeSelection, now: number): ResolvedRange
  * The histogram is the picker: the user chooses a range by seeing where
  * the changes are, rather than recalling dates.
  */
-export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPreset, refreshToken, onRefresh }: TimeRangeBarProps) {
+export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPreset, refreshToken, onRefresh, onShowIgnored }: TimeRangeBarProps) {
   const [open, setOpen] = useState(false)
   const [presetId, setPresetId] = useState<PresetId | 'custom'>(initialPreset ?? 'custom')
   const [granularity, setGranularity] = useState<Granularity>('day')
@@ -318,6 +324,36 @@ export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPres
                 <X className="h-3.5 w-3.5 text-red-500" />
                 {formatCount(counts.deleted)} deleted
               </span>
+              {/* Shown only when there are any: most ranges have none. */}
+              {counts.ignored > 0 &&
+                (onShowIgnored ? (
+                  // Ignored items are hidden unless asked for; this count
+                  // is where the user learns there are some, so it is
+                  // also the way to see them.
+                  <button
+                    type="button"
+                    className="text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground transition-colors"
+                    title="Items that stopped being tracked because they came to match an ignore pattern. They are not counted as deleted. Click to show ignored items."
+                    onClick={onShowIgnored}
+                  >
+                    {formatCount(counts.ignored)} ignored
+                  </button>
+                ) : (
+                  <span
+                    className="text-muted-foreground"
+                    title="Items that stopped being tracked because they came to match an ignore pattern. They are not counted as deleted."
+                  >
+                    {formatCount(counts.ignored)} ignored
+                  </span>
+                ))}
+              {counts.resumed > 0 && (
+                <span
+                  className="text-muted-foreground"
+                  title="Items tracked again after being ignored. They are not counted as added."
+                >
+                  {formatCount(counts.resumed)} tracking resumed
+                </span>
+              )}
             </div>
           )}
           {summaryError && <span className="text-sm text-red-600">{summaryError}</span>}

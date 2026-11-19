@@ -5,23 +5,38 @@ pub(super) fn general_help() -> String {
 
 fsPulse tracks filesystem state over time using temporal versioning:
 
-- **roots** — Monitored directory paths. Each root is scanned independently.
-- **scans** — A scan is a point-in-time snapshot of a root. Records file/folder counts, sizes, and change/integrity stats.
+- **roots** — Monitored directory paths. Each root is tracked independently.
 - **items** — Stable identity of a file or directory (path, name, type). Mutable state lives in versions, not here.
-- **versions** — Each version captures the full state of an item at a point in time (size, mod_date, val_state, etc.). A new version is created only when state changes. Filter with `is_current:(T)` for latest state. **IMPORTANT**: `is_current:(T)` returns the latest version of *every* item, including items whose latest version is a deletion record (`is_deleted:(T)`). To analyze only live (non-deleted) items, always combine both filters: `is_current:(T), is_deleted:(F)`.
+- **versions** — Each version captures the full state of an item (size, mod_date, val_state, etc.) from `first_seen_at` until the item's next version begins. Filter with `is_current:(T)` for latest state. **IMPORTANT**: `is_current:(T)` returns the latest version of *every* item, including items whose latest version is a deletion record (`is_deleted:(T)`). To analyze only live (non-deleted) items, always combine both filters: `is_current:(T), is_deleted:(F)`. `is_deleted:(T)` also covers items that are merely ignored; see "Ignore patterns" below.
 - **hashes** — SHA-256 hash observations on file versions. Hash state is Baseline (expected) or Suspect (hash changed without metadata change).
+- **snapshots** — One row per root per hour in which something changed: items added, modified and deleted in that hour, and the root's file count, folder count and total size at the end of it. Hours with no changes have no row. Rows of hours in which an integrity check completed also carry integrity counts. Rows from before the realtime model are one per old scan, at the scan's start time.
+- **scans** — Integrity checks: runs that hash and/or validate a root's files. They do not detect changes.
 
 Relationships:
-- A root has zero or more scans and zero or more items.
-- An item always has at least one version (created on first scan).
-- A version has zero or more hash observations (0 = file never hashed, 1 = baseline hash, >1 = hash changed between scans — later observations may be suspect).
+- A root has zero or more items, snapshots and integrity checks.
+- An item always has at least one version.
+- A version has zero or more hash observations (0 = file never hashed, 1 = baseline hash, >1 = the hash changed while size and mod_date did not — later observations may be suspect).
 
-Scan modes and integrity:
-- Every scan walks the filesystem and detects adds, modifications, and deletes. This always happens regardless of settings.
-- Integrity actions are optional per scan, controlled by two settings:
-  - **Hashing** (`is_hash`, `hash_all` on scans): Three modes — None (no hashing), New/Changed (`is_hash:(T), hash_all:(F)` — hashes only versions that have never been hashed), or All (`is_hash:(T), hash_all:(T)` — recomputes hashes for every file). Only "All" scans can detect suspect hashes, because only they recompute and compare hashes for previously hashed versions.
-  - **Validation** (`is_val` on scans): On or off. Validating scans check the structural integrity of files that have a validator and have not yet been validated for this version. Validation is never repeated on an already-validated version.
-- If a version has no hash observations or `val_state` is Unknown, it means no scan with the appropriate integrity setting has run since that version was created — it is not an error.
+How changes are recorded:
+- fsPulse watches each root and records a change within seconds of it happening. A periodic full check of the root (at startup, then daily, or every few hours when watching is not reliable) catches anything the watcher missed.
+- Changes are grouped by the hour. If an item changes several times within one hour, that is one version: `first_seen_at` is when the first of those changes was recorded, `last_changed_at` the latest, and `change_count` how many were folded in. A change in a later hour starts a new version. Once a version has been hashed or validated it is never updated; a further change starts a new version even within the same hour.
+- Because of this, state can be reconstructed exactly at any hour boundary and at "now", but not at an arbitrary minute in the past. The time-based tools move range starts, and ends in the past, back to the hour and report the times they used.
+- A range compares its two ends: an item is added, modified or deleted between them, or "transient" if it appeared and disappeared inside the range.
+
+Ignore patterns:
+- Each root can have ignore patterns (for example `node_modules`, `*.tmp`, `Library/Caches`). A path that matches is not tracked. An item first seen while a pattern matches it is never recorded at all.
+- An item that was already tracked when a pattern came to match it is **ignored**, not deleted: it gets a version with `is_deleted:(T), is_ignored:(T)` ("tracking stopped") and its earlier history is kept. Nothing is known about it from then on, including whether it still exists.
+- If the pattern is removed and the item is still on disk, it gets a version with `is_added:(T), is_ignored:(T)` ("tracking resumed"). If it is no longer on disk, it gets an ordinary deletion.
+- Ignored and resumed items are never counted as deleted or added: not in the time-based tools, and not in `add_count` / `delete_count` on snapshots (see `ignored_count`, `resumed_count`).
+- In version queries, `is_deleted:(T)` means "not present" and so includes ignored items. For real deletions use `is_deleted:(T), is_ignored:(F)`; for currently ignored items use `is_current:(T), is_deleted:(T), is_ignored:(T)`.
+- Items already tracked are relabelled by the next full check after a pattern changes, so for a while after a change some matching items may still read as present.
+
+Integrity checks:
+- Run on a schedule or on demand, separately from change tracking. Two settings:
+  - **Hashing** (`is_hash`, `hash_all` on scans): None, New/Changed (`is_hash:(T), hash_all:(F)` — hashes only versions that have never been hashed), or All (`is_hash:(T), hash_all:(T)` — recomputes hashes for every file). Only "All" checks can detect suspect hashes, because only they recompute and compare hashes for previously hashed versions.
+  - **Validation** (`is_val` on scans): On or off. Checks the structural integrity of files that have a validator and have not yet been validated for this version. Validation is never repeated on an already-validated version.
+- A file is hashed or validated only if its size and modification time on disk match the version, both before and after it is read. A file that is changing is skipped and picked up by the next check.
+- If a version has no hash observations or `val_state` is Unknown, no integrity check with the appropriate setting has covered that version yet — it is not an error.
 
 Integrity review:
 - Users can mark integrity issues (validation failures, suspect hashes) as reviewed. `val_reviewed_at` and `hash_reviewed_at` on versions record when this happened (NULL = not yet reviewed). Filter for unreviewed issues with `val_reviewed_at:(null)` or `hash_reviewed_at:(null)`.
@@ -39,7 +54,8 @@ DOMAIN [WHERE ...] [GROUP BY ...] [SHOW ...] [ORDER BY ...] [LIMIT ...] [OFFSET 
 - **items** — Item identity (path, name, extension, type)
 - **versions** — Item versions over time (size, mod_date, val_state, etc.). Filter with `is_current:(T), is_deleted:(F)` for latest state of live items. Using `is_current:(T)` alone includes deleted items.
 - **hashes** — Hash observations on item versions (file_hash, hash_state)
-- **scans** — Scan sessions (timestamps, counts, integrity findings)
+- **snapshots** — Hourly change counts and totals per root (taken_at, add/modify/delete counts, ignored/resumed counts, file/folder counts, total size, integrity counts)
+- **scans** — Integrity checks (timestamps, settings, new integrity findings)
 - **roots** — Monitored root directories
 
 ### WHERE Clause
@@ -82,7 +98,7 @@ Controls displayed columns. Use `default` for defaults, `all` for everything.
 
 **Format modifiers** — append `@mode` to a column name to control display format:
 
-- **Date columns** (`mod_date`, `started_at`, `ended_at`, `created_at`, `updated_at`, `val_reviewed_at`, `hash_reviewed_at`):
+- **Date columns** (`mod_date`, `first_seen_at`, `last_changed_at`, `taken_at`, `started_at`, `ended_at`, `val_reviewed_at`, `hash_reviewed_at`, ...):
   - `@short` (default) — date only: `2026-03-30`
   - `@full` — date and time with second precision: `2026-03-30 18:44:11`
   - `@timestamp` — raw Unix epoch (seconds, UTC): `1743364800`
@@ -121,18 +137,19 @@ For `query_data`, pagination is controlled via LIMIT and OFFSET in the query str
 - Then paginate with `limit N offset M` in the query string
 - Results are capped at 200 rows regardless of the LIMIT value in the query
 
-For other tools (`integrity_report`, `scan_history`, `scan_changes`, `item_detail`, `browse_filesystem`, `search_files`):
+For other tools (`integrity_report`, `integrity_check_history`, `activity`, `changes`, `item_detail`, `browse_filesystem`):
 - Each tool accepts `limit` (default 50, max 200) and `offset` (default 0) parameters
 - Total counts are included in the response
 - When more results are available, the response indicates the next offset to use
 
-### Timestamps: Event Time vs. Detection Time
+### Timestamps: Event Time vs. Recording Time
 
 When answering "when did this change?", choose the right timestamp:
 
-- **`mod_date`** (on versions) is the filesystem's own timestamp — the actual time the file was created or last modified. Prefer this for adds and modifications when building timelines.
-- **`started_at`** (on scans) is when fspulse detected the change, which may lag the actual event by up to a full scan interval. Use scan time only as a fallback.
-- **Deletes** are the exception: the file is gone, so there is no `mod_date`. The detecting scan's `started_at` is the only available time anchor — treat it as an upper bound, not the exact deletion time.
+- **`mod_date`** (on versions) is the filesystem's own timestamp — when the file's content was last modified according to the file itself. It can be older than the change fsPulse saw (a file copied in keeps its original `mod_date`).
+- **`first_seen_at`** and **`last_changed_at`** (on versions) are when fsPulse recorded the change. For a change the watcher saw, this is within seconds of the event. For a change found by a full check it is only an upper bound: the change happened some time before, since the previous full check. When `first_seen_at` is much later than `mod_date`, trust `mod_date` for when the content changed.
+- **Deletes** have no `mod_date`. `first_seen_at` of the deletion version is when the deletion was recorded.
+- **`started_at`** (on scans) is when an integrity check began. It says nothing about when files changed.
 
 ### Examples
 
@@ -141,6 +158,8 @@ versions where is_current:(T), is_deleted:(F), root_id:(1) show item_path, size 
 versions where is_current:(T), is_deleted:(F), root_id:(1, 2), item_type:(F) show item_path, size
 hashes where hash_state:(S) show item_path, file_hash
 scans where root_id:(1) order by started_at desc limit 10
+snapshots where root_id:(1), taken_at:(2026-11-01..2026-11-17) show taken_at@full, add_count, modify_count, delete_count, total_size
+versions where root_id:(1), first_seen_at:(2026-11-17) show item_path, first_seen_at@full, change_count, is_added, is_deleted
 items where file_extension:('pdf') show item_path, item_name
 versions where is_current:(T), is_deleted:(F), item_type:(F) group by file_extension show file_extension, count(*), sum(size) order by sum(size) desc
 scans group by root_id show root_id, count(*) order by count(*) desc
@@ -163,10 +182,11 @@ pub(super) fn domain_help(domain: &str) -> Result<String, rmcp::ErrorData> {
         "versions" => &VERSIONS_QUERY_COLS,
         "hashes" => &HASHES_QUERY_COLS,
         "scans" => &SCANS_QUERY_COLS,
+        "snapshots" => &SNAPSHOTS_QUERY_COLS,
         "roots" => &ROOTS_QUERY_COLS,
         _ => {
             return Err(rmcp::ErrorData::invalid_params(
-                format!("Unknown domain '{}'. Valid domains: items, versions, hashes, scans, roots", domain),
+                format!("Unknown domain '{}'. Valid domains: items, versions, hashes, snapshots, scans, roots", domain),
                 None,
             ));
         }

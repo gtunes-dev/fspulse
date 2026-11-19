@@ -46,6 +46,8 @@ impl Error {
     }
 
     /// Returns the corresponding [`ErrorKind`] for this error.
+    // Part of the module's API; exercised by its tests, not yet called by the app.
+    #[allow(dead_code)]
     pub const fn kind(&self) -> ErrorKind {
         self.kind
     }

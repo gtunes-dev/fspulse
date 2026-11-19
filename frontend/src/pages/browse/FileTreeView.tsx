@@ -118,6 +118,8 @@ export const FileTreeView = forwardRef<FileTreeViewHandle, FileTreeViewProps>(
             item_name: item.item_name,
             item_type: item.item_type,
             is_deleted: item.is_deleted,
+            ignored_since: item.ignored_since,
+            resumed: item.resumed,
             size: item.size,
             mod_date: item.mod_date,
             change_kind: item.change_kind,

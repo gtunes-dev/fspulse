@@ -16,7 +16,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
-import { useTaskProgress } from '@/contexts/TaskContext'
+import { useTaskProgress } from '@/contexts/useTaskContext'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,

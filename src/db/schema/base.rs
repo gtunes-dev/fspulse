@@ -20,7 +20,7 @@
 //     FROM item_versions iv
 //     WHERE iv.root_id = ? AND iv.first_seen_at >= ? AND iv.first_seen_at < ?
 //   Index: idx_versions_root_time_hid
-//     (root_id, first_seen_at, hierarchy_id, is_added, is_deleted)
+//     (root_id, first_seen_at, hierarchy_id, is_added, is_deleted, is_ignored)
 //
 // Pattern 3: "What changed beneath a folder in a time range"
 //   Used by: folder listings below the root (timeline.rs).
@@ -31,7 +31,7 @@
 //       AND iv.hierarchy_id > ? AND iv.hierarchy_id < ?
 //       AND iv.first_seen_at >= ? AND iv.first_seen_at < ?
 //   Index: idx_versions_root_hid_time
-//     (root_id, hierarchy_id, first_seen_at, is_added, is_deleted)
+//     (root_id, hierarchy_id, first_seen_at, is_added, is_deleted, is_ignored)
 //
 // Pattern 4: "Direct children of a folder"
 //   Used by: browse folder view, child counts.
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '33');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '34');
 
 -- ========================================
 -- Roots
@@ -99,7 +99,11 @@ CREATE TABLE IF NOT EXISTS roots (
     watch_enabled   INTEGER NOT NULL DEFAULT 1,
     -- JSON array of glob patterns excluded from watching and reconcile.
     -- NULL means no exclusions.
-    ignore_patterns TEXT
+    ignore_patterns TEXT,
+    -- When ignore_patterns last changed (epoch seconds), NULL if never.
+    -- Later than the start of the last completed checkpoint means items
+    -- tracked before the change may not be relabelled yet.
+    ignore_changed_at INTEGER
 );
 
 -- Indexes to optimize queries
@@ -173,6 +177,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
     -- Schedule reference
     schedule_id     INTEGER DEFAULT NULL,
 
+    -- Items whose tracking stopped or resumed because of the root's
+    -- ignore patterns. Counted in neither add_count nor delete_count.
+    ignored_count   INTEGER,
+    resumed_count   INTEGER,
+
     PRIMARY KEY (root_id, taken_at),
     FOREIGN KEY (root_id) REFERENCES roots(root_id)
 ) WITHOUT ROWID;
@@ -219,6 +228,16 @@ CREATE INDEX IF NOT EXISTS idx_items_parent_name ON items (root_id, parent_item_
 -- increment change_count. A version is never modified after its bucket
 -- ends. Alive<->deleted transitions always create a new version.
 --
+-- An item is present, deleted or ignored. is_deleted = 1 means "not
+-- present"; is_ignored says the ignore patterns are why:
+--   is_deleted = 1, is_ignored = 0: deleted.
+--   is_deleted = 1, is_ignored = 1: tracking stopped (the item matches
+--                                   an ignore pattern; nothing is known
+--                                   about it from here on).
+--   is_added = 1,   is_ignored = 1: tracking resumed (present again
+--                                   after being ignored; not an add).
+-- These transitions always create a new version too.
+--
 -- first_seen_at:   when this version began.
 -- last_changed_at: when its state was last updated (= first_seen_at
 --                  unless coalesced).
@@ -257,6 +276,9 @@ CREATE TABLE IF NOT EXISTS item_versions (
     val_reviewed_at  INTEGER DEFAULT NULL,
     hash_reviewed_at INTEGER DEFAULT NULL,
 
+    -- 1 if this version was written because of the ignore patterns
+    is_ignored      BOOLEAN NOT NULL DEFAULT 0,
+
     PRIMARY KEY (item_id, item_version),
     FOREIGN KEY (item_id) REFERENCES items(item_id),
     FOREIGN KEY (root_id) REFERENCES roots(root_id)
@@ -264,9 +286,10 @@ CREATE TABLE IF NOT EXISTS item_versions (
 
 -- The two indexes behind "what changed in this range": by time for a
 -- whole root, by position for one folder's subtree. Both carry
--- is_added and is_deleted so those queries never touch the table.
-CREATE INDEX IF NOT EXISTS idx_versions_root_time_hid ON item_versions (root_id, first_seen_at, hierarchy_id, is_added, is_deleted);
-CREATE INDEX IF NOT EXISTS idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted);
+-- is_added, is_deleted and is_ignored so those queries never touch the
+-- table.
+CREATE INDEX IF NOT EXISTS idx_versions_root_time_hid ON item_versions (root_id, first_seen_at, hierarchy_id, is_added, is_deleted, is_ignored);
+CREATE INDEX IF NOT EXISTS idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted, is_ignored);
 CREATE INDEX IF NOT EXISTS idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
 CREATE INDEX IF NOT EXISTS idx_versions_val_at ON item_versions (val_at, val_state);
 

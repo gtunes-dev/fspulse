@@ -24,11 +24,13 @@
 //! The reconcile walk has the same rule; only a walk the user confirmed
 //! gets past it.
 //!
-//! A path that matches its root's ignore patterns is treated as not
-//! being on disk, whoever hinted it. This is the one place the patterns
-//! are enforced; the watcher and the walk filter earlier only to save
-//! work. An item tracked before a pattern was added is therefore marked
-//! gone the next time its path is hinted, which the next walk does.
+//! A path that matches its root's ignore patterns is not looked at. The
+//! test made here only saves a stat: the hint is passed on as
+//! `Unobserved` and `item_ops` decides again, under the write lock,
+//! whether the path is ignored. The patterns can change between this
+//! test and that transaction, so nothing here is trusted. An item
+//! tracked before a pattern was added stops being tracked the next
+//! time its path is hinted, which the next walk does.
 
 use std::collections::HashMap;
 use std::fs;
@@ -170,7 +172,7 @@ fn observe_all(conn: &Connection, hints: &[Hint]) -> Result<Vec<ObservedEvent>, 
         };
 
         let event = if root.ignore.is_ignored(&root.path, &hint.path) {
-            Some(ObservedEvent::Gone {
+            Some(ObservedEvent::Unobserved {
                 root_id: hint.root_id,
                 path: hint.path.to_string_lossy().into_owned(),
                 source: hint.source,

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, type RefCallback } from 'reac
 import { useSearchParams } from 'react-router-dom'
 import { FolderTree, FolderOpen, Search, ArrowLeftRight, SlidersHorizontal, Plus, Triangle, X, Minus } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
@@ -48,7 +49,7 @@ interface BrowseCardProps {
 }
 
 export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: pageActive = true, isPrimary = false }: BrowseCardProps) {
-  const [, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [selectedRootId, setSelectedRootIdRaw] = useState<string>(defaultRootId ?? '')
 
   // Wrap setter to also update URL for the primary card (enables sidebar root context)
@@ -71,6 +72,22 @@ export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: p
   const handleRefresh = useCallback(() => setRefreshToken((token) => token + 1), [])
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hiddenKinds, setHiddenKinds] = useState<Set<ChangeKind>>(new Set())
+  // Whether items that are not tracked because of an ignore pattern are
+  // listed. Off unless asked for; kept in the URL for the primary card.
+  const [showIgnored, setShowIgnoredRaw] = useState<boolean>(
+    () => isPrimary && searchParams.get('ignored') === '1'
+  )
+  const setShowIgnored = useCallback((show: boolean) => {
+    setShowIgnoredRaw(show)
+    if (isPrimary) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (show) next.set('ignored', '1')
+        else next.delete('ignored')
+        return next
+      }, { replace: true })
+    }
+  }, [isPrimary, setSearchParams])
   const [searchFilter, setSearchFilter] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   // Per-view selection: each tab has its own independently selected item
@@ -98,8 +115,8 @@ export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: p
 
   // Shared data cache for Tree and Folder views
   const selectedRoot = roots.find(r => r.root_id.toString() === selectedRootId)
-  const cache = useBrowseCache(selectedRoot?.root_id ?? 0, selection, refreshToken)
-  const viewKey = `${rangeKey(selection)}:${refreshToken}`
+  const cache = useBrowseCache(selectedRoot?.root_id ?? 0, selection, refreshToken, showIgnored)
+  const viewKey = `${rangeKey(selection)}:${refreshToken}:${showIgnored}`
 
   // Keep the URL in step with the primary card's selection, so the view can be linked to.
   const handleSelectionChange = useCallback((next: TimeRangeSelection) => {
@@ -276,6 +293,7 @@ export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: p
           rootPath={selectedRoot.root_path}
           selection={selection}
           refreshToken={refreshToken}
+          includeIgnored={showIgnored}
           searchQuery={debouncedSearch}
           hiddenKinds={hiddenKinds}
           isActive={pageActive && viewMode === 'search' && hasSearchQuery}
@@ -346,6 +364,7 @@ export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: p
             initialPreset={defaultSelection ? undefined : DEFAULT_PRESET}
             refreshToken={refreshToken}
             onRefresh={handleRefresh}
+            onShowIgnored={() => setShowIgnored(true)}
           />
         )}
 
@@ -405,9 +424,33 @@ export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: p
                     </button>
                   )
                 })}
+                <div className="my-1 border-t border-border" />
+                <label className="inline-flex items-center gap-2 px-2 py-1 rounded text-sm cursor-pointer hover:bg-accent whitespace-nowrap">
+                  <Checkbox
+                    checked={showIgnored}
+                    onCheckedChange={(checked) => setShowIgnored(checked === true)}
+                  />
+                  Show ignored items
+                </label>
+                <span className="px-2 pb-1 text-xs text-muted-foreground max-w-56">
+                  Items that are not tracked because they match an ignore pattern, as last recorded. Hidden unless this is on.
+                </span>
               </div>
             </PopoverContent>
           </Popover>
+
+          {/* The toggle's state stays on screen while the popover is closed. */}
+          {showIgnored && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors whitespace-nowrap"
+              onClick={() => setShowIgnored(false)}
+              title="Ignored items are being shown. Click to hide them."
+            >
+              Showing ignored
+              <X className="h-3 w-3" />
+            </button>
+          )}
 
           <Tabs value={viewMode} onValueChange={handleViewModeChange}>
             <TabsList className="shrink-0">

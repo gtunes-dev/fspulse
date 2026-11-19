@@ -22,11 +22,15 @@ Once connected, try prompts like these. The agent will choose which tools to cal
 
 > Show me validation failures for PDF files
 
-## Scan History
+## Changes Over Time
 
-> Show me recent scan activity for /home/user/Documents
+> What changed in /home/user/Documents in the last 24 hours?
 
-> What changed in the last scan?
+> On which days this month was there the most activity?
+
+> What did /home/user/Documents/taxes look like on March 1?
+
+> When was the last integrity check, and did it find anything new?
 
 ## Browsing and Searching
 
@@ -38,7 +42,7 @@ Once connected, try prompts like these. The agent will choose which tools to cal
 
 > Count files by extension for root 3, sorted by total size
 
-> How many scans has each root had?
+> How many integrity checks has each root had?
 
 ## Multi-Step Investigations
 
@@ -58,7 +62,7 @@ From the results, you might follow up with:
 
 ### Storage Growth Analysis
 
-> Show me how the total size of root 2 has changed over the last 20 scans
+> Show me how the total size of root 2 has changed over the last three months
 
 > Graph the file count and total size trends
 

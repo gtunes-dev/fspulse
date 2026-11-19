@@ -13,6 +13,12 @@ export interface RootObservation {
   ignore_patterns: string[]
   last_walk_started_at: number | null
   last_walk_completed_at: number | null
+  /**
+   * The ignore patterns changed and no full check has completed since.
+   * Nothing new is recorded for ignored paths, but items tracked before
+   * the change may not be relabelled yet.
+   */
+  ignore_pending: boolean
   /** Null until the watcher has looked at the root. */
   watch: WatchState | null
   watch_detail: string | null
@@ -28,7 +34,12 @@ export async function fetchObservation(): Promise<RootObservation[]> {
 
 export async function updateObservation(
   rootId: number,
-  settings: { watch_enabled?: boolean; ignore_patterns?: string[] }
+  settings: {
+    watch_enabled?: boolean
+    ignore_patterns?: string[]
+    /** Queue a full check after saving, so already-tracked items are relabelled now. */
+    run_check?: boolean
+  }
 ): Promise<void> {
   const response = await fetch(`/api/roots/${rootId}/observation`, {
     method: 'PUT',

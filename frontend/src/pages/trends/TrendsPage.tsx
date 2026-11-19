@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
-import { Calendar as CalendarIcon, Plus, Triangle, X, Minus } from 'lucide-react'
+import { Calendar as CalendarIcon, Plus, Triangle, X, Minus, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import {
@@ -37,7 +37,7 @@ import {
 } from 'recharts'
 import { cn } from '@/lib/utils'
 import { fetchQuery } from '@/lib/api'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext } from '@/contexts/useTaskContext'
 import type { ColumnSpec } from '@/lib/types'
 
 interface Root {
@@ -53,6 +53,9 @@ interface SnapshotData {
   modify_count: number
   add_count: number
   delete_count: number
+  /** Stopped being tracked / tracked again because of ignore patterns. Not deletes or adds. */
+  ignored_count: number
+  resumed_count: number
   new_val_invalid_count: number
   val_invalid_count: number
   new_hash_suspect_count: number
@@ -312,6 +315,8 @@ export function TrendsPage() {
         { name: 'hash_suspect_count', visible: true, sort_direction: 'none', position: 8 },
         { name: 'new_val_invalid_count', visible: true, sort_direction: 'none', position: 9 },
         { name: 'new_hash_suspect_count', visible: true, sort_direction: 'none', position: 10 },
+        { name: 'ignored_count', visible: true, sort_direction: 'none', position: 11 },
+        { name: 'resumed_count', visible: true, sort_direction: 'none', position: 12 },
       ]
 
       const response = await fetchQuery('snapshots', {
@@ -329,6 +334,8 @@ export function TrendsPage() {
         modify_count: parseInt(row[4]) || 0,
         add_count: parseInt(row[5]) || 0,
         delete_count: parseInt(row[6]) || 0,
+        ignored_count: parseInt(row[11]) || 0,
+        resumed_count: parseInt(row[12]) || 0,
         new_val_invalid_count: parseInt(row[9]) || 0,
         val_invalid_count: parseInt(row[7]) || 0,
         new_hash_suspect_count: parseInt(row[10]) || 0,
@@ -368,7 +375,7 @@ export function TrendsPage() {
   const changeCountData = snapshotData.filter(d => {
     if (excludeFirstSnapshot && firstSnapshotTakenAt !== null && d.taken_at === firstSnapshotTakenAt) return false
     if (hideEmptyChangeScans) {
-      const visibleKeys = ['add_count', 'modify_count', 'delete_count', 'unchanged_count'] as const
+      const visibleKeys = ['add_count', 'modify_count', 'delete_count', 'ignored_count', 'resumed_count', 'unchanged_count'] as const
       const hasVisibleData = visibleKeys.some(key =>
         !hiddenChangeSeries.has(key) && (key === 'unchanged_count'
           ? (d.file_count + d.folder_count) - d.add_count - d.modify_count > 0
@@ -658,6 +665,14 @@ export function TrendsPage() {
                         label: 'Deleted',
                         color: 'hsl(0 84% 60%)',
                       },
+                      ignored_count: {
+                        label: 'Ignored',
+                        color: 'hsl(38 60% 55%)',
+                      },
+                      resumed_count: {
+                        label: 'Tracking resumed',
+                        color: 'hsl(174 45% 45%)',
+                      },
                       unchanged_count: {
                         label: 'Unchanged',
                         color: 'hsl(220 9% 60%)',
@@ -671,6 +686,8 @@ export function TrendsPage() {
                         add_count: d.add_count,
                         modify_count: d.modify_count,
                         delete_count: d.delete_count,
+                        ignored_count: d.ignored_count,
+                        resumed_count: d.resumed_count,
                         unchanged_count: (d.file_count + d.folder_count) - d.add_count - d.modify_count,
                         taken_at: d.taken_at,
                       }))}
@@ -694,6 +711,8 @@ export function TrendsPage() {
                             { key: 'add_count', label: 'Added', color: 'text-green-500', Icon: Plus, filled: false },
                             { key: 'modify_count', label: 'Modified', color: 'text-blue-500', Icon: Triangle, filled: true },
                             { key: 'delete_count', label: 'Deleted', color: 'text-red-500', Icon: X, filled: false },
+                            { key: 'ignored_count', label: 'Ignored', color: 'text-amber-500', Icon: EyeOff, filled: false },
+                            { key: 'resumed_count', label: 'Tracking resumed', color: 'text-teal-500', Icon: Eye, filled: false },
                             { key: 'unchanged_count', label: 'Unchanged', color: 'text-foreground', Icon: Minus, filled: false },
                           ]).map(({ key, label, color, Icon, filled }) => {
                             const visible = !hiddenChangeSeries.has(key)
@@ -735,6 +754,12 @@ export function TrendsPage() {
                       )}
                       {!hiddenChangeSeries.has('delete_count') && (
                         <Bar dataKey="delete_count" stackId="a" fill="var(--color-delete_count)" name="Deleted" />
+                      )}
+                      {!hiddenChangeSeries.has('ignored_count') && (
+                        <Bar dataKey="ignored_count" stackId="a" fill="var(--color-ignored_count)" name="Ignored" />
+                      )}
+                      {!hiddenChangeSeries.has('resumed_count') && (
+                        <Bar dataKey="resumed_count" stackId="a" fill="var(--color-resumed_count)" name="Tracking resumed" />
                       )}
                       {!hiddenChangeSeries.has('unchanged_count') && (
                         <Bar dataKey="unchanged_count" stackId="a" fill="var(--color-unchanged_count)" name="Unchanged" />

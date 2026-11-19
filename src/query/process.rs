@@ -591,6 +591,8 @@ impl SnapshotsQuery {
                 "new_val_invalid_count" => Format::format_opt_i64(snap.new_val_invalid_count),
                 "new_hash_suspect_count" => Format::format_opt_i64(snap.new_hash_suspect_count),
                 "schedule_id" => Format::format_opt_i64(snap.schedule_id),
+                "ignored_count" => Format::format_opt_i64(snap.ignored_count),
+                "resumed_count" => Format::format_opt_i64(snap.resumed_count),
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -697,6 +699,7 @@ impl VersionsQuery {
                 "val_error" => Format::format_opt_string(&version.val_error),
                 "val_reviewed_at" => Format::format_opt_date(version.val_reviewed_at, col.format)?,
                 "hash_reviewed_at" => Format::format_opt_date(version.hash_reviewed_at, col.format)?,
+                "is_ignored" => Format::format_bool(version.is_ignored, col.format)?,
                 _ => {
                     return Err(FsPulseError::Error("Invalid column".into()));
                 }
@@ -952,6 +955,7 @@ struct VersionsQueryRow {
     val_error: Option<String>,
     val_reviewed_at: Option<i64>,
     hash_reviewed_at: Option<i64>,
+    is_ignored: bool,
 }
 
 impl VersionsQueryRow {
@@ -978,6 +982,7 @@ impl VersionsQueryRow {
             val_error: row.get(18)?,
             val_reviewed_at: row.get(19)?,
             hash_reviewed_at: row.get(20)?,
+            is_ignored: row.get(21)?,
         })
     }
 }
@@ -1038,6 +1043,8 @@ struct SnapshotsQueryRow {
     new_val_invalid_count: Option<i64>,
     new_hash_suspect_count: Option<i64>,
     schedule_id: Option<i64>,
+    ignored_count: Option<i64>,
+    resumed_count: Option<i64>,
 }
 
 impl SnapshotsQueryRow {
@@ -1061,6 +1068,8 @@ impl SnapshotsQueryRow {
             new_val_invalid_count: row.get(15)?,
             new_hash_suspect_count: row.get(16)?,
             schedule_id: row.get(17)?,
+            ignored_count: row.get(18)?,
+            resumed_count: row.get(19)?,
         })
     }
 }

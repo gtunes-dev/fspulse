@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatTimeAgo } from '@/lib/dateUtils'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext } from '@/contexts/useTaskContext'
 import { shortenPath } from '@/lib/pathUtils'
 import { CheckCircle, XCircle, AlertTriangle, CircleX, ArrowRight, Hash } from 'lucide-react'
 import { ChangeIcons } from '@/components/shared/ChangeIcons'

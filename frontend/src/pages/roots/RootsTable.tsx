@@ -26,7 +26,7 @@ import {
   type RootObservation,
 } from '@/lib/observation'
 import { formatCount } from '@/lib/formatUtils'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext } from '@/contexts/useTaskContext'
 import type { RootWithScan } from '@/lib/types'
 
 interface RootsTableProps {
@@ -238,6 +238,11 @@ export function RootsTable({ onAddRoot, onScanNow, externalReloadTrigger }: Root
                             <RefreshCw className="h-3 w-3" />
                           </Button>
                         </div>
+                        {observation.ignore_pending && (
+                          <span className="text-xs text-muted-foreground max-w-xs">
+                            Ignore changes take full effect at the next full check.
+                          </span>
+                        )}
                         {observation.walk_block && (
                           <div className="flex flex-col items-start gap-1">
                             <div className="flex items-center gap-2">

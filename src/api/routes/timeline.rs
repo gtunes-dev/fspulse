@@ -50,6 +50,11 @@ pub struct ChildrenParams {
     /// Also list items that appeared and disappeared inside the range.
     #[serde(default)]
     pub include_transient: bool,
+    /// Also list items that are not tracked because they match an
+    /// ignore pattern, whenever their tracking stopped. Without it no
+    /// ignored item is listed, whatever the range.
+    #[serde(default)]
+    pub include_ignored: bool,
 }
 
 /// GET /api/timeline/children?root_id=1&parent_path=/data&from=..&to=..
@@ -70,6 +75,7 @@ pub async fn get_children(
         &params.parent_path,
         range,
         params.include_transient,
+        params.include_ignored,
     )
     .map(Json)
     .map_err(|e| api_error("Listing folder", e))
@@ -146,7 +152,8 @@ pub struct ChangesParams {
     pub from: i64,
     pub to: Option<i64>,
     /// Comma-separated kinds to include: `added`, `modified`, `deleted`,
-    /// `transient`. Leave out for added, modified and deleted.
+    /// `ignored`, `resumed`, `transient`. Leave out for all but
+    /// transient.
     pub kinds: Option<String>,
     #[serde(default = "default_page_size")]
     pub limit: i64,
@@ -165,12 +172,15 @@ fn parse_kinds(kinds: Option<&str>) -> Result<i64, ApiError> {
             "modified" => Change::Modified.mask(),
             "deleted" => Change::Deleted.mask(),
             "transient" => Change::Transient.mask(),
+            "ignored" => Change::Ignored.mask(),
+            "resumed" => Change::Resumed.mask(),
             other => {
                 return Err((
                     StatusCode::BAD_REQUEST,
                     Json(ErrorResponse {
                         error: format!(
-                            "Unknown kind '{other}'. Use added, modified, deleted or transient."
+                            "Unknown kind '{other}'. Use added, modified, deleted, ignored, \
+                             resumed or transient."
                         ),
                     }),
                 ))
@@ -213,6 +223,10 @@ pub struct SearchParams {
     pub to: Option<i64>,
     #[serde(default = "default_page_size")]
     pub limit: i64,
+    /// Also find items that are not tracked because they match an
+    /// ignore pattern.
+    #[serde(default)]
+    pub include_ignored: bool,
 }
 
 /// GET /api/timeline/search?root_id=1&query=report&from=..&to=..
@@ -229,6 +243,7 @@ pub async fn search(Query(params): Query<SearchParams>) -> Result<Json<Listing>,
         &params.query,
         range,
         params.limit.clamp(1, MAX_PAGE_SIZE),
+        params.include_ignored,
     )
     .map(Json)
     .map_err(|e| api_error("Searching", e))

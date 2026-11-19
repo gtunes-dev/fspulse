@@ -15,7 +15,7 @@ import { EditScheduleDialog } from './EditScheduleDialog'
 import { RunScheduleDialog } from './RunScheduleDialog'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'
 import { formatDateRelative } from '@/lib/dateUtils'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext } from '@/contexts/useTaskContext'
 import type { ScheduleWithRoot } from '@/lib/types'
 
 interface SchedulesTableProps {

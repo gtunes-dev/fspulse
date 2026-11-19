@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { IgnorePatternsEditor } from '@/components/shared/IgnorePatternsEditor'
 import { parsePatterns, updateObservation, type RootObservation } from '@/lib/observation'
@@ -26,14 +27,28 @@ interface TrackingSettingsDialogProps {
 export function TrackingSettingsDialog({ observation, open, onOpenChange, onSaved }: TrackingSettingsDialogProps) {
   const [watchEnabled, setWatchEnabled] = useState(true)
   const [patterns, setPatterns] = useState('')
+  // On by default: someone changing what is ignored expects to see it
+  // take effect. Turning it off leaves the relabelling of items that
+  // are already tracked to the next scheduled full check.
+  const [runCheck, setRunCheck] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Load the root's current settings each time the dialog opens.
+  // Load the root's settings once per opening, not every time the page
+  // refreshes its status. The Roots page re-reads every root's status
+  // every 30 seconds, which hands this dialog a new `observation`
+  // object; reloading from it would throw away what is being typed.
+  const loadedRootRef = useRef<number | null>(null)
   useEffect(() => {
-    if (open && observation) {
+    if (!open) {
+      loadedRootRef.current = null
+      return
+    }
+    if (observation && loadedRootRef.current !== observation.root_id) {
+      loadedRootRef.current = observation.root_id
       setWatchEnabled(observation.watch_enabled)
       setPatterns(observation.ignore_patterns.join('\n'))
+      setRunCheck(true)
       setError('')
     }
   }, [open, observation])
@@ -41,7 +56,10 @@ export function TrackingSettingsDialog({ observation, open, onOpenChange, onSave
   if (!observation) return null
 
   const before = new Set(observation.ignore_patterns)
-  const added = parsePatterns(patterns).filter((pattern) => !before.has(pattern))
+  const current = parsePatterns(patterns)
+  const added = current.filter((pattern) => !before.has(pattern))
+  const removed = observation.ignore_patterns.filter((pattern) => !current.includes(pattern))
+  const patternsChanged = added.length > 0 || removed.length > 0
 
   const save = async () => {
     setSaving(true)
@@ -49,7 +67,8 @@ export function TrackingSettingsDialog({ observation, open, onOpenChange, onSave
     try {
       await updateObservation(observation.root_id, {
         watch_enabled: watchEnabled,
-        ignore_patterns: parsePatterns(patterns),
+        ignore_patterns: current,
+        run_check: patternsChanged && runCheck,
       })
       onSaved()
       onOpenChange(false)
@@ -87,12 +106,26 @@ export function TrackingSettingsDialog({ observation, open, onOpenChange, onSave
               Ignore
             </label>
             <IgnorePatternsEditor id="ignore-patterns" value={patterns} onChange={setPatterns} />
-            {added.length > 0 && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                Items already tracked that match {added.length === 1 ? 'the new pattern' : 'the new patterns'}{' '}
-                will be shown as deleted from the next full check on. Their history is kept, and
-                removing the pattern brings them back.
-              </p>
+            {patternsChanged && (
+              <div className="space-y-2 rounded-md border border-border p-3">
+                <p className="text-xs text-muted-foreground">
+                  The change applies to anything new as soon as you save.
+                  {added.length > 0 &&
+                    ' Items already tracked that match will stop being tracked: they are not deleted, their history is kept, and Browse can show them with "Show ignored items".'}
+                  {removed.length > 0 &&
+                    ' Items that no longer match will be tracked again if they are still there.'}{' '}
+                  Items already tracked are updated by a full check.
+                </p>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={runCheck} onCheckedChange={(checked) => setRunCheck(checked === true)} />
+                  Run a full check now
+                </label>
+                {!runCheck && (
+                  <p className="text-xs text-muted-foreground">
+                    Without it, items already tracked are updated at the next scheduled full check.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

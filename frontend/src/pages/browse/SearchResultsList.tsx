@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
-import type { FlatTreeItem, ChangeKind } from '@/lib/pathUtils'
-import { hashStateFromInt, valStateFromInt, isItemVisible } from '@/lib/pathUtils'
+import type { FlatTreeItem, ChangeKind, TimelineChange } from '@/lib/pathUtils'
+import { describeTimelineItem, hashStateFromInt, valStateFromInt, isItemVisible } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 import { rangeKey, rangeParams, type TimeRangeSelection } from '@/lib/timeRange'
 
@@ -11,6 +11,8 @@ interface SearchResultsListProps {
   rootPath: string
   selection: TimeRangeSelection
   refreshToken: number
+  /** Also find items that are not tracked because of an ignore pattern. */
+  includeIgnored: boolean
   searchQuery: string
   hiddenKinds: Set<ChangeKind>
   isActive?: boolean
@@ -23,6 +25,7 @@ export function SearchResultsList({
   rootPath,
   selection,
   refreshToken,
+  includeIgnored,
   searchQuery,
   hiddenKinds,
   isActive = true,
@@ -43,7 +46,7 @@ export function SearchResultsList({
   useEffect(() => {
     if (!isActive) return
 
-    const fetchKey = `${rootId}:${selectionKey}:${refreshToken}:${searchQuery}`
+    const fetchKey = `${rootId}:${selectionKey}:${refreshToken}:${includeIgnored}:${searchQuery}`
     if (lastFetchKeyRef.current === fetchKey) return
     lastFetchKeyRef.current = fetchKey
 
@@ -59,6 +62,7 @@ export function SearchResultsList({
           query: searchQuery,
           limit: '2000',
           ...rangeParams(selection),
+          ...(includeIgnored ? { include_ignored: 'true' } : {}),
         })
 
         const response = await fetch(`/api/timeline/search?${params}`)
@@ -75,11 +79,13 @@ export function SearchResultsList({
             item_name: string
             item_type: string
             is_deleted: boolean
+            is_ignored: boolean
+            first_seen_at: number
             size: number | null
             mod_date: number | null
             val_state: number | null
             hash_state: number | null
-            change: 'added' | 'modified' | 'deleted' | 'unchanged' | 'transient' | null
+            change: TimelineChange | null
           }>
         }
 
@@ -91,10 +97,7 @@ export function SearchResultsList({
           is_deleted: item.is_deleted,
           size: item.size,
           mod_date: item.mod_date,
-          // A point in time has no comparison.
-          change_kind: (item.change === null || item.change === 'transient'
-            ? 'unchanged'
-            : item.change) as ChangeKind,
+          ...describeTimelineItem(item),
           // Search results do not carry what is beneath a folder.
           add_count: null,
           modify_count: null,
@@ -124,7 +127,7 @@ export function SearchResultsList({
     search()
     // selectionKey stands in for `selection`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, rootId, selectionKey, refreshToken, searchQuery])
+  }, [isActive, rootId, selectionKey, refreshToken, includeIgnored, searchQuery])
 
   // Filter items client-side based on change kind, hash state, and val state toggles
   const visibleResults = results.filter((item) => isItemVisible(item, hiddenKinds))

@@ -82,7 +82,6 @@ pub struct Scan {
     started_at: i64,
     #[allow(dead_code)]
     ended_at: Option<i64>,
-    was_restarted: bool,
     state: ScanState,
     analysis_spec: AnalysisSpec,
     new_hash_suspect_count: Option<i64>,
@@ -176,7 +175,6 @@ impl Scan {
             schedule_id,
             started_at,
             ended_at: None,
-            was_restarted: false,
             state: ScanState::from_i64(state),
             analysis_spec,
             new_hash_suspect_count: None,
@@ -253,7 +251,6 @@ impl Scan {
                     schedule_id: row.get(2)?,
                     started_at: row.get(3)?,
                     ended_at: row.get(4)?,
-                    was_restarted: row.get(5)?,
                     state: ScanState::from_i64(row.get(6)?),
                     analysis_spec: AnalysisSpec {
                         hash_mode,
@@ -275,10 +272,6 @@ impl Scan {
 
     pub fn root_id(&self) -> i64 {
         self.root_id
-    }
-
-    pub fn was_restarted(&self) -> bool {
-        self.was_restarted
     }
 
     pub fn state(&self) -> ScanState {
@@ -434,25 +427,6 @@ impl Scan {
                 self.state().as_i64()
             ))),
         }
-    }
-
-    fn set_state(&mut self, conn: &Connection, new_state: ScanState) -> Result<(), FsPulseError> {
-        let rows_updated = conn.execute(
-            "UPDATE scans SET state = ? WHERE scan_id = ?",
-            [new_state.as_i64(), self.scan_id],
-        )?;
-
-        if rows_updated == 0 {
-            return Err(FsPulseError::Error(format!(
-                "Could not update the state of Scan Id {} to {}",
-                self.scan_id,
-                new_state.as_i64()
-            )));
-        }
-
-        self.state = new_state;
-
-        Ok(())
     }
 
     pub fn stop_scan(

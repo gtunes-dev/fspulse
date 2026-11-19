@@ -134,39 +134,6 @@ fn temporal_children_where(parent_path: &str) -> (String, String, String) {
     (path_prefix, path_upper, where_fragment)
 }
 
-/// Count immediate children of a directory at a point in time.
-pub fn count_temporal_immediate_children(
-    root_id: i64,
-    parent_path: &str,
-    scan_id: i64,
-) -> Result<i64, FsPulseError> {
-    let conn = Database::get_connection()?;
-    let (path_prefix, path_upper, where_fragment) = temporal_children_where(parent_path);
-
-    let sql = format!(
-        "SELECT COUNT(*)
-         FROM items i
-         JOIN item_versions iv ON iv.item_id = i.item_id
-         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-             AND hv.item_version = iv.item_version
-             AND hv.first_seen_at = (
-                 SELECT MAX(first_seen_at) FROM hash_versions
-                 WHERE item_id = i.item_id AND item_version = iv.item_version
-             )
-         {}",
-        where_fragment
-    );
-
-    let count: i64 = conn
-        .prepare(&sql)?
-        .query_row(
-            params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
-            |row| row.get(0),
-        )?;
-
-    Ok(count)
-}
-
 pub fn get_temporal_immediate_children(
     root_id: i64,
     parent_path: &str,
@@ -341,26 +308,6 @@ const TEMPORAL_SEARCH_FROM: &str =
              WHERE item_id = i.item_id AND item_version = iv.item_version
          )";
 
-/// Count items matching a name search at a point in time.
-pub fn count_temporal_search_items(
-    root_id: i64,
-    scan_id: i64,
-    query: &str,
-) -> Result<i64, FsPulseError> {
-    let conn = Database::get_connection()?;
-
-    let sql = format!(
-        "SELECT COUNT(*) {} {}",
-        TEMPORAL_SEARCH_FROM, TEMPORAL_SEARCH_WHERE
-    );
-
-    let count: i64 = conn
-        .prepare(&sql)?
-        .query_row(params![root_id, scan_id, query], |row| row.get(0))?;
-
-    Ok(count)
-}
-
 /// Search for items by name at a point in time using items + item_versions.
 /// Matches against the item name (last path segment) rather than the full path.
 /// Returns items whose name contains the search query, ordered by path.
@@ -450,6 +397,9 @@ pub struct VersionHistoryEntry {
     pub source: i64,
     pub is_added: bool,
     pub is_deleted: bool,
+    /// Written because of the ignore patterns: with `is_deleted`,
+    /// tracking stopped; with `is_added`, tracking resumed.
+    pub is_ignored: bool,
     pub access: i64,
     pub mod_date: Option<i64>,
     pub size: Option<i64>,
@@ -483,6 +433,7 @@ impl VersionHistoryEntry {
             val_error: row.get(13)?,
             val_reviewed_at: row.get(14)?,
             hash_reviewed_at: row.get(15)?,
+            is_ignored: row.get(16)?,
         })
     }
 }
@@ -492,7 +443,7 @@ const VERSION_HISTORY_COLUMNS: &str =
      v.is_added, v.is_deleted, v.access, \
      v.mod_date, v.size, \
      hv.hash_state, hv.file_hash, v.val_state, v.val_error, \
-     v.val_reviewed_at, v.hash_reviewed_at";
+     v.val_reviewed_at, v.hash_reviewed_at, v.is_ignored";
 
 const VERSION_HISTORY_JOINS: &str =
     "LEFT JOIN hash_versions hv ON hv.item_id = v.item_id \

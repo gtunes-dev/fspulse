@@ -40,6 +40,11 @@ pub struct SnapshotDelta {
     pub modified: i64,
     /// Items marked deleted.
     pub deleted: i64,
+    /// Items whose tracking stopped because they match an ignore
+    /// pattern, and items whose tracking resumed. In neither `added`
+    /// nor `deleted`.
+    pub ignored: i64,
+    pub resumed: i64,
     /// Net change in alive files, alive folders and bytes in files.
     pub files: i64,
     pub folders: i64,
@@ -69,6 +74,26 @@ impl SnapshotDelta {
         self.files -= totals.files;
         self.folders -= totals.folders;
         self.size -= totals.size;
+    }
+
+    /// A present item stopped being tracked.
+    pub fn record_ignored(&mut self, item_type: ItemType, size: Option<i64>) {
+        self.ignored += 1;
+        self.count(item_type, size, -1);
+    }
+
+    /// Several present items stopped being tracked at once.
+    pub fn record_ignored_many(&mut self, items: i64, totals: Totals) {
+        self.ignored += items;
+        self.files -= totals.files;
+        self.folders -= totals.folders;
+        self.size -= totals.size;
+    }
+
+    /// A stopped item is tracked, and present, again.
+    pub fn record_resumed(&mut self, item_type: ItemType, size: Option<i64>) {
+        self.resumed += 1;
+        self.count(item_type, size, 1);
     }
 
     /// An alive item's recorded size changed. `new_version` is false
@@ -181,15 +206,17 @@ fn upsert_locked(
     conn.prepare_cached(
         "INSERT INTO snapshots (
             root_id, taken_at, file_count, folder_count, total_size,
-            add_count, modify_count, delete_count
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            add_count, modify_count, delete_count, ignored_count, resumed_count
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT (root_id, taken_at) DO UPDATE SET
             file_count   = excluded.file_count,
             folder_count = excluded.folder_count,
             total_size   = excluded.total_size,
             add_count    = COALESCE(add_count, 0) + excluded.add_count,
             modify_count = COALESCE(modify_count, 0) + excluded.modify_count,
-            delete_count = COALESCE(delete_count, 0) + excluded.delete_count",
+            delete_count = COALESCE(delete_count, 0) + excluded.delete_count,
+            ignored_count = COALESCE(ignored_count, 0) + excluded.ignored_count,
+            resumed_count = COALESCE(resumed_count, 0) + excluded.resumed_count",
     )?
     .execute(params![
         root_id,
@@ -200,6 +227,8 @@ fn upsert_locked(
         delta.added,
         delta.modified,
         delta.deleted,
+        delta.ignored,
+        delta.resumed,
     ])?;
     Ok(())
 }

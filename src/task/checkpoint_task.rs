@@ -134,8 +134,12 @@ impl CheckpointTask {
     /// Allocate `started_at` under the write lock and stamp it on the
     /// root row. Also clears `last_checkpoint_completed_at`, so during
     /// the run the row reflects "checkpoint in progress, no completion
-    /// yet." Returns the `started_at` value.
-    fn begin(root_id: i64) -> Result<i64, FsPulseError> {
+    /// yet."
+    ///
+    /// Returns the root's `ignore_changed_at` as of this moment. The
+    /// walk reads the ignore patterns after this transaction, so it
+    /// covers every pattern change up to the returned value.
+    fn begin(root_id: i64) -> Result<Option<i64>, FsPulseError> {
         let conn = Database::get_connection()?;
         Database::immediate_transaction(&conn, |c| {
             let started_at = Utils::now_secs();
@@ -151,7 +155,12 @@ impl CheckpointTask {
                     "Checkpoint: root {root_id} not found"
                 )));
             }
-            Ok(started_at)
+            let ignore_changed_at = c.query_row(
+                "SELECT ignore_changed_at FROM roots WHERE root_id = ?1",
+                params![root_id],
+                |row| row.get(0),
+            )?;
+            Ok(ignore_changed_at)
         })
     }
 
@@ -167,17 +176,30 @@ impl CheckpointTask {
     /// runs leave `completed_at` NULL — combined with `started_at`
     /// from `begin`, that's the signal the next run uses to know the
     /// previous attempt didn't finish.
-    fn finalize(root_id: i64) -> Result<(), FsPulseError> {
+    ///
+    /// `ignore_seen` is what `begin` returned. If the root's
+    /// `ignore_changed_at` still has that value, this walk covered every
+    /// pattern change and the marker is cleared. If it has moved, the
+    /// patterns changed while the walk ran: the marker stays and true
+    /// is returned, so the caller can queue one more walk.
+    fn finalize(root_id: i64, ignore_seen: Option<i64>) -> Result<bool, FsPulseError> {
         let conn = Database::get_connection()?;
         Database::immediate_transaction(&conn, |c| {
             let now = Utils::now_secs();
             c.execute(
                 "UPDATE roots
-                    SET last_checkpoint_completed_at = ?1
+                    SET last_checkpoint_completed_at = ?1,
+                        ignore_changed_at = CASE WHEN ignore_changed_at IS ?3
+                                                 THEN NULL ELSE ignore_changed_at END
                   WHERE root_id = ?2",
-                params![now, root_id],
+                params![now, root_id, ignore_seen],
             )?;
-            Ok(())
+            let still_pending: bool = c.query_row(
+                "SELECT ignore_changed_at IS NOT NULL FROM roots WHERE root_id = ?1",
+                params![root_id],
+                |row| row.get(0),
+            )?;
+            Ok(still_pending)
         })
     }
 }
@@ -189,7 +211,7 @@ impl Task for CheckpointTask {
         interrupt_token: Arc<AtomicBool>,
     ) -> Result<(), FsPulseError> {
         // Set started_at, clear completed_at, all under the lock.
-        Self::begin(self.root_id)?;
+        let ignore_seen = Self::begin(self.root_id)?;
 
         progress.set_phase("Comparing with what is recorded");
         let root_id = self.root_id;
@@ -222,6 +244,14 @@ impl Task for CheckpointTask {
                     missing.push(path);
                     Ok(())
                 }
+                // Stops tracking, deletes nothing: not held back and
+                // not subject to the mass-delete refusal.
+                Difference::Ignored => Applier::submit(Hint {
+                    root_id,
+                    path,
+                    source: VersionSource::Reconcile,
+                    confirmed,
+                }),
             },
             &mut |stats| {
                 progress.set_indeterminate_progress(&format!(
@@ -293,10 +323,32 @@ impl Task for CheckpointTask {
             applied.modified + applied.coalesced,
             applied.deleted
         ));
+        if applied.ignored > 0 || applied.resumed > 0 {
+            progress.add_breadcrumb(&format!(
+                "{} stopped being tracked (ignored), {} tracked again",
+                applied.ignored, applied.resumed
+            ));
+        }
 
         // Write completed_at. started_at is left in place so the UI can
         // show "last checkpoint ran from X to Y."
-        Self::finalize(self.root_id)?;
+        let patterns_changed = Self::finalize(self.root_id, ignore_seen)?;
+        if patterns_changed {
+            // The ignore patterns changed while this walk ran, so parts
+            // of the root were compared under the old ones. One more
+            // walk puts that right. If it cannot be queued (tasks are
+            // paused, say), the root stays marked as pending and the
+            // next walk of any kind does it.
+            progress.add_breadcrumb("Ignore patterns changed during the check; checking again");
+            match crate::task_manager::TaskManager::request_checkpoint(
+                &conn,
+                root_id,
+                &CheckpointSettings::default(),
+            ) {
+                Ok(()) => log::info!("Checkpoint: queued a follow-up walk for root {root_id}"),
+                Err(e) => log::warn!("Checkpoint: could not queue a follow-up walk: {e}"),
+            }
+        }
 
         Ok(())
     }

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { formatDateRelative } from '@/lib/dateUtils'
 import { shortenPath } from '@/lib/pathUtils'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext } from '@/contexts/useTaskContext'
 import type { RootWithScan } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { formatTimeAgo } from '@/lib/dateUtils'

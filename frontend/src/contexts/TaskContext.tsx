@@ -1,38 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type {
   BroadcastMessage,
   TaskData,
   PauseState,
   TaskStatus,
 } from '@/lib/types'
-
-// ── Stable context (changes at task boundaries, not every progress tick) ──
-
-interface TaskContextType {
-  currentTaskId: number | null
-  activeRootId: number | null
-  isRunning: boolean
-  isExclusive: boolean
-  isPaused: boolean
-  pauseUntil: number | null
-  lastTaskCompletedAt: number | null
-  lastTaskScheduledAt: number | null
-  backendConnected: boolean | null
-  stopTask: (taskId: number) => Promise<void>
-  pauseTasks: (durationSeconds: number) => Promise<void>
-  unpauseTasks: () => Promise<void>
-  notifyTaskScheduled: () => void
-}
-
-const TaskContext = createContext<TaskContextType | null>(null)
-
-// ── Progress context (updates every ~250ms during active tasks) ──
-
-interface TaskProgressContextType {
-  activeTask: TaskData | null
-}
-
-const TaskProgressContext = createContext<TaskProgressContextType>({ activeTask: null })
+import {
+  TaskContext,
+  TaskProgressContext,
+  type TaskContextType,
+  type TaskProgressContextType,
+} from './useTaskContext'
 
 // ── Provider ──
 
@@ -270,16 +248,4 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       </TaskProgressContext.Provider>
     </TaskContext.Provider>
   )
-}
-
-export function useTaskContext() {
-  const context = useContext(TaskContext)
-  if (!context) {
-    throw new Error('useTaskContext must be used within TaskProvider')
-  }
-  return context
-}
-
-export function useTaskProgress() {
-  return useContext(TaskProgressContext)
 }

@@ -100,8 +100,9 @@ The `versions` domain queries individual item version rows — each representing
 | `item_type`       | Item Type Enum    | Yes     | File, Directory, Symlink, or Unknown     |
 | `first_scan_id`   | Integer           | Yes     | Scan where this version was first observed |
 | `last_scan_id`    | Integer           | Yes     | Last scan confirming this version's state|
-| `is_added`        | Boolean           | No      | True if item was added in this version   |
-| `is_deleted`      | Boolean           | Yes     | True if item was deleted in this version |
+| `is_added`        | Boolean           | No      | True if the item was not present before this version (new, restored, or with `is_ignored` tracked again after being ignored) |
+| `is_deleted`      | Boolean           | Yes     | True if the item is not present as of this version: deleted, or with `is_ignored` no longer tracked because of an ignore pattern |
+| `is_ignored`      | Boolean           | No      | True if this version was written because of the root's ignore patterns. For real deletions use `is_deleted:(T), is_ignored:(F)` |
 | `is_current`      | Boolean           | No      | True if this is the latest version of the item |
 | `access`          | Access Status     | No      | Access state                             |
 | `mod_date`        | Date              | Yes     | Last modification date                   |

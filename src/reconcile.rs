@@ -4,9 +4,17 @@
 //! The walk visits every directory under a root. For each one it lists
 //! the directory on disk, loads the same directory's children from the
 //! database, and compares the two in memory. It reports a path only when
-//! they differ: something new, something changed, or something recorded
-//! as alive that is no longer there. It writes nothing itself; the
-//! caller forwards the reported paths to the applier.
+//! they differ: something new, something changed, something recorded
+//! as alive that is no longer there, or something recorded as present
+//! that the root's ignore patterns now match. It writes nothing itself;
+//! the caller forwards the reported paths to the applier.
+//!
+//! Ignore patterns are corrected lazily, and this is where: every walk
+//! reports tracked items that have come to match a pattern (they stop
+//! being tracked) and stopped items that no longer match one (they
+//! resume if they are on disk and are deleted if they are not). The
+//! walk's own reading of the patterns is only a way to find candidates;
+//! `item_ops` decides again under the write lock.
 //!
 //! A walk over a tree that matches the database therefore produces no
 //! hints and no writes, however large the tree is.
@@ -33,7 +41,7 @@ use crate::item_ops::ObservedItem;
 /// Uses idx_items_parent_name.
 pub(crate) const RECORDED_CHILDREN_SQL: &str = "
     SELECT i.item_id, i.item_name, i.item_type,
-           iv.is_deleted, iv.access, iv.mod_date, iv.size
+           iv.is_deleted, iv.access, iv.mod_date, iv.size, iv.is_ignored
     FROM items i
     JOIN item_versions iv ON iv.item_id = i.item_id
        AND iv.item_version = (
@@ -44,8 +52,8 @@ pub(crate) const RECORDED_CHILDREN_SQL: &str = "
 
 /// Items alive under a directory, at any depth.
 /// Parameters: ?1 root_id, ?2 the directory's item_id.
-/// Same shape as `item_ops::TOMBSTONE_DESCENDANTS_SQL`, which writes the
-/// tombstones this counts in advance.
+/// Counts in advance the tombstones `item_ops` writes when the
+/// directory is reported missing.
 pub(crate) const ALIVE_DESCENDANTS_SQL: &str = "
     WITH RECURSIVE sub(item_id) AS (
         SELECT item_id FROM items
@@ -69,10 +77,16 @@ pub enum Difference {
     /// The path is on disk and is new, changed, or of another type than
     /// recorded.
     Changed,
-    /// The database records the path as alive and it is not on disk (or
-    /// is now ignored). Applying this marks the item, and everything
-    /// under it, as deleted.
+    /// The database records the path as alive, or as stopped by an
+    /// ignore pattern that no longer matches it, and it is not on disk.
+    /// Applying this marks the item, and everything under it, as
+    /// deleted.
     Missing,
+    /// The database records the path as present and it now matches the
+    /// root's ignore patterns. Applying this stops tracking the item
+    /// and everything under it. Nothing is deleted, so these are not
+    /// counted in `missing_items` and need no confirmation.
+    Ignored,
 }
 
 /// Counters for one walk.
@@ -166,9 +180,17 @@ enum DirKey {
 struct RecordedChild {
     item_id: i64,
     is_deleted: bool,
+    /// With `is_deleted`: tracking was stopped by an ignore pattern.
+    is_ignored: bool,
     access: Access,
     mod_date: Option<i64>,
     size: Option<i64>,
+}
+
+impl RecordedChild {
+    fn is_stopped(&self) -> bool {
+        self.is_deleted && self.is_ignored
+    }
 }
 
 struct Walk<'a> {
@@ -237,6 +259,7 @@ impl Walk<'_> {
                     access: Access::from_i64(row.get(4)?),
                     mod_date: row.get(5)?,
                     size: row.get(6)?,
+                    is_ignored: row.get(7)?,
                 },
             );
         }
@@ -275,10 +298,9 @@ impl Walk<'_> {
             };
             let entry_path = entry.path();
 
-            // An ignored entry is treated as absent: it is not examined
-            // or descended into. If the database still records it as
-            // alive, it is left in `recorded`, reported below with the
-            // other missing names, and the applier marks it gone.
+            // An ignored entry is not examined or descended into. If the
+            // database still records it as present, it is left in
+            // `recorded` and reported below as `Ignored`.
             if self.ignore.is_ignored(self.root_path, &entry_path) {
                 entries_on_disk += 1;
                 continue;
@@ -345,32 +367,57 @@ impl Walk<'_> {
             }
         }
 
-        // Whatever is left in `recorded` was not found on disk.
-        let missing: Vec<(String, ItemType, i64)> = recorded
-            .into_iter()
-            .filter(|(_, child)| !child.is_deleted)
-            .map(|((name, item_type), child)| (name, item_type, child.item_id))
-            .collect();
+        // Whatever is left in `recorded` was not found on disk, or is
+        // ignored. Sort it into three:
+        // - present and now ignored: tracking stops (`Ignored`);
+        // - present and not ignored: it is gone (`Missing`);
+        // - stopped and no longer ignored: it was not found when
+        //   looked for again, so it is gone too (`Missing`, but it was
+        //   not alive, so it adds nothing to the mass-delete count).
+        let mut newly_ignored: Vec<String> = Vec::new();
+        let mut missing: Vec<(String, ItemType, i64, bool)> = Vec::new();
+        for ((name, item_type), child) in recorded {
+            if child.is_deleted && !child.is_stopped() {
+                continue;
+            }
+            let ignored = self.ignore.is_ignored(self.root_path, &dir_path.join(&name));
+            match (child.is_stopped(), ignored) {
+                (true, true) => {}
+                (true, false) => missing.push((name, item_type, child.item_id, false)),
+                (false, true) => newly_ignored.push(name),
+                (false, false) => missing.push((name, item_type, child.item_id, true)),
+            }
+        }
+
+        // These do not depend on what the listing found, so they are
+        // reported even if the listing was incomplete.
+        for name in newly_ignored {
+            if hinted_names.insert(name.clone()) {
+                self.hint(dir_path.join(name), Difference::Ignored)?;
+            }
+        }
 
         if matches!(key, DirKey::Root)
             && entries_on_disk == 0
-            && !missing.is_empty()
+            && missing.iter().any(|(_, _, _, was_alive)| *was_alive)
             && !self.allow_empty_root
         {
             return Err(FsPulseError::RootEmpty(format!(
                 "'{}' is empty on disk but {} items are recorded directly in it. \
                  The volume may be unmounted; nothing was marked deleted.",
                 dir_path.display(),
-                missing.len()
+                missing.iter().filter(|(_, _, _, was_alive)| *was_alive).count()
             )));
         }
 
         if listing_complete {
-            for (name, item_type, item_id) in missing {
+            for (name, item_type, item_id, was_alive) in missing {
                 // A name already reported is a type change: the entry on
                 // disk replaces the recorded one when it is applied.
                 if hinted_names.insert(name.clone()) {
-                    self.stats.missing_items += self.alive_items_at(item_id, item_type)?;
+                    if was_alive {
+                        self.stats.missing_items += self.alive_items_at(item_id, item_type)?;
+                    }
                     self.hint(dir_path.join(name), Difference::Missing)?;
                 }
             }
@@ -641,26 +688,308 @@ mod tests {
     }
 
     #[test]
-    fn adding_a_pattern_marks_tracked_items_gone_and_removing_it_restores_them() {
+    fn adding_a_pattern_stops_tracked_items_and_removing_it_resumes_them() {
         let fx = Fixture::new();
         sample_tree(&fx);
         fx.reconcile(T0);
         assert_eq!(fx.alive(), 6);
 
-        // Ignore the folder a/b: it and its two files are marked gone.
+        // Ignore the folder a/b: it and its two files stop being
+        // tracked. Nothing is recorded as deleted.
         set_ignore(&fx, Some(r#"["a/b"]"#));
         let (paths, stats) = fx.reconcile(T0 + BUCKET_SECS);
         assert_eq!(fx.rel(&paths), vec!["a/b"]);
-        assert_eq!(stats.deleted, 3);
+        assert_eq!((stats.ignored, stats.deleted), (3, 0));
         assert_eq!(fx.alive(), 3);
         assert!(fx.differences().is_empty());
 
-        // Remove the pattern: the same items come back to life.
+        // Remove the pattern: the same items resume. Nothing is
+        // recorded as added.
         set_ignore(&fx, None);
         let (_, stats) = fx.reconcile(T0 + 2 * BUCKET_SECS);
-        assert_eq!(stats.added, 3);
+        assert_eq!((stats.resumed, stats.added), (3, 0));
         assert_eq!(fx.alive(), 6);
         assert_eq!(count(&fx.conn, "SELECT COUNT(*) FROM items"), 6);
+        assert!(fx.differences().is_empty());
+    }
+
+    #[test]
+    fn ignoring_most_of_a_root_is_not_counted_as_missing() {
+        let fx = Fixture::new();
+        sample_tree(&fx);
+        fx.reconcile(T0);
+
+        set_ignore(&fx, Some(r#"["a"]"#));
+        let (found, stats) = walk(&fx, false).unwrap();
+        assert_eq!(found, vec![("a".to_string(), Difference::Ignored)]);
+        assert_eq!(stats.missing_items, 0);
+    }
+
+    #[test]
+    fn a_stopped_item_that_is_gone_when_unignored_is_reported_and_deleted() {
+        let fx = Fixture::new();
+        sample_tree(&fx);
+        fx.reconcile(T0);
+        set_ignore(&fx, Some(r#"["a/b"]"#));
+        fx.reconcile(T0 + BUCKET_SECS);
+
+        // Removed from disk while ignored, then the pattern is dropped.
+        fs::remove_dir_all(fx.root.join("a/b")).unwrap();
+        set_ignore(&fx, None);
+
+        let (found, stats) = walk(&fx, false).unwrap();
+        assert_eq!(found, vec![("a/b".to_string(), Difference::Missing)]);
+        // It was not alive, so it does not count toward a mass delete.
+        assert_eq!(stats.missing_items, 0);
+
+        let (_, stats) = fx.reconcile(T0 + 2 * BUCKET_SECS);
+        assert_eq!((stats.deleted, stats.resumed, stats.added), (3, 0, 0));
+        assert_eq!(
+            count(
+                &fx.conn,
+                "SELECT COUNT(*) FROM item_versions WHERE is_deleted = 1 AND is_ignored = 0"
+            ),
+            3
+        );
+        assert!(fx.differences().is_empty());
+    }
+
+    /// Design doc 9.7. Random file operations, pattern changes, writes
+    /// decided under stale patterns, unfinished walks and chunked
+    /// subtree writes, in random order; then one full walk. Whatever
+    /// happened before, the database must end up describing the disk
+    /// under the final patterns, with a history that never records an
+    /// ignore as a delete or a resume as an add in the counts.
+    #[test]
+    fn any_interleaving_followed_by_a_full_walk_converges() {
+        use crate::item_ops::{self, ObservedEvent};
+
+        struct Rng(u64);
+        impl Rng {
+            fn below(&mut self, n: usize) -> usize {
+                self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                ((self.0 >> 33) as usize) % n
+            }
+            fn pick<'a>(&mut self, items: &[&'a str]) -> &'a str {
+                items[self.below(items.len())]
+            }
+        }
+
+        const DIRS: &[&str] = &["d0", "d1", "cache", "build"];
+        const FILES: &[&str] = &["f0.txt", "f1.txt", "x.log", "y.tmp", "cache", "build"];
+        const PATTERNS: &[&[&str]] = &[
+            &[],
+            &["cache"],
+            &["*.log"],
+            &["d0/cache"],
+            &["build", "*.tmp"],
+            &["d1"],
+            &["d0", "*.log"],
+        ];
+
+        fn random_path(rng: &mut Rng) -> String {
+            let mut parts: Vec<&str> = Vec::new();
+            for _ in 0..rng.below(3) {
+                parts.push(rng.pick(DIRS));
+            }
+            parts.push(rng.pick(FILES));
+            parts.join("/")
+        }
+
+        fn set_random_patterns(fx: &Fixture, rng: &mut Rng) {
+            let patterns = PATTERNS[rng.below(PATTERNS.len())];
+            let json = IgnoreSet::to_stored_json(patterns).unwrap();
+            fx.conn.execute("UPDATE roots SET ignore_patterns = ?1", [json]).unwrap();
+        }
+
+        fn remove(path: &Path) {
+            match fs::symlink_metadata(path) {
+                Ok(m) if m.is_dir() => {
+                    let _ = fs::remove_dir_all(path);
+                }
+                Ok(_) => {
+                    let _ = fs::remove_file(path);
+                }
+                Err(_) => {}
+            }
+        }
+
+        // Proof that the runs exercised what they are meant to.
+        let mut seen = (0i64, 0i64, 0i64);
+        for seed in 1..=150u64 {
+            let mut rng = Rng(seed);
+            let fx = Fixture::new();
+            // Never ignored, never removed: the root is never empty.
+            fx.write("anchor.txt", "a");
+            let mut now = T0;
+            let hint = |path: PathBuf| Hint {
+                root_id: fx.root_id,
+                path,
+                source: VersionSource::Watch,
+                confirmed: false,
+            };
+
+            for step in 0..120 {
+                now += rng.below(1500) as i64;
+                let path = fx.root.join(random_path(&mut rng));
+                match rng.below(9) {
+                    // Create or grow a file. Fails harmlessly if a
+                    // parent is a file or the path is a folder.
+                    0 | 1 => {
+                        if fs::create_dir_all(path.parent().unwrap()).is_ok() {
+                            if let Ok(mut file) =
+                                fs::OpenOptions::new().create(true).append(true).open(&path)
+                            {
+                                let _ = file.write_all(format!("{step}").as_bytes());
+                            }
+                        }
+                    }
+                    2 => remove(&path),
+                    // Replace whatever is at a folder's name with a file.
+                    3 => {
+                        let dir = fx.root.join(rng.pick(DIRS));
+                        remove(&dir);
+                        let _ = fs::write(&dir, "was a folder");
+                    }
+                    4 => set_random_patterns(&fx, &mut rng),
+                    // A write decided before a pattern change and
+                    // applied after it, possibly in small chunks.
+                    5 => {
+                        let event = applier::observe(&hint(path)).unwrap();
+                        set_random_patterns(&fx, &mut rng);
+                        if let Some(event) = event {
+                            let chunk = 1 + rng.below(4);
+                            item_ops::apply_in_steps_at(&fx.conn, &[event], now, chunk).unwrap();
+                        }
+                    }
+                    // A path skipped as ignored whether or not it is.
+                    6 => {
+                        let event = ObservedEvent::Unobserved {
+                            root_id: fx.root_id,
+                            path: path.to_string_lossy().into_owned(),
+                            source: VersionSource::Watch,
+                        };
+                        item_ops::apply_observed_events_at(&fx.conn, &[event], now).unwrap();
+                    }
+                    // A walk that stops part-way.
+                    7 => {
+                        let found = fx.differences();
+                        let keep = rng.below(found.len() + 1);
+                        let hints: Vec<Hint> = found.into_iter().take(keep).map(hint).collect();
+                        applier::apply_hints_at(&fx.conn, &hints, now).unwrap();
+                    }
+                    // A watcher hint for one path.
+                    _ => {
+                        applier::apply_hints_at(&fx.conn, &[hint(path)], now).unwrap();
+                    }
+                }
+            }
+
+            // The full walk.
+            now += 10;
+            fx.reconcile(now);
+            assert!(fx.differences().is_empty(), "seed {seed}: a second walk found differences");
+
+            // Every item's recorded state agrees with the disk and the
+            // final patterns.
+            let ignore = IgnoreSet::load(&fx.conn, fx.root_id).unwrap();
+            let items: Vec<(String, i64, bool, bool)> = fx
+                .conn
+                .prepare(
+                    "SELECT i.item_path, i.item_type, iv.is_deleted, iv.is_ignored
+                     FROM items i JOIN item_versions iv ON iv.item_id = i.item_id
+                      AND iv.item_version = (SELECT MAX(v.item_version) FROM item_versions v
+                                              WHERE v.item_id = i.item_id)",
+                )
+                .unwrap()
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            for (path, item_type, is_deleted, is_ignored) in &items {
+                let ignored = ignore.is_ignored(&fx.root, Path::new(path));
+                let on_disk = match fs::symlink_metadata(path) {
+                    Ok(m) => (m.is_dir() && *item_type == 1) || (m.is_file() && *item_type == 0),
+                    Err(_) => false,
+                };
+                if !is_deleted {
+                    assert!(on_disk && !ignored, "seed {seed}: '{path}' is present but should not be");
+                } else if *is_ignored {
+                    assert!(ignored, "seed {seed}: '{path}' is stopped but matches no pattern");
+                }
+            }
+
+            // Each item's history is a legal sequence of states.
+            let versions: Vec<(i64, i64, bool, bool, bool)> = fx
+                .conn
+                .prepare(
+                    "SELECT item_id, item_version, is_added, is_deleted, is_ignored
+                     FROM item_versions ORDER BY item_id, item_version",
+                )
+                .unwrap()
+                .query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+                })
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            for pair in versions.windows(2) {
+                let (prev, next) = (&pair[0], &pair[1]);
+                if prev.0 != next.0 {
+                    continue;
+                }
+                let prev_present = !prev.3;
+                let prev_stopped = prev.3 && prev.4;
+                match (next.2, next.3, next.4) {
+                    // Stopped: only from present.
+                    (false, true, true) => assert!(prev_present, "seed {seed}: stop after {prev:?}"),
+                    // Deleted: from present or stopped.
+                    (false, true, false) => {
+                        assert!(prev_present || prev_stopped, "seed {seed}: delete after {prev:?}")
+                    }
+                    // Resumed: only from stopped.
+                    (true, false, true) => assert!(prev_stopped, "seed {seed}: resume after {prev:?}"),
+                    // Added back: only from deleted.
+                    (true, false, false) => {
+                        assert!(prev.3 && !prev.4, "seed {seed}: add after {prev:?}")
+                    }
+                    // Modified: only from present.
+                    (false, false, false) => assert!(prev_present, "seed {seed}: modify after {prev:?}"),
+                    other => panic!("seed {seed}: impossible flags {other:?}"),
+                }
+            }
+
+            // The snapshot counts say what the versions say, and the
+            // running totals match a recount.
+            let versions_where = |clause: &str| {
+                count(&fx.conn, &format!("SELECT COUNT(*) FROM item_versions WHERE {clause}"))
+            };
+            let counted = |column: &str| {
+                count(&fx.conn, &format!("SELECT COALESCE(SUM({column}), 0) FROM snapshots"))
+            };
+            assert_eq!(counted("add_count"), versions_where("is_added = 1 AND is_ignored = 0"), "seed {seed}");
+            assert_eq!(counted("resumed_count"), versions_where("is_added = 1 AND is_ignored = 1"), "seed {seed}");
+            assert_eq!(counted("delete_count"), versions_where("is_deleted = 1 AND is_ignored = 0"), "seed {seed}");
+            assert_eq!(counted("ignored_count"), versions_where("is_deleted = 1 AND is_ignored = 1"), "seed {seed}");
+            seen.0 += versions_where("is_deleted = 1 AND is_ignored = 1");
+            seen.1 += versions_where("is_added = 1 AND is_ignored = 1");
+            seen.2 += count(
+                &fx.conn,
+                "SELECT COUNT(*) FROM item_versions d JOIN item_versions s
+                   ON s.item_id = d.item_id AND s.item_version = d.item_version - 1
+                 WHERE d.is_deleted = 1 AND d.is_ignored = 0
+                   AND s.is_deleted = 1 AND s.is_ignored = 1",
+            );
+            assert!(
+                !crate::snapshots::correct_totals_locked(&fx.conn, fx.root_id, now).unwrap(),
+                "seed {seed}: snapshot totals had drifted"
+            );
+        }
+        let _ = &mut seen;
+        assert!(
+            seen.0 > 200 && seen.1 > 100 && seen.2 > 50,
+            "too few stops, resumes or deletes of stopped items to mean anything: {seen:?}"
+        );
     }
 
     #[test]
@@ -671,11 +1000,12 @@ mod tests {
         fx.reconcile(T0);
 
         // Only an ignored entry remains on disk. The root is not empty,
-        // so the walk runs and the deleted file is recorded as gone.
+        // so the walk runs and the deleted file is recorded as gone,
+        // while the ignored folder and its file stop being tracked.
         set_ignore(&fx, Some(r#"["cache"]"#));
         fs::remove_file(fx.root.join("keep.txt")).unwrap();
         let (_, stats) = fx.reconcile(T0 + BUCKET_SECS);
-        assert_eq!(stats.deleted, 3);
+        assert_eq!((stats.deleted, stats.ignored), (1, 2));
         assert_eq!(fx.alive(), 0);
     }
 

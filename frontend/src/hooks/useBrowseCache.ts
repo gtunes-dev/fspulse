@@ -1,5 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { hashStateFromInt, valStateFromInt, type ChangeKind, type HashState, type ValState } from '@/lib/pathUtils'
+import {
+  describeTimelineItem,
+  hashStateFromInt,
+  valStateFromInt,
+  type ChangeKind,
+  type HashState,
+  type TimelineChange,
+  type ValState,
+} from '@/lib/pathUtils'
 import { rangeKey, rangeParams, type TimeRangeSelection } from '@/lib/timeRange'
 
 /**
@@ -12,6 +20,10 @@ export interface CachedItem {
   item_name: string
   item_type: 'F' | 'D' | 'S' | 'O'
   is_deleted: boolean
+  /** When tracking stopped because of an ignore pattern; null if tracked. */
+  ignored_since: number | null
+  /** Ignored at the start of the range, tracked again at the end. */
+  resumed: boolean
   size: number | null
   mod_date: number | null
   change_kind: ChangeKind
@@ -36,12 +48,15 @@ interface TimelineChild {
   item_name: string
   item_type: string
   is_deleted: boolean
+  /** Not tracked because of an ignore pattern; `first_seen_at` is since when. */
+  is_ignored: boolean
+  first_seen_at: number
   size: number | null
   mod_date: number | null
   val_state: number | null
   hash_state: number | null
   /** Absent for a point in time. */
-  change: 'added' | 'modified' | 'deleted' | 'unchanged' | 'transient' | null
+  change: TimelineChange | null
   /** Folders in a range: net changes beneath the folder. */
   descendants: { added: number; modified: number; deleted: number; transient: number } | null
 }
@@ -53,16 +68,21 @@ interface TimelineChild {
  * The cache deduplicates concurrent requests and serves instant cache hits
  * when both views access the same paths.
  *
- * Resets automatically when the root, the time selection, or the refresh
- * token change.
+ * Resets automatically when the root, the time selection, the refresh
+ * token, or whether ignored items are shown change.
  */
-export function useBrowseCache(rootId: number, selection: TimeRangeSelection, refreshToken: number): BrowseCache {
+export function useBrowseCache(
+  rootId: number,
+  selection: TimeRangeSelection,
+  refreshToken: number,
+  includeIgnored: boolean
+): BrowseCache {
   const cacheRef = useRef<Map<string, CachedItem[]>>(new Map())
   const inflightRef = useRef<Map<string, Promise<CachedItem[]>>>(new Map())
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set())
 
   // Everything that decides what a folder's children are.
-  const contextKey = `${rootId}:${rangeKey(selection)}:${refreshToken}`
+  const contextKey = `${rootId}:${rangeKey(selection)}:${refreshToken}:${includeIgnored}`
 
   // Capture the current context for stale-checks inside async closures
   const contextRef = useRef(contextKey)
@@ -111,6 +131,7 @@ export function useBrowseCache(rootId: number, selection: TimeRangeSelection, re
           root_id: rootId.toString(),
           parent_path: parentPath,
           ...rangeParams(selection),
+          ...(includeIgnored ? { include_ignored: 'true' } : {}),
         })
 
         const response = await fetch(`/api/timeline/children?${params}`)
@@ -130,11 +151,7 @@ export function useBrowseCache(rootId: number, selection: TimeRangeSelection, re
             is_deleted: item.is_deleted,
             size: item.size,
             mod_date: item.mod_date,
-            // A point in time has no comparison: everything is as it was.
-            // Transient items are not requested, so they do not occur.
-            change_kind: (item.change === null || item.change === 'transient'
-              ? 'unchanged'
-              : item.change) as ChangeKind,
+            ...describeTimelineItem(item),
             add_count: isDir ? item.descendants?.added ?? 0 : null,
             modify_count: isDir ? item.descendants?.modified ?? 0 : null,
             delete_count: isDir ? item.descendants?.deleted ?? 0 : null,
@@ -142,7 +159,9 @@ export function useBrowseCache(rootId: number, selection: TimeRangeSelection, re
             // that exists at the end of the range as possibly holding
             // unchanged items, which keeps it visible and expandable
             // when "Unchanged" is shown.
-            unchanged_count: isDir ? (item.is_deleted ? 0 : 1) : null,
+            // An ignored folder stays expandable too: what was recorded
+            // beneath it can be shown.
+            unchanged_count: isDir ? (item.is_deleted && !item.is_ignored ? 0 : 1) : null,
             hash_state: hashStateFromInt(item.hash_state),
             val_state: valStateFromInt(item.val_state),
           }
@@ -166,7 +185,7 @@ export function useBrowseCache(rootId: number, selection: TimeRangeSelection, re
 
     inflightRef.current.set(parentPath, promise)
     return promise
-    // contextKey stands in for rootId, selection and refreshToken.
+    // contextKey stands in for rootId, selection, refreshToken and includeIgnored.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextKey])
 

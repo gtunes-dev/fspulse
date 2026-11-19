@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useTaskContext } from '@/contexts/TaskContext'
+import { useTaskContext } from '@/contexts/useTaskContext'
 import { shortenPath } from '@/lib/pathUtils'
 import { Clock, Calendar, CirclePause } from 'lucide-react'
 import { RootDetailSheet } from '@/components/shared/RootDetailSheet'

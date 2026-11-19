@@ -15,6 +15,34 @@ export type ChangeKind = 'added' | 'modified' | 'deleted' | 'unchanged'
 export type HashState = 'unknown' | 'baseline' | 'suspect'
 export type ValState = 'unknown' | 'valid' | 'invalid' | 'no_validator'
 
+/** How the time API describes an item's change over a range. */
+export type TimelineChange =
+  | 'added' | 'modified' | 'deleted' | 'unchanged' | 'transient' | 'ignored' | 'resumed'
+
+/**
+ * What Browse shows for an item the time API returned.
+ *
+ * Ignored and resumed are not changes to the item on disk, so they are
+ * not change kinds: the item keeps the neutral kind and carries its own
+ * note (`ignored_since`, `resumed`), which is shown in words.
+ */
+export function describeTimelineItem(item: {
+  is_ignored: boolean
+  first_seen_at: number
+  change: TimelineChange | null
+}): { change_kind: ChangeKind; ignored_since: number | null; resumed: boolean } {
+  const ignored = item.is_ignored
+  const change = item.change
+  const plain =
+    change === 'added' || change === 'modified' || change === 'deleted' ? change : 'unchanged'
+  return {
+    // A point in time has no comparison: everything is as it was.
+    change_kind: ignored ? 'unchanged' : plain,
+    ignored_since: ignored ? item.first_seen_at : null,
+    resumed: !ignored && change === 'resumed',
+  }
+}
+
 export function hashStateFromInt(val: number | null): HashState | null {
   if (val === null || val === undefined) return null
   switch (val) {
@@ -51,9 +79,14 @@ export function isItemVisible(
     modify_count?: number | null
     delete_count?: number | null
     unchanged_count?: number | null
+    ignored_since?: number | null
+    resumed?: boolean
   },
   hiddenKinds: Set<ChangeKind>,
 ): boolean {
+  // Ignored and resumed items are listed because of that, whatever the
+  // change-type filter says.
+  if (item.ignored_since != null || item.resumed) return true
   if (item.item_type !== 'D') {
     return !hiddenKinds.has(item.change_kind)
   }
@@ -72,6 +105,10 @@ export interface ItemData {
   item_name: string // Filename/directory name (from backend using @name format)
   item_type: 'F' | 'D' | 'S' | 'O' // File, Directory, Symlink, Other
   is_deleted: boolean
+  /** When tracking stopped because of an ignore pattern; null if tracked. */
+  ignored_since?: number | null
+  /** Ignored at the start of the range, tracked again at the end. */
+  resumed?: boolean
   size?: number | null
   mod_date?: number | null
   change_kind: ChangeKind
@@ -94,6 +131,8 @@ export interface FlatTreeItem {
   item_name: string
   item_type: 'F' | 'D' | 'S' | 'O'
   is_deleted: boolean
+  ignored_since?: number | null
+  resumed?: boolean
   size?: number | null
   mod_date?: number | null
   change_kind: ChangeKind

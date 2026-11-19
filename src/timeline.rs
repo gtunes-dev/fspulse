@@ -22,11 +22,19 @@
 //! - **deleted** if it existed at A and does not exist at B,
 //! - **modified** if it exists at both and has a different version,
 //! - **unchanged** if it exists at both with the same version,
-//! - **transient** if it appeared and disappeared in between.
+//! - **transient** if it appeared and disappeared in between,
+//! - **ignored** if it was present at A and has stopped being tracked
+//!   by B because it matches an ignore pattern,
+//! - **resumed** if it was ignored at A and is tracked and present
+//!   again at B.
+//!
+//! Ignored and resumed are not deletions or additions and are never
+//! counted as such.
 //!
 //! Only the versions that began inside the range are needed to decide
-//! this: the first one's `is_added` says whether the item existed at A,
-//! and the last one's `is_deleted` says whether it exists at B.
+//! this: the first one's `is_added` and `is_ignored` say what the item
+//! was at A, and the last one's `is_deleted` and `is_ignored` say what
+//! it is at B.
 
 use std::path::Path;
 
@@ -106,19 +114,59 @@ pub enum Change {
     Modified,
     Deleted,
     Unchanged,
-    /// Appeared and disappeared inside the range.
+    /// Appeared and disappeared inside the range, or was not being
+    /// tracked at either end of it.
     Transient,
+    /// Present at the start; no longer tracked at the end because it
+    /// matches an ignore pattern. Not a deletion.
+    Ignored,
+    /// Ignored at the start; tracked and present again at the end. Not
+    /// an addition.
+    Resumed,
+}
+
+/// What an item was at one end of a range.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EndState {
+    Present,
+    /// Deleted, or never seen.
+    Absent,
+    /// Not tracked because of an ignore pattern.
+    Ignored,
 }
 
 impl Change {
-    /// Classify from the versions that began inside the range:
-    /// `first_is_added` of the earliest, `last_is_deleted` of the latest.
-    fn from_range_versions(first_is_added: bool, last_is_deleted: bool) -> Change {
-        match (first_is_added, last_is_deleted) {
-            (true, false) => Change::Added,
-            (false, true) => Change::Deleted,
-            (false, false) => Change::Modified,
-            (true, true) => Change::Transient,
+    /// Classify from the versions that began inside the range. `a` is
+    /// `is_added * 2 + is_ignored` of the earliest and `d` is
+    /// `is_deleted * 2 + is_ignored` of the latest, as the SQL packs
+    /// them.
+    ///
+    /// The earliest version says what came before it: a version that is
+    /// not an add followed a present one, an add followed a deletion
+    /// (or nothing), a resume followed a stop. (A deletion recorded for
+    /// an item that was stopped reads as "present before"; the item
+    /// then shows as deleted in the range where it was found gone.)
+    fn from_range_versions(a: i64, d: i64) -> Change {
+        let at_start = match a {
+            2 => EndState::Absent,
+            3 => EndState::Ignored,
+            _ => EndState::Present,
+        };
+        let at_end = match d {
+            2 => EndState::Absent,
+            3 => EndState::Ignored,
+            _ => EndState::Present,
+        };
+        match (at_start, at_end) {
+            (EndState::Present, EndState::Present) => Change::Modified,
+            (EndState::Present, EndState::Absent) => Change::Deleted,
+            (EndState::Present, EndState::Ignored) => Change::Ignored,
+            (EndState::Absent, EndState::Present) => Change::Added,
+            (EndState::Absent, EndState::Absent) => Change::Transient,
+            (EndState::Absent, EndState::Ignored) => Change::Transient,
+            (EndState::Ignored, EndState::Present) => Change::Resumed,
+            (EndState::Ignored, EndState::Absent) => Change::Deleted,
+            (EndState::Ignored, EndState::Ignored) => Change::Transient,
         }
     }
 }
@@ -130,6 +178,11 @@ pub struct ChangeCounts {
     pub modified: i64,
     pub deleted: i64,
     pub transient: i64,
+    /// Stopped being tracked because of an ignore pattern. Not in
+    /// `deleted`.
+    pub ignored: i64,
+    /// Tracked again after being ignored. Not in `added`.
+    pub resumed: i64,
 }
 
 impl ChangeCounts {
@@ -139,6 +192,8 @@ impl ChangeCounts {
             Change::Modified => self.modified += 1,
             Change::Deleted => self.deleted += 1,
             Change::Transient => self.transient += 1,
+            Change::Ignored => self.ignored += 1,
+            Change::Resumed => self.resumed += 1,
             Change::Unchanged => {}
         }
     }
@@ -159,8 +214,13 @@ pub struct TimelineItem {
     pub has_validator: bool,
     /// True when the item does not exist at the end of the range. Such
     /// items are listed only for a range, and only if they existed at
-    /// some point in it.
+    /// some point in it. Also true for an ignored item; see `is_ignored`.
     pub is_deleted: bool,
+    /// True when the item is not tracked at the end of the range
+    /// because it matches an ignore pattern. `first_seen_at` is then
+    /// when tracking stopped. Listed only when ignored items are asked
+    /// for.
+    pub is_ignored: bool,
     /// When the version in effect began, and when it last changed.
     pub first_seen_at: i64,
     pub last_changed_at: i64,
@@ -245,7 +305,9 @@ fn resolve_parent(
 /// range.
 /// Parameters: ?1 root_id, ?2 parent item_id (NULL for the root),
 /// ?3 end of range (exclusive), ?4 start of range (or the end again for
-/// a point in time, which lists nothing that is deleted).
+/// a point in time, which lists nothing that is deleted), ?5 whether to
+/// list ignored items. Ignored items are listed only when asked for,
+/// whenever their tracking stopped: one rule for every range.
 /// Uses idx_items_parent_name, which also gives the name order.
 pub(crate) const CHILDREN_SQL: &str = "
     SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
@@ -255,7 +317,8 @@ pub(crate) const CHILDREN_SQL: &str = "
            (SELECT hv.hash_state FROM hash_versions hv
              WHERE hv.item_id = iv.item_id AND hv.item_version = iv.item_version
                AND hv.first_seen_at < ?3
-             ORDER BY hv.first_seen_at DESC LIMIT 1)
+             ORDER BY hv.first_seen_at DESC LIMIT 1),
+           iv.is_deleted AND iv.is_ignored
     FROM items i
     JOIN item_versions iv ON iv.item_id = i.item_id
        AND iv.item_version = (
@@ -263,19 +326,23 @@ pub(crate) const CHILDREN_SQL: &str = "
             WHERE v.item_id = i.item_id AND v.first_seen_at < ?3
        )
     WHERE i.root_id = ?1 AND i.parent_item_id IS ?2
-      AND (iv.is_deleted = 0 OR iv.first_seen_at >= ?4)
+      AND (iv.is_deleted = 0
+           OR (iv.is_ignored = 0 AND iv.first_seen_at >= ?4)
+           OR (?5 AND iv.is_ignored = 1))
     ORDER BY i.item_name COLLATE natural_path";
 
 /// The core of every range query: one row per item that has a version
 /// which began inside the range, with what is needed to classify it.
 /// Columns: item_id, hierarchy_id, `a` (the earliest such version's
-/// `is_added`), `d` (the latest one's `is_deleted`), last_version.
+/// `is_added * 2 + is_ignored`), `d` (the latest one's
+/// `is_deleted * 2 + is_ignored`), last_version. See
+/// `Change::from_range_versions` for what the values mean.
 /// Parameters: ?1 root_id, ?2 start, ?3 end (exclusive), and for the
 /// folder form ?4 and ?5, the subtree's bounds in hierarchy order (both
 /// exclusive).
 ///
-/// Packing the version number above a flag makes MIN and MAX return
-/// the flag of the earliest and latest version.
+/// Packing the version number above the flags makes MIN and MAX return
+/// the flags of the earliest and latest version.
 ///
 /// There are two forms because neither index suits every scope:
 ///
@@ -286,14 +353,14 @@ pub(crate) const CHILDREN_SQL: &str = "
 ///   folder below the root that is far less than the root's activity in
 ///   the range. Rows come out in hierarchy order with no sort.
 ///
-/// Both indexes carry `is_added` and `is_deleted`, so neither form
-/// touches the table. An item has one hierarchy_id, so grouping by it
+/// Both indexes carry `is_added`, `is_deleted` and `is_ignored`, so
+/// neither form touches the table. An item has one hierarchy_id, so grouping by it
 /// groups by item and orders the result depth-first.
 macro_rules! changed_items {
     (root) => {
         "SELECT iv.item_id AS item_id, iv.hierarchy_id AS hierarchy_id,
-                MIN(iv.item_version * 2 + iv.is_added) & 1 AS a,
-                MAX(iv.item_version * 2 + iv.is_deleted) & 1 AS d,
+                MIN(iv.item_version * 4 + iv.is_added * 2 + iv.is_ignored) & 3 AS a,
+                MAX(iv.item_version * 4 + iv.is_deleted * 2 + iv.is_ignored) & 3 AS d,
                 MAX(iv.item_version) AS last_version
          FROM item_versions iv INDEXED BY idx_versions_root_time_hid
          WHERE iv.root_id = ?1
@@ -302,8 +369,8 @@ macro_rules! changed_items {
     };
     (folder) => {
         "SELECT iv.item_id AS item_id, iv.hierarchy_id AS hierarchy_id,
-                MIN(iv.item_version * 2 + iv.is_added) & 1 AS a,
-                MAX(iv.item_version * 2 + iv.is_deleted) & 1 AS d,
+                MIN(iv.item_version * 4 + iv.is_added * 2 + iv.is_ignored) & 3 AS a,
+                MAX(iv.item_version * 4 + iv.is_deleted * 2 + iv.is_ignored) & 3 AS d,
                 MAX(iv.item_version) AS last_version
          FROM item_versions iv INDEXED BY idx_versions_root_hid_time
          WHERE iv.root_id = ?1
@@ -318,20 +385,30 @@ pub(crate) const RANGE_CHANGES_IN_FOLDER_SQL: &str = changed_items!(folder);
 
 /// List a folder's children as of the end of `range`. For a range, each
 /// child says how it changed and each folder how its contents changed.
-/// Transient items are left out unless `include_transient`.
+/// Transient items are left out unless `include_transient`. Items that
+/// are not tracked at the end of the range because of an ignore pattern
+/// are left out unless `include_ignored`, whether tracking stopped
+/// inside the range or before it.
 pub fn children(
     conn: &Connection,
     root_id: i64,
     parent_path: &str,
     range: TimeRange,
     include_transient: bool,
+    include_ignored: bool,
 ) -> Result<Listing, FsPulseError> {
     let parent = resolve_parent(conn, root_id, parent_path)?;
 
     let mut stmt = conn.prepare_cached(CHILDREN_SQL)?;
     let rows = stmt
         .query_map(
-            params![root_id, parent.item_id, range.end, range.from.unwrap_or(range.end)],
+            params![
+                root_id,
+                parent.item_id,
+                range.end,
+                range.from.unwrap_or(range.end),
+                include_ignored
+            ],
             |row| {
                 Ok((
                     TimelineItem {
@@ -341,6 +418,7 @@ pub fn children(
                         item_type: ItemType::from_i64(row.get(3)?),
                         has_validator: row.get(4)?,
                         is_deleted: row.get(6)?,
+                        is_ignored: row.get(13)?,
                         first_seen_at: row.get(7)?,
                         last_changed_at: row.get(8)?,
                         mod_date: row.get(9)?,
@@ -362,7 +440,11 @@ pub fn children(
     if let Some(from) = range.from {
         classify(conn, root_id, &parent, from, range.end, &mut items, &hierarchy_ids)?;
         if !include_transient {
-            items.retain(|item| item.change != Some(Change::Transient));
+            // An ignored item asked for by `include_ignored` stays even
+            // if nothing about it changed net of the range.
+            items.retain(|item| {
+                item.change != Some(Change::Transient) || (include_ignored && item.is_ignored)
+            });
         }
     }
 
@@ -441,10 +523,12 @@ fn classify(
 macro_rules! summary_sql {
     ($scope:tt) => {
         concat!(
-            "SELECT COALESCE(SUM(a = 1 AND d = 0), 0),
-                    COALESCE(SUM(a = 0 AND d = 0), 0),
-                    COALESCE(SUM(a = 0 AND d = 1), 0),
-                    COALESCE(SUM(a = 1 AND d = 1), 0)
+            "SELECT COALESCE(SUM(a = 2 AND d < 2), 0),
+                    COALESCE(SUM(a < 2 AND d < 2), 0),
+                    COALESCE(SUM(a <> 2 AND d = 2), 0),
+                    COALESCE(SUM((a = 2 AND d >= 2) OR (a = 3 AND d = 3)), 0),
+                    COALESCE(SUM(a < 2 AND d = 3), 0),
+                    COALESCE(SUM(a = 3 AND d < 2), 0)
              FROM (",
             changed_items!($scope),
             ")"
@@ -460,7 +544,8 @@ pub(crate) const SUMMARY_IN_FOLDER_SQL: &str = summary_sql!(folder);
 /// Parameters: as `changed_items!`, plus ?6 which kinds to include
 /// (see `Change::mask`), ?7 limit, ?8 offset.
 ///
-/// `a * 2 + d` numbers the four kinds 0 to 3. The page is cut before
+/// `a * 4 + d` numbers the sixteen combinations 0 to 15; `Change::mask`
+/// has a bit for each one a kind covers. The page is cut before
 /// the joins, so only the rows returned are looked up. `activity` is
 /// the number of recorded changes to the item inside the range.
 macro_rules! changes_page_sql {
@@ -474,8 +559,8 @@ macro_rules! changes_page_sql {
              FROM (",
             changed_items!($scope),
             "
-                   HAVING (?6 >> ((MIN(iv.item_version * 2 + iv.is_added) & 1) * 2
-                                  + (MAX(iv.item_version * 2 + iv.is_deleted) & 1))) & 1
+                   HAVING (?6 >> ((MIN(iv.item_version * 4 + iv.is_added * 2 + iv.is_ignored) & 3) * 4
+                                  + (MAX(iv.item_version * 4 + iv.is_deleted * 2 + iv.is_ignored) & 3))) & 1
                    ORDER BY iv.hierarchy_id
                    LIMIT ?7 OFFSET ?8) c
              JOIN items i ON i.item_id = c.item_id
@@ -489,21 +574,32 @@ pub(crate) const CHANGES_PAGE_IN_ROOT_SQL: &str = changes_page_sql!(root);
 pub(crate) const CHANGES_PAGE_IN_FOLDER_SQL: &str = changes_page_sql!(folder);
 
 impl Change {
-    /// Bit for this kind in the `kinds` filter of [`changes`]. The bit
-    /// position is `is_added * 2 + is_deleted`, matching the SQL.
+    /// Bits for this kind in the `kinds` filter of [`changes`]: one
+    /// for every `a * 4 + d` combination (as the SQL computes it) that
+    /// `from_range_versions` maps to this kind.
     pub fn mask(self) -> i64 {
-        match self {
-            Change::Modified => 1 << 0,
-            Change::Deleted => 1 << 1,
-            Change::Added => 1 << 2,
-            Change::Transient => 1 << 3,
-            Change::Unchanged => 0,
+        if self == Change::Unchanged {
+            return 0;
         }
+        let mut mask = 0;
+        for a in 0..4 {
+            for d in 0..4 {
+                if Change::from_range_versions(a, d) == self {
+                    mask |= 1 << (a * 4 + d);
+                }
+            }
+        }
+        mask
     }
 
-    /// Added, modified and deleted: everything but transient.
+    /// Every kind with a net difference between the two ends:
+    /// everything but transient.
     pub fn net_mask() -> i64 {
-        Change::Added.mask() | Change::Modified.mask() | Change::Deleted.mask()
+        Change::Added.mask()
+            | Change::Modified.mask()
+            | Change::Deleted.mask()
+            | Change::Ignored.mask()
+            | Change::Resumed.mask()
     }
 }
 
@@ -559,6 +655,8 @@ pub fn summary(
             modified: row.get(1)?,
             deleted: row.get(2)?,
             transient: row.get(3)?,
+            ignored: row.get(4)?,
+            resumed: row.get(5)?,
         })
     };
     let counts = match &scope.subtree {
@@ -649,7 +747,8 @@ fn resolve_scope(
 /// Items whose name contains a string, with the version in effect at
 /// the end of the range and, for a range, how each changed.
 /// Parameters: ?1 root_id, ?2 the string, ?3 end (exclusive), ?4 start
-/// (or the end again for a point in time), ?5 limit.
+/// (or the end again for a point in time), ?5 limit, ?6 whether to
+/// include ignored items whenever their tracking stopped.
 /// Reads every item name in the root, in path order, until the limit
 /// is reached.
 pub(crate) const SEARCH_SQL: &str = "
@@ -660,12 +759,13 @@ pub(crate) const SEARCH_SQL: &str = "
              WHERE hv.item_id = iv.item_id AND hv.item_version = iv.item_version
                AND hv.first_seen_at < ?3
              ORDER BY hv.first_seen_at DESC LIMIT 1),
-           (SELECT MIN(v.item_version * 2 + v.is_added) & 1 FROM item_versions v
+           (SELECT MIN(v.item_version * 4 + v.is_added * 2 + v.is_ignored) & 3 FROM item_versions v
              WHERE v.item_id = i.item_id
                AND v.first_seen_at >= ?4 AND v.first_seen_at < ?3),
-           (SELECT MAX(v.item_version * 2 + v.is_deleted) & 1 FROM item_versions v
+           (SELECT MAX(v.item_version * 4 + v.is_deleted * 2 + v.is_ignored) & 3 FROM item_versions v
              WHERE v.item_id = i.item_id
-               AND v.first_seen_at >= ?4 AND v.first_seen_at < ?3)
+               AND v.first_seen_at >= ?4 AND v.first_seen_at < ?3),
+           iv.is_deleted AND iv.is_ignored
     FROM items i
     JOIN item_versions iv ON iv.item_id = i.item_id
        AND iv.item_version = (
@@ -674,28 +774,39 @@ pub(crate) const SEARCH_SQL: &str = "
        )
     WHERE i.root_id = ?1
       AND i.item_name LIKE '%' || ?2 || '%'
-      AND (iv.is_deleted = 0 OR iv.first_seen_at >= ?4)
+      AND (iv.is_deleted = 0
+           OR (iv.is_ignored = 0 AND iv.first_seen_at >= ?4)
+           OR (?6 AND iv.is_ignored = 1))
     ORDER BY i.item_path COLLATE natural_path
     LIMIT ?5";
 
 /// Search a root by item name as of the end of `range`. For a range,
 /// items deleted inside it are included and every result says how it
-/// changed. Transient items are left out.
+/// changed. Transient items are left out. Ignored items are left out
+/// unless `include_ignored`.
 pub fn search(
     conn: &Connection,
     root_id: i64,
     query: &str,
     range: TimeRange,
     limit: i64,
+    include_ignored: bool,
 ) -> Result<Listing, FsPulseError> {
     let is_range = range.from.is_some();
     let mut stmt = conn.prepare_cached(SEARCH_SQL)?;
     let mut items = stmt
         .query_map(
-            params![root_id, query, range.end, range.from.unwrap_or(range.end), limit],
+            params![
+                root_id,
+                query,
+                range.end,
+                range.from.unwrap_or(range.end),
+                limit,
+                include_ignored
+            ],
             |row| {
-                let first_is_added: Option<bool> = row.get(12)?;
-                let last_is_deleted: Option<bool> = row.get(13)?;
+                let first_is_added: Option<i64> = row.get(12)?;
+                let last_is_deleted: Option<i64> = row.get(13)?;
                 let change = match (is_range, first_is_added, last_is_deleted) {
                     (false, _, _) => None,
                     (true, Some(a), Some(d)) => Some(Change::from_range_versions(a, d)),
@@ -708,6 +819,7 @@ pub fn search(
                     item_type: ItemType::from_i64(row.get(3)?),
                     has_validator: row.get(4)?,
                     is_deleted: row.get(5)?,
+                    is_ignored: row.get(14)?,
                     first_seen_at: row.get(6)?,
                     last_changed_at: row.get(7)?,
                     mod_date: row.get(8)?,
@@ -720,7 +832,9 @@ pub fn search(
             },
         )?
         .collect::<Result<Vec<_>, _>>()?;
-    items.retain(|item| item.change != Some(Change::Transient));
+    items.retain(|item| {
+        item.change != Some(Change::Transient) || (include_ignored && item.is_ignored)
+    });
     Ok(Listing { range, items })
 }
 
@@ -886,7 +1000,7 @@ mod tests {
                 self.root.join(rel)
             };
             let range = TimeRange::resolve(from, to, now);
-            children(&self.conn, self.root_id, parent.to_str().unwrap(), range, include_transient)
+            children(&self.conn, self.root_id, parent.to_str().unwrap(), range, include_transient, false)
                 .unwrap()
                 .items
                 .iter()
@@ -1069,8 +1183,8 @@ mod tests {
         let fx = history();
         let range = TimeRange::resolve(None, None, H0 + 10 * HOUR);
         let missing = fx.root.join("nope");
-        assert!(children(&fx.conn, fx.root_id, missing.to_str().unwrap(), range, false).is_err());
-        assert!(children(&fx.conn, 999, fx.root.to_str().unwrap(), range, false).is_err());
+        assert!(children(&fx.conn, fx.root_id, missing.to_str().unwrap(), range, false, false).is_err());
+        assert!(children(&fx.conn, 999, fx.root.to_str().unwrap(), range, false, false).is_err());
     }
 
     fn changed(
@@ -1147,20 +1261,20 @@ mod tests {
         let whole = summary(&fx.conn, fx.root_id, None, range).unwrap().counts;
         assert_eq!(
             whole,
-            ChangeCounts { added: 2, modified: 2, deleted: 1, transient: 0 }
+            ChangeCounts { added: 2, modified: 2, deleted: 1, transient: 0, ..Default::default() }
         );
 
         let docs = fx.root.join("docs");
         let in_docs = summary(&fx.conn, fx.root_id, docs.to_str(), range).unwrap().counts;
         assert_eq!(
             in_docs,
-            ChangeCounts { added: 1, modified: 1, deleted: 1, transient: 0 }
+            ChangeCounts { added: 1, modified: 1, deleted: 1, transient: 0, ..Default::default() }
         );
 
         let to_now = TimeRange::resolve(Some(H0 + 3 * HOUR), None, now);
         assert_eq!(
             summary(&fx.conn, fx.root_id, None, to_now).unwrap().counts,
-            ChangeCounts { added: 0, modified: 1, deleted: 0, transient: 1 }
+            ChangeCounts { added: 0, modified: 1, deleted: 0, transient: 1, ..Default::default() }
         );
 
         // A point in time has no changes; an unknown root is an error.
@@ -1178,7 +1292,7 @@ mod tests {
         let now = H0 + 10 * HOUR;
         let find = |query: &str, from: Option<i64>, to: Option<i64>| -> Vec<String> {
             let range = TimeRange::resolve(from, to, now);
-            search(&fx.conn, fx.root_id, query, range, 100)
+            search(&fx.conn, fx.root_id, query, range, 100, false)
                 .unwrap()
                 .items
                 .iter()
@@ -1201,6 +1315,199 @@ mod tests {
         );
         assert_eq!(find("sub", Some(H0 + HOUR), None), vec!["sub unchanged"]);
         assert!(find("zzz", None, None).is_empty());
+    }
+
+    fn set_patterns(fx: &Fixture, patterns: &[&str]) {
+        let json = crate::ignore::IgnoreSet::to_stored_json(patterns).unwrap();
+        fx.conn.execute("UPDATE roots SET ignore_patterns = ?1", [json]).unwrap();
+    }
+
+    /// `history()`, then:
+    /// Hour 6: `docs` becomes ignored (docs, new.txt, sub, two.txt stop).
+    /// Hour 8: the pattern is removed; docs/new.txt has been deleted
+    ///         meanwhile, the rest resume.
+    fn history_with_ignore() -> Fixture {
+        let fx = history();
+        set_patterns(&fx, &["docs"]);
+        fx.apply(&["docs"], H0 + 6 * HOUR + 60);
+
+        set_patterns(&fx, &[]);
+        fs::remove_file(fx.root.join("docs/new.txt")).unwrap();
+        fx.apply(
+            &["docs", "docs/new.txt", "docs/sub", "docs/sub/two.txt"],
+            H0 + 8 * HOUR + 60,
+        );
+        fx
+    }
+
+    fn counts(fx: &Fixture, from: i64, to: i64, now: i64) -> ChangeCounts {
+        summary(&fx.conn, fx.root_id, None, TimeRange::resolve(Some(from), Some(to), now))
+            .unwrap()
+            .counts
+    }
+
+    #[test]
+    fn every_combination_of_range_flags_belongs_to_exactly_one_kind() {
+        let kinds = [
+            Change::Added,
+            Change::Modified,
+            Change::Deleted,
+            Change::Transient,
+            Change::Ignored,
+            Change::Resumed,
+        ];
+        let mut all = 0i64;
+        for kind in kinds {
+            assert_eq!(all & kind.mask(), 0, "{kind:?} overlaps another kind");
+            all |= kind.mask();
+        }
+        assert_eq!(all, 0xFFFF);
+        assert_eq!(Change::net_mask() | Change::Transient.mask(), 0xFFFF);
+    }
+
+    #[test]
+    fn ignoring_is_not_a_deletion_and_resuming_is_not_an_addition() {
+        let fx = history_with_ignore();
+        let now = H0 + 12 * HOUR;
+
+        // Hour 5.x to 7: the ignore. Four items stop; nothing is deleted
+        // except tmp.txt, which really was (hour 5).
+        let ignore_hours = counts(&fx, H0 + 6 * HOUR, H0 + 7 * HOUR, now);
+        assert_eq!((ignore_hours.ignored, ignore_hours.deleted, ignore_hours.added), (4, 0, 0));
+
+        // Hour 7 to 9: the un-ignore. Three resume; new.txt, which was
+        // found gone, is the one real deletion. Nothing is added.
+        let resume_hours = counts(&fx, H0 + 7 * HOUR, H0 + 9 * HOUR, now);
+        assert_eq!(
+            (resume_hours.resumed, resume_hours.deleted, resume_hours.added),
+            (3, 1, 0)
+        );
+
+        // An ignored item is not in a folder listing unless asked for,
+        // even for the range in which it was ignored.
+        assert_eq!(
+            fx.list("", Some(H0 + 6 * HOUR), Some(H0 + 7 * HOUR), now),
+            vec!["a.txt unchanged", "b.txt unchanged"]
+        );
+        let ignore_range = TimeRange::resolve(Some(H0 + 6 * HOUR), Some(H0 + 7 * HOUR), now);
+        let asked: Vec<(String, Option<Change>)> =
+            children(&fx.conn, fx.root_id, fx.root.to_str().unwrap(), ignore_range, false, true)
+                .unwrap()
+                .items
+                .iter()
+                .map(|item| (item.item_name.clone(), item.change))
+                .collect();
+        assert_eq!(asked.last().unwrap(), &("docs".to_string(), Some(Change::Ignored)));
+        assert_eq!(
+            fx.list("", Some(H0 + 7 * HOUR), Some(H0 + 9 * HOUR), now),
+            vec!["a.txt unchanged", "b.txt unchanged", "docs resumed [+0 ~0 -1 t0]"]
+        );
+
+        // The snapshot counts agree.
+        let (deleted, ignored, resumed): (i64, i64, i64) = fx
+            .conn
+            .query_row(
+                "SELECT SUM(delete_count), SUM(ignored_count), SUM(resumed_count)
+                 FROM snapshots WHERE taken_at >= ?1",
+                [H0 + 6 * HOUR],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!((deleted, ignored, resumed), (1, 4, 3));
+    }
+
+    #[test]
+    fn ignored_items_are_listed_only_when_asked_for() {
+        let fx = history_with_ignore();
+        let now = H0 + 12 * HOUR;
+        let root = fx.root.to_str().unwrap().to_string();
+        let names = |range: TimeRange, include_ignored: bool| -> Vec<String> {
+            children(&fx.conn, fx.root_id, &root, range, false, include_ignored)
+                .unwrap()
+                .items
+                .iter()
+                .map(|item| {
+                    if item.is_ignored {
+                        format!("{} (ignored)", item.item_name)
+                    } else {
+                        item.item_name.clone()
+                    }
+                })
+                .collect()
+        };
+
+        // As of hour 8, docs is ignored: hidden by default.
+        let at_8 = TimeRange::resolve(None, Some(H0 + 8 * HOUR), now);
+        assert_eq!(names(at_8, false), vec!["a.txt", "b.txt"]);
+        assert_eq!(names(at_8, true), vec!["a.txt", "b.txt", "docs (ignored)"]);
+
+        // A range that begins after the ignore: the same.
+        let after = TimeRange::resolve(Some(H0 + 7 * HOUR), Some(H0 + 8 * HOUR), now);
+        assert_eq!(names(after, false), vec!["a.txt", "b.txt"]);
+        assert_eq!(names(after, true), vec!["a.txt", "b.txt", "docs (ignored)"]);
+
+        // Its contents can be listed too, as they were when it stopped.
+        let docs = fx.root.join("docs");
+        let inside: Vec<String> =
+            children(&fx.conn, fx.root_id, docs.to_str().unwrap(), at_8, false, true)
+                .unwrap()
+                .items
+                .iter()
+                .map(|item| item.item_name.clone())
+                .collect();
+        assert_eq!(inside, vec!["new.txt", "sub"]);
+
+        // Now it is tracked again and is listed normally either way.
+        let current = TimeRange::resolve(None, None, now);
+        assert_eq!(names(current, false), vec!["a.txt", "b.txt", "docs"]);
+
+        // Search follows the same rule.
+        let found = |include_ignored: bool| -> Vec<String> {
+            search(&fx.conn, fx.root_id, "two", at_8, 100, include_ignored)
+                .unwrap()
+                .items
+                .iter()
+                .map(|item| item.item_name.clone())
+                .collect()
+        };
+        assert!(found(false).is_empty());
+        assert_eq!(found(true), vec!["two.txt"]);
+    }
+
+    #[test]
+    fn the_changes_list_can_be_filtered_to_ignored_or_resumed() {
+        let fx = history_with_ignore();
+        let now = H0 + 12 * HOUR;
+        let names = |from: i64, to: i64, kinds: i64| -> Vec<String> {
+            let range = TimeRange::resolve(Some(from), Some(to), now);
+            changes(&fx.conn, fx.root_id, None, range, kinds, 100, 0)
+                .unwrap()
+                .items
+                .iter()
+                .map(|item| format!("{} {:?}", item.item_name, item.change).to_lowercase())
+                .collect()
+        };
+
+        assert_eq!(
+            names(H0 + 6 * HOUR, H0 + 7 * HOUR, Change::Ignored.mask()),
+            vec!["docs ignored", "new.txt ignored", "sub ignored", "two.txt ignored"]
+        );
+        assert!(names(H0 + 6 * HOUR, H0 + 7 * HOUR, Change::Deleted.mask()).is_empty());
+        assert_eq!(
+            names(H0 + 7 * HOUR, H0 + 9 * HOUR, Change::Resumed.mask()),
+            vec!["docs resumed", "sub resumed", "two.txt resumed"]
+        );
+        assert_eq!(
+            names(H0 + 7 * HOUR, H0 + 9 * HOUR, Change::Deleted.mask()),
+            vec!["new.txt deleted"]
+        );
+        // Ignored and resumed inside one range: no net change for the
+        // items still there at both ends... except that they read as
+        // modified, the known imprecision.
+        assert_eq!(
+            names(H0 + 6 * HOUR, H0 + 9 * HOUR, Change::net_mask()),
+            vec!["docs modified", "new.txt deleted", "sub modified", "two.txt modified"]
+        );
     }
 
     #[test]
@@ -1281,7 +1588,7 @@ mod tests {
         let time = |label: &str, parent: &str, from: Option<i64>| {
             let range = TimeRange::resolve(from, None, now);
             let started = Instant::now();
-            let listing = children(&conn, root_id, parent, range, false).unwrap();
+            let listing = children(&conn, root_id, parent, range, false, false).unwrap();
             let changed: i64 = listing
                 .items
                 .iter()
@@ -1332,7 +1639,7 @@ mod tests {
         for query in ["fspulse", ".rs", "zzzzqq"] {
             let range = TimeRange::resolve(Some(newest - HOUR), None, now);
             let started = Instant::now();
-            let found = search(&conn, root_id, query, range, 500).unwrap();
+            let found = search(&conn, root_id, query, range, 500, false).unwrap();
             eprintln!("search '{query}': {} results, {:?}", found.items.len(), started.elapsed());
         }
 

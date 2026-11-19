@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import type { FlatTreeItem, ChangeKind } from '@/lib/pathUtils'
 import { ChangeDots } from '@/components/shared/ChangeDots'
 import { IntegrityIcons } from '@/components/shared/IntegrityIcons'
+import { TrackingLabel } from '@/components/shared/TrackingLabel'
 
 interface TreeNodeProps {
   item: FlatTreeItem
@@ -120,12 +121,13 @@ export function TreeNode({
         hiddenKinds={hiddenKinds}
       />
       <span
-        className="cursor-pointer truncate"
+        className={cn('cursor-pointer truncate', item.ignored_since != null && 'text-muted-foreground')}
         onClick={handleItemClick}
         title={showPathTooltip ? item.item_path : item.item_name}
       >
         {item.item_name}
       </span>
+      <TrackingLabel ignoredSince={item.ignored_since} resumed={item.resumed} />
       <IntegrityIcons hashState={item.hash_state} valState={item.val_state} />
     </div>
   )

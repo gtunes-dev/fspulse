@@ -22,6 +22,7 @@ mod v29_to_v30;
 mod v30_to_v31;
 mod v31_to_v32;
 mod v32_to_v33;
+mod v33_to_v34;
 mod v2_to_v3;
 mod v3_to_v4;
 mod v4_to_v5;
@@ -63,6 +64,7 @@ use v29_to_v30::{migrate_v29_to_v30, UPGRADE_29_TO_30_PRE_SQL};
 use v30_to_v31::{migrate_v30_to_v31, UPGRADE_30_TO_31_PRE_SQL};
 use v31_to_v32::{migrate_v31_to_v32, UPGRADE_31_TO_32_PRE_SQL, UPGRADE_31_TO_32_POST_SQL};
 use v32_to_v33::UPGRADE_32_TO_33_SQL;
+pub(crate) use v33_to_v34::UPGRADE_33_TO_34_SQL;
 use v2_to_v3::UPGRADE_2_TO_3_SQL;
 use v3_to_v4::UPGRADE_3_TO_4_SQL;
 use v4_to_v5::UPGRADE_4_TO_5_SQL;
@@ -193,6 +195,11 @@ pub const MIGRATION_31_TO_32: Migration = Migration::Transacted {
 };
 pub const MIGRATION_32_TO_33: Migration = Migration::Transacted {
     pre_sql: Some(UPGRADE_32_TO_33_SQL),
+    code_fn: None,
+    post_sql: None,
+};
+pub const MIGRATION_33_TO_34: Migration = Migration::Transacted {
+    pre_sql: Some(UPGRADE_33_TO_34_SQL),
     code_fn: None,
     post_sql: None,
 };

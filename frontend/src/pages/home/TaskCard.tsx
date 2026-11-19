@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, CirclePause, Play, Lightbulb } from 'lucide-react'
-import { useTaskContext, useTaskProgress } from '@/contexts/TaskContext'
+import { useTaskContext, useTaskProgress } from '@/contexts/useTaskContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

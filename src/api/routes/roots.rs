@@ -322,6 +322,10 @@ pub struct RootObservation {
     pub last_walk_started_at: Option<i64>,
     /// `None` if no walk has completed, or the latest one did not.
     pub last_walk_completed_at: Option<i64>,
+    /// The ignore patterns changed and no full check has completed
+    /// since. Nothing new is recorded for ignored paths, but items
+    /// tracked before the change may not be relabelled yet.
+    pub ignore_pending: bool,
     /// Runtime state from the watcher and the last walk.
     #[serde(flatten)]
     pub status: RootStatus,
@@ -354,7 +358,8 @@ pub async fn get_observation(
     let mut stmt = conn
         .prepare_cached(
             "SELECT root_id, root_path, watch_enabled, ignore_patterns,
-                    last_checkpoint_started_at, last_checkpoint_completed_at
+                    last_checkpoint_started_at, last_checkpoint_completed_at,
+                    ignore_changed_at IS NOT NULL
                FROM roots ORDER BY root_path COLLATE natural_path",
         )
         .map_err(|e| internal_error("Reading roots", e))?;
@@ -374,6 +379,7 @@ pub async fn get_observation(
                     .unwrap_or_default(),
                 last_walk_started_at: row.get(4)?,
                 last_walk_completed_at: row.get(5)?,
+                ignore_pending: row.get(6)?,
                 status: root_status::get(root_id),
             })
         })
@@ -389,12 +395,21 @@ pub async fn get_observation(
 pub struct UpdateObservationRequest {
     pub watch_enabled: Option<bool>,
     pub ignore_patterns: Option<Vec<String>>,
+    /// Queue a full check of the root after saving, so that items
+    /// already tracked are relabelled now and not at the next scheduled
+    /// check.
+    #[serde(default)]
+    pub run_check: bool,
 }
 
 /// PUT /api/roots/{root_id}/observation
-/// Changes whether a root is watched and what it ignores. The watcher
-/// picks the change up within half a minute. Items that match a new
-/// pattern are marked deleted by the next walk.
+/// Changes whether a root is watched and what it ignores.
+///
+/// New patterns are in force for every write from the moment this
+/// transaction commits: `item_ops` reads them under the write lock.
+/// Items that were already tracked are relabelled lazily, by the next
+/// full check (queued here if `run_check` is set). The watcher is told
+/// to reload at once.
 pub async fn update_observation(
     Path(root_id): Path<i64>,
     Json(req): Json<UpdateObservationRequest>,
@@ -423,9 +438,16 @@ pub async fn update_observation(
             )?;
         }
         if let Some(json) = &patterns_json {
+            // ignore_changed_at marks "changed, not yet covered by a
+            // full check". It only ever goes up, even within one
+            // second, so a check can tell whether the patterns moved
+            // while it ran by comparing values.
             c.execute(
-                "UPDATE roots SET ignore_patterns = ?1 WHERE root_id = ?2",
-                rusqlite::params![json, root_id],
+                "UPDATE roots
+                    SET ignore_patterns = ?1,
+                        ignore_changed_at = MAX(?3, COALESCE(ignore_changed_at, 0) + 1)
+                  WHERE root_id = ?2 AND ignore_patterns IS NOT ?1",
+                rusqlite::params![json, root_id, crate::utils::Utils::now_secs()],
             )?;
         }
         Ok(true)
@@ -436,6 +458,16 @@ pub async fn update_observation(
         return Err(root_not_found(root_id));
     }
     log::info!("Updated observation settings for root {root_id}");
+    crate::watcher::request_refresh();
+
+    if req.run_check {
+        // The settings are saved either way. If the check cannot be
+        // queued (tasks paused, say), the root stays marked as pending.
+        match TaskManager::request_checkpoint(&conn, root_id, &CheckpointSettings::default()) {
+            Ok(()) => log::info!("Full check queued for root {root_id} after a settings change"),
+            Err(e) => log::warn!("Could not queue a full check for root {root_id}: {e}"),
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

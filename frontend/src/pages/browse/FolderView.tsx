@@ -9,6 +9,7 @@ import { isItemVisible, type ChangeKind } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 import { ChangeDots } from '@/components/shared/ChangeDots'
 import { IntegrityIcons } from '@/components/shared/IntegrityIcons'
+import { TrackingLabel } from '@/components/shared/TrackingLabel'
 
 interface FolderViewProps {
   rootPath: string
@@ -275,7 +276,7 @@ export function FolderView({
                   >
                     {/* Icon — click navigates into folders */}
                     <div className="w-7 flex items-center justify-center shrink-0">
-                      {isDir && !item.is_deleted ? (
+                      {isDir && (!item.is_deleted || item.ignored_since !== null) ? (
                         <button
                           className="p-0 border-none bg-transparent cursor-pointer"
                           onClick={() => handleNavigate(item.item_path)}
@@ -302,7 +303,10 @@ export function FolderView({
                         unchangedCount={item.unchanged_count}
                         hiddenKinds={hiddenKinds}
                       />
-                      <span className="truncate">{item.item_name}</span>
+                      <span className={cn('truncate', item.ignored_since !== null && 'text-muted-foreground')}>
+                        {item.item_name}
+                      </span>
+                      <TrackingLabel ignoredSince={item.ignored_since} resumed={item.resumed} />
                       <IntegrityIcons hashState={item.hash_state} valState={item.val_state} />
                     </div>
 

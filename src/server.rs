@@ -41,6 +41,11 @@ use tokio_util::sync::CancellationToken;
 #[cfg(not(debug_assertions))]
 use rust_embed::RustEmbed;
 
+// Debug builds serve the frontend from disk and never touch the crate;
+// this keeps Cargo's unused-dependency check quiet there.
+#[cfg(debug_assertions)]
+use rust_embed as _;
+
 #[cfg(not(debug_assertions))]
 #[derive(RustEmbed)]
 #[folder = "frontend/dist/"]
