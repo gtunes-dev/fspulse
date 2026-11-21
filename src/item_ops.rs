@@ -2204,8 +2204,8 @@ mod tests {
 
     /// Times how long the write lock is held when a large tracked folder
     /// becomes ignored, against a disposable COPY of a real database
-    /// (it is migrated to the current schema if it is one version
-    /// behind, and the timed writes are rolled back). Ignored by
+    /// at the current schema version (the timed writes are rolled
+    /// back). Ignored by
     /// default:
     ///
     ///   FSPULSE_STOP_TIMING_DB=/path/to/copy/fspulse.db \
@@ -2226,15 +2226,7 @@ mod tests {
         let version: String = conn
             .query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0))
             .unwrap();
-        if version == "33" {
-            let started = Instant::now();
-            conn.execute_batch(&format!(
-                "BEGIN;{}COMMIT;",
-                crate::db::schema::UPGRADE_33_TO_34_SQL
-            ))
-            .unwrap();
-            eprintln!("migrated v33 -> v34 in {:?}", started.elapsed());
-        }
+        assert_eq!(version, "32", "the copy must be at the current schema version");
 
         let (root_id, root_path): (i64, String) = conn
             .query_row(

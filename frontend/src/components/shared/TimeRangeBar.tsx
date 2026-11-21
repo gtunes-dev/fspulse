@@ -85,6 +85,8 @@ const BAR_WIDTH: Record<Unit, number> = { hour: 10, day: 12, month: 22, year: 44
 const BARS_HEIGHT = 96
 const BARS_TOP = 8
 const AXIS_HEIGHT = 20
+/** Space after the last bar, so a handle at the end of the strip is not cut off. */
+const END_ROOM = 8
 const PLOT_HEIGHT = BARS_TOP + BARS_HEIGHT
 
 /** While dragging, the strip scrolls when the pointer is this close to an edge. */
@@ -145,7 +147,7 @@ const STEP_ARROW =
  * the other.
  */
 export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPreset, refreshToken, onRefresh, onShowIgnored }: TimeRangeBarProps) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [presetId, setPresetId] = useState<PresetId | 'custom'>(initialPreset ?? 'custom')
 
   const [points, setPoints] = useState<ActivityPoint[]>([])
@@ -292,6 +294,16 @@ export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPres
   const centre = useRef<number | null>(null)
   const wanted = useRef<number | null>(selected.start + (selected.end - selected.start) / 2)
   const stripShape = useRef('')
+  // The resolution and bar width the strip was last positioned at, and
+  // how far the right edge of the view then was from the end of the
+  // strip. The strip ends at now, so when only the width of the control
+  // changes the view keeps that distance: the newest bars stay where
+  // they are and older ones come and go on the left.
+  const stripGrid = useRef('')
+  const rightGap = useRef(0)
+  // The width the strip was last positioned for. While a window is being
+  // resized the element's real width runs ahead of this one.
+  const placedWidth = useRef(0)
   const [moves, setMoves] = useState(0)
 
   const centreOn = (time: number) => {
@@ -302,25 +314,47 @@ export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPres
   useLayoutEffect(() => {
     const element = scroller
     if (!element || width === 0 || bars.length === 0 || !activityLoaded) {
-      if (width === 0) stripShape.current = ''
+      if (width === 0) {
+        stripShape.current = ''
+        stripGrid.current = ''
+      }
       return
     }
     const shape = `${unit}:${barWidth}:${bars[0].start}:${width}`
+    const grid = `${unit}:${barWidth}`
     // Closing the control sets the width to 0, so reopening it is a new shape too.
-    const target = wanted.current ?? (shape !== stripShape.current ? centre.current : null)
+    const reshaped = shape !== stripShape.current
+    const resized = reshaped && grid === stripGrid.current
+    const target = wanted.current ?? (reshaped && !resized ? centre.current : null)
     stripShape.current = shape
+    stripGrid.current = grid
     wanted.current = null
-    if (target === null) return
-    element.scrollLeft = xOf(target) - width / 2
-    centre.current = target
-    setScrollLeft(element.scrollLeft)
-  }, [scroller, bars, unit, barWidth, width, xOf, moves, activityLoaded])
+    placedWidth.current = width
+    const furthest = Math.max(0, stripWidth + END_ROOM - width)
+    let left: number
+    if (target !== null) left = xOf(target) - width / 2
+    else if (resized) left = furthest - rightGap.current
+    else return
+    // Worked out here, not read back from the element: during a resize
+    // the element may already be a different width from the one this
+    // was worked out for, and would report a different position.
+    left = Math.min(furthest, Math.max(0, left))
+    element.scrollLeft = left
+    centre.current = timeAt(left + width / 2)
+    rightGap.current = furthest - left
+    setScrollLeft(left)
+  }, [scroller, bars, unit, barWidth, width, stripWidth, xOf, timeAt, moves, activityLoaded])
 
   const onScroll = () => {
     const element = scroller
     if (!element) return
     setScrollLeft(element.scrollLeft)
-    centre.current = timeAt(element.scrollLeft + width / 2)
+    // A resize is under way and the strip has not been positioned for the
+    // new width yet. What the element reports now is not where the user
+    // put the view, so it must not be remembered as if it were.
+    if (element.clientWidth !== placedWidth.current) return
+    centre.current = timeAt(element.scrollLeft + element.clientWidth / 2)
+    rightGap.current = element.scrollWidth - element.clientWidth - element.scrollLeft
   }
 
   // ── Changing the selection ────────────────────────────────────────
@@ -329,8 +363,17 @@ export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPres
   const [draft, setDraft] = useState<Period | null>(null)
   const [hovered, setHovered] = useState<number | null>(null)
   const shown = draft ?? selected
-  const bandLeft = xOf(shown.start)
-  const bandRight = Math.max(xOf(shown.end), bandLeft + 2)
+  // A span that reaches the present is drawn to the end of the last bar,
+  // not to where now falls inside it: everything in that bar is in the
+  // span, and the rest of the bar has not happened yet.
+  const endX = useCallback(
+    (period: Period): number => (period.end >= now - 60 ? stripWidth : xOf(period.end)),
+    [now, stripWidth, xOf]
+  )
+  const shownEndX = endX(shown)
+  // A single moment is a line, drawn where its end is.
+  const bandLeft = shown.start >= shown.end ? shownEndX - 2 : xOf(shown.start)
+  const bandRight = Math.max(shownEndX, bandLeft + 2)
 
   /** Make a span the selection. One that reaches the present stays open-ended, so it keeps showing new changes. */
   const select = useCallback(
@@ -345,7 +388,7 @@ export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPres
   const reveal = (period: Period) => {
     if (!scroller || width === 0) return
     const left = xOf(period.start)
-    const right = xOf(period.end)
+    const right = endX(period)
     const inView = right > scroller.scrollLeft && left < scroller.scrollLeft + width
     const whole = left >= scroller.scrollLeft && right <= scroller.scrollLeft + width
     if (whole || (inView && right - left > width)) return
@@ -781,7 +824,7 @@ export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPres
                   >
                     <div
                       className="relative select-none cursor-crosshair"
-                      style={{ width: stripWidth, height: PLOT_HEIGHT + AXIS_HEIGHT }}
+                      style={{ width: stripWidth + END_ROOM, height: PLOT_HEIGHT + AXIS_HEIGHT }}
                       role="group"
                       aria-label="Activity over time"
                       onMouseDown={(event) => startDrag({ kind: 'new', anchor: barUnder(event.clientX) }, event)}

@@ -15,7 +15,20 @@
 //   - Scans slimmed to integrity-only (walk/posture columns dropped)
 //   - ScanState renumbered
 //   - scan_undo_log dropped
-//   - roots: checkpoint timestamps, watch_enabled, ignore_patterns
+//   - roots: checkpoint timestamps, watch_enabled, ignore_patterns,
+//     ignore_changed_at
+//   - item_versions: add is_ignored. An item that comes to match one of
+//     its root's ignore patterns is recorded as ignored, not deleted:
+//     with is_deleted = 1 the version means "tracking stopped", with
+//     is_added = 1 "tracking resumed". Migrated versions are all 0: items
+//     ignored before this version stay recorded as deleted.
+//   - snapshots: new_val_invalid_count and new_hash_suspect_count (the
+//     problems each integrity check newly found, copied from the scan a
+//     snapshot came from), ignored_count and resumed_count
+//
+// Schema versions 33 and 34 existed during development of this release
+// and were folded into this migration before it shipped. No released
+// build ever wrote them.
 //
 // This is a Transacted migration (pre_sql + code_fn + post_sql).
 // The code_fn handles: undo-log rollback of in-progress scans, scan state
@@ -123,6 +136,7 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
         val_error       TEXT,
         val_reviewed_at  INTEGER DEFAULT NULL,
         hash_reviewed_at INTEGER DEFAULT NULL,
+        is_ignored      BOOLEAN NOT NULL DEFAULT 0,
         PRIMARY KEY (item_id, item_version),
         FOREIGN KEY (item_id) REFERENCES items(item_id),
         FOREIGN KEY (root_id) REFERENCES roots(root_id)
@@ -153,8 +167,8 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
     JOIN scans s1 ON s1.scan_id = ivo.first_scan_id
     JOIN items i ON i.item_id = ivo.item_id;
 
-    CREATE INDEX idx_versions_root_time_hid ON item_versions (root_id, first_seen_at, hierarchy_id, is_added, is_deleted);
-    CREATE INDEX idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted);
+    CREATE INDEX idx_versions_root_time_hid ON item_versions (root_id, first_seen_at, hierarchy_id, is_added, is_deleted, is_ignored);
+    CREATE INDEX idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted, is_ignored);
     CREATE INDEX idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
     CREATE INDEX idx_versions_val_at ON item_versions (val_at, val_state);
 
@@ -207,19 +221,26 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
         hash_unknown_count      INTEGER,
         hash_baseline_count     INTEGER,
         hash_suspect_count      INTEGER,
+        new_val_invalid_count   INTEGER,
+        new_hash_suspect_count  INTEGER,
         schedule_id     INTEGER DEFAULT NULL,
+        ignored_count   INTEGER,
+        resumed_count   INTEGER,
         PRIMARY KEY (root_id, taken_at),
         FOREIGN KEY (root_id) REFERENCES roots(root_id)
     ) WITHOUT ROWID;
 
     -- Copy all completed scans into snapshots (every historical scan
-    -- included a walk, so every one has meaningful counts to preserve)
+    -- included a walk, so every one has meaningful counts to preserve).
+    -- The new-problem counts come from scans that ran an integrity check;
+    -- a walk-only scan found none, so its snapshot has NULL.
     INSERT OR IGNORE INTO snapshots (
         root_id, taken_at,
         file_count, folder_count, total_size,
         add_count, modify_count, delete_count,
         val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
         hash_unknown_count, hash_baseline_count, hash_suspect_count,
+        new_val_invalid_count, new_hash_suspect_count,
         schedule_id
     )
     SELECT
@@ -228,6 +249,8 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
         add_count, modify_count, delete_count,
         val_unknown_count, val_valid_count, val_invalid_count, val_no_validator_count,
         hash_unknown_count, hash_baseline_count, hash_suspect_count,
+        CASE WHEN is_hash = 0 AND is_val = 0 THEN NULL ELSE new_val_invalid_count END,
+        CASE WHEN is_hash = 0 AND is_val = 0 THEN NULL ELSE new_hash_suspect_count END,
         schedule_id
     FROM scans
     WHERE state = 2;
@@ -237,6 +260,7 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
     ALTER TABLE roots ADD COLUMN last_checkpoint_completed_at INTEGER;
     ALTER TABLE roots ADD COLUMN watch_enabled INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE roots ADD COLUMN ignore_patterns TEXT;
+    ALTER TABLE roots ADD COLUMN ignore_changed_at INTEGER;
 
     -- Every completed historical scan walked the whole root, so the
     -- latest one is when the root's contents were last confirmed. Must
