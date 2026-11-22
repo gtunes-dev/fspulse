@@ -7,18 +7,10 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::db::Database;
-use crate::items::{self, HashHistoryEntry, SizeHistoryPoint};
+use crate::items::{self, HashHistoryEntry};
+use crate::timeline::SizePoint;
 use crate::timeline::TimeRange;
 use crate::utils::Utils;
-
-/// Query parameters for size history (temporal model)
-#[derive(Debug, Deserialize)]
-pub struct SizeHistoryParams {
-    /// Unix seconds. Leave out for all history.
-    pub from: Option<i64>,
-    /// Unix seconds. Leave out for now.
-    pub to: Option<i64>,
-}
 
 /// The last second that counts as "at" the requested time, for the
 /// `items` functions, which take an inclusive time.
@@ -55,7 +47,7 @@ pub async fn get_item_in_range(
 /// Response structure for size history
 #[derive(Debug, Serialize)]
 pub struct SizeHistoryResponse {
-    pub history: Vec<SizeHistoryPoint>,
+    pub points: Vec<SizePoint>,
 }
 
 /// Response structure for children counts
@@ -69,9 +61,7 @@ pub struct ChildrenCountsResponse {
 #[derive(Debug, Deserialize)]
 pub struct ChildrenCountsParams {
     /// Unix seconds. Leave out for now. A time in the past is moved back
-    /// to the hour (see `crate::timeline`). `scan_id` is accepted as an
-    /// old name for the same value.
-    #[serde(alias = "scan_id")]
+    /// to the hour (see `crate::timeline`).
     pub at: Option<i64>,
 }
 
@@ -79,7 +69,6 @@ pub struct ChildrenCountsParams {
 #[derive(Debug, Deserialize)]
 pub struct IntegrityStateParams {
     /// See `ChildrenCountsParams::at`.
-    #[serde(alias = "scan_id")]
     pub at: Option<i64>,
 }
 
@@ -95,7 +84,7 @@ pub struct IntegrityStateResponse {
 }
 
 /// GET /api/items/:item_id/integrity-state?at=1700000000
-/// Returns the current hash and validation state for an item at a specific scan point
+/// Returns the hash and validation state of an item at a time
 pub async fn get_integrity_state(
     Path(item_id): Path<i64>,
     Query(params): Query<IntegrityStateParams>,
@@ -119,14 +108,18 @@ pub async fn get_integrity_state(
     }
 }
 
-/// GET /api/items/:item_id/size-history?from=1700000000&to=1700090000
-/// Returns size history for an item from a date up to a specific scan
+/// GET /api/items/:item_id/size-history
+///
+/// The item's size over everything recorded about it, oldest first: see
+/// `timeline::size_history`. A folder's size is the total of the files
+/// beneath it.
 pub async fn get_item_size_history(
     Path(item_id): Path<i64>,
-    Query(params): Query<SizeHistoryParams>,
 ) -> Result<Json<SizeHistoryResponse>, (StatusCode, String)> {
-    match items::get_size_history(item_id, params.from.unwrap_or(0), as_of(params.to)) {
-        Ok(history) => Ok(Json(SizeHistoryResponse { history })),
+    let conn = Database::get_connection()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed: {}", e)))?;
+    match crate::timeline::size_history(&conn, item_id) {
+        Ok(points) => Ok(Json(SizeHistoryResponse { points })),
         Err(e) => {
             error!("Failed to get size history for item {}: {}", item_id, e);
             Err((
@@ -138,8 +131,8 @@ pub async fn get_item_size_history(
 }
 
 /// GET /api/items/:item_id/children-counts?at=1700000000
-/// Returns counts of files and directories that are children of the given directory
-/// at the specified scan point in time
+/// Returns counts of the files and directories beneath the given directory, at any
+/// depth, at a time
 pub async fn get_children_counts(
     Path(item_id): Path<i64>,
     Query(params): Query<ChildrenCountsParams>,
@@ -185,138 +178,15 @@ pub async fn get_hash_history(
     }
 }
 
-/// Query parameters for temporal immediate children
-#[derive(Debug, Deserialize)]
-pub struct ImmediateChildrenParams {
-    pub root_id: i64,
-    pub parent_path: String,
-    pub scan_id: i64,
-}
-
-/// Item data for temporal API response
-#[derive(Debug, Serialize)]
-pub struct ItemResponse {
-    pub item_id: i64,
-    pub item_path: String,
-    pub item_name: String,
-    pub item_type: String,
-    pub first_seen_at: i64,
-    pub is_added: bool,
-    pub is_deleted: bool,
-    pub mod_date: Option<i64>,
-    pub size: Option<i64>,
-    pub add_count: Option<i64>,
-    pub modify_count: Option<i64>,
-    pub delete_count: Option<i64>,
-    pub unchanged_count: Option<i64>,
-    pub val_state: Option<i64>,
-    pub hash_state: Option<i64>,
-}
-
-/// GET /api/items/immediate-children?root_id=X&parent_path=/path&scan_id=Y
-/// Returns immediate children at a point in time using the item_versions table.
-/// Always includes deleted items - filtering should be done client-side.
-pub async fn get_immediate_children(
-    Query(params): Query<ImmediateChildrenParams>,
-) -> Result<Json<Vec<ItemResponse>>, (StatusCode, String)> {
-    match items::get_temporal_immediate_children(params.root_id, &params.parent_path, params.scan_id, None, None)
-    {
-        Ok(items) => {
-            let response: Vec<ItemResponse> = items
-                .iter()
-                .map(|item| ItemResponse {
-                    item_id: item.item_id,
-                    item_path: item.item_path.clone(),
-                    item_name: item.item_name.clone(),
-                    item_type: item.item_type.short_name().to_string(),
-                    first_seen_at: item.first_seen_at,
-                    is_added: item.is_added,
-                    is_deleted: item.is_deleted,
-                    mod_date: item.mod_date,
-                    size: item.size,
-                    add_count: item.add_count,
-                    modify_count: item.modify_count,
-                    delete_count: item.delete_count,
-                    unchanged_count: item.unchanged_count,
-                    val_state: item.val_state,
-                    hash_state: item.hash_state,
-                })
-                .collect();
-            Ok(Json(response))
-        }
-        Err(e) => {
-            error!(
-                "Failed to get temporal immediate children for root_id={}, parent_path={}, scan_id={}: {}",
-                params.root_id, params.parent_path, params.scan_id, e
-            );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get immediate children: {}", e),
-            ))
-        }
-    }
-}
-
-/// Query parameters for temporal item search
-#[derive(Debug, Deserialize)]
-pub struct SearchParams {
-    pub root_id: i64,
-    pub scan_id: i64,
-    pub query: String,
-}
-
-/// GET /api/items/search?root_id=X&scan_id=Y&query=term
-/// Searches for items by name (last path segment) at a point in time.
-/// Always includes deleted items - filtering should be done client-side.
-pub async fn search_items(
-    Query(params): Query<SearchParams>,
-) -> Result<Json<Vec<ItemResponse>>, (StatusCode, String)> {
-    match items::get_temporal_search_items(params.root_id, params.scan_id, &params.query, None, None) {
-        Ok(items) => {
-            let response: Vec<ItemResponse> = items
-                .iter()
-                .map(|item| ItemResponse {
-                    item_id: item.item_id,
-                    item_path: item.item_path.clone(),
-                    item_name: item.item_name.clone(),
-                    item_type: item.item_type.short_name().to_string(),
-                    first_seen_at: item.first_seen_at,
-                    is_added: item.is_added,
-                    is_deleted: item.is_deleted,
-                    mod_date: item.mod_date,
-                    size: item.size,
-                    add_count: item.add_count,
-                    modify_count: item.modify_count,
-                    delete_count: item.delete_count,
-                    unchanged_count: item.unchanged_count,
-                    val_state: item.val_state,
-                    hash_state: item.hash_state,
-                })
-                .collect();
-            Ok(Json(response))
-        }
-        Err(e) => {
-            error!(
-                "Failed to search items for root_id={}, scan_id={}, query='{}': {}",
-                params.root_id, params.scan_id, params.query, e
-            );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to search items: {}", e),
-            ))
-        }
-    }
-}
-
 /// GET /api/items/:item_id/version-at?at=1700000000
-/// Returns the item_version in effect at the given time. Also served at
-/// the old path `version-at-scan`.
-pub async fn get_version_at_scan(
+/// Returns the version in effect at the given time and whether the item
+/// was present then. 404 if nothing had been recorded about it yet.
+pub async fn get_version_at(
     Path(item_id): Path<i64>,
-    Query(params): Query<VersionAtScanParams>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    match items::get_version_at_scan(item_id, as_of(params.at)) {
-        Ok(Some(version)) => Ok(Json(serde_json::json!({ "item_version": version }))),
+    Query(params): Query<VersionAtParams>,
+) -> Result<Json<items::VersionAt>, (StatusCode, String)> {
+    match items::get_version_at(item_id, as_of(params.at)) {
+        Ok(Some(version)) => Ok(Json(version)),
         Ok(None) => Err((StatusCode::NOT_FOUND, "No version found at this time".to_string())),
         Err(e) => {
             error!("Failed to get the version at a time for item {}: {}", item_id, e);
@@ -326,18 +196,20 @@ pub async fn get_version_at_scan(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct VersionAtScanParams {
+pub struct VersionAtParams {
     /// See `ChildrenCountsParams::at`.
-    #[serde(alias = "scan_id")]
     pub at: Option<i64>,
 }
 
 /// GET /api/items/:item_id/version-count
+///
+/// The number of versions and a stamp that changes whenever anything
+/// recorded about the item does: see `items::count_versions`.
 pub async fn get_version_count(
     Path(item_id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     match items::count_versions(item_id) {
-        Ok(total) => Ok(Json(serde_json::json!({ "total": total }))),
+        Ok((total, stamp)) => Ok(Json(serde_json::json!({ "total": total, "stamp": stamp }))),
         Err(e) => {
             error!("Failed to count versions for item {}: {}", item_id, e);
             Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed: {}", e)))

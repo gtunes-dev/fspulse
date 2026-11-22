@@ -287,9 +287,10 @@ CREATE TABLE IF NOT EXISTS item_versions (
 -- The two indexes behind "what changed in this range": by time for a
 -- whole root, by position for one folder's subtree. Both carry
 -- is_added, is_deleted and is_ignored so those queries never touch the
--- table.
+-- table. The by-position index also carries size: a folder's size over
+-- time is summed from the versions beneath it (see timeline::size_history).
 CREATE INDEX IF NOT EXISTS idx_versions_root_time_hid ON item_versions (root_id, first_seen_at, hierarchy_id, is_added, is_deleted, is_ignored);
-CREATE INDEX IF NOT EXISTS idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted, is_ignored);
+CREATE INDEX IF NOT EXISTS idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted, is_ignored, size);
 CREATE INDEX IF NOT EXISTS idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
 CREATE INDEX IF NOT EXISTS idx_versions_val_at ON item_versions (val_at, val_state);
 

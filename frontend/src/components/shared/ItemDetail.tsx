@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
-import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns'
+import { format } from 'date-fns'
 import {
-  File, Folder, Calendar as CalendarIcon,
-  HardDrive, AlertTriangle, CircleX, ChevronDown, Eye, X,
+  File, Folder, FolderTree,
+  HardDrive, AlertTriangle, CircleX, ChevronDown, ChevronLeft, ChevronRight, Eye, X,
   ShieldCheck, ShieldOff, Plus, Triangle,
   Minus,
 } from 'lucide-react'
@@ -26,17 +26,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -47,6 +36,8 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  ReferenceArea,
+  ReferenceLine,
 } from 'recharts'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -54,16 +45,8 @@ import {
   HoverCardTrigger,
   HoverCardContent,
 } from '@/components/ui/hover-card'
-import {
-  type CarouselApi,
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselPrevious,
-  CarouselNext,
-} from '@/components/ui/carousel'
 import { formatDateFull } from '@/lib/dateUtils'
-import { HOUR, formatMoment } from '@/lib/timeRange'
+import { DAY, HOUR, formatMoment, nowSeconds } from '@/lib/timeRange'
 import { formatFileSize } from '@/lib/formatUtils'
 import { cn } from '@/lib/utils'
 
@@ -85,6 +68,12 @@ interface ItemDetailProps {
    * item inside it and marks the versions that fall in it.
    */
   from?: number | null
+  /** The root the item is in. With a range, a folder then says what changed beneath it. */
+  rootId?: number
+  /** Changes when the surrounding view is read again, so the pane reads again too. */
+  refreshToken?: number
+  /** Given when the surrounding view can be moved to a time: a version then offers to show the tree as it was. */
+  onShowMoment?: (time: number) => void
   // Panel mode
   onClose?: () => void
   // Sheet mode
@@ -140,9 +129,26 @@ interface VersionPageResponse {
   versions: VersionEntry[]
 }
 
-interface SizeHistoryPoint {
-  first_seen_at: number
-  size: number
+/** The item's size from one moment until the next point, from `/api/items/:id/size-history`. */
+interface SizePoint {
+  time: number
+  /** Null while a file is deleted or not tracked. */
+  size: number | null
+}
+
+/** The version in effect at the time shown, from `/api/items/:id/version-at`. */
+interface VersionAt {
+  item_version: number
+  is_deleted: boolean
+  is_ignored: boolean
+}
+
+/** What happened beneath a folder inside the selected range, from `/api/timeline/summary`. */
+interface ChangesBeneath {
+  added: number
+  modified: number
+  deleted: number
+  changed: number
 }
 
 interface ChildrenCounts {
@@ -161,12 +167,12 @@ interface IntegrityState {
 
 type ChangeKind = 'initial' | 'modified' | 'deleted' | 'restored' | 'ignored' | 'resumed'
 
-type TimeWindowPreset = '7d' | '30d' | '3m' | '6m' | '1y' | 'custom'
-
 // ---- Constants ----
 
 const VERSIONS_PER_PAGE = 10
 const HASHES_PER_PAGE = 10
+/** How often a pane showing the present asks whether its item has changed. */
+const LIVE_POLL_MS = 10_000
 
 // ---- Helpers ----
 
@@ -208,14 +214,6 @@ function classifyChange(v: VersionEntry, prev: VersionEntry | null): ChangeKind 
   return 'modified'
 }
 
-function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
-  return (
-    v.mod_date !== prev.mod_date ||
-    v.size !== prev.size ||
-    v.access !== prev.access
-  )
-}
-
 const clock = (seconds: number): string => format(new Date(seconds * 1000), 'HH:mm')
 
 /**
@@ -229,17 +227,24 @@ function recordedLabel(v: VersionEntry): string {
   return `${formatMoment(start)} to ${clock(start + HOUR)}, changed ${v.change_count} times, last at ${clock(v.last_changed_at)}`
 }
 
+/** The same in few words, for a row of the list. The card has the rest. */
+function recordedShort(v: VersionEntry): string {
+  if (v.change_count <= 1) return formatMoment(v.first_seen_at)
+  const start = v.first_seen_at - (v.first_seen_at % HOUR)
+  return `${formatMoment(start)} to ${clock(start + HOUR)} \u00b7 ${v.change_count} changes`
+}
+
 /**
  * How a version came to be recorded, where that matters to reading its
  * time. A change seen as it happened needs no remark. One found by a
  * check happened at some earlier time that was not seen.
  */
-function sourceNote(v: VersionEntry): { short: string; full: string } | null {
+function sourceNote(v: VersionEntry): string | null {
   switch (v.source) {
     case 1:
-      return { short: 'found by a check', full: 'Found by a check. The change itself happened some time before.' }
+      return 'Found by a check. The change itself happened some time before.'
     case 3:
-      return { short: 'found by an integrity check', full: 'Noticed while the file was being checked for integrity.' }
+      return 'Noticed while the file was being checked for integrity.'
     default:
       return null
   }
@@ -298,6 +303,9 @@ export function ItemDetail({
   isTombstone,
   at,
   from = null,
+  rootId,
+  refreshToken,
+  onShowMoment,
   onClose,
   open,
   onOpenChange,
@@ -310,17 +318,14 @@ export function ItemDetail({
   const [totalVersionCount, setTotalVersionCount] = useState(0)
   const [versionPage, setVersionPage] = useState(0)
   const [versionOrder, setVersionOrder] = useState<'desc' | 'asc'>('desc')
-  const [openVersions, setOpenVersions] = useState<Record<number, boolean>>({})
 
   // What happened to the item inside the selected range
   const [inRange, setInRange] = useState<InRange | null>(null)
+  // For a folder, what happened beneath it inside the selected range
+  const [changesBeneath, setChangesBeneath] = useState<ChangesBeneath | null>(null)
 
-  // Size history state
-  const [sizeHistory, setSizeHistory] = useState<SizeHistoryPoint[]>([])
-  const [timeWindow, setTimeWindow] = useState<TimeWindowPreset>('3m')
-  const [fromDate, setFromDate] = useState<Date | undefined>()
-  const [toDate, setToDate] = useState<Date | undefined>()
-  const [loadingSizeHistory, setLoadingSizeHistory] = useState(false)
+  // Size over everything recorded; null until read
+  const [sizeHistory, setSizeHistory] = useState<SizePoint[] | null>(null)
 
   // Children counts state
   const [childrenCounts, setChildrenCounts] = useState<ChildrenCounts | null>(null)
@@ -337,13 +342,23 @@ export function ItemDetail({
   const [pathExpanded, setPathExpanded] = useState(false)
   const [pathTruncated, setPathTruncated] = useState(false)
   const pathRef = useRef<HTMLSpanElement>(null)
-  const [carouselApi, setCarouselApi] = useState<CarouselApi>()
-  const suppressCarouselSync = useRef(false)
 
-  // Selected version for the detail view — stored as full data, not derived from page
+  // The version shown in the card — stored as full data, not derived from page
   const [selectedVersion, setSelectedVersion] = useState<VersionEntry | null>(null)
   // The version in effect at the time the pane shows the item as of.
-  const [versionAtEnd, setVersionAtEnd] = useState<VersionEntry | null>(null)
+  const [versionAtEnd, setVersionAtEnd] = useState<VersionAt | null>(null)
+
+  // Reading again. The server's stamp for the item changes when anything
+  // recorded about it does; `reloadKey` is bumped when a new one is seen.
+  const [reloadKey, setReloadKey] = useState(0)
+  const stamp = useRef<string | null>(null)
+  const refreshKey = `${reloadKey}:${refreshToken ?? 0}`
+  // Which item and time the versions were last read for, to tell a
+  // refresh from a new subject.
+  const loadedFor = useRef('')
+  // The version to stay on through a refresh: the one being looked at,
+  // unless that is the one in effect, which is followed to its successor.
+  const keepVersion = useRef<number | null>(null)
 
   const isPanel = mode === 'panel'
   const isSheet = mode === 'sheet'
@@ -356,12 +371,20 @@ export function ItemDetail({
 
   // Reset state when switching items
   useEffect(() => {
-    setOpenVersions({})
     setPathExpanded(false)
     setPathTruncated(false)
     setSelectedVersion(null)
     setVersionAtEnd(null)
+    setSizeHistory(null)
+    stamp.current = null
   }, [itemId])
+
+  useEffect(() => {
+    keepVersion.current =
+      selectedVersion && selectedVersion.item_version !== versionAtEnd?.item_version
+        ? selectedVersion.item_version
+        : null
+  }, [selectedVersion, versionAtEnd])
 
   // Detect if path text is truncated
   useEffect(() => {
@@ -370,50 +393,7 @@ export function ItemDetail({
     if (el) setPathTruncated(el.scrollWidth > el.clientWidth)
   }, [parentPath, pathExpanded])
 
-  // Sync carousel → selectedVersion when user swipes/clicks arrows
-  useEffect(() => {
-    if (!carouselApi) return
-    const onSelect = () => {
-      if (suppressCarouselSync.current) return
-      const idx = carouselApi.selectedScrollSnap()
-      if (idx >= 0 && idx < versions.length && versions[idx].item_version !== selectedVersion?.item_version) {
-        setSelectedVersion(versions[idx])
-      }
-    }
-    carouselApi.on('select', onSelect)
-    return () => { carouselApi.off('select', onSelect) }
-  }, [carouselApi, versions, selectedVersion])
-
-  // Sync selectedVersion → carousel when user clicks version list
-  useEffect(() => {
-    if (!carouselApi || !selectedVersion) return
-    const idx = versions.findIndex(v => v.item_version === selectedVersion.item_version)
-    if (idx >= 0 && idx !== carouselApi.selectedScrollSnap()) {
-      suppressCarouselSync.current = true
-      carouselApi.scrollTo(idx)
-      // Re-enable after animation settles
-      requestAnimationFrame(() => { suppressCarouselSync.current = false })
-    }
-  }, [carouselApi, selectedVersion, versions])
-
   // ---- Data loading ----
-
-  // Load version count (once per item)
-  useEffect(() => {
-    if (!shouldLoad) return
-    async function loadCount() {
-      try {
-        const response = await fetch(`/api/items/${itemId}/version-count`)
-        if (response.ok) {
-          const data = await response.json()
-          setTotalVersionCount(data.total)
-        }
-      } catch (error) {
-        console.error('Error loading version count:', error)
-      }
-    }
-    loadCount()
-  }, [shouldLoad, itemId])
 
   // Load a page of versions with one extra record for predecessor diffs.
   // selectVersion: jump to a specific version after loading.
@@ -472,48 +452,79 @@ export function ItemDetail({
     return null
   }, [shouldLoad, itemId])
 
-  // Initial load — resolve the correct version page based on the `at` time.
-  // When `at` is present, find which item_version was in effect then,
-  // compute the page containing it, and select it. Otherwise, show page 0 desc.
+  // Read the versions: find the version in effect at the time shown,
+  // load the page of the list that holds it and show it in the card.
+  // Reading again for the same item and time (a refresh) does not blank
+  // the pane and stays on the version being looked at.
   useEffect(() => {
     if (!shouldLoad) return
-    setLoadingVersions(true)
+    const subject = `${itemId}:${at}`
+    const isRefresh = loadedFor.current === subject
+    loadedFor.current = subject
+    if (!isRefresh) setLoadingVersions(true)
+    let current = true
 
-    async function initialLoad() {
-      if (at !== null) {
-        try {
-          // Fetch the version in effect and the version count in parallel
-          const [atScanRes, countRes] = await Promise.all([
-            fetch(`/api/items/${itemId}/version-at?at=${at}`),
-            fetch(`/api/items/${itemId}/version-count`),
-          ])
-
-          if (atScanRes.ok && countRes.ok) {
-            const { item_version: targetVersion } = await atScanRes.json()
-            const { total } = await countRes.json()
-            setTotalVersionCount(total)
-
-            // Compute page containing the target version in current sort order
-            const position = versionOrder === 'asc'
-              ? targetVersion - 1
-              : total - targetVersion
-            const page = Math.floor(position / VERSIONS_PER_PAGE)
-
-            setVersionAtEnd(await loadVersionPage(page, versionOrder, targetVersion))
-            return
-          }
-        } catch (error) {
-          console.error('Error resolving version at time:', error)
+    async function load() {
+      let inEffect: VersionAt | null = null
+      let total = 0
+      try {
+        const [atResponse, countResponse] = await Promise.all([
+          fetch(`/api/items/${itemId}/version-at${at !== null ? `?at=${at}` : ''}`),
+          fetch(`/api/items/${itemId}/version-count`),
+        ])
+        if (countResponse.ok) {
+          const count = await countResponse.json()
+          total = count.total
+          stamp.current = count.stamp
         }
+        // 404: nothing had been recorded about the item at that time.
+        if (atResponse.ok) inEffect = await atResponse.json()
+      } catch (error) {
+        console.error('Error resolving version at time:', error)
       }
+      if (!current) return
+      setTotalVersionCount(total)
+      setVersionAtEnd(inEffect)
 
-      // Fallback: no time given or resolution failed — show latest (page 0 desc)
-      setVersionAtEnd(await loadVersionPage(0, versionOrder, undefined, true))
+      const kept = isRefresh && keepVersion.current !== null && keepVersion.current <= total ? keepVersion.current : null
+      const show = kept ?? inEffect?.item_version ?? null
+      if (show === null) {
+        await loadVersionPage(0, versionOrder, undefined, true)
+        return
+      }
+      const position = versionOrder === 'asc' ? show - 1 : total - show
+      await loadVersionPage(Math.floor(position / VERSIONS_PER_PAGE), versionOrder, show)
     }
 
-    initialLoad().finally(() => setLoadingVersions(false))
+    load().finally(() => {
+      if (current) setLoadingVersions(false)
+    })
+    return () => {
+      current = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldLoad, itemId, at]) // intentionally not including versionOrder or loadVersionPage
+  }, [shouldLoad, itemId, at, refreshKey]) // intentionally not including versionOrder or loadVersionPage
+
+  // While the present is shown, ask now and then whether anything
+  // recorded about the item has changed, and read again if it has.
+  useEffect(() => {
+    if (!shouldLoad || at !== null) return
+    const timer = window.setInterval(async () => {
+      if (document.hidden) return
+      try {
+        const response = await fetch(`/api/items/${itemId}/version-count`)
+        if (!response.ok) return
+        const count = await response.json()
+        if (stamp.current !== null && count.stamp !== stamp.current) {
+          stamp.current = count.stamp
+          setReloadKey(key => key + 1)
+        }
+      } catch {
+        // The next tick asks again.
+      }
+    }, LIVE_POLL_MS)
+    return () => window.clearInterval(timer)
+  }, [shouldLoad, itemId, at])
 
   // What happened inside the selected range
   useEffect(() => {
@@ -536,7 +547,29 @@ export function ItemDetail({
     return () => {
       current = false
     }
-  }, [shouldLoad, itemId, from, at])
+  }, [shouldLoad, itemId, from, at, refreshKey])
+
+  // For a folder: what happened beneath it inside the selected range
+  useEffect(() => {
+    if (!shouldLoad || itemType !== 'D' || from === null || rootId === undefined) {
+      setChangesBeneath(null)
+      return
+    }
+    let current = true
+    const params = new URLSearchParams({ root_id: rootId.toString(), path: itemPath, from: from.toString() })
+    if (at !== null) params.set('to', at.toString())
+    fetch(`/api/timeline/summary?${params}`)
+      .then(response => (response.ok ? response.json() : null))
+      .then((data: { range: InRange['range']; counts: ChangesBeneath } | null) => {
+        if (current) setChangesBeneath(data && data.range.from !== null ? data.counts : null)
+      })
+      .catch(() => {
+        if (current) setChangesBeneath(null)
+      })
+    return () => {
+      current = false
+    }
+  }, [shouldLoad, itemId, itemType, itemPath, rootId, from, at, refreshKey])
 
   /** Whether a version began inside the selected range. */
   const isInRange = (v: VersionEntry): boolean => {
@@ -559,60 +592,38 @@ export function ItemDetail({
     }
   }
 
-  // ---- Size history ----
-
-  const getFromDateForPreset = (preset: TimeWindowPreset): Date => {
-    const today = startOfDay(new Date())
-    switch (preset) {
-      case '7d': return subDays(today, 7)
-      case '30d': return subDays(today, 30)
-      case '3m': return subMonths(today, 3)
-      case '6m': return subMonths(today, 6)
-      case '1y': return subYears(today, 1)
-      case 'custom': return fromDate || subMonths(today, 3)
+  /** Show the version before or after the one in the card, loading the page of the list it is on if need be. */
+  const stepVersion = (by: -1 | 1) => {
+    if (!selectedVersion) return
+    const target = selectedVersion.item_version + by
+    if (target < 1 || target > totalVersionCount) return
+    const loaded = versions.find(v => v.item_version === target)
+    if (loaded) {
+      setSelectedVersion(loaded)
+      return
     }
+    const position = versionOrder === 'asc' ? target - 1 : totalVersionCount - target
+    loadVersionPage(Math.floor(position / VERSIONS_PER_PAGE), versionOrder, target)
   }
 
+  // ---- Size history ----
+
   useEffect(() => {
-    if (timeWindow !== 'custom') {
-      const from = getFromDateForPreset(timeWindow)
-      setFromDate(from)
-      setToDate(startOfDay(new Date()))
+    if (!shouldLoad) return
+    let current = true
+    fetch(`/api/items/${itemId}/size-history`)
+      .then(response => (response.ok ? response.json() : null))
+      .then((data: { points: SizePoint[] } | null) => {
+        if (current) setSizeHistory(data?.points ?? [])
+      })
+      .catch(error => {
+        console.error('Error loading size history:', error)
+        if (current) setSizeHistory([])
+      })
+    return () => {
+      current = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeWindow])
-
-  useEffect(() => {
-    const today = startOfDay(new Date())
-    setFromDate(subMonths(today, 3))
-    setToDate(today)
-  }, [])
-
-  const loadSizeHistory = useCallback(async () => {
-    if (!shouldLoad || !fromDate) return
-    setLoadingSizeHistory(true)
-    try {
-      const from = Math.floor(fromDate.getTime() / 1000)
-      const response = await fetch(
-        `/api/items/${itemId}/size-history?from=${from}${at !== null ? `&to=${at}` : ''}`
-      )
-      if (response.ok) {
-        const data = await response.json()
-        setSizeHistory(data.history || [])
-      } else {
-        setSizeHistory([])
-      }
-    } catch (error) {
-      console.error('Error loading size history:', error)
-      setSizeHistory([])
-    } finally {
-      setLoadingSizeHistory(false)
-    }
-  }, [itemId, fromDate, at, shouldLoad])
-
-  useEffect(() => {
-    loadSizeHistory()
-  }, [loadSizeHistory])
+  }, [shouldLoad, itemId, refreshKey])
 
   // ---- Children counts ----
 
@@ -637,7 +648,7 @@ export function ItemDetail({
       }
     }
     loadChildrenCounts()
-  }, [shouldLoad, itemId, itemType, isTombstone, at])
+  }, [shouldLoad, itemId, itemType, isTombstone, at, refreshKey])
 
   // ---- Integrity state (files only) ----
 
@@ -656,7 +667,8 @@ export function ItemDetail({
     } catch {
       setIntegrityState(null)
     }
-  }, [shouldLoad, itemId, itemType, at])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldLoad, itemId, itemType, at, refreshKey])
 
   useEffect(() => {
     loadIntegrity()
@@ -695,7 +707,8 @@ export function ItemDetail({
     } finally {
       setLoadingHashHistory(false)
     }
-  }, [shouldLoad, itemId, selectedVersion, itemType])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldLoad, itemId, selectedVersion, itemType, refreshKey])
 
   useEffect(() => {
     setHashHistoryPage(0)
@@ -774,16 +787,14 @@ export function ItemDetail({
     )
   }
 
-  // A version's time in one line, for the list.
-  const versionTimeLabel = (v: VersionEntry) => {
-    const note = sourceNote(v)
-    return <>{recordedLabel(v)}{note && <> &middot; {note.short}</>}</>
-  }
-
   // What the item was at the time shown: there, deleted, or no longer tracked.
   const endState: 'deleted' | 'ignored' | null = versionAtEnd
     ? versionAtEnd.is_deleted ? (versionAtEnd.is_ignored ? 'ignored' : 'deleted') : null
     : isTombstone ? 'deleted' : null
+
+  // The time shown, as the server reads it: the present, or the start
+  // of the hour asked for.
+  const shownAt = at === null ? null : at - (at % HOUR)
 
   // ---- Content rendering ----
 
@@ -910,27 +921,45 @@ export function ItemDetail({
     )
   }
 
-  // Render version detail content for a given version.
-  // Hash timeline and review controls only render for the selected version
-  // (since that data is loaded on selection). Other slides show a summary.
+  // The card's content for the version it shows: what it was, when it
+  // was recorded, and what differs from the version before it.
   const renderVersionDetail = (v: VersionEntry) => {
-    const isSelected = v.item_version === selectedVersion?.item_version
+    const prev = predecessors.get(v.item_version) ?? null
+    const kind = classifyChange(v, prev)
+    // What a value was before, where both versions are of the item present.
+    const comparable = prev !== null && !prev.is_deleted && !v.is_deleted
+    const was = (changed: boolean, before: string) =>
+      comparable && changed ? <span className="text-muted-foreground"> &middot; was {before}</span> : null
+    const note = sourceNote(v)
+    const alreadyShown = v.item_version === versionAtEnd?.item_version
     const content = (
       <>
-        {/* Metadata fields — inline label: value */}
         <div className={`text-sm ${isPanel ? 'space-y-1' : 'space-y-1.5'}`}>
+          <div>{getChangeIndicator(kind)}</div>
           <p><span className="text-muted-foreground">Recorded:</span> {recordedLabel(v)}</p>
-          {sourceNote(v) && <p className="text-xs text-muted-foreground">{sourceNote(v)?.full}</p>}
+          {note && <p className="text-xs text-muted-foreground">{note}</p>}
           {v.mod_date != null && (
-            <p><span className="text-muted-foreground">File date:</span> {formatDateFull(v.mod_date)}</p>
+            <p>
+              <span className="text-muted-foreground">File date:</span> {formatDateFull(v.mod_date)}
+              {was(prev?.mod_date !== v.mod_date, prev?.mod_date != null ? formatDateFull(prev.mod_date) : 'not set')}
+            </p>
           )}
           {v.size !== null && (
-            <p><span className="text-muted-foreground">Size:</span> {formatFileSize(v.size)}</p>
+            <p>
+              <span className="text-muted-foreground">Size:</span> {formatFileSize(v.size)}
+              {was(prev?.size !== v.size, formatFileSize(prev?.size ?? null))}
+            </p>
+          )}
+          {(v.access !== 0 || (comparable && prev.access !== v.access)) && (
+            <p>
+              <span className="text-muted-foreground">Access:</span> {accessLabel(v.access)}
+              {was(prev?.access !== v.access, accessLabel(prev?.access ?? 0))}
+            </p>
           )}
         </div>
 
-        {/* Integrity (files only) — full detail only for selected version */}
-        {itemType === 'F' && integrityState && isSelected && (() => {
+        {/* Integrity (files only). A deleted version has no content to check. */}
+        {itemType === 'F' && integrityState && !v.is_deleted && (() => {
           const suspectCount = hashHistory.filter(h => h.hash_state === 2).length
           const hasHashes = hashHistory.length > 0
           const hashPageCount = Math.ceil(hashHistory.length / HASHES_PER_PAGE)
@@ -1106,27 +1135,22 @@ export function ItemDetail({
           )
         })()}
 
-        {/* Children counts (directories only) */}
-        {itemType === 'D' && !isTombstone && (
-          <div className={`${isPanel ? 'mt-2 pt-2 pl-2' : 'mt-4 pt-4'} border-t`}>
-            {loadingChildrenCounts ? (
-              <p className="text-sm text-muted-foreground text-center">Loading...</p>
-            ) : childrenCounts && (childrenCounts.file_count > 0 || childrenCounts.directory_count > 0) ? (
-              <>
-                <div className={`flex items-center justify-center ${isPanel ? 'gap-4' : 'gap-6'} text-sm`}>
-                  <span className="flex items-center gap-1">
-                    <Folder className={`${isPanel ? 'h-3 w-3' : 'h-4 w-4'} text-muted-foreground`} />
-                    <span className="font-medium">{childrenCounts.directory_count.toLocaleString()}</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <File className={`${isPanel ? 'h-3 w-3' : 'h-4 w-4'} text-muted-foreground`} />
-                    <span className="font-medium">{childrenCounts.file_count.toLocaleString()}</span>
-                  </span>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center">Empty directory</p>
-            )}
+        {/* Move the surrounding view to this version's time */}
+        {onShowMoment && (
+          <div className={isPanel ? 'mt-2' : 'mt-3'}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-xs gap-1"
+              disabled={alreadyShown}
+              title={alreadyShown
+                ? 'This is the version at the time the tree is showing'
+                : 'Show everything as it was at the end of the hour this version was recorded in'}
+              onClick={() => onShowMoment(v.first_seen_at)}
+            >
+              <FolderTree className="h-3 w-3" />
+              Show the tree at this time
+            </Button>
           </div>
         )}
       </>
@@ -1152,36 +1176,39 @@ export function ItemDetail({
       </Select>
     )
 
-    const versionCarousel = versions.length > 0 && (
-      <Carousel
-        opts={{ align: 'center', watchDrag: false }}
-        setApi={setCarouselApi}
-        className="w-full"
-      >
-        <div className="flex items-center gap-1">
-          <CarouselPrevious className="static translate-y-0 h-7 w-7 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <CarouselContent>
-                {versions.map((v) => (
-                  <CarouselItem key={v.item_version}>
-                    <div className="border border-border rounded-lg overflow-hidden">
-                      <div className="bg-muted px-3 py-1.5 text-center">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          Version {v.item_version} of {totalVersionCount}
-                          {isInRange(v) && <span className="text-primary"> &middot; in the selected range</span>}
-                        </p>
-                      </div>
-                      <div className={isPanel ? 'p-2' : 'p-4'}>
-                        {renderVersionDetail(v)}
-                      </div>
-                    </div>
-                  </CarouselItem>
-                ))}
-              </CarouselContent>
-            </div>
-          <CarouselNext className="static translate-y-0 h-7 w-7 flex-shrink-0" />
+    // One version at a time, with the way to the one before and the one
+    // after. Older is to the left, as on the time control.
+    const arrow = (by: -1 | 1) => {
+      const target = (selectedVersion?.item_version ?? 0) + by
+      const label = by === -1 ? 'Older version' : 'Newer version'
+      return (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 flex-shrink-0"
+          disabled={!selectedVersion || target < 1 || target > totalVersionCount}
+          onClick={() => stepVersion(by)}
+          aria-label={label}
+          title={label}
+        >
+          {by === -1 ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </Button>
+      )
+    }
+    const versionCard = selectedVersion && (
+      <div className="border border-border rounded-lg overflow-hidden">
+        <div className="bg-muted px-1 py-1 flex items-center gap-1">
+          {arrow(-1)}
+          <p className="flex-1 min-w-0 truncate text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Version {selectedVersion.item_version} of {totalVersionCount}
+            {isInRange(selectedVersion) && <span className="text-primary"> &middot; in the selected range</span>}
+          </p>
+          {arrow(1)}
         </div>
-      </Carousel>
+        <div className={isPanel ? 'p-2' : 'p-4'}>
+          {renderVersionDetail(selectedVersion)}
+        </div>
+      </div>
     )
 
     if (isSheet) {
@@ -1194,13 +1221,11 @@ export function ItemDetail({
           </CardContent>
           <Separator />
 
-          {/* Version detail carousel */}
-          {versionCarousel && (
-            <>
-              <CardContent className="py-3">
-                {versionCarousel}
-              </CardContent>
-            </>
+          {/* The version being looked at */}
+          {versionCard && (
+            <CardContent className="py-3">
+              {versionCard}
+            </CardContent>
           )}
 
           {/* Version list */}
@@ -1241,9 +1266,9 @@ export function ItemDetail({
           {renderItemProperties()}
           {renderInRange()}
         </div>
-        {versionCarousel && (
-          <div className="py-2 px-1.5">
-            {versionCarousel}
+        {versionCard && (
+          <div className="py-2 px-3">
+            {versionCard}
           </div>
         )}
         <div className="bg-muted/50 px-3 py-1.5 relative flex items-center justify-end border-y border-border">
@@ -1276,221 +1301,198 @@ export function ItemDetail({
     )
   }
 
+  // The size at the time shown: the last point before it.
+  const sizeAtShownTime = (): number | null => {
+    let size: number | null = null
+    for (const point of sizeHistory ?? []) {
+      if (shownAt !== null && point.time >= shownAt) break
+      size = point.size
+    }
+    return size
+  }
+
+  // Everything recorded about the item's size, with the selected range
+  // (or, for a point in the past, the time shown) marked on it.
   const renderSizeHistory = () => {
-    const timeWindowSelector = (
-      <div className={`flex items-center gap-2 ${isSheet ? 'flex-wrap' : ''}`}>
-        <Select value={timeWindow} onValueChange={(v) => setTimeWindow(v as TimeWindowPreset)}>
-          <SelectTrigger className={isPanel ? 'h-6 w-[100px] text-xs' : 'w-[140px]'}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7d">{isPanel ? '7 Days' : 'Last 7 Days'}</SelectItem>
-            <SelectItem value="30d">{isPanel ? '30 Days' : 'Last 30 Days'}</SelectItem>
-            <SelectItem value="3m">{isPanel ? '3 Months' : 'Last 3 Months'}</SelectItem>
-            <SelectItem value="6m">{isPanel ? '6 Months' : 'Last 6 Months'}</SelectItem>
-            <SelectItem value="1y">{isPanel ? '1 Year' : 'Last Year'}</SelectItem>
-            <SelectItem value="custom">Custom Range</SelectItem>
-          </SelectContent>
-        </Select>
-        {timeWindow === 'custom' && (
-          <>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    isPanel ? 'h-6 w-[120px] text-xs' : 'w-[140px]',
-                    'justify-start text-left font-normal',
-                    !fromDate && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {fromDate ? format(fromDate, 'MMM dd, yyyy') : 'From'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={fromDate} onSelect={setFromDate} />
-              </PopoverContent>
-            </Popover>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    isPanel ? 'h-6 w-[120px] text-xs' : 'w-[140px]',
-                    'justify-start text-left font-normal',
-                    !toDate && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {toDate ? format(toDate, 'MMM dd, yyyy') : 'To'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={toDate} onSelect={setToDate} />
-              </PopoverContent>
-            </Popover>
-          </>
-        )}
-      </div>
-    )
+    const points = sizeHistory ?? []
+    const now = nowSeconds()
+    const start = points.length > 0 ? points[0].time : now
+    // Room after a single recent point, so the line has somewhere to go.
+    const end = Math.max(now, start + HOUR)
+    // The last size holds until the end.
+    const data = points.length > 0 ? [...points, { time: end, size: points[points.length - 1].size }] : []
+
+    const shownEnd = Math.min(shownAt ?? end, end)
+    const rangeStart = from !== null ? Math.max(from - (from % HOUR), start) : null
+    const shaded = rangeStart !== null && rangeStart < shownEnd
+    const marked = from === null && shownAt !== null && shownAt > start && shownAt < end
+
+    const span = end - start
+    const tickFormat = span <= 2 * DAY ? 'MMM d, HH:mm' : span <= 366 * DAY ? 'MMM d' : 'MMM yyyy'
+    const tickStyle = { fill: 'var(--muted-foreground)', fontSize: isPanel ? 10 : 12 }
 
     const chart = (
       <ChartContainer
         config={{ size: { label: 'Size', color: 'hsl(271 81% 56%)' } }}
         className={`aspect-auto ${sp.chartHeight}`}
       >
-        <LineChart data={sizeHistory.map(p => ({ date: format(new Date(p.first_seen_at * 1000), 'MMM dd'), size: p.size }))}>
+        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isPanel ? 10 : undefined }} />
+          <XAxis
+            dataKey="time"
+            type="number"
+            domain={[start, end]}
+            tickCount={isPanel ? 4 : 6}
+            tick={tickStyle}
+            tickFormatter={(value) => format(new Date((value as number) * 1000), tickFormat)}
+          />
           <YAxis
-            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: isPanel ? 10 : undefined }}
+            tick={tickStyle}
             tickFormatter={(value) => {
               const units = ['B', 'KB', 'MB', 'GB', 'TB']
               let i = 0; let s = value as number
-              while (s >= 1024 && i < units.length - 1) { s /= 1024; i++ }
-              return `${s.toFixed(isPanel ? 0 : 1)} ${units[i]}`
+              while (s >= 1000 && i < units.length - 1) { s /= 1000; i++ }
+              return `${s.toFixed(s < 10 && i > 0 ? 1 : 0)} ${units[i]}`
             }}
             width={isPanel ? 50 : 60}
           />
-          <ChartTooltip content={<ChartTooltipContent />} formatter={(v) => formatFileSize(v as number)} />
-          <Line type="step" dataKey="size" stroke="var(--color-size)" strokeWidth={2} dot={false} name="Size" />
+          {shaded && (
+            <ReferenceArea x1={rangeStart} x2={shownEnd} fill="var(--primary)" fillOpacity={0.12} stroke="none" />
+          )}
+          {marked && <ReferenceLine x={shownAt} stroke="var(--primary)" strokeDasharray="3 3" />}
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                labelFormatter={(_label, payload) => {
+                  const time = payload?.[0]?.payload?.time
+                  return typeof time === 'number' ? formatMoment(time) : ''
+                }}
+              />
+            }
+            formatter={(v) => formatFileSize(v as number)}
+          />
+          <Line
+            type="stepAfter"
+            dataKey="size"
+            stroke="var(--color-size)"
+            strokeWidth={2}
+            dot={false}
+            connectNulls={false}
+            isAnimationActive={false}
+            name="Size"
+          />
         </LineChart>
       </ChartContainer>
     )
 
-    const chartContent = loadingSizeHistory ? (
-      <div className={`flex items-center justify-center ${isPanel ? 'h-32' : 'h-64'} text-sm text-muted-foreground`}>Loading...</div>
-    ) : sizeHistory.length === 0 ? (
-      <div className={`flex items-center justify-center ${isPanel ? 'h-32' : 'h-64'} text-sm text-muted-foreground`}>No size history</div>
-    ) : chart
-
+    const blank = `flex items-center justify-center ${isPanel ? 'h-32' : 'h-64'} text-sm text-muted-foreground`
     return (
-      <Section mode={mode} title="Size History" trailing={timeWindowSelector}>
-        {chartContent}
+      <Section mode={mode} title="Size History">
+        {sizeHistory === null ? (
+          <div className={blank}>Loading...</div>
+        ) : points.length === 0 ? (
+          <div className={blank}>No size history</div>
+        ) : (
+          <>
+            {chart}
+            <p className="mt-1 text-xs text-muted-foreground">
+              {itemType === 'D' ? 'The total size of the files beneath this folder, over everything recorded.' : 'Over everything recorded.'}
+              {shaded && ' Shaded: the selected range.'}
+              {marked && ' Dashed line: the time shown.'}
+            </p>
+          </>
+        )}
       </Section>
     )
   }
 
-  const renderVersionRows = () => {
+  // What a folder holds at the time shown and, with a range, what
+  // happened beneath it. The versions above are only the folder's own.
+  const renderFolderContents = () => {
+    if (itemType !== 'D') return null
+    const size = sizeAtShownTime()
+    const iconSize = isPanel ? 'h-3 w-3' : 'h-4 w-4'
     return (
-      <>
-              {versions.map((v, idx) => {
-                const prev = predecessors.get(v.item_version) ?? null
-                const kind = classifyChange(v, prev)
-                const isSelected = selectedVersion?.item_version === v.item_version
-                const isOpen = openVersions[v.item_version] || false
-                const setIsOpen = (val: boolean) => setOpenVersions(prev => ({ ...prev, [v.item_version]: val }))
-                const hasIntegrity = v.hash_state != null || v.val_state != null
-                const hasMetadataChanges = kind === 'modified' && prev && hasFieldChanges(v, prev)
-                const isExpandable = hasMetadataChanges || hasIntegrity
-
-                const headerContent = (
-                  <>
-                    {isInRange(v) && rangeMark}
-                    <span className="text-xs font-medium shrink-0">v{v.item_version}</span>
-                    {getChangeIndicator(kind)}
-                    {v.hash_state === 2 && <AlertTriangle className={`${sp.iconLg} text-amber-500 flex-shrink-0`} />}
-                    {v.val_state === 2 && <CircleX className={`${sp.iconLg} text-rose-500 flex-shrink-0`} />}
-                    <p className="text-xs text-muted-foreground truncate flex-1">
-                      {versionTimeLabel(v)}
-                    </p>
-                    {isSelected && <Eye className={`${sp.iconLg} text-primary flex-shrink-0`} />}
-                  </>
-                )
-
-                return (
-                  <div key={v.item_version}>
-                    <div
-                      className={cn(
-                        sp.padX,
-                        "cursor-pointer transition-colors",
-                        isSelected ? "bg-accent/50" : "hover:bg-accent/20"
-                      )}
-                      onClick={() => setSelectedVersion(v)}
-                    >
-                      {isExpandable ? (
-                        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                          <div className={`flex items-center ${sp.gap}`}>
-                            <CollapsibleTrigger asChild>
-                              <Button variant="ghost" size="icon" className={`${sp.chevron} p-0 flex-shrink-0`}>
-                                <ChevronDown className={cn(`${sp.chevronInner} transition-transform`, !isOpen && "-rotate-90")} />
-                              </Button>
-                            </CollapsibleTrigger>
-                            {headerContent}
-                          </div>
-                          <CollapsibleContent className={`${isPanel ? 'mt-1' : 'mt-2'} ${sp.ml}`}>
-                            <div className={`${sp.space} text-xs`}>
-                              {/* Metadata diffs (modified versions with predecessor) */}
-                              {prev && v.mod_date !== prev.mod_date && (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium flex items-center gap-1"><CalendarIcon className={sp.icon} />Modified</p>
-                                  <p className="text-muted-foreground">{prev.mod_date ? formatDateFull(prev.mod_date) : 'N/A'} &rarr; {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
-                                </div>
-                              )}
-                              {prev && v.size !== prev.size && (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium flex items-center gap-1"><HardDrive className={sp.icon} />Size</p>
-                                  <p className="text-muted-foreground">{formatFileSize(prev.size)} &rarr; {formatFileSize(v.size)}</p>
-                                </div>
-                              )}
-                              {prev && v.access !== prev.access && (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium">Access</p>
-                                  <p className="text-muted-foreground">{accessLabel(prev.access)} &rarr; {accessLabel(v.access)}</p>
-                                </div>
-                              )}
-
-                              {/* Integrity state */}
-                              {v.file_hash != null ? (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium flex items-center gap-1">
-                                    Hash
-                                    {v.hash_state === 2 && <AlertTriangle className={`${sp.icon} text-amber-500`} />}
-                                  </p>
-                                  <p className="font-mono break-all text-muted-foreground">{v.file_hash}</p>
-                                </div>
-                              ) : v.hash_state != null && (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium">Hash</p>
-                                  <p className="text-muted-foreground">Not available</p>
-                                </div>
-                              )}
-                              {v.val_state != null ? (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium flex items-center gap-1">
-                                    Validation
-                                    {v.val_state === 2 && <CircleX className={`${sp.icon} text-rose-500`} />}
-                                  </p>
-                                  <p className="text-muted-foreground">{valStateLabel(v.val_state)}</p>
-                                  {v.val_error && v.val_error.trim() !== '' && (
-                                    <p className="font-mono break-all text-muted-foreground mt-0.5">{v.val_error}</p>
-                                  )}
-                                </div>
-                              ) : v.hash_state != null && (
-                                <div className={`bg-muted/50 ${sp.pad} rounded`}>
-                                  <p className="font-medium">Validation</p>
-                                  <p className="text-muted-foreground">Not available</p>
-                                </div>
-                              )}
-
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      ) : (
-                        <div className={`flex items-center ${sp.gap}`}>
-                          <div className={`${sp.chevron} flex-shrink-0`} />
-                          {headerContent}
-                        </div>
-                      )}
-                    </div>
-                    {isSheet && idx < versions.length - 1 && <Separator />}
-                  </div>
-                )
-              })}
-      </>
+      <Section mode={mode} title="Contents">
+        {endState !== null ? (
+          <p className="text-sm text-muted-foreground">
+            {endState === 'deleted' ? 'The folder was not there at the time shown.' : 'The folder was not tracked at the time shown.'}
+          </p>
+        ) : !childrenCounts ? (
+          <p className="text-sm text-muted-foreground">{loadingChildrenCounts ? 'Loading...' : 'Empty folder'}</p>
+        ) : (
+          <div className={`flex flex-wrap items-center ${isPanel ? 'gap-x-4' : 'gap-x-6'} gap-y-1 text-sm`}>
+            <span className="flex items-center gap-1">
+              <Folder className={`${iconSize} text-muted-foreground`} />
+              <span className="font-medium">{childrenCounts.directory_count.toLocaleString()}</span>
+              <span className="text-muted-foreground">{childrenCounts.directory_count === 1 ? 'folder' : 'folders'}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <File className={`${iconSize} text-muted-foreground`} />
+              <span className="font-medium">{childrenCounts.file_count.toLocaleString()}</span>
+              <span className="text-muted-foreground">{childrenCounts.file_count === 1 ? 'file' : 'files'}</span>
+            </span>
+            {size !== null && (
+              <span className="flex items-center gap-1">
+                <HardDrive className={`${iconSize} text-muted-foreground`} />
+                <span className="font-medium">{formatFileSize(size)}</span>
+              </span>
+            )}
+          </div>
+        )}
+        <p className="mt-1 text-xs text-muted-foreground">Everything beneath this folder, at any depth.</p>
+        {changesBeneath && (
+          <p className={cn('flex items-center gap-1.5', isPanel ? 'text-xs mt-1.5' : 'text-sm mt-2')}>
+            {changesBeneath.changed === 0 ? (
+              <span className="text-muted-foreground">Nothing beneath it changed in the selected range</span>
+            ) : (
+              <>
+                {rangeMark}
+                <span className="text-muted-foreground">In the selected range, beneath it:</span>
+                <span className="font-medium">
+                  {changesBeneath.added.toLocaleString()} added, {changesBeneath.modified.toLocaleString()} modified, {changesBeneath.deleted.toLocaleString()} deleted
+                </span>
+              </>
+            )}
+          </p>
+        )}
+      </Section>
     )
   }
+
+  // The list is for finding a version and choosing it; the card shows it.
+  const renderVersionRows = () => (
+    <>
+      {versions.map((v, idx) => {
+        const kind = classifyChange(v, predecessors.get(v.item_version) ?? null)
+        const isSelected = selectedVersion?.item_version === v.item_version
+        return (
+          <div key={v.item_version}>
+            <button
+              type="button"
+              className={cn(
+                sp.padX,
+                `flex w-full items-center text-left ${sp.gap} transition-colors`,
+                isSelected ? 'bg-accent/50' : 'hover:bg-accent/20'
+              )}
+              aria-current={isSelected}
+              onClick={() => setSelectedVersion(v)}
+            >
+              {/* The same width with and without the mark, so the rows line up. */}
+              <span className="flex w-0.5 flex-shrink-0 justify-center">{isInRange(v) && rangeMark}</span>
+              <span className="text-xs font-medium shrink-0">v{v.item_version}</span>
+              {getChangeIndicator(kind)}
+              {v.hash_state === 2 && <AlertTriangle className={`${sp.iconLg} text-amber-500 flex-shrink-0`} />}
+              {v.val_state === 2 && <CircleX className={`${sp.iconLg} text-rose-500 flex-shrink-0`} />}
+              <span className="text-xs text-muted-foreground truncate flex-1">{recordedShort(v)}</span>
+              {isSelected && <Eye className={`${sp.iconLg} text-primary flex-shrink-0`} />}
+            </button>
+            {isSheet && idx < versions.length - 1 && <Separator />}
+          </div>
+        )
+      })}
+    </>
+  )
 
   // ---- Main render ----
 
@@ -1504,6 +1506,7 @@ export function ItemDetail({
       ) : (
         <div className={isSheet ? 'space-y-4 mt-4' : 'divide-y divide-border border-b border-border'}>
           {renderMainCard()}
+          {renderFolderContents()}
           {renderSizeHistory()}
         </div>
       )}

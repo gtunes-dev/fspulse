@@ -168,7 +168,7 @@ pub const UPGRADE_31_TO_32_POST_SQL: &str = "
     JOIN items i ON i.item_id = ivo.item_id;
 
     CREATE INDEX idx_versions_root_time_hid ON item_versions (root_id, first_seen_at, hierarchy_id, is_added, is_deleted, is_ignored);
-    CREATE INDEX idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted, is_ignored);
+    CREATE INDEX idx_versions_root_hid_time ON item_versions (root_id, hierarchy_id, first_seen_at, is_added, is_deleted, is_ignored, size);
     CREATE INDEX idx_versions_parent_firstseen ON item_versions (parent_item_id, first_seen_at);
     CREATE INDEX idx_versions_val_at ON item_versions (val_at, val_state);
 

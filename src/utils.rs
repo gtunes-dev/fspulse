@@ -108,25 +108,6 @@ impl Utils {
         Ok((start, end))
     }
 
-    // ── Convenience methods for callers outside the query engine ──────────
-
-    /// For a single date-only string: returns full-day bounds as UTC epochs.
-    pub fn single_date_bounds(date_str: &str) -> Result<(i64, i64), FsPulseError> {
-        let start = Self::date_start_of_day(date_str)?;
-        let end = Self::date_end_of_day(date_str)?;
-        Ok((start, end))
-    }
-
-    /// For a range of date-only strings: returns (start-of-first-day, end-of-last-day) as UTC epochs.
-    pub fn range_date_bounds(
-        start_date_str: &str,
-        end_date_str: &str,
-    ) -> Result<(i64, i64), FsPulseError> {
-        let start = Self::date_start_of_day(start_date_str)?;
-        let end = Self::date_end_of_day(end_date_str)?;
-        Self::validate_range(start, end)
-    }
-
     /// Current time as a Unix epoch in seconds. Returns 0 if the
     /// system clock is before the epoch (which shouldn't happen on
     /// any sane system).
@@ -257,33 +238,6 @@ mod tests {
         let mid = Utils::datetime_to_epoch("2023-12-25 12:00:00").unwrap();
         assert!(mid > start, "midday ({mid}) should be after start-of-day ({start})");
         assert!(mid < end, "midday ({mid}) should be before end-of-day ({end})");
-    }
-
-    // ── Convenience methods (single_date_bounds, range_date_bounds) ──────
-
-    #[test]
-    fn test_single_date_bounds() {
-        let (start, end) = Utils::single_date_bounds("2023-12-25").unwrap();
-        assert!(start <= end);
-        assert!(end - start <= 86400);
-    }
-
-    #[test]
-    fn test_single_date_bounds_invalid() {
-        assert!(Utils::single_date_bounds("invalid-date").is_err());
-        assert!(Utils::single_date_bounds("2023-13-25").is_err());
-        assert!(Utils::single_date_bounds("").is_err());
-    }
-
-    #[test]
-    fn test_range_date_bounds_valid() {
-        let (start, end) = Utils::range_date_bounds("2023-12-24", "2023-12-25").unwrap();
-        assert!(start <= end);
-    }
-
-    #[test]
-    fn test_range_date_bounds_reversed() {
-        assert!(Utils::range_date_bounds("2023-12-25", "2023-12-24").is_err());
     }
 
     #[test]

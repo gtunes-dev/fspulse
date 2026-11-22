@@ -953,6 +953,94 @@ pub fn item_in_range(
 }
 
 // ============================================================================
+// Size over time
+// ============================================================================
+
+/// The size of an item from one moment until the next point.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SizePoint {
+    /// When the size became this (Unix seconds).
+    pub time: i64,
+    /// Bytes. `None` while a file is deleted or not tracked. A folder
+    /// always has a number: the total of the files beneath it.
+    pub size: Option<i64>,
+}
+
+/// A file's sizes: one row per version, oldest first.
+const FILE_SIZES_SQL: &str = "
+    SELECT first_seen_at, CASE WHEN is_deleted THEN NULL ELSE size END
+    FROM item_versions
+    WHERE item_id = ?1
+    ORDER BY item_version";
+
+/// How the total size beneath a folder changed, hour by hour.
+/// Parameters: ?1 root_id, ?2 and ?3 the bounds of the folder's subtree.
+///
+/// Folder sizes are not stored. Each version beneath the folder changes
+/// the total by its size less the size of the version before it, and a
+/// deleted or untracked version counts as nothing. The index is in
+/// (position, time) order, so an item's versions arrive together and in
+/// order: the window needs no sort, and `size` is in the index, so the
+/// table is not read. The cost follows the number of versions beneath
+/// the folder.
+pub(crate) const FOLDER_SIZE_CHANGES_SQL: &str = "
+    SELECT MAX(time), SUM(size - before)
+    FROM (SELECT iv.first_seen_at AS time,
+                 CASE WHEN iv.is_deleted THEN 0 ELSE COALESCE(iv.size, 0) END AS size,
+                 COALESCE(LAG(CASE WHEN iv.is_deleted THEN 0 ELSE COALESCE(iv.size, 0) END)
+                            OVER (PARTITION BY iv.hierarchy_id ORDER BY iv.first_seen_at), 0) AS before
+          FROM item_versions iv INDEXED BY idx_versions_root_hid_time
+          WHERE iv.root_id = ?1 AND iv.hierarchy_id > ?2 AND iv.hierarchy_id < ?3)
+    GROUP BY time / 3600
+    ORDER BY time / 3600";
+
+/// The size of an item over everything recorded about it, oldest first.
+/// A point is given only where the size changes. For a folder that is
+/// at most one point an hour: the total beneath it after the last
+/// change in that hour.
+pub fn size_history(conn: &Connection, item_id: i64) -> Result<Vec<SizePoint>, FsPulseError> {
+    let (root_id, item_type, hierarchy_id): (i64, i64, Option<Vec<u8>>) = conn
+        .query_row(
+            "SELECT root_id, item_type, hierarchy_id FROM items WHERE item_id = ?",
+            [item_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?
+        .ok_or_else(|| FsPulseError::Error(format!("Item {item_id} not found")))?;
+
+    let mut points: Vec<SizePoint> = Vec::new();
+    let mut push = |time: i64, size: Option<i64>| {
+        if points.last().map(|last| last.size) != Some(size) {
+            points.push(SizePoint { time, size });
+        }
+    };
+
+    if item_type != ItemType::Directory.as_i64() {
+        let mut stmt = conn.prepare_cached(FILE_SIZES_SQL)?;
+        let mut rows = stmt.query([item_id])?;
+        while let Some(row) = rows.next()? {
+            push(row.get(0)?, row.get(1)?);
+        }
+        return Ok(points);
+    }
+
+    let Some(lower) = hierarchy_id else {
+        return Ok(points);
+    };
+    let Some(upper) = HierarchyId::from_bytes(&lower).subtree_end() else {
+        return Ok(points);
+    };
+    let mut stmt = conn.prepare_cached(FOLDER_SIZE_CHANGES_SQL)?;
+    let mut rows = stmt.query(params![root_id, lower, upper])?;
+    let mut total: i64 = 0;
+    while let Some(row) = rows.next()? {
+        total += row.get::<_, i64>(1)?;
+        push(row.get(0)?, Some(total));
+    }
+    Ok(points)
+}
+
+// ============================================================================
 // Search
 // ============================================================================
 
@@ -1607,6 +1695,38 @@ mod tests {
     }
 
     #[test]
+    fn size_history_follows_a_file_and_totals_a_folder() {
+        let fx = history();
+        let sizes = |rel: &str| -> Vec<(i64, Option<i64>)> {
+            let item_id: i64 = fx
+                .conn
+                .query_row(
+                    "SELECT item_id FROM items WHERE item_path = ?",
+                    [fx.root.join(rel).to_str().unwrap()],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            size_history(&fx.conn, item_id)
+                .unwrap()
+                .into_iter()
+                .map(|point| (point.time - H0, point.size))
+                .collect()
+        };
+        let (first, second, third, fourth) = (60, 2 * HOUR + 60, 4 * HOUR + 60, 5 * HOUR + 60);
+
+        // A file: one point where its size changes, none while deleted.
+        assert_eq!(sizes("a.txt"), vec![(first, Some(1)), (second, Some(2)), (third, Some(3))]);
+        assert_eq!(sizes("docs/one.txt"), vec![(first, Some(1)), (second, None)]);
+        assert_eq!(sizes("tmp.txt"), vec![(third, Some(1)), (fourth, None)]);
+
+        // A folder: the total of the files beneath it, at any depth.
+        // docs starts with one.txt (1) and sub/two.txt (1). Then one.txt
+        // goes, new.txt (1) arrives and two.txt grows to 4.
+        assert_eq!(sizes("docs"), vec![(first, Some(2)), (second, Some(5))]);
+        assert_eq!(sizes("docs/sub"), vec![(first, Some(1)), (second, Some(4))]);
+    }
+
+    #[test]
     fn summary_counts_match_the_list() {
         let fx = history();
         let now = H0 + 10 * HOUR;
@@ -1994,6 +2114,82 @@ mod tests {
             let started = Instant::now();
             let found = search(&conn, root_id, query, range, 500, false).unwrap();
             eprintln!("search '{query}': {} results, {:?}", found.items.len(), started.elapsed());
+        }
+
+        {
+            let mut stmt = conn.prepare(&format!("EXPLAIN QUERY PLAN {FOLDER_SIZE_CHANGES_SQL}")).unwrap();
+            let lines: Vec<String> = stmt
+                .query_map(params![1, vec![1u8], vec![2u8]], |row| row.get::<_, String>(3))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            eprintln!("folder size changes:\n  {}\n", lines.join("\n  "));
+        }
+        // The largest folders directly under the root, then two smaller ones.
+        let mut folders: Vec<String> = conn
+            .prepare(
+                "SELECT i.item_path FROM items i
+                  WHERE i.root_id = ?1 AND i.item_type = ?2
+                    AND i.item_path NOT LIKE ?3
+                  LIMIT 400",
+            )
+            .unwrap()
+            .query_map(
+                params![root_id, ItemType::Directory.as_i64(), format!("{root_path}/%/%")],
+                |row| row.get(0),
+            )
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        folders.push(format!("{root_path}/Library/Application Support"));
+        folders.push(projects.clone());
+        let mut timed: Vec<(std::time::Duration, String)> = Vec::new();
+        for folder in &folders {
+            let Some(item_id) = conn
+                .query_row(
+                    "SELECT item_id FROM items WHERE root_id = ?1 AND item_path = ?2 AND item_type = ?3",
+                    params![root_id, folder, ItemType::Directory.as_i64()],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .unwrap()
+            else {
+                continue;
+            };
+            let started = Instant::now();
+            let points = size_history(&conn, item_id).unwrap();
+            let took = started.elapsed();
+            let versions: i64 = {
+                let (lower, upper): (Vec<u8>, Vec<u8>) = {
+                    let hid: Vec<u8> = conn
+                        .query_row("SELECT hierarchy_id FROM items WHERE item_id = ?", [item_id], |r| r.get(0))
+                        .unwrap();
+                    let end = HierarchyId::from_bytes(&hid).subtree_end().unwrap();
+                    (hid, end)
+                };
+                conn.query_row(
+                    "SELECT COUNT(*) FROM item_versions INDEXED BY idx_versions_root_hid_time
+                      WHERE root_id = ?1 AND hierarchy_id > ?2 AND hierarchy_id < ?3",
+                    params![root_id, lower, upper],
+                    |r| r.get(0),
+                )
+                .unwrap()
+            };
+            timed.push((
+                took,
+                format!(
+                    "size history, {folder}: {versions} versions beneath, {} points, last {:?}, {took:?}",
+                    points.len(),
+                    points.last().and_then(|p| p.size)
+                ),
+            ));
+        }
+        timed.sort_by_key(|entry| std::cmp::Reverse(entry.0));
+        for (_, line) in timed.iter().take(8) {
+            eprintln!("{line}");
+        }
+        for (_, line) in timed.iter().rev().take(2) {
+            eprintln!("{line}");
         }
 
         let started = Instant::now();

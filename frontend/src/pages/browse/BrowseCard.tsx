@@ -15,6 +15,8 @@ import { useBrowseCache } from '@/hooks/useBrowseCache'
 import { getParentPath, type ChangeKind } from '@/lib/pathUtils'
 import {
   DEFAULT_PRESET,
+  HOUR,
+  nowSeconds,
   presetSelection,
   rangeKey,
   type TimeRangeSelection,
@@ -132,6 +134,14 @@ export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: p
       }, { replace: true })
     }
   }, [isPrimary, setSearchParams])
+
+  // Show everything as it was just after a moment: at the end of the
+  // hour it falls in, so what happened at that moment is part of what
+  // is shown. An hour that has not ended yet is the present.
+  const handleShowMoment = useCallback((time: number) => {
+    const hourEnd = time - (time % HOUR) + HOUR
+    handleSelectionChange({ from: null, to: hourEnd > nowSeconds() ? null : hourEnd })
+  }, [handleSelectionChange])
 
   // Follow a time selection that arrives by link while the page is open.
   const defaultSelectionKey = defaultSelection ? rangeKey(defaultSelection) : null
@@ -334,6 +344,9 @@ export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: p
             // past and move it back to the hour.
             at={selection.to}
             from={selection.from}
+            rootId={selectedRoot.root_id}
+            refreshToken={refreshToken}
+            onShowMoment={handleShowMoment}
             onClose={handleDetailClose}
           />
         </ScrollArea>

@@ -1,16 +1,15 @@
 use crate::db::Database;
-use crate::scans::Scan;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, Query, State,
+        Path, State,
     },
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
 use log::error;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::state::AppState;
 
@@ -149,153 +148,4 @@ pub async fn clear_pause(State(_state): State<AppState>) -> Result<StatusCode, S
 
     log::info!("Pause cleared");
     Ok(StatusCode::OK)
-}
-
-
-/// Query parameters for scan dates within a month
-#[derive(Debug, Deserialize)]
-pub struct ScanDatesParams {
-    pub root_id: i64,
-    pub year: i32,
-    pub month: u32,
-}
-
-/// Response structure for scan dates
-#[derive(Debug, Serialize)]
-pub struct ScanDatesResponse {
-    pub dates: Vec<String>,
-}
-
-/// GET /api/scans/scan_dates?root_id=X&year=YYYY&month=MM
-/// Returns distinct local dates within a month that have completed scans for the root.
-pub async fn get_scan_dates(
-    Query(params): Query<ScanDatesParams>,
-) -> Result<Json<ScanDatesResponse>, (StatusCode, String)> {
-    let conn = Database::get_connection().map_err(|e| {
-        error!("Database error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-    })?;
-
-    let dates =
-        crate::scans::get_scan_dates_for_month(&conn, params.root_id, params.year, params.month)
-            .map_err(|e| {
-                error!(
-                    "Failed to get scan dates for root_id={}, {}-{}: {}",
-                    params.root_id, params.year, params.month, e
-                );
-                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            })?;
-
-    Ok(Json(ScanDatesResponse { dates }))
-}
-
-/// Query parameters for scans on a specific date
-#[derive(Debug, Deserialize)]
-pub struct ScansByDateParams {
-    pub root_id: i64,
-    pub date: String,
-}
-
-/// Response structure for scans by date
-#[derive(Debug, Serialize)]
-pub struct ScansByDateResponse {
-    pub scans: Vec<crate::scans::ScanSummary>,
-}
-
-/// GET /api/scans/by_date?root_id=X&date=YYYY-MM-DD
-/// Returns all completed scans for a root on a specific date, most recent first.
-pub async fn get_scans_by_date(
-    Query(params): Query<ScansByDateParams>,
-) -> Result<Json<ScansByDateResponse>, (StatusCode, String)> {
-    let conn = Database::get_connection().map_err(|e| {
-        error!("Database error: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-    })?;
-
-    let scans = crate::scans::get_scans_for_date(&conn, params.root_id, &params.date).map_err(
-        |e| {
-            error!(
-                "Failed to get scans for root_id={}, date={}: {}",
-                params.root_id, params.date, e
-            );
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        },
-    )?;
-
-    Ok(Json(ScansByDateResponse { scans }))
-}
-
-/// Query parameters for scan resolution
-#[derive(Debug, Deserialize)]
-pub struct ResolveScanParams {
-    pub root_id: Option<i64>,
-    pub date: Option<String>,    // "YYYY-MM-DD", omit for latest
-    pub scan_id: Option<i64>,    // Look up a specific scan by ID
-}
-
-/// Response structure for resolved scan
-#[derive(Debug, Serialize)]
-pub struct ResolvedScanResponse {
-    pub scan_id: i64,
-    pub started_at: i64,
-}
-
-/// GET /api/scans/resolve?root_id=X&date=YYYY-MM-DD
-/// GET /api/scans/resolve?scan_id=Y
-/// Resolves to a scan. If scan_id is provided, looks up that scan directly.
-/// Otherwise requires root_id and optionally date to find the most recent completed scan.
-pub async fn resolve_scan(
-    Query(params): Query<ResolveScanParams>,
-) -> Result<Json<ResolvedScanResponse>, (StatusCode, String)> {
-    // If scan_id is provided, look up that specific scan
-    if let Some(scan_id) = params.scan_id {
-        let conn = Database::get_connection().map_err(|e| {
-            error!("Database error: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        })?;
-
-        return match Scan::get_by_id_or_latest(&conn, Some(scan_id), None) {
-            Ok(Some(scan)) => Ok(Json(ResolvedScanResponse {
-                scan_id: scan.scan_id(),
-                started_at: scan.started_at(),
-            })),
-            Ok(None) => Err((
-                StatusCode::NOT_FOUND,
-                format!("Scan {} not found", scan_id),
-            )),
-            Err(e) => {
-                error!("Failed to resolve scan_id={}: {}", scan_id, e);
-                Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to resolve scan: {}", e),
-                ))
-            }
-        };
-    }
-
-    // Otherwise, resolve by root_id (required) and optional date
-    let root_id = params.root_id.ok_or_else(|| {
-        (StatusCode::BAD_REQUEST, "root_id or scan_id is required".to_string())
-    })?;
-
-    match Scan::resolve_scan_for_date(root_id, params.date.as_deref()) {
-        Ok(Some((scan_id, started_at))) => Ok(Json(ResolvedScanResponse {
-            scan_id,
-            started_at,
-        })),
-        Ok(None) => Err((
-            StatusCode::NOT_FOUND,
-            "No completed scan found for the specified root and date".to_string(),
-        )),
-        Err(e) => {
-            error!(
-                "Failed to resolve scan for root_id={}, date={:?}: {}",
-                root_id, params.date, e
-            );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to resolve scan: {}", e),
-            ))
-        }
-    }
 }

@@ -841,7 +841,7 @@ impl FsPulseMcp {
                 params.item_id, item_path, type_str, root_id);
 
             // Version count and history
-            let version_count = items::count_versions(params.item_id).map_err(|e| e.to_string())?;
+            let (version_count, _) = items::count_versions(params.item_id).map_err(|e| e.to_string())?;
             let limit = effective_limit(params.limit);
             let offset = params.offset.unwrap_or(0).max(0);
             let versions = items::get_versions(params.item_id, offset, limit, "desc")

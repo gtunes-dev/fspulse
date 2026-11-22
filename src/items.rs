@@ -23,349 +23,10 @@ impl crate::query::QueryEnum for Access {
     }
 }
 
-/// Size of an item over time: one point per version that recorded a
-/// size and began between `from` and `to` (Unix seconds, inclusive).
-pub fn get_size_history(
-    item_id: i64,
-    from: i64,
-    to: i64,
-) -> Result<Vec<SizeHistoryPoint>, FsPulseError> {
-    let conn = Database::get_connection()?;
-
-    let sql = r#"
-        SELECT iv.first_seen_at, iv.size
-        FROM item_versions iv
-        WHERE iv.item_id = ?
-          AND iv.size IS NOT NULL
-          AND iv.first_seen_at BETWEEN ? AND ?
-        ORDER BY iv.first_seen_at ASC"#;
-
-    let mut stmt = conn.prepare_cached(sql)?;
-    let rows = stmt.query_map(params![item_id, from, to], SizeHistoryPoint::from_row)?;
-
-    let mut history = Vec::new();
-    for row in rows {
-        history.push(row?);
-    }
-
-    Ok(history)
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SizeHistoryPoint {
-    pub first_seen_at: i64,
-    pub size: i64,
-}
-
-impl SizeHistoryPoint {
-    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
-        Ok(SizeHistoryPoint {
-            first_seen_at: row.get(0)?,
-            size: row.get(1)?,
-        })
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChildrenCounts {
     pub file_count: i64,
     pub directory_count: i64,
-}
-
-/// Lightweight struct for temporal tree browsing results
-#[derive(Clone, Debug, Serialize)]
-pub struct TemporalTreeItem {
-    pub item_id: i64,
-    pub item_path: String,
-    pub item_name: String,
-    pub item_type: ItemType,
-    pub has_validator: bool,
-    pub first_seen_at: i64,
-    pub is_added: bool,
-    pub is_deleted: bool,
-    pub mod_date: Option<i64>,
-    pub size: Option<i64>,
-    // Descendant change counts (folders only, computed at query time
-    // via hierarchy_id range queries in compute_descendant_counts)
-    pub add_count: Option<i64>,
-    pub modify_count: Option<i64>,
-    pub delete_count: Option<i64>,
-    pub unchanged_count: Option<i64>,
-    // Integrity state (NULL if never hashed/validated)
-    pub val_state: Option<i64>,
-    pub hash_state: Option<i64>,
-}
-
-/// Get immediate children at a point in time using items + item_versions.
-/// Returns the effective version of each immediate child of `parent_path`
-/// as of `scan_id`.
-/// Common WHERE clause fragment for temporal immediate children queries.
-fn temporal_children_where(parent_path: &str) -> (String, String, String) {
-    let path_prefix = if parent_path.ends_with(MAIN_SEPARATOR_STR) {
-        parent_path.to_string()
-    } else {
-        format!("{}{}", parent_path, MAIN_SEPARATOR_STR)
-    };
-
-    // Upper bound for range scan: replace trailing separator with next ASCII char.
-    // Unix: '/' (0x2F) + 1 = '0' (0x30). Windows: '\' (0x5C) + 1 = ']' (0x5D).
-    let path_upper = format!(
-        "{}{}",
-        &path_prefix[..path_prefix.len() - MAIN_SEPARATOR_STR.len()],
-        char::from(std::path::MAIN_SEPARATOR as u8 + 1)
-    );
-
-    let where_fragment = format!(
-        "WHERE i.root_id = ?1
-           AND iv.first_seen_at = (
-               SELECT MAX(first_seen_at)
-               FROM item_versions
-               WHERE item_id = i.item_id
-                 AND first_seen_at <= ?2
-           )
-           AND (iv.is_deleted = 0 OR iv.first_seen_at = ?2)
-           AND i.item_path >= ?3
-           AND i.item_path < ?4
-           AND i.item_path != ?5
-           AND SUBSTR(i.item_path, LENGTH(?3) + 1) NOT LIKE '%{}%'",
-        MAIN_SEPARATOR_STR
-    );
-
-    (path_prefix, path_upper, where_fragment)
-}
-
-pub fn get_temporal_immediate_children(
-    root_id: i64,
-    parent_path: &str,
-    scan_id: i64,
-    limit: Option<i64>,
-    offset: Option<i64>,
-) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
-    let conn = Database::get_connection()?;
-    let (path_prefix, path_upper, where_fragment) = temporal_children_where(parent_path);
-
-    let limit_clause = match limit {
-        Some(l) => format!("\n         LIMIT {}", l),
-        None => String::new(),
-    };
-    let offset_clause = match offset {
-        Some(o) if o > 0 => format!("\n         OFFSET {}", o),
-        _ => String::new(),
-    };
-
-    // Query includes hierarchy_id from items for descendant count computation
-    let sql = format!(
-        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
-                iv.first_seen_at, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
-                iv.val_state, hv.hash_state,
-                i.hierarchy_id
-         FROM items i
-         JOIN item_versions iv ON iv.item_id = i.item_id
-         LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-             AND hv.item_version = iv.item_version
-             AND hv.first_seen_at = (
-                 SELECT MAX(first_seen_at) FROM hash_versions
-                 WHERE item_id = i.item_id AND item_version = iv.item_version
-             )
-         {}
-         ORDER BY i.item_path COLLATE natural_path ASC{}{}",
-        where_fragment, limit_clause, offset_clause
-    );
-
-    let mut stmt = conn.prepare(&sql)?;
-
-    let rows = stmt.query_map(
-        params![root_id, scan_id, &path_prefix, &path_upper, parent_path],
-        |row| {
-            Ok((
-                TemporalTreeItem {
-                    item_id: row.get(0)?,
-                    item_path: row.get(1)?,
-                    item_name: row.get(2)?,
-                    item_type: ItemType::from_i64(row.get(3)?),
-                    has_validator: row.get::<_, i64>(4)? != 0,
-                    first_seen_at: row.get(5)?,
-                    is_added: row.get(6)?,
-                    is_deleted: row.get(7)?,
-                    mod_date: row.get(8)?,
-                    size: row.get(9)?,
-                    add_count: None,
-                    modify_count: None,
-                    delete_count: None,
-                    unchanged_count: None,
-                    val_state: row.get(10)?,
-                    hash_state: row.get(11)?,
-                },
-                row.get::<_, Option<Vec<u8>>>(12)?, // hierarchy_id
-            ))
-        },
-    )?;
-
-    let items_with_hid: Vec<(TemporalTreeItem, Option<Vec<u8>>)> =
-        rows.collect::<Result<Vec<_>, _>>()?;
-    drop(stmt);
-
-    // Compute descendant change counts for directory children using
-    // hierarchy_id ranges. Each folder's subtree range is
-    // (folder_hid, next_sibling_hid).
-    compute_descendant_counts(&conn, root_id, scan_id, items_with_hid)
-}
-
-/// Compute descendant change counts for directory children using
-/// hierarchy_id range queries on item_versions.
-fn compute_descendant_counts(
-    conn: &rusqlite::Connection,
-    root_id: i64,
-    scan_id: i64,
-    items_with_hid: Vec<(TemporalTreeItem, Option<Vec<u8>>)>,
-) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
-    if items_with_hid.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let hids: Vec<Option<Vec<u8>>> = items_with_hid
-        .iter()
-        .map(|(_, hid)| hid.clone())
-        .collect();
-
-    // Uses idx_versions_root_time_hid: (root_id, first_seen_at, hierarchy_id, ...)
-    let mut count_stmt_bounded = conn.prepare_cached(
-        "SELECT
-            COALESCE(SUM(CASE WHEN is_added = 1 THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN is_added = 0 AND is_deleted = 0 THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN is_deleted = 1 THEN 1 ELSE 0 END), 0)
-         FROM item_versions
-         WHERE root_id = ?1
-           AND first_seen_at = ?2
-           AND hierarchy_id > ?3
-           AND hierarchy_id < ?4",
-    )?;
-
-    let mut count_stmt_unbounded = conn.prepare_cached(
-        "SELECT
-            COALESCE(SUM(CASE WHEN is_added = 1 THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN is_added = 0 AND is_deleted = 0 THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN is_deleted = 1 THEN 1 ELSE 0 END), 0)
-         FROM item_versions
-         WHERE root_id = ?1
-           AND first_seen_at = ?2
-           AND hierarchy_id > ?3",
-    )?;
-
-    let mut results = Vec::with_capacity(items_with_hid.len());
-
-    for (idx, (mut item, hid)) in items_with_hid.into_iter().enumerate() {
-        if item.item_type == ItemType::Directory && !item.is_deleted {
-            if let Some(ref my_hid) = hid {
-                let next_hid = hids.get(idx + 1).and_then(|h| h.as_deref());
-
-                let (adds, mods, dels): (i64, i64, i64) = if let Some(next) = next_hid {
-                    count_stmt_bounded.query_row(
-                        params![root_id, scan_id, my_hid, next],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-                    )?
-                } else {
-                    count_stmt_unbounded.query_row(
-                        params![root_id, scan_id, my_hid],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-                    )?
-                };
-
-                item.add_count = Some(adds);
-                item.modify_count = Some(mods);
-                item.delete_count = Some(dels);
-                // Sentinel: non-zero unchanged_count signals the folder
-                // has content and should be rendered as expandable.
-                item.unchanged_count = Some(1);
-            }
-        }
-
-        results.push(item);
-    }
-
-    Ok(results)
-}
-
-/// Common WHERE fragment for temporal search queries.
-const TEMPORAL_SEARCH_WHERE: &str =
-    "WHERE i.root_id = ?1
-       AND iv.first_seen_at = (
-           SELECT MAX(first_seen_at)
-           FROM item_versions
-           WHERE item_id = i.item_id
-             AND first_seen_at <= ?2
-       )
-       AND (iv.is_deleted = 0 OR iv.first_seen_at = ?2)
-       AND i.item_name LIKE '%' || ?3 || '%'";
-
-const TEMPORAL_SEARCH_FROM: &str =
-    "FROM items i
-     JOIN item_versions iv ON iv.item_id = i.item_id
-     LEFT JOIN hash_versions hv ON hv.item_id = i.item_id
-         AND hv.item_version = iv.item_version
-         AND hv.first_seen_at = (
-             SELECT MAX(first_seen_at) FROM hash_versions
-             WHERE item_id = i.item_id AND item_version = iv.item_version
-         )";
-
-/// Search for items by name at a point in time using items + item_versions.
-/// Matches against the item name (last path segment) rather than the full path.
-/// Returns items whose name contains the search query, ordered by path.
-pub fn get_temporal_search_items(
-    root_id: i64,
-    scan_id: i64,
-    query: &str,
-    limit: Option<i64>,
-    offset: Option<i64>,
-) -> Result<Vec<TemporalTreeItem>, FsPulseError> {
-    let conn = Database::get_connection()?;
-
-    let limit_clause = match limit {
-        Some(l) => format!("\n         LIMIT {}", l),
-        None => String::new(),
-    };
-    let offset_clause = match offset {
-        Some(o) if o > 0 => format!("\n         OFFSET {}", o),
-        _ => String::new(),
-    };
-
-    let sql = format!(
-        "SELECT i.item_id, i.item_path, i.item_name, i.item_type, i.has_validator,
-                iv.first_seen_at, iv.is_added, iv.is_deleted, iv.mod_date, iv.size,
-                iv.val_state, hv.hash_state
-         {} {} ORDER BY i.item_path COLLATE natural_path ASC{}{}",
-        TEMPORAL_SEARCH_FROM, TEMPORAL_SEARCH_WHERE, limit_clause, offset_clause
-    );
-
-    let mut stmt = conn.prepare(&sql)?;
-
-    let rows = stmt.query_map(
-        params![root_id, scan_id, query],
-        |row| {
-            Ok(TemporalTreeItem {
-                item_id: row.get(0)?,
-                item_path: row.get(1)?,
-                item_name: row.get(2)?,
-                item_type: ItemType::from_i64(row.get(3)?),
-                has_validator: row.get::<_, i64>(4)? != 0,
-                first_seen_at: row.get(5)?,
-                is_added: row.get(6)?,
-                is_deleted: row.get(7)?,
-                mod_date: row.get(8)?,
-                size: row.get(9)?,
-                add_count: None,
-                modify_count: None,
-                delete_count: None,
-                unchanged_count: None,
-                val_state: row.get(10)?,
-                hash_state: row.get(11)?,
-            })
-        },
-    )?;
-
-    let items: Vec<TemporalTreeItem> = rows.collect::<Result<Vec<_>, _>>()?;
-
-    Ok(items)
 }
 
 // ---- Version history types and functions ----
@@ -460,15 +121,25 @@ const VERSION_HISTORY_JOINS: &str =
            WHERE hv2.item_id = v.item_id AND hv2.item_version = v.item_version \
        )";
 
-/// Count total versions for an item.
-pub fn count_versions(item_id: i64) -> Result<i64, FsPulseError> {
+/// How many versions an item has, and a stamp that changes whenever
+/// anything recorded about the item does: a new version, further
+/// changes folded into the latest one, a validation, a hash computed
+/// or confirmed. A viewer compares stamps to learn that what it shows
+/// is out of date.
+pub fn count_versions(item_id: i64) -> Result<(i64, String), FsPulseError> {
     let conn = Database::get_connection()?;
-    let total: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM item_versions WHERE item_id = ?",
+    let found = conn.query_row(
+        "SELECT COUNT(*), COALESCE(MAX(last_changed_at), 0), COALESCE(MAX(val_at), 0),
+                (SELECT COALESCE(MAX(last_seen_at), 0) FROM hash_versions WHERE item_id = ?1)
+           FROM item_versions WHERE item_id = ?1",
         params![item_id],
-        |row| row.get(0),
+        |row| {
+            let total: i64 = row.get(0)?;
+            let (changed, validated, hashed): (i64, i64, i64) = (row.get(1)?, row.get(2)?, row.get(3)?);
+            Ok((total, format!("{total}.{changed}.{validated}.{hashed}")))
+        },
     )?;
-    Ok(total)
+    Ok(found)
 }
 
 /// Get a page of version history for an item.
@@ -499,31 +170,45 @@ pub fn get_versions(
     Ok(versions)
 }
 
-/// Find the item_version in effect at a point in time: the latest
-/// version that began at or before it.
+/// The version of an item in effect at a time.
+#[derive(Clone, Debug, Serialize)]
+pub struct VersionAt {
+    pub item_version: i64,
+    /// Not present then: deleted or, with `is_ignored`, not tracked.
+    pub is_deleted: bool,
+    pub is_ignored: bool,
+}
+
+/// Find the version in effect at a point in time: the latest version
+/// that began at or before it.
 ///
-/// The parameter is an epoch timestamp. The name and the `scan_id`
-/// route parameter are leftovers that the time API phase replaces.
-pub fn get_version_at_scan(item_id: i64, scan_id: i64) -> Result<Option<i64>, FsPulseError> {
+/// The time is Unix seconds, inclusive.
+pub fn get_version_at(item_id: i64, at: i64) -> Result<Option<VersionAt>, FsPulseError> {
     let conn = Database::get_connection()?;
-    let version: Option<i64> = conn
+    let version = conn
         .query_row(
-            "SELECT item_version FROM item_versions \
+            "SELECT item_version, is_deleted, is_ignored FROM item_versions \
              WHERE item_id = ? AND first_seen_at <= ? \
              ORDER BY item_version DESC \
              LIMIT 1",
-            params![item_id, scan_id],
-            |row| row.get(0),
+            params![item_id, at],
+            |row| {
+                Ok(VersionAt {
+                    item_version: row.get(0)?,
+                    is_deleted: row.get(1)?,
+                    is_ignored: row.get(2)?,
+                })
+            },
         )
         .optional()?;
     Ok(version)
 }
 
-/// Get counts of children (files and directories) for a directory item using temporal model.
-/// Counts non-deleted items at the given scan_id.
+/// Count the files and folders beneath a folder, at any depth, that
+/// were present at a time (Unix seconds, inclusive).
 pub fn get_children_counts(
     item_id: i64,
-    scan_id: i64,
+    at: i64,
 ) -> Result<ChildrenCounts, FsPulseError> {
     let conn = Database::get_connection()?;
 
@@ -570,7 +255,7 @@ pub fn get_children_counts(
         GROUP BY i.item_type"#;
 
     let mut stmt = conn.prepare_cached(sql)?;
-    let rows = stmt.query_map(params![root_id, scan_id, path_prefix, path_upper, parent_path], |row| {
+    let rows = stmt.query_map(params![root_id, at, path_prefix, path_upper, parent_path], |row| {
         let item_type: i64 = row.get(0)?;
         let count: i64 = row.get(1)?;
         Ok((item_type, count))
@@ -660,7 +345,7 @@ pub struct IntegrityState {
 /// plus has_validator from the items table.
 pub fn get_integrity_state(
     item_id: i64,
-    scan_id: i64,
+    at: i64,
 ) -> Result<IntegrityState, FsPulseError> {
     let conn = Database::get_connection()?;
 
@@ -685,7 +370,7 @@ pub fn get_integrity_state(
                    SELECT MAX(first_seen_at) FROM item_versions \
                    WHERE item_id = ?1 AND first_seen_at <= ?2 \
                )",
-            params![item_id, scan_id],
+            params![item_id, at],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?;

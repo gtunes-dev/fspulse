@@ -3,10 +3,8 @@ use crate::error::FsPulseError;
 use crate::roots::Root;
 use crate::utils::Utils;
 
-use chrono::{Local, NaiveDate, TimeZone, Utc};
 use log::info;
 use rusqlite::{params, Connection, OptionalExtension, Result};
-use serde::Serialize;
 
 use std::fmt;
 
@@ -290,48 +288,6 @@ impl Scan {
         self.error.as_deref()
     }
 
-    /// Resolve a date to the most recent completed scan for a root at or before that date.
-    /// If `date_str` is None, returns the most recent completed scan for the root.
-    /// Returns (scan_id, started_at) or None if no matching scan exists.
-    pub fn resolve_scan_for_date(
-        root_id: i64,
-        date_str: Option<&str>,
-    ) -> Result<Option<(i64, i64)>, FsPulseError> {
-        let conn = Database::get_connection()?;
-
-        match date_str {
-            Some(date) => {
-                // Get end-of-day timestamp for the given date
-                let (_start_ts, end_ts) = crate::utils::Utils::single_date_bounds(date)?;
-
-                let result: Option<(i64, i64)> = conn
-                    .query_row(
-                        "SELECT scan_id, started_at FROM scans
-                         WHERE root_id = ? AND state = 2 AND started_at <= ?
-                         ORDER BY started_at DESC LIMIT 1",
-                        params![root_id, end_ts],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
-                    )
-                    .optional()?;
-
-                Ok(result)
-            }
-            None => {
-                let result: Option<(i64, i64)> = conn
-                    .query_row(
-                        "SELECT scan_id, started_at FROM scans
-                         WHERE root_id = ? AND state = 2
-                         ORDER BY scan_id DESC LIMIT 1",
-                        params![root_id],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
-                    )
-                    .optional()?;
-
-                Ok(result)
-            }
-        }
-    }
-
     pub fn set_state_completed(&mut self, conn: &Connection) -> Result<(), FsPulseError> {
         match self.state() {
             ScanState::Scanning => {
@@ -454,101 +410,6 @@ impl Scan {
 
         Ok(())
     }
-}
-
-/// Compact scan summary for the ScanPicker component
-#[derive(Debug, Clone, Serialize)]
-pub struct ScanSummary {
-    pub scan_id: i64,
-    pub started_at: i64,
-}
-
-/// Get the distinct local-date strings (YYYY-MM-DD) that have completed scans
-/// for a given root within a calendar month.
-pub fn get_scan_dates_for_month(
-    conn: &Connection,
-    root_id: i64,
-    year: i32,
-    month: u32,
-) -> Result<Vec<String>, FsPulseError> {
-    use chrono::Datelike;
-
-    let first_day = NaiveDate::from_ymd_opt(year, month, 1).ok_or_else(|| {
-        FsPulseError::Error(format!("Invalid year/month: {year}-{month}"))
-    })?;
-    let last_day = if month == 12 {
-        NaiveDate::from_ymd_opt(year + 1, 1, 1)
-    } else {
-        NaiveDate::from_ymd_opt(year, month + 1, 1)
-    }
-    .unwrap()
-    .pred_opt()
-    .unwrap();
-
-    let first_str = first_day.format("%Y-%m-%d").to_string();
-    let last_str = last_day.format("%Y-%m-%d").to_string();
-    let (start_ts, end_ts) = crate::utils::Utils::range_date_bounds(&first_str, &last_str)?;
-
-    let mut stmt = conn.prepare_cached(
-        "SELECT started_at FROM scans
-         WHERE root_id = ? AND state = 2 AND started_at >= ? AND started_at <= ?
-         ORDER BY started_at",
-    )?;
-
-    let timestamps: Vec<i64> = stmt
-        .query_map(params![root_id, start_ts, end_ts], |row| row.get(0))?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    // Convert UTC timestamps to local dates and deduplicate
-    let mut dates: Vec<String> = Vec::new();
-    for ts in timestamps {
-        let dt = Utc
-            .timestamp_opt(ts, 0)
-            .single()
-            .ok_or_else(|| FsPulseError::Error(format!("Invalid timestamp: {ts}")))?;
-        let local = dt.with_timezone(&Local);
-        let date_str = format!(
-            "{:04}-{:02}-{:02}",
-            local.year(),
-            local.month(),
-            local.day()
-        );
-        if dates.last() != Some(&date_str) {
-            dates.push(date_str);
-        }
-    }
-
-    Ok(dates)
-}
-
-/// Get all completed scans for a root on a specific local date, most recent first.
-pub fn get_scans_for_date(
-    conn: &Connection,
-    root_id: i64,
-    date_str: &str,
-) -> Result<Vec<ScanSummary>, FsPulseError> {
-    let (start_ts, end_ts) = crate::utils::Utils::single_date_bounds(date_str)?;
-
-    let mut stmt = conn.prepare_cached(
-        "SELECT scan_id, started_at
-         FROM scans
-         WHERE root_id = ? AND state = 2 AND started_at >= ? AND started_at <= ?
-         ORDER BY started_at DESC",
-    )?;
-
-    let rows = stmt.query_map(params![root_id, start_ts, end_ts], |row| {
-        Ok(ScanSummary {
-            scan_id: row.get(0)?,
-            started_at: row.get(1)?,
-        })
-    })?;
-
-    let mut result = Vec::new();
-    for row in rows {
-        result.push(row?);
-    }
-    Ok(result)
 }
 
 #[cfg(test)]

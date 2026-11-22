@@ -293,31 +293,14 @@ impl WebServer {
                 "/api/tasks/history/fetch",
                 get(api::tasks::get_task_history_fetch),
             )
-            // Scan resolution endpoint (temporal versioning)
-            .route(
-                "/api/scans/resolve",
-                get(api::scans::resolve_scan),
-            )
-            .route(
-                "/api/scans/scan_dates",
-                get(api::scans::get_scan_dates),
-            )
-            .route(
-                "/api/scans/by_date",
-                get(api::scans::get_scans_by_date),
-            )
             // Item endpoints
             .route(
                 "/api/items/{item_id}/size-history",
                 get(api::items::get_item_size_history),
             )
             .route(
-                "/api/items/{item_id}/version-at-scan",
-                get(api::items::get_version_at_scan),
-            )
-            .route(
                 "/api/items/{item_id}/version-at",
-                get(api::items::get_version_at_scan),
+                get(api::items::get_version_at),
             )
             .route(
                 "/api/items/{item_id}/in-range",
@@ -342,15 +325,6 @@ impl WebServer {
             .route(
                 "/api/items/{item_id}/versions/{item_version}/hashes",
                 get(api::items::get_hash_history),
-            )
-            // Temporal model item endpoints
-            .route(
-                "/api/items/immediate-children",
-                get(api::items::get_immediate_children),
-            )
-            .route(
-                "/api/items/search",
-                get(api::items::search_items),
             )
             // Time-based browsing
             .route(
