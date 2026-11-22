@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Database;
 use crate::error::FsPulseError;
-use crate::timeline::{self, ActivityPoint, Change, ChangesPage, Listing, Summary, TimeRange};
+use crate::timeline::{self, ActivityPoint, ChangesPage, Kinds, Listing, Summary, TimeRange};
 use crate::utils::Utils;
 
 #[derive(Debug, Serialize)]
@@ -161,33 +161,25 @@ pub struct ChangesParams {
     pub offset: i64,
 }
 
-fn parse_kinds(kinds: Option<&str>) -> Result<i64, ApiError> {
-    let Some(kinds) = kinds else {
-        return Ok(Change::net_mask());
+fn parse_kinds(kinds: Option<&str>) -> Result<Kinds, ApiError> {
+    let Some(names) = kinds else {
+        return Ok(Kinds::all());
     };
-    let mut mask = 0;
-    for kind in kinds.split(',').map(str::trim).filter(|k| !k.is_empty()) {
-        mask |= match kind {
-            "added" => Change::Added.mask(),
-            "modified" => Change::Modified.mask(),
-            "deleted" => Change::Deleted.mask(),
-            "transient" => Change::Transient.mask(),
-            "ignored" => Change::Ignored.mask(),
-            "resumed" => Change::Resumed.mask(),
-            other => {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    Json(ErrorResponse {
-                        error: format!(
-                            "Unknown kind '{other}'. Use added, modified, deleted, ignored, \
-                             resumed or transient."
-                        ),
-                    }),
-                ))
-            }
-        };
+    let mut kinds = Kinds::default();
+    for kind in names.split(',').map(str::trim).filter(|k| !k.is_empty()) {
+        if !kinds.include(kind) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: format!(
+                        "Unknown kind '{kind}'. Use added, modified, deleted, ignored, \
+                         resumed or transient."
+                    ),
+                }),
+            ));
+        }
     }
-    Ok(mask)
+    Ok(kinds)
 }
 
 /// GET /api/timeline/changes?root_id=1&from=..&to=..&kinds=added,deleted&limit=200&offset=0
@@ -252,15 +244,25 @@ pub async fn search(Query(params): Query<SearchParams>) -> Result<Json<Listing>,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::timeline::{Change, Happened};
 
     #[test]
     fn kinds_default_to_net_changes_and_reject_unknown_names() {
-        assert_eq!(parse_kinds(None).unwrap(), Change::net_mask());
+        assert_eq!(parse_kinds(None).unwrap(), Kinds::all());
         assert_eq!(
             parse_kinds(Some("added, deleted")).unwrap(),
-            Change::Added.mask() | Change::Deleted.mask()
+            Kinds {
+                happened: Happened::ADDED | Happened::DELETED,
+                compared: 0
+            }
         );
-        assert_eq!(parse_kinds(Some("transient")).unwrap(), Change::Transient.mask());
+        assert_eq!(
+            parse_kinds(Some("transient")).unwrap(),
+            Kinds {
+                happened: 0,
+                compared: Change::Transient.mask()
+            }
+        );
         assert!(parse_kinds(Some("added,renamed")).is_err());
     }
 }

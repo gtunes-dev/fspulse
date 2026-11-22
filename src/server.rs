@@ -320,6 +320,10 @@ impl WebServer {
                 get(api::items::get_version_at_scan),
             )
             .route(
+                "/api/items/{item_id}/in-range",
+                get(api::items::get_item_in_range),
+            )
+            .route(
                 "/api/items/{item_id}/version-count",
                 get(api::items::get_version_count),
             )

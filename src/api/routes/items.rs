@@ -6,6 +6,7 @@ use axum::{
 use log::error;
 use serde::{Deserialize, Serialize};
 
+use crate::db::Database;
 use crate::items::{self, HashHistoryEntry, SizeHistoryPoint};
 use crate::timeline::TimeRange;
 use crate::utils::Utils;
@@ -23,6 +24,32 @@ pub struct SizeHistoryParams {
 /// `items` functions, which take an inclusive time.
 fn as_of(at: Option<i64>) -> i64 {
     TimeRange::resolve(None, at, Utils::now_secs()).last_second()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InRangeParams {
+    pub from: Option<i64>,
+    pub to: Option<i64>,
+}
+
+/// GET /api/items/:item_id/in-range?from=..&to=..
+///
+/// What happened to the item inside a range: see `timeline::ItemInRange`.
+/// The range is resolved as the timeline endpoints resolve it and is
+/// returned, so the caller can tell which versions fall inside it.
+pub async fn get_item_in_range(
+    Path(item_id): Path<i64>,
+    Query(params): Query<InRangeParams>,
+) -> Result<Json<crate::timeline::ItemInRange>, (StatusCode, String)> {
+    let range = TimeRange::resolve(params.from, params.to, Utils::now_secs());
+    let conn = Database::get_connection()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed: {}", e)))?;
+    crate::timeline::item_in_range(&conn, item_id, range)
+        .map(Json)
+        .map_err(|e| {
+            error!("Failed to read item {} in a range: {}", item_id, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed: {}", e))
+        })
 }
 
 /// Response structure for size history
@@ -290,9 +317,9 @@ pub async fn get_version_at_scan(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     match items::get_version_at_scan(item_id, as_of(params.at)) {
         Ok(Some(version)) => Ok(Json(serde_json::json!({ "item_version": version }))),
-        Ok(None) => Err((StatusCode::NOT_FOUND, "No version found at this scan".to_string())),
+        Ok(None) => Err((StatusCode::NOT_FOUND, "No version found at this time".to_string())),
         Err(e) => {
-            error!("Failed to get version at scan for item {}: {}", item_id, e);
+            error!("Failed to get the version at a time for item {}: {}", item_id, e);
             Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed: {}", e)))
         }
     }

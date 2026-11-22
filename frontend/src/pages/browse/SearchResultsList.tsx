@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TreeNode } from './TreeNode'
-import type { FlatTreeItem, ChangeKind, TimelineChange } from '@/lib/pathUtils'
-import { describeTimelineItem, hashStateFromInt, valStateFromInt, isItemVisible } from '@/lib/pathUtils'
+import type { FlatTreeItem, ChangeKind, Happened, TimelineChange } from '@/lib/pathUtils'
+import { changeCounts, describeTimelineItem, hashStateFromInt, valStateFromInt, isItemVisible } from '@/lib/pathUtils'
 import { useScrollElement, useScrollMargin } from '@/contexts/ScrollContext'
 import { rangeKey, rangeParams, type TimeRangeSelection } from '@/lib/timeRange'
 
@@ -86,6 +86,7 @@ export function SearchResultsList({
             val_state: number | null
             hash_state: number | null
             change: TimelineChange | null
+            happened: Happened | null
           }>
         }
 
@@ -98,11 +99,9 @@ export function SearchResultsList({
           size: item.size,
           mod_date: item.mod_date,
           ...describeTimelineItem(item),
-          // Search results do not carry what is beneath a folder.
-          add_count: null,
-          modify_count: null,
-          delete_count: null,
-          unchanged_count: null,
+          // Search results do not carry what is beneath a folder: its
+          // square shows only what happened to the folder itself.
+          ...changeCounts(item),
           hash_state: hashStateFromInt(item.hash_state),
           val_state: valStateFromInt(item.val_state),
           depth: 0,

@@ -295,7 +295,6 @@ export function FolderView({
                       onClick={() => handleItemSelect(item)}
                     >
                       <ChangeDots
-                        changeKind={item.change_kind}
                         isDir={item.item_type === 'D'}
                         addCount={item.add_count}
                         modifyCount={item.modify_count}

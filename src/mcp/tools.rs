@@ -8,7 +8,7 @@ use rmcp::handler::server::wrapper::Parameters;
 use crate::db::Database;
 use crate::query::QueryProcessor;
 
-use crate::timeline::{self, Change, ChangeCounts, TimeRange};
+use crate::timeline::{self, Change, ChangeCounts, Happened, Kinds, TimeRange};
 use crate::utils::Utils;
 
 use super::formatting::{
@@ -48,6 +48,26 @@ fn change_word(change: Change) -> &'static str {
         Change::Ignored => "ignored",
         Change::Resumed => "resumed",
     }
+}
+
+/// What happened to an item inside a range, in order: "added,
+/// modified". For an item with nothing recorded as happening (transient,
+/// ignored, resumed), how it compares.
+fn happened_words(change: Change, happened: Happened) -> String {
+    let mut words = Vec::new();
+    if happened.added {
+        words.push("added");
+    }
+    if happened.modified {
+        words.push("modified");
+    }
+    if happened.deleted {
+        words.push("deleted");
+    }
+    if words.is_empty() {
+        return change_word(change).to_string();
+    }
+    words.join(", ")
 }
 
 /// "+3 ~1 -2" for the changes beneath a folder, with "ignored 4" and
@@ -543,7 +563,7 @@ impl FsPulseMcp {
         }
     }
 
-    #[tool(description = "Show what was added, modified or deleted in a root (or beneath one folder) between two times. This is the net difference between the two ends of the range: a file changed ten times is listed once as modified; a file created and deleted inside the range is 'transient' and listed only when asked for. Items that stopped being tracked because they came to match one of the root's ignore patterns are 'ignored', and items tracked again after that are 'resumed'; neither is counted as deleted or added. Times: '24h', '7d', '2w', a date, a date and time, or Unix seconds; `to` defaults to now. Range starts, and ends in the past, are moved back to the hour; the response states the times used. Returns totals per change type, then the changed items in folder order with size, when each last changed in the range and how many changes were recorded. Supports pagination via limit/offset.")]
+    #[tool(description = "Show what was added, modified or deleted in a root (or beneath one folder) between two times. Each item is listed once, with every kind of change that happened to it in the range: a file changed ten times is 'modified'; a file created and changed in a later hour is 'added, modified'; a file deleted and put back is 'added, deleted'. Changes within one hour are one change. A file created and deleted inside the range and gone at the end is 'transient' and listed only when asked for. Items that stopped being tracked because they came to match one of the root's ignore patterns are 'ignored', and items tracked again after that are 'resumed'; neither is counted as deleted or added. Times: '24h', '7d', '2w', a date, a date and time, or Unix seconds; `to` defaults to now. Range starts, and ends in the past, are moved back to the hour; the response states the times used. Returns totals per change type, then the changed items in folder order with size, when each last changed in the range and how many changes were recorded. Supports pagination via limit/offset.")]
     async fn changes(
         &self,
         Parameters(params): Parameters<ChangesParams>,
@@ -565,29 +585,33 @@ impl FsPulseMcp {
                 .counts;
 
             let change_type = params.change_type.as_deref().unwrap_or("all");
-            let (kinds, total) = match change_type {
-                "all" => (
-                    Change::net_mask(),
-                    counts.added + counts.modified + counts.deleted + counts.ignored + counts.resumed,
-                ),
-                "ignored" => (Change::Ignored.mask(), counts.ignored),
-                "resumed" => (Change::Resumed.mask(), counts.resumed),
-                "added" => (Change::Added.mask(), counts.added),
-                "modified" => (Change::Modified.mask(), counts.modified),
-                "deleted" => (Change::Deleted.mask(), counts.deleted),
-                "transient" => (Change::Transient.mask(), counts.transient),
+            let mut kinds = Kinds::default();
+            let total = match change_type {
+                "all" => {
+                    kinds = Kinds::all();
+                    counts.changed + counts.ignored + counts.resumed
+                }
+                "ignored" => counts.ignored,
+                "resumed" => counts.resumed,
+                "added" => counts.added,
+                "modified" => counts.modified,
+                "deleted" => counts.deleted,
+                "transient" => counts.transient,
                 other => {
                     return Err(format!(
                         "Unknown change_type '{other}'. Use added, modified, deleted, ignored, resumed, transient or all."
                     ))
                 }
             };
+            if change_type != "all" {
+                kinds.include(change_type);
+            }
 
             let mut out = format!(
-                "{}{}.\n\nAdded: {}, modified: {}, deleted: {}, transient (appeared and disappeared): {}.\n",
+                "{}{}.\n\n{} items changed. Added: {}, modified: {}, deleted: {} (an item is in each count that happened to it). Transient (appeared and disappeared): {}.\n",
                 describe_range(&range),
                 folder.map(|f| format!(" beneath '{f}'")).unwrap_or_default(),
-                counts.added, counts.modified, counts.deleted, counts.transient
+                counts.changed, counts.added, counts.modified, counts.deleted, counts.transient
             );
             if counts.ignored > 0 || counts.resumed > 0 {
                 out.push_str(&format!(
@@ -609,7 +633,7 @@ impl FsPulseMcp {
             for item in &page.items {
                 out.push_str(&format!(
                     "| {} | {} | {} | {} | {} | {} | {} |\n",
-                    change_word(item.change),
+                    happened_words(item.change, item.happened),
                     item.item_type.full_name(),
                     item.item_path,
                     item.size.map(|s| s.to_string()).unwrap_or_else(|| "-".to_string()),
@@ -631,7 +655,7 @@ impl FsPulseMcp {
         }
     }
 
-    #[tool(description = "List the immediate children of a folder in a monitored root, as of now or as of a past time (`at`). With `from`, also shows how each child changed between `from` and `at`, the net changes beneath each folder (+added ~modified -deleted), and children deleted in that range. Times: 'now', '24h', '7d', a date, a date and time, or Unix seconds; past times are moved back to the hour and the response states the times used. Supports pagination via limit/offset parameters. Returns total count in response.")]
+    #[tool(description = "List the immediate children of a folder in a monitored root, as of now or as of a past time (`at`). With `from`, also shows how each child changed between `from` and `at`, how many items beneath each folder were added, modified or deleted in the range (+added ~modified -deleted), and children deleted in that range. Times: 'now', '24h', '7d', a date, a date and time, or Unix seconds; past times are moved back to the hour and the response states the times used. Supports pagination via limit/offset parameters. Returns total count in response.")]
     async fn browse_filesystem(
         &self,
         Parameters(params): Parameters<BrowseFilesystemParams>,

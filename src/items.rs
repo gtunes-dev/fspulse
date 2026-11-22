@@ -409,6 +409,10 @@ pub struct VersionHistoryEntry {
     pub file_hash: Option<Vec<u8>>,
     pub val_state: Option<i64>,
     pub val_error: Option<String>,
+    /// When this version was validated.
+    pub val_at: Option<i64>,
+    /// When this version's latest hash was last confirmed by an integrity check.
+    pub hash_last_seen_at: Option<i64>,
     // Review timestamps
     pub val_reviewed_at: Option<i64>,
     pub hash_reviewed_at: Option<i64>,
@@ -434,6 +438,8 @@ impl VersionHistoryEntry {
             val_reviewed_at: row.get(14)?,
             hash_reviewed_at: row.get(15)?,
             is_ignored: row.get(16)?,
+            val_at: row.get(17)?,
+            hash_last_seen_at: row.get(18)?,
         })
     }
 }
@@ -443,7 +449,8 @@ const VERSION_HISTORY_COLUMNS: &str =
      v.is_added, v.is_deleted, v.access, \
      v.mod_date, v.size, \
      hv.hash_state, hv.file_hash, v.val_state, v.val_error, \
-     v.val_reviewed_at, v.hash_reviewed_at, v.is_ignored";
+     v.val_reviewed_at, v.hash_reviewed_at, v.is_ignored, \
+     v.val_at, hv.last_seen_at";
 
 const VERSION_HISTORY_JOINS: &str =
     "LEFT JOIN hash_versions hv ON hv.item_id = v.item_id \

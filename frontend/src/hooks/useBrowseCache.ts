@@ -1,9 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   describeTimelineItem,
+  changeCounts,
   hashStateFromInt,
   valStateFromInt,
   type ChangeKind,
+  type Happened,
   type HashState,
   type TimelineChange,
   type ValState,
@@ -57,7 +59,9 @@ interface TimelineChild {
   hash_state: number | null
   /** Absent for a point in time. */
   change: TimelineChange | null
-  /** Folders in a range: net changes beneath the folder. */
+  /** What happened to the item inside the range. Absent for a point in time. */
+  happened: Happened | null
+  /** Folders in a range: how many items beneath the folder each kind of change happened to. */
   descendants: { added: number; modified: number; deleted: number; transient: number } | null
 }
 
@@ -142,7 +146,6 @@ export function useBrowseCache(
         const data = await response.json() as { items: TimelineChild[] }
 
         const items: CachedItem[] = data.items.map(item => {
-          const isDir = item.item_type === 'D'
           return {
             item_id: item.item_id,
             item_path: item.item_path,
@@ -152,16 +155,7 @@ export function useBrowseCache(
             size: item.size,
             mod_date: item.mod_date,
             ...describeTimelineItem(item),
-            add_count: isDir ? item.descendants?.added ?? 0 : null,
-            modify_count: isDir ? item.descendants?.modified ?? 0 : null,
-            delete_count: isDir ? item.descendants?.deleted ?? 0 : null,
-            // Not counted by the server. A non-zero value marks a folder
-            // that exists at the end of the range as possibly holding
-            // unchanged items, which keeps it visible and expandable
-            // when "Unchanged" is shown.
-            // An ignored folder stays expandable too: what was recorded
-            // beneath it can be shown.
-            unchanged_count: isDir ? (item.is_deleted && !item.is_ignored ? 0 : 1) : null,
+            ...changeCounts(item),
             hash_state: hashStateFromInt(item.hash_state),
             val_state: valStateFromInt(item.val_state),
           }

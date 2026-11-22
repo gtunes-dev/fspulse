@@ -36,13 +36,13 @@ Counts are items, not events: a file saved fifty times within one hour counts on
 
 What was added, modified or deleted in a root, or beneath one folder, between two times. Takes `from` (required), `to` (default: now), and optionally `folder_path` and `change_type`.
 
-The result is the net difference between the two ends of the range. A file changed ten times is listed once, as modified, with the number of changes recorded. A file that was created and deleted inside the range is "transient"; these are counted in the totals and listed only when `change_type` is `transient`.
+Each item is listed once, with every kind of change that happened to it inside the range and the number of changes recorded. A file changed ten times is "modified". A file created and changed again in a later hour is "added, modified". A file deleted and put back is "added, deleted". Changes to a file within one hour are one change. The totals count items by what happened to them, so one item can be in more than one total. A file that was created and deleted inside the range and is gone at the end is "transient"; these are counted separately and listed only when `change_type` is `transient`.
 
 An item that stopped being tracked because it came to match one of the root's ignore patterns is "ignored", and one that is tracked again after that is "resumed". Neither is counted as deleted or added. Both are listed by default and can be selected with `change_type`.
 
 ## browse_filesystem
 
-Lists the immediate children of a folder as of now, or as of a past time (`at`). With `from`, each child also shows how it changed between `from` and `at`, each folder shows the net changes beneath it, and children deleted in that range are listed.
+Lists the immediate children of a folder as of now, or as of a past time (`at`). With `from`, each child also shows how it changed between `from` and `at`, each folder shows how many items beneath it were added, modified or deleted in the range, and children deleted in that range are listed.
 
 Items that are not tracked because they match an ignore pattern are left out unless `include_ignored` is true. They are then listed as "ignored since" the time tracking stopped, as they were last recorded. An item that was never tracked before its pattern was added has no record and is never listed.
 

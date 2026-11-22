@@ -62,7 +62,8 @@ import {
   CarouselPrevious,
   CarouselNext,
 } from '@/components/ui/carousel'
-import { formatDateFull, formatScanDate } from '@/lib/dateUtils'
+import { formatDateFull } from '@/lib/dateUtils'
+import { HOUR, formatMoment } from '@/lib/timeRange'
 import { formatFileSize } from '@/lib/formatUtils'
 import { cn } from '@/lib/utils'
 
@@ -78,6 +79,12 @@ interface ItemDetailProps {
   isTombstone: boolean
   /** Show the item as of this time (Unix seconds); null for now. */
   at: number | null
+  /**
+   * Start of the selected range (Unix seconds), when the item is being
+   * looked at over a range: the pane then says what happened to the
+   * item inside it and marks the versions that fall in it.
+   */
+  from?: number | null
   // Panel mode
   onClose?: () => void
   // Sheet mode
@@ -104,8 +111,22 @@ interface VersionEntry {
   file_hash: string | null
   val_state: number | null
   val_error: string | null
+  /** When this version was validated. */
+  val_at: number | null
+  /** When this version's latest hash was last confirmed. */
+  hash_last_seen_at: number | null
   val_reviewed_at: number | null
   hash_reviewed_at: number | null
+}
+
+/** What happened to the item inside the selected range, from `/api/items/:id/in-range`. */
+interface InRange {
+  /** The range as the server resolved it. */
+  range: { from: number | null; to: number; to_is_now: boolean }
+  changes: number
+  happened: { added: boolean; modified: boolean; deleted: boolean }
+  tracking_stopped: boolean
+  tracking_resumed: boolean
 }
 
 interface HashEntry {
@@ -195,6 +216,35 @@ function hasFieldChanges(v: VersionEntry, prev: VersionEntry): boolean {
   )
 }
 
+const clock = (seconds: number): string => format(new Date(seconds * 1000), 'HH:mm')
+
+/**
+ * When a version was recorded. One change has a moment. Several changes
+ * in the same hour are one version, so they have the hour, how many
+ * there were and when the last one was.
+ */
+function recordedLabel(v: VersionEntry): string {
+  if (v.change_count <= 1) return formatMoment(v.first_seen_at)
+  const start = v.first_seen_at - (v.first_seen_at % HOUR)
+  return `${formatMoment(start)} to ${clock(start + HOUR)}, changed ${v.change_count} times, last at ${clock(v.last_changed_at)}`
+}
+
+/**
+ * How a version came to be recorded, where that matters to reading its
+ * time. A change seen as it happened needs no remark. One found by a
+ * check happened at some earlier time that was not seen.
+ */
+function sourceNote(v: VersionEntry): { short: string; full: string } | null {
+  switch (v.source) {
+    case 1:
+      return { short: 'found by a check', full: 'Found by a check. The change itself happened some time before.' }
+    case 3:
+      return { short: 'found by an integrity check', full: 'Noticed while the file was being checked for integrity.' }
+    default:
+      return null
+  }
+}
+
 /** Build a predecessor map from a set of versions (which may include one extra for boundary). */
 function buildPredecessorMap(allVersions: VersionEntry[]): Map<number, VersionEntry> {
   const byVersion = new Map<number, VersionEntry>()
@@ -247,6 +297,7 @@ export function ItemDetail({
   itemType,
   isTombstone,
   at,
+  from = null,
   onClose,
   open,
   onOpenChange,
@@ -260,6 +311,9 @@ export function ItemDetail({
   const [versionPage, setVersionPage] = useState(0)
   const [versionOrder, setVersionOrder] = useState<'desc' | 'asc'>('desc')
   const [openVersions, setOpenVersions] = useState<Record<number, boolean>>({})
+
+  // What happened to the item inside the selected range
+  const [inRange, setInRange] = useState<InRange | null>(null)
 
   // Size history state
   const [sizeHistory, setSizeHistory] = useState<SizeHistoryPoint[]>([])
@@ -288,6 +342,8 @@ export function ItemDetail({
 
   // Selected version for the detail view — stored as full data, not derived from page
   const [selectedVersion, setSelectedVersion] = useState<VersionEntry | null>(null)
+  // The version in effect at the time the pane shows the item as of.
+  const [versionAtEnd, setVersionAtEnd] = useState<VersionEntry | null>(null)
 
   const isPanel = mode === 'panel'
   const isSheet = mode === 'sheet'
@@ -304,6 +360,7 @@ export function ItemDetail({
     setPathExpanded(false)
     setPathTruncated(false)
     setSelectedVersion(null)
+    setVersionAtEnd(null)
   }, [itemId])
 
   // Detect if path text is truncated
@@ -366,8 +423,8 @@ export function ItemDetail({
     order: 'asc' | 'desc',
     selectVersion?: number,
     autoSelect?: boolean,
-  ) => {
-    if (!shouldLoad) return
+  ): Promise<VersionEntry | null> => {
+    if (!shouldLoad) return null
     try {
       const pageOffset = page * VERSIONS_PER_PAGE
 
@@ -403,13 +460,16 @@ export function ItemDetail({
         if (selectVersion !== undefined) {
           const found = displayVersions.find(v => v.item_version === selectVersion)
           if (found) setSelectedVersion(found)
+          return found ?? null
         } else if (autoSelect && displayVersions.length > 0) {
           setSelectedVersion(displayVersions[0])
+          return displayVersions[0]
         }
       }
     } catch (error) {
       console.error('Error loading versions:', error)
     }
+    return null
   }, [shouldLoad, itemId])
 
   // Initial load — resolve the correct version page based on the `at` time.
@@ -439,7 +499,7 @@ export function ItemDetail({
               : total - targetVersion
             const page = Math.floor(position / VERSIONS_PER_PAGE)
 
-            await loadVersionPage(page, versionOrder, targetVersion)
+            setVersionAtEnd(await loadVersionPage(page, versionOrder, targetVersion))
             return
           }
         } catch (error) {
@@ -448,12 +508,41 @@ export function ItemDetail({
       }
 
       // Fallback: no time given or resolution failed — show latest (page 0 desc)
-      await loadVersionPage(0, versionOrder, undefined, true)
+      setVersionAtEnd(await loadVersionPage(0, versionOrder, undefined, true))
     }
 
     initialLoad().finally(() => setLoadingVersions(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldLoad, itemId, at]) // intentionally not including versionOrder or loadVersionPage
+
+  // What happened inside the selected range
+  useEffect(() => {
+    if (!shouldLoad || from === null) {
+      setInRange(null)
+      return
+    }
+    let current = true
+    const params = new URLSearchParams({ from: from.toString() })
+    if (at !== null) params.set('to', at.toString())
+    fetch(`/api/items/${itemId}/in-range?${params}`)
+      .then(response => (response.ok ? response.json() : null))
+      .then((data: InRange | null) => {
+        // A start that is not before the end is not a range.
+        if (current) setInRange(data && data.range.from !== null ? data : null)
+      })
+      .catch(() => {
+        if (current) setInRange(null)
+      })
+    return () => {
+      current = false
+    }
+  }, [shouldLoad, itemId, from, at])
+
+  /** Whether a version began inside the selected range. */
+  const isInRange = (v: VersionEntry): boolean => {
+    if (!inRange || inRange.range.from === null) return false
+    return v.first_seen_at >= inRange.range.from && (inRange.range.to_is_now || v.first_seen_at < inRange.range.to)
+  }
 
   // When sort order changes, compute the page that contains the selected version
   const handleOrderChange = (newOrder: 'asc' | 'desc') => {
@@ -685,15 +774,16 @@ export function ItemDetail({
     )
   }
 
-  // When a version began, plus how many changes were coalesced into it.
+  // A version's time in one line, for the list.
   const versionTimeLabel = (v: VersionEntry) => {
-    if (v.change_count <= 1) return <>{formatScanDate(v.first_seen_at)}</>
-    return (
-      <>
-        {formatScanDate(v.first_seen_at)} &ndash; changed {v.change_count}&times;, last at {formatScanDate(v.last_changed_at)}
-      </>
-    )
+    const note = sourceNote(v)
+    return <>{recordedLabel(v)}{note && <> &middot; {note.short}</>}</>
   }
+
+  // What the item was at the time shown: there, deleted, or no longer tracked.
+  const endState: 'deleted' | 'ignored' | null = versionAtEnd
+    ? versionAtEnd.is_deleted ? (versionAtEnd.is_ignored ? 'ignored' : 'deleted') : null
+    : isTombstone ? 'deleted' : null
 
   // ---- Content rendering ----
 
@@ -756,7 +846,8 @@ export function ItemDetail({
       <div className="flex items-center gap-4">
         <span><span className="text-muted-foreground">Item:</span> <span className="font-mono font-semibold">#{itemId}</span></span>
         <span><span className="text-muted-foreground">Type:</span> {itemTypeLabel(itemType)}</span>
-        {isTombstone && <Badge variant="destructive">Deleted</Badge>}
+        {endState === 'deleted' && <Badge variant="destructive">Deleted</Badge>}
+        {endState === 'ignored' && <Badge variant="secondary">Not tracked (ignored)</Badge>}
       </div>
       {itemType === 'F' && integrityState && (
         <HoverCard openDelay={300}>
@@ -778,14 +869,46 @@ export function ItemDetail({
           </HoverCardTrigger>
           <HoverCardContent side="bottom" align="end" className="w-56 text-xs">
             {integrityState.do_not_validate
-              ? <p>Validation is <span className="font-semibold">disabled</span> for this file. Enable to include it in future validation scans.</p>
-              : <p>This file will be <span className="font-semibold">validated</span> during future scans. Disable to skip validation for this file.</p>
+              ? <p>Validation is <span className="font-semibold">disabled</span> for this file. Enable to include it in future integrity checks.</p>
+              : <p>This file will be <span className="font-semibold">validated</span> during future integrity checks. Disable to skip validation for this file.</p>
             }
           </HoverCardContent>
         </HoverCard>
       )}
     </div>
   )
+
+  // The mark that ties the "In this range" line to the versions in the list.
+  const rangeMark = <span className="inline-block w-0.5 h-3 rounded-full bg-primary flex-shrink-0" aria-hidden />
+
+  const renderInRange = () => {
+    if (!inRange) return null
+    const happened = [
+      inRange.happened.added && 'added',
+      inRange.happened.modified && 'modified',
+      inRange.happened.deleted && 'deleted',
+      inRange.tracking_stopped && 'tracking stopped',
+      inRange.tracking_resumed && 'tracking resumed',
+    ].filter(Boolean)
+    return (
+      <p className={cn('flex items-center gap-1.5', isPanel ? 'text-xs mt-1.5' : 'text-sm mt-2')}>
+        {happened.length === 0 ? (
+          <span className="text-muted-foreground">Unchanged in the selected range</span>
+        ) : (
+          <>
+            {rangeMark}
+            <span className="text-muted-foreground">In the selected range:</span>
+            <span className="font-medium">{happened.join(', ')}</span>
+            {inRange.changes > 0 && (
+              <span className="text-muted-foreground">
+                &middot; {inRange.changes.toLocaleString()} {inRange.changes === 1 ? 'change' : 'changes'}
+              </span>
+            )}
+          </>
+        )}
+      </p>
+    )
+  }
 
   // Render version detail content for a given version.
   // Hash timeline and review controls only render for the selected version
@@ -796,8 +919,11 @@ export function ItemDetail({
       <>
         {/* Metadata fields — inline label: value */}
         <div className={`text-sm ${isPanel ? 'space-y-1' : 'space-y-1.5'}`}>
-          <p><span className="text-muted-foreground">Since:</span> {versionTimeLabel(v)}</p>
-          <p><span className="text-muted-foreground">Modified:</span> {v.mod_date ? formatDateFull(v.mod_date) : 'N/A'}</p>
+          <p><span className="text-muted-foreground">Recorded:</span> {recordedLabel(v)}</p>
+          {sourceNote(v) && <p className="text-xs text-muted-foreground">{sourceNote(v)?.full}</p>}
+          {v.mod_date != null && (
+            <p><span className="text-muted-foreground">File date:</span> {formatDateFull(v.mod_date)}</p>
+          )}
           {v.size !== null && (
             <p><span className="text-muted-foreground">Size:</span> {formatFileSize(v.size)}</p>
           )}
@@ -831,7 +957,10 @@ export function ItemDetail({
                         <span className="font-medium">Baseline</span>
                       )
                     ) : (
-                      <span className="text-muted-foreground">Not hashed</span>
+                      <span className="text-muted-foreground">Not hashed yet</span>
+                    )}
+                    {hasHashes && v.hash_last_seen_at != null && (
+                      <span className="text-muted-foreground"> &middot; last confirmed {formatMoment(v.hash_last_seen_at)}</span>
                     )}
                   </p>
                   {hasHashes && suspectCount > 0 && (
@@ -864,6 +993,7 @@ export function ItemDetail({
                         <thead>
                           <tr className="bg-muted">
                             <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">First seen</th>
+                            <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">Last confirmed</th>
                             <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">State</th>
                             <th className="text-left px-2 py-1 font-medium uppercase tracking-wide text-muted-foreground">Hash</th>
                           </tr>
@@ -875,7 +1005,10 @@ export function ItemDetail({
                             return (
                               <tr key={h.first_seen_at} className={h.hash_state === 2 ? 'bg-amber-500/5' : ''}>
                                 <td className="px-2 py-1 whitespace-nowrap text-muted-foreground">
-                                  {formatScanDate(h.first_seen_at)}
+                                  {formatMoment(h.first_seen_at)}
+                                </td>
+                                <td className="px-2 py-1 whitespace-nowrap text-muted-foreground">
+                                  {formatMoment(h.last_seen_at)}
                                 </td>
                                 <td className="px-2 py-1 whitespace-nowrap">
                                   <span className="flex items-center gap-1">
@@ -940,6 +1073,9 @@ export function ItemDetail({
                         : valStateLabel(v.val_state)}
                     </span>
                     {v.val_state === 2 && <CircleX className="inline h-3.5 w-3.5 text-rose-500 ml-1 align-text-bottom" />}
+                    {v.val_state != null && v.val_at != null && (
+                      <span className="text-muted-foreground"> &middot; checked {formatMoment(v.val_at)}</span>
+                    )}
                   </p>
                   {v.val_state === 2 && (
                     <HoverCard openDelay={300}>
@@ -1032,6 +1168,7 @@ export function ItemDetail({
                       <div className="bg-muted px-3 py-1.5 text-center">
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Version {v.item_version} of {totalVersionCount}
+                          {isInRange(v) && <span className="text-primary"> &middot; in the selected range</span>}
                         </p>
                       </div>
                       <div className={isPanel ? 'p-2' : 'p-4'}>
@@ -1053,6 +1190,7 @@ export function ItemDetail({
           {/* Item properties */}
           <CardContent className="py-3">
             {renderItemProperties()}
+            {renderInRange()}
           </CardContent>
           <Separator />
 
@@ -1101,6 +1239,7 @@ export function ItemDetail({
       <div>
         <div className="px-3 py-2 border-b border-border">
           {renderItemProperties()}
+          {renderInRange()}
         </div>
         {versionCarousel && (
           <div className="py-2 px-1.5">
@@ -1248,6 +1387,7 @@ export function ItemDetail({
 
                 const headerContent = (
                   <>
+                    {isInRange(v) && rangeMark}
                     <span className="text-xs font-medium shrink-0">v{v.item_version}</span>
                     {getChangeIndicator(kind)}
                     {v.hash_state === 2 && <AlertTriangle className={`${sp.iconLg} text-amber-500 flex-shrink-0`} />}

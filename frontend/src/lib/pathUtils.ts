@@ -43,6 +43,45 @@ export function describeTimelineItem(item: {
   }
 }
 
+/** What was done to an item inside the selected range, each at least once. */
+export interface Happened {
+  added: boolean
+  modified: boolean
+  deleted: boolean
+}
+
+/**
+ * The four numbers behind a row's change square: how many items, the
+ * row's own item and (for a folder) everything beneath it, were added,
+ * modified and deleted at least once inside the range. One item can be
+ * in more than one of them.
+ *
+ * `unchanged_count` is not a count. For a file it is 1 when nothing
+ * happened to it. For a folder it is 1 when the folder exists at the
+ * end of the range and so may hold unchanged items, which keeps it
+ * visible and expandable when "Unchanged" is shown; an ignored folder
+ * stays expandable too, so what was recorded beneath it can be shown.
+ */
+export function changeCounts(item: {
+  item_type: string
+  is_deleted: boolean
+  is_ignored: boolean
+  /** Null for a point in time. */
+  happened?: Happened | null
+  /** Folders in a range: what happened beneath the folder. */
+  descendants?: { added: number; modified: number; deleted: number } | null
+}): { add_count: number; modify_count: number; delete_count: number; unchanged_count: number } {
+  const isDir = item.item_type === 'D'
+  const beneath = isDir ? item.descendants : null
+  const add_count = (item.happened?.added ? 1 : 0) + (beneath?.added ?? 0)
+  const modify_count = (item.happened?.modified ? 1 : 0) + (beneath?.modified ?? 0)
+  const delete_count = (item.happened?.deleted ? 1 : 0) + (beneath?.deleted ?? 0)
+  const unchanged_count = isDir
+    ? (item.is_deleted && !item.is_ignored ? 0 : 1)
+    : (add_count + modify_count + delete_count === 0 ? 1 : 0)
+  return { add_count, modify_count, delete_count, unchanged_count }
+}
+
 export function hashStateFromInt(val: number | null): HashState | null {
   if (val === null || val === undefined) return null
   switch (val) {
@@ -65,16 +104,12 @@ export function valStateFromInt(val: number | null): ValState | null {
 }
 
 /**
- * Determines if an item should be visible given the set of hidden change kinds.
- *
- * For non-directories: visible if their change_kind is not hidden.
- * For directories: visible if their own change_kind is not hidden, or if they
- * have descendants with a visible change kind.
+ * Whether an item is shown, given the change kinds that are hidden: it
+ * is if any kind lit in its change square is not hidden. See
+ * `changeCounts` for what lights each kind.
  */
 export function isItemVisible(
   item: {
-    item_type: string
-    change_kind: ChangeKind
     add_count?: number | null
     modify_count?: number | null
     delete_count?: number | null
@@ -87,13 +122,7 @@ export function isItemVisible(
   // Ignored and resumed items are listed because of that, whatever the
   // change-type filter says.
   if (item.ignored_since != null || item.resumed) return true
-  if (item.item_type !== 'D') {
-    return !hiddenKinds.has(item.change_kind)
-  }
-
-  // Directory: visible if own kind is visible OR has descendants with a visible kind
-  return !hiddenKinds.has(item.change_kind) ||
-    (!hiddenKinds.has('added') && (item.add_count ?? 0) > 0) ||
+  return (!hiddenKinds.has('added') && (item.add_count ?? 0) > 0) ||
     (!hiddenKinds.has('modified') && (item.modify_count ?? 0) > 0) ||
     (!hiddenKinds.has('deleted') && (item.delete_count ?? 0) > 0) ||
     (!hiddenKinds.has('unchanged') && (item.unchanged_count ?? 0) > 0)
@@ -112,10 +141,12 @@ export interface ItemData {
   size?: number | null
   mod_date?: number | null
   change_kind: ChangeKind
-  add_count?: number | null       // Folder descendant add count (null for files)
-  modify_count?: number | null    // Folder descendant modify count (null for files)
-  delete_count?: number | null    // Folder descendant delete count (null for files)
-  unchanged_count?: number | null // Folder descendant unchanged count (null for files)
+  // What happened to the item, and beneath it if it is a folder, inside
+  // the range. See `changeCounts`.
+  add_count?: number | null
+  modify_count?: number | null
+  delete_count?: number | null
+  unchanged_count?: number | null
   // Integrity state for files (null for dirs/symlinks/other)
   hash_state?: HashState | null
   val_state?: ValState | null

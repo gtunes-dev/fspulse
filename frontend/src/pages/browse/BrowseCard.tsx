@@ -333,6 +333,7 @@ export function BrowseCard({ roots, defaultRootId, defaultSelection, isActive: p
             // "now" must not be sent, or the server would read it as the
             // past and move it back to the hour.
             at={selection.to}
+            from={selection.from}
             onClose={handleDetailClose}
           />
         </ScrollArea>

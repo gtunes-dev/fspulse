@@ -185,7 +185,7 @@ export function TimeRangeBar({ rootId, selection, onSelectionChange, initialPres
       })
   }, [rootId, refreshToken])
 
-  // ── What the selection resolves to, and its net change counts ─────
+  // ── What the selection resolves to, and what happened inside it ───
   const summaryRequest = useRef(0)
   useEffect(() => {
     const request = ++summaryRequest.current

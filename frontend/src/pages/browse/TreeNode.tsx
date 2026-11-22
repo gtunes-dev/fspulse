@@ -112,7 +112,6 @@ export function TreeNode({
         </>
       )}
       <ChangeDots
-        changeKind={item.change_kind}
         isDir={item.item_type === 'D'}
         addCount={item.add_count}
         modifyCount={item.modify_count}
